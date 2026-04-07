@@ -57,7 +57,7 @@ let deliveryCounter = 0;
 let reportCounter = 0;
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setAuth] = useState(false);
+  const [isAuthenticated, setAuth] = useState(() => sessionStorage.getItem('topac_auth') === 'true');
   const [emps, setEmps] = useState<Employee[]>(initialEmployees);
   const [entries, setEntries] = useState<MonthlyEntry[]>(initialEntries);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
@@ -67,10 +67,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const login = useCallback((u: string, p: string) => {
     if ((u === 'admin' && p === 'admin') || (u === 'rh' && p === 'rh123')) {
-      setAuth(true); return true;
+      setAuth(true); sessionStorage.setItem('topac_auth', 'true'); return true;
     }
     return false;
   }, []);
+
+  const logout = useCallback(() => { setAuth(false); sessionStorage.removeItem('topac_auth'); }, []);
 
   const logout = useCallback(() => setAuth(false), []);
 
