@@ -74,7 +74,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const logout = useCallback(() => { setAuth(false); sessionStorage.removeItem('topac_auth'); }, []);
 
-  const logout = useCallback(() => setAuth(false), []);
+  
 
   const updateEmployee = useCallback((id: string, data: Partial<Employee>) => {
     setEmps(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
