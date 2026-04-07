@@ -67,7 +67,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const getOrCreateEntries = useCallback((companyId: string, competencia: string) => {
     const existing = entries.filter(e => e.companyId === companyId && e.competencia === competencia);
     if (existing.length > 0) return existing;
-    const compEmps = emps.filter(e => e.companyId === companyId && e.status === 'ativo');
+    const compEmps = emps.filter(e => e.companyId === companyId && e.status === 'ativo' && e.categoria === 'operacional');
     const newEntries = generateDefaultEntries(companyId, competencia, compEmps.map(e => e.id));
     setEntries(prev => [...prev, ...newEntries]);
     return newEntries;
