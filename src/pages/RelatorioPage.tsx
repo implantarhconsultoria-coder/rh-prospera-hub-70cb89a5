@@ -15,7 +15,7 @@ const RelatorioPage: React.FC = () => {
   const reportRef = useRef<HTMLDivElement>(null);
 
   const company = companies.find(c => c.id === selectedCompany);
-  const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo');
+  const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional');
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
 
@@ -29,7 +29,8 @@ const RelatorioPage: React.FC = () => {
     const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
     const atrasoVal = calcAtraso(emp.salarioBase, entry.atrasos);
     const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
-    const vrVal = entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * 22 : 0;
+    const vrDias = entry.vrDias ?? 22;
+    const vrVal = entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * vrDias : 0;
     const vaVal = entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0;
     const vtVal = entry.vtAplicado && emp.vtAtivo ? emp.vtValor : 0;
 
