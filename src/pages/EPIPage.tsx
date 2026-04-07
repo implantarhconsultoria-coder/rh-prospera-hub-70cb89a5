@@ -1,14 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { EPI_TYPES, RESPONSIBILITY_TEXT, type DeliveryItem } from '@/data/deliveries';
+import { EPI_TYPES, type DeliveryItem } from '@/data/deliveries';
 import { HardHat, Plus, Trash2, FileText, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 const EPIPage: React.FC = () => {
   const { companies, employees, addDelivery } = useApp();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [items, setItems] = useState<DeliveryItem[]>([]);
@@ -40,31 +41,39 @@ const EPIPage: React.FC = () => {
 
   const handleGenerate = () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
+    if (!company) { toast.error('Empresa do funcionário não encontrada'); return; }
     if (items.length === 0) { toast.error('Adicione pelo menos um item'); return; }
     if (!responsavel.trim()) { toast.error('Informe o responsável'); return; }
 
-    const delivery = addDelivery({
+    const currentItems = items.map(item => ({ ...item }));
+    const responsavelNome = responsavel.trim();
+
+    addDelivery({
       type: 'epi',
       employeeId: emp.id,
       companyId: emp.companyId,
       date: deliveryDate,
-      items,
-      responsavel,
+      items: currentItems,
+      responsavel: responsavelNome,
     });
 
-    // Store full print payload in sessionStorage so the print tab can read it
-    const printData = {
-      delivery,
-      employee: emp,
-      company,
-    };
-    sessionStorage.setItem('topac_print_delivery', JSON.stringify(printData));
-
-    window.open(`/entrega-impressao?id=${delivery.id}`, '_blank');
+    navigate('/entrega-impressao', {
+      state: {
+        previewData: {
+          delivery: {
+            type: 'epi',
+            date: deliveryDate,
+            items: currentItems,
+            responsavel: responsavelNome,
+          },
+          employee: emp,
+          company,
+          returnPath: '/epi',
+        },
+      },
+    });
 
     toast.success('Ficha de EPI gerada com sucesso!');
-    setItems([]);
-    setResponsavel('');
   };
 
   return (
@@ -81,7 +90,6 @@ const EPIPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Employee selection */}
       <div className="card-premium p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Search className="w-4 h-4 text-muted-foreground" />
@@ -124,7 +132,6 @@ const EPIPage: React.FC = () => {
         )}
       </div>
 
-      {/* Items */}
       {emp && (
         <div className="card-premium p-5 space-y-4">
           <div className="flex items-center justify-between">
