@@ -32,32 +32,25 @@ const AuthGate = () => {
   const { isAuthenticated } = useApp();
   if (!isAuthenticated) return <LoginPage />;
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/empresas" element={<EmpresasPage />} />
-          <Route path="/base-mestra" element={<BaseMestraPage />} />
-          <Route path="/funcionarios" element={<FuncionariosPage />} />
-          <Route path="/funcionarios/:id" element={<EmployeeDetailPage />} />
-          <Route path="/lancamentos" element={<LancamentosPage />} />
-          <Route path="/fechamento" element={<FechamentoPage />} />
-          <Route path="/relatorio" element={<RelatorioPage />} />
-          <Route path="/epi" element={<EPIPage />} />
-          <Route path="/uniformes" element={<UniformePage />} />
-          <Route path="/relatorio-vr" element={<RelatorioVRPage />} />
-          <Route path="/relatorio-vt" element={<RelatorioVTPage />} />
-          <Route path="/historico" element={<HistoricoPage />} />
-          <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-        {/* Print routes — no sidebar/layout */}
-        <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />
-        <Route path="/entrega-impressao" element={<EntregaImpressaoPage />} />
-        <Route path="/relatorio-vr-impressao" element={<RelatorioVRImpressaoPage />} />
-        <Route path="/relatorio-vt-impressao" element={<RelatorioVTImpressaoPage />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/empresas" element={<EmpresasPage />} />
+        <Route path="/base-mestra" element={<BaseMestraPage />} />
+        <Route path="/funcionarios" element={<FuncionariosPage />} />
+        <Route path="/funcionarios/:id" element={<EmployeeDetailPage />} />
+        <Route path="/lancamentos" element={<LancamentosPage />} />
+        <Route path="/fechamento" element={<FechamentoPage />} />
+        <Route path="/relatorio" element={<RelatorioPage />} />
+        <Route path="/epi" element={<EPIPage />} />
+        <Route path="/uniformes" element={<UniformePage />} />
+        <Route path="/relatorio-vr" element={<RelatorioVRPage />} />
+        <Route path="/relatorio-vt" element={<RelatorioVTPage />} />
+        <Route path="/historico" element={<HistoricoPage />} />
+        <Route path="/configuracoes" element={<ConfiguracoesPage />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   );
 };
 
@@ -67,7 +60,16 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AppProvider>
-        <AuthGate />
+        <BrowserRouter>
+          <Routes>
+            {/* Print routes — outside auth gate, no login required */}
+            <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />
+            <Route path="/entrega-impressao" element={<EntregaImpressaoPage />} />
+            <Route path="/relatorio-vr-impressao" element={<RelatorioVRImpressaoPage />} />
+            <Route path="/relatorio-vt-impressao" element={<RelatorioVTImpressaoPage />} />
+            <Route path="/*" element={<AuthGate />} />
+          </Routes>
+        </BrowserRouter>
       </AppProvider>
     </TooltipProvider>
   </QueryClientProvider>
