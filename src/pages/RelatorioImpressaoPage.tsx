@@ -56,6 +56,16 @@ const RelatorioImpressaoPage: React.FC = () => {
 
   return (
     <div className="bg-white text-black min-h-screen print:bg-white" style={{ fontFamily: "'Segoe UI', Arial, sans-serif" }}>
+      <div className="print:hidden flex items-center gap-3 px-8 py-3 bg-gray-100 border-b">
+        <button onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = '/relatorio'}
+          className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          ← Voltar
+        </button>
+        <button onClick={() => window.print()}
+          className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
+          🖨 Imprimir / PDF
+        </button>
+      </div>
       <div className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
         {/* Header */}
         <div className="border-b-2 border-black pb-3 mb-4">
