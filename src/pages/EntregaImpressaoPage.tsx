@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { RESPONSIBILITY_TEXT } from '@/data/deliveries';
@@ -9,11 +9,30 @@ const EntregaImpressaoPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const deliveryId = searchParams.get('id') || '';
 
-  const delivery = deliveries.find(d => d.id === deliveryId);
-  if (!delivery) return <div className="p-10 text-center text-lg">Ficha não encontrada.</div>;
+  // Try context first, then sessionStorage fallback (new tab has empty state)
+  const { delivery, emp, company } = useMemo(() => {
+    const ctxDelivery = deliveries.find(d => d.id === deliveryId);
+    if (ctxDelivery) {
+      return {
+        delivery: ctxDelivery,
+        emp: employees.find(e => e.id === ctxDelivery.employeeId),
+        company: companies.find(c => c.id === ctxDelivery.companyId),
+      };
+    }
+    // Fallback: read from sessionStorage
+    try {
+      const raw = sessionStorage.getItem('topac_print_delivery');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.delivery?.id === deliveryId) {
+          return { delivery: parsed.delivery, emp: parsed.employee, company: parsed.company };
+        }
+      }
+    } catch { /* ignore */ }
+    return { delivery: null, emp: null, company: null };
+  }, [deliveryId, deliveries, employees, companies]);
 
-  const emp = employees.find(e => e.id === delivery.employeeId);
-  const company = companies.find(c => c.id === delivery.companyId);
+  if (!delivery) return <div className="p-10 text-center text-lg">Ficha não encontrada.</div>;
   if (!emp || !company) return <div className="p-10 text-center">Dados incompletos.</div>;
 
   const title = delivery.type === 'epi' ? 'FICHA DE ENTREGA DE EPI' : 'FICHA DE ENTREGA DE UNIFORMES';

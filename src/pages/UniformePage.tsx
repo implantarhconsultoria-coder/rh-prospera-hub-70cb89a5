@@ -51,6 +51,13 @@ const UniformePage: React.FC = () => {
       responsavel,
     });
 
+    const printData = {
+      delivery,
+      employee: emp,
+      company,
+    };
+    sessionStorage.setItem('topac_print_delivery', JSON.stringify(printData));
+
     window.open(`/entrega-impressao?id=${delivery.id}`, '_blank');
     toast.success('Ficha de Uniforme gerada com sucesso!');
     setItems([]);

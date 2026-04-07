@@ -52,9 +52,15 @@ const EPIPage: React.FC = () => {
       responsavel,
     });
 
-    // Open print page
-    const url = `/entrega-impressao?id=${delivery.id}`;
-    window.open(url, '_blank');
+    // Store full print payload in sessionStorage so the print tab can read it
+    const printData = {
+      delivery,
+      employee: emp,
+      company,
+    };
+    sessionStorage.setItem('topac_print_delivery', JSON.stringify(printData));
+
+    window.open(`/entrega-impressao?id=${delivery.id}`, '_blank');
 
     toast.success('Ficha de EPI gerada com sucesso!');
     setItems([]);
