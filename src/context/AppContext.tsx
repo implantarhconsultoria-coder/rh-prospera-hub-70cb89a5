@@ -2,7 +2,9 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { employees as initialEmployees, type Employee } from '@/data/employees';
 import { type MonthlyEntry, type Fechamento, generateDefaultEntries, initialEntries } from '@/data/entries';
 import { companies, type Company } from '@/data/companies';
-import { type Delivery, type BenefitReport } from '@/data/deliveries';
+import type { Delivery, BenefitReport } from '@/data/deliveries';
+
+// Force HMR refresh
 
 interface AppState {
   isAuthenticated: boolean;
