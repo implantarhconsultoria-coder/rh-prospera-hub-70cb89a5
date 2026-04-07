@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { employees as initialEmployees, type Employee } from '@/data/employees';
-import { type MonthlyEntry, type Fechamento, generateDefaultEntries } from '@/data/entries';
+import { type MonthlyEntry, type Fechamento, generateDefaultEntries, initialEntries } from '@/data/entries';
 import { companies, type Company } from '@/data/companies';
 
 interface AppState {
@@ -47,7 +47,7 @@ export const useApp = () => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setAuth] = useState(false);
   const [emps, setEmps] = useState<Employee[]>(initialEmployees);
-  const [entries, setEntries] = useState<MonthlyEntry[]>([]);
+  const [entries, setEntries] = useState<MonthlyEntry[]>(initialEntries);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
   const [config, setConfig] = useState<AppConfig>(defaultConfig);
 

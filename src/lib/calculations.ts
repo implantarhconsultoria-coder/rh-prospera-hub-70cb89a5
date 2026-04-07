@@ -16,20 +16,23 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry) => {
     + entry.adicionais
     + (entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0);
 
+  const vrDias = entry.vrDias ?? 22;
   const beneficios =
-    (entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * 22 : 0)
+    (entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * vrDias : 0)
     + (entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0)
     + (entry.vtAplicado && emp.vtAtivo ? emp.vtValor : 0);
 
   const descontos = calcFalta(emp.salarioBase, entry.faltasDias)
     + calcAtraso(emp.salarioBase, entry.atrasos)
     + entry.descontosDiversos
-    + (entry.adiantamento || 0);
+    + (entry.adiantamento || 0)
+    + (entry.vtDesconto || 0);
 
   return { proventos, beneficios, descontos, liquido: proventos + beneficios - descontos };
 };
 
 export const feriasStatus = (dataAdmissao: string) => {
+  if (!dataAdmissao) return { status: 'em dia' as const, periodoAtual: 0, mesesNoPeriodo: 0 };
   const adm = new Date(dataAdmissao);
   const hoje = new Date();
   const diffMs = hoje.getTime() - adm.getTime();
@@ -43,6 +46,7 @@ export const feriasStatus = (dataAdmissao: string) => {
 };
 
 export const asoStatus = (dataExame: string) => {
+  if (!dataExame) return { status: 'ok' as const, proximoASO: new Date(), diasRestantes: 0 };
   const exame = new Date(dataExame);
   const hoje = new Date();
   const proximo = new Date(exame);
@@ -57,5 +61,7 @@ export const asoStatus = (dataExame: string) => {
 export const formatCurrency = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-export const formatDate = (d: string) =>
-  new Date(d).toLocaleDateString('pt-BR');
+export const formatDate = (d: string) => {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('pt-BR');
+};
