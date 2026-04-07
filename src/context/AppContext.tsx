@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import { employees as initialEmployees, type Employee } from '@/data/employees';
 import { type MonthlyEntry, type Fechamento, generateDefaultEntries, initialEntries } from '@/data/entries';
 import { companies, type Company } from '@/data/companies';
+import { type Delivery, type BenefitReport } from '@/data/deliveries';
 
 interface AppState {
   isAuthenticated: boolean;
@@ -20,6 +21,12 @@ interface AppState {
   updateFechamento: (companyId: string, competencia: string, data: Partial<Fechamento>) => void;
   config: AppConfig;
   setConfig: React.Dispatch<React.SetStateAction<AppConfig>>;
+  // Deliveries (EPI & Uniforms)
+  deliveries: Delivery[];
+  addDelivery: (data: Omit<Delivery, 'id' | 'createdAt'>) => Delivery;
+  // Benefit reports (VR & VT)
+  benefitReports: BenefitReport[];
+  addBenefitReport: (data: Omit<BenefitReport, 'id' | 'createdAt'>) => BenefitReport;
 }
 
 interface AppConfig {
@@ -44,12 +51,17 @@ export const useApp = () => {
   return ctx;
 };
 
+let deliveryCounter = 0;
+let reportCounter = 0;
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setAuth] = useState(false);
   const [emps, setEmps] = useState<Employee[]>(initialEmployees);
   const [entries, setEntries] = useState<MonthlyEntry[]>(initialEntries);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
   const [config, setConfig] = useState<AppConfig>(defaultConfig);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [benefitReports, setBenefitReports] = useState<BenefitReport[]>([]);
 
   const login = useCallback((u: string, p: string) => {
     if ((u === 'admin' && p === 'admin') || (u === 'rh' && p === 'rh123')) {
@@ -96,12 +108,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  const addDelivery = useCallback((data: Omit<Delivery, 'id' | 'createdAt'>): Delivery => {
+    deliveryCounter++;
+    const delivery: Delivery = { ...data, id: `del-${Date.now()}-${deliveryCounter}`, createdAt: new Date().toISOString() };
+    setDeliveries(prev => [...prev, delivery]);
+    return delivery;
+  }, []);
+
+  const addBenefitReport = useCallback((data: Omit<BenefitReport, 'id' | 'createdAt'>): BenefitReport => {
+    reportCounter++;
+    const report: BenefitReport = { ...data, id: `rpt-${Date.now()}-${reportCounter}`, createdAt: new Date().toISOString() };
+    setBenefitReports(prev => [...prev, report]);
+    return report;
+  }, []);
+
   return (
     <AppContext.Provider value={{
       isAuthenticated, login, logout, companies, employees: emps, updateEmployee,
       entries, setEntries, getOrCreateEntries, updateEntry,
       fechamentos, setFechamentos, getFechamento, updateFechamento,
       config, setConfig,
+      deliveries, addDelivery,
+      benefitReports, addBenefitReport,
     }}>
       {children}
     </AppContext.Provider>

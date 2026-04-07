@@ -16,6 +16,14 @@ import FechamentoPage from "@/pages/FechamentoPage";
 import RelatorioPage from "@/pages/RelatorioPage";
 import RelatorioImpressaoPage from "@/pages/RelatorioImpressaoPage";
 import ConfiguracoesPage from "@/pages/ConfiguracoesPage";
+import EPIPage from "@/pages/EPIPage";
+import UniformePage from "@/pages/UniformePage";
+import EntregaImpressaoPage from "@/pages/EntregaImpressaoPage";
+import RelatorioVRPage from "@/pages/RelatorioVRPage";
+import RelatorioVTPage from "@/pages/RelatorioVTPage";
+import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
+import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
+import HistoricoPage from "@/pages/HistoricoPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,11 +43,19 @@ const AuthGate = () => {
           <Route path="/lancamentos" element={<LancamentosPage />} />
           <Route path="/fechamento" element={<FechamentoPage />} />
           <Route path="/relatorio" element={<RelatorioPage />} />
+          <Route path="/epi" element={<EPIPage />} />
+          <Route path="/uniformes" element={<UniformePage />} />
+          <Route path="/relatorio-vr" element={<RelatorioVRPage />} />
+          <Route path="/relatorio-vt" element={<RelatorioVTPage />} />
+          <Route path="/historico" element={<HistoricoPage />} />
           <Route path="/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
-        {/* Print route — no sidebar/layout */}
+        {/* Print routes — no sidebar/layout */}
         <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />
+        <Route path="/entrega-impressao" element={<EntregaImpressaoPage />} />
+        <Route path="/relatorio-vr-impressao" element={<RelatorioVRImpressaoPage />} />
+        <Route path="/relatorio-vt-impressao" element={<RelatorioVTImpressaoPage />} />
       </Routes>
     </BrowserRouter>
   );

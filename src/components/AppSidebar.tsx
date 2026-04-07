@@ -1,9 +1,9 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Users, UserCheck, CalendarDays,
+  LayoutDashboard, Building2, Users, CalendarDays,
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
-  Database, Truck, Package
+  Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -16,13 +16,18 @@ const menuItems = [
   { label: 'Lançamentos Mensais', icon: CalendarDays, path: '/lancamentos' },
   { label: 'Fechamento', icon: FileCheck, path: '/fechamento' },
   { label: 'Relatório', icon: FileText, path: '/relatorio' },
-  { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
 
-const futureItems = [
-  { label: 'Ponto Digital', icon: UserCheck },
-  { label: 'Operacional', icon: Truck },
-  { label: 'Almoxarifado', icon: Package },
+const operationalItems = [
+  { label: 'Entrega de EPI', icon: HardHat, path: '/epi' },
+  { label: 'Uniformes', icon: Shirt, path: '/uniformes' },
+  { label: 'Relatório VR', icon: UtensilsCrossed, path: '/relatorio-vr' },
+  { label: 'Relatório VT', icon: Bus, path: '/relatorio-vt' },
+  { label: 'Histórico', icon: History, path: '/historico' },
+];
+
+const bottomItems = [
+  { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
 
 interface Props { collapsed: boolean; onToggle: () => void; }
@@ -30,6 +35,19 @@ interface Props { collapsed: boolean; onToggle: () => void; }
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout } = useApp();
   const location = useLocation();
+
+  const renderLink = (item: { label: string; icon: React.ElementType; path: string }) => (
+    <NavLink key={item.path} to={item.path}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+        location.pathname === item.path
+          ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-premium"
+          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+      )}>
+      <item.icon className="w-5 h-5 flex-shrink-0" />
+      {!collapsed && <span>{item.label}</span>}
+    </NavLink>
+  );
 
   return (
     <aside className={cn(
@@ -54,31 +72,19 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
       </div>
 
       <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
-        {menuItems.map(item => (
-          <NavLink key={item.path} to={item.path}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-              location.pathname === item.path
-                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-premium"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            )}>
-            <item.icon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>{item.label}</span>}
-          </NavLink>
-        ))}
+        {menuItems.map(renderLink)}
 
         {!collapsed && (
-          <div className="pt-4 mt-4 border-t border-sidebar-border">
-            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Em breve</p>
-            {futureItems.map(item => (
-              <div key={item.label}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/30 cursor-not-allowed">
-                <item.icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </div>
-            ))}
+          <div className="pt-3 mt-3 border-t border-sidebar-border">
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Operacional</p>
           </div>
         )}
+        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {operationalItems.map(renderLink)}
+
+        {!collapsed && <div className="pt-3 mt-3 border-t border-sidebar-border" />}
+        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {bottomItems.map(renderLink)}
       </nav>
 
       <div className="p-2 border-t border-sidebar-border">
