@@ -3,8 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useApp } from "@/context/AppContext";
-import { AppProvider } from "@/context/AppProvider";
+import { AppProvider, useApp } from "@/context/AppContext";
 import AppLayout from "@/components/AppLayout";
 import LoginPage from "@/pages/LoginPage";
 import DashboardPage from "@/pages/DashboardPage";
@@ -43,7 +42,6 @@ const AuthGate = () => {
   );
 };
 
-// App root
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
