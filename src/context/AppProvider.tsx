@@ -1,47 +1,14 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { employees as initialEmployees, type Employee } from '@/data/employees';
 import { type MonthlyEntry, type Fechamento, generateDefaultEntries, initialEntries } from '@/data/entries';
-import { companies, type Company } from '@/data/companies';
-
-interface AppState {
-  isAuthenticated: boolean;
-  login: (u: string, p: string) => boolean;
-  logout: () => void;
-  companies: Company[];
-  employees: Employee[];
-  updateEmployee: (id: string, data: Partial<Employee>) => void;
-  entries: MonthlyEntry[];
-  setEntries: React.Dispatch<React.SetStateAction<MonthlyEntry[]>>;
-  getOrCreateEntries: (companyId: string, competencia: string) => MonthlyEntry[];
-  updateEntry: (employeeId: string, competencia: string, data: Partial<MonthlyEntry>) => void;
-  fechamentos: Fechamento[];
-  setFechamentos: React.Dispatch<React.SetStateAction<Fechamento[]>>;
-  getFechamento: (companyId: string, competencia: string) => Fechamento;
-  updateFechamento: (companyId: string, competencia: string, data: Partial<Fechamento>) => void;
-  config: AppConfig;
-  setConfig: React.Dispatch<React.SetStateAction<AppConfig>>;
-}
-
-interface AppConfig {
-  platformName: string;
-  pctAdiantamento: number;
-  valorInsalubridade: number;
-  mensagemInstitucional: string;
-}
+import { companies } from '@/data/companies';
+import { AppContext, type AppConfig } from '@/context/AppContext';
 
 const defaultConfig: AppConfig = {
   platformName: 'Topac RH Multiempresa PRO',
   pctAdiantamento: 40,
   valorInsalubridade: 648.40,
   mensagemInstitucional: 'Sistema desenvolvido por ImplantaRH ConsultoriaPRO',
-};
-
-const AppContext = createContext<AppState | null>(null);
-
-export const useApp = () => {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
-  return ctx;
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -53,7 +20,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const login = useCallback((u: string, p: string) => {
     if ((u === 'admin' && p === 'admin') || (u === 'rh' && p === 'rh123')) {
-      setAuth(true); return true;
+      setAuth(true);
+      return true;
     }
     return false;
   }, []);
@@ -61,12 +29,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = useCallback(() => setAuth(false), []);
 
   const updateEmployee = useCallback((id: string, data: Partial<Employee>) => {
-    setEmps(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
+    setEmps(prev => prev.map(e => (e.id === id ? { ...e, ...data } : e)));
   }, []);
 
   const getOrCreateEntries = useCallback((companyId: string, competencia: string) => {
     const existing = entries.filter(e => e.companyId === companyId && e.competencia === competencia);
     if (existing.length > 0) return existing;
+
     const compEmps = emps.filter(e => e.companyId === companyId && e.status === 'ativo' && e.categoria === 'operacional');
     const newEntries = generateDefaultEntries(companyId, competencia, compEmps.map(e => e.id));
     setEntries(prev => [...prev, ...newEntries]);
@@ -74,14 +43,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [entries, emps]);
 
   const updateEntry = useCallback((employeeId: string, competencia: string, data: Partial<MonthlyEntry>) => {
-    setEntries(prev => prev.map(e =>
+    setEntries(prev => prev.map(e => (
       e.employeeId === employeeId && e.competencia === competencia ? { ...e, ...data } : e
-    ));
+    )));
   }, []);
 
   const getFechamento = useCallback((companyId: string, competencia: string): Fechamento => {
-    const f = fechamentos.find(f => f.companyId === companyId && f.competencia === competencia);
-    return f || { companyId, competencia, status: 'aberto', observacoes: '' };
+    const fechamento = fechamentos.find(f => f.companyId === companyId && f.competencia === competencia);
+    return fechamento || { companyId, competencia, status: 'aberto', observacoes: '' };
   }, [fechamentos]);
 
   const updateFechamento = useCallback((companyId: string, competencia: string, data: Partial<Fechamento>) => {
@@ -97,12 +66,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   return (
-    <AppContext.Provider value={{
-      isAuthenticated, login, logout, companies, employees: emps, updateEmployee,
-      entries, setEntries, getOrCreateEntries, updateEntry,
-      fechamentos, setFechamentos, getFechamento, updateFechamento,
-      config, setConfig,
-    }}>
+    <AppContext.Provider
+      value={{
+        isAuthenticated,
+        login,
+        logout,
+        companies,
+        employees: emps,
+        updateEmployee,
+        entries,
+        setEntries,
+        getOrCreateEntries,
+        updateEntry,
+        fechamentos,
+        setFechamentos,
+        getFechamento,
+        updateFechamento,
+        config,
+        setConfig,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
