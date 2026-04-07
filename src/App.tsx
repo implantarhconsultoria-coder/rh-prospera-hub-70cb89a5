@@ -14,6 +14,7 @@ import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
 import LancamentosPage from "@/pages/LancamentosPage";
 import FechamentoPage from "@/pages/FechamentoPage";
 import RelatorioPage from "@/pages/RelatorioPage";
+import RelatorioImpressaoPage from "@/pages/RelatorioImpressaoPage";
 import ConfiguracoesPage from "@/pages/ConfiguracoesPage";
 import NotFound from "@/pages/NotFound";
 
@@ -37,6 +38,8 @@ const AuthGate = () => {
           <Route path="/configuracoes" element={<ConfiguracoesPage />} />
           <Route path="*" element={<NotFound />} />
         </Route>
+        {/* Print route — no sidebar/layout */}
+        <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />
       </Routes>
     </BrowserRouter>
   );

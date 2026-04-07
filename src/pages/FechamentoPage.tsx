@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { calcTotalFuncionario, formatCurrency, calcAdiantamento } from '@/lib/calculations';
+import { calcTotalFuncionario, formatCurrency, calcFalta } from '@/lib/calculations';
+import { getWorkingDays } from '@/lib/workingDays';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Save, Lock, FileText, CheckCircle } from 'lucide-react';
+import { Save, Lock, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
 const FechamentoPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, updateEntry, getFechamento, updateFechamento, config } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, updateEntry, getFechamento, updateFechamento } = useApp();
   const navigate = useNavigate();
   const [selectedCompany, setSelectedCompany] = useState(companies[0]?.id || '');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
+
+  const diasUteis = getWorkingDays(competencia);
 
   useEffect(() => {
     if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
@@ -22,14 +25,19 @@ const FechamentoPage: React.FC = () => {
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
 
-  let totalProventos = 0, totalDescontos = 0, totalLiquido = 0, totalBeneficios = 0;
-  compEmps.forEach(emp => {
-    const entry = compEntries.find(e => e.employeeId === emp.id);
-    if (entry) {
-      const c = calcTotalFuncionario(emp, entry);
-      totalProventos += c.proventos; totalDescontos += c.descontos; totalLiquido += c.liquido; totalBeneficios += c.beneficios;
-    }
-  });
+  const { totalProventos, totalDescontos, totalLiquido, totalBeneficios, totalInsalubridade, totalFaltaDias, totalFaltaVal } = useMemo(() => {
+    let tP = 0, tD = 0, tL = 0, tB = 0, tI = 0, tFD = 0, tFV = 0;
+    compEmps.forEach(emp => {
+      const entry = compEntries.find(e => e.employeeId === emp.id);
+      if (entry) {
+        const c = calcTotalFuncionario(emp, entry, diasUteis);
+        tP += c.proventos; tD += c.descontos; tL += c.liquido; tB += c.beneficios;
+        tI += (entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0);
+        tFD += entry.faltasDias; tFV += calcFalta(emp.salarioBase, entry.faltasDias);
+      }
+    });
+    return { totalProventos: tP, totalDescontos: tD, totalLiquido: tL, totalBeneficios: tB, totalInsalubridade: tI, totalFaltaDias: tFD, totalFaltaVal: tFV };
+  }, [compEmps, compEntries, diasUteis]);
 
   const statusColor = fechamento.status === 'fechado' ? 'bg-success text-success-foreground' : fechamento.status === 'em_conferencia' ? 'bg-warning text-warning-foreground' : 'bg-muted text-muted-foreground';
 
@@ -43,6 +51,7 @@ const FechamentoPage: React.FC = () => {
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="w-48" />
+        <span className="text-xs text-muted-foreground">Dias úteis: <strong className="text-foreground">{diasUteis}</strong></span>
         <Badge className={`${statusColor} ml-2`}>{fechamento.status.replace('_', ' ')}</Badge>
       </div>
 
@@ -53,6 +62,10 @@ const FechamentoPage: React.FC = () => {
           { l: 'Total Descontos', v: formatCurrency(totalDescontos), c: 'text-destructive' },
           { l: 'Total Benefícios', v: formatCurrency(totalBeneficios), c: 'text-primary' },
           { l: 'Líquido Estimado', v: formatCurrency(totalLiquido), c: 'text-accent' },
+          { l: 'Insalubridade', v: formatCurrency(totalInsalubridade), c: 'text-foreground' },
+          { l: 'Funcionários', v: String(compEmps.length), c: 'text-foreground' },
+          { l: 'Faltas (dias)', v: `${totalFaltaDias}`, c: 'text-destructive' },
+          { l: 'Desc. Faltas', v: formatCurrency(totalFaltaVal), c: 'text-destructive' },
         ].map((card, i) => (
           <div key={i} className="card-premium p-4 text-center">
             <p className="text-xs text-muted-foreground uppercase">{card.l}</p>
@@ -66,7 +79,7 @@ const FechamentoPage: React.FC = () => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              {['Funcionário','Salário','Faltas','Atrasos','HE50','HE100','Adic.','Insal.','VR','VA','VT','Desc.','Adiant.','Líquido'].map(h => (
+              {['Funcionário','Salário','Faltas','Atrasos','HE50','HE100','Adic.','Insal.','VR','VT','Desc.','Adiant.','Líquido'].map(h => (
                 <th key={h} className="px-2 py-3 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -75,7 +88,7 @@ const FechamentoPage: React.FC = () => {
             {compEmps.map(emp => {
               const entry = compEntries.find(e => e.employeeId === emp.id);
               if (!entry) return null;
-              const calc = calcTotalFuncionario(emp, entry);
+              const calc = calcTotalFuncionario(emp, entry, diasUteis);
               const update = (data: any) => updateEntry(emp.id, competencia, data);
               return (
                 <tr key={emp.id} className="border-b hover:bg-muted/20">
@@ -87,9 +100,8 @@ const FechamentoPage: React.FC = () => {
                   <td className="px-2 py-2"><Input type="number" value={entry.he100} onChange={e => update({ he100: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
                   <td className="px-2 py-2"><Input type="number" value={entry.adicionais} onChange={e => update({ adicionais: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
                   <td className="px-2 py-2 text-xs">{emp.insalubridadeAtiva ? formatCurrency(emp.insalubridadeValor) : '—'}</td>
-                  <td className="px-2 py-2 text-xs">{entry.vrAplicado && emp.vrAtivo ? formatCurrency(emp.vrDiario * (entry.vrDias ?? 22)) : '—'}</td>
-                  <td className="px-2 py-2 text-xs">{entry.vaAplicado && emp.vaAtivo ? formatCurrency(emp.vaMensal) : '—'}</td>
-                  <td className="px-2 py-2 text-xs">{entry.vtAplicado && emp.vtAtivo ? formatCurrency(emp.vtValor) : '—'}</td>
+                  <td className="px-2 py-2 text-xs">{entry.vrAplicado && emp.vrAtivo ? `${formatCurrency(calc.vrVal)} (${calc.vrDiasEfetivos}d)` : '—'}</td>
+                  <td className="px-2 py-2 text-xs">{entry.vtAplicado && emp.vtAtivo ? formatCurrency(calc.vtVal) : '—'}</td>
                   <td className="px-2 py-2"><Input type="number" value={entry.descontosDiversos} onChange={e => update({ descontosDiversos: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
                   <td className="px-2 py-2"><Input type="number" value={entry.adiantamento} onChange={e => update({ adiantamento: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
                   <td className="px-2 py-2 font-bold text-xs">{formatCurrency(calc.liquido)}</td>
@@ -111,7 +123,9 @@ const FechamentoPage: React.FC = () => {
             className="gradient-primary text-primary-foreground"><Save className="w-4 h-4 mr-2" />Salvar Fechamento</Button>
           <Button onClick={() => { updateFechamento(selectedCompany, competencia, { status: 'fechado', dataFechamento: new Date().toISOString() }); toast.success('Fechamento marcado como fechado!'); }}
             variant="outline"><Lock className="w-4 h-4 mr-2" />Marcar como Fechado</Button>
-          <Button onClick={() => navigate('/relatorio')} variant="outline"><FileText className="w-4 h-4 mr-2" />Emitir Relatório</Button>
+          <Button onClick={() => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`)} variant="outline">
+            <FileText className="w-4 h-4 mr-2" />Relatório para Impressão
+          </Button>
         </div>
       </div>
     </div>

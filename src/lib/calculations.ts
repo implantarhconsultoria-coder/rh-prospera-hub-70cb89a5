@@ -9,18 +9,41 @@ export const calcFalta = (salario: number, dias: number) => (salario / 30) * dia
 export const calcAtraso = (salario: number, horas: number) => valorHora(salario) * horas;
 export const calcAdiantamento = (salario: number, pct: number = 40) => salario * (pct / 100);
 
-export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry) => {
+/**
+ * Calculate VR discount for absences: each falta day removes one VR daily value.
+ */
+export const calcDescontoVRFaltas = (vrDiario: number, faltasDias: number) => vrDiario * faltasDias;
+
+/**
+ * Calculate VT discount for absences: proportional per day (vtValor / diasUteis * faltasDias).
+ */
+export const calcDescontoVTFaltas = (vtValor: number, diasUteis: number, faltasDias: number) => {
+  if (diasUteis <= 0) return 0;
+  return (vtValor / diasUteis) * faltasDias;
+};
+
+export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22) => {
   const proventos = emp.salarioBase
     + calcHE50(emp.salarioBase, entry.he50)
     + calcHE100(emp.salarioBase, entry.he100)
     + entry.adicionais
     + (entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0);
 
-  const vrDias = entry.vrDias ?? 22;
-  const beneficios =
-    (entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * vrDias : 0)
-    + (entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0)
-    + (entry.vtAplicado && emp.vtAtivo ? emp.vtValor : 0);
+  // VR: use entry vrDias (auto or manual), discount faltas
+  const vrDiasEfetivos = Math.max(0, (entry.vrDias ?? diasUteis) - entry.faltasDias);
+  const vrVal = entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * vrDiasEfetivos : 0;
+
+  // VA: fixed monthly
+  const vaVal = entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0;
+
+  // VT: proportional discount for faltas
+  const vtBruto = entry.vtAplicado && emp.vtAtivo ? emp.vtValor : 0;
+  const vtDescontoFalta = entry.vtAplicado && emp.vtAtivo
+    ? calcDescontoVTFaltas(emp.vtValor, diasUteis, entry.faltasDias)
+    : 0;
+  const vtVal = Math.max(0, vtBruto - vtDescontoFalta);
+
+  const beneficios = vrVal + vaVal + vtVal;
 
   const descontos = calcFalta(emp.salarioBase, entry.faltasDias)
     + calcAtraso(emp.salarioBase, entry.atrasos)
@@ -28,7 +51,17 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry) => {
     + (entry.adiantamento || 0)
     + (entry.vtDesconto || 0);
 
-  return { proventos, beneficios, descontos, liquido: proventos + beneficios - descontos };
+  return {
+    proventos,
+    beneficios,
+    descontos,
+    liquido: proventos + beneficios - descontos,
+    vrVal,
+    vaVal,
+    vtVal,
+    vtDescontoFalta,
+    vrDiasEfetivos,
+  };
 };
 
 export const feriasStatus = (dataAdmissao: string) => {
