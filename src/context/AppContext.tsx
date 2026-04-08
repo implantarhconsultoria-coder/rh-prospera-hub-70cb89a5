@@ -4,7 +4,7 @@ import { type MonthlyEntry, type Fechamento, generateDefaultEntries, initialEntr
 import { companies, type Company } from '@/data/companies';
 import type { Delivery, BenefitReport } from '@/data/deliveries';
 
-// Force HMR refresh
+// HMR v2
 
 interface AppState {
   isAuthenticated: boolean;
