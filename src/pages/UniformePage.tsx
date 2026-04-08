@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 
 const UniformePage: React.FC = () => {
   const { companies, employees, addDelivery } = useApp();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [items, setItems] = useState<DeliveryItem[]>([]);
@@ -39,26 +41,38 @@ const UniformePage: React.FC = () => {
 
   const handleGenerate = () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
+    if (!company) { toast.error('Empresa do funcionário não encontrada'); return; }
     if (items.length === 0) { toast.error('Adicione pelo menos um item'); return; }
     if (!responsavel.trim()) { toast.error('Informe o responsável'); return; }
 
-    const delivery = addDelivery({
+    const currentItems = items.map(item => ({ ...item }));
+    const responsavelNome = responsavel.trim();
+
+    addDelivery({
       type: 'uniforme',
       employeeId: emp.id,
       companyId: emp.companyId,
       date: deliveryDate,
-      items,
-      responsavel,
+      items: currentItems,
+      responsavel: responsavelNome,
     });
 
-    const printData = {
-      delivery,
-      employee: emp,
-      company,
-    };
-    sessionStorage.setItem('topac_print_delivery', JSON.stringify(printData));
+    navigate('/entrega-impressao', {
+      state: {
+        previewData: {
+          delivery: {
+            type: 'uniforme',
+            date: deliveryDate,
+            items: currentItems,
+            responsavel: responsavelNome,
+          },
+          employee: emp,
+          company,
+          returnPath: '/uniformes',
+        },
+      },
+    });
 
-    window.open(`/entrega-impressao?id=${delivery.id}`, '_blank');
     toast.success('Ficha de Uniforme gerada com sucesso!');
     setItems([]);
     setResponsavel('');
