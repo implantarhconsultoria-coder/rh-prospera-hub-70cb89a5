@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Building2, Users, CalendarDays,
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
   Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
+  Clock, Wallet, CalendarCheck, FileX,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,13 @@ const operationalItems = [
   { label: 'Relatório VR', icon: UtensilsCrossed, path: '/relatorio-vr' },
   { label: 'Relatório VT', icon: Bus, path: '/relatorio-vt' },
   { label: 'Histórico', icon: History, path: '/historico' },
+];
+
+const upcomingItems = [
+  { label: 'Ponto Digital', icon: Clock, path: '#', disabled: true },
+  { label: 'Folha de Pagamento', icon: Wallet, path: '#', disabled: true },
+  { label: 'Férias e 13º', icon: CalendarCheck, path: '#', disabled: true },
+  { label: 'Rescisões', icon: FileX, path: '#', disabled: true },
 ];
 
 const bottomItems = [

@@ -10,6 +10,22 @@ export const calcAtraso = (salario: number, horas: number) => valorHora(salario)
 export const calcAdiantamento = (salario: number, pct: number = 40) => salario * (pct / 100);
 
 /**
+ * DSR sobre horas extras: (total HE / dias úteis do mês) * domingos e feriados
+ * Fórmula simplificada: totalHE / diasUteis * (diasNoMes - diasUteis)
+ */
+export const calcDSR = (totalHE: number, diasUteis: number, competencia?: string) => {
+  if (diasUteis <= 0) return 0;
+  // dias no mês
+  let diasNoMes = 30;
+  if (competencia) {
+    const [y, m] = competencia.split('-').map(Number);
+    diasNoMes = new Date(y, m, 0).getDate();
+  }
+  const diasDescanso = diasNoMes - diasUteis;
+  return (totalHE / diasUteis) * diasDescanso;
+};
+
+/**
  * Calculate VR discount for absences: each falta day removes one VR daily value.
  */
 export const calcDescontoVRFaltas = (vrDiario: number, faltasDias: number) => vrDiario * faltasDias;

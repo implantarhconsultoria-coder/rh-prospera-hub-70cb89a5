@@ -127,10 +127,6 @@ const EntregaImpressaoPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="border border-gray-400 rounded p-3 mb-4">
-              <p className="text-[9px] uppercase text-gray-500 mb-2 font-bold">RESPONSÁVEL PELA ENTREGA</p>
-              <p className="text-xs"><strong>{delivery.responsavel}</strong></p>
-            </div>
 
             <table className="w-full border-collapse mb-4" style={{ fontSize: '10px' }}>
               <thead>
