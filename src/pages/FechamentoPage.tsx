@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { calcTotalFuncionario, formatCurrency, calcFalta } from '@/lib/calculations';
+import { calcTotalFuncionario, calcHE50, calcHE100, calcDSR, formatCurrency, calcFalta } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -25,19 +25,34 @@ const FechamentoPage: React.FC = () => {
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
 
+  // Comissão: 2% para Goiânia, 1% para demais
+  const comissaoPct = selectedCompany === 'topac-gyn' ? 0.02 : 0.01;
+
   const { totalProventos, totalDescontos, totalLiquido, totalBeneficios, totalInsalubridade, totalFaltaDias, totalFaltaVal } = useMemo(() => {
     let tP = 0, tD = 0, tL = 0, tB = 0, tI = 0, tFD = 0, tFV = 0;
     compEmps.forEach(emp => {
       const entry = compEntries.find(e => e.employeeId === emp.id);
       if (entry) {
         const c = calcTotalFuncionario(emp, entry, diasUteis);
-        tP += c.proventos; tD += c.descontos; tL += c.liquido; tB += c.beneficios;
+        tP += c.proventos; tD += c.descontos; tB += c.beneficios;
         tI += (entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0);
         tFD += entry.faltasDias; tFV += calcFalta(emp.salarioBase, entry.faltasDias);
+
+        // Líquido sem VR/VT, com comissão
+        const he50Val = calcHE50(emp.salarioBase, entry.he50);
+        const he100Val = calcHE100(emp.salarioBase, entry.he100);
+        const totalHE = he50Val + he100Val;
+        const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
+        const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
+        const comissaoVal = (entry.comissaoBase || 0) * comissaoPct;
+        const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
+        const liq = emp.salarioBase + insVal + he50Val + he100Val + dsrHE + comissaoVal + entry.adicionais
+          - faltaVal - (entry.adiantamento || 0) - entry.descontosDiversos - (entry.atrasos > 0 ? (emp.salarioBase / 220) * entry.atrasos : 0);
+        tL += liq;
       }
     });
     return { totalProventos: tP, totalDescontos: tD, totalLiquido: tL, totalBeneficios: tB, totalInsalubridade: tI, totalFaltaDias: tFD, totalFaltaVal: tFV };
-  }, [compEmps, compEntries, diasUteis]);
+  }, [compEmps, compEntries, diasUteis, comissaoPct]);
 
   const statusColor = fechamento.status === 'fechado' ? 'bg-success text-success-foreground' : fechamento.status === 'em_conferencia' ? 'bg-warning text-warning-foreground' : 'bg-muted text-muted-foreground';
 
@@ -79,7 +94,7 @@ const FechamentoPage: React.FC = () => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              {['Funcionário','Salário','Faltas','Atrasos','HE50','HE100','DSR','Adic.','Insal.','VR','VT','Desc.','Adiant.','Líquido'].map(h => (
+              {['Funcionário','Salário','Faltas','Atrasos','HE50','HE100','DSR','Adic.','Insal.','VR','VT','Comissão','Desc.','Adiant.','Líquido'].map(h => (
                 <th key={h} className="px-2 py-3 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -90,6 +105,19 @@ const FechamentoPage: React.FC = () => {
               if (!entry) return null;
               const calc = calcTotalFuncionario(emp, entry, diasUteis);
               const update = (data: any) => updateEntry(emp.id, competencia, data);
+
+              // Calc líquido individual sem VR/VT
+              const he50Val = calcHE50(emp.salarioBase, entry.he50);
+              const he100Val = calcHE100(emp.salarioBase, entry.he100);
+              const totalHE = he50Val + he100Val;
+              const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
+              const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
+              const comissaoVal = (entry.comissaoBase || 0) * comissaoPct;
+              const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
+              const atrasoVal = entry.atrasos > 0 ? (emp.salarioBase / 220) * entry.atrasos : 0;
+              const liquido = emp.salarioBase + insVal + he50Val + he100Val + dsrHE + comissaoVal + entry.adicionais
+                - faltaVal - (entry.adiantamento || 0) - entry.descontosDiversos - atrasoVal;
+
               return (
                 <tr key={emp.id} className="border-b hover:bg-muted/20">
                   <td className="px-2 py-2 font-medium whitespace-nowrap text-xs">{emp.name}</td>
@@ -98,14 +126,19 @@ const FechamentoPage: React.FC = () => {
                   <td className="px-2 py-2"><Input type="number" value={entry.atrasos} onChange={e => update({ atrasos: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
                   <td className="px-2 py-2"><Input type="number" value={entry.he50} onChange={e => update({ he50: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
                   <td className="px-2 py-2"><Input type="number" value={entry.he100} onChange={e => update({ he100: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
+                  <td className="px-2 py-2 text-xs">{formatCurrency(dsrHE)}</td>
                   <td className="px-2 py-2"><Input type="number" value={entry.adicionais} onChange={e => update({ adicionais: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
-                  <td className="px-2 py-2 text-xs">{formatCurrency(calc.dsrHE)}</td>
                   <td className="px-2 py-2 text-xs">{emp.insalubridadeAtiva ? formatCurrency(emp.insalubridadeValor) : '—'}</td>
                   <td className="px-2 py-2 text-xs">{entry.vrAplicado && emp.vrAtivo ? `${formatCurrency(calc.vrVal)} (${calc.vrDiasEfetivos}d)` : '—'}</td>
                   <td className="px-2 py-2 text-xs">{entry.vtAplicado && emp.vtAtivo ? formatCurrency(calc.vtVal) : '—'}</td>
+                  <td className="px-2 py-2">
+                    <Input type="number" value={entry.comissaoBase || ''} onChange={e => update({ comissaoBase: Number(e.target.value) })}
+                      placeholder="Base" className="w-20 text-xs h-7" />
+                    {comissaoVal > 0 && <span className="text-[10px] text-success block">{formatCurrency(comissaoVal)}</span>}
+                  </td>
                   <td className="px-2 py-2"><Input type="number" value={entry.descontosDiversos} onChange={e => update({ descontosDiversos: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
                   <td className="px-2 py-2"><Input type="number" value={entry.adiantamento} onChange={e => update({ adiantamento: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
-                  <td className="px-2 py-2 font-bold text-xs">{formatCurrency(calc.liquido)}</td>
+                  <td className="px-2 py-2 font-bold text-xs">{formatCurrency(liquido)}</td>
                 </tr>
               );
             })}
