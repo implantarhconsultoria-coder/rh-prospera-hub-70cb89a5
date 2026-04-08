@@ -10,6 +10,22 @@ export const calcAtraso = (salario: number, horas: number) => valorHora(salario)
 export const calcAdiantamento = (salario: number, pct: number = 40) => salario * (pct / 100);
 
 /**
+ * DSR sobre horas extras: (total HE / dias úteis do mês) * domingos e feriados
+ * Fórmula simplificada: totalHE / diasUteis * (diasNoMes - diasUteis)
+ */
+export const calcDSR = (totalHE: number, diasUteis: number, competencia?: string) => {
+  if (diasUteis <= 0) return 0;
+  // dias no mês
+  let diasNoMes = 30;
+  if (competencia) {
+    const [y, m] = competencia.split('-').map(Number);
+    diasNoMes = new Date(y, m, 0).getDate();
+  }
+  const diasDescanso = diasNoMes - diasUteis;
+  return (totalHE / diasUteis) * diasDescanso;
+};
+
+/**
  * Calculate VR discount for absences: each falta day removes one VR daily value.
  */
 export const calcDescontoVRFaltas = (vrDiario: number, faltasDias: number) => vrDiario * faltasDias;
@@ -23,9 +39,15 @@ export const calcDescontoVTFaltas = (vtValor: number, diasUteis: number, faltasD
 };
 
 export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22) => {
+  const he50Val = calcHE50(emp.salarioBase, entry.he50);
+  const he100Val = calcHE100(emp.salarioBase, entry.he100);
+  const totalHE = he50Val + he100Val;
+  const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
+
   const proventos = emp.salarioBase
-    + calcHE50(emp.salarioBase, entry.he50)
-    + calcHE100(emp.salarioBase, entry.he100)
+    + he50Val
+    + he100Val
+    + dsrHE
     + entry.adicionais
     + (entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0);
 
@@ -61,6 +83,9 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
     vtVal,
     vtDescontoFalta,
     vrDiasEfetivos,
+    he50Val,
+    he100Val,
+    dsrHE,
   };
 };
 

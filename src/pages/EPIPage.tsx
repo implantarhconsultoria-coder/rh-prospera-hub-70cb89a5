@@ -43,7 +43,6 @@ const EPIPage: React.FC = () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
     if (!company) { toast.error('Empresa do funcionário não encontrada'); return; }
     if (items.length === 0) { toast.error('Adicione pelo menos um item'); return; }
-    if (!responsavel.trim()) { toast.error('Informe o responsável'); return; }
 
     const currentItems = items.map(item => ({ ...item }));
     const responsavelNome = responsavel.trim();
@@ -176,10 +175,6 @@ const EPIPage: React.FC = () => {
             <p className="text-center text-sm text-muted-foreground py-6">Clique em "Adicionar Item" para lançar EPIs</p>
           )}
 
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Responsável pela entrega</label>
-            <Input value={responsavel} onChange={e => setResponsavel(e.target.value)} placeholder="Nome do responsável" className="max-w-xs" />
-          </div>
 
           <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
             <FileText className="w-4 h-4 mr-2" /> Gerar Ficha de EPI

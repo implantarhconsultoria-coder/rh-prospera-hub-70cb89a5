@@ -13,7 +13,17 @@ const LancamentosPage: React.FC = () => {
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
 
   useEffect(() => {
-    if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
+    if (selectedCompany && competencia) {
+      const created = getOrCreateEntries(selectedCompany, competencia);
+      // Auto-fill adiantamento (40%) for entries that have 0
+      const compEmpsLocal = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional');
+      compEmpsLocal.forEach(emp => {
+        const entry = created.find(e => e.employeeId === emp.id);
+        if (entry && entry.adiantamento === 0) {
+          updateEntry(emp.id, competencia, { adiantamento: Math.round(emp.salarioBase * 0.4 * 100) / 100 });
+        }
+      });
+    }
   }, [selectedCompany, competencia]);
 
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
