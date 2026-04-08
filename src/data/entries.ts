@@ -1,3 +1,5 @@
+import { getWorkingDays } from '@/lib/workingDays';
+
 export interface MonthlyEntry {
   employeeId: string;
   companyId: string;
@@ -19,16 +21,19 @@ export interface MonthlyEntry {
   observacoes: string;
 }
 
-export const generateDefaultEntries = (companyId: string, competencia: string, employeeIds: string[]): MonthlyEntry[] =>
-  employeeIds.map(eid => ({
+export const generateDefaultEntries = (companyId: string, competencia: string, employeeIds: string[]): MonthlyEntry[] => {
+  const diasUteis = getWorkingDays(competencia);
+
+  return employeeIds.map(eid => ({
     employeeId: eid, companyId, competencia,
     faltasDias: 0, atrasos: 0, he50: 0, he100: 0,
     adicionais: 0, descontosDiversos: 0, adiantamento: 0,
-    vrAplicado: true, vrDias: 22,
+    vrAplicado: true, vrDias: diasUteis,
     vaAplicado: true, vtAplicado: true, vtDesconto: 0,
     insalubridadeAplicada: true,
     statusConferencia: 'pendente', observacoes: '',
   }));
+};
 
 // Pre-populated benefit entries for ALQUI — competência 2026-04
 export const initialEntries: MonthlyEntry[] = [

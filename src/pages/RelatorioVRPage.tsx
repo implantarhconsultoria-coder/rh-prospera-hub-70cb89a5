@@ -30,12 +30,13 @@ const RelatorioVRPage: React.FC = () => {
     return compEmps.map(emp => {
       const entry = compEntries.find(e => e.employeeId === emp.id);
       const faltasDias = entry?.faltasDias || 0;
-      const vrDias = entry?.vrDias ?? diasUteis;
-      const vrDiasEfetivos = Math.max(0, vrDias - faltasDias);
-      const valorBase = emp.vrDiario * vrDias;
-      const desconto = emp.vrDiario * faltasDias;
+      const vrDiasBase = entry?.vrDias === 22 && diasUteis !== 22 ? diasUteis : (entry?.vrDias ?? diasUteis);
+      const descontoDias = Math.min(faltasDias, vrDiasBase);
+      const vrDiasEfetivos = Math.max(0, vrDiasBase - descontoDias);
+      const valorBase = emp.vrDiario * vrDiasBase;
+      const desconto = emp.vrDiario * descontoDias;
       const valorFinal = emp.vrDiario * vrDiasEfetivos;
-      return { emp, faltasDias, valorBase, desconto, valorFinal, motivo: faltasDias > 0 ? `${faltasDias} falta(s)` : '' };
+      return { emp, faltasDias, valorBase, desconto, valorFinal, motivo: descontoDias > 0 ? `${faltasDias} falta(s)` : '' };
     });
   }, [compEmps, compEntries, diasUteis]);
 
