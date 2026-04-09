@@ -15,7 +15,23 @@ const FechamentoPage: React.FC = () => {
   const [selectedCompany, setSelectedCompany] = useState(companies[0]?.id || '');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
 
-  const diasUteis = getWorkingDays(competencia);
+  const diasUteisDefault = getWorkingDays(competencia);
+  const [diasUteisManual, setDiasUteisManual] = useState<number>(diasUteisDefault);
+  const [domingosFeriados, setDomingosFeriados] = useState<number>(() => {
+    const [y, m] = new Date().toISOString().slice(0, 7).split('-').map(Number);
+    return new Date(y, m, 0).getDate() - diasUteisDefault;
+  });
+
+  // Recalculate defaults when competencia changes
+  useEffect(() => {
+    const du = getWorkingDays(competencia);
+    setDiasUteisManual(du);
+    const [y, m] = competencia.split('-').map(Number);
+    const diasNoMes = new Date(y, m, 0).getDate();
+    setDomingosFeriados(diasNoMes - du);
+  }, [competencia]);
+
+  const diasUteis = diasUteisManual;
 
   useEffect(() => {
     if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
