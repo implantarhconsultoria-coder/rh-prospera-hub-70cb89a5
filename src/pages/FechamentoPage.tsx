@@ -109,7 +109,14 @@ const FechamentoPage: React.FC = () => {
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="w-48" />
-        <span className="text-xs text-muted-foreground">Dias úteis: <strong className="text-foreground">{diasUteis}</strong></span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">Dias úteis:</span>
+          <Input type="number" value={diasUteisManual} onChange={e => setDiasUteisManual(Number(e.target.value))} className="w-16 text-xs h-7" />
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">Dom/Feriados:</span>
+          <Input type="number" value={domingosFeriados} onChange={e => setDomingosFeriados(Number(e.target.value))} className="w-16 text-xs h-7" />
+        </div>
         <Badge className={`${statusColor} ml-2`}>{fechamento.status.replace('_', ' ')}</Badge>
       </div>
 
