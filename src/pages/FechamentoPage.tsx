@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { calcHE50, calcHE100, calcDSR, calcFalta, calcAtraso, calcINSS, calcIRRF, calcFGTS, calcDescontoVT, formatCurrency, calcTotalFuncionario } from '@/lib/calculations';
+import { calcFalta, calcAtraso, calcINSS, calcIRRF, calcFGTS, calcDescontoVT, formatCurrency, calcTotalFuncionario } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,23 @@ const FechamentoPage: React.FC = () => {
   const [selectedCompany, setSelectedCompany] = useState(companies[0]?.id || '');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
 
-  const diasUteis = getWorkingDays(competencia);
+  const diasUteisDefault = getWorkingDays(competencia);
+  const [diasUteisManual, setDiasUteisManual] = useState<number>(diasUteisDefault);
+  const [domingosFeriados, setDomingosFeriados] = useState<number>(() => {
+    const [y, m] = new Date().toISOString().slice(0, 7).split('-').map(Number);
+    return new Date(y, m, 0).getDate() - diasUteisDefault;
+  });
+
+  // Recalculate defaults when competencia changes
+  useEffect(() => {
+    const du = getWorkingDays(competencia);
+    setDiasUteisManual(du);
+    const [y, m] = competencia.split('-').map(Number);
+    const diasNoMes = new Date(y, m, 0).getDate();
+    setDomingosFeriados(diasNoMes - du);
+  }, [competencia]);
+
+  const diasUteis = diasUteisManual;
 
   useEffect(() => {
     if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
@@ -30,10 +46,11 @@ const FechamentoPage: React.FC = () => {
   // Calculate per-employee payroll
   const calcPayroll = (emp: typeof compEmps[0], entry: typeof compEntries[0]) => {
     const adiantamento = Math.round(emp.salarioBase * 0.4 * 100) / 100;
-    const he50Val = calcHE50(emp.salarioBase, entry.he50);
-    const he100Val = calcHE100(emp.salarioBase, entry.he100);
+    const valorHora = emp.salarioBase / 220;
+    const he50Val = valorHora * 1.5 * entry.he50;
+    const he100Val = valorHora * 2 * entry.he100;
     const totalHE = he50Val + he100Val;
-    const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
+    const dsrHE = diasUteis > 0 ? (totalHE / diasUteis) * domingosFeriados : 0;
     const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
     const comissaoVal = (entry.comissaoBase || 0) * comissaoPct;
     const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
@@ -92,7 +109,14 @@ const FechamentoPage: React.FC = () => {
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="w-48" />
-        <span className="text-xs text-muted-foreground">Dias úteis: <strong className="text-foreground">{diasUteis}</strong></span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">Dias úteis:</span>
+          <Input type="number" value={diasUteisManual} onChange={e => setDiasUteisManual(Number(e.target.value))} className="w-16 text-xs h-7" />
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">Dom/Feriados:</span>
+          <Input type="number" value={domingosFeriados} onChange={e => setDomingosFeriados(Number(e.target.value))} className="w-16 text-xs h-7" />
+        </div>
         <Badge className={`${statusColor} ml-2`}>{fechamento.status.replace('_', ' ')}</Badge>
       </div>
 
