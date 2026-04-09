@@ -10,6 +10,71 @@ export const calcAtraso = (salario: number, horas: number) => valorHora(salario)
 export const calcAdiantamento = (salario: number, pct: number = 40) => salario * (pct / 100);
 
 /**
+ * INSS 2024 progressive table
+ */
+export const calcINSS = (baseINSS: number): number => {
+  if (baseINSS <= 0) return 0;
+  const faixas = [
+    { teto: 1412.00, aliq: 0.075 },
+    { teto: 2666.68, aliq: 0.09 },
+    { teto: 4000.03, aliq: 0.12 },
+    { teto: 7786.02, aliq: 0.14 },
+  ];
+  let inss = 0;
+  let anterior = 0;
+  for (const f of faixas) {
+    if (baseINSS <= f.teto) {
+      inss += (baseINSS - anterior) * f.aliq;
+      break;
+    } else {
+      inss += (f.teto - anterior) * f.aliq;
+      anterior = f.teto;
+      if (f === faixas[faixas.length - 1]) {
+        // cap at last bracket
+        break;
+      }
+    }
+  }
+  return Math.round(inss * 100) / 100;
+};
+
+/**
+ * IRRF progressive table (after INSS deduction)
+ */
+export const calcIRRF = (baseIR: number, dependentes: number = 0): number => {
+  const dedDep = dependentes * 189.59;
+  const base = baseIR - dedDep;
+  if (base <= 2259.20) return 0;
+  const faixas = [
+    { teto: 2826.65, aliq: 0.075, ded: 169.44 },
+    { teto: 3751.05, aliq: 0.15, ded: 381.44 },
+    { teto: 4664.68, aliq: 0.225, ded: 662.77 },
+    { teto: Infinity, aliq: 0.275, ded: 896.00 },
+  ];
+  for (const f of faixas) {
+    if (base <= f.teto) {
+      const ir = base * f.aliq - f.ded;
+      return Math.max(0, Math.round(ir * 100) / 100);
+    }
+  }
+  return 0;
+};
+
+/**
+ * FGTS: 8% sobre remuneração bruta
+ */
+export const calcFGTS = (baseFGTS: number): number => {
+  return Math.round(baseFGTS * 0.08 * 100) / 100;
+};
+
+/**
+ * Desconto VT: 6% do salário base (quando vtAtivo)
+ */
+export const calcDescontoVT = (salarioBase: number): number => {
+  return Math.round(salarioBase * 0.06 * 100) / 100;
+};
+
+/**
  * DSR sobre horas extras: (total HE / dias úteis do mês) * domingos e feriados
  * Fórmula simplificada: totalHE / diasUteis * (diasNoMes - diasUteis)
  */

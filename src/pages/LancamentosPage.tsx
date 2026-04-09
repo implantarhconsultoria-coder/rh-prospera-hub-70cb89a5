@@ -69,7 +69,7 @@ const LancamentosPage: React.FC = () => {
                   <td className="px-3 py-2"><Input type="number" value={entry.he100} onChange={e => update({ he100: Number(e.target.value) })} className="w-16 text-xs h-8" /></td>
                   <td className="px-3 py-2"><Input type="number" value={entry.adicionais} onChange={e => update({ adicionais: Number(e.target.value) })} className="w-20 text-xs h-8" /></td>
                   <td className="px-3 py-2"><Input type="number" value={entry.descontosDiversos} onChange={e => update({ descontosDiversos: Number(e.target.value) })} className="w-20 text-xs h-8" /></td>
-                  <td className="px-3 py-2"><Input type="number" value={entry.adiantamento} onChange={e => update({ adiantamento: Number(e.target.value) })} className="w-20 text-xs h-8" /></td>
+                  <td className="px-3 py-2 text-xs">{formatCurrency(Math.round(emp.salarioBase * 0.4 * 100) / 100)}</td>
                   <td className="px-3 py-2 text-xs">{emp.insalubridadeAtiva ? formatCurrency(emp.insalubridadeValor) : '—'}</td>
                   <td className="px-3 py-2">
                     <select value={entry.statusConferencia} onChange={e => update({ statusConferencia: e.target.value })}
