@@ -1,14 +1,17 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { employees as initialEmployees, type Employee } from '@/data/employees';
 import { type MonthlyEntry, type Fechamento, generateDefaultEntries, initialEntries } from '@/data/entries';
 import { companies, type Company } from '@/data/companies';
 import type { Delivery, BenefitReport } from '@/data/deliveries';
+import { supabase } from '@/integrations/supabase/client';
+import type { Session } from '@supabase/supabase-js';
 
-// HMR v2
+// HMR v3
 
 interface AppState {
   isAuthenticated: boolean;
-  login: (u: string, p: string) => boolean;
+  session: Session | null;
+  loading: boolean;
   logout: () => void;
   companies: Company[];
   employees: Employee[];
@@ -23,10 +26,8 @@ interface AppState {
   updateFechamento: (companyId: string, competencia: string, data: Partial<Fechamento>) => void;
   config: AppConfig;
   setConfig: React.Dispatch<React.SetStateAction<AppConfig>>;
-  // Deliveries (EPI & Uniforms)
   deliveries: Delivery[];
   addDelivery: (data: Omit<Delivery, 'id' | 'createdAt'>) => Delivery;
-  // Benefit reports (VR & VT)
   benefitReports: BenefitReport[];
   addBenefitReport: (data: Omit<BenefitReport, 'id' | 'createdAt'>) => BenefitReport;
 }
@@ -57,7 +58,8 @@ let deliveryCounter = 0;
 let reportCounter = 0;
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setAuth] = useState(() => sessionStorage.getItem('topac_auth') === 'true');
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
   const [emps, setEmps] = useState<Employee[]>(initialEmployees);
   const [entries, setEntries] = useState<MonthlyEntry[]>(initialEntries);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
@@ -65,16 +67,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [benefitReports, setBenefitReports] = useState<BenefitReport[]>([]);
 
-  const login = useCallback((u: string, p: string) => {
-    if ((u === 'admin' && p === 'admin') || (u === 'rh' && p === 'rh123')) {
-      setAuth(true); sessionStorage.setItem('topac_auth', 'true'); return true;
-    }
-    return false;
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const logout = useCallback(() => { setAuth(false); sessionStorage.removeItem('topac_auth'); }, []);
-
-  
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+  }, []);
 
   const updateEmployee = useCallback((id: string, data: Partial<Employee>) => {
     setEmps(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
@@ -128,7 +138,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      isAuthenticated, login, logout, companies, employees: emps, updateEmployee,
+      isAuthenticated: !!session, session, loading, logout, companies, employees: emps, updateEmployee,
       entries, setEntries, getOrCreateEntries, updateEntry,
       fechamentos, setFechamentos, getFechamento, updateFechamento,
       config, setConfig,

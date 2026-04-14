@@ -6,6 +6,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import AppLayout from "@/components/AppLayout";
 import LoginPage from "@/pages/LoginPage";
+import CadastroPage from "@/pages/CadastroPage";
+import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
+import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
@@ -26,12 +29,32 @@ import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
 import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividualPage";
 import HistoricoPage from "@/pages/HistoricoPage";
 import NotFound from "@/pages/NotFound";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
 const AuthGate = () => {
-  const { isAuthenticated } = useApp();
-  if (!isAuthenticated) return <LoginPage />;
+  const { isAuthenticated, loading } = useApp();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/cadastro" element={<CadastroPage />} />
+        <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
+        <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
       <Route element={<AppLayout />}>
