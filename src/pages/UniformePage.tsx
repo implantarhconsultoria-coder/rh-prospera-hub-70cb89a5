@@ -71,7 +71,7 @@ const UniformePage: React.FC = () => {
 
     toast.success('Ficha de Uniforme gerada com sucesso!');
     setItems([]);
-    setResponsavel('');
+    
   };
 
   return (
@@ -170,10 +170,6 @@ const UniformePage: React.FC = () => {
             <p className="text-center text-sm text-muted-foreground py-6">Clique em "Adicionar Item" para lançar uniformes</p>
           )}
 
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Responsável pela entrega</label>
-            <Input value={responsavel} onChange={e => setResponsavel(e.target.value)} placeholder="Nome do responsável" className="max-w-xs" />
-          </div>
 
           <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
             <FileText className="w-4 h-4 mr-2" /> Gerar Ficha de Uniforme
