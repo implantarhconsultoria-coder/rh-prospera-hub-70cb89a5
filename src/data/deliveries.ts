@@ -14,7 +14,7 @@ export interface Delivery {
   companyId: string;
   date: string; // ISO date
   items: DeliveryItem[];
-  responsavel: string;
+  responsavel?: string;
   createdAt: string;
 }
 
