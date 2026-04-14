@@ -6,7 +6,7 @@ import type { Company } from '@/data/companies';
 import type { Employee } from '@/data/employees';
 import { formatDate } from '@/lib/calculations';
 
-type DeliveryPreview = Pick<Delivery, 'type' | 'date' | 'items' | 'responsavel'>;
+type DeliveryPreview = Pick<Delivery, 'type' | 'date' | 'items'> & { responsavel?: string };
 
 interface EntregaPreviewData {
   delivery: DeliveryPreview;
@@ -202,7 +202,7 @@ const EntregaImpressaoPage: React.FC = () => {
           </div>
           <div className="text-center">
             <div className="border-t border-black pt-1">
-              <p className="text-xs font-bold">{delivery.responsavel}</p>
+              <p className="text-xs font-bold">&nbsp;</p>
               <p className="text-[9px] text-gray-500">Responsável pela Entrega</p>
             </div>
           </div>
