@@ -3,6 +3,7 @@ import { employees as initialEmployees, type Employee } from '@/data/employees';
 import { type MonthlyEntry, type Fechamento, generateDefaultEntries, initialEntries } from '@/data/entries';
 import { companies, type Company } from '@/data/companies';
 import type { Delivery, BenefitReport } from '@/data/deliveries';
+import { getWorkingDays } from '@/lib/workingDays';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 
