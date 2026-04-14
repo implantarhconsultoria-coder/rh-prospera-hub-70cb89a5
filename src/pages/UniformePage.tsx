@@ -13,7 +13,7 @@ const UniformePage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [items, setItems] = useState<DeliveryItem[]>([]);
-  const [responsavel, setResponsavel] = useState('');
+  
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
 
   const filteredEmps = employees.filter(e =>
@@ -43,10 +43,8 @@ const UniformePage: React.FC = () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
     if (!company) { toast.error('Empresa do funcionário não encontrada'); return; }
     if (items.length === 0) { toast.error('Adicione pelo menos um item'); return; }
-    if (!responsavel.trim()) { toast.error('Informe o responsável'); return; }
 
     const currentItems = items.map(item => ({ ...item }));
-    const responsavelNome = responsavel.trim();
 
     addDelivery({
       type: 'uniforme',
@@ -54,7 +52,6 @@ const UniformePage: React.FC = () => {
       companyId: emp.companyId,
       date: deliveryDate,
       items: currentItems,
-      responsavel: responsavelNome,
     });
 
     navigate('/entrega-impressao', {
@@ -64,7 +61,6 @@ const UniformePage: React.FC = () => {
             type: 'uniforme',
             date: deliveryDate,
             items: currentItems,
-            responsavel: responsavelNome,
           },
           employee: emp,
           company,
