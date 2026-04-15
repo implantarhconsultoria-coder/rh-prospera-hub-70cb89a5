@@ -20,7 +20,6 @@ import LancamentosPage from "@/pages/LancamentosPage";
 import FechamentoPage from "@/pages/FechamentoPage";
 import CombustivelPage from "@/pages/CombustivelPage";
 import ProtocoloPage from "@/pages/ProtocoloPage";
-import ProtocoloPage from "@/pages/ProtocoloPage";
 import DocumentosVeiculosPage from "@/pages/DocumentosVeiculosPage";
 import AvisoFeriasPage from "@/pages/AvisoFeriasPage";
 import RelatorioPage from "@/pages/RelatorioPage";
