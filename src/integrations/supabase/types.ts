@@ -346,7 +346,9 @@ export type Database = {
           nome: string
           observacao: string | null
           pagamento_tipo: string
+          proximo_pagamento: string | null
           status: string
+          ultimo_pagamento: string | null
           updated_at: string
           user_id: string
           valor_diario: number | null
@@ -366,7 +368,9 @@ export type Database = {
           nome: string
           observacao?: string | null
           pagamento_tipo?: string
+          proximo_pagamento?: string | null
           status?: string
+          ultimo_pagamento?: string | null
           updated_at?: string
           user_id: string
           valor_diario?: number | null
@@ -386,7 +390,9 @@ export type Database = {
           nome?: string
           observacao?: string | null
           pagamento_tipo?: string
+          proximo_pagamento?: string | null
           status?: string
+          ultimo_pagamento?: string | null
           updated_at?: string
           user_id?: string
           valor_diario?: number | null
