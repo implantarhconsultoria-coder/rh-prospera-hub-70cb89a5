@@ -58,6 +58,31 @@ const ProtocoloPage: React.FC = () => {
     load();
   }, []);
 
+  // Fetch PDF as blob for internal viewer (avoids X-Frame-Options blocking)
+  useEffect(() => {
+    if (!pdfUrl) { setPdfBlobUrl(''); return; }
+    let cancelled = false;
+    setLoadingPdf(true);
+    fetch(pdfUrl)
+      .then(r => r.blob())
+      .then(blob => {
+        if (!cancelled) {
+          const url = URL.createObjectURL(blob);
+          setPdfBlobUrl(url);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPdfBlobUrl('');
+      })
+      .finally(() => { if (!cancelled) setLoadingPdf(false); });
+    return () => { cancelled = true; };
+  }, [pdfUrl]);
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => { if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl); };
+  }, [pdfBlobUrl]);
+
   // Auto-match when key fields change — auto-fill ALL vehicle fields
   useEffect(() => {
     if (!placa && !patrimonio && !renavam && !chassi) {
@@ -67,22 +92,22 @@ const ProtocoloPage: React.FC = () => {
     const sanitize = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const match = ativosCache.find(a => {
       if (placa && a.placa && sanitize(a.placa) === sanitize(placa)) return true;
-      if (patrimonio && a.patrimonio && a.patrimonio.toLowerCase() === patrimonio.toLowerCase()) return true;
-      if (renavam && a.renavam && a.renavam === renavam) return true;
-      if (chassi && a.chassi && a.chassi.toLowerCase() === chassi.toLowerCase()) return true;
+      if (patrimonio && a.patrimonio && a.patrimonio.trim() && a.patrimonio.toLowerCase() === patrimonio.toLowerCase()) return true;
+      if (renavam && a.renavam && a.renavam.trim() && a.renavam === renavam) return true;
+      if (chassi && a.chassi && a.chassi.trim() && a.chassi.toLowerCase() === chassi.toLowerCase()) return true;
       return false;
     });
     if (match) {
       setMatchedAtivo(match);
-      // Auto-fill all fields from the matched vehicle
-      if (match.patrimonio && !patrimonio) setPatrimonio(match.patrimonio);
-      if (match.renavam && !renavam) setRenavam(match.renavam);
-      if (match.chassi && !chassi) setChassi(match.chassi);
-      if (match.ano_fabricacao) setAnoFabricacao(match.ano_fabricacao);
-      if (match.ano_modelo) setAnoModelo(match.ano_modelo);
-      if (match.empresa) setEmpresaDestinataria(match.empresa);
-      if (match.descricao) setDescricaoEquipamento(match.descricao);
-      if (match.arquivo_url) setPdfUrl(match.arquivo_url);
+      // Auto-fill all fields from the matched vehicle (skip empty strings)
+      if (match.patrimonio?.trim()) setPatrimonio(match.patrimonio);
+      if (match.renavam?.trim()) setRenavam(match.renavam);
+      if (match.chassi?.trim()) setChassi(match.chassi);
+      if (match.ano_fabricacao?.trim()) setAnoFabricacao(match.ano_fabricacao);
+      if (match.ano_modelo?.trim()) setAnoModelo(match.ano_modelo);
+      if (match.empresa?.trim()) setEmpresaDestinataria(match.empresa);
+      if (match.descricao?.trim()) setDescricaoEquipamento(match.descricao);
+      if (match.arquivo_url?.trim()) setPdfUrl(match.arquivo_url);
       toast.success(`Veículo localizado: ${match.descricao || match.placa} — campos preenchidos automaticamente.`);
     } else {
       setMatchedAtivo(null);
