@@ -55,10 +55,10 @@ const BaseMestraPage: React.FC = () => {
         <Filter className="w-5 h-5 text-muted-foreground" />
       </div>
 
-      <div className="card-premium overflow-x-auto">
+      <div className="card-premium overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b bg-muted">
               {['Empresa','CNPJ','Nº Reg','Mat. eSocial','Nome','CPF','Cargo','Salário Base','Admissão','ASO','Férias','VR','VA','VT','Insal.','Status'].map(h => (
                 <th key={h} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
