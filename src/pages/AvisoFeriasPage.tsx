@@ -20,7 +20,7 @@ const AvisoFeriasPage: React.FC = () => {
       .filter(e => e.status === 'ativo' && e.categoria === 'operacional')
       .map(e => {
         const fer = feriasStatus(e.dataAdmissao);
-        return { ...e, ferStatus: fer.status, ferDias: fer.dias || 0 };
+        return { ...e, ferStatus: fer.status, ferMeses: fer.mesesNoPeriodo };
       })
       .filter(e => {
         if (search && !e.name.toLowerCase().includes(search.toLowerCase()) && !e.cpf.includes(search)) return false;
