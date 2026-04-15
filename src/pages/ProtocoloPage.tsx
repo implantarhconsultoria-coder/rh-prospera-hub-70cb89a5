@@ -376,7 +376,12 @@ const ProtocoloPage: React.FC = () => {
                 </label>
               </div>
             )}
-            {pdfUrl && <p className="text-xs text-success mt-1">✓ PDF vinculado — será impresso como via adicional</p>}
+            {pdfUrl && (
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs text-success">✓ PDF vinculado — será impresso como via adicional</p>
+                <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">Visualizar PDF</a>
+              </div>
+            )}
             {!pdfUrl && <p className="text-xs text-muted-foreground mt-1">Sem PDF: imprime apenas 2 vias do protocolo</p>}
           </div>
         </div>
