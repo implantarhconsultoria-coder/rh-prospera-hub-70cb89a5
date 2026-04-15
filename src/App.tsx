@@ -36,6 +36,7 @@ import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividu
 import HistoricoPage from "@/pages/HistoricoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
+import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -87,6 +88,7 @@ const AuthGate = () => {
         <Route path="/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/almoxarifado" element={<AlmoxarifadoPage />} />
         <Route path="/monitoramento" element={<MonitoramentoPage />} />
+        <Route path="/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
