@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Users, Plus, Printer, Save, X } from 'lucide-react';
+import { Users, Plus, Printer, Save, X, ChevronLeft, Landmark } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Prestador {
@@ -18,21 +18,31 @@ interface Prestador {
   valor_diario: number;
   observacao: string;
   status: string;
+  banco: string;
+  banco_titular: string;
+  banco_tipo_conta: string;
+  banco_agencia: string;
+  banco_conta: string;
 }
 
 const PrestadoresPage: React.FC = () => {
   const { session } = useApp();
   const [prestadores, setPrestadores] = useState<Prestador[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ nome: '', cpf: '', funcao: 'Serviços Gerais', valorDiario: 0, observacao: '' });
+  const [form, setForm] = useState({
+    nome: '', cpf: '', funcao: 'Serviços Gerais', valorDiario: 0, observacao: '',
+    banco: '', bancoTitular: '', bancoTipoConta: 'Conta corrente', bancoAgencia: '', bancoConta: '',
+  });
   const [selectedId, setSelectedId] = useState('');
   const [quinzena, setQuinzena] = useState('1');
   const [diasTrabalhados, setDiasTrabalhados] = useState(0);
+  const [valorPago, setValorPago] = useState(0);
+  const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
 
   const fetchPrestadores = async () => {
     const { data, error } = await supabase.from('prestadores').select('*').order('created_at', { ascending: false });
-    if (!error && data) setPrestadores(data as Prestador[]);
+    if (!error && data) setPrestadores(data as unknown as Prestador[]);
   };
 
   useEffect(() => { fetchPrestadores(); }, []);
@@ -52,28 +62,31 @@ const PrestadoresPage: React.FC = () => {
       dias_trabalho: 'segunda,quinta',
       pagamento_tipo: 'quinzenal',
       status: 'ativo',
-    });
+      banco: form.banco,
+      banco_titular: form.bancoTitular,
+      banco_tipo_conta: form.bancoTipoConta,
+      banco_agencia: form.bancoAgencia,
+      banco_conta: form.bancoConta,
+    } as any);
     if (error) { toast.error('Erro: ' + error.message); } else {
       toast.success('Prestador cadastrado!');
-      setForm({ nome: '', cpf: '', funcao: 'Serviços Gerais', valorDiario: 0, observacao: '' });
+      setForm({ nome: '', cpf: '', funcao: 'Serviços Gerais', valorDiario: 0, observacao: '', banco: '', bancoTitular: '', bancoTipoConta: 'Conta corrente', bancoAgencia: '', bancoConta: '' });
       setShowForm(false);
       fetchPrestadores();
     }
     setLoading(false);
   };
 
-  const handleDelete = async (id: string) => {
-    await supabase.from('prestadores').delete().eq('id', id);
-    toast.success('Removido');
-    fetchPrestadores();
-  };
-
   const selected = prestadores.find(p => p.id === selectedId);
+
+  useEffect(() => {
+    if (selected) setValorPago(diasTrabalhados * selected.valor_diario);
+  }, [diasTrabalhados, selected]);
 
   const handlePrintRecibo = () => {
     if (!selected) return;
     const mes = new Date().toISOString().slice(0, 7);
-    const total = diasTrabalhados * selected.valor_diario;
+    const total = valorPago || diasTrabalhados * selected.valor_diario;
 
     const printWin = window.open('', '_blank');
     if (!printWin) return;
@@ -99,9 +112,18 @@ const PrestadoresPage: React.FC = () => {
     <div class="field"><span>Função:</span> ${selected.funcao}</div>
     <div class="field"><span>Período:</span> ${quinzena}ª Quinzena de ${mes}</div>
     </div></div>
+    ${selected.banco ? `<div class="block"><div class="block-title">Dados Bancários</div>
+    <div class="grid">
+    <div class="field"><span>Banco:</span> ${selected.banco}</div>
+    <div class="field"><span>Titular:</span> ${selected.banco_titular}</div>
+    <div class="field"><span>Tipo:</span> ${selected.banco_tipo_conta}</div>
+    <div class="field"><span>Agência:</span> ${selected.banco_agencia}</div>
+    <div class="field"><span>Conta:</span> ${selected.banco_conta}</div>
+    </div></div>` : ''}
     <table><thead><tr><th>Descrição</th><th>Qtd Dias</th><th>Valor/Dia</th><th>Total</th></tr></thead>
     <tbody><tr><td>Serviço prestado — ${selected.funcao}</td><td>${diasTrabalhados}</td><td>R$ ${selected.valor_diario.toFixed(2)}</td><td>R$ ${total.toFixed(2)}</td></tr></tbody></table>
     <p style="font-size:12px;font-weight:bold;text-align:right;margin-top:8px">TOTAL A PAGAR: R$ ${total.toFixed(2)}</p>
+    <p style="font-size:11px;margin-top:4px"><span style="color:#666">Data do Pagamento:</span> ${new Date(dataPagamento).toLocaleDateString('pt-BR')}</p>
     <div class="signatures">
     <div class="sig-line"><hr/><small>Assinatura do Prestador</small></div>
     <div class="sig-line"><hr/><small>Assinatura — ALQUI OBRAS</small></div>
@@ -137,18 +159,38 @@ const PrestadoresPage: React.FC = () => {
         </div>
 
         {showForm && (
-          <div className="bg-muted/30 rounded-lg p-4 mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div><label className="text-xs text-muted-foreground block mb-1">Nome</label>
-              <Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">CPF</label>
-              <Input value={form.cpf} onChange={e => setForm({ ...form, cpf: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Função</label>
-              <Input value={form.funcao} onChange={e => setForm({ ...form, funcao: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Valor/Dia (R$)</label>
-              <Input type="number" value={form.valorDiario} onChange={e => setForm({ ...form, valorDiario: Number(e.target.value) })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Observação</label>
-              <Input value={form.observacao} onChange={e => setForm({ ...form, observacao: e.target.value })} /></div>
-            <div className="flex items-end">
+          <div className="bg-muted/30 rounded-lg p-4 mb-4 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div><label className="text-xs text-muted-foreground block mb-1">Nome</label>
+                <Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">CPF</label>
+                <Input value={form.cpf} onChange={e => setForm({ ...form, cpf: e.target.value })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Função</label>
+                <Input value={form.funcao} onChange={e => setForm({ ...form, funcao: e.target.value })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Valor/Dia (R$)</label>
+                <Input type="number" value={form.valorDiario} onChange={e => setForm({ ...form, valorDiario: Number(e.target.value) })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Observação</label>
+                <Input value={form.observacao} onChange={e => setForm({ ...form, observacao: e.target.value })} /></div>
+            </div>
+            <div className="border-t pt-3 mt-2">
+              <p className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Landmark className="w-3 h-3" /> Dados Bancários (opcional)</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div><label className="text-xs text-muted-foreground block mb-1">Banco / Instituição</label>
+                  <Input value={form.banco} onChange={e => setForm({ ...form, banco: e.target.value })} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Titular</label>
+                  <Input value={form.bancoTitular} onChange={e => setForm({ ...form, bancoTitular: e.target.value })} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Tipo de Conta</label>
+                  <select value={form.bancoTipoConta} onChange={e => setForm({ ...form, bancoTipoConta: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+                    <option>Conta corrente</option><option>Conta poupança</option>
+                  </select></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Agência</label>
+                  <Input value={form.bancoAgencia} onChange={e => setForm({ ...form, bancoAgencia: e.target.value })} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Conta</label>
+                  <Input value={form.bancoConta} onChange={e => setForm({ ...form, bancoConta: e.target.value })} /></div>
+              </div>
+            </div>
+            <div className="flex items-end pt-2">
               <Button onClick={handleAdd} disabled={loading}><Save className="w-4 h-4 mr-1" /> Salvar</Button>
             </div>
           </div>
@@ -166,7 +208,7 @@ const PrestadoresPage: React.FC = () => {
           </thead>
           <tbody>
             {prestadores.map(p => (
-              <tr key={p.id} className="border-b hover:bg-muted/30 cursor-pointer" onClick={() => setSelectedId(p.id)}>
+              <tr key={p.id} className={`border-b hover:bg-muted/30 cursor-pointer ${selectedId === p.id ? 'bg-primary/5 ring-1 ring-primary/20' : ''}`} onClick={() => setSelectedId(selectedId === p.id ? '' : p.id)}>
                 <td className="px-3 py-2 font-medium">{p.nome}</td>
                 <td className="px-3 py-2">{p.funcao}</td>
                 <td className="px-3 py-2">R$ {(p.valor_diario || 0).toFixed(2)}</td>
@@ -183,8 +225,27 @@ const PrestadoresPage: React.FC = () => {
 
       {selected && (
         <div className="card-premium p-5 space-y-4">
-          <h2 className="text-sm font-bold text-foreground">Lançamento — {selected.nome}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-foreground">Detalhes — {selected.nome}</h2>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedId('')}><ChevronLeft className="w-4 h-4 mr-1" /> Voltar</Button>
+          </div>
+
+          {/* Dados bancários */}
+          {selected.banco && (
+            <div className="bg-muted/30 rounded-lg p-4">
+              <p className="text-xs font-bold text-muted-foreground mb-2 flex items-center gap-1"><Landmark className="w-3 h-3" /> Dados Bancários</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                <div><span className="text-muted-foreground">Banco:</span> {selected.banco}</div>
+                <div><span className="text-muted-foreground">Titular:</span> {selected.banco_titular}</div>
+                <div><span className="text-muted-foreground">Tipo:</span> {selected.banco_tipo_conta}</div>
+                <div><span className="text-muted-foreground">Agência:</span> {selected.banco_agencia}</div>
+                <div><span className="text-muted-foreground">Conta:</span> {selected.banco_conta}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Lançamento quinzenal */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div><label className="text-xs text-muted-foreground block mb-1">Quinzena</label>
               <select value={quinzena} onChange={e => setQuinzena(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
@@ -193,7 +254,11 @@ const PrestadoresPage: React.FC = () => {
               </select></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Dias Trabalhados</label>
               <Input type="number" value={diasTrabalhados} onChange={e => setDiasTrabalhados(Number(e.target.value))} /></div>
-            <div className="flex items-end gap-2">
+            <div><label className="text-xs text-muted-foreground block mb-1">Valor a Pagar (R$)</label>
+              <Input type="number" step="0.01" value={valorPago} onChange={e => setValorPago(Number(e.target.value))} /></div>
+            <div><label className="text-xs text-muted-foreground block mb-1">Data Pagamento</label>
+              <Input type="date" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} /></div>
+            <div className="flex items-end">
               <Button onClick={handlePrintRecibo} className="gradient-accent text-accent-foreground font-semibold">
                 <Printer className="w-4 h-4 mr-1" /> Recibo
               </Button>

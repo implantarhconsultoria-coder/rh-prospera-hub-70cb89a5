@@ -188,25 +188,39 @@ const ProtocoloPage: React.FC = () => {
       toast.error('Informe ao menos placa, patrimônio ou descrição');
       return;
     }
-    const printWin = window.open('', '_blank');
-    if (!printWin) return;
 
-    let pdfPage = '';
     if (pdfUrl) {
-      pdfPage = `<div style="page-break-after:always;padding:15mm;">
-        <div style="text-align:center;font-size:10px;color:#666;margin-bottom:10px">DOCUMENTO ANEXO — Referente ao Protocolo de ${new Date(dataEmissao).toLocaleDateString('pt-BR')}</div>
-        <iframe src="${pdfUrl}" style="width:100%;height:90vh;border:1px solid #ccc"></iframe>
-      </div>`;
+      // Print protocol pages first, then open PDF in separate tab
+      const printWin = window.open('', '_blank');
+      if (!printWin) return;
+      printWin.document.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
+      <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}@media print{body{-webkit-print-color-adjust:exact}}</style></head><body>
+      ${buildProtocoloHtml(1, 2)}
+      ${buildProtocoloHtml(2, 2)}
+      </body></html>`);
+      printWin.document.close();
+      setTimeout(() => {
+        printWin.print();
+        // After protocol prints, open the PDF for separate printing
+        toast.info('Após imprimir o protocolo, o documento PDF será aberto para impressão.');
+        const pdfWin = window.open(pdfUrl, '_blank');
+        if (pdfWin) {
+          pdfWin.addEventListener('load', () => {
+            setTimeout(() => pdfWin.print(), 1000);
+          });
+        }
+      }, 500);
+    } else {
+      const printWin = window.open('', '_blank');
+      if (!printWin) return;
+      printWin.document.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
+      <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}@media print{body{-webkit-print-color-adjust:exact}}</style></head><body>
+      ${buildProtocoloHtml(1, 2)}
+      ${buildProtocoloHtml(2, 2)}
+      </body></html>`);
+      printWin.document.close();
+      setTimeout(() => printWin.print(), 500);
     }
-
-    printWin.document.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
-    <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}@media print{body{-webkit-print-color-adjust:exact}}</style></head><body>
-    ${buildProtocoloHtml(1, 2)}
-    ${buildProtocoloHtml(2, 2)}
-    ${pdfPage}
-    </body></html>`);
-    printWin.document.close();
-    setTimeout(() => printWin.print(), 500);
   };
 
   const handleClear = () => {
