@@ -56,14 +56,15 @@ const ProtocoloPage: React.FC = () => {
     load();
   }, []);
 
-  // Auto-match when key fields change
+  // Auto-match when key fields change — auto-fill ALL vehicle fields
   useEffect(() => {
     if (!placa && !patrimonio && !renavam && !chassi) {
       setMatchedAtivo(null);
       return;
     }
+    const sanitize = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const match = ativosCache.find(a => {
-      if (placa && a.placa && a.placa.toLowerCase().replace(/[^a-z0-9]/g, '') === placa.toLowerCase().replace(/[^a-z0-9]/g, '')) return true;
+      if (placa && a.placa && sanitize(a.placa) === sanitize(placa)) return true;
       if (patrimonio && a.patrimonio && a.patrimonio.toLowerCase() === patrimonio.toLowerCase()) return true;
       if (renavam && a.renavam && a.renavam === renavam) return true;
       if (chassi && a.chassi && a.chassi.toLowerCase() === chassi.toLowerCase()) return true;
@@ -71,9 +72,16 @@ const ProtocoloPage: React.FC = () => {
     });
     if (match) {
       setMatchedAtivo(match);
-      if (match.arquivo_url && !pdfUrl) {
-        setPdfUrl(match.arquivo_url);
-      }
+      // Auto-fill all fields from the matched vehicle
+      if (match.patrimonio && !patrimonio) setPatrimonio(match.patrimonio);
+      if (match.renavam && !renavam) setRenavam(match.renavam);
+      if (match.chassi && !chassi) setChassi(match.chassi);
+      if (match.ano_fabricacao) setAnoFabricacao(match.ano_fabricacao);
+      if (match.ano_modelo) setAnoModelo(match.ano_modelo);
+      if (match.empresa) setEmpresaDestinataria(match.empresa);
+      if (match.descricao) setDescricaoEquipamento(match.descricao);
+      if (match.arquivo_url) setPdfUrl(match.arquivo_url);
+      toast.success(`Veículo localizado: ${match.descricao || match.placa} — campos preenchidos automaticamente.`);
     } else {
       setMatchedAtivo(null);
     }
@@ -377,9 +385,12 @@ const ProtocoloPage: React.FC = () => {
               </div>
             )}
             {pdfUrl && (
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-xs text-success">✓ PDF vinculado — será impresso como via adicional</p>
-                <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">Visualizar PDF</a>
+              <div className="space-y-2 mt-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-success">✓ PDF vinculado — será impresso como via adicional</p>
+                  <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">Abrir em nova aba</a>
+                </div>
+                <iframe src={pdfUrl} className="w-full h-64 border rounded-lg" title="PDF do documento" />
               </div>
             )}
             {!pdfUrl && <p className="text-xs text-muted-foreground mt-1">Sem PDF: imprime apenas 2 vias do protocolo</p>}
