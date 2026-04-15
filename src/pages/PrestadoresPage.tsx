@@ -252,6 +252,41 @@ const PrestadoresPage: React.FC = () => {
             <Button variant="ghost" size="sm" onClick={() => setSelectedId('')}><ChevronLeft className="w-4 h-4 mr-1" /> Voltar</Button>
           </div>
 
+          {/* Alerta de pagamento */}
+          {(() => {
+            const alert = getAlertStatus(selected.proximo_pagamento);
+            if (!alert) return null;
+            const isUrgent = alert.days <= 1;
+            return (
+              <div className={`rounded-lg p-4 flex items-center justify-between ${isUrgent ? 'bg-destructive/10 border border-destructive/30' : 'bg-muted/30'}`}>
+                <div>
+                  <p className={`text-sm font-bold ${isUrgent ? 'text-destructive' : 'text-foreground'}`}>
+                    {alert.days < 0 ? `⚠️ Pagamento atrasado há ${Math.abs(alert.days)} dia(s)` :
+                     alert.days === 0 ? '🔔 Pagamento vence HOJE' :
+                     alert.days === 1 ? '⏰ Pagamento vence AMANHÃ' :
+                     `Próximo pagamento em ${alert.days} dias`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Último: {selected.ultimo_pagamento ? new Date(selected.ultimo_pagamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'} | 
+                    Próximo: {selected.proximo_pagamento ? new Date(selected.proximo_pagamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'} | 
+                    Valor: R$ {(selected.valor_diario || 0).toFixed(2)}
+                  </p>
+                </div>
+                <Button size="sm" variant={isUrgent ? 'destructive' : 'default'} onClick={async () => {
+                  const hoje = new Date().toISOString().slice(0, 10);
+                  const prox = new Date();
+                  prox.setDate(prox.getDate() + 15);
+                  const proxStr = prox.toISOString().slice(0, 10);
+                  await supabase.from('prestadores').update({ ultimo_pagamento: hoje, proximo_pagamento: proxStr } as any).eq('id', selected.id);
+                  toast.success('Pagamento registrado! Próximo em 15 dias.');
+                  fetchPrestadores();
+                }}>
+                  Registrar Pagamento
+                </Button>
+              </div>
+            );
+          })()}
+
           {/* Dados bancários */}
           {selected.banco && (
             <div className="bg-muted/30 rounded-lg p-4">
