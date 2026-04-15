@@ -12,6 +12,8 @@ import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
+import ASOPage from "@/pages/ASOPage";
+import PrestadoresPage from "@/pages/PrestadoresPage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
 import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
 import LancamentosPage from "@/pages/LancamentosPage";
@@ -76,6 +78,8 @@ const AuthGate = () => {
         <Route path="/relatorio-vr" element={<RelatorioVRPage />} />
         <Route path="/relatorio-vt" element={<RelatorioVTPage />} />
         <Route path="/historico" element={<HistoricoPage />} />
+        <Route path="/aso" element={<ASOPage />} />
+        <Route path="/prestadores" element={<PrestadoresPage />} />
         <Route path="/combustivel" element={<CombustivelPage />} />
         <Route path="/protocolo" element={<ProtocoloPage />} />
         <Route path="/compressores" element={<CompressoresPage />} />

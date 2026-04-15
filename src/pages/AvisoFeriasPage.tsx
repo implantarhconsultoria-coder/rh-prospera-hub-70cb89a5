@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { CalendarCheck, Printer, Search, Save } from 'lucide-react';
-import { formatDate } from '@/lib/calculations';
+import { Badge } from '@/components/ui/badge';
+import { CalendarCheck, Printer, Save, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { formatDate, feriasStatus } from '@/lib/calculations';
 import { toast } from 'sonner';
 
 const AvisoFeriasPage: React.FC = () => {
@@ -12,12 +13,27 @@ const AvisoFeriasPage: React.FC = () => {
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [inicioFerias, setInicioFerias] = useState('');
   const [diasFerias, setDiasFerias] = useState(30);
+  const [filterCompany, setFilterCompany] = useState('');
 
-  const filteredEmps = employees.filter(e =>
-    e.status === 'ativo' && e.categoria === 'operacional' &&
-    (e.name.toLowerCase().includes(search.toLowerCase()) ||
-     e.cpf.includes(search) || e.cargo.toLowerCase().includes(search.toLowerCase()))
-  );
+  const empsList = useMemo(() => {
+    return employees
+      .filter(e => e.status === 'ativo' && e.categoria === 'operacional')
+      .map(e => {
+        const fer = feriasStatus(e.dataAdmissao);
+        return { ...e, ferStatus: fer.status, ferMeses: fer.mesesNoPeriodo };
+      })
+      .filter(e => {
+        if (search && !e.name.toLowerCase().includes(search.toLowerCase()) && !e.cpf.includes(search)) return false;
+        if (filterCompany && e.companyId !== filterCompany) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const order = { vencida: 0, atenção: 1, 'em dia': 2 };
+        return (order[a.ferStatus as keyof typeof order] ?? 2) - (order[b.ferStatus as keyof typeof order] ?? 2);
+      });
+  }, [employees, search, filterCompany]);
+
+  const alertas = useMemo(() => empsList.filter(e => e.ferStatus === 'vencido' || e.ferStatus === 'atenção'), [empsList]);
 
   const emp = employees.find(e => e.id === selectedEmpId);
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
@@ -28,12 +44,13 @@ const AvisoFeriasPage: React.FC = () => {
     d.setDate(d.getDate() + diasFerias);
     return d.toISOString().slice(0, 10);
   };
-
   const retorno = calcRetorno();
 
   const handleSaveDate = () => {
     if (!emp || !inicioFerias) { toast.error('Selecione funcionário e data'); return; }
-    updateEmployee(emp.id, { observacoes: `${emp.observacoes}\n[FÉRIAS] Início previsto: ${inicioFerias} | Retorno: ${retorno} | ${diasFerias} dias`.trim() });
+    updateEmployee(emp.id, {
+      observacoes: `${emp.observacoes}\n[FÉRIAS] Início previsto: ${inicioFerias} | Retorno: ${retorno} | ${diasFerias} dias`.trim(),
+    });
     toast.success('Data de férias salva no cadastro!');
   };
 
@@ -85,54 +102,37 @@ const AvisoFeriasPage: React.FC = () => {
     toast.success('Aviso de férias gerado!');
   };
 
-  return (
-    <div className="space-y-5 animate-fade-in">
-      <div className="card-premium p-6 gradient-primary text-primary-foreground">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center">
-            <CalendarCheck className="w-7 h-7" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold font-display">Aviso de Férias</h1>
-            <p className="text-primary-foreground/70 text-sm">Gerar aviso de férias para impressão</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="card-premium p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Search className="w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar funcionário..." value={search}
-            onChange={e => setSearch(e.target.value)} className="flex-1" />
-        </div>
-        {search && !selectedEmpId && (
-          <div className="border rounded-lg max-h-48 overflow-y-auto">
-            {filteredEmps.map(e => {
-              const co = companies.find(c => c.id === e.companyId);
-              return (
-                <button key={e.id} onClick={() => { setSelectedEmpId(e.id); setSearch(''); }}
-                  className="w-full text-left px-3 py-2 hover:bg-muted/50 text-sm flex justify-between items-center border-b last:border-0">
-                  <span className="font-medium">{e.name}</span>
-                  <span className="text-xs text-muted-foreground">{co?.name} — {e.cargo}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {emp && company && (
-          <div className="bg-muted/30 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{emp.name}</strong></div>
-            <div><span className="text-muted-foreground text-xs block">Empresa</span>{company.name}</div>
-            <div><span className="text-muted-foreground text-xs block">Função</span>{emp.cargo}</div>
-            <div><span className="text-muted-foreground text-xs block">Admissão</span>{formatDate(emp.dataAdmissao)}</div>
-            <div className="flex items-end">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedEmpId('')} className="text-xs text-destructive">Trocar</Button>
+  // Detail view
+  if (selectedEmpId && emp) {
+    const fer = feriasStatus(emp.dataAdmissao);
+    return (
+      <div className="space-y-5 animate-fade-in">
+        <div className="card-premium p-6 gradient-primary text-primary-foreground">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => setSelectedEmpId('')} className="text-primary-foreground hover:bg-primary-foreground/10">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold font-display">Aviso de Férias — {emp.name}</h1>
+              <p className="text-primary-foreground/70 text-sm">{company?.name} — {emp.cargo}</p>
             </div>
           </div>
-        )}
-      </div>
+        </div>
 
-      {emp && (
+        <div className="card-premium p-5 space-y-3">
+          <h2 className="text-sm font-bold text-foreground">Situação de Férias</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div><span className="text-xs text-muted-foreground block">Status</span>
+              <Badge className={fer.status === 'em dia' ? 'bg-success text-success-foreground' : fer.status === 'atenção' ? 'bg-warning text-warning-foreground' : 'bg-destructive text-destructive-foreground'}>
+                {fer.status}
+              </Badge>
+            </div>
+            <div><span className="text-xs text-muted-foreground block">Admissão</span><strong>{formatDate(emp.dataAdmissao)}</strong></div>
+            <div><span className="text-xs text-muted-foreground block">Meses no Período</span><strong>{fer.mesesNoPeriodo} meses</strong></div>
+            <div><span className="text-xs text-muted-foreground block">CPF</span>{emp.cpf}</div>
+          </div>
+        </div>
+
         <div className="card-premium p-5 space-y-4">
           <h2 className="text-sm font-bold text-foreground">Dados das Férias</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -158,7 +158,86 @@ const AvisoFeriasPage: React.FC = () => {
             </Button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // List view
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <div className="card-premium p-6 gradient-primary text-primary-foreground">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center">
+            <CalendarCheck className="w-7 h-7" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold font-display">Aviso de Férias</h1>
+            <p className="text-primary-foreground/70 text-sm">Clique no funcionário para gerar o aviso</p>
+          </div>
+        </div>
+      </div>
+
+      {alertas.length > 0 && (
+        <div className="card-premium p-4 border-l-4 border-warning bg-warning/5">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="w-4 h-4 text-warning" />
+            <span className="text-sm font-bold text-foreground">{alertas.length} funcionário(s) com férias pendentes</span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {alertas.slice(0, 5).map(e => (
+              <Badge key={e.id} variant="outline" className="text-xs cursor-pointer hover:bg-muted/50"
+                onClick={() => setSelectedEmpId(e.id)}>
+                {e.name} — {e.ferStatus}
+              </Badge>
+            ))}
+            {alertas.length > 5 && <Badge variant="outline" className="text-xs">+{alertas.length - 5} mais</Badge>}
+          </div>
+        </div>
       )}
+
+      <div className="card-premium p-4 flex flex-wrap gap-3 items-center">
+        <Input placeholder="Buscar por nome ou CPF..." value={search}
+          onChange={e => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
+        <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+          <option value="">Todas Empresas</option>
+          {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+
+      <div className="card-premium overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Nome</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Cargo</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Admissão</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status Férias</th>
+            </tr>
+          </thead>
+          <tbody>
+            {empsList.map(e => {
+              const co = companies.find(c => c.id === e.companyId);
+              return (
+                <tr key={e.id} className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
+                  onClick={() => setSelectedEmpId(e.id)}>
+                  <td className="px-3 py-2.5 font-medium">{e.name}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{co?.name}</td>
+                  <td className="px-3 py-2.5">{e.cargo}</td>
+                  <td className="px-3 py-2.5 text-xs">{formatDate(e.dataAdmissao)}</td>
+                  <td className="px-3 py-2.5">
+                    <Badge variant="outline" className={`text-[10px] ${e.ferStatus === 'em dia' ? 'border-success text-success' : e.ferStatus === 'atenção' ? 'border-warning text-warning' : 'border-destructive text-destructive'}`}>
+                      {e.ferStatus}
+                    </Badge>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="p-3 text-xs text-muted-foreground border-t">{empsList.length} funcionário(s)</div>
+      </div>
     </div>
   );
 };

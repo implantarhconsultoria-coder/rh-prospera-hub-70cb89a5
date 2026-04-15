@@ -14,6 +14,214 @@ export type Database = {
   }
   public: {
     Tables: {
+      almoxarifado_entradas: {
+        Row: {
+          created_at: string
+          fornecedor: string | null
+          id: string
+          item_id: string
+          nota_fiscal_url: string | null
+          observacao: string | null
+          quantidade: number
+          user_id: string
+          valor_total: number | null
+          valor_unitario: number | null
+        }
+        Insert: {
+          created_at?: string
+          fornecedor?: string | null
+          id?: string
+          item_id: string
+          nota_fiscal_url?: string | null
+          observacao?: string | null
+          quantidade: number
+          user_id: string
+          valor_total?: number | null
+          valor_unitario?: number | null
+        }
+        Update: {
+          created_at?: string
+          fornecedor?: string | null
+          id?: string
+          item_id?: string
+          nota_fiscal_url?: string | null
+          observacao?: string | null
+          quantidade?: number
+          user_id?: string
+          valor_total?: number | null
+          valor_unitario?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "almoxarifado_entradas_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "almoxarifado_itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      almoxarifado_itens: {
+        Row: {
+          categoria: string | null
+          codigo_sku: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          localizacao: string | null
+          nome: string
+          quantidade: number
+          unidade: string
+          updated_at: string
+          user_id: string
+          valor_unitario: number | null
+        }
+        Insert: {
+          categoria?: string | null
+          codigo_sku?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          localizacao?: string | null
+          nome: string
+          quantidade?: number
+          unidade?: string
+          updated_at?: string
+          user_id: string
+          valor_unitario?: number | null
+        }
+        Update: {
+          categoria?: string | null
+          codigo_sku?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          localizacao?: string | null
+          nome?: string
+          quantidade?: number
+          unidade?: string
+          updated_at?: string
+          user_id?: string
+          valor_unitario?: number | null
+        }
+        Relationships: []
+      }
+      almoxarifado_saidas: {
+        Row: {
+          created_at: string
+          funcionario_nome: string
+          id: string
+          item_id: string
+          motivo: string | null
+          observacao: string | null
+          quantidade: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          funcionario_nome: string
+          id?: string
+          item_id: string
+          motivo?: string | null
+          observacao?: string | null
+          quantidade: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          funcionario_nome?: string
+          id?: string
+          item_id?: string
+          motivo?: string | null
+          observacao?: string | null
+          quantidade?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "almoxarifado_saidas_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "almoxarifado_itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aso_agendamentos: {
+        Row: {
+          clinica_endereco: string | null
+          cpf: string | null
+          created_at: string
+          ctps: string | null
+          data_admissao: string | null
+          data_exame: string | null
+          data_nascimento: string | null
+          empresa: string
+          espaco_confinado: boolean | null
+          funcao: string | null
+          funcionario_nome: string
+          id: string
+          obra_local: string | null
+          observacao: string | null
+          pis: string | null
+          responsavel_contato: string | null
+          rg: string | null
+          status: string
+          tipo_exame: string
+          trabalho_altura: boolean | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clinica_endereco?: string | null
+          cpf?: string | null
+          created_at?: string
+          ctps?: string | null
+          data_admissao?: string | null
+          data_exame?: string | null
+          data_nascimento?: string | null
+          empresa: string
+          espaco_confinado?: boolean | null
+          funcao?: string | null
+          funcionario_nome: string
+          id?: string
+          obra_local?: string | null
+          observacao?: string | null
+          pis?: string | null
+          responsavel_contato?: string | null
+          rg?: string | null
+          status?: string
+          tipo_exame?: string
+          trabalho_altura?: boolean | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clinica_endereco?: string | null
+          cpf?: string | null
+          created_at?: string
+          ctps?: string | null
+          data_admissao?: string | null
+          data_exame?: string | null
+          data_nascimento?: string | null
+          empresa?: string
+          espaco_confinado?: boolean | null
+          funcao?: string | null
+          funcionario_nome?: string
+          id?: string
+          obra_local?: string | null
+          observacao?: string | null
+          pis?: string | null
+          responsavel_contato?: string | null
+          rg?: string | null
+          status?: string
+          tipo_exame?: string
+          trabalho_altura?: boolean | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ativos: {
         Row: {
           ano_fabricacao: string | null
@@ -71,6 +279,54 @@ export type Database = {
         }
         Relationships: []
       }
+      prestadores: {
+        Row: {
+          cpf: string | null
+          created_at: string
+          dias_trabalho: string | null
+          empresa_pagadora: string
+          funcao: string | null
+          id: string
+          nome: string
+          observacao: string | null
+          pagamento_tipo: string
+          status: string
+          updated_at: string
+          user_id: string
+          valor_diario: number | null
+        }
+        Insert: {
+          cpf?: string | null
+          created_at?: string
+          dias_trabalho?: string | null
+          empresa_pagadora?: string
+          funcao?: string | null
+          id?: string
+          nome: string
+          observacao?: string | null
+          pagamento_tipo?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          valor_diario?: number | null
+        }
+        Update: {
+          cpf?: string | null
+          created_at?: string
+          dias_trabalho?: string | null
+          empresa_pagadora?: string
+          funcao?: string | null
+          id?: string
+          nome?: string
+          observacao?: string | null
+          pagamento_tipo?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          valor_diario?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           cargo: string | null
@@ -104,15 +360,47 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role:
+        | "admin"
+        | "filial_praia"
+        | "filial_goiania"
+        | "almoxarifado"
+        | "usuario"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -239,6 +527,14 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: [
+        "admin",
+        "filial_praia",
+        "filial_goiania",
+        "almoxarifado",
+        "usuario",
+      ],
+    },
   },
 } as const

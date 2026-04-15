@@ -5,6 +5,7 @@ import {
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
   Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car, Cog,
+  Stethoscope, UserCheck,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,8 @@ const operationalItems = [
   { label: 'Compressores', icon: Cog, path: '/compressores' },
   { label: 'Doc. Veículos', icon: Car, path: '/documentos-ativos' },
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/aviso-ferias' },
+  { label: 'ASO', icon: Stethoscope, path: '/aso' },
+  { label: 'Prestadores', icon: UserCheck, path: '/prestadores' },
   { label: 'Histórico', icon: History, path: '/historico' },
 ];
 
