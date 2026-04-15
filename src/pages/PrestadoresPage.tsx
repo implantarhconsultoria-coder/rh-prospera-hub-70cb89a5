@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useApp } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,47 +12,60 @@ interface Prestador {
   nome: string;
   cpf: string;
   funcao: string;
-  empresaPagadora: string;
-  diasTrabalho: string;
-  pagamentoTipo: string;
-  valorDiario: number;
+  empresa_pagadora: string;
+  dias_trabalho: string;
+  pagamento_tipo: string;
+  valor_diario: number;
   observacao: string;
   status: string;
-  diasTrabalhados: { quinzena: string; dias: number }[];
 }
 
 const PrestadoresPage: React.FC = () => {
+  const { session } = useApp();
   const [prestadores, setPrestadores] = useState<Prestador[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ nome: '', cpf: '', funcao: 'Serviços Gerais', valorDiario: 0, observacao: '' });
   const [selectedId, setSelectedId] = useState('');
   const [quinzena, setQuinzena] = useState('1');
   const [diasTrabalhados, setDiasTrabalhados] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  const handleAdd = () => {
-    if (!form.nome) { toast.error('Preencha o nome'); return; }
-    const p: Prestador = {
-      id: `prest-${Date.now()}`, nome: form.nome, cpf: form.cpf, funcao: form.funcao,
-      empresaPagadora: 'ALQUI OBRAS', diasTrabalho: 'segunda,quinta',
-      pagamentoTipo: 'quinzenal', valorDiario: form.valorDiario,
-      observacao: form.observacao, status: 'ativo', diasTrabalhados: [],
-    };
-    setPrestadores(prev => [...prev, p]);
-    setForm({ nome: '', cpf: '', funcao: 'Serviços Gerais', valorDiario: 0, observacao: '' });
-    setShowForm(false);
-    toast.success('Prestador cadastrado!');
+  const fetchPrestadores = async () => {
+    const { data, error } = await supabase.from('prestadores').select('*').order('created_at', { ascending: false });
+    if (!error && data) setPrestadores(data as Prestador[]);
   };
 
-  const handleLancar = () => {
-    if (!selectedId) return;
-    setPrestadores(prev => prev.map(p => {
-      if (p.id !== selectedId) return p;
-      const mes = new Date().toISOString().slice(0, 7);
-      const key = `${mes}-Q${quinzena}`;
-      const existing = p.diasTrabalhados.filter(d => d.quinzena !== key);
-      return { ...p, diasTrabalhados: [...existing, { quinzena: key, dias: diasTrabalhados }] };
-    }));
-    toast.success('Dias lançados!');
+  useEffect(() => { fetchPrestadores(); }, []);
+
+  const handleAdd = async () => {
+    if (!form.nome) { toast.error('Preencha o nome'); return; }
+    if (!session?.user?.id) { toast.error('Faça login'); return; }
+    setLoading(true);
+    const { error } = await supabase.from('prestadores').insert({
+      user_id: session.user.id,
+      nome: form.nome,
+      cpf: form.cpf,
+      funcao: form.funcao,
+      valor_diario: form.valorDiario,
+      observacao: form.observacao,
+      empresa_pagadora: 'ALQUI OBRAS',
+      dias_trabalho: 'segunda,quinta',
+      pagamento_tipo: 'quinzenal',
+      status: 'ativo',
+    });
+    if (error) { toast.error('Erro: ' + error.message); } else {
+      toast.success('Prestador cadastrado!');
+      setForm({ nome: '', cpf: '', funcao: 'Serviços Gerais', valorDiario: 0, observacao: '' });
+      setShowForm(false);
+      fetchPrestadores();
+    }
+    setLoading(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    await supabase.from('prestadores').delete().eq('id', id);
+    toast.success('Removido');
+    fetchPrestadores();
   };
 
   const selected = prestadores.find(p => p.id === selectedId);
@@ -58,10 +73,7 @@ const PrestadoresPage: React.FC = () => {
   const handlePrintRecibo = () => {
     if (!selected) return;
     const mes = new Date().toISOString().slice(0, 7);
-    const key = `${mes}-Q${quinzena}`;
-    const reg = selected.diasTrabalhados.find(d => d.quinzena === key);
-    const dias = reg?.dias || 0;
-    const total = dias * selected.valorDiario;
+    const total = diasTrabalhados * selected.valor_diario;
 
     const printWin = window.open('', '_blank');
     if (!printWin) return;
@@ -88,7 +100,7 @@ const PrestadoresPage: React.FC = () => {
     <div class="field"><span>Período:</span> ${quinzena}ª Quinzena de ${mes}</div>
     </div></div>
     <table><thead><tr><th>Descrição</th><th>Qtd Dias</th><th>Valor/Dia</th><th>Total</th></tr></thead>
-    <tbody><tr><td>Serviço prestado — ${selected.funcao}</td><td>${dias}</td><td>R$ ${selected.valorDiario.toFixed(2)}</td><td>R$ ${total.toFixed(2)}</td></tr></tbody></table>
+    <tbody><tr><td>Serviço prestado — ${selected.funcao}</td><td>${diasTrabalhados}</td><td>R$ ${selected.valor_diario.toFixed(2)}</td><td>R$ ${total.toFixed(2)}</td></tr></tbody></table>
     <p style="font-size:12px;font-weight:bold;text-align:right;margin-top:8px">TOTAL A PAGAR: R$ ${total.toFixed(2)}</p>
     <div class="signatures">
     <div class="sig-line"><hr/><small>Assinatura do Prestador</small></div>
@@ -137,7 +149,7 @@ const PrestadoresPage: React.FC = () => {
             <div><label className="text-xs text-muted-foreground block mb-1">Observação</label>
               <Input value={form.observacao} onChange={e => setForm({ ...form, observacao: e.target.value })} /></div>
             <div className="flex items-end">
-              <Button onClick={handleAdd}><Save className="w-4 h-4 mr-1" /> Salvar</Button>
+              <Button onClick={handleAdd} disabled={loading}><Save className="w-4 h-4 mr-1" /> Salvar</Button>
             </div>
           </div>
         )}
@@ -157,8 +169,8 @@ const PrestadoresPage: React.FC = () => {
               <tr key={p.id} className="border-b hover:bg-muted/30 cursor-pointer" onClick={() => setSelectedId(p.id)}>
                 <td className="px-3 py-2 font-medium">{p.nome}</td>
                 <td className="px-3 py-2">{p.funcao}</td>
-                <td className="px-3 py-2">R$ {p.valorDiario.toFixed(2)}</td>
-                <td className="px-3 py-2 text-xs">{p.diasTrabalho}</td>
+                <td className="px-3 py-2">R$ {(p.valor_diario || 0).toFixed(2)}</td>
+                <td className="px-3 py-2 text-xs">{p.dias_trabalho}</td>
                 <td className="px-3 py-2"><Badge className="text-[10px] bg-success text-success-foreground">{p.status}</Badge></td>
               </tr>
             ))}
@@ -182,7 +194,6 @@ const PrestadoresPage: React.FC = () => {
             <div><label className="text-xs text-muted-foreground block mb-1">Dias Trabalhados</label>
               <Input type="number" value={diasTrabalhados} onChange={e => setDiasTrabalhados(Number(e.target.value))} /></div>
             <div className="flex items-end gap-2">
-              <Button onClick={handleLancar} variant="outline"><Save className="w-4 h-4 mr-1" /> Lançar</Button>
               <Button onClick={handlePrintRecibo} className="gradient-accent text-accent-foreground font-semibold">
                 <Printer className="w-4 h-4 mr-1" /> Recibo
               </Button>
