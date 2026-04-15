@@ -43,8 +43,8 @@ const FilialDashboard: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Portal RH — {branchName}</h1>
-        <p className="text-muted-foreground text-sm">Bem-vindo(a), {session?.user?.email}</p>
+        <h1 className="text-2xl font-bold font-display text-foreground">{getGreeting(userName)}</h1>
+        <p className="text-muted-foreground text-sm">Portal RH — {branchName}</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
