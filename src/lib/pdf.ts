@@ -59,7 +59,7 @@ export const renderPdfPagesToDataUrls = async (
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
 
-    await page.render({ canvasContext: context, viewport }).promise;
+    await page.render({ canvasContext: context, viewport, canvas } as any).promise;
     pageUrls.push(canvas.toDataURL('image/jpeg', 0.94));
   }
 
