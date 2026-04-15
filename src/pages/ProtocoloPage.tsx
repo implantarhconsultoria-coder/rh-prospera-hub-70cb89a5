@@ -10,6 +10,7 @@ const ProtocoloPage: React.FC = () => {
   const { companies } = useApp();
   const topac = companies.find(c => c.id === 'topac-matriz');
 
+  const [tipoDocumento, setTipoDocumento] = useState<'protocolo' | 'compressor'>('protocolo');
   const [empresaDestinataria, setEmpresaDestinataria] = useState('');
   const [localCanteiro, setLocalCanteiro] = useState('');
   const [responsavelRecebimento, setResponsavelRecebimento] = useState('');
@@ -20,6 +21,7 @@ const ProtocoloPage: React.FC = () => {
   const [anoModelo, setAnoModelo] = useState('');
   const [patrimonio, setPatrimonio] = useState('');
   const [exercicio, setExercicio] = useState(new Date().getFullYear().toString());
+  const [descricaoEquipamento, setDescricaoEquipamento] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [dataEmissao, setDataEmissao] = useState(new Date().toISOString().slice(0, 10));
   const [textoColado, setTextoColado] = useState('');
@@ -46,7 +48,7 @@ const ProtocoloPage: React.FC = () => {
         if (d.chassi) setChassi(d.chassi);
         if (d.ano_modelo) setAnoModelo(d.ano_modelo);
         if (d.observacoes) setObservacoes(d.observacoes);
-        toast.success('Campos preenchidos automaticamente!');
+        toast.success('Campos preenchidos pela IA — revise e edite antes de imprimir.');
       }
     } catch (e: any) {
       toast.error('Erro ao processar texto: ' + (e.message || 'Tente novamente'));
@@ -58,73 +60,87 @@ const ProtocoloPage: React.FC = () => {
   const handlePdfUpload = async (file: File) => {
     setPdfFile(file);
     const fileName = `protocolo-${Date.now()}-${file.name}`;
-    const { data, error } = await supabase.storage
-      .from('documentos-ativos')
-      .upload(fileName, file, { contentType: 'application/pdf' });
+    const { error } = await supabase.storage.from('documentos-ativos').upload(fileName, file, { contentType: 'application/pdf' });
     if (error) { toast.error('Erro no upload'); return; }
     const { data: urlData } = supabase.storage.from('documentos-ativos').getPublicUrl(fileName);
     setPdfUrl(urlData.publicUrl);
     toast.success('PDF anexado!');
   };
 
-  const buildProtocoloHtml = (via: number) => {
+  const titulo = tipoDocumento === 'compressor' ? 'LIBERAÇÃO DE LOCAÇÃO DE COMPRESSOR' : 'PROTOCOLO DE LIBERAÇÃO DE DOCUMENTO';
+
+  const buildProtocoloHtml = (via: number, total: number) => {
     const co = topac;
-    return `<div style="page-break-after:always;padding:15mm;font-family:Arial,sans-serif;font-size:12px;color:#000">
-    <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px">
+    return `<div style="page-break-after:always;padding:15mm;font-family:Arial,sans-serif;font-size:12px;color:#000;box-sizing:border-box;">
+    <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:14px">
       <div><strong>${co?.name || 'TOPAC MATRIZ'}</strong><br/><span style="font-size:10px">CNPJ: ${co?.cnpj || ''}</span></div>
-      <div style="font-size:16px;font-weight:bold;text-align:right">PROTOCOLO DE<br/>LIBERAÇÃO DE DOCUMENTO<br/><span style="font-size:10px;color:#666">${via}ª Via</span></div>
+      <div style="font-size:14px;font-weight:bold;text-align:right">${titulo}<br/><span style="font-size:10px;color:#666">${via}ª Via de ${total}</span></div>
     </div>
     <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
       <div style="font-weight:bold;font-size:11px;text-transform:uppercase;color:#555;margin-bottom:6px">Dados da Liberação</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
-        <div style="font-size:11px"><span style="color:#666">Empresa Destinatária:</span> ${empresaDestinataria}</div>
-        <div style="font-size:11px"><span style="color:#666">Local/Canteiro:</span> ${localCanteiro || '—'}</div>
-        <div style="font-size:11px"><span style="color:#666">Responsável Recebimento:</span> ${responsavelRecebimento}</div>
-        <div style="font-size:11px"><span style="color:#666">Data:</span> ${new Date(dataEmissao).toLocaleDateString('pt-BR')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px">
+        <div><span style="color:#666">Empresa Destinatária:</span> ${empresaDestinataria}</div>
+        <div><span style="color:#666">Local/Canteiro:</span> ${localCanteiro || '—'}</div>
+        <div><span style="color:#666">Responsável Recebimento:</span> ${responsavelRecebimento || '—'}</div>
+        <div><span style="color:#666">Data:</span> ${new Date(dataEmissao).toLocaleDateString('pt-BR')}</div>
+        ${descricaoEquipamento ? `<div style="grid-column:1/-1"><span style="color:#666">Equipamento:</span> ${descricaoEquipamento}</div>` : ''}
       </div>
     </div>
     <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
       <div style="font-weight:bold;font-size:11px;text-transform:uppercase;color:#555;margin-bottom:6px">Identificação do Ativo</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
-        <div style="font-size:11px"><span style="color:#666">Placa:</span> ${placa || '—'}</div>
-        <div style="font-size:11px"><span style="color:#666">Renavam:</span> ${renavam || '—'}</div>
-        <div style="font-size:11px"><span style="color:#666">Chassi:</span> ${chassi || '—'}</div>
-        <div style="font-size:11px"><span style="color:#666">Ano Fabricação:</span> ${anoFabricacao || '—'}</div>
-        <div style="font-size:11px"><span style="color:#666">Ano Modelo:</span> ${anoModelo || '—'}</div>
-        <div style="font-size:11px"><span style="color:#666">Patrimônio:</span> ${patrimonio || '—'}</div>
-        <div style="font-size:11px"><span style="color:#666">Exercício:</span> ${exercicio}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px">
+        <div><span style="color:#666">Placa:</span> ${placa || '—'}</div>
+        <div><span style="color:#666">Renavam:</span> ${renavam || '—'}</div>
+        <div><span style="color:#666">Chassi:</span> ${chassi || '—'}</div>
+        <div><span style="color:#666">Ano Fabricação:</span> ${anoFabricacao || '—'}</div>
+        <div><span style="color:#666">Ano Modelo:</span> ${anoModelo || '—'}</div>
+        <div><span style="color:#666">Patrimônio:</span> ${patrimonio || '—'}</div>
+        <div><span style="color:#666">Exercício:</span> ${exercicio}</div>
       </div>
     </div>
-    ${observacoes ? `<div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px"><div style="font-weight:bold;font-size:11px;text-transform:uppercase;color:#555;margin-bottom:6px">Observações</div><p style="font-size:11px">${observacoes}</p></div>` : ''}
+    ${observacoes ? `<div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px"><div style="font-weight:bold;font-size:11px;text-transform:uppercase;color:#555;margin-bottom:6px">Observações</div><p style="font-size:11px;margin:0;white-space:pre-wrap">${observacoes}</p></div>` : ''}
     <div style="display:flex;justify-content:space-between;margin-top:60px">
       <div style="text-align:center;width:45%"><hr style="border:0;border-top:1px solid #000;margin-bottom:4px"/><small>Assinatura — Entrega</small></div>
       <div style="text-align:center;width:45%"><hr style="border:0;border-top:1px solid #000;margin-bottom:4px"/><small>Assinatura — Recebimento</small></div>
     </div>
-    <div style="margin-top:30px;text-align:center;font-size:9px;color:#999;border-top:1px solid #eee;padding-top:6px">Topac RH Multiempresa PRO — Documento gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+    <div style="margin-top:20px;text-align:center;font-size:9px;color:#999;border-top:1px solid #eee;padding-top:6px">Topac RH Multiempresa PRO — Documento gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
     </div>`;
   };
 
   const handlePrint = () => {
-    if (!placa && !patrimonio) { toast.error('Informe ao menos placa ou patrimônio'); return; }
+    if (!placa && !patrimonio && !descricaoEquipamento) {
+      toast.error('Informe ao menos placa, patrimônio ou descrição do equipamento');
+      return;
+    }
     const printWin = window.open('', '_blank');
     if (!printWin) return;
-    
+
     let pdfPage = '';
     if (pdfUrl) {
-      pdfPage = `<div style="page-break-after:always;height:100vh;display:flex;align-items:center;justify-content:center;">
-        <iframe src="${pdfUrl}" style="width:100%;height:95vh;border:none"></iframe>
+      pdfPage = `<div style="page-break-after:always;padding:15mm;">
+        <div style="text-align:center;font-size:10px;color:#666;margin-bottom:10px">DOCUMENTO ANEXO — Referente ao Protocolo de ${new Date(dataEmissao).toLocaleDateString('pt-BR')}</div>
+        <iframe src="${pdfUrl}" style="width:100%;height:90vh;border:1px solid #ccc"></iframe>
       </div>`;
     }
 
-    printWin.document.write(`<!DOCTYPE html><html><head><title>Protocolo de Liberação</title>
+    printWin.document.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
     <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}@media print{body{-webkit-print-color-adjust:exact}}</style></head><body>
-    ${buildProtocoloHtml(1)}
-    ${buildProtocoloHtml(2)}
+    ${buildProtocoloHtml(1, 2)}
+    ${buildProtocoloHtml(2, 2)}
     ${pdfPage}
     </body></html>`);
     printWin.document.close();
     setTimeout(() => printWin.print(), 500);
-    toast.success('Protocolo gerado — 2 vias' + (pdfUrl ? ' + documento anexo' : ''));
+    toast.success(`Protocolo gerado — 2 vias${pdfUrl ? ' + documento anexo' : ''}`);
+  };
+
+  const handleClear = () => {
+    setEmpresaDestinataria(''); setLocalCanteiro(''); setResponsavelRecebimento('');
+    setPlaca(''); setRenavam(''); setChassi(''); setAnoFabricacao(''); setAnoModelo('');
+    setPatrimonio(''); setDescricaoEquipamento(''); setObservacoes('');
+    setTextoColado(''); setPdfFile(null); setPdfUrl('');
+    setExercicio(new Date().getFullYear().toString());
+    setDataEmissao(new Date().toISOString().slice(0, 10));
   };
 
   return (
@@ -136,28 +152,50 @@ const ProtocoloPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display">Protocolo / Liberação de Documento</h1>
-            <p className="text-primary-foreground/70 text-sm">Empresa padrão: TOPAC MATRIZ — Cole texto de WhatsApp/e-mail para preencher automaticamente</p>
+            <p className="text-primary-foreground/70 text-sm">Empresa padrão: TOPAC MATRIZ — Inclui liberação de compressores</p>
           </div>
         </div>
       </div>
 
-      {/* Área de texto colado */}
-      <div className="card-premium p-5 space-y-3">
-        <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" /> Leitura Inteligente de Texto
-        </h2>
-        <textarea
-          value={textoColado}
-          onChange={e => setTextoColado(e.target.value)}
-          placeholder="Cole aqui o texto de WhatsApp ou e-mail com os dados do documento para preenchimento automático..."
-          className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[120px]"
-        />
-        <Button onClick={handleParseText} disabled={parsing} variant="outline">
-          {parsing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-          {parsing ? 'Lendo texto...' : 'Ler texto e preencher'}
-        </Button>
+      {/* Tipo + Leitura IA */}
+      <div className="card-premium p-5 space-y-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Tipo de Documento</label>
+            <select value={tipoDocumento} onChange={e => setTipoDocumento(e.target.value as any)}
+              className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+              <option value="protocolo">Protocolo de Documento</option>
+              <option value="compressor">Liberação de Compressor</option>
+            </select>
+          </div>
+          <div className="ml-auto">
+            <Button variant="ghost" size="sm" onClick={handleClear} className="text-xs text-muted-foreground">
+              Limpar Campos
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-sm font-bold text-foreground flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-primary" /> Leitura Inteligente de Texto
+          </h2>
+          <textarea
+            value={textoColado}
+            onChange={e => setTextoColado(e.target.value)}
+            placeholder="Cole aqui o texto de WhatsApp, e-mail ou mensagem com os dados do documento. A IA vai sugerir o preenchimento — você pode revisar e editar tudo antes de salvar ou imprimir."
+            className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[140px] resize-y"
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <Button onClick={handleParseText} disabled={parsing} variant="outline">
+              {parsing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+              {parsing ? 'Lendo texto...' : 'Ler texto e preencher'}
+            </Button>
+            <span className="text-xs text-muted-foreground">Os campos serão preenchidos automaticamente. Revise antes de imprimir.</span>
+          </div>
+        </div>
       </div>
 
+      {/* Dados da liberação */}
       <div className="card-premium p-5 space-y-4">
         <h2 className="text-sm font-bold text-foreground">Dados da Liberação</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -169,9 +207,14 @@ const ProtocoloPage: React.FC = () => {
             <Input value={responsavelRecebimento} onChange={e => setResponsavelRecebimento(e.target.value)} /></div>
           <div><label className="text-xs text-muted-foreground block mb-1">Data de Emissão</label>
             <Input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} /></div>
+          {tipoDocumento === 'compressor' && (
+            <div className="lg:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Descrição do Compressor / Equipamento</label>
+              <Input value={descricaoEquipamento} onChange={e => setDescricaoEquipamento(e.target.value)} placeholder="Ex: Compressor Atlas Copco XAS 185" /></div>
+          )}
         </div>
       </div>
 
+      {/* Identificação do ativo */}
       <div className="card-premium p-5 space-y-4">
         <h2 className="text-sm font-bold text-foreground">Identificação do Ativo</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -192,12 +235,13 @@ const ProtocoloPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Observações + PDF + Imprimir */}
       <div className="card-premium p-5 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Observações</label>
             <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[60px]" />
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[80px] resize-y" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">PDF do Documento (opcional)</label>
@@ -209,11 +253,12 @@ const ProtocoloPage: React.FC = () => {
                   onChange={e => e.target.files?.[0] && handlePdfUpload(e.target.files[0])} />
               </label>
             </div>
-            {pdfUrl && <p className="text-xs text-success mt-1">✓ PDF anexado — será impresso como 3ª via</p>}
+            {pdfUrl && <p className="text-xs text-success mt-1">✓ PDF anexado — será impresso como via adicional</p>}
+            {!pdfUrl && <p className="text-xs text-muted-foreground mt-1">Sem PDF: imprime apenas 2 vias do protocolo</p>}
           </div>
         </div>
-        <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold">
-          <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir — {pdfUrl ? '2 vias + Documento' : '2 vias'}
+        <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold" size="lg">
+          <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir — {pdfUrl ? '2 vias + Documento Anexo' : '2 vias'}
         </Button>
       </div>
     </div>

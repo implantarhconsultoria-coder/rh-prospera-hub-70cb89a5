@@ -44,10 +44,10 @@ const LancamentosPage: React.FC = () => {
         </Button>
       </div>
 
-      <div className="card-premium overflow-x-auto">
+      <div className="card-premium overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-muted/50">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b bg-muted">
               {['Funcionário','Cargo','Salário','Faltas (dias)','Atrasos (h)','HE 50%','HE 100%','Adicionais','Descontos','Adiant.','Insal.','Status','Obs'].map(h => (
                 <th key={h} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}

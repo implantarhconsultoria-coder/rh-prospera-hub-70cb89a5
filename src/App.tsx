@@ -20,7 +20,6 @@ import LancamentosPage from "@/pages/LancamentosPage";
 import FechamentoPage from "@/pages/FechamentoPage";
 import CombustivelPage from "@/pages/CombustivelPage";
 import ProtocoloPage from "@/pages/ProtocoloPage";
-import CompressoresPage from "@/pages/CompressoresPage";
 import DocumentosVeiculosPage from "@/pages/DocumentosVeiculosPage";
 import AvisoFeriasPage from "@/pages/AvisoFeriasPage";
 import RelatorioPage from "@/pages/RelatorioPage";
@@ -82,7 +81,7 @@ const AuthGate = () => {
         <Route path="/prestadores" element={<PrestadoresPage />} />
         <Route path="/combustivel" element={<CombustivelPage />} />
         <Route path="/protocolo" element={<ProtocoloPage />} />
-        <Route path="/compressores" element={<CompressoresPage />} />
+        <Route path="/compressores" element={<ProtocoloPage />} />
         <Route path="/documentos-ativos" element={<DocumentosVeiculosPage />} />
         <Route path="/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
