@@ -54,7 +54,7 @@ const DespacharChamadoPage: React.FC = () => {
   }, []);
 
   const fetchChamados = async () => {
-    const { data } = await supabase.from('chamados').select('*, profiles:colaborador_id(nome_completo)').order('created_at', { ascending: false }).limit(50);
+    const { data } = await supabase.from('chamados').select('*').order('created_at', { ascending: false }).limit(50);
     setChamados(data || []);
   };
 
