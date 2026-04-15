@@ -325,7 +325,14 @@ const DocumentosVeiculosPage: React.FC = () => {
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_licenciamento))}</td>
                 <td className="px-3 py-2 text-xs">{a.empresa}</td>
                 <td className="px-3 py-2 text-xs">
-                  {a.arquivo_url ? <a href={a.arquivo_url} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1"><Eye className="w-3 h-3" />Ver</a> : '—'}
+                  {a.arquivo_url ? <button onClick={async () => {
+                    setViewingPdf({ url: a.arquivo_url, descricao: a.descricao });
+                    try {
+                      const r = await fetch(a.arquivo_url);
+                      const blob = await r.blob();
+                      setViewingBlobUrl(URL.createObjectURL(blob));
+                    } catch { toast.error('Erro ao carregar PDF'); }
+                  }} className="text-primary hover:underline flex items-center gap-1 text-xs"><Eye className="w-3 h-3" />Ver</button> : '—'}
                 </td>
                 <td className="px-3 py-2 flex gap-1">
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(a)}>
