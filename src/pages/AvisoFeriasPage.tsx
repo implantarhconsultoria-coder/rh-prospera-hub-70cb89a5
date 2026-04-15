@@ -33,7 +33,7 @@ const AvisoFeriasPage: React.FC = () => {
       });
   }, [employees, search, filterCompany]);
 
-  const alertas = useMemo(() => empsList.filter(e => e.ferStatus === 'vencida' || e.ferStatus === 'atenção'), [empsList]);
+  const alertas = useMemo(() => empsList.filter(e => e.ferStatus === 'vencido' || e.ferStatus === 'atenção'), [empsList]);
 
   const emp = employees.find(e => e.id === selectedEmpId);
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
