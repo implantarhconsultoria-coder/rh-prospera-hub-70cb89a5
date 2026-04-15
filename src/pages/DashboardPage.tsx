@@ -85,7 +85,7 @@ const FilialDashboard: React.FC = () => {
 };
 
 const DashboardPage: React.FC = () => {
-  const { companies, employees, entries, userRole } = useApp();
+  const { companies, employees, entries, userRole, session } = useApp();
   const navigate = useNavigate();
 
   // Filial users get simplified portal
