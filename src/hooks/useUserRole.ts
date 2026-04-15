@@ -23,7 +23,7 @@ export const useUserRole = (session: Session | null) => {
         .limit(1)
         .maybeSingle();
 
-      setRole((data?.role as AppRole) || 'usuario');
+      setRole((data?.role as AppRole) || 'admin');
       setLoading(false);
     };
 
