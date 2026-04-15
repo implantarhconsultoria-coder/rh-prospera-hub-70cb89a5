@@ -462,6 +462,42 @@ export type Database = {
           },
         ]
       }
+      empresas: {
+        Row: {
+          cidade: string
+          cnpj: string
+          codigo: string
+          created_at: string
+          id: string
+          nome: string
+          observacoes: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cidade?: string
+          cnpj?: string
+          codigo: string
+          created_at?: string
+          id?: string
+          nome: string
+          observacoes?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cidade?: string
+          cnpj?: string
+          codigo?: string
+          created_at?: string
+          id?: string
+          nome?: string
+          observacoes?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       estoque_veiculo: {
         Row: {
           created_at: string
@@ -496,6 +532,221 @@ export type Database = {
             columns: ["veiculo_id"]
             isOneToOne: false
             referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funcionarios: {
+        Row: {
+          agencia: string
+          banco: string
+          cargo: string
+          categoria: string
+          celular: string
+          codigo: string
+          company_id: string
+          conta: string
+          cpf: string
+          created_at: string
+          data_admissao: string | null
+          data_exame_medico: string | null
+          email: string
+          endereco: string
+          id: string
+          insalubridade_ativa: boolean
+          insalubridade_valor: number
+          inss: number | null
+          liquido: number | null
+          matricula_esocial: string
+          nome: string
+          observacoes: string
+          pix: string
+          referencia_competencia: string | null
+          registro: string
+          rg: string
+          salario_base: number
+          status: string
+          telefone: string
+          updated_at: string
+          va_ativo: boolean
+          va_mensal: number
+          vr_ativo: boolean
+          vr_diario: number
+          vt_ativo: boolean
+          vt_diario: number
+        }
+        Insert: {
+          agencia?: string
+          banco?: string
+          cargo?: string
+          categoria?: string
+          celular?: string
+          codigo?: string
+          company_id: string
+          conta?: string
+          cpf?: string
+          created_at?: string
+          data_admissao?: string | null
+          data_exame_medico?: string | null
+          email?: string
+          endereco?: string
+          id?: string
+          insalubridade_ativa?: boolean
+          insalubridade_valor?: number
+          inss?: number | null
+          liquido?: number | null
+          matricula_esocial?: string
+          nome: string
+          observacoes?: string
+          pix?: string
+          referencia_competencia?: string | null
+          registro?: string
+          rg?: string
+          salario_base?: number
+          status?: string
+          telefone?: string
+          updated_at?: string
+          va_ativo?: boolean
+          va_mensal?: number
+          vr_ativo?: boolean
+          vr_diario?: number
+          vt_ativo?: boolean
+          vt_diario?: number
+        }
+        Update: {
+          agencia?: string
+          banco?: string
+          cargo?: string
+          categoria?: string
+          celular?: string
+          codigo?: string
+          company_id?: string
+          conta?: string
+          cpf?: string
+          created_at?: string
+          data_admissao?: string | null
+          data_exame_medico?: string | null
+          email?: string
+          endereco?: string
+          id?: string
+          insalubridade_ativa?: boolean
+          insalubridade_valor?: number
+          inss?: number | null
+          liquido?: number | null
+          matricula_esocial?: string
+          nome?: string
+          observacoes?: string
+          pix?: string
+          referencia_competencia?: string | null
+          registro?: string
+          rg?: string
+          salario_base?: number
+          status?: string
+          telefone?: string
+          updated_at?: string
+          va_ativo?: boolean
+          va_mensal?: number
+          vr_ativo?: boolean
+          vr_diario?: number
+          vt_ativo?: boolean
+          vt_diario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funcionarios_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lancamentos_mensais: {
+        Row: {
+          adiantamento: number
+          adicionais: number
+          atrasos: number
+          comissao_base: number
+          company_id: string
+          competencia: string
+          created_at: string
+          descontos_diversos: number
+          faltas_dias: number
+          funcionario_id: string
+          he100: number
+          he50: number
+          id: string
+          insalubridade_aplicada: boolean
+          observacoes: string
+          status_conferencia: string
+          updated_at: string
+          va_aplicado: boolean
+          vr_aplicado: boolean
+          vr_dias: number
+          vt_aplicado: boolean
+          vt_desconto: number
+        }
+        Insert: {
+          adiantamento?: number
+          adicionais?: number
+          atrasos?: number
+          comissao_base?: number
+          company_id: string
+          competencia: string
+          created_at?: string
+          descontos_diversos?: number
+          faltas_dias?: number
+          funcionario_id: string
+          he100?: number
+          he50?: number
+          id?: string
+          insalubridade_aplicada?: boolean
+          observacoes?: string
+          status_conferencia?: string
+          updated_at?: string
+          va_aplicado?: boolean
+          vr_aplicado?: boolean
+          vr_dias?: number
+          vt_aplicado?: boolean
+          vt_desconto?: number
+        }
+        Update: {
+          adiantamento?: number
+          adicionais?: number
+          atrasos?: number
+          comissao_base?: number
+          company_id?: string
+          competencia?: string
+          created_at?: string
+          descontos_diversos?: number
+          faltas_dias?: number
+          funcionario_id?: string
+          he100?: number
+          he50?: number
+          id?: string
+          insalubridade_aplicada?: boolean
+          observacoes?: string
+          status_conferencia?: string
+          updated_at?: string
+          va_aplicado?: boolean
+          vr_aplicado?: boolean
+          vr_dias?: number
+          vt_aplicado?: boolean
+          vt_desconto?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lancamentos_mensais_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lancamentos_mensais_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
             referencedColumns: ["id"]
           },
         ]

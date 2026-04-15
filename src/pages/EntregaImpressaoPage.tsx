@@ -2,8 +2,7 @@ import React, { useMemo } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { RESPONSIBILITY_TEXT, type Delivery } from '@/data/deliveries';
-import type { Company } from '@/data/companies';
-import type { Employee } from '@/data/employees';
+import type { Company, Employee } from '@/types/database';
 import { formatDate } from '@/lib/calculations';
 
 type DeliveryPreview = Pick<Delivery, 'type' | 'date' | 'items'> & { responsavel?: string };

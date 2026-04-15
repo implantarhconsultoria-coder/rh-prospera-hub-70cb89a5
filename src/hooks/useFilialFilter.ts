@@ -1,25 +1,25 @@
 import { useApp } from '@/context/AppContext';
 
 /**
- * Maps filial roles to their company IDs.
- * Used to filter data so filial users only see their own branch.
+ * Filters data by company for filial users.
+ * Uses the company `codigo` field to map roles to companies.
+ * RLS at the database level enforces this - this hook is for UI convenience.
  */
-const ROLE_COMPANY_MAP: Record<string, string> = {
-  filial_praia: 'topac-pg',
-  filial_goiania: 'topac-gyn',
-};
-
 export const useFilialFilter = () => {
-  const { userRole } = useApp();
+  const { userRole, companies } = useApp();
 
   const isFilial = userRole === 'filial_praia' || userRole === 'filial_goiania';
-  const filialCompanyId = isFilial ? ROLE_COMPANY_MAP[userRole!] : null;
 
-  /**
-   * Returns the company ID to filter by.
-   * - For filial users: their specific branch company ID
-   * - For admin: the provided companyId (or null for all)
-   */
+  // Map role to company codigo
+  const ROLE_CODIGO_MAP: Record<string, string> = {
+    filial_praia: 'topac-pg',
+    filial_goiania: 'topac-gyn',
+  };
+
+  const filialCompanyId = isFilial
+    ? companies.find(c => c.codigo === ROLE_CODIGO_MAP[userRole!])?.id || null
+    : null;
+
   const getCompanyFilter = (selectedCompanyId?: string): string | null => {
     if (isFilial) return filialCompanyId;
     return selectedCompanyId || null;
