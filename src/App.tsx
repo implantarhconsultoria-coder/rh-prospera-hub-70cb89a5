@@ -1,10 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import AppLayout from "@/components/AppLayout";
+import FilialLayout from "@/components/FilialLayout";
+import OperacionalLayout from "@/components/OperacionalLayout";
+import CampoLayout from "@/components/CampoLayout";
 import LoginPage from "@/pages/LoginPage";
 import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
@@ -37,7 +40,6 @@ import HistoricoPage from "@/pages/HistoricoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
-import CampoLayout from "@/components/CampoLayout";
 import CampoHomePage from "@/pages/campo/CampoHomePage";
 import PontoPage from "@/pages/campo/PontoPage";
 import ChamadosPage from "@/pages/campo/ChamadosPage";
@@ -48,6 +50,26 @@ import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
+
+/**
+ * RoleRedirect — after login, sends user to the correct portal based on role.
+ */
+const RoleRedirect = () => {
+  const { userRole, roleLoading } = useApp();
+
+  if (roleLoading) {
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  if (userRole === 'admin') return <Navigate to="/admin" replace />;
+  if (userRole === 'filial_praia' || userRole === 'filial_goiania') return <Navigate to="/filial" replace />;
+  if (userRole === 'tecnico_campo') return <Navigate to="/campo" replace />;
+  if (userRole === 'operacional') return <Navigate to="/operacional" replace />;
+  if (userRole === 'almoxarifado') return <Navigate to="/filial" replace />;
+
+  // No role — will show AguardandoAcesso via layout
+  return <Navigate to="/admin" replace />;
+};
 
 const AuthGate = () => {
   const { isAuthenticated, loading } = useApp();
@@ -73,7 +95,56 @@ const AuthGate = () => {
 
   return (
     <Routes>
-      {/* Campo layout for tecnico_campo */}
+      {/* Root → redirect to correct portal */}
+      <Route path="/" element={<RoleRedirect />} />
+
+      {/* ========== ADMIN PORTAL ========== */}
+      <Route element={<AppLayout />}>
+        <Route path="/admin" element={<DashboardPage />} />
+        <Route path="/admin/empresas" element={<EmpresasPage />} />
+        <Route path="/admin/base-mestra" element={<BaseMestraPage />} />
+        <Route path="/admin/funcionarios" element={<FuncionariosPage />} />
+        <Route path="/admin/funcionarios/:id" element={<EmployeeDetailPage />} />
+        <Route path="/admin/lancamentos" element={<LancamentosPage />} />
+        <Route path="/admin/fechamento" element={<FechamentoPage />} />
+        <Route path="/admin/relatorio" element={<RelatorioPage />} />
+        <Route path="/admin/epi" element={<EPIPage />} />
+        <Route path="/admin/uniformes" element={<UniformePage />} />
+        <Route path="/admin/relatorio-vr" element={<RelatorioVRPage />} />
+        <Route path="/admin/relatorio-vt" element={<RelatorioVTPage />} />
+        <Route path="/admin/historico" element={<HistoricoPage />} />
+        <Route path="/admin/aso" element={<ASOPage />} />
+        <Route path="/admin/prestadores" element={<PrestadoresPage />} />
+        <Route path="/admin/combustivel" element={<CombustivelPage />} />
+        <Route path="/admin/protocolo" element={<ProtocoloPage />} />
+        <Route path="/admin/documentos-ativos" element={<DocumentosVeiculosPage />} />
+        <Route path="/admin/aviso-ferias" element={<AvisoFeriasPage />} />
+        <Route path="/admin/almoxarifado" element={<AlmoxarifadoPage />} />
+        <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
+        <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
+        <Route path="/admin/chamados" element={<DespacharChamadoPage />} />
+        <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
+      </Route>
+
+      {/* ========== FILIAL PORTAL ========== */}
+      <Route element={<FilialLayout />}>
+        <Route path="/filial" element={<DashboardPage />} />
+        <Route path="/filial/funcionarios" element={<FuncionariosPage />} />
+        <Route path="/filial/funcionarios/:id" element={<EmployeeDetailPage />} />
+        <Route path="/filial/lancamentos" element={<LancamentosPage />} />
+        <Route path="/filial/relatorio" element={<RelatorioPage />} />
+        <Route path="/filial/epi" element={<EPIPage />} />
+        <Route path="/filial/uniformes" element={<UniformePage />} />
+        <Route path="/filial/relatorio-vr" element={<RelatorioVRPage />} />
+        <Route path="/filial/relatorio-vt" element={<RelatorioVTPage />} />
+        <Route path="/filial/protocolo" element={<ProtocoloPage />} />
+        <Route path="/filial/documentos-ativos" element={<DocumentosVeiculosPage />} />
+        <Route path="/filial/aviso-ferias" element={<AvisoFeriasPage />} />
+        <Route path="/filial/aso" element={<ASOPage />} />
+        <Route path="/filial/historico" element={<HistoricoPage />} />
+      </Route>
+
+      {/* ========== CAMPO PORTAL ========== */}
       <Route element={<CampoLayout />}>
         <Route path="/campo" element={<CampoHomePage />} />
         <Route path="/campo/ponto" element={<PontoPage />} />
@@ -82,34 +153,13 @@ const AuthGate = () => {
         <Route path="/campo/km" element={<RegistroKmPage />} />
       </Route>
 
-      {/* Main layout */}
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/empresas" element={<EmpresasPage />} />
-        <Route path="/base-mestra" element={<BaseMestraPage />} />
-        <Route path="/funcionarios" element={<FuncionariosPage />} />
-        <Route path="/funcionarios/:id" element={<EmployeeDetailPage />} />
-        <Route path="/lancamentos" element={<LancamentosPage />} />
-        <Route path="/fechamento" element={<FechamentoPage />} />
-        <Route path="/relatorio" element={<RelatorioPage />} />
-        <Route path="/epi" element={<EPIPage />} />
-        <Route path="/uniformes" element={<UniformePage />} />
-        <Route path="/relatorio-vr" element={<RelatorioVRPage />} />
-        <Route path="/relatorio-vt" element={<RelatorioVTPage />} />
-        <Route path="/historico" element={<HistoricoPage />} />
-        <Route path="/aso" element={<ASOPage />} />
-        <Route path="/prestadores" element={<PrestadoresPage />} />
-        <Route path="/combustivel" element={<CombustivelPage />} />
-        <Route path="/protocolo" element={<ProtocoloPage />} />
-        <Route path="/documentos-ativos" element={<DocumentosVeiculosPage />} />
-        <Route path="/aviso-ferias" element={<AvisoFeriasPage />} />
-        <Route path="/almoxarifado" element={<AlmoxarifadoPage />} />
-        <Route path="/monitoramento" element={<MonitoramentoPage />} />
-        <Route path="/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
-        <Route path="/operacional/chamados" element={<DespacharChamadoPage />} />
-        <Route path="/configuracoes" element={<ConfiguracoesPage />} />
-        <Route path="*" element={<NotFound />} />
+      {/* ========== OPERACIONAL PORTAL ========== */}
+      <Route element={<OperacionalLayout />}>
+        <Route path="/operacional" element={<DespacharChamadoPage />} />
       </Route>
+
+      {/* Catch-all */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };
