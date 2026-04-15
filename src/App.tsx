@@ -129,7 +129,7 @@ const AuthGate = () => {
 
       {/* ========== FILIAL PORTAL ========== */}
       <Route element={<FilialLayout />}>
-        <Route path="/filial" element={<DashboardPage />} />
+        <Route path="/filial" element={<FilialDashboardPage />} />
         <Route path="/filial/funcionarios" element={<FuncionariosPage />} />
         <Route path="/filial/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/filial/lancamentos" element={<LancamentosPage />} />
