@@ -349,6 +349,27 @@ const DocumentosVeiculosPage: React.FC = () => {
         </table>
         <div className="p-3 text-xs text-muted-foreground border-t">{filtered.length} documento(s)</div>
       </div>
+
+      {/* Internal PDF Viewer Modal */}
+      {viewingPdf && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-sm font-bold">{viewingPdf.descricao}</h3>
+              <Button variant="ghost" size="sm" onClick={() => { setViewingPdf(null); if (viewingBlobUrl) { URL.revokeObjectURL(viewingBlobUrl); setViewingBlobUrl(''); } }}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0 p-2">
+              {viewingBlobUrl ? (
+                <iframe src={viewingBlobUrl} className="w-full h-full min-h-[70vh] border rounded-lg" title="PDF Viewer" />
+              ) : (
+                <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Carregando PDF...</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
