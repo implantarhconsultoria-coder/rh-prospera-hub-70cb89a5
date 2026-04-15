@@ -35,7 +35,6 @@ const operationalItems = [
 const upcomingItems = [
   { label: 'Ponto Digital', icon: Clock, path: '#', disabled: true },
   { label: 'Folha de Pagamento', icon: Wallet, path: '#', disabled: true },
-  { label: 'Férias e 13º', icon: CalendarCheck, path: '#', disabled: true },
   { label: 'Rescisões', icon: FileX, path: '#', disabled: true },
 ];
 

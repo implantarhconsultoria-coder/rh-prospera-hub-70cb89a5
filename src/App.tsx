@@ -71,6 +71,11 @@ const AuthGate = () => {
         <Route path="/relatorio-vr" element={<RelatorioVRPage />} />
         <Route path="/relatorio-vt" element={<RelatorioVTPage />} />
         <Route path="/historico" element={<HistoricoPage />} />
+        <Route path="/combustivel" element={<CombustivelPage />} />
+        <Route path="/protocolo" element={<ProtocoloPage />} />
+        <Route path="/compressores" element={<CompressoresPage />} />
+        <Route path="/documentos-ativos" element={<DocumentosVeiculosPage />} />
+        <Route path="/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
