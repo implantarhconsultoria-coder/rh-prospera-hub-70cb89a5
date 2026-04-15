@@ -332,6 +332,11 @@ export type Database = {
       }
       prestadores: {
         Row: {
+          banco: string | null
+          banco_agencia: string | null
+          banco_conta: string | null
+          banco_tipo_conta: string | null
+          banco_titular: string | null
           cpf: string | null
           created_at: string
           dias_trabalho: string | null
@@ -347,6 +352,11 @@ export type Database = {
           valor_diario: number | null
         }
         Insert: {
+          banco?: string | null
+          banco_agencia?: string | null
+          banco_conta?: string | null
+          banco_tipo_conta?: string | null
+          banco_titular?: string | null
           cpf?: string | null
           created_at?: string
           dias_trabalho?: string | null
@@ -362,6 +372,11 @@ export type Database = {
           valor_diario?: number | null
         }
         Update: {
+          banco?: string | null
+          banco_agencia?: string | null
+          banco_conta?: string | null
+          banco_tipo_conta?: string | null
+          banco_titular?: string | null
           cpf?: string | null
           created_at?: string
           dias_trabalho?: string | null
