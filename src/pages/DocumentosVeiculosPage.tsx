@@ -4,6 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import PdfDocumentViewer from '@/components/PdfDocumentViewer';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -49,7 +52,6 @@ const DocumentosVeiculosPage: React.FC = () => {
   const [ativos, setAtivos] = useState<Ativo[]>([]);
   const [search, setSearch] = useState('');
   const [viewingPdf, setViewingPdf] = useState<{ url: string; descricao: string } | null>(null);
-  const [viewingBlobUrl, setViewingBlobUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>('todos');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,6 +63,25 @@ const DocumentosVeiculosPage: React.FC = () => {
   };
 
   useEffect(() => { fetchAtivos(); }, []);
+
+  const analyzeVehiclePdf = async (source: File | Uint8Array, fileName: string) => {
+    const bytes = source instanceof File ? new Uint8Array(await source.arrayBuffer()) : source;
+    const extractedText = await extractPdfText(bytes).catch(() => '');
+    const { pageUrls } = await renderPdfPagesToDataUrls(bytes, 1.15, 2);
+    const { data, error } = await supabase.functions.invoke('parse-text', {
+      body: {
+        text: `Arquivo: ${fileName}\n\n${extractedText}`.trim(),
+        images: pageUrls,
+        type: 'documento_veiculo',
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    return data?.data ?? {};
+  };
 
   const handleMultiUpload = async (files: FileList) => {
     if (!session?.user?.id) { toast.error('Faça login primeiro'); return; }
@@ -76,10 +97,7 @@ const DocumentosVeiculosPage: React.FC = () => {
 
       let extracted: any = {};
       try {
-        const { data: aiData } = await supabase.functions.invoke('parse-text', {
-          body: { text: `Arquivo: ${file.name}. Documento de veículo.`, type: 'documento_veiculo' },
-        });
-        if (aiData?.data) extracted = aiData.data;
+        extracted = await analyzeVehiclePdf(file, file.name);
       } catch {}
 
       const { error } = await supabase.from('ativos').insert({
@@ -89,7 +107,7 @@ const DocumentosVeiculosPage: React.FC = () => {
         placa: extracted.placa || '',
         patrimonio: extracted.patrimonio || '',
         empresa: extracted.empresa || 'TOPAC MATRIZ',
-        observacao: '',
+        observacao: extracted.observacao || '',
         arquivo_url,
         renavam: extracted.renavam || '',
         chassi: extracted.chassi || '',
@@ -135,10 +153,11 @@ const DocumentosVeiculosPage: React.FC = () => {
     let list = ativos;
     if (search) {
       const q = search.toLowerCase();
-      list = list.filter(a =>
+        list = list.filter(a =>
         (a.descricao || '').toLowerCase().includes(q) ||
         (a.placa || '').toLowerCase().includes(q) ||
-        (a.patrimonio || '').toLowerCase().includes(q)
+          (a.patrimonio || '').toLowerCase().includes(q) ||
+          (a.renavam || '').toLowerCase().includes(q)
       );
     }
     if (filterType === 'ipva_vencer') list = list.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer');
@@ -325,14 +344,7 @@ const DocumentosVeiculosPage: React.FC = () => {
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_licenciamento))}</td>
                 <td className="px-3 py-2 text-xs">{a.empresa}</td>
                 <td className="px-3 py-2 text-xs">
-                  {a.arquivo_url ? <button onClick={async () => {
-                    setViewingPdf({ url: a.arquivo_url, descricao: a.descricao });
-                    try {
-                      const r = await fetch(a.arquivo_url);
-                      const blob = await r.blob();
-                      setViewingBlobUrl(URL.createObjectURL(blob));
-                    } catch { toast.error('Erro ao carregar PDF'); }
-                  }} className="text-primary hover:underline flex items-center gap-1 text-xs"><Eye className="w-3 h-3" />Ver</button> : '—'}
+                  {a.arquivo_url ? <button onClick={() => setViewingPdf({ url: a.arquivo_url, descricao: a.descricao })} className="text-primary hover:underline flex items-center gap-1 text-xs"><Eye className="w-3 h-3" />Ver</button> : '—'}
                 </td>
                 <td className="px-3 py-2 flex gap-1">
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(a)}>
@@ -351,25 +363,16 @@ const DocumentosVeiculosPage: React.FC = () => {
       </div>
 
       {/* Internal PDF Viewer Modal */}
-      {viewingPdf && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-background rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-sm font-bold">{viewingPdf.descricao}</h3>
-              <Button variant="ghost" size="sm" onClick={() => { setViewingPdf(null); if (viewingBlobUrl) { URL.revokeObjectURL(viewingBlobUrl); setViewingBlobUrl(''); } }}>
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="flex-1 min-h-0 p-2">
-              {viewingBlobUrl ? (
-                <iframe src={viewingBlobUrl} className="w-full h-full min-h-[70vh] border rounded-lg" title="PDF Viewer" />
-              ) : (
-                <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Carregando PDF...</div>
-              )}
-            </div>
+      <Dialog open={!!viewingPdf} onOpenChange={(open) => !open && setViewingPdf(null)}>
+        <DialogContent className="max-w-6xl overflow-hidden p-0 sm:max-w-6xl">
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle className="text-base">{viewingPdf?.descricao || 'Documento do veículo'}</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            <PdfDocumentViewer sourceUrl={viewingPdf?.url} title={viewingPdf?.descricao || 'Documento do veículo'} />
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

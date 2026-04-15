@@ -9,7 +9,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { text, type } = await req.json();
+    const { text = "", type, images = [] } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -25,7 +25,10 @@ Retorne APENAS um JSON com estes campos:
 - patrimonio
 - renavam
 - chassi
+- ano_fabricacao
 - ano_modelo
+- empresa
+- descricao_ativo
 - observacoes`;
     } else if (type === "documento_veiculo") {
       systemPrompt = `Você é um assistente que extrai dados de documentos de veículos.
@@ -38,8 +41,25 @@ Retorne APENAS um JSON com estes campos:
 - ano_modelo
 - patrimonio
 - descricao
-- empresa`;
+- empresa
+- observacao`;
     }
+
+    const userContent = [
+      {
+        type: "text",
+        text: text || "Extraia os dados do documento enviado.",
+      },
+      ...Array.isArray(images)
+        ? images
+            .filter((image) => typeof image === "string" && image.startsWith("data:image/"))
+            .slice(0, 3)
+            .map((image) => ({
+              type: "image_url",
+              image_url: { url: image },
+            }))
+        : [],
+    ];
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -51,7 +71,7 @@ Retorne APENAS um JSON com estes campos:
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: text },
+          { role: "user", content: userContent },
         ],
         tools: [
           {
@@ -69,7 +89,10 @@ Retorne APENAS um JSON com estes campos:
                   patrimonio: { type: "string" },
                   renavam: { type: "string" },
                   chassi: { type: "string" },
+                  ano_fabricacao: { type: "string" },
                   ano_modelo: { type: "string" },
+                  empresa: { type: "string" },
+                  descricao_ativo: { type: "string" },
                   observacoes: { type: "string" },
                 } : {
                   placa: { type: "string" },
@@ -80,6 +103,7 @@ Retorne APENAS um JSON com estes campos:
                   patrimonio: { type: "string" },
                   descricao: { type: "string" },
                   empresa: { type: "string" },
+                  observacao: { type: "string" },
                 },
                 required: [],
               },

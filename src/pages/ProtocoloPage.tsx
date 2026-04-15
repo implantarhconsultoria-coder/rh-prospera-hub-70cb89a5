@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import PdfDocumentViewer from '@/components/PdfDocumentViewer';
+import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { FileCheck, Printer, Sparkles, Upload, Loader2, Search, LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +19,7 @@ interface AtivoDoc {
   ano_modelo: string;
   empresa: string;
   arquivo_url: string;
+  observacao?: string;
 }
 
 const ProtocoloPage: React.FC = () => {
@@ -40,7 +43,6 @@ const ProtocoloPage: React.FC = () => {
   const [parsing, setParsing] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState('');
-  const [pdfBlobUrl, setPdfBlobUrl] = useState('');
   const [loadingPdf, setLoadingPdf] = useState(false);
 
   // Auto-lookup state
@@ -48,6 +50,8 @@ const ProtocoloPage: React.FC = () => {
   const [matchedAtivo, setMatchedAtivo] = useState<AtivoDoc | null>(null);
   const [showManualSelect, setShowManualSelect] = useState(false);
   const [ativoSearch, setAtivoSearch] = useState('');
+  const hydratingIdsRef = useRef(new Set<string>());
+  const lastMatchedIdRef = useRef<string | null>(null);
 
   // Load all vehicle docs for matching
   useEffect(() => {
@@ -58,59 +62,122 @@ const ProtocoloPage: React.FC = () => {
     load();
   }, []);
 
-  // Fetch PDF as blob for internal viewer (avoids X-Frame-Options blocking)
-  useEffect(() => {
-    if (!pdfUrl) { setPdfBlobUrl(''); return; }
-    let cancelled = false;
-    setLoadingPdf(true);
-    fetch(pdfUrl)
-      .then(r => r.blob())
-      .then(blob => {
-        if (!cancelled) {
-          const url = URL.createObjectURL(blob);
-          setPdfBlobUrl(url);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setPdfBlobUrl('');
-      })
-      .finally(() => { if (!cancelled) setLoadingPdf(false); });
-    return () => { cancelled = true; };
-  }, [pdfUrl]);
+  const sanitize = (value: string) => (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const hasValue = (value?: string | null) => Boolean(value?.trim());
 
-  // Cleanup blob URLs on unmount
-  useEffect(() => {
-    return () => { if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl); };
-  }, [pdfBlobUrl]);
+  const analyzeVehiclePdf = async (sourceUrl: string, fileLabel: string) => {
+    const { bytes, pageUrls } = await renderPdfPagesToDataUrls(sourceUrl, 1.15, 2);
+    const extractedText = await extractPdfText(bytes).catch(() => '');
+    const { data, error } = await supabase.functions.invoke('parse-text', {
+      body: {
+        text: `Arquivo: ${fileLabel}\n\n${extractedText}`.trim(),
+        images: pageUrls,
+        type: 'documento_veiculo',
+      },
+    });
+
+    if (error) throw error;
+    return data?.data ?? {};
+  };
+
+  const applyMatchedAtivo = (ativo: AtivoDoc) => {
+    if (hasValue(ativo.placa)) setPlaca(ativo.placa);
+    if (hasValue(ativo.patrimonio)) setPatrimonio(ativo.patrimonio);
+    if (hasValue(ativo.renavam)) setRenavam(ativo.renavam);
+    if (hasValue(ativo.chassi)) setChassi(ativo.chassi);
+    if (hasValue(ativo.ano_fabricacao)) setAnoFabricacao(ativo.ano_fabricacao);
+    if (hasValue(ativo.ano_modelo)) setAnoModelo(ativo.ano_modelo);
+    if (hasValue(ativo.empresa)) setEmpresaDestinataria(ativo.empresa);
+    if (hasValue(ativo.descricao)) setDescricaoEquipamento(ativo.descricao);
+    if (hasValue(ativo.observacao) && !hasValue(observacoes)) setObservacoes(ativo.observacao || '');
+    if (hasValue(ativo.arquivo_url)) setPdfUrl(ativo.arquivo_url);
+  };
+
+  const hydrateMatchedAtivo = async (ativo: AtivoDoc) => {
+    if (!ativo.arquivo_url || hydratingIdsRef.current.has(ativo.id)) return;
+
+    const missingFields = {
+      patrimonio: !hasValue(ativo.patrimonio),
+      renavam: !hasValue(ativo.renavam),
+      chassi: !hasValue(ativo.chassi),
+      ano_fabricacao: !hasValue(ativo.ano_fabricacao),
+      ano_modelo: !hasValue(ativo.ano_modelo),
+      empresa: !hasValue(ativo.empresa),
+      descricao: !hasValue(ativo.descricao),
+      observacao: !hasValue(ativo.observacao),
+    };
+
+    if (!Object.values(missingFields).some(Boolean)) return;
+
+    hydratingIdsRef.current.add(ativo.id);
+    setLoadingPdf(true);
+
+    try {
+      const extracted = await analyzeVehiclePdf(ativo.arquivo_url, ativo.descricao || ativo.placa || 'Documento do veículo');
+      const updates: Record<string, string> = {};
+
+      Object.entries(missingFields).forEach(([field, shouldFill]) => {
+        const nextValue = extracted?.[field];
+        if (shouldFill && typeof nextValue === 'string' && nextValue.trim()) {
+          updates[field] = nextValue.trim();
+        }
+      });
+
+      if (Object.keys(updates).length === 0) return;
+
+      const hydratedAtivo = { ...ativo, ...updates } as AtivoDoc;
+      const { error } = await supabase.from('ativos').update(updates as any).eq('id', ativo.id);
+      if (error) throw error;
+
+      setAtivosCache((current) => current.map((item) => (item.id === ativo.id ? hydratedAtivo : item)));
+      setMatchedAtivo(hydratedAtivo);
+      applyMatchedAtivo(hydratedAtivo);
+      toast.success('Dados do veículo atualizados a partir do PDF salvo no sistema.');
+    } catch {
+      toast.error('Não foi possível complementar os dados do veículo pelo PDF.');
+    } finally {
+      hydratingIdsRef.current.delete(ativo.id);
+      setLoadingPdf(false);
+    }
+  };
 
   // Auto-match when key fields change — auto-fill ALL vehicle fields
   useEffect(() => {
     if (!placa && !patrimonio && !renavam && !chassi) {
       setMatchedAtivo(null);
+      lastMatchedIdRef.current = null;
       return;
     }
-    const sanitize = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const match = ativosCache.find(a => {
-      if (placa && a.placa && sanitize(a.placa) === sanitize(placa)) return true;
-      if (patrimonio && a.patrimonio && a.patrimonio.trim() && a.patrimonio.toLowerCase() === patrimonio.toLowerCase()) return true;
-      if (renavam && a.renavam && a.renavam.trim() && a.renavam === renavam) return true;
-      if (chassi && a.chassi && a.chassi.trim() && a.chassi.toLowerCase() === chassi.toLowerCase()) return true;
+
+    const normalizedPlaca = sanitize(placa);
+    const normalizedPatrimonio = patrimonio.trim().toLowerCase();
+    const normalizedRenavam = renavam.trim();
+    const normalizedChassi = chassi.trim().toLowerCase();
+
+    const plateMatch = normalizedPlaca
+      ? ativosCache.find((a) => hasValue(a.placa) && sanitize(a.placa) === normalizedPlaca)
+      : null;
+
+    const match = plateMatch || ativosCache.find(a => {
+      if (normalizedPatrimonio && hasValue(a.patrimonio) && a.patrimonio.toLowerCase() === normalizedPatrimonio) return true;
+      if (normalizedRenavam && hasValue(a.renavam) && a.renavam === normalizedRenavam) return true;
+      if (normalizedChassi && hasValue(a.chassi) && a.chassi.toLowerCase() === normalizedChassi) return true;
       return false;
     });
+
     if (match) {
       setMatchedAtivo(match);
-      // Auto-fill all fields from the matched vehicle (skip empty strings)
-      if (match.patrimonio?.trim()) setPatrimonio(match.patrimonio);
-      if (match.renavam?.trim()) setRenavam(match.renavam);
-      if (match.chassi?.trim()) setChassi(match.chassi);
-      if (match.ano_fabricacao?.trim()) setAnoFabricacao(match.ano_fabricacao);
-      if (match.ano_modelo?.trim()) setAnoModelo(match.ano_modelo);
-      if (match.empresa?.trim()) setEmpresaDestinataria(match.empresa);
-      if (match.descricao?.trim()) setDescricaoEquipamento(match.descricao);
-      if (match.arquivo_url?.trim()) setPdfUrl(match.arquivo_url);
-      toast.success(`Veículo localizado: ${match.descricao || match.placa} — campos preenchidos automaticamente.`);
+      applyMatchedAtivo(match);
+
+      if (lastMatchedIdRef.current !== match.id) {
+        toast.success(`Veículo localizado: ${match.descricao || match.placa} — campos preenchidos automaticamente.`);
+        lastMatchedIdRef.current = match.id;
+      }
+
+      hydrateMatchedAtivo(match);
     } else {
       setMatchedAtivo(null);
+      lastMatchedIdRef.current = null;
     }
   }, [placa, patrimonio, renavam, chassi, ativosCache]);
 
@@ -120,7 +187,8 @@ const ProtocoloPage: React.FC = () => {
     return ativosCache.filter(a =>
       (a.descricao || '').toLowerCase().includes(q) ||
       (a.placa || '').toLowerCase().includes(q) ||
-      (a.patrimonio || '').toLowerCase().includes(q)
+      (a.patrimonio || '').toLowerCase().includes(q) ||
+      (a.renavam || '').toLowerCase().includes(q)
     ).slice(0, 10);
   }, [ativoSearch, ativosCache]);
 
@@ -141,7 +209,10 @@ const ProtocoloPage: React.FC = () => {
         if (d.patrimonio) setPatrimonio(d.patrimonio);
         if (d.renavam) setRenavam(d.renavam);
         if (d.chassi) setChassi(d.chassi);
+        if (d.ano_fabricacao) setAnoFabricacao(d.ano_fabricacao);
         if (d.ano_modelo) setAnoModelo(d.ano_modelo);
+        if (d.empresa) setEmpresaDestinataria(d.empresa);
+        if (d.descricao_ativo) setDescricaoEquipamento(d.descricao_ativo);
         if (d.observacoes) setObservacoes(d.observacoes);
         toast.success('Campos preenchidos pela IA — revise e edite antes de imprimir.');
       }
@@ -154,17 +225,10 @@ const ProtocoloPage: React.FC = () => {
 
   const handleSelectAtivo = (a: AtivoDoc) => {
     setMatchedAtivo(a);
-    if (a.placa) setPlaca(a.placa);
-    if (a.patrimonio) setPatrimonio(a.patrimonio);
-    if (a.renavam) setRenavam(a.renavam);
-    if (a.chassi) setChassi(a.chassi);
-    if (a.ano_fabricacao) setAnoFabricacao(a.ano_fabricacao);
-    if (a.ano_modelo) setAnoModelo(a.ano_modelo);
-    if (a.empresa) setEmpresaDestinataria(a.empresa);
-    if (a.descricao) setDescricaoEquipamento(a.descricao);
-    if (a.arquivo_url) setPdfUrl(a.arquivo_url);
+    applyMatchedAtivo(a);
     setShowManualSelect(false);
     setAtivoSearch('');
+    hydrateMatchedAtivo(a);
     toast.success('Documento vinculado! PDF carregado automaticamente.');
   };
 
@@ -230,26 +294,22 @@ const ProtocoloPage: React.FC = () => {
     // Build protocol HTML (2 vias)
     let fullHtml = buildProtocoloHtml(1, 2) + buildProtocoloHtml(2, 2);
 
-    // If there's a PDF, fetch it as base64 and embed via iframe in print
+    // If there's a PDF, render the real document pages and append to the print flow
     if (pdfUrl) {
       try {
-        const response = await fetch(pdfUrl);
-        const blob = await response.blob();
-        const base64 = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-        fullHtml += `<div style="page-break-before:always;width:100%;height:100vh;padding:0;margin:0">
-          <iframe src="${base64}" style="width:100%;height:100%;border:none" title="Documento"></iframe>
-        </div>`;
+        const { pageUrls } = await renderPdfPagesToDataUrls(pdfUrl, 1.6);
+        fullHtml += pageUrls.map((pageUrl, index) => `
+          <div class="pdf-print-page" style="${index === 0 ? 'page-break-before:always;' : ''}">
+            <img src="${pageUrl}" alt="Documento do veículo página ${index + 1}" style="display:block;width:100%;height:auto" />
+          </div>
+        `).join('');
       } catch {
         toast.error('Não foi possível incorporar o PDF na impressão');
       }
     }
 
     printWin.document.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
-    <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}@media print{body{-webkit-print-color-adjust:exact}iframe{width:100%!important;height:100vh!important}}</style></head><body>
+    <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}.pdf-print-page{padding:0;margin:0}.pdf-print-page img{display:block;width:100%;height:auto}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
     ${fullHtml}
     </body></html>`);
     printWin.document.close();
@@ -262,6 +322,7 @@ const ProtocoloPage: React.FC = () => {
     setPatrimonio(''); setDescricaoEquipamento(''); setObservacoes('');
     setTextoColado(''); setPdfFile(null); setPdfUrl('');
     setMatchedAtivo(null); setShowManualSelect(false);
+    lastMatchedIdRef.current = null;
     setExercicio(new Date().getFullYear().toString());
     setDataEmissao(new Date().toISOString().slice(0, 10));
   };
@@ -413,9 +474,7 @@ const ProtocoloPage: React.FC = () => {
               <div className="space-y-2 mt-1">
                 <p className="text-xs text-success">✓ PDF vinculado — será impresso como via adicional</p>
                 {loadingPdf && <p className="text-xs text-muted-foreground">Carregando PDF...</p>}
-                {pdfBlobUrl && (
-                  <iframe src={pdfBlobUrl} className="w-full h-80 border rounded-lg" title="PDF do documento" />
-                )}
+                <PdfDocumentViewer sourceUrl={pdfUrl} title="PDF do documento" />
               </div>
             )}
             {!pdfUrl && <p className="text-xs text-muted-foreground mt-1">Sem PDF: imprime apenas 2 vias do protocolo</p>}
