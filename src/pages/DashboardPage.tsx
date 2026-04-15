@@ -10,6 +10,12 @@ const ROLE_COMPANY_MAP: Record<string, string> = {
   filial_goiania: 'topac-gyn',
 };
 
+const getGreeting = (nome?: string | null) => {
+  const h = new Date().getHours();
+  const prefix = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  return nome ? `${prefix}, ${nome.split(' ')[0]}` : prefix;
+};
+
 const FilialDashboard: React.FC = () => {
   const { userRole, employees, session } = useApp();
   const navigate = useNavigate();
@@ -19,6 +25,7 @@ const FilialDashboard: React.FC = () => {
   const feriasAlerta = emps.filter(e => feriasStatus(e.dataAdmissao).status !== 'em dia').length;
 
   const branchName = userRole === 'filial_praia' ? 'Praia Grande' : 'Goiânia';
+  const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
 
   const shortcuts = [
     { label: 'Funcionários', icon: Users, path: '/funcionarios' },
@@ -36,8 +43,8 @@ const FilialDashboard: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Portal RH — {branchName}</h1>
-        <p className="text-muted-foreground text-sm">Bem-vindo(a), {session?.user?.email}</p>
+        <h1 className="text-2xl font-bold font-display text-foreground">{getGreeting(userName)}</h1>
+        <p className="text-muted-foreground text-sm">Portal RH — {branchName}</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -78,7 +85,7 @@ const FilialDashboard: React.FC = () => {
 };
 
 const DashboardPage: React.FC = () => {
-  const { companies, employees, entries, userRole } = useApp();
+  const { companies, employees, entries, userRole, session } = useApp();
   const navigate = useNavigate();
 
   // Filial users get simplified portal
@@ -114,10 +121,12 @@ const DashboardPage: React.FC = () => {
 
   const cardAnim = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
 
+  const adminName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Dashboard Executivo</h1>
+        <h1 className="text-2xl font-bold font-display text-foreground">{getGreeting(adminName)}</h1>
         <p className="text-muted-foreground text-sm">Visão consolidada da operação — Competência {comp}</p>
       </div>
 
