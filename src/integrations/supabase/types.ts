@@ -285,6 +285,8 @@ export type Database = {
           tipo: string
           updated_at: string
           user_id: string
+          vencimento_ipva: string | null
+          vencimento_licenciamento: string | null
         }
         Insert: {
           ano_fabricacao?: string | null
@@ -303,6 +305,8 @@ export type Database = {
           tipo: string
           updated_at?: string
           user_id: string
+          vencimento_ipva?: string | null
+          vencimento_licenciamento?: string | null
         }
         Update: {
           ano_fabricacao?: string | null
@@ -321,6 +325,8 @@ export type Database = {
           tipo?: string
           updated_at?: string
           user_id?: string
+          vencimento_ipva?: string | null
+          vencimento_licenciamento?: string | null
         }
         Relationships: []
       }
