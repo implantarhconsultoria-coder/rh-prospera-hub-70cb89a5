@@ -330,6 +330,176 @@ export type Database = {
         }
         Relationships: []
       }
+      chamado_itens_utilizados: {
+        Row: {
+          chamado_id: string
+          created_at: string
+          id: string
+          item_id: string
+          nome_item: string
+          quantidade: number
+        }
+        Insert: {
+          chamado_id: string
+          created_at?: string
+          id?: string
+          item_id: string
+          nome_item?: string
+          quantidade?: number
+        }
+        Update: {
+          chamado_id?: string
+          created_at?: string
+          id?: string
+          item_id?: string
+          nome_item?: string
+          quantidade?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chamado_itens_utilizados_chamado_id_fkey"
+            columns: ["chamado_id"]
+            isOneToOne: false
+            referencedRelation: "chamados"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chamados: {
+        Row: {
+          aceito_em: string | null
+          cliente: string
+          colaborador_id: string | null
+          concluido_em: string | null
+          created_at: string
+          criado_por: string
+          id: string
+          info_adicional: string | null
+          itens_previstos: string | null
+          latitude: number | null
+          local_servico: string
+          longitude: number | null
+          observacoes: string | null
+          status: string
+          tipo_servico: string
+          updated_at: string
+          veiculo_id: string | null
+        }
+        Insert: {
+          aceito_em?: string | null
+          cliente?: string
+          colaborador_id?: string | null
+          concluido_em?: string | null
+          created_at?: string
+          criado_por: string
+          id?: string
+          info_adicional?: string | null
+          itens_previstos?: string | null
+          latitude?: number | null
+          local_servico?: string
+          longitude?: number | null
+          observacoes?: string | null
+          status?: string
+          tipo_servico?: string
+          updated_at?: string
+          veiculo_id?: string | null
+        }
+        Update: {
+          aceito_em?: string | null
+          cliente?: string
+          colaborador_id?: string | null
+          concluido_em?: string | null
+          created_at?: string
+          criado_por?: string
+          id?: string
+          info_adicional?: string | null
+          itens_previstos?: string | null
+          latitude?: number | null
+          local_servico?: string
+          longitude?: number | null
+          observacoes?: string | null
+          status?: string
+          tipo_servico?: string
+          updated_at?: string
+          veiculo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chamados_veiculo_id_fkey"
+            columns: ["veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      colaborador_veiculo: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          veiculo_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          veiculo_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          veiculo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "colaborador_veiculo_veiculo_id_fkey"
+            columns: ["veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estoque_veiculo: {
+        Row: {
+          created_at: string
+          id: string
+          nome_item: string
+          quantidade: number
+          unidade: string
+          updated_at: string
+          veiculo_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nome_item: string
+          quantidade?: number
+          unidade?: string
+          updated_at?: string
+          veiculo_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome_item?: string
+          quantidade?: number
+          unidade?: string
+          updated_at?: string
+          veiculo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estoque_veiculo_veiculo_id_fkey"
+            columns: ["veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prestadores: {
         Row: {
           banco: string | null
@@ -432,6 +602,103 @@ export type Database = {
         }
         Relationships: []
       }
+      registros_km: {
+        Row: {
+          created_at: string
+          data: string
+          foto_url: string | null
+          hora: string
+          id: string
+          km_valor: number
+          latitude: number | null
+          longitude: number | null
+          tipo_registro: string
+          user_id: string
+          veiculo_id: string
+        }
+        Insert: {
+          created_at?: string
+          data?: string
+          foto_url?: string | null
+          hora?: string
+          id?: string
+          km_valor: number
+          latitude?: number | null
+          longitude?: number | null
+          tipo_registro?: string
+          user_id: string
+          veiculo_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          foto_url?: string | null
+          hora?: string
+          id?: string
+          km_valor?: number
+          latitude?: number | null
+          longitude?: number | null
+          tipo_registro?: string
+          user_id?: string
+          veiculo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "registros_km_veiculo_id_fkey"
+            columns: ["veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      registros_ponto: {
+        Row: {
+          created_at: string
+          data: string
+          endereco_formatado: string | null
+          hora: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          tipo: string
+          user_id: string
+          veiculo_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          data?: string
+          endereco_formatado?: string | null
+          hora?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          tipo: string
+          user_id: string
+          veiculo_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          endereco_formatado?: string | null
+          hora?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          tipo?: string
+          user_id?: string
+          veiculo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "registros_ponto_veiculo_id_fkey"
+            columns: ["veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -450,6 +717,36 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      veiculos: {
+        Row: {
+          created_at: string
+          id: string
+          identificacao_interna: string | null
+          modelo: string
+          placa: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          identificacao_interna?: string | null
+          modelo?: string
+          placa: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          identificacao_interna?: string | null
+          modelo?: string
+          placa?: string
+          status?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -473,6 +770,8 @@ export type Database = {
         | "filial_goiania"
         | "almoxarifado"
         | "usuario"
+        | "tecnico_campo"
+        | "operacional"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -606,6 +905,8 @@ export const Constants = {
         "filial_goiania",
         "almoxarifado",
         "usuario",
+        "tecnico_campo",
+        "operacional",
       ],
     },
   },

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 
-export type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario';
+export type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario' | 'tecnico_campo' | 'operacional';
 
 export const useUserRole = (session: Session | null) => {
   const [role, setRole] = useState<AppRole | null>(null);

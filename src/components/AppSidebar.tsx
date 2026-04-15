@@ -5,7 +5,7 @@ import {
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
   Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
-  Stethoscope, UserCheck, Package, Monitor, Shield,
+  Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -19,7 +19,7 @@ interface MenuItem {
   roles?: AppRole[]; // if undefined, admin-only
 }
 
-const ALL_ROLES: AppRole[] = ['admin', 'filial_praia', 'filial_goiania', 'almoxarifado', 'usuario'];
+const ALL_ROLES: AppRole[] = ['admin', 'filial_praia', 'filial_goiania', 'almoxarifado', 'usuario', 'tecnico_campo', 'operacional'];
 const RH_ROLES: AppRole[] = ['admin', 'filial_praia', 'filial_goiania'];
 const ADMIN_ONLY: AppRole[] = ['admin'];
 
@@ -45,6 +45,7 @@ const operationalItems: MenuItem[] = [
   { label: 'ASO', icon: Stethoscope, path: '/aso', roles: RH_ROLES },
   { label: 'Prestadores', icon: UserCheck, path: '/prestadores', roles: ADMIN_ONLY },
   { label: 'Almoxarifado', icon: Package, path: '/almoxarifado', roles: ['admin', 'almoxarifado'] },
+  { label: 'Despachar Chamados', icon: ClipboardList, path: '/operacional/chamados', roles: ['admin', 'operacional'] },
   { label: 'Histórico', icon: History, path: '/historico', roles: RH_ROLES },
 ];
 

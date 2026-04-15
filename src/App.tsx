@@ -37,6 +37,13 @@ import HistoricoPage from "@/pages/HistoricoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
+import CampoLayout from "@/components/CampoLayout";
+import CampoHomePage from "@/pages/campo/CampoHomePage";
+import PontoPage from "@/pages/campo/PontoPage";
+import ChamadosPage from "@/pages/campo/ChamadosPage";
+import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
+import RegistroKmPage from "@/pages/campo/RegistroKmPage";
+import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -66,6 +73,16 @@ const AuthGate = () => {
 
   return (
     <Routes>
+      {/* Campo layout for tecnico_campo */}
+      <Route element={<CampoLayout />}>
+        <Route path="/campo" element={<CampoHomePage />} />
+        <Route path="/campo/ponto" element={<PontoPage />} />
+        <Route path="/campo/chamados" element={<ChamadosPage />} />
+        <Route path="/campo/estoque" element={<EstoqueVeiculoPage />} />
+        <Route path="/campo/km" element={<RegistroKmPage />} />
+      </Route>
+
+      {/* Main layout */}
       <Route element={<AppLayout />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/empresas" element={<EmpresasPage />} />
@@ -89,6 +106,7 @@ const AuthGate = () => {
         <Route path="/almoxarifado" element={<AlmoxarifadoPage />} />
         <Route path="/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
+        <Route path="/operacional/chamados" element={<DespacharChamadoPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>

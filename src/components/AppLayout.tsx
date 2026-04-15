@@ -14,6 +14,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   filial_praia: ['/', '/funcionarios', '/lancamentos', '/relatorio', '/epi', '/uniformes', '/relatorio-vr', '/relatorio-vt', '/protocolo', '/documentos-ativos', '/aviso-ferias', '/aso', '/historico'],
   filial_goiania: ['/', '/funcionarios', '/lancamentos', '/relatorio', '/epi', '/uniformes', '/relatorio-vr', '/relatorio-vt', '/protocolo', '/documentos-ativos', '/aviso-ferias', '/aso', '/historico'],
   almoxarifado: ['/almoxarifado'],
+  operacional: ['/', '/operacional', '/gerenciar-usuarios'],
   usuario: ['/'],
 };
 
@@ -37,12 +38,19 @@ const AppLayout: React.FC = () => {
     return <AguardandoAcesso />;
   }
 
+  // tecnico_campo users should be on /campo routes (handled by CampoLayout)
+  if (userRole === 'tecnico_campo') {
+    return <Navigate to="/campo" replace />;
+  }
+
   // Redirect restricted roles to their allowed default if trying to access forbidden route
   if (userRole !== 'admin') {
     const allowed = ROLE_ROUTES[userRole] || ['/'];
     const currentBase = '/' + location.pathname.split('/')[1];
     if (!allowed.includes(location.pathname) && !allowed.includes(currentBase)) {
-      const defaultRoute = userRole === 'almoxarifado' ? '/almoxarifado' : '/';
+      const defaultRoute = userRole === 'almoxarifado' ? '/almoxarifado'
+        : userRole === 'operacional' ? '/operacional/chamados'
+        : '/';
       return <Navigate to={defaultRoute} replace />;
     }
   }

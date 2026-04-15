@@ -24,6 +24,8 @@ const ROLE_LABELS: Record<AppRole, { label: string; color: string }> = {
   filial_praia: { label: 'Filial Praia Grande', color: 'bg-blue-500' },
   filial_goiania: { label: 'Filial Goiânia', color: 'bg-emerald-500' },
   almoxarifado: { label: 'Almoxarifado', color: 'bg-amber-500' },
+  tecnico_campo: { label: 'Técnico de Campo', color: 'bg-purple-500' },
+  operacional: { label: 'Operacional', color: 'bg-teal-500' },
   usuario: { label: 'Usuário Básico', color: 'bg-gray-500' },
 };
 
