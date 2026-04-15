@@ -5,7 +5,7 @@ import {
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
   Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
-  Stethoscope, UserCheck,
+  Stethoscope, UserCheck, Package, Monitor,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -31,17 +31,19 @@ const operationalItems = [
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/aviso-ferias' },
   { label: 'ASO', icon: Stethoscope, path: '/aso' },
   { label: 'Prestadores', icon: UserCheck, path: '/prestadores' },
+  { label: 'Almoxarifado', icon: Package, path: '/almoxarifado' },
   { label: 'Histórico', icon: History, path: '/historico' },
+];
+
+const adminItems = [
+  { label: 'Monitoramento', icon: Monitor, path: '/monitoramento' },
+  { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
 
 const upcomingItems = [
   { label: 'Ponto Digital', icon: Clock, path: '#', disabled: true },
   { label: 'Folha de Pagamento', icon: Wallet, path: '#', disabled: true },
   { label: 'Rescisões', icon: FileX, path: '#', disabled: true },
-];
-
-const bottomItems = [
-  { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
 
 interface Props { collapsed: boolean; onToggle: () => void; }
@@ -98,6 +100,14 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Administração</p>
+          </div>
+        )}
+        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {adminItems.map(renderLink)}
+
+        {!collapsed && (
+          <div className="pt-3 mt-3 border-t border-sidebar-border">
             <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Próximos Módulos</p>
           </div>
         )}
@@ -110,10 +120,6 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
             {!collapsed && <span className="ml-auto text-[9px] bg-sidebar-accent/50 rounded px-1.5 py-0.5">Em breve</span>}
           </div>
         ))}
-
-        {!collapsed && <div className="pt-3 mt-3 border-t border-sidebar-border" />}
-        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
-        {bottomItems.map(renderLink)}
       </nav>
 
       <div className="p-2 border-t border-sidebar-border">

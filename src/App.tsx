@@ -34,6 +34,8 @@ import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
 import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
 import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividualPage";
 import HistoricoPage from "@/pages/HistoricoPage";
+import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
+import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -81,9 +83,10 @@ const AuthGate = () => {
         <Route path="/prestadores" element={<PrestadoresPage />} />
         <Route path="/combustivel" element={<CombustivelPage />} />
         <Route path="/protocolo" element={<ProtocoloPage />} />
-        <Route path="/compressores" element={<ProtocoloPage />} />
         <Route path="/documentos-ativos" element={<DocumentosVeiculosPage />} />
         <Route path="/aviso-ferias" element={<AvisoFeriasPage />} />
+        <Route path="/almoxarifado" element={<AlmoxarifadoPage />} />
+        <Route path="/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
@@ -99,7 +102,6 @@ const App = () => (
       <AppProvider>
         <BrowserRouter>
           <Routes>
-            {/* Print routes — outside auth gate, no login required */}
             <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />
             <Route path="/entrega-impressao" element={<EntregaImpressaoPage />} />
             <Route path="/relatorio-vr-impressao" element={<RelatorioVRImpressaoPage />} />
