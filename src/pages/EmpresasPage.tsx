@@ -1,20 +1,17 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Building2, MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 const EmpresasPage: React.FC = () => {
   const { companies } = useApp();
-  const navigate = useNavigate();
 
   return (
     <div className="space-y-6 animate-fade-in">
       <h1 className="text-2xl font-bold font-display text-foreground">Empresas</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {companies.map(c => (
-          <div key={c.id} className="card-premium p-6 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all"
-            onClick={() => navigate(`/funcionarios?empresa=${c.id}`)}>
+          <div key={c.id} className="card-premium p-6">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-12 h-12 gradient-primary rounded-xl flex items-center justify-center">
                 <Building2 className="w-6 h-6 text-primary-foreground" />
