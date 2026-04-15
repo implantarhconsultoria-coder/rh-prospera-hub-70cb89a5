@@ -5,7 +5,7 @@ import {
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
   Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
-  Stethoscope, UserCheck, Package, Monitor,
+  Stethoscope, UserCheck, Package, Monitor, Shield,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -49,6 +49,7 @@ const operationalItems: MenuItem[] = [
 ];
 
 const adminItems: MenuItem[] = [
+  { label: 'Gerenciar Usuários', icon: Shield, path: '/gerenciar-usuarios', roles: ADMIN_ONLY },
   { label: 'Monitoramento', icon: Monitor, path: '/monitoramento', roles: ADMIN_ONLY },
   { label: 'Configurações', icon: Settings, path: '/configuracoes', roles: ADMIN_ONLY },
 ];
