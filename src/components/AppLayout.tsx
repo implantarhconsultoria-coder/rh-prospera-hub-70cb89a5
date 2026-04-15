@@ -7,6 +7,7 @@ import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { cn } from '@/lib/utils';
 import type { AppRole } from '@/hooks/useUserRole';
 import { Loader2 } from 'lucide-react';
+import AguardandoAcesso from '@/components/AguardandoAcesso';
 
 // Routes allowed per role (admin sees all)
 const ROLE_ROUTES: Record<string, string[]> = {
@@ -31,8 +32,13 @@ const AppLayout: React.FC = () => {
     );
   }
 
+  // User without role → awaiting access
+  if (!userRole) {
+    return <AguardandoAcesso />;
+  }
+
   // Redirect restricted roles to their allowed default if trying to access forbidden route
-  if (userRole && userRole !== 'admin') {
+  if (userRole !== 'admin') {
     const allowed = ROLE_ROUTES[userRole] || ['/'];
     const currentBase = '/' + location.pathname.split('/')[1];
     if (!allowed.includes(location.pathname) && !allowed.includes(currentBase)) {
