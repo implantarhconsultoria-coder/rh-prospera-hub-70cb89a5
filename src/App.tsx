@@ -13,6 +13,7 @@ import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
+import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
 import ASOPage from "@/pages/ASOPage";
@@ -128,7 +129,7 @@ const AuthGate = () => {
 
       {/* ========== FILIAL PORTAL ========== */}
       <Route element={<FilialLayout />}>
-        <Route path="/filial" element={<DashboardPage />} />
+        <Route path="/filial" element={<FilialDashboardPage />} />
         <Route path="/filial/funcionarios" element={<FuncionariosPage />} />
         <Route path="/filial/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/filial/lancamentos" element={<LancamentosPage />} />
