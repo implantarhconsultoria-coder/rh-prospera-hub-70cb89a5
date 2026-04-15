@@ -108,8 +108,8 @@ const EmployeeDetailPage: React.FC = () => {
             {emp.vrAtivo && <Field label="Valor Diário VR" value={emp.vrDiario} field="vrDiario" type="number" />}
             <Toggle label="Vale Alimentação (VA)" active={emp.vaAtivo} field="vaAtivo" valueField="vaMensal" valueLabel="Mensal" value={emp.vaMensal} />
             {emp.vaAtivo && <Field label="Valor Mensal VA" value={emp.vaMensal} field="vaMensal" type="number" />}
-            <Toggle label="Vale Transporte (VT)" active={emp.vtAtivo} field="vtAtivo" valueField="vtDiario" valueLabel="Valor" value={emp.vtDiario} />
-            {emp.vtAtivo && <Field label="Valor VT" value={emp.vtDiario} field="vtDiario" type="number" />}
+            <Toggle label="Vale Transporte (VT)" active={emp.vtAtivo} field="vtAtivo" valueField="vtDiario" valueLabel="Diário" value={emp.vtDiario} />
+            {emp.vtAtivo && <Field label="Valor Diário VT" value={emp.vtDiario} field="vtDiario" type="number" />}
             <Toggle label="Insalubridade" active={emp.insalubridadeAtiva} field="insalubridadeAtiva" valueField="insalubridadeValor" valueLabel="Valor" value={emp.insalubridadeValor} />
             {emp.insalubridadeAtiva && <Field label="Valor Insalubridade" value={emp.insalubridadeValor} field="insalubridadeValor" type="number" />}
           </div>

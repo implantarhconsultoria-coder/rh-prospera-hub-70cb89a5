@@ -124,9 +124,9 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
   const vaVal = entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0;
 
   // VT: proportional discount for faltas
-  const vtBruto = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario : 0;
+  const vtBruto = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario * diasUteis : 0;
   const vtDescontoFalta = entry.vtAplicado && emp.vtAtivo
-    ? calcDescontoVTFaltas(emp.vtDiario, diasUteis, entry.faltasDias)
+    ? emp.vtDiario * entry.faltasDias
     : 0;
   const vtVal = Math.max(0, vtBruto - vtDescontoFalta);
 

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, Users, CalendarDays,
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
   Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
-  Clock, Wallet, CalendarCheck, FileX,
+  Clock, Wallet, CalendarCheck, FileX, Fuel, Car, Cog,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,11 @@ const operationalItems = [
   { label: 'Uniformes', icon: Shirt, path: '/uniformes' },
   { label: 'Relatório VR', icon: UtensilsCrossed, path: '/relatorio-vr' },
   { label: 'Relatório VT', icon: Bus, path: '/relatorio-vt' },
+  { label: 'Combustível', icon: Fuel, path: '/combustivel' },
+  { label: 'Protocolo', icon: FileCheck, path: '/protocolo' },
+  { label: 'Compressores', icon: Cog, path: '/compressores' },
+  { label: 'Doc. Veículos', icon: Car, path: '/documentos-ativos' },
+  { label: 'Aviso de Férias', icon: CalendarCheck, path: '/aviso-ferias' },
   { label: 'Histórico', icon: History, path: '/historico' },
 ];
 
