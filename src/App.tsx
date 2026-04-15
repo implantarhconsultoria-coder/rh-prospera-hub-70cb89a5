@@ -37,6 +37,13 @@ import HistoricoPage from "@/pages/HistoricoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
+import CampoLayout from "@/components/CampoLayout";
+import CampoHomePage from "@/pages/campo/CampoHomePage";
+import PontoPage from "@/pages/campo/PontoPage";
+import ChamadosPage from "@/pages/campo/ChamadosPage";
+import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
+import RegistroKmPage from "@/pages/campo/RegistroKmPage";
+import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 
