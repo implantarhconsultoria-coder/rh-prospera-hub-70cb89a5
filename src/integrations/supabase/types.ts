@@ -473,6 +473,8 @@ export type Database = {
         | "filial_goiania"
         | "almoxarifado"
         | "usuario"
+        | "tecnico_campo"
+        | "operacional"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -606,6 +608,8 @@ export const Constants = {
         "filial_goiania",
         "almoxarifado",
         "usuario",
+        "tecnico_campo",
+        "operacional",
       ],
     },
   },
