@@ -1,5 +1,4 @@
-import type { Employee } from '@/data/employees';
-import type { MonthlyEntry } from '@/data/entries';
+import type { Employee, MonthlyEntry } from '@/types/database';
 
 export const valorHora = (salario: number) => salario / 220;
 
