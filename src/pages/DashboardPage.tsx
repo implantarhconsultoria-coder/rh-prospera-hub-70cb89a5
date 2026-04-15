@@ -10,6 +10,12 @@ const ROLE_COMPANY_MAP: Record<string, string> = {
   filial_goiania: 'topac-gyn',
 };
 
+const getGreeting = (nome?: string | null) => {
+  const h = new Date().getHours();
+  const prefix = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  return nome ? `${prefix}, ${nome.split(' ')[0]}` : prefix;
+};
+
 const FilialDashboard: React.FC = () => {
   const { userRole, employees, session } = useApp();
   const navigate = useNavigate();
@@ -19,6 +25,7 @@ const FilialDashboard: React.FC = () => {
   const feriasAlerta = emps.filter(e => feriasStatus(e.dataAdmissao).status !== 'em dia').length;
 
   const branchName = userRole === 'filial_praia' ? 'Praia Grande' : 'Goiânia';
+  const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
 
   const shortcuts = [
     { label: 'Funcionários', icon: Users, path: '/funcionarios' },
