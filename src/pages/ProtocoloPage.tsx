@@ -40,6 +40,8 @@ const ProtocoloPage: React.FC = () => {
   const [parsing, setParsing] = useState(false);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState('');
+  const [pdfBlobUrl, setPdfBlobUrl] = useState('');
+  const [loadingPdf, setLoadingPdf] = useState(false);
 
   // Auto-lookup state
   const [ativosCache, setAtivosCache] = useState<AtivoDoc[]>([]);
