@@ -27,7 +27,6 @@ const operationalItems = [
   { label: 'Relatório VT', icon: Bus, path: '/relatorio-vt' },
   { label: 'Combustível', icon: Fuel, path: '/combustivel' },
   { label: 'Protocolo', icon: FileCheck, path: '/protocolo' },
-  { label: 'Compressores', icon: Cog, path: '/compressores' },
   { label: 'Doc. Veículos', icon: Car, path: '/documentos-ativos' },
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/aviso-ferias' },
   { label: 'ASO', icon: Stethoscope, path: '/aso' },
