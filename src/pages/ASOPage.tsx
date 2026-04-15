@@ -6,11 +6,11 @@ import { Stethoscope, Printer, Search, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
 const CLINICAS: Record<string, string> = {
-  'topac-praia-grande': 'Clínica Praia Grande — Endereço da Clínica da Praia Grande',
+  'topac-praia-grande': 'Rua Londrina, 483, Centro, Praia Grande/SP',
   'topac-goiania': 'ASMETRO - Medicina do Trabalho, Rua 18, nº 247, Setor Central, Goiânia - GO, CEP 74030-040',
-  'topac-matriz': 'Clínica São Paulo — Endereço da Clínica de São Paulo',
-  'lmt': 'Clínica São Paulo — Endereço da Clínica de São Paulo',
-  'alqui': 'Clínica São Paulo — Endereço da Clínica de São Paulo',
+  'topac-matriz': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
+  'lmt': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
+  'alqui': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
 };
 
 const TIPOS_EXAME = [
