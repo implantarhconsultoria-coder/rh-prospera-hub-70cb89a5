@@ -6,13 +6,16 @@ import type { Delivery, BenefitReport } from '@/data/deliveries';
 import { getWorkingDays } from '@/lib/workingDays';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
+import { useUserRole, type AppRole } from '@/hooks/useUserRole';
 
-// HMR v3
+// HMR v4
 
 interface AppState {
   isAuthenticated: boolean;
   session: Session | null;
   loading: boolean;
+  userRole: AppRole | null;
+  roleLoading: boolean;
   logout: () => void;
   companies: Company[];
   employees: Employee[];
@@ -61,6 +64,7 @@ let reportCounter = 0;
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const { role: userRole, roleLoading } = useUserRole(session);
   const [emps, setEmps] = useState<Employee[]>(initialEmployees);
   const [entries, setEntries] = useState<MonthlyEntry[]>(initialEntries);
   const [fechamentos, setFechamentos] = useState<Fechamento[]>([]);
@@ -152,7 +156,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      isAuthenticated: !!session, session, loading, logout, companies, employees: emps, updateEmployee,
+      isAuthenticated: !!session, session, loading, userRole, roleLoading, logout, companies, employees: emps, updateEmployee,
       entries, setEntries, getOrCreateEntries, updateEntry,
       fechamentos, setFechamentos, getFechamento, updateFechamento,
       config, setConfig,
