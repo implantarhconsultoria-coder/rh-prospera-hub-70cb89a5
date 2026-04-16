@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { formatCurrency, formatDate, feriasStatus, asoStatus } from '@/lib/calculations';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,11 @@ const EmployeeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { employees, companies, updateEmployee } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState(0);
+
+  const portalPrefix = location.pathname.startsWith('/filial') ? '/filial'
+    : location.pathname.startsWith('/admin') ? '/admin' : '';
 
   const emp = employees.find(e => e.id === id);
   if (!emp) return <div className="p-8 text-center text-muted-foreground">Funcionário não encontrado</div>;
@@ -50,7 +54,7 @@ const EmployeeDetailPage: React.FC = () => {
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="w-5 h-5" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => navigate(`${portalPrefix}/funcionarios`)}><ArrowLeft className="w-5 h-5" /></Button>
         <div>
           <h1 className="text-xl font-bold font-display text-foreground">{emp.name}</h1>
           <p className="text-sm text-muted-foreground">{emp.cargo} — {company?.name}</p>
@@ -139,7 +143,7 @@ const EmployeeDetailPage: React.FC = () => {
         {activeTab === 4 && (
           <div className="text-center py-8 text-muted-foreground">
             <p>Acesse o módulo de Lançamentos Mensais para gerenciar os lançamentos deste funcionário.</p>
-            <Button className="mt-4" onClick={() => navigate('/lancamentos')}>Ir para Lançamentos</Button>
+            <Button className="mt-4" onClick={() => navigate(`${portalPrefix}/lancamentos`)}>Ir para Lançamentos</Button>
           </div>
         )}
         {activeTab === 5 && (
