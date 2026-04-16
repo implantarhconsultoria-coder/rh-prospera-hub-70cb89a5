@@ -104,8 +104,13 @@ const AvisoFeriasPage: React.FC = () => {
     </body></html>`;
   };
 
-  const handlePrint = () => {
+  const [lastDocId, setLastDocId] = useState('');
+
+  const handlePrint = async () => {
     if (!emp || !inicioFerias) { toast.error('Preencha os dados'); return; }
+    const htmlContent = buildPrintHtml();
+
+    // Print
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.top = '-10000px';
@@ -114,14 +119,43 @@ const AvisoFeriasPage: React.FC = () => {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) return;
     doc.open();
-    doc.write(buildPrintHtml());
+    doc.write(htmlContent);
     doc.close();
     iframe.contentWindow?.focus();
     setTimeout(() => {
       iframe.contentWindow?.print();
       setTimeout(() => document.body.removeChild(iframe), 2000);
     }, 300);
-    toast.success('Aviso de férias gerado!');
+
+    // Archive automatically
+    if (session?.user) {
+      try {
+        const arquivoUrl = await uploadDocumentoPdf(emp.id, 'aviso-ferias', htmlContent);
+        const profile = await import('@/integrations/supabase/client').then(m =>
+          m.supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single()
+        );
+        const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
+
+        const registro = await registrarDocumento({
+          funcionarioId: emp.id,
+          funcionarioNome: emp.name,
+          companyId: emp.companyId,
+          empresaNome: company?.name || '',
+          tipoDocumento: 'Aviso de Férias',
+          descricao: `Férias de ${diasFerias} dias — Início: ${new Date(inicioFerias).toLocaleDateString('pt-BR')} — Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '—'}`,
+          arquivoUrl,
+          geradoPorUserId: session.user.id,
+          geradoPorNome: nomeUsuario,
+          unidade: company?.name || '',
+        });
+        setLastDocId(registro?.id || '');
+        toast.success('Aviso gerado e salvo no histórico do funcionário!');
+      } catch {
+        toast.success('Aviso gerado! (erro ao salvar no histórico)');
+      }
+    } else {
+      toast.success('Aviso de férias gerado!');
+    }
   };
 
   // Detail view
