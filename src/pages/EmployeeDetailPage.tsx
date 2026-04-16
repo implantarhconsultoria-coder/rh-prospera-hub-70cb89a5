@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Save } from 'lucide-react';
+import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
 
-const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico'];
+const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
 const EmployeeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -147,11 +148,14 @@ const EmployeeDetailPage: React.FC = () => {
           </div>
         )}
         {activeTab === 5 && (
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Observações</label>
-            <textarea value={emp.observacoes} onChange={e => updateEmployee(emp.id, { observacoes: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[120px]"
-              placeholder="Histórico e observações do funcionário..." />
+          <div className="space-y-6">
+            <HistoricoDocumentalFuncionario funcionarioId={emp.id} />
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Observações Gerais</label>
+              <textarea value={emp.observacoes} onChange={e => updateEmployee(emp.id, { observacoes: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[120px]"
+                placeholder="Observações adicionais do funcionário..." />
+            </div>
           </div>
         )}
       </div>
