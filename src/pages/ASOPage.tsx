@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
+import { useFilialFilter } from '@/hooks/useFilialFilter';
+import { asoStatus, formatDate } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Stethoscope, Printer, Search, Mail, ArrowLeft } from 'lucide-react';
+import { Stethoscope, Printer, Search, Mail, ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 const CLINICAS: Record<string, string> = {
   'TOPAC MATRIZ': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
@@ -20,7 +23,8 @@ const TIPOS_EXAME = [
 ];
 
 const ASOPage: React.FC = () => {
-  const { companies, employees } = useApp();
+  const { companies, employees, session } = useApp();
+  const { isFilial, filialCompanyId } = useFilialFilter();
   const [search, setSearch] = useState('');
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [dataExame, setDataExame] = useState('');
@@ -30,10 +34,15 @@ const ASOPage: React.FC = () => {
   const [espacoConfinado, setEspacoConfinado] = useState(false);
   const [responsavelContato, setResponsavelContato] = useState('');
 
-  const filteredEmps = employees.filter(e =>
-    e.status === 'ativo' && e.categoria === 'operacional' &&
-    (e.name.toLowerCase().includes(search.toLowerCase()) || e.cpf.includes(search))
-  );
+  const filteredEmps = employees.filter(e => {
+    if (e.status !== 'ativo' || e.categoria !== 'operacional') return false;
+    if (isFilial && e.companyId !== filialCompanyId) return false;
+    if (search && !e.name.toLowerCase().includes(search.toLowerCase()) && !e.cpf.includes(search)) return false;
+    return true;
+  }).map(e => {
+    const aso = asoStatus(e.dataExameMedico);
+    return { ...e, asoInfo: aso };
+  });
   const emp = employees.find(e => e.id === selectedEmpId);
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
   const clinica = company ? CLINICAS[company.name] || '' : '';
