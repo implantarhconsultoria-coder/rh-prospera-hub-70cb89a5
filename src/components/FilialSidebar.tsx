@@ -1,40 +1,31 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, CalendarDays, FileText, HardHat, Shirt,
-  UtensilsCrossed, Bus, FileCheck, Car, CalendarCheck, Stethoscope,
-  History, Building2, ChevronLeft, Menu, LogOut,
+  LayoutDashboard, Users, CalendarCheck, Stethoscope,
+  FileText, FileCheck, Bell, Building2, ChevronLeft, Menu, LogOut,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 
 const menuItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/filial' },
+  { label: 'Painel da Filial', icon: LayoutDashboard, path: '/filial' },
   { label: 'Funcionários', icon: Users, path: '/filial/funcionarios' },
-  { label: 'Lançamentos', icon: CalendarDays, path: '/filial/lancamentos' },
-  { label: 'Relatório', icon: FileText, path: '/filial/relatorio' },
-];
-
-const operationalItems = [
-  { label: 'Entrega de EPI', icon: HardHat, path: '/filial/epi' },
-  { label: 'Uniformes', icon: Shirt, path: '/filial/uniformes' },
-  { label: 'Relatório VR', icon: UtensilsCrossed, path: '/filial/relatorio-vr' },
-  { label: 'Relatório VT', icon: Bus, path: '/filial/relatorio-vt' },
-  { label: 'Protocolo', icon: FileCheck, path: '/filial/protocolo' },
-  { label: 'Doc. Veículos', icon: Car, path: '/filial/documentos-ativos' },
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/filial/aviso-ferias' },
-  { label: 'ASO', icon: Stethoscope, path: '/filial/aso' },
-  { label: 'Histórico', icon: History, path: '/filial/historico' },
+  { label: 'ASO / Agendamento', icon: Stethoscope, path: '/filial/aso' },
+  { label: 'Documentos de RH', icon: FileText, path: '/filial/documentos-ativos' },
+  { label: 'Protocolos', icon: FileCheck, path: '/filial/protocolo' },
+  { label: 'Alertas', icon: Bell, path: '/filial/alertas' },
 ];
 
 interface Props { collapsed: boolean; onToggle: () => void; }
 
 const FilialSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
-  const { logout, userRole } = useApp();
+  const { logout, userRole, session } = useApp();
   const location = useLocation();
 
   const portalTitle = userRole === 'filial_praia' ? 'RH Praia Grande' : 'RH Goiânia';
   const portalColor = userRole === 'filial_praia' ? 'bg-blue-500' : 'bg-emerald-500';
+  const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || '';
 
   const renderLink = (item: { label: string; icon: React.ElementType; path: string }) => (
     <NavLink key={item.path} to={item.path}
@@ -71,16 +62,16 @@ const FilialSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
         </button>
       </div>
 
+      {/* Logged-in user info */}
+      {!collapsed && (
+        <div className="px-4 py-2 border-b border-sidebar-border">
+          <p className="text-[10px] text-sidebar-foreground/50 uppercase tracking-wider">Logado como</p>
+          <p className="text-xs text-sidebar-foreground truncate font-medium">{userName}</p>
+        </div>
+      )}
+
       <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
         {menuItems.map(renderLink)}
-
-        {!collapsed && (
-          <div className="pt-3 mt-3 border-t border-sidebar-border">
-            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Operacional</p>
-          </div>
-        )}
-        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
-        {operationalItems.map(renderLink)}
       </nav>
 
       <div className="p-2 border-t border-sidebar-border">

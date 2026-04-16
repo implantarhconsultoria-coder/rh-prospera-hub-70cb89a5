@@ -14,6 +14,7 @@ import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
+import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
 import ASOPage from "@/pages/ASOPage";
@@ -132,17 +133,11 @@ const AuthGate = () => {
         <Route path="/filial" element={<FilialDashboardPage />} />
         <Route path="/filial/funcionarios" element={<FuncionariosPage />} />
         <Route path="/filial/funcionarios/:id" element={<EmployeeDetailPage />} />
-        <Route path="/filial/lancamentos" element={<LancamentosPage />} />
-        <Route path="/filial/relatorio" element={<RelatorioPage />} />
-        <Route path="/filial/epi" element={<EPIPage />} />
-        <Route path="/filial/uniformes" element={<UniformePage />} />
-        <Route path="/filial/relatorio-vr" element={<RelatorioVRPage />} />
-        <Route path="/filial/relatorio-vt" element={<RelatorioVTPage />} />
-        <Route path="/filial/protocolo" element={<ProtocoloPage />} />
-        <Route path="/filial/documentos-ativos" element={<DocumentosVeiculosPage />} />
         <Route path="/filial/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/filial/aso" element={<ASOPage />} />
-        <Route path="/filial/historico" element={<HistoricoPage />} />
+        <Route path="/filial/documentos-ativos" element={<DocumentosVeiculosPage />} />
+        <Route path="/filial/protocolo" element={<ProtocoloPage />} />
+        <Route path="/filial/alertas" element={<FilialAlertasPage />} />
       </Route>
 
       {/* ========== CAMPO PORTAL ========== */}
