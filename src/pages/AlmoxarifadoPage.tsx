@@ -74,6 +74,17 @@ const AlmoxarifadoPage: React.FC = () => {
   const [carVeiculo, setCarVeiculo] = useState('');
   const [carItens, setCarItens] = useState<{ item_id: string; qtd: number }[]>([]);
 
+  // Ajuste rápido modal
+  const [ajusteOpen, setAjusteOpen] = useState(false);
+  const [ajusteItem, setAjusteItem] = useState<Item | null>(null);
+  const [ajusteTipo, setAjusteTipo] = useState<'entrada_rapida' | 'saida_rapida' | 'ajuste'>('ajuste');
+  const [ajusteQtd, setAjusteQtd] = useState<string>('');
+  const [ajusteMotivo, setAjusteMotivo] = useState('');
+  const [ajusteObs, setAjusteObs] = useState('');
+  const [historicoOpen, setHistoricoOpen] = useState(false);
+  const [historicoItem, setHistoricoItem] = useState<Item | null>(null);
+  const [historicoAjustes, setHistoricoAjustes] = useState<any[]>([]);
+
   const uid = session?.user?.id;
 
   // Employee autocomplete filtering
