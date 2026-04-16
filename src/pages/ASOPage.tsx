@@ -36,6 +36,7 @@ const ASOPage: React.FC = () => {
   const [espacoConfinado, setEspacoConfinado] = useState(false);
   const [responsavelContato, setResponsavelContato] = useState('');
   const [saving, setSaving] = useState(false);
+  const [lastDocId, setLastDocId] = useState('');
 
   const filteredEmps = employees.filter(e => {
     if (e.status !== 'ativo' || e.categoria !== 'operacional') return false;
@@ -98,8 +99,10 @@ const ASOPage: React.FC = () => {
     </body></html>`;
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
+    const htmlContent = buildFichaHtml();
+
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.top = '-10000px';
@@ -108,14 +111,41 @@ const ASOPage: React.FC = () => {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) return;
     doc.open();
-    doc.write(buildFichaHtml());
+    doc.write(htmlContent);
     doc.close();
     iframe.contentWindow?.focus();
     setTimeout(() => {
       iframe.contentWindow?.print();
       setTimeout(() => document.body.removeChild(iframe), 2000);
     }, 300);
-    toast.success('Ficha ASO gerada!');
+
+    if (session?.user) {
+      try {
+        const arquivoUrl = await uploadDocumentoPdf(emp.id, 'ficha-aso', htmlContent);
+        const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
+        const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
+
+        const registro = await registrarDocumento({
+          funcionarioId: emp.id,
+          funcionarioNome: emp.name,
+          companyId: emp.companyId,
+          empresaNome: company?.name || '',
+          tipoDocumento: `Ficha ASO — ${tipoExame}`,
+          descricao: `Exame ${tipoExame} — Data: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'} — ${obraLocal || 'Sem local'}`,
+          arquivoUrl,
+          geradoPorUserId: session.user.id,
+          geradoPorNome: nomeUsuario,
+          unidade: company?.name || '',
+        });
+        setLastDocId(registro?.id || '');
+        toast.success('Ficha ASO gerada e salva no histórico!');
+      } catch {
+        toast.success('Ficha ASO gerada! (erro ao salvar no histórico)');
+      }
+    } else {
+      toast.success('Ficha ASO gerada!');
+    }
+  };
   };
 
   const handleSave = async () => {
