@@ -173,6 +173,30 @@ const ASOPage: React.FC = () => {
             </div>
           )}
           <div className="flex gap-3 flex-wrap">
+            <Button onClick={async () => {
+              if (!emp || !session?.user?.id) return;
+              const { error } = await supabase.from('aso_agendamentos').insert({
+                funcionario_nome: emp.name,
+                empresa: company?.name || '',
+                funcao: emp.cargo,
+                data_exame: dataExame || null,
+                tipo_exame: tipoExame.toLowerCase(),
+                obra_local: obraLocal,
+                trabalho_altura: trabalhoAltura,
+                espaco_confinado: espacoConfinado,
+                responsavel_contato: responsavelContato,
+                clinica_endereco: clinica,
+                cpf: emp.cpf,
+                rg: emp.rg,
+                data_admissao: emp.dataAdmissao || null,
+                user_id: session.user.id,
+                status: 'pendente',
+              });
+              if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
+              toast.success('Agendamento salvo no banco!');
+            }} className="gradient-primary text-primary-foreground font-semibold">
+              <Save className="w-4 h-4 mr-2" /> Salvar Agendamento
+            </Button>
             <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold">
               <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir Ficha
             </Button>
