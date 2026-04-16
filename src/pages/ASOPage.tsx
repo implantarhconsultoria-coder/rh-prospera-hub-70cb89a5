@@ -2,15 +2,16 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Stethoscope, Printer, Search, Mail } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Stethoscope, Printer, Search, Mail, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 const CLINICAS: Record<string, string> = {
-  'topac-praia-grande': 'Rua Londrina, 483, Centro, Praia Grande/SP',
-  'topac-goiania': 'ASMETRO - Medicina do Trabalho, Rua 18, nº 247, Setor Central, Goiânia - GO, CEP 74030-040',
-  'topac-matriz': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
-  'lmt': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
-  'alqui': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
+  'TOPAC MATRIZ': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
+  'TOPAC FILIAL PRAIA GRANDE': 'Rua Londrina, 483, Centro, Praia Grande/SP',
+  'TOPAC FILIAL GOIÂNIA': 'ASMETRO - Medicina do Trabalho, Rua 18, nº 247, Setor Central, Goiânia - GO, CEP 74030-040',
+  'LMT': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
+  'ALQUI OBRAS': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
 };
 
 const TIPOS_EXAME = [
@@ -35,7 +36,7 @@ const ASOPage: React.FC = () => {
   );
   const emp = employees.find(e => e.id === selectedEmpId);
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
-  const clinica = company ? CLINICAS[company.id] || '' : '';
+  const clinica = company ? CLINICAS[company.name] || '' : '';
 
   const buildFichaHtml = () => {
     const co = company;
@@ -91,7 +92,7 @@ const ASOPage: React.FC = () => {
     toast.success('Ficha ASO gerada!');
   };
 
-  const handleEmail = () => {
+  const handleOutlook = () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
     const subject = encodeURIComponent(`Agendamento ASO — ${emp.name} — ${tipoExame}`);
     const body = encodeURIComponent(
@@ -99,61 +100,40 @@ const ASOPage: React.FC = () => {
       `Nome: ${emp.name}\nFunção: ${emp.cargo}\nCPF: ${emp.cpf}\nEmpresa: ${company?.name || ''}\n` +
       `Data pretendida: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'}\n` +
       `Obra/Local: ${obraLocal || '—'}\nTrabalho em Altura: ${trabalhoAltura ? 'Sim' : 'Não'}\n` +
-      `Espaço Confinado: ${espacoConfinado ? 'Sim' : 'Não'}\n\n` +
+      `Espaço Confinado: ${espacoConfinado ? 'Sim' : 'Não'}\n` +
+      `Clínica: ${clinica || 'A definir'}\n\n` +
       `Contato: ${responsavelContato || '—'}\n\nAtenciosamente,\nTopac RH`
     );
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
-    toast.success('E-mail preparado para envio!');
+    toast.success('Outlook aberto com assunto e corpo preenchidos!');
   };
 
-  return (
-    <div className="space-y-5 animate-fade-in">
-      <div className="card-premium p-6 gradient-primary text-primary-foreground">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center">
-            <Stethoscope className="w-7 h-7" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold font-display">ASO — Ficha de Agendamento</h1>
-            <p className="text-primary-foreground/70 text-sm">Agendamento de exames médicos</p>
+  // Detail view
+  if (selectedEmpId && emp && company) {
+    return (
+      <div className="space-y-5 animate-fade-in">
+        <div className="card-premium p-6 gradient-primary text-primary-foreground">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => setSelectedEmpId('')} className="text-primary-foreground hover:bg-primary-foreground/10">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold font-display">ASO — {emp.name}</h1>
+              <p className="text-primary-foreground/70 text-sm">{company.name} — {emp.cargo}</p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="card-premium p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Search className="w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar funcionário..." value={search}
-            onChange={e => setSearch(e.target.value)} className="flex-1" />
-        </div>
-        {search && !selectedEmpId && (
-          <div className="border rounded-lg max-h-48 overflow-y-auto">
-            {filteredEmps.map(e => {
-              const co = companies.find(c => c.id === e.companyId);
-              return (
-                <button key={e.id} onClick={() => { setSelectedEmpId(e.id); setSearch(''); }}
-                  className="w-full text-left px-3 py-2 hover:bg-muted/50 text-sm flex justify-between items-center border-b last:border-0">
-                  <span className="font-medium">{e.name}</span>
-                  <span className="text-xs text-muted-foreground">{co?.name} — {e.cargo}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {emp && company && (
-          <div className="bg-muted/30 rounded-lg p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div className="card-premium p-5">
+          <h2 className="text-sm font-bold text-foreground mb-3">Dados do Colaborador</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div><span className="text-muted-foreground text-xs block">Nome</span><strong>{emp.name}</strong></div>
             <div><span className="text-muted-foreground text-xs block">Empresa</span>{company.name}</div>
             <div><span className="text-muted-foreground text-xs block">Função</span>{emp.cargo}</div>
             <div><span className="text-muted-foreground text-xs block">CPF</span>{emp.cpf}</div>
-            <div className="flex items-end">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedEmpId('')} className="text-xs text-destructive">Trocar</Button>
-            </div>
           </div>
-        )}
-      </div>
+        </div>
 
-      {emp && (
         <div className="card-premium p-5 space-y-4">
           <h2 className="text-sm font-bold text-foreground">Dados do Exame</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -170,12 +150,10 @@ const ASOPage: React.FC = () => {
               <Input value={responsavelContato} onChange={e => setResponsavelContato(e.target.value)} /></div>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={trabalhoAltura} onChange={e => setTrabalhoAltura(e.target.checked)}
-                  className="rounded border-border" /> Trabalho em Altura
+                <input type="checkbox" checked={trabalhoAltura} onChange={e => setTrabalhoAltura(e.target.checked)} className="rounded border-border" /> Trabalho em Altura
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={espacoConfinado} onChange={e => setEspacoConfinado(e.target.checked)}
-                  className="rounded border-border" /> Espaço Confinado
+                <input type="checkbox" checked={espacoConfinado} onChange={e => setEspacoConfinado(e.target.checked)} className="rounded border-border" /> Espaço Confinado
               </label>
             </div>
           </div>
@@ -189,12 +167,65 @@ const ASOPage: React.FC = () => {
             <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold">
               <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir Ficha
             </Button>
-            <Button onClick={handleEmail} variant="outline">
-              <Mail className="w-4 h-4 mr-2" /> Enviar por E-mail
+            <Button onClick={handleOutlook} variant="outline">
+              <Mail className="w-4 h-4 mr-2" /> Enviar via Outlook
             </Button>
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
+
+  // List view
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <div className="card-premium p-6 gradient-primary text-primary-foreground">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center">
+            <Stethoscope className="w-7 h-7" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold font-display">ASO — Ficha de Agendamento</h1>
+            <p className="text-primary-foreground/70 text-sm">Clique no funcionário para agendar exame</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card-premium p-4">
+        <div className="flex items-center gap-2">
+          <Search className="w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Buscar por nome ou CPF..." value={search}
+            onChange={e => setSearch(e.target.value)} className="flex-1" />
+        </div>
+      </div>
+
+      <div className="card-premium overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Nome</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Cargo</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">CPF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredEmps.map(e => {
+              const co = companies.find(c => c.id === e.companyId);
+              return (
+                <tr key={e.id} className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
+                  onClick={() => { setSelectedEmpId(e.id); setSearch(''); }}>
+                  <td className="px-3 py-2.5 font-medium">{e.name}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{co?.name}</td>
+                  <td className="px-3 py-2.5">{e.cargo}</td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{e.cpf}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="p-3 text-xs text-muted-foreground border-t">{filteredEmps.length} funcionário(s)</div>
+      </div>
     </div>
   );
 };

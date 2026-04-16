@@ -44,7 +44,7 @@ const LancamentosPage: React.FC = () => {
         </Button>
       </div>
 
-      <div className="card-premium overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]">
+      <div className="card-premium overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]" style={{ overflowX: 'scroll' }}>
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="border-b bg-muted">

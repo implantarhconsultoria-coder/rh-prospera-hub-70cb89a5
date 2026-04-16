@@ -55,7 +55,7 @@ const BaseMestraPage: React.FC = () => {
         <Filter className="w-5 h-5 text-muted-foreground" />
       </div>
 
-      <div className="card-premium overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]">
+      <div className="card-premium overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]" style={{ overflowX: 'scroll' }}>
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="border-b bg-muted">
@@ -70,7 +70,7 @@ const BaseMestraPage: React.FC = () => {
               const fer = feriasStatus(e.dataAdmissao);
               return (
                 <tr key={e.id} className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/funcionarios/${e.id}`)}>
+                  onClick={() => navigate(`/admin/funcionarios/${e.id}`)}>
                   <td className="px-3 py-2.5 whitespace-nowrap font-medium">{getCompanyName(e.companyId)}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground text-xs">{getCompanyCnpj(e.companyId)}</td>
                   <td className="px-3 py-2.5">{e.registro}</td>
