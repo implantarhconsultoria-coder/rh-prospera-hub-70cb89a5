@@ -10,6 +10,12 @@ const ROLE_COMPANY_MAP: Record<string, string> = {
   filial_goiania: 'topac-gyn',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  'vencido': 'Vencido',
+  'próximo': 'Próximo do vencimento',
+  'atenção': 'Atenção',
+};
+
 const FilialAlertasPage: React.FC = () => {
   const { userRole, employees } = useApp();
   const navigate = useNavigate();
@@ -31,7 +37,6 @@ const FilialAlertasPage: React.FC = () => {
         <p className="text-muted-foreground text-sm">Pendências que precisam de atenção</p>
       </div>
 
-      {/* ASO Alerts */}
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
           <Stethoscope className="w-4 h-4" /> ASO Pendente / Vencido ({asoAlerts.length})
@@ -49,7 +54,7 @@ const FilialAlertasPage: React.FC = () => {
                   <p className="text-xs text-muted-foreground">{e.cargo}</p>
                 </div>
                 <span className={`text-xs font-semibold px-2 py-1 rounded ${e.aso.status === 'vencido' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning'}`}>
-                  {e.aso.label}
+                  {STATUS_LABELS[e.aso.status] || e.aso.status}
                 </span>
               </motion.div>
             ))}
@@ -57,7 +62,6 @@ const FilialAlertasPage: React.FC = () => {
         )}
       </div>
 
-      {/* Férias Alerts */}
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
           <CalendarCheck className="w-4 h-4" /> Férias a Vencer ({feriasAlerts.length})
@@ -74,8 +78,8 @@ const FilialAlertasPage: React.FC = () => {
                   <p className="text-sm font-medium text-foreground">{e.name}</p>
                   <p className="text-xs text-muted-foreground">{e.cargo}</p>
                 </div>
-                <span className={`text-xs font-semibold px-2 py-1 rounded ${e.ferias.status === 'vencidas' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning'}`}>
-                  {e.ferias.label}
+                <span className={`text-xs font-semibold px-2 py-1 rounded ${e.ferias.status === 'vencido' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning'}`}>
+                  {STATUS_LABELS[e.ferias.status] || e.ferias.status}
                 </span>
               </motion.div>
             ))}
