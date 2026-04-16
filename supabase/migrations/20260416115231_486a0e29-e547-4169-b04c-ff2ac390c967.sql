@@ -1,0 +1,1 @@
+UPDATE public.user_roles SET role = 'filial_goiania' WHERE user_id = 'dd0a1727-d850-4899-b474-ed35d462f67e';
