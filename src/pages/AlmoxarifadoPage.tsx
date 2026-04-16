@@ -4,8 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Package, Plus, ArrowDown, ArrowUp, Search, Trash2, Upload, FileText, Loader2, Truck, Clock, Download, Printer, CheckCircle, X } from 'lucide-react';
+import { Package, Plus, ArrowDown, ArrowUp, Search, Trash2, Upload, FileText, Loader2, Truck, Clock, Download, Printer, CheckCircle, X, Settings2, History } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 type Tab = 'estoque' | 'entrada' | 'saida' | 'carregamento' | 'fechamento' | 'relatorio';
 
