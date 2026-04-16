@@ -213,9 +213,10 @@ const ASOPage: React.FC = () => {
           <thead>
             <tr className="border-b bg-muted/50">
               <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Nome</th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
+              {!isFilial && <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>}
               <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Cargo</th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">CPF</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Último ASO</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -225,9 +226,14 @@ const ASOPage: React.FC = () => {
                 <tr key={e.id} className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
                   onClick={() => { setSelectedEmpId(e.id); setSearch(''); }}>
                   <td className="px-3 py-2.5 font-medium">{e.name}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground">{co?.name}</td>
+                  {!isFilial && <td className="px-3 py-2.5 text-muted-foreground">{co?.name}</td>}
                   <td className="px-3 py-2.5">{e.cargo}</td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{e.cpf}</td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{e.dataExameMedico ? formatDate(e.dataExameMedico) : '—'}</td>
+                  <td className="px-3 py-2.5">
+                    <Badge className={`text-[10px] ${e.asoInfo.status === 'ok' ? 'bg-success/20 text-success' : e.asoInfo.status === 'vencido' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning'}`}>
+                      {e.asoInfo.status === 'ok' ? 'Em dia' : e.asoInfo.status === 'vencido' ? 'Vencido' : 'Atenção'}
+                    </Badge>
+                  </td>
                 </tr>
               );
             })}
