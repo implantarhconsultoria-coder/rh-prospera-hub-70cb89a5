@@ -176,21 +176,43 @@ const AvisoFeriasPage: React.FC = () => {
             </Button>
             <Button onClick={async () => {
               if (!emp || !inicioFerias) { toast.error('Preencha os dados'); return; }
+              // 1. Garante PDF baixado para o operador anexar
+              const pdf = gerarPdfAtual();
+              if (pdf) downloadPdf(pdf.blob, pdf.fileName);
+
+              const destinatarios = getDestinatariosFerias(company?.name || '');
+              // 2. Texto humano e legível, sem "+", sem URL params quebrados
+              const body = [
+                `Segue aviso de férias do(a) colaborador(a) abaixo:`,
+                ``,
+                `Nome: ${emp.name}`,
+                `CPF: ${emp.cpf}`,
+                `Cargo: ${emp.cargo}`,
+                `Empresa: ${company?.name || ''}`,
+                `Início: ${new Date(inicioFerias).toLocaleDateString('pt-BR')}`,
+                `Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '—'}`,
+                `Dias: ${diasFerias}`,
+                ``,
+                `Segue aviso em anexo.`,
+                ``,
+                `Atenciosamente.`,
+              ].join('\n');
+
               openEmailClient({
-                to: DESTINATARIOS.ferias,
+                to: destinatarios,
                 cc: CC_OBRIGATORIO,
                 subject: `Aviso de Férias — ${emp.name} — ${company?.name || ''}`,
-                body: `Prezados,\n\nSegue aviso de férias do(a) colaborador(a) ${emp.name}.\n\nEmpresa: ${company?.name || ''}\nCargo: ${emp.cargo}\nInício: ${new Date(inicioFerias).toLocaleDateString('pt-BR')}\nRetorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '—'}\nDias: ${diasFerias}\n\nFavor conferir o documento em anexo.\n\nAtt.`,
+                body,
               });
-              // Mark as sent in history
+
               if (lastDocId && session?.user) {
                 const profile = await import('@/integrations/supabase/client').then(m =>
                   m.supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single()
                 );
                 const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
-                await marcarComoEnviado(lastDocId, session.user.id, nomeUsuario, DESTINATARIOS.ferias.join(', '));
+                await marcarComoEnviado(lastDocId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
               }
-              toast.success('Outlook aberto — anexe o aviso de férias antes de enviar');
+              toast.success('Outlook aberto — arraste o PDF baixado para anexar');
             }} variant="outline" className="border-primary text-primary hover:bg-primary/10">
               <Mail className="w-4 h-4 mr-2" /> Enviar por E-mail
             </Button>
