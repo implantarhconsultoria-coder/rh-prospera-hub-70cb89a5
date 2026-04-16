@@ -4,8 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Package, Plus, ArrowDown, ArrowUp, Search, Trash2, Upload, FileText, Loader2, Truck, Clock, Download, Printer, CheckCircle, X } from 'lucide-react';
+import { Package, Plus, ArrowDown, ArrowUp, Search, Trash2, Upload, FileText, Loader2, Truck, Clock, Download, Printer, CheckCircle, X, Settings2, History } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 type Tab = 'estoque' | 'entrada' | 'saida' | 'carregamento' | 'fechamento' | 'relatorio';
 
@@ -71,6 +73,17 @@ const AlmoxarifadoPage: React.FC = () => {
   const [carEquipe, setCarEquipe] = useState('');
   const [carVeiculo, setCarVeiculo] = useState('');
   const [carItens, setCarItens] = useState<{ item_id: string; qtd: number }[]>([]);
+
+  // Ajuste rápido modal
+  const [ajusteOpen, setAjusteOpen] = useState(false);
+  const [ajusteItem, setAjusteItem] = useState<Item | null>(null);
+  const [ajusteTipo, setAjusteTipo] = useState<'entrada_rapida' | 'saida_rapida' | 'ajuste'>('ajuste');
+  const [ajusteQtd, setAjusteQtd] = useState<string>('');
+  const [ajusteMotivo, setAjusteMotivo] = useState('');
+  const [ajusteObs, setAjusteObs] = useState('');
+  const [historicoOpen, setHistoricoOpen] = useState(false);
+  const [historicoItem, setHistoricoItem] = useState<Item | null>(null);
+  const [historicoAjustes, setHistoricoAjustes] = useState<any[]>([]);
 
   const uid = session?.user?.id;
 
@@ -268,6 +281,56 @@ const AlmoxarifadoPage: React.FC = () => {
     setCarEquipe(''); setCarVeiculo(''); setCarItens([]);
     setLoading(false);
     fetchAll();
+  };
+
+  const abrirAjuste = (item: Item, tipo: 'entrada_rapida' | 'saida_rapida' | 'ajuste') => {
+    setAjusteItem(item);
+    setAjusteTipo(tipo);
+    setAjusteQtd(tipo === 'ajuste' ? String(item.quantidade) : '');
+    setAjusteMotivo('');
+    setAjusteObs('');
+    setAjusteOpen(true);
+  };
+
+  const confirmarAjuste = async () => {
+    if (!ajusteItem || !uid) return;
+    const qtdNum = Number(ajusteQtd);
+    if (isNaN(qtdNum) || qtdNum < 0) { toast.error('Quantidade inválida'); return; }
+    if (ajusteTipo === 'ajuste' && !ajusteMotivo.trim()) {
+      toast.error('Informe o motivo do ajuste manual'); return;
+    }
+    const anterior = ajusteItem.quantidade;
+    let nova = anterior;
+    if (ajusteTipo === 'entrada_rapida') nova = anterior + qtdNum;
+    else if (ajusteTipo === 'saida_rapida') nova = Math.max(0, anterior - qtdNum);
+    else nova = qtdNum;
+
+    setLoading(true);
+    const usuarioNome = session?.user?.email || 'Usuário';
+    const { error: errAj } = await supabase.from('almoxarifado_ajustes').insert({
+      item_id: ajusteItem.id, user_id: uid, usuario_nome: usuarioNome,
+      tipo_movimentacao: ajusteTipo, quantidade_anterior: anterior,
+      quantidade_nova: nova, diferenca: nova - anterior,
+      motivo: ajusteMotivo, observacao: ajusteObs,
+    } as any);
+    if (errAj) { toast.error(errAj.message); setLoading(false); return; }
+
+    const { error: errUp } = await supabase.from('almoxarifado_itens')
+      .update({ quantidade: nova } as any).eq('id', ajusteItem.id);
+    if (errUp) { toast.error(errUp.message); setLoading(false); return; }
+
+    toast.success(`Estoque atualizado: ${anterior} → ${nova}`);
+    setAjusteOpen(false);
+    setLoading(false);
+    fetchAll();
+  };
+
+  const abrirHistorico = async (item: Item) => {
+    setHistoricoItem(item);
+    setHistoricoOpen(true);
+    const { data } = await supabase.from('almoxarifado_ajustes')
+      .select('*').eq('item_id', item.id).order('created_at', { ascending: false }).limit(50);
+    setHistoricoAjustes(data || []);
   };
 
   const handleFecharDia = () => {
@@ -487,10 +550,32 @@ const AlmoxarifadoPage: React.FC = () => {
                       <td className="px-3 py-2 text-xs">R$ {(item.valor_unitario || 0).toFixed(2)}</td>
                       <td className="px-3 py-2 text-xs">{item.localizacao || '—'}</td>
                       <td className="px-3 py-2">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
-                          onClick={async () => { await supabase.from('almoxarifado_itens').delete().eq('id', item.id); fetchAll(); }}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="outline" size="icon" className="h-7 w-7 text-green-600" title="Entrada rápida"
+                            onClick={() => abrirAjuste(item, 'entrada_rapida')}>
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="outline" size="icon" className="h-7 w-7 text-orange-600" title="Saída rápida"
+                            onClick={() => abrirAjuste(item, 'saida_rapida')}>
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </Button>
+                          {isAdmin && (
+                            <Button variant="outline" size="icon" className="h-7 w-7" title="Ajuste manual (admin)"
+                              onClick={() => abrirAjuste(item, 'ajuste')}>
+                              <Settings2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Histórico"
+                            onClick={() => abrirHistorico(item)}>
+                            <History className="w-3.5 h-3.5" />
+                          </Button>
+                          {isAdmin && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Excluir"
+                              onClick={async () => { await supabase.from('almoxarifado_itens').delete().eq('id', item.id); fetchAll(); }}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -847,6 +932,111 @@ const AlmoxarifadoPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal Ajuste */}
+      <Dialog open={ajusteOpen} onOpenChange={setAjusteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {ajusteTipo === 'entrada_rapida' && 'Lançar Entrada'}
+              {ajusteTipo === 'saida_rapida' && 'Lançar Saída'}
+              {ajusteTipo === 'ajuste' && 'Ajuste Manual de Estoque'}
+            </DialogTitle>
+          </DialogHeader>
+          {ajusteItem && (
+            <div className="space-y-3">
+              <div className="bg-muted/40 p-3 rounded-lg">
+                <p className="text-sm font-bold">{ajusteItem.nome}</p>
+                <p className="text-xs text-muted-foreground">
+                  Estoque atual: <span className="font-bold text-foreground">{ajusteItem.quantidade} {ajusteItem.unidade}</span>
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  {ajusteTipo === 'ajuste' ? 'Nova quantidade *' : 'Quantidade *'}
+                </label>
+                <Input type="number" min={0} value={ajusteQtd} onChange={e => setAjusteQtd(e.target.value)} autoFocus />
+                {ajusteTipo !== 'ajuste' && ajusteQtd && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Saldo após: <span className="font-bold text-foreground">
+                      {ajusteTipo === 'entrada_rapida'
+                        ? ajusteItem.quantidade + Number(ajusteQtd)
+                        : Math.max(0, ajusteItem.quantidade - Number(ajusteQtd))} {ajusteItem.unidade}
+                    </span>
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  Motivo {ajusteTipo === 'ajuste' && '*'}
+                </label>
+                <Input value={ajusteMotivo} onChange={e => setAjusteMotivo(e.target.value)}
+                  placeholder={ajusteTipo === 'ajuste' ? 'Ex: Inventário, correção de divergência' : 'Opcional'} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Observação</label>
+                <Textarea value={ajusteObs} onChange={e => setAjusteObs(e.target.value)} rows={2} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAjusteOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmarAjuste} disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-2" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Histórico */}
+      <Dialog open={historicoOpen} onOpenChange={setHistoricoOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Histórico de movimentações — {historicoItem?.nome}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {historicoAjustes.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">Nenhuma movimentação registrada</p>
+            ) : (
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-background border-b">
+                  <tr>
+                    <th className="px-2 py-2 text-left">Data/Hora</th>
+                    <th className="px-2 py-2 text-left">Tipo</th>
+                    <th className="px-2 py-2 text-left">Anterior</th>
+                    <th className="px-2 py-2 text-left">Nova</th>
+                    <th className="px-2 py-2 text-left">Δ</th>
+                    <th className="px-2 py-2 text-left">Usuário</th>
+                    <th className="px-2 py-2 text-left">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historicoAjustes.map(a => (
+                    <tr key={a.id} className="border-b">
+                      <td className="px-2 py-1.5">{new Date(a.created_at).toLocaleString('pt-BR')}</td>
+                      <td className="px-2 py-1.5">
+                        <Badge variant="outline" className="text-[10px]">
+                          {a.tipo_movimentacao === 'entrada_rapida' ? 'Entrada' :
+                           a.tipo_movimentacao === 'saida_rapida' ? 'Saída' :
+                           a.tipo_movimentacao === 'ajuste' ? 'Ajuste' : a.tipo_movimentacao}
+                        </Badge>
+                      </td>
+                      <td className="px-2 py-1.5">{a.quantidade_anterior}</td>
+                      <td className="px-2 py-1.5 font-bold">{a.quantidade_nova}</td>
+                      <td className={`px-2 py-1.5 font-bold ${a.diferenca > 0 ? 'text-green-600' : a.diferenca < 0 ? 'text-red-600' : ''}`}>
+                        {a.diferenca > 0 ? '+' : ''}{a.diferenca}
+                      </td>
+                      <td className="px-2 py-1.5">{a.usuario_nome}</td>
+                      <td className="px-2 py-1.5">{a.motivo || a.observacao || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -59,6 +59,56 @@ export type Database = {
         }
         Relationships: []
       }
+      almoxarifado_ajustes: {
+        Row: {
+          created_at: string
+          diferenca: number
+          id: string
+          item_id: string
+          motivo: string
+          observacao: string
+          quantidade_anterior: number
+          quantidade_nova: number
+          tipo_movimentacao: string
+          user_id: string
+          usuario_nome: string
+        }
+        Insert: {
+          created_at?: string
+          diferenca: number
+          id?: string
+          item_id: string
+          motivo?: string
+          observacao?: string
+          quantidade_anterior: number
+          quantidade_nova: number
+          tipo_movimentacao?: string
+          user_id: string
+          usuario_nome?: string
+        }
+        Update: {
+          created_at?: string
+          diferenca?: number
+          id?: string
+          item_id?: string
+          motivo?: string
+          observacao?: string
+          quantidade_anterior?: number
+          quantidade_nova?: number
+          tipo_movimentacao?: string
+          user_id?: string
+          usuario_nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "almoxarifado_ajustes_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "almoxarifado_itens"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       almoxarifado_entradas: {
         Row: {
           created_at: string
