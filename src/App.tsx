@@ -54,6 +54,15 @@ import ClienteDetailPage from "@/pages/faturamento/ClienteDetailPage";
 import ContratosPage from "@/pages/faturamento/ContratosPage";
 import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
 import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
+import FinanceiroDashboardPage from "@/pages/financeiro/FinanceiroDashboardPage";
+import ContasReceberPage from "@/pages/financeiro/ContasReceberPage";
+import ContasPagarPage from "@/pages/financeiro/ContasPagarPage";
+import FornecedoresPage from "@/pages/financeiro/FornecedoresPage";
+import BancosPage from "@/pages/financeiro/BancosPage";
+import FluxoCaixaPage from "@/pages/financeiro/FluxoCaixaPage";
+import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
+import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
+import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -142,6 +151,16 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/medicoes" element={<MedicoesPage />} />
         <Route path="/admin/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
+        {/* Financeiro */}
+        <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
+        <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />
+        <Route path="/admin/financeiro/contas-pagar" element={<ContasPagarPage />} />
+        <Route path="/admin/financeiro/fornecedores" element={<FornecedoresPage />} />
+        <Route path="/admin/financeiro/bancos" element={<BancosPage />} />
+        <Route path="/admin/financeiro/fluxo-caixa" element={<FluxoCaixaPage />} />
+        <Route path="/admin/financeiro/inadimplencia" element={<InadimplenciaPage />} />
+        <Route path="/admin/financeiro/centros-custo" element={<CentrosCustoPage />} />
+        <Route path="/admin/financeiro/conciliacao" element={<ConciliacaoPage />} />
       </Route>
 
       {/* ========== FILIAL PORTAL ========== */}

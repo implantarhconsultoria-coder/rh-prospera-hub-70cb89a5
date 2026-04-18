@@ -7,6 +7,7 @@ import {
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
   ChevronDown, ChevronRight, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
+  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -60,6 +61,18 @@ const faturamentoItems: MenuItem[] = [
   { label: 'Pendências', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
 ];
 
+const financeiroItems: MenuItem[] = [
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/financeiro' },
+  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
+  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
+  { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores' },
+  { label: 'Caixa e Bancos', icon: Landmark, path: '/admin/financeiro/bancos' },
+  { label: 'Fluxo de Caixa', icon: Activity, path: '/admin/financeiro/fluxo-caixa' },
+  { label: 'Conciliação', icon: CheckSquare, path: '/admin/financeiro/conciliacao' },
+  { label: 'Inadimplência', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia' },
+  { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo' },
+];
+
 const upcomingItems: MenuItem[] = [
   { label: 'Ponto Digital', icon: Clock, path: '#', disabled: true },
   { label: 'Folha de Pagamento', icon: Wallet, path: '#', disabled: true },
@@ -72,6 +85,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout } = useApp();
   const location = useLocation();
   const [fatOpen, setFatOpen] = useState(location.pathname.startsWith('/admin/faturamento'));
+  const [finOpen, setFinOpen] = useState(location.pathname.startsWith('/admin/financeiro'));
 
   const renderLink = (item: MenuItem) => (
     <NavLink key={item.path} to={item.path}
@@ -148,6 +162,37 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
           </>
         ) : (
           faturamentoItems.map(renderLink)
+        )}
+
+        {!collapsed && (
+          <div className="pt-3 mt-3 border-t border-sidebar-border">
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Financeiro</p>
+          </div>
+        )}
+        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {!collapsed ? (
+          <>
+            <button
+              onClick={() => setFinOpen(!finOpen)}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm w-full transition-all",
+                location.pathname.startsWith('/admin/financeiro')
+                  ? "bg-sidebar-primary/40 text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent"
+              )}
+            >
+              <DollarSign className="w-5 h-5 flex-shrink-0" />
+              <span className="flex-1 text-left">Financeiro</span>
+              {finOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+            {finOpen && (
+              <div className="ml-3 pl-2 border-l border-sidebar-border space-y-1 mt-1">
+                {financeiroItems.map(renderLink)}
+              </div>
+            )}
+          </>
+        ) : (
+          financeiroItems.map(renderLink)
         )}
 
         {!collapsed && (
