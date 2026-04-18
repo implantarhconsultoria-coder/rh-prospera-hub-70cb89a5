@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ClipboardList, MapPin, User, Wrench, CheckCircle2, Clock, Loader2, ArrowRight } from 'lucide-react';
+import { ClipboardList, MapPin, Wrench, Loader2, ArrowRight, Package, Plus, Minus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useVeiculoColaborador } from '@/hooks/useVeiculoColaborador';
 import ConfirmacaoVisual from '@/components/ConfirmacaoVisual';
 import { toast } from 'sonner';
+
+interface ItemEstoque { id: string; nome_item: string; quantidade: number; unidade: string; }
+interface ItemSelecionado { item_id: string; nome_item: string; quantidade: number; max: number; }
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: 'Pendente',
