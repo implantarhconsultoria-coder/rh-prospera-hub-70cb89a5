@@ -121,6 +121,37 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Faturamento</p>
+          </div>
+        )}
+        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {!collapsed ? (
+          <>
+            <button
+              onClick={() => setFatOpen(!fatOpen)}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm w-full transition-all",
+                location.pathname.startsWith('/admin/faturamento')
+                  ? "bg-sidebar-primary/40 text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent"
+              )}
+            >
+              <Wallet className="w-5 h-5 flex-shrink-0" />
+              <span className="flex-1 text-left">Faturamento</span>
+              {fatOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+            {fatOpen && (
+              <div className="ml-3 pl-2 border-l border-sidebar-border space-y-1 mt-1">
+                {faturamentoItems.map(renderLink)}
+              </div>
+            )}
+          </>
+        ) : (
+          faturamentoItems.map(renderLink)
+        )}
+
+        {!collapsed && (
+          <div className="pt-3 mt-3 border-t border-sidebar-border">
             <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Administração</p>
           </div>
         )}
