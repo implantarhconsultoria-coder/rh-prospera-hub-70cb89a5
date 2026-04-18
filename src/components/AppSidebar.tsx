@@ -7,7 +7,7 @@ import {
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
   ChevronDown, ChevronRight, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
-  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign,
+  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Despachar Chamados', icon: ClipboardList, path: '/admin/chamados' },
+  { label: 'App Operacional', icon: Wrench, path: '/admin/app-operacional' },
   { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 

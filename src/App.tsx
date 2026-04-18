@@ -42,6 +42,8 @@ import HistoricoPage from "@/pages/HistoricoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
+import AppOperacionalPage from "@/pages/admin/AppOperacionalPage";
+import TecnicoDetailPage from "@/pages/admin/TecnicoDetailPage";
 import CampoHomePage from "@/pages/campo/CampoHomePage";
 import PontoPage from "@/pages/campo/PontoPage";
 import ChamadosPage from "@/pages/campo/ChamadosPage";
@@ -140,6 +142,8 @@ const AuthGate = () => {
         <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
         <Route path="/admin/chamados" element={<DespacharChamadoPage />} />
+        <Route path="/admin/app-operacional" element={<AppOperacionalPage />} />
+        <Route path="/admin/app-operacional/:id" element={<TecnicoDetailPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
         {/* Faturamento */}
         <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
