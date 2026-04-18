@@ -53,6 +53,9 @@ const ChamadosPage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmacao, setConfirmacao] = useState<{ titulo: string; detalhes: { label: string; valor: string }[] } | null>(null);
+  const [showItensDialog, setShowItensDialog] = useState(false);
+  const [estoque, setEstoque] = useState<ItemEstoque[]>([]);
+  const [itensConsumo, setItensConsumo] = useState<ItemSelecionado[]>([]);
 
   const fetchChamados = async () => {
     const { data } = await supabase
