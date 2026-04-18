@@ -50,6 +50,16 @@ const adminItems: MenuItem[] = [
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
 
+const faturamentoItems: MenuItem[] = [
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/faturamento' },
+  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
+  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
+  { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas' },
+  { label: 'Medições', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
+  { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
+  { label: 'Pendências', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
+];
+
 const upcomingItems: MenuItem[] = [
   { label: 'Ponto Digital', icon: Clock, path: '#', disabled: true },
   { label: 'Folha de Pagamento', icon: Wallet, path: '#', disabled: true },
@@ -61,6 +71,7 @@ interface Props { collapsed: boolean; onToggle: () => void; }
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout } = useApp();
   const location = useLocation();
+  const [fatOpen, setFatOpen] = useState(location.pathname.startsWith('/admin/faturamento'));
 
   const renderLink = (item: MenuItem) => (
     <NavLink key={item.path} to={item.path}
