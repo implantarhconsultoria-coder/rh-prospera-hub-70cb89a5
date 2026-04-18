@@ -48,6 +48,12 @@ import ChamadosPage from "@/pages/campo/ChamadosPage";
 import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
 import RegistroKmPage from "@/pages/campo/RegistroKmPage";
 import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
+import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
+import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
+import ClienteDetailPage from "@/pages/faturamento/ClienteDetailPage";
+import ContratosPage from "@/pages/faturamento/ContratosPage";
+import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
+import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 
