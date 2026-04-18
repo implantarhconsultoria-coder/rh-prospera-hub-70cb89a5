@@ -483,6 +483,63 @@ export type Database = {
           },
         ]
       }
+      clientes_fat: {
+        Row: {
+          cep: string | null
+          cidade: string | null
+          cnpj_cpf: string | null
+          contato_responsavel: string | null
+          created_at: string
+          email: string | null
+          endereco: string | null
+          id: string
+          inscricao_estadual: string | null
+          nome_fantasia: string | null
+          observacoes: string | null
+          razao_social: string
+          status: string
+          telefone: string | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          cep?: string | null
+          cidade?: string | null
+          cnpj_cpf?: string | null
+          contato_responsavel?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          nome_fantasia?: string | null
+          observacoes?: string | null
+          razao_social: string
+          status?: string
+          telefone?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cep?: string | null
+          cidade?: string | null
+          cnpj_cpf?: string | null
+          contato_responsavel?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          nome_fantasia?: string | null
+          observacoes?: string | null
+          razao_social?: string
+          status?: string
+          telefone?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       colaborador_veiculo: {
         Row: {
           created_at: string
@@ -508,6 +565,153 @@ export type Database = {
             columns: ["veiculo_id"]
             isOneToOne: false
             referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contrato_equipamentos: {
+        Row: {
+          ativo_id: string | null
+          contrato_id: string
+          created_at: string
+          data_envio: string | null
+          data_retorno: string | null
+          descricao_livre: string | null
+          id: string
+          observacao: string | null
+          patrimonio: string | null
+          placa: string | null
+          status: string
+          updated_at: string
+          valor_unitario: number
+        }
+        Insert: {
+          ativo_id?: string | null
+          contrato_id: string
+          created_at?: string
+          data_envio?: string | null
+          data_retorno?: string | null
+          descricao_livre?: string | null
+          id?: string
+          observacao?: string | null
+          patrimonio?: string | null
+          placa?: string | null
+          status?: string
+          updated_at?: string
+          valor_unitario?: number
+        }
+        Update: {
+          ativo_id?: string | null
+          contrato_id?: string
+          created_at?: string
+          data_envio?: string | null
+          data_retorno?: string | null
+          descricao_livre?: string | null
+          id?: string
+          observacao?: string | null
+          patrimonio?: string | null
+          placa?: string | null
+          status?: string
+          updated_at?: string
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contrato_equipamentos_ativo_id_fkey"
+            columns: ["ativo_id"]
+            isOneToOne: false
+            referencedRelation: "ativos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contrato_equipamentos_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contratos: {
+        Row: {
+          arquivo_url: string | null
+          cliente_id: string
+          created_at: string
+          data_base_reajuste: string | null
+          data_fim: string | null
+          data_inicio: string
+          dia_vencimento: number | null
+          empresa_id: string
+          id: string
+          indice_reajuste: string | null
+          numero: string
+          observacoes: string | null
+          percentual_reajuste: number | null
+          periodicidade: string
+          proximo_reajuste: string | null
+          regra_faturamento: string
+          status: string
+          tipo: string
+          updated_at: string
+          valor_mensal: number
+        }
+        Insert: {
+          arquivo_url?: string | null
+          cliente_id: string
+          created_at?: string
+          data_base_reajuste?: string | null
+          data_fim?: string | null
+          data_inicio: string
+          dia_vencimento?: number | null
+          empresa_id: string
+          id?: string
+          indice_reajuste?: string | null
+          numero: string
+          observacoes?: string | null
+          percentual_reajuste?: number | null
+          periodicidade?: string
+          proximo_reajuste?: string | null
+          regra_faturamento?: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor_mensal?: number
+        }
+        Update: {
+          arquivo_url?: string | null
+          cliente_id?: string
+          created_at?: string
+          data_base_reajuste?: string | null
+          data_fim?: string | null
+          data_inicio?: string
+          dia_vencimento?: number | null
+          empresa_id?: string
+          id?: string
+          indice_reajuste?: string | null
+          numero?: string
+          observacoes?: string | null
+          percentual_reajuste?: number | null
+          periodicidade?: string
+          proximo_reajuste?: string | null
+          regra_faturamento?: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor_mensal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contratos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes_fat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contratos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]
@@ -648,6 +852,292 @@ export type Database = {
             columns: ["veiculo_id"]
             isOneToOne: false
             referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fatura_itens: {
+        Row: {
+          contrato_equipamento_id: string | null
+          created_at: string
+          descricao: string
+          fatura_id: string
+          id: string
+          observacao: string | null
+          quantidade: number
+          total: number
+          valor_unitario: number
+        }
+        Insert: {
+          contrato_equipamento_id?: string | null
+          created_at?: string
+          descricao?: string
+          fatura_id: string
+          id?: string
+          observacao?: string | null
+          quantidade?: number
+          total?: number
+          valor_unitario?: number
+        }
+        Update: {
+          contrato_equipamento_id?: string | null
+          created_at?: string
+          descricao?: string
+          fatura_id?: string
+          id?: string
+          observacao?: string | null
+          quantidade?: number
+          total?: number
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fatura_itens_contrato_equipamento_id_fkey"
+            columns: ["contrato_equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "contrato_equipamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fatura_itens_fatura_id_fkey"
+            columns: ["fatura_id"]
+            isOneToOne: false
+            referencedRelation: "faturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faturamento_historico: {
+        Row: {
+          acao: string
+          cliente_id: string | null
+          contrato_id: string | null
+          created_at: string
+          detalhes: Json | null
+          entidade: string
+          entidade_id: string | null
+          fatura_id: string | null
+          id: string
+          user_id: string
+          usuario_nome: string | null
+        }
+        Insert: {
+          acao: string
+          cliente_id?: string | null
+          contrato_id?: string | null
+          created_at?: string
+          detalhes?: Json | null
+          entidade: string
+          entidade_id?: string | null
+          fatura_id?: string | null
+          id?: string
+          user_id: string
+          usuario_nome?: string | null
+        }
+        Update: {
+          acao?: string
+          cliente_id?: string | null
+          contrato_id?: string | null
+          created_at?: string
+          detalhes?: Json | null
+          entidade?: string
+          entidade_id?: string | null
+          fatura_id?: string | null
+          id?: string
+          user_id?: string
+          usuario_nome?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faturamento_historico_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes_fat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faturamento_historico_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faturamento_historico_fatura_id_fkey"
+            columns: ["fatura_id"]
+            isOneToOne: false
+            referencedRelation: "faturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faturamento_pendencias: {
+        Row: {
+          cliente_id: string | null
+          contrato_id: string | null
+          created_at: string
+          descricao: string
+          fatura_id: string | null
+          id: string
+          resolvida_em: string | null
+          resolvida_por: string | null
+          severidade: string
+          status: string
+          tipo: string
+        }
+        Insert: {
+          cliente_id?: string | null
+          contrato_id?: string | null
+          created_at?: string
+          descricao: string
+          fatura_id?: string | null
+          id?: string
+          resolvida_em?: string | null
+          resolvida_por?: string | null
+          severidade?: string
+          status?: string
+          tipo: string
+        }
+        Update: {
+          cliente_id?: string | null
+          contrato_id?: string | null
+          created_at?: string
+          descricao?: string
+          fatura_id?: string | null
+          id?: string
+          resolvida_em?: string | null
+          resolvida_por?: string | null
+          severidade?: string
+          status?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faturamento_pendencias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes_fat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faturamento_pendencias_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faturamento_pendencias_fatura_id_fkey"
+            columns: ["fatura_id"]
+            isOneToOne: false
+            referencedRelation: "faturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faturas: {
+        Row: {
+          acrescimos: number
+          arquivo_pdf_url: string | null
+          cliente_id: string
+          competencia: string
+          contrato_id: string
+          created_at: string
+          data_emissao: string
+          data_pagamento: string | null
+          data_vencimento: string
+          descontos: number
+          destinatarios: string | null
+          empresa_id: string
+          enviada_em: string | null
+          id: string
+          medicao_id: string | null
+          numero: string
+          observacoes: string | null
+          reajuste_aplicado: number
+          status: string
+          subtotal: number
+          total: number
+          updated_at: string
+          valor_pago: number
+        }
+        Insert: {
+          acrescimos?: number
+          arquivo_pdf_url?: string | null
+          cliente_id: string
+          competencia: string
+          contrato_id: string
+          created_at?: string
+          data_emissao?: string
+          data_pagamento?: string | null
+          data_vencimento: string
+          descontos?: number
+          destinatarios?: string | null
+          empresa_id: string
+          enviada_em?: string | null
+          id?: string
+          medicao_id?: string | null
+          numero: string
+          observacoes?: string | null
+          reajuste_aplicado?: number
+          status?: string
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          valor_pago?: number
+        }
+        Update: {
+          acrescimos?: number
+          arquivo_pdf_url?: string | null
+          cliente_id?: string
+          competencia?: string
+          contrato_id?: string
+          created_at?: string
+          data_emissao?: string
+          data_pagamento?: string | null
+          data_vencimento?: string
+          descontos?: number
+          destinatarios?: string | null
+          empresa_id?: string
+          enviada_em?: string | null
+          id?: string
+          medicao_id?: string | null
+          numero?: string
+          observacoes?: string | null
+          reajuste_aplicado?: number
+          status?: string
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          valor_pago?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faturas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes_fat"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faturas_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faturas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "faturas_medicao_id_fkey"
+            columns: ["medicao_id"]
+            isOneToOne: false
+            referencedRelation: "medicoes"
             referencedColumns: ["id"]
           },
         ]
@@ -867,6 +1357,119 @@ export type Database = {
           },
         ]
       }
+      medicao_itens: {
+        Row: {
+          ajuste: number
+          contrato_equipamento_id: string | null
+          created_at: string
+          descricao: string
+          dias_faturaveis: number | null
+          id: string
+          medicao_id: string
+          observacao: string | null
+          quantidade: number
+          total: number
+          valor_unitario: number
+        }
+        Insert: {
+          ajuste?: number
+          contrato_equipamento_id?: string | null
+          created_at?: string
+          descricao?: string
+          dias_faturaveis?: number | null
+          id?: string
+          medicao_id: string
+          observacao?: string | null
+          quantidade?: number
+          total?: number
+          valor_unitario?: number
+        }
+        Update: {
+          ajuste?: number
+          contrato_equipamento_id?: string | null
+          created_at?: string
+          descricao?: string
+          dias_faturaveis?: number | null
+          id?: string
+          medicao_id?: string
+          observacao?: string | null
+          quantidade?: number
+          total?: number
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medicao_itens_contrato_equipamento_id_fkey"
+            columns: ["contrato_equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "contrato_equipamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medicao_itens_medicao_id_fkey"
+            columns: ["medicao_id"]
+            isOneToOne: false
+            referencedRelation: "medicoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medicoes: {
+        Row: {
+          aprovada_em: string | null
+          aprovada_por: string | null
+          competencia: string
+          contrato_id: string
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          fatura_id: string | null
+          id: string
+          observacoes: string | null
+          status: string
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          aprovada_em?: string | null
+          aprovada_por?: string | null
+          competencia: string
+          contrato_id: string
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          fatura_id?: string | null
+          id?: string
+          observacoes?: string | null
+          status?: string
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          aprovada_em?: string | null
+          aprovada_por?: string | null
+          competencia?: string
+          contrato_id?: string
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          fatura_id?: string | null
+          id?: string
+          observacoes?: string | null
+          status?: string
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medicoes_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prestadores: {
         Row: {
           banco: string | null
@@ -968,6 +1571,56 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      reajustes: {
+        Row: {
+          aplicado_por: string | null
+          contrato_id: string
+          created_at: string
+          data_aplicacao: string
+          id: string
+          indice: string | null
+          observacao: string | null
+          percentual: number
+          status: string
+          valor_anterior: number
+          valor_novo: number
+        }
+        Insert: {
+          aplicado_por?: string | null
+          contrato_id: string
+          created_at?: string
+          data_aplicacao?: string
+          id?: string
+          indice?: string | null
+          observacao?: string | null
+          percentual?: number
+          status?: string
+          valor_anterior?: number
+          valor_novo?: number
+        }
+        Update: {
+          aplicado_por?: string | null
+          contrato_id?: string
+          created_at?: string
+          data_aplicacao?: string
+          id?: string
+          indice?: string | null
+          observacao?: string | null
+          percentual?: number
+          status?: string
+          valor_anterior?: number
+          valor_novo?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reajustes_contrato_id_fkey"
+            columns: ["contrato_id"]
+            isOneToOne: false
+            referencedRelation: "contratos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       registros_km: {
         Row: {
