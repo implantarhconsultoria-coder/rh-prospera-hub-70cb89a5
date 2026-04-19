@@ -74,19 +74,19 @@ const queryClient = new QueryClient();
  * RoleRedirect — after login, sends user to the correct portal based on role.
  */
 const RoleRedirect = () => {
-  const { userRole, roleLoading } = useApp();
+  const { userRoles, roleLoading } = useApp();
 
   if (roleLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
-  if (userRole === 'admin') return <Navigate to="/admin" replace />;
-  if (userRole === 'filial_praia' || userRole === 'filial_goiania') return <Navigate to="/filial" replace />;
-  if (userRole === 'tecnico_campo') return <Navigate to="/campo" replace />;
-  if (userRole === 'operacional') return <Navigate to="/operacional" replace />;
-  if (userRole === 'almoxarifado') return <Navigate to="/filial" replace />;
+  // Priority: admin always wins (admin can also have tecnico_campo for testing the field app)
+  if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
+  if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
+  if (userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
+  if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
+  if (userRoles.includes('tecnico_campo')) return <Navigate to="/campo" replace />;
 
-  // No role — will show AguardandoAcesso via layout
   return <Navigate to="/admin" replace />;
 };
 

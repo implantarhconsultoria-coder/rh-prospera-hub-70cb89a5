@@ -98,7 +98,12 @@ const AppOperacionalPage: React.FC = () => {
           </h1>
           <p className="text-muted-foreground mt-1">Monitoramento em tempo real dos técnicos de campo</p>
         </div>
-        <Button variant="outline" onClick={load}>Atualizar</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => window.open('/campo', '_blank')} className="bg-amber-500/10 border-amber-500/30 text-amber-700 hover:bg-amber-500/20">
+            👁 Visualizar App
+          </Button>
+          <Button variant="outline" onClick={load}>Atualizar</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

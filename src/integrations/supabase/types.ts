@@ -2252,6 +2252,7 @@ export type Database = {
           id: string
           latitude: number | null
           longitude: number | null
+          selfie_url: string | null
           tipo: string
           user_id: string
           veiculo_id: string | null
@@ -2264,6 +2265,7 @@ export type Database = {
           id?: string
           latitude?: number | null
           longitude?: number | null
+          selfie_url?: string | null
           tipo: string
           user_id: string
           veiculo_id?: string | null
@@ -2276,6 +2278,7 @@ export type Database = {
           id?: string
           latitude?: number | null
           longitude?: number | null
+          selfie_url?: string | null
           tipo?: string
           user_id?: string
           veiculo_id?: string | null

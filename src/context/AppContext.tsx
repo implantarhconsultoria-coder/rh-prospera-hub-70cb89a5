@@ -12,6 +12,7 @@ interface AppState {
   session: Session | null;
   loading: boolean;
   userRole: AppRole | null;
+  userRoles: AppRole[];
   roleLoading: boolean;
   logout: () => void;
   companies: Company[];
@@ -62,7 +63,7 @@ let reportCounter = 0;
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const { role: userRole, roleLoading } = useUserRole(session);
+  const { role: userRole, roles: userRoles, roleLoading } = useUserRole(session);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [entries, setEntries] = useState<MonthlyEntry[]>([]);
@@ -239,7 +240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      isAuthenticated: !!session, session, loading, userRole, roleLoading, logout,
+      isAuthenticated: !!session, session, loading, userRole, userRoles, roleLoading, logout,
       companies, employees, updateEmployee,
       entries, setEntries, getOrCreateEntries, updateEntry,
       fechamentos, setFechamentos, getFechamento, updateFechamento,

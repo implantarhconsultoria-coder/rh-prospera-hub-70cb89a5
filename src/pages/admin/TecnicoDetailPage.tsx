@@ -132,12 +132,31 @@ const TecnicoDetailPage: React.FC = () => {
             {pontos.length ? (
               <div className="divide-y divide-border">
                 {pontos.map((p: any) => (
-                  <div key={p.id} className="py-2.5 flex items-center justify-between text-sm">
-                    <div>
-                      <p className="font-medium capitalize">{p.tipo?.replace('_', ' ')}</p>
+                  <div key={p.id} className="py-3 flex items-center gap-3 text-sm">
+                    {p.selfie_url ? (
+                      <a href={p.selfie_url} target="_blank" rel="noreferrer" className="flex-shrink-0">
+                        <img src={p.selfie_url} alt="Selfie" className="w-12 h-12 rounded-lg object-cover border-2 border-primary/40 shadow" />
+                      </a>
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-muted flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium capitalize flex items-center gap-2">
+                        {p.tipo?.replace('_', ' ')}
+                        {p.selfie_url && <Badge variant="outline" className="text-[9px] py-0 h-4">com selfie</Badge>}
+                      </p>
                       <p className="text-xs text-muted-foreground">{format(new Date(p.created_at), 'dd/MM/yyyy HH:mm')}</p>
                     </div>
-                    {p.latitude && <span className="text-xs text-muted-foreground">{p.latitude.toFixed(4)}, {p.longitude.toFixed(4)}</span>}
+                    {p.latitude && (
+                      <a
+                        href={`https://maps.google.com/?q=${p.latitude},${p.longitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-primary hover:underline whitespace-nowrap"
+                      >
+                        {p.latitude.toFixed(4)}, {p.longitude.toFixed(4)}
+                      </a>
+                    )}
                   </div>
                 ))}
               </div>
