@@ -406,7 +406,7 @@ Deno.serve(async (req) => {
         if (up.error) return json({ error: "upload_foto", detalhe: up.error.message }, 500);
         const { data: pub } = sb().storage.from("abastecimento-fotos").getPublicUrl(path);
 
-        const veic = (tec as any).veiculos || null;
+        const veicSel = resolveVeiculo(tec, p);
         const func = (tec as any).funcionarios || null;
         const now = new Date();
         const competencia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -419,9 +419,9 @@ Deno.serve(async (req) => {
             tecnico_id: tec.id,
             user_id: userId,
             mecanico_nome: func?.nome || tec.apelido,
-            veiculo_id: veiculoId,
-            placa: veic?.placa || "",
-            modelo: veic?.modelo || "",
+            veiculo_id: veicSel.id,
+            placa: veicSel.placa || "",
+            modelo: veicSel.modelo || "",
             data: now.toISOString().split("T")[0],
             hora: now.toTimeString().slice(0, 8),
             latitude: p.latitude ?? null,
