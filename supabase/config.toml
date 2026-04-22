@@ -2,3 +2,6 @@ project_id = "onwdhwuqehuakvtkakuk"
 
 [functions.provision-tecnicos]
 verify_jwt = false
+
+[functions.tecnico-app]
+verify_jwt = false

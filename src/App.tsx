@@ -8,6 +8,12 @@ import AppLayout from "@/components/AppLayout";
 import FilialLayout from "@/components/FilialLayout";
 import OperacionalLayout from "@/components/OperacionalLayout";
 import CampoLayout from "@/components/CampoLayout";
+import MecanicoLayout from "@/components/MecanicoLayout";
+import MecanicoHomePage from "@/pages/mecanico/MecanicoHomePage";
+import MecanicoPontoPage from "@/pages/mecanico/MecanicoPontoPage";
+import MecanicoChamadosPage from "@/pages/mecanico/MecanicoChamadosPage";
+import MecanicoEstoquePage from "@/pages/mecanico/MecanicoEstoquePage";
+import MecanicoKmPage from "@/pages/mecanico/MecanicoKmPage";
 import LoginPage from "@/pages/LoginPage";
 import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
@@ -206,6 +212,14 @@ const App = () => (
       <AppProvider>
         <BrowserRouter>
           <Routes>
+            {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
+            <Route path="/m/:token" element={<MecanicoLayout />}>
+              <Route index element={<MecanicoHomePage />} />
+              <Route path="ponto" element={<MecanicoPontoPage />} />
+              <Route path="chamados" element={<MecanicoChamadosPage />} />
+              <Route path="estoque" element={<MecanicoEstoquePage />} />
+              <Route path="km" element={<MecanicoKmPage />} />
+            </Route>
             <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />
             <Route path="/entrega-impressao" element={<EntregaImpressaoPage />} />
             <Route path="/relatorio-vr-impressao" element={<RelatorioVRImpressaoPage />} />

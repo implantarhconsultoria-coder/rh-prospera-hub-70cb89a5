@@ -2361,34 +2361,40 @@ export type Database = {
       }
       tecnicos_campo: {
         Row: {
+          access_token: string | null
           apelido: string
           created_at: string
           funcionario_id: string
           id: string
           observacoes: string | null
           status: string
+          ultima_atividade_em: string | null
           updated_at: string
           user_id: string | null
           veiculo_id: string | null
         }
         Insert: {
+          access_token?: string | null
           apelido?: string
           created_at?: string
           funcionario_id: string
           id?: string
           observacoes?: string | null
           status?: string
+          ultima_atividade_em?: string | null
           updated_at?: string
           user_id?: string | null
           veiculo_id?: string | null
         }
         Update: {
+          access_token?: string | null
           apelido?: string
           created_at?: string
           funcionario_id?: string
           id?: string
           observacoes?: string | null
           status?: string
+          ultima_atividade_em?: string | null
           updated_at?: string
           user_id?: string | null
           veiculo_id?: string | null
@@ -2693,6 +2699,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      gen_tecnico_access_token: { Args: never; Returns: string }
       get_user_empresas: { Args: never; Returns: string[] }
       has_role: {
         Args: {
