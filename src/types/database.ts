@@ -68,6 +68,9 @@ export interface MonthlyEntry {
   insalubridadeAplicada: boolean;
   statusConferencia: 'pendente' | 'conferido' | 'divergente';
   observacoes: string;
+  origem?: 'manual' | 'consolidado';
+  bloqueado?: boolean;
+  fechamentoId?: string | null;
 }
 
 export interface Fechamento {
@@ -146,6 +149,9 @@ export const mapEntry = (row: any): MonthlyEntry => ({
   insalubridadeAplicada: row.insalubridade_aplicada ?? false,
   statusConferencia: row.status_conferencia || 'pendente',
   observacoes: row.observacoes || '',
+  origem: row.origem || 'manual',
+  bloqueado: row.bloqueado ?? false,
+  fechamentoId: row.fechamento_id || null,
 });
 
 // Reverse mapper: App entry -> Supabase row for insert/update
