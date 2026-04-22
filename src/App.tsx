@@ -21,6 +21,9 @@ import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
+import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
+import FilialFechamentoPage from "@/pages/filial/FilialFechamentoPage";
+import FechamentosFiliaisPage from "@/pages/admin/FechamentosFiliaisPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
 import ASOPage from "@/pages/ASOPage";
@@ -132,6 +135,7 @@ const AuthGate = () => {
         <Route path="/admin/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/admin/lancamentos" element={<LancamentosPage />} />
         <Route path="/admin/fechamento" element={<FechamentoPage />} />
+        <Route path="/admin/fechamentos-filiais" element={<FechamentosFiliaisPage />} />
         <Route path="/admin/relatorio" element={<RelatorioPage />} />
         <Route path="/admin/epi" element={<EPIPage />} />
         <Route path="/admin/uniformes" element={<UniformePage />} />
@@ -182,6 +186,8 @@ const AuthGate = () => {
         <Route path="/filial/aso" element={<ASOPage />} />
         <Route path="/filial/protocolo" element={<ProtocoloPage />} />
         <Route path="/filial/alertas" element={<FilialAlertasPage />} />
+        <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
+        <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
       </Route>
 
       {/* ========== CAMPO PORTAL ========== */}
