@@ -431,6 +431,87 @@ export type Database = {
         }
         Relationships: []
       }
+      atestados: {
+        Row: {
+          aplicado_vr: boolean
+          aplicado_vt: boolean
+          arquivo_nome: string
+          arquivo_url: string
+          cid: string
+          company_id: string | null
+          competencia: string
+          created_at: string
+          crm: string
+          data_fim: string | null
+          data_inicio: string | null
+          dias_cobertos: number
+          empresa_nome: string
+          funcionario_id: string | null
+          funcionario_nome: string
+          id: string
+          importado_por_nome: string
+          importado_por_user_id: string
+          medico: string
+          observacao: string
+          ocr_confianca: number
+          ocr_texto_bruto: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          aplicado_vr?: boolean
+          aplicado_vt?: boolean
+          arquivo_nome?: string
+          arquivo_url?: string
+          cid?: string
+          company_id?: string | null
+          competencia?: string
+          created_at?: string
+          crm?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          dias_cobertos?: number
+          empresa_nome?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          importado_por_nome?: string
+          importado_por_user_id: string
+          medico?: string
+          observacao?: string
+          ocr_confianca?: number
+          ocr_texto_bruto?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          aplicado_vr?: boolean
+          aplicado_vt?: boolean
+          arquivo_nome?: string
+          arquivo_url?: string
+          cid?: string
+          company_id?: string | null
+          competencia?: string
+          created_at?: string
+          crm?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          dias_cobertos?: number
+          empresa_nome?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          importado_por_nome?: string
+          importado_por_user_id?: string
+          medico?: string
+          observacao?: string
+          ocr_confianca?: number
+          ocr_texto_bruto?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ativos: {
         Row: {
           ano_fabricacao: string | null
