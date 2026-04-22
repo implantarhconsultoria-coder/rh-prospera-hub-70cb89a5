@@ -30,7 +30,34 @@ async function resolveTecnico(token: string) {
     )
     .eq("access_token", token)
     .maybeSingle();
-  return data;
+  if (!data) return null;
+  // Carrega TODOS os veiculos vinculados a esse colaborador (suporte a multi-veiculo, ex: Rafael)
+  let veiculos_disponiveis: any[] = [];
+  if (data.user_id) {
+    const { data: cv } = await sb()
+      .from("colaborador_veiculo")
+      .select("veiculo_id, veiculos:veiculo_id(id, placa, modelo, identificacao_interna)")
+      .eq("user_id", data.user_id);
+    veiculos_disponiveis = (cv || [])
+      .map((r: any) => r.veiculos)
+      .filter(Boolean);
+  }
+  // fallback: se nao tem na colaborador_veiculo mas tem veiculo_id padrao
+  if (!veiculos_disponiveis.length && (data as any).veiculos) {
+    veiculos_disponiveis = [(data as any).veiculos];
+  }
+  return { ...data, veiculos_disponiveis };
+}
+
+// Resolve veiculo a usar nesta operacao: payload.veiculo_id se valido, senao o padrao.
+function resolveVeiculo(tec: any, payload: any): { id: string | null; placa: string; modelo: string } {
+  const list = (tec.veiculos_disponiveis || []) as any[];
+  const requested = payload?.veiculo_id ? String(payload.veiculo_id) : null;
+  let chosen = null;
+  if (requested) chosen = list.find((v) => v.id === requested) || null;
+  if (!chosen) chosen = list.find((v) => v.id === tec.veiculo_id) || list[0] || null;
+  if (!chosen) return { id: tec.veiculo_id || null, placa: "", modelo: "" };
+  return { id: chosen.id, placa: chosen.placa || "", modelo: chosen.modelo || "" };
 }
 
 // Touch ultima_atividade_em + status online
@@ -57,7 +84,7 @@ Deno.serve(async (req) => {
 
     const userId = tec.user_id as string | null;
     const veiculoId = tec.veiculo_id as string | null;
-
+    const veiculosDisponiveis = (tec as any).veiculos_disponiveis || [];
     switch (action) {
       // ---------- BOOTSTRAP ----------
       case "perfil": {
@@ -109,6 +136,7 @@ Deno.serve(async (req) => {
           ]);
         return json({
           tecnico: tec,
+          veiculos_disponiveis: veiculosDisponiveis,
           today: pontoToday.data || [],
           chamados_abertos: chamadosAbertos.count || 0,
           ultimo_ponto: ultPonto.data || null,
@@ -138,6 +166,7 @@ Deno.serve(async (req) => {
           selfieUrl = pub.publicUrl;
         }
 
+        const veicSel = resolveVeiculo(tec, payload);
         const now = new Date();
         const { data: row, error } = await sb()
           .from("registros_ponto")
@@ -148,7 +177,7 @@ Deno.serve(async (req) => {
             hora: now.toTimeString().slice(0, 8),
             latitude: p.latitude ?? null,
             longitude: p.longitude ?? null,
-            veiculo_id: veiculoId,
+            veiculo_id: veicSel.id,
             selfie_url: selfieUrl,
           })
           .select("*")
@@ -160,8 +189,10 @@ Deno.serve(async (req) => {
 
       // ---------- KM ----------
       case "registrar_km": {
-        if (!userId || !veiculoId) return json({ error: "sem_veiculo" }, 400);
+        if (!userId) return json({ error: "sem_user" }, 400);
         const p = payload || {};
+        const veicSel = resolveVeiculo(tec, p);
+        if (!veicSel.id) return json({ error: "sem_veiculo" }, 400);
         const km = Number(p.km_valor);
         if (!km || km < 0) return json({ error: "km_invalido" }, 400);
 
@@ -183,7 +214,7 @@ Deno.serve(async (req) => {
           .from("registros_km")
           .insert({
             user_id: userId,
-            veiculo_id: veiculoId,
+            veiculo_id: veicSel.id,
             km_valor: km,
             tipo_registro: p.foto_base64 ? "foto" : "manual",
             foto_url: fotoUrl,
@@ -213,13 +244,14 @@ Deno.serve(async (req) => {
       case "atualizar_chamado": {
         if (!userId) return json({ error: "sem_user" }, 400);
         const p = payload || {};
+        const veicSel = resolveVeiculo(tec, p);
         const id = String(p.id || "");
         const novo = String(p.status || "");
         const updates: Record<string, unknown> = {
           status: novo,
           latitude: p.latitude ?? null,
           longitude: p.longitude ?? null,
-          veiculo_id: veiculoId,
+          veiculo_id: veicSel.id,
         };
         if (novo === "aceito") updates.aceito_em = new Date().toISOString();
         if (novo === "concluido") updates.concluido_em = new Date().toISOString();
@@ -242,20 +274,22 @@ Deno.serve(async (req) => {
 
       // ---------- ESTOQUE DO CARRO ----------
       case "listar_estoque": {
-        if (!veiculoId) return json({ itens: [] });
+        const veicSel = resolveVeiculo(tec, payload);
+        if (!veicSel.id) return json({ itens: [] });
         const { data } = await sb()
           .from("estoque_veiculo")
           .select("*")
-          .eq("veiculo_id", veiculoId)
+          .eq("veiculo_id", veicSel.id)
           .order("nome_item");
         return json({ itens: data || [] });
       }
 
       case "estoque_add": {
-        if (!veiculoId) return json({ error: "sem_veiculo" }, 400);
         const p = payload || {};
+        const veicSel = resolveVeiculo(tec, p);
+        if (!veicSel.id) return json({ error: "sem_veiculo" }, 400);
         const { error } = await sb().from("estoque_veiculo").insert({
-          veiculo_id: veiculoId,
+          veiculo_id: veicSel.id,
           nome_item: String(p.nome_item || "").trim(),
           quantidade: Number(p.quantidade) || 0,
         });
@@ -265,13 +299,14 @@ Deno.serve(async (req) => {
       }
 
       case "estoque_qtd": {
-        if (!veiculoId) return json({ error: "sem_veiculo" }, 400);
         const p = payload || {};
+        const veicSel = resolveVeiculo(tec, p);
+        if (!veicSel.id) return json({ error: "sem_veiculo" }, 400);
         const { data: cur } = await sb()
           .from("estoque_veiculo")
           .select("quantidade")
           .eq("id", String(p.item_id))
-          .eq("veiculo_id", veiculoId)
+          .eq("veiculo_id", veicSel.id)
           .maybeSingle();
         if (!cur) return json({ error: "item_nao_encontrado" }, 404);
         const novo = Math.max(0, (cur.quantidade as number) + Number(p.delta || 0));
@@ -322,10 +357,10 @@ Deno.serve(async (req) => {
         if (vale.validade && new Date(vale.validade) < new Date(new Date().toISOString().split("T")[0])) {
           return json({ error: "vale_vencido" }, 400);
         }
-        if (vale.veiculo_id && veiculoId && vale.veiculo_id !== veiculoId) {
+        const veicSel = resolveVeiculo(tec, payload);
+        if (vale.veiculo_id && veicSel.id && vale.veiculo_id !== veicSel.id) {
           return json({ error: "vale_outro_veiculo" }, 400);
         }
-        const veic = (tec as any).veiculos || null;
         const func = (tec as any).funcionarios || null;
         return json({
           ok: true,
@@ -336,7 +371,7 @@ Deno.serve(async (req) => {
             nome: func?.nome || tec.apelido,
             cargo: func?.cargo || "",
           },
-          veiculo: veic ? { id: veic.id, placa: veic.placa, modelo: veic.modelo } : null,
+          veiculo: veicSel.id ? { id: veicSel.id, placa: veicSel.placa, modelo: veicSel.modelo } : null,
           posto: {
             nome: vale.posto_nome || "",
             cnpj: vale.posto_cnpj || "",
@@ -371,7 +406,7 @@ Deno.serve(async (req) => {
         if (up.error) return json({ error: "upload_foto", detalhe: up.error.message }, 500);
         const { data: pub } = sb().storage.from("abastecimento-fotos").getPublicUrl(path);
 
-        const veic = (tec as any).veiculos || null;
+        const veicSel = resolveVeiculo(tec, p);
         const func = (tec as any).funcionarios || null;
         const now = new Date();
         const competencia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -384,9 +419,9 @@ Deno.serve(async (req) => {
             tecnico_id: tec.id,
             user_id: userId,
             mecanico_nome: func?.nome || tec.apelido,
-            veiculo_id: veiculoId,
-            placa: veic?.placa || "",
-            modelo: veic?.modelo || "",
+            veiculo_id: veicSel.id,
+            placa: veicSel.placa || "",
+            modelo: veicSel.modelo || "",
             data: now.toISOString().split("T")[0],
             hora: now.toTimeString().slice(0, 8),
             latitude: p.latitude ?? null,

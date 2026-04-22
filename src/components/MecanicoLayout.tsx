@@ -15,11 +15,11 @@ const tabs = [
 ];
 
 const HeaderInner: React.FC = () => {
-  const { tecnico } = useTecnicoApp();
-  const v = tecnico.veiculos;
+  const { tecnico, veiculosDisponiveis, veiculoSelecionado, setVeiculoSelecionado } = useTecnicoApp();
+  const multi = veiculosDisponiveis.length > 1;
   return (
     <header className="sticky top-0 z-30 bg-slate-900/80 backdrop-blur-lg border-b border-white/5 px-4 py-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/30 flex-shrink-0">
             <span className="text-white font-bold text-xs">
@@ -33,12 +33,25 @@ const HeaderInner: React.FC = () => {
             </h1>
           </div>
         </div>
-        {v?.placa && (
+        {multi ? (
+          <select
+            value={veiculoSelecionado?.id || ''}
+            onChange={(e) => setVeiculoSelecionado(e.target.value)}
+            className="bg-white/10 border border-white/15 rounded-full px-3 py-1.5 text-[11px] text-white font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50"
+            aria-label="Trocar veículo"
+          >
+            {veiculosDisponiveis.map((v) => (
+              <option key={v.id} value={v.id} className="bg-slate-900">
+                {v.placa} · {v.modelo}
+              </option>
+            ))}
+          </select>
+        ) : veiculoSelecionado?.placa ? (
           <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full px-3 py-1.5">
             <Car className="w-3.5 h-3.5 text-primary" />
-            <span className="text-[11px] text-white font-semibold">{v.placa}</span>
+            <span className="text-[11px] text-white font-semibold">{veiculoSelecionado.placa}</span>
           </div>
-        )}
+        ) : null}
       </div>
     </header>
   );

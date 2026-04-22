@@ -1,8 +1,15 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
 const FN_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/tecnico-app`;
+
+interface VeiculoLite {
+  id: string;
+  placa: string;
+  modelo: string;
+  identificacao_interna?: string;
+}
 
 interface TecnicoLite {
   id: string;
@@ -11,12 +18,15 @@ interface TecnicoLite {
   user_id: string | null;
   veiculo_id: string | null;
   funcionarios?: { nome: string; cargo: string; celular: string } | null;
-  veiculos?: { placa: string; modelo: string; identificacao_interna: string } | null;
+  veiculos?: VeiculoLite | null;
 }
 
 interface TecnicoCtxValue {
   token: string;
   tecnico: TecnicoLite | null;
+  veiculosDisponiveis: VeiculoLite[];
+  veiculoSelecionado: VeiculoLite | null;
+  setVeiculoSelecionado: (id: string) => void;
   refresh: () => Promise<void>;
   call: <T = any>(action: string, payload?: any) => Promise<T>;
 }
@@ -29,13 +39,17 @@ export const useTecnicoApp = () => {
   return c;
 };
 
+const storageKey = (token: string) => `tecnico_veic_sel_${token}`;
+
 export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token = '' } = useParams<{ token: string }>();
   const [tecnico, setTecnico] = useState<TecnicoLite | null>(null);
+  const [veiculosDisponiveis, setVeiculosDisponiveis] = useState<VeiculoLite[]>([]);
+  const [veiculoSelId, setVeiculoSelId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const call = useCallback(
+  const baseCall = useCallback(
     async <T,>(action: string, payload?: any): Promise<T> => {
       const res = await fetch(FN_URL, {
         method: 'POST',
@@ -49,21 +63,51 @@ export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [token],
   );
 
+  // Wrapper that automatically injects veiculo_id selecionado em todo payload
+  const call = useCallback(
+    async <T,>(action: string, payload?: any): Promise<T> => {
+      const enriched = { ...(payload || {}) } as any;
+      if (veiculoSelId && !enriched.veiculo_id) enriched.veiculo_id = veiculoSelId;
+      return baseCall<T>(action, enriched);
+    },
+    [baseCall, veiculoSelId],
+  );
+
   const refresh = useCallback(async () => {
     try {
-      const data = await call<{ tecnico: TecnicoLite }>('perfil');
+      const data = await baseCall<{ tecnico: TecnicoLite; veiculos_disponiveis: VeiculoLite[] }>('perfil');
       setTecnico(data.tecnico);
+      const list = data.veiculos_disponiveis || [];
+      setVeiculosDisponiveis(list);
+      // restaurar seleção previa OU usar veiculo_id padrao
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(storageKey(token)) : null;
+      const valid = stored && list.find((v) => v.id === stored) ? stored : null;
+      const def = valid || data.tecnico?.veiculo_id || list[0]?.id || null;
+      setVeiculoSelId(def);
       setError(null);
     } catch (e: any) {
       setError(e.message || 'invalid_token');
     } finally {
       setLoading(false);
     }
-  }, [call]);
+  }, [baseCall, token]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const setVeiculoSelecionado = useCallback(
+    (id: string) => {
+      setVeiculoSelId(id);
+      if (typeof window !== 'undefined') localStorage.setItem(storageKey(token), id);
+    },
+    [token],
+  );
+
+  const veiculoSelecionado = useMemo(
+    () => veiculosDisponiveis.find((v) => v.id === veiculoSelId) || tecnico?.veiculos || null,
+    [veiculosDisponiveis, veiculoSelId, tecnico],
+  );
 
   if (loading) {
     return (
@@ -87,5 +131,19 @@ export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     );
   }
 
-  return <Ctx.Provider value={{ token, tecnico, refresh, call }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider
+      value={{
+        token,
+        tecnico,
+        veiculosDisponiveis,
+        veiculoSelecionado,
+        setVeiculoSelecionado,
+        refresh,
+        call,
+      }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
 };
