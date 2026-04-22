@@ -1,6 +1,7 @@
 // Edge function: ocr-atestado
-// Recebe a URL pública de um arquivo (PDF/imagem) e usa o Lovable AI Gateway
-// (google/gemini-2.5-flash) para extrair os dados estruturados do atestado.
+// Aceita { fileUrl } (imagem) OU { dataUrl } (data URL base64 de PNG/JPEG/WebP/GIF).
+// O Lovable AI Gateway (Gemini) só aceita imagens — PDFs devem ser rasterizados
+// no cliente (pdf.js) e enviados como dataUrl.
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,19 +9,6 @@ const corsHeaders = {
     'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
-interface AtestadoExtraido {
-  funcionario_nome: string;
-  cpf: string;
-  data_inicio: string; // YYYY-MM-DD
-  data_fim: string;    // YYYY-MM-DD
-  dias_cobertos: number;
-  cid: string;
-  medico: string;
-  crm: string;
-  texto_bruto: string;
-  confianca: number; // 0..1
-}
 
 const SYSTEM_PROMPT = `Você é um analisador de atestados médicos brasileiros (CLT).
 Receberá uma imagem (ou primeira página de PDF) de um atestado e deve devolver SOMENTE um JSON válido com os campos:
@@ -41,6 +29,27 @@ Regras:
 - Datas SEMPRE em ISO (YYYY-MM-DD). Se só houver "afastar por X dias" sem data fim, calcule data_fim = data_inicio + X-1 dias.
 - Não inclua texto fora do JSON. Sem markdown, sem comentários, sem \`\`\`json.`;
 
+const IMG_MIME = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+
+const guessMimeFromUrl = (url: string): string | null => {
+  const lower = url.toLowerCase().split('?')[0];
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return null;
+};
+
+const toBase64 = (bytes: Uint8Array): string => {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -49,9 +58,11 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({}));
     const fileUrl: string | undefined = body.fileUrl;
-    if (!fileUrl) {
+    let dataUrl: string | undefined = body.dataUrl;
+
+    if (!dataUrl && !fileUrl) {
       return new Response(
-        JSON.stringify({ error: 'fileUrl obrigatório' }),
+        JSON.stringify({ error: 'Envie dataUrl (preferencial) ou fileUrl' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -62,6 +73,35 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: 'LOVABLE_API_KEY ausente' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
+    }
+
+    // Se veio só fileUrl, baixar e converter pra dataUrl (somente imagens).
+    if (!dataUrl && fileUrl) {
+      const mime = guessMimeFromUrl(fileUrl);
+      if (mime === 'application/pdf') {
+        return new Response(
+          JSON.stringify({
+            error: 'PDF deve ser rasterizado no cliente. Envie dataUrl da primeira página.',
+            code: 'PDF_NEEDS_RASTERIZATION',
+          }),
+          { status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      if (!mime || !IMG_MIME.includes(mime)) {
+        return new Response(
+          JSON.stringify({ error: `Formato não suportado: ${mime || 'desconhecido'}. Use PNG/JPEG/WebP/GIF.` }),
+          { status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const r = await fetch(fileUrl);
+      if (!r.ok) {
+        return new Response(
+          JSON.stringify({ error: `Falha ao baixar arquivo: ${r.status}` }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      dataUrl = `data:${mime};base64,${toBase64(bytes)}`;
     }
 
     const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -78,7 +118,7 @@ Deno.serve(async (req: Request) => {
             role: 'user',
             content: [
               { type: 'text', text: 'Extraia os dados deste atestado. Devolva APENAS JSON.' },
-              { type: 'image_url', image_url: { url: fileUrl } },
+              { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
         ],
@@ -98,7 +138,7 @@ Deno.serve(async (req: Request) => {
     const raw: string = aiJson?.choices?.[0]?.message?.content ?? '';
     const cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim();
 
-    let parsed: AtestadoExtraido;
+    let parsed;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
