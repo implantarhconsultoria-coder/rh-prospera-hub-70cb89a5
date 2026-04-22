@@ -136,6 +136,7 @@ Deno.serve(async (req) => {
           ]);
         return json({
           tecnico: tec,
+          veiculos_disponiveis: veiculosDisponiveis,
           today: pontoToday.data || [],
           chamados_abertos: chamadosAbertos.count || 0,
           ultimo_ponto: ultPonto.data || null,
