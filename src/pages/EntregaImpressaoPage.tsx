@@ -20,7 +20,7 @@ interface EntregaLocationState {
 }
 
 const EntregaImpressaoPage: React.FC = () => {
-  const { companies, employees, deliveries } = useApp();
+  const { companies, employees, deliveries, session } = useApp();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const deliveryId = searchParams.get('id') || '';
