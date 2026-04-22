@@ -35,7 +35,7 @@ const greeting = (nome?: string) => {
 const MecanicoHomePage: React.FC = () => {
   const navigate = useNavigate();
   const { token = '' } = useParams<{ token: string }>();
-  const { tecnico, call } = useTecnicoApp();
+  const { tecnico, call, veiculoSelecionado } = useTecnicoApp();
   const [ultimoPonto, setUltimoPonto] = useState<{ tipo: string; hora: string } | null>(null);
   const [chamadosAbertos, setChamadosAbertos] = useState(0);
 
@@ -52,7 +52,6 @@ const MecanicoHomePage: React.FC = () => {
   }, [call]);
 
   const go = (sub: string) => navigate(`/m/${token}/${sub}`);
-  const { veiculoSelecionado } = useTecnicoApp();
   const veic = veiculoSelecionado;
 
   return (
