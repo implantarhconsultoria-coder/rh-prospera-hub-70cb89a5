@@ -154,7 +154,7 @@ const CombustivelPage: React.FC = () => {
     <div class="sig-line"><hr/><small>Assinatura do Colaborador</small></div>
     <div class="sig-line"><hr/><small>Assinatura do Responsável</small></div>
     </div>
-    <div class="footer">Topac RH Multiempresa PRO — Documento gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+    <!-- rodapé limpo -->
     </body></html>`);
     printWin.document.close();
     printWin.print();

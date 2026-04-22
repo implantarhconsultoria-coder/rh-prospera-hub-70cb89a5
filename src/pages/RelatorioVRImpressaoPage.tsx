@@ -136,7 +136,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
           </table>
 
           <div className="mt-6 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
-            ImplantaRH ConsultoriaPRO — Topac RH Multiempresa PRO — Relatório gerado em {emissaoDate}
+            {' '}
           </div>
         </div>
       </div>

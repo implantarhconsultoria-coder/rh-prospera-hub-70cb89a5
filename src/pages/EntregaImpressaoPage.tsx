@@ -232,9 +232,6 @@ const EntregaImpressaoPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-10 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
-          ImplantaRH ConsultoriaPRO — Topac RH Multiempresa PRO — Documento gerado em {formatDate(new Date().toISOString())}
-        </div>
       </div>
     </div>
   );

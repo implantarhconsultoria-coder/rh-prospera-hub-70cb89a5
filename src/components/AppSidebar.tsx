@@ -27,6 +27,7 @@ const menuItems: MenuItem[] = [
   { label: 'Lançamentos Mensais', icon: CalendarDays, path: '/admin/lancamentos' },
   { label: 'Fechamentos Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
+  { label: 'Fechamento por Ponto', icon: Clock, path: '/admin/fechamento-ponto' },
   { label: 'Relatório', icon: FileText, path: '/admin/relatorio' },
 ];
 
@@ -77,7 +78,6 @@ const financeiroItems: MenuItem[] = [
 ];
 
 const upcomingItems: MenuItem[] = [
-  { label: 'Ponto Digital', icon: Clock, path: '#', disabled: true },
   { label: 'Folha de Pagamento', icon: Wallet, path: '#', disabled: true },
   { label: 'Rescisões', icon: FileX, path: '#', disabled: true },
 ];

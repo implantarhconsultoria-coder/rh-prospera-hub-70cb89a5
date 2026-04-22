@@ -61,7 +61,7 @@ const CompressoresPage: React.FC = () => {
     <hr style="border:0;border-top:1px dashed #ccc;margin:30px 0"/>
     <p style="text-align:center;font-size:10px;color:#999;margin-bottom:10px">2ª VIA — CONTRATANTE</p>
     ${buildVia()}
-    <div class="footer">Topac RH Multiempresa PRO — Documento gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+    <!-- rodapé limpo -->
     </body></html>`);
     printWin.document.close();
     printWin.print();

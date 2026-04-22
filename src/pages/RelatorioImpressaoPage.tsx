@@ -154,7 +154,7 @@ const RelatorioImpressaoPage: React.FC = () => {
 
         {/* Footer */}
         <div className="mt-6 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
-          ImplantaRH ConsultoriaPRO — Topac RH Multiempresa PRO — Relatório gerado em {new Date().toLocaleDateString('pt-BR')}
+          {' '}
         </div>
       </div>
     </div>

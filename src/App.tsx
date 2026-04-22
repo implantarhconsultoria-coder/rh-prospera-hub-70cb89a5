@@ -35,6 +35,7 @@ import FuncionariosPage from "@/pages/FuncionariosPage";
 import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
 import LancamentosPage from "@/pages/LancamentosPage";
 import FechamentoPage from "@/pages/FechamentoPage";
+import FechamentoPontoPage from "@/pages/admin/FechamentoPontoPage";
 import CombustivelPage from "@/pages/CombustivelPage";
 import CombustivelAdminPage from "@/pages/admin/CombustivelAdminPage";
 import ProtocoloPage from "@/pages/ProtocoloPage";
@@ -139,6 +140,7 @@ const AuthGate = () => {
         <Route path="/admin/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/admin/lancamentos" element={<LancamentosPage />} />
         <Route path="/admin/fechamento" element={<FechamentoPage />} />
+        <Route path="/admin/fechamento-ponto" element={<FechamentoPontoPage />} />
         <Route path="/admin/fechamentos-filiais" element={<FechamentosFiliaisPage />} />
         <Route path="/admin/relatorio" element={<RelatorioPage />} />
         <Route path="/admin/epi" element={<EPIPage />} />

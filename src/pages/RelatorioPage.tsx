@@ -204,7 +204,7 @@ const RelatorioPage: React.FC = () => {
           </div>
 
           <div className="text-center text-xs text-muted-foreground pt-4 border-t">
-            ImplantaRH ConsultoriaPRO — Topac RH Multiempresa PRO — Relatório gerado em {formatDate(new Date().toISOString())}
+            {' '}
           </div>
         </div>
       )}
