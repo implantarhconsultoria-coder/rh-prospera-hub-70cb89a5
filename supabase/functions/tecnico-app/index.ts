@@ -166,6 +166,7 @@ Deno.serve(async (req) => {
           selfieUrl = pub.publicUrl;
         }
 
+        const veicSel = resolveVeiculo(tec, payload);
         const now = new Date();
         const { data: row, error } = await sb()
           .from("registros_ponto")
@@ -176,7 +177,7 @@ Deno.serve(async (req) => {
             hora: now.toTimeString().slice(0, 8),
             latitude: p.latitude ?? null,
             longitude: p.longitude ?? null,
-            veiculo_id: veiculoId,
+            veiculo_id: veicSel.id,
             selfie_url: selfieUrl,
           })
           .select("*")
