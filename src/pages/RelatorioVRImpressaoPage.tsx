@@ -135,9 +135,6 @@ const RelatorioVRImpressaoPage: React.FC = () => {
             </tfoot>
           </table>
 
-          <div className="mt-6 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
-            {' '}
-          </div>
         </div>
       </div>
     </>
