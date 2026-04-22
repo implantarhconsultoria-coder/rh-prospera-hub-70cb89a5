@@ -801,6 +801,75 @@ export type Database = {
           },
         ]
       }
+      combustivel_galoes: {
+        Row: {
+          cargo: string
+          competencia: string
+          created_at: string
+          data: string
+          foto_url: string
+          hora: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          modelo: string
+          motorista_nome: string
+          observacao: string
+          origem: string
+          placa: string
+          quantidade_litros: number
+          tecnico_id: string | null
+          tipo_combustivel: string
+          updated_at: string
+          user_id: string | null
+          veiculo_id: string | null
+        }
+        Insert: {
+          cargo?: string
+          competencia?: string
+          created_at?: string
+          data?: string
+          foto_url?: string
+          hora?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          modelo?: string
+          motorista_nome?: string
+          observacao?: string
+          origem?: string
+          placa?: string
+          quantidade_litros?: number
+          tecnico_id?: string | null
+          tipo_combustivel?: string
+          updated_at?: string
+          user_id?: string | null
+          veiculo_id?: string | null
+        }
+        Update: {
+          cargo?: string
+          competencia?: string
+          created_at?: string
+          data?: string
+          foto_url?: string
+          hora?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          modelo?: string
+          motorista_nome?: string
+          observacao?: string
+          origem?: string
+          placa?: string
+          quantidade_litros?: number
+          tecnico_id?: string | null
+          tipo_combustivel?: string
+          updated_at?: string
+          user_id?: string | null
+          veiculo_id?: string | null
+        }
+        Relationships: []
+      }
       conciliacoes: {
         Row: {
           conta_bancaria_id: string

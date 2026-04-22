@@ -15,6 +15,7 @@ import MecanicoChamadosPage from "@/pages/mecanico/MecanicoChamadosPage";
 import MecanicoEstoquePage from "@/pages/mecanico/MecanicoEstoquePage";
 import MecanicoKmPage from "@/pages/mecanico/MecanicoKmPage";
 import MecanicoAbastecimentoPage from "@/pages/mecanico/MecanicoAbastecimentoPage";
+import MecanicoGaloesPage from "@/pages/mecanico/MecanicoGaloesPage";
 import MecanicoHistoricoPage from "@/pages/mecanico/MecanicoHistoricoPage";
 import LoginPage from "@/pages/LoginPage";
 import CadastroPage from "@/pages/CadastroPage";
@@ -148,6 +149,7 @@ const AuthGate = () => {
         <Route path="/admin/aso" element={<ASOPage />} />
         <Route path="/admin/prestadores" element={<PrestadoresPage />} />
         <Route path="/admin/combustivel" element={<CombustivelAdminPage />} />
+        <Route path="/admin/galoes-combustivel" element={<CombustivelPage />} />
         <Route path="/admin/protocolo" element={<ProtocoloPage />} />
         <Route path="/admin/documentos-ativos" element={<DocumentosVeiculosPage />} />
         <Route path="/admin/aviso-ferias" element={<AvisoFeriasPage />} />
@@ -229,6 +231,7 @@ const App = () => (
               <Route path="estoque" element={<MecanicoEstoquePage />} />
               <Route path="km" element={<MecanicoKmPage />} />
               <Route path="abastecimento" element={<MecanicoAbastecimentoPage />} />
+              <Route path="galoes" element={<MecanicoGaloesPage />} />
               <Route path="historico" element={<MecanicoHistoricoPage />} />
             </Route>
             <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />

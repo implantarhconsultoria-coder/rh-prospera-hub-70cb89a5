@@ -494,6 +494,71 @@ Deno.serve(async (req) => {
         return json({ abastecimentos: data || [] });
       }
 
+      // ---------- COMBUSTIVEL DOS GALOES (separado do QR/Posto) ----------
+      case "registrar_galao": {
+        const p = payload || {};
+        const litros = Number(p.quantidade_litros);
+        if (!litros || litros <= 0) return json({ error: "quantidade_invalida" }, 400);
+        const tipo = String(p.tipo_combustivel || "gasolina").toLowerCase();
+        if (!["gasolina", "diesel", "etanol", "diesel_s10"].includes(tipo)) {
+          return json({ error: "tipo_invalido" }, 400);
+        }
+        const veicSel = resolveVeiculo(tec, p);
+
+        let fotoUrl = "";
+        if (p.foto_base64) {
+          const base64 = String(p.foto_base64).replace(/^data:image\/\w+;base64,/, "");
+          const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+          const path = `${tec.id}/${Date.now()}-galao.jpg`;
+          const { error: upErr } = await sb()
+            .storage.from("galao-fotos")
+            .upload(path, bytes, { contentType: "image/jpeg", upsert: false });
+          if (!upErr) {
+            const { data: pub } = sb().storage.from("galao-fotos").getPublicUrl(path);
+            fotoUrl = pub.publicUrl;
+          }
+        }
+
+        const now = new Date();
+        const fn: any = (tec as any).funcionarios || {};
+        const { data: row, error } = await sb()
+          .from("combustivel_galoes")
+          .insert({
+            user_id: userId,
+            tecnico_id: tec.id,
+            motorista_nome: fn.nome || tec.apelido || "",
+            cargo: fn.cargo || "",
+            veiculo_id: veicSel.id,
+            placa: veicSel.placa,
+            modelo: veicSel.modelo,
+            tipo_combustivel: tipo,
+            quantidade_litros: litros,
+            observacao: String(p.observacao || ""),
+            foto_url: fotoUrl,
+            latitude: p.latitude ?? null,
+            longitude: p.longitude ?? null,
+            data: now.toISOString().split("T")[0],
+            hora: now.toTimeString().slice(0, 8),
+            competencia: now.toISOString().slice(0, 7),
+            origem: "app",
+          })
+          .select("*")
+          .single();
+        if (error) return json({ error: "insert_galao", detalhe: error.message }, 500);
+        await touch(tec.id);
+        return json({ ok: true, registro: row });
+      }
+
+      case "listar_galoes": {
+        const { data } = await sb()
+          .from("combustivel_galoes")
+          .select("*")
+          .eq("tecnico_id", tec.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        return json({ galoes: data || [] });
+      }
+
       // ---------- HISTÓRICO UNIFICADO ----------
       case "historico": {
         if (!userId) return json({ historico: [] });
@@ -537,6 +602,15 @@ Deno.serve(async (req) => {
             .order("created_at", { ascending: false })
             .limit(limit);
           (data || []).forEach((r) => out.push({ ...r, _kind: "abastecimento" }));
+        }
+        if (tipo === "todos" || tipo === "galao") {
+          const { data } = await sb()
+            .from("combustivel_galoes")
+            .select("id, tipo_combustivel, quantidade_litros, placa, foto_url, data, hora, observacao, created_at")
+            .eq("tecnico_id", tec.id)
+            .order("created_at", { ascending: false })
+            .limit(limit);
+          (data || []).forEach((r) => out.push({ ...r, _kind: "galao" }));
         }
         out.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         return json({ historico: out.slice(0, 60) });
