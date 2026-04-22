@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Droplet, Search, Printer, History as HistoryIcon, Save } from 'lucide-react';
+import { Droplet, Search, Printer, History as HistoryIcon, Save, Plus, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { registrarDocumento } from '@/lib/documentoHistorico';
 
 interface GaloesRow {
   id: string;
@@ -28,17 +29,23 @@ const TIPO_LABEL: Record<string, string> = {
   etanol: 'Etanol',
 };
 
+// Volume padrão de cada galão (litros)
+const LITROS_POR_GALAO_DEFAULT = 20;
+
 const CombustivelPage: React.FC = () => {
-  const { companies, employees } = useApp();
+  const { companies, employees, session } = useApp();
   const [search, setSearch] = useState('');
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [tipoCombustivel, setTipoCombustivel] = useState('gasolina');
-  const [quantidade, setQuantidade] = useState('15');
+  const [qtdGaloes, setQtdGaloes] = useState(1);
+  const [litrosPorGalao, setLitrosPorGalao] = useState(LITROS_POR_GALAO_DEFAULT);
   const [observacoes, setObservacoes] = useState('');
   const [dataRetirada, setDataRetirada] = useState(new Date().toISOString().slice(0, 10));
   const [historico, setHistorico] = useState<GaloesRow[]>([]);
   const [filtroComp, setFiltroComp] = useState(new Date().toISOString().slice(0, 7));
   const [salvando, setSalvando] = useState(false);
+
+  const totalLitros = qtdGaloes * litrosPorGalao;
 
   const topacMatriz = companies.find(c => c.id === 'topac-matriz');
   const filteredEmps = employees.filter(e =>
@@ -57,37 +64,55 @@ const CombustivelPage: React.FC = () => {
       .like('competencia', `${filtroComp}%`)
       .order('created_at', { ascending: false })
       .limit(200);
-    setHistorico((data as any) || []);
+    setHistorico((data as GaloesRow[]) || []);
   };
 
   useEffect(() => { carregar(); }, [filtroComp]);
 
   const salvar = async () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
-    const litros = Number(String(quantidade).replace(',', '.'));
-    if (!litros || litros <= 0) { toast.error('Quantidade inválida'); return; }
+    if (qtdGaloes <= 0) { toast.error('Informe pelo menos 1 galão'); return; }
     setSalvando(true);
     try {
-      const dt = new Date(dataRetirada + 'T12:00:00');
+      const obsCompleta = `${qtdGaloes} galão(ões) × ${litrosPorGalao}L = ${totalLitros}L${observacoes ? ` — ${observacoes}` : ''}`;
       const { error } = await supabase.from('combustivel_galoes').insert({
         motorista_nome: emp.name,
         cargo: emp.cargo,
         placa: '',
         modelo: '',
         tipo_combustivel: tipoCombustivel,
-        quantidade_litros: litros,
-        observacao: observacoes,
+        quantidade_litros: totalLitros,
+        observacao: obsCompleta,
         data: dataRetirada,
         hora: new Date().toTimeString().slice(0, 8),
         competencia: dataRetirada.slice(0, 7),
         origem: 'central',
       });
       if (error) throw error;
-      toast.success('Retirada do galão registrada');
+
+      // Registra no histórico de documentos do funcionário (igual aos outros PDFs)
+      if (company) {
+        await registrarDocumento({
+          funcionarioId: emp.id,
+          funcionarioNome: emp.name,
+          companyId: company.id,
+          empresaNome: company.name,
+          tipoDocumento: 'Retirada de Combustível (Galão)',
+          competencia: dataRetirada.slice(0, 7),
+          descricao: `${qtdGaloes} galão(ões) de ${TIPO_LABEL[tipoCombustivel] || tipoCombustivel} (${litrosPorGalao}L cada) — Total: ${totalLitros}L em ${new Date(dataRetirada).toLocaleDateString('pt-BR')}${observacoes ? `. Obs: ${observacoes}` : ''}`,
+          geradoPorUserId: session?.user?.id || '00000000-0000-0000-0000-000000000000',
+          geradoPorNome: session?.user?.user_metadata?.nome_completo || session?.user?.email || 'Sistema',
+          unidade: company.city,
+        }).catch((e) => console.error('Falha ao registrar documento:', e));
+      }
+
+      toast.success(`Retirada registrada: ${qtdGaloes} galão(ões) = ${totalLitros}L`);
       setObservacoes('');
+      setQtdGaloes(1);
       carregar();
-    } catch (e: any) {
-      toast.error(e.message || 'Erro ao salvar');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erro ao salvar';
+      toast.error(msg);
     } finally {
       setSalvando(false);
     }
@@ -123,8 +148,8 @@ const CombustivelPage: React.FC = () => {
     <div class="field"><span>Matrícula:</span> ${emp.registro || '—'}</div>
     <div class="field"><span>Data:</span> ${new Date(dataRetirada).toLocaleDateString('pt-BR')}</div>
     </div></div>
-    <table><thead><tr><th>Tipo de Combustível</th><th>Quantidade</th><th>Observações</th></tr></thead>
-    <tbody><tr><td>${TIPO_LABEL[tipoCombustivel] || tipoCombustivel}</td><td>${quantidade} litros</td><td>${observacoes || '—'}</td></tr></tbody></table>
+    <table><thead><tr><th>Tipo de Combustível</th><th>Galões</th><th>Litros / Galão</th><th>Total</th><th>Observações</th></tr></thead>
+    <tbody><tr><td>${TIPO_LABEL[tipoCombustivel] || tipoCombustivel}</td><td><strong>${qtdGaloes}</strong></td><td>${litrosPorGalao} L</td><td><strong>${totalLitros} L</strong></td><td>${observacoes || '—'}</td></tr></tbody></table>
     <div class="signatures">
     <div class="sig-line"><hr/><small>Assinatura do Colaborador</small></div>
     <div class="sig-line"><hr/><small>Assinatura do Responsável</small></div>
@@ -144,7 +169,7 @@ const CombustivelPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display">Combustível dos Galões</h1>
-            <p className="text-primary-foreground/70 text-sm">Controle interno · separado do Abastecimento (Posto/QR)</p>
+            <p className="text-primary-foreground/70 text-sm">Controle interno por galão · separado do Abastecimento (Posto/QR)</p>
           </div>
         </div>
       </div>
@@ -191,7 +216,7 @@ const CombustivelPage: React.FC = () => {
 
         {emp && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Tipo de Combustível</label>
                 <select value={tipoCombustivel} onChange={e => setTipoCombustivel(e.target.value)}
@@ -203,17 +228,40 @@ const CombustivelPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Quantidade (litros)</label>
-                <Input value={quantidade} onChange={e => setQuantidade(e.target.value)} placeholder="0,00" />
+                <label className="text-xs text-muted-foreground block mb-1">Quantidade de Galões</label>
+                <div className="flex items-center gap-2">
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0"
+                    onClick={() => setQtdGaloes(q => Math.max(1, q - 1))}>
+                    <Minus className="w-4 h-4" />
+                  </Button>
+                  <Input type="number" min={1} max={50} value={qtdGaloes}
+                    onChange={e => setQtdGaloes(Math.max(1, Number(e.target.value) || 1))}
+                    className="text-center text-lg font-bold h-9" />
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0"
+                    onClick={() => setQtdGaloes(q => Math.min(50, q + 1))}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Observações</label>
-                <Input value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Opcional..." />
+                <label className="text-xs text-muted-foreground block mb-1">Litros por Galão</label>
+                <Input type="number" min={1} value={litrosPorGalao}
+                  onChange={e => setLitrosPorGalao(Math.max(1, Number(e.target.value) || LITROS_POR_GALAO_DEFAULT))} />
               </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Total</label>
+                <div className="border rounded-lg px-3 py-2 bg-primary/5 text-primary font-bold text-lg">
+                  {totalLitros} L
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Observações</label>
+              <Input value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Opcional..." />
             </div>
             <div className="flex flex-wrap gap-2">
               <Button onClick={salvar} disabled={salvando} className="gradient-accent text-accent-foreground font-semibold">
-                <Save className="w-4 h-4 mr-2" /> Salvar retirada
+                <Save className="w-4 h-4 mr-2" /> Salvar retirada ({qtdGaloes} galão{qtdGaloes > 1 ? 'es' : ''})
               </Button>
               <Button onClick={handlePrint} variant="outline">
                 <Printer className="w-4 h-4 mr-2" /> Imprimir comprovante
