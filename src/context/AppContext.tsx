@@ -1,61 +1,14 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { type Company, type Employee, type MonthlyEntry, type Fechamento, mapCompany, mapEmployee, mapEntry, entryToRow, employeeToRow } from '@/types/database';
 import type { Delivery, BenefitReport } from '@/data/deliveries';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
-import { useUserRole, type AppRole } from '@/hooks/useUserRole';
+import { useUserRole } from '@/hooks/useUserRole';
+import { AppContext, defaultConfig, type AppConfig } from '@/context/AppContextValue';
+import { useApp } from '@/hooks/useApp';
 
-// HMR v6
-
-interface AppState {
-  isAuthenticated: boolean;
-  session: Session | null;
-  loading: boolean;
-  userRole: AppRole | null;
-  userRoles: AppRole[];
-  roleLoading: boolean;
-  logout: () => void;
-  companies: Company[];
-  employees: Employee[];
-  updateEmployee: (id: string, data: Partial<Employee>) => void;
-  entries: MonthlyEntry[];
-  setEntries: React.Dispatch<React.SetStateAction<MonthlyEntry[]>>;
-  getOrCreateEntries: (companyId: string, competencia: string) => MonthlyEntry[];
-  updateEntry: (employeeId: string, competencia: string, data: Partial<MonthlyEntry>) => void;
-  fechamentos: Fechamento[];
-  setFechamentos: React.Dispatch<React.SetStateAction<Fechamento[]>>;
-  getFechamento: (companyId: string, competencia: string) => Fechamento;
-  updateFechamento: (companyId: string, competencia: string, data: Partial<Fechamento>) => void;
-  config: AppConfig;
-  setConfig: React.Dispatch<React.SetStateAction<AppConfig>>;
-  deliveries: Delivery[];
-  addDelivery: (data: Omit<Delivery, 'id' | 'createdAt'>) => Delivery;
-  benefitReports: BenefitReport[];
-  addBenefitReport: (data: Omit<BenefitReport, 'id' | 'createdAt'>) => BenefitReport;
-  dataLoading: boolean;
-}
-
-interface AppConfig {
-  platformName: string;
-  pctAdiantamento: number;
-  valorInsalubridade: number;
-  mensagemInstitucional: string;
-}
-
-const defaultConfig: AppConfig = {
-  platformName: 'Topac RH Multiempresa PRO',
-  pctAdiantamento: 40,
-  valorInsalubridade: 648.40,
-  mensagemInstitucional: 'Sistema desenvolvido por ImplantaRH ConsultoriaPRO',
-};
-
-const AppContext = createContext<AppState | null>(null);
-
-export const useApp = () => {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
-  return ctx;
-};
+// Re-export para manter compatibilidade com imports existentes (`import { useApp } from '@/context/AppContext'`)
+export { useApp };
 
 let deliveryCounter = 0;
 let reportCounter = 0;
