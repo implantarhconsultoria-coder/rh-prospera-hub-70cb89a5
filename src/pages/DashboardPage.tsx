@@ -1,14 +1,26 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/context/AppContext';
 import { calcTotalFuncionario, asoStatus, feriasStatus, formatCurrency } from '@/lib/calculations';
-import { Building2, Users, TrendingUp, TrendingDown, DollarSign, AlertTriangle, ShieldCheck, Flame, FileCheck } from 'lucide-react';
+import { Building2, Users, TrendingUp, TrendingDown, DollarSign, AlertTriangle, ShieldCheck, Flame, FileCheck, Lock, Unlock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 const DashboardPage: React.FC = () => {
   const { companies, employees, entries, session } = useApp();
   const navigate = useNavigate();
   const comp = new Date().toISOString().slice(0, 7);
+  const [fechStats, setFechStats] = useState({ fechadas: 0, abertas: 0, pendentes: 0 });
+
+  useEffect(() => {
+    supabase.from('fechamentos_filial').select('status').eq('competencia', comp).then(({ data }) => {
+      const arr = (data || []) as any[];
+      const fechadas = arr.filter(f => f.status === 'fechado').length;
+      const abertas = arr.filter(f => f.status === 'aberto' || f.status === 'reaberto').length;
+      const pendentes = Math.max(0, companies.length - fechadas - abertas);
+      setFechStats({ fechadas, abertas, pendentes });
+    });
+  }, [comp, companies.length]);
 
   const h = new Date().getHours();
   const adminName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
