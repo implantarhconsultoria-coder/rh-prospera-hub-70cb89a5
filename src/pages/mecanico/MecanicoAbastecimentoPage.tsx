@@ -92,17 +92,18 @@ const MecanicoAbastecimentoPage: React.FC = () => {
   const onCodeRead = async (codigo: string) => {
     try {
       setLoading(true);
-      // Normaliza padrão TOPAC-ABAST-NNN (case + espaços)
-      const limpo = codigo.trim().toUpperCase().replace(/\s+/g, '');
-      const isTopac = /^TOPAC-ABAST-\d{1,6}$/.test(limpo);
-      const codigoFinal = isTopac ? limpo : codigo.trim();
+      // Extrai TOPAC-ABAST-NNN mesmo se o QR vier dentro de URL/JSON/texto qualquer
+      const upper = codigo.trim().toUpperCase().replace(/\s+/g, '');
+      const m = upper.match(/TOPAC-?ABAST-?(\d{1,6})/);
+      const codigoFinal = m ? `TOPAC-ABAST-${m[1].padStart(3, '0')}` : codigo.trim();
+      const isTopac = !!m;
       const r: any = await call('validar_vale', { codigo: codigoFinal });
       setVale(r);
       // Pré-preenche posto a partir do vale (TOPAC-ABAST traz posto vinculado)
       if (r?.posto?.nome) setPostoNome(r.posto.nome);
       if (r?.posto?.cnpj) setPostoCnpj(r.posto.cnpj);
       setStep('confirm');
-      if (isTopac) toast.success(`Autorização TOPAC reconhecida: ${limpo}`);
+      if (isTopac) toast.success(`Autorização TOPAC reconhecida: ${codigoFinal}`);
     } catch (e: any) {
       const map: Record<string, string> = {
         vale_invalido: 'Vale não encontrado',
