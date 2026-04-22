@@ -244,13 +244,14 @@ Deno.serve(async (req) => {
       case "atualizar_chamado": {
         if (!userId) return json({ error: "sem_user" }, 400);
         const p = payload || {};
+        const veicSel = resolveVeiculo(tec, p);
         const id = String(p.id || "");
         const novo = String(p.status || "");
         const updates: Record<string, unknown> = {
           status: novo,
           latitude: p.latitude ?? null,
           longitude: p.longitude ?? null,
-          veiculo_id: veiculoId,
+          veiculo_id: veicSel.id,
         };
         if (novo === "aceito") updates.aceito_em = new Date().toISOString();
         if (novo === "concluido") updates.concluido_em = new Date().toISOString();
@@ -273,20 +274,22 @@ Deno.serve(async (req) => {
 
       // ---------- ESTOQUE DO CARRO ----------
       case "listar_estoque": {
-        if (!veiculoId) return json({ itens: [] });
+        const veicSel = resolveVeiculo(tec, payload);
+        if (!veicSel.id) return json({ itens: [] });
         const { data } = await sb()
           .from("estoque_veiculo")
           .select("*")
-          .eq("veiculo_id", veiculoId)
+          .eq("veiculo_id", veicSel.id)
           .order("nome_item");
         return json({ itens: data || [] });
       }
 
       case "estoque_add": {
-        if (!veiculoId) return json({ error: "sem_veiculo" }, 400);
         const p = payload || {};
+        const veicSel = resolveVeiculo(tec, p);
+        if (!veicSel.id) return json({ error: "sem_veiculo" }, 400);
         const { error } = await sb().from("estoque_veiculo").insert({
-          veiculo_id: veiculoId,
+          veiculo_id: veicSel.id,
           nome_item: String(p.nome_item || "").trim(),
           quantidade: Number(p.quantidade) || 0,
         });
@@ -296,13 +299,14 @@ Deno.serve(async (req) => {
       }
 
       case "estoque_qtd": {
-        if (!veiculoId) return json({ error: "sem_veiculo" }, 400);
         const p = payload || {};
+        const veicSel = resolveVeiculo(tec, p);
+        if (!veicSel.id) return json({ error: "sem_veiculo" }, 400);
         const { data: cur } = await sb()
           .from("estoque_veiculo")
           .select("quantidade")
           .eq("id", String(p.item_id))
-          .eq("veiculo_id", veiculoId)
+          .eq("veiculo_id", veicSel.id)
           .maybeSingle();
         if (!cur) return json({ error: "item_nao_encontrado" }, 404);
         const novo = Math.max(0, (cur.quantidade as number) + Number(p.delta || 0));
