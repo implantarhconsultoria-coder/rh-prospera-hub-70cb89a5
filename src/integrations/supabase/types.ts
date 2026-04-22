@@ -1393,6 +1393,118 @@ export type Database = {
           },
         ]
       }
+      fechamentos_filial: {
+        Row: {
+          company_id: string
+          competencia: string
+          created_at: string
+          empresa_nome: string
+          fechado_em: string | null
+          fechado_por_nome: string
+          fechado_por_user_id: string | null
+          id: string
+          motivo_reabertura: string
+          observacoes: string
+          reaberto_em: string | null
+          reaberto_por_nome: string
+          reaberto_por_user_id: string | null
+          status: string
+          total_descontos: number
+          total_funcionarios: number
+          total_liquido: number
+          total_proventos: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          competencia: string
+          created_at?: string
+          empresa_nome?: string
+          fechado_em?: string | null
+          fechado_por_nome?: string
+          fechado_por_user_id?: string | null
+          id?: string
+          motivo_reabertura?: string
+          observacoes?: string
+          reaberto_em?: string | null
+          reaberto_por_nome?: string
+          reaberto_por_user_id?: string | null
+          status?: string
+          total_descontos?: number
+          total_funcionarios?: number
+          total_liquido?: number
+          total_proventos?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          competencia?: string
+          created_at?: string
+          empresa_nome?: string
+          fechado_em?: string | null
+          fechado_por_nome?: string
+          fechado_por_user_id?: string | null
+          id?: string
+          motivo_reabertura?: string
+          observacoes?: string
+          reaberto_em?: string | null
+          reaberto_por_nome?: string
+          reaberto_por_user_id?: string | null
+          status?: string
+          total_descontos?: number
+          total_funcionarios?: number
+          total_liquido?: number
+          total_proventos?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamentos_filial_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fechamentos_historico: {
+        Row: {
+          acao: string
+          created_at: string
+          detalhes: Json
+          fechamento_id: string
+          id: string
+          user_id: string
+          usuario_nome: string
+        }
+        Insert: {
+          acao: string
+          created_at?: string
+          detalhes?: Json
+          fechamento_id: string
+          id?: string
+          user_id: string
+          usuario_nome?: string
+        }
+        Update: {
+          acao?: string
+          created_at?: string
+          detalhes?: Json
+          fechamento_id?: string
+          id?: string
+          user_id?: string
+          usuario_nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fechamentos_historico_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos_filial"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fornecedores: {
         Row: {
           agencia: string | null
@@ -1662,18 +1774,21 @@ export type Database = {
           adiantamento: number
           adicionais: number
           atrasos: number
+          bloqueado: boolean
           comissao_base: number
           company_id: string
           competencia: string
           created_at: string
           descontos_diversos: number
           faltas_dias: number
+          fechamento_id: string | null
           funcionario_id: string
           he100: number
           he50: number
           id: string
           insalubridade_aplicada: boolean
           observacoes: string
+          origem: string
           status_conferencia: string
           updated_at: string
           va_aplicado: boolean
@@ -1686,18 +1801,21 @@ export type Database = {
           adiantamento?: number
           adicionais?: number
           atrasos?: number
+          bloqueado?: boolean
           comissao_base?: number
           company_id: string
           competencia: string
           created_at?: string
           descontos_diversos?: number
           faltas_dias?: number
+          fechamento_id?: string | null
           funcionario_id: string
           he100?: number
           he50?: number
           id?: string
           insalubridade_aplicada?: boolean
           observacoes?: string
+          origem?: string
           status_conferencia?: string
           updated_at?: string
           va_aplicado?: boolean
@@ -1710,18 +1828,21 @@ export type Database = {
           adiantamento?: number
           adicionais?: number
           atrasos?: number
+          bloqueado?: boolean
           comissao_base?: number
           company_id?: string
           competencia?: string
           created_at?: string
           descontos_diversos?: number
           faltas_dias?: number
+          fechamento_id?: string | null
           funcionario_id?: string
           he100?: number
           he50?: number
           id?: string
           insalubridade_aplicada?: boolean
           observacoes?: string
+          origem?: string
           status_conferencia?: string
           updated_at?: string
           va_aplicado?: boolean
@@ -1736,6 +1857,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lancamentos_mensais_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "fechamentos_filial"
             referencedColumns: ["id"]
           },
           {
@@ -1929,6 +2057,69 @@ export type Database = {
             columns: ["recebimento_id"]
             isOneToOne: false
             referencedRelation: "recebimentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      movimento_diario: {
+        Row: {
+          company_id: string
+          competencia: string
+          created_at: string
+          data: string
+          funcionario_id: string
+          id: string
+          observacao: string
+          quantidade: number
+          registrado_por_nome: string
+          registrado_por_user_id: string
+          tipo: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          company_id: string
+          competencia: string
+          created_at?: string
+          data: string
+          funcionario_id: string
+          id?: string
+          observacao?: string
+          quantidade?: number
+          registrado_por_nome?: string
+          registrado_por_user_id: string
+          tipo: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          company_id?: string
+          competencia?: string
+          created_at?: string
+          data?: string
+          funcionario_id?: string
+          id?: string
+          observacao?: string
+          quantidade?: number
+          registrado_por_nome?: string
+          registrado_por_user_id?: string
+          tipo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movimento_diario_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movimento_diario_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
             referencedColumns: ["id"]
           },
         ]

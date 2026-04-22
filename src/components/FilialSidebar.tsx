@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, CalendarCheck, Stethoscope,
-  FileCheck, Bell, Building2, ChevronLeft, Menu, LogOut,
+  FileCheck, Bell, Building2, ChevronLeft, Menu, LogOut, CalendarDays, Lock,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 const menuItems = [
   { label: 'Painel da Filial', icon: LayoutDashboard, path: '/filial' },
   { label: 'Funcionários', icon: Users, path: '/filial/funcionarios' },
+  { label: 'Movimento Diário', icon: CalendarDays, path: '/filial/movimento-diario' },
+  { label: 'Fechamento', icon: Lock, path: '/filial/fechamento' },
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/filial/aviso-ferias' },
   { label: 'ASO / Agendamento', icon: Stethoscope, path: '/filial/aso' },
   { label: 'Protocolos', icon: FileCheck, path: '/filial/protocolo' },

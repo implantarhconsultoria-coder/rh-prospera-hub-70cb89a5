@@ -1,14 +1,26 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/context/AppContext';
 import { calcTotalFuncionario, asoStatus, feriasStatus, formatCurrency } from '@/lib/calculations';
-import { Building2, Users, TrendingUp, TrendingDown, DollarSign, AlertTriangle, ShieldCheck, Flame, FileCheck } from 'lucide-react';
+import { Building2, Users, TrendingUp, TrendingDown, DollarSign, AlertTriangle, ShieldCheck, Flame, FileCheck, Lock, Unlock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 
 const DashboardPage: React.FC = () => {
   const { companies, employees, entries, session } = useApp();
   const navigate = useNavigate();
   const comp = new Date().toISOString().slice(0, 7);
+  const [fechStats, setFechStats] = useState({ fechadas: 0, abertas: 0, pendentes: 0 });
+
+  useEffect(() => {
+    supabase.from('fechamentos_filial').select('status').eq('competencia', comp).then(({ data }) => {
+      const arr = (data || []) as any[];
+      const fechadas = arr.filter(f => f.status === 'fechado').length;
+      const abertas = arr.filter(f => f.status === 'aberto' || f.status === 'reaberto').length;
+      const pendentes = Math.max(0, companies.length - fechadas - abertas);
+      setFechStats({ fechadas, abertas, pendentes });
+    });
+  }, [comp, companies.length]);
 
   const h = new Date().getHours();
   const adminName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
@@ -60,6 +72,28 @@ const DashboardPage: React.FC = () => {
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">{card.label}</p>
                 <p className={`text-xl font-bold font-display mt-1 ${card.color}`}>{card.value}</p>
+              </div>
+              <card.icon className={`w-8 h-8 ${card.color} opacity-30`} />
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Fechamentos por filial */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { label: 'Filiais Fechadas', value: fechStats.fechadas, icon: Lock, color: 'text-success' },
+          { label: 'Em Andamento', value: fechStats.abertas, icon: Unlock, color: 'text-warning' },
+          { label: 'Pendentes', value: fechStats.pendentes, icon: AlertTriangle, color: 'text-destructive' },
+        ].map((card, i) => (
+          <motion.div key={i} {...cardAnim} transition={{ delay: 0.05 + i * 0.05 }}
+            onClick={() => navigate('/admin/fechamentos-filiais')}
+            className="card-premium p-5 cursor-pointer hover:bg-sidebar-accent/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">{card.label}</p>
+                <p className={`text-2xl font-bold font-display mt-1 ${card.color}`}>{card.value}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Competência {comp}</p>
               </div>
               <card.icon className={`w-8 h-8 ${card.color} opacity-30`} />
             </div>

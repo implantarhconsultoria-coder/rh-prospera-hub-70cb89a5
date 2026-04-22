@@ -25,6 +25,7 @@ const menuItems: MenuItem[] = [
   { label: 'Base Mestra', icon: Database, path: '/admin/base-mestra' },
   { label: 'Funcionários', icon: Users, path: '/admin/funcionarios' },
   { label: 'Lançamentos Mensais', icon: CalendarDays, path: '/admin/lancamentos' },
+  { label: 'Fechamentos Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
   { label: 'Relatório', icon: FileText, path: '/admin/relatorio' },
 ];
