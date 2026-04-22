@@ -51,9 +51,16 @@ export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const baseCall = useCallback(
     async <T,>(action: string, payload?: any): Promise<T> => {
+      // cache: 'no-store' garante que toda chamada do app dos mecânicos
+      // ignore qualquer cache do browser/CDN — sempre versão mais nova.
       const res = await fetch(FN_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+        cache: 'no-store',
         body: JSON.stringify({ action, token, payload }),
       });
       const data = await res.json();
