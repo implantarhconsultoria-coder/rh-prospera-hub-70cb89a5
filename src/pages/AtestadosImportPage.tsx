@@ -7,6 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, User, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { renderPdfPagesToDataUrls } from '@/lib/pdf';
+
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
 
 interface AtestadoStaging {
   fileName: string;
