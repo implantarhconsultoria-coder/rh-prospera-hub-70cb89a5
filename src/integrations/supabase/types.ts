@@ -14,6 +14,120 @@ export type Database = {
   }
   public: {
     Tables: {
+      abastecimentos: {
+        Row: {
+          combustivel: string
+          competencia: string
+          conferido_em: string | null
+          conferido_por: string | null
+          conferido_por_nome: string
+          created_at: string
+          data: string
+          forma_pagamento: string
+          foto_bomba_url: string
+          hora: string
+          id: string
+          km_atual: number | null
+          latitude: number | null
+          litros: number
+          longitude: number | null
+          mecanico_nome: string
+          modelo: string
+          nfce_chave: string
+          nfce_numero: string
+          nfce_protocolo: string
+          nfce_serie: string
+          observacao_conferencia: string
+          placa: string
+          posto_cnpj: string
+          posto_endereco: string
+          posto_nome: string
+          preenchimento: string
+          status: string
+          tecnico_id: string | null
+          updated_at: string
+          user_id: string | null
+          vale_codigo: string
+          vale_id: string | null
+          valor: number
+          veiculo_id: string | null
+        }
+        Insert: {
+          combustivel?: string
+          competencia?: string
+          conferido_em?: string | null
+          conferido_por?: string | null
+          conferido_por_nome?: string
+          created_at?: string
+          data?: string
+          forma_pagamento?: string
+          foto_bomba_url?: string
+          hora?: string
+          id?: string
+          km_atual?: number | null
+          latitude?: number | null
+          litros?: number
+          longitude?: number | null
+          mecanico_nome?: string
+          modelo?: string
+          nfce_chave?: string
+          nfce_numero?: string
+          nfce_protocolo?: string
+          nfce_serie?: string
+          observacao_conferencia?: string
+          placa?: string
+          posto_cnpj?: string
+          posto_endereco?: string
+          posto_nome?: string
+          preenchimento?: string
+          status?: string
+          tecnico_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+          vale_codigo?: string
+          vale_id?: string | null
+          valor?: number
+          veiculo_id?: string | null
+        }
+        Update: {
+          combustivel?: string
+          competencia?: string
+          conferido_em?: string | null
+          conferido_por?: string | null
+          conferido_por_nome?: string
+          created_at?: string
+          data?: string
+          forma_pagamento?: string
+          foto_bomba_url?: string
+          hora?: string
+          id?: string
+          km_atual?: number | null
+          latitude?: number | null
+          litros?: number
+          longitude?: number | null
+          mecanico_nome?: string
+          modelo?: string
+          nfce_chave?: string
+          nfce_numero?: string
+          nfce_protocolo?: string
+          nfce_serie?: string
+          observacao_conferencia?: string
+          placa?: string
+          posto_cnpj?: string
+          posto_endereco?: string
+          posto_nome?: string
+          preenchimento?: string
+          status?: string
+          tecnico_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+          vale_codigo?: string
+          vale_id?: string | null
+          valor?: number
+          veiculo_id?: string | null
+        }
+        Relationships: []
+      }
       activity_log: {
         Row: {
           action: string
@@ -2852,6 +2966,60 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      vales_combustivel: {
+        Row: {
+          codigo: string
+          created_at: string
+          emitido_por: string | null
+          emitido_por_nome: string
+          id: string
+          litros_limite: number
+          observacao: string
+          status: string
+          tecnico_id: string | null
+          updated_at: string
+          utilizado_em: string | null
+          utilizado_por: string | null
+          validade: string | null
+          valor_limite: number
+          veiculo_id: string | null
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          emitido_por?: string | null
+          emitido_por_nome?: string
+          id?: string
+          litros_limite?: number
+          observacao?: string
+          status?: string
+          tecnico_id?: string | null
+          updated_at?: string
+          utilizado_em?: string | null
+          utilizado_por?: string | null
+          validade?: string | null
+          valor_limite?: number
+          veiculo_id?: string | null
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          emitido_por?: string | null
+          emitido_por_nome?: string
+          id?: string
+          litros_limite?: number
+          observacao?: string
+          status?: string
+          tecnico_id?: string | null
+          updated_at?: string
+          utilizado_em?: string | null
+          utilizado_por?: string | null
+          validade?: string | null
+          valor_limite?: number
+          veiculo_id?: string | null
         }
         Relationships: []
       }
