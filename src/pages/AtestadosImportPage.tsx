@@ -96,7 +96,17 @@ const AtestadosImportPage: React.FC = () => {
         ? { ...s, status: 'processando', fileUrl } : s));
 
       try {
-        const { data, error } = await supabase.functions.invoke('ocr-atestado', { body: { fileUrl } });
+        // Gera dataUrl: PDFs viram imagem da 1ª página (Gemini só aceita imagens)
+        let dataUrl: string;
+        if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+          const { pageUrls } = await renderPdfPagesToDataUrls(fileUrl, 1.6, 1);
+          if (!pageUrls.length) throw new Error('PDF sem páginas legíveis');
+          dataUrl = pageUrls[0];
+        } else {
+          dataUrl = await fileToDataUrl(file);
+        }
+
+        const { data, error } = await supabase.functions.invoke('ocr-atestado', { body: { dataUrl } });
         if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Falha OCR');
 
         const ext = data.data;
