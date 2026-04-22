@@ -7,7 +7,7 @@ import {
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
   ChevronDown, ChevronRight, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
-  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench,
+  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Protocolo', icon: FileCheck, path: '/admin/protocolo' },
   { label: 'Doc. Veículos', icon: Car, path: '/admin/documentos-ativos' },
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
+  { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },

@@ -53,6 +53,7 @@ import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
 import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
 import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividualPage";
 import HistoricoPage from "@/pages/HistoricoPage";
+import AtestadosImportPage from "@/pages/AtestadosImportPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
@@ -155,6 +156,7 @@ const AuthGate = () => {
         <Route path="/admin/protocolo" element={<ProtocoloPage />} />
         <Route path="/admin/documentos-ativos" element={<DocumentosVeiculosPage />} />
         <Route path="/admin/aviso-ferias" element={<AvisoFeriasPage />} />
+        <Route path="/admin/atestados" element={<AtestadosImportPage />} />
         <Route path="/admin/almoxarifado" element={<AlmoxarifadoPage />} />
         <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
@@ -191,6 +193,7 @@ const AuthGate = () => {
         <Route path="/filial/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/filial/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/filial/aso" element={<ASOPage />} />
+        <Route path="/filial/atestados" element={<AtestadosImportPage />} />
         <Route path="/filial/protocolo" element={<ProtocoloPage />} />
         <Route path="/filial/alertas" element={<FilialAlertasPage />} />
         <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
