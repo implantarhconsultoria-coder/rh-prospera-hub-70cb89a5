@@ -2978,8 +2978,12 @@ export type Database = {
           id: string
           litros_limite: number
           observacao: string
+          posto_cnpj: string
+          posto_endereco: string
+          posto_nome: string
           status: string
           tecnico_id: string | null
+          tipo: string
           updated_at: string
           utilizado_em: string | null
           utilizado_por: string | null
@@ -2995,8 +2999,12 @@ export type Database = {
           id?: string
           litros_limite?: number
           observacao?: string
+          posto_cnpj?: string
+          posto_endereco?: string
+          posto_nome?: string
           status?: string
           tecnico_id?: string | null
+          tipo?: string
           updated_at?: string
           utilizado_em?: string | null
           utilizado_por?: string | null
@@ -3012,8 +3020,12 @@ export type Database = {
           id?: string
           litros_limite?: number
           observacao?: string
+          posto_cnpj?: string
+          posto_endereco?: string
+          posto_nome?: string
           status?: string
           tecnico_id?: string | null
+          tipo?: string
           updated_at?: string
           utilizado_em?: string | null
           utilizado_por?: string | null

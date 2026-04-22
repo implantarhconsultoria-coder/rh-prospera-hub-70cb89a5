@@ -13,9 +13,11 @@ import { Html5Qrcode } from 'html5-qrcode';
 type Step = 'idle' | 'scan' | 'confirm' | 'photo' | 'fill' | 'done';
 
 interface ValeData {
-  vale: { id: string; codigo: string; valor_limite: number; litros_limite: number };
-  mecanico: { id: string; nome: string };
+  vale: { id: string; codigo: string; valor_limite: number; litros_limite: number; tipo?: string };
+  tipo?: string;
+  mecanico: { id: string; nome: string; cargo?: string };
   veiculo: { placa: string; modelo: string } | null;
+  posto?: { nome: string; cnpj: string; endereco: string };
   agora: string;
 }
 
@@ -90,9 +92,17 @@ const MecanicoAbastecimentoPage: React.FC = () => {
   const onCodeRead = async (codigo: string) => {
     try {
       setLoading(true);
-      const r: any = await call('validar_vale', { codigo: codigo.trim() });
+      // Normaliza padrão TOPAC-ABAST-NNN (case + espaços)
+      const limpo = codigo.trim().toUpperCase().replace(/\s+/g, '');
+      const isTopac = /^TOPAC-ABAST-\d{1,6}$/.test(limpo);
+      const codigoFinal = isTopac ? limpo : codigo.trim();
+      const r: any = await call('validar_vale', { codigo: codigoFinal });
       setVale(r);
+      // Pré-preenche posto a partir do vale (TOPAC-ABAST traz posto vinculado)
+      if (r?.posto?.nome) setPostoNome(r.posto.nome);
+      if (r?.posto?.cnpj) setPostoCnpj(r.posto.cnpj);
       setStep('confirm');
+      if (isTopac) toast.success(`Autorização TOPAC reconhecida: ${limpo}`);
     } catch (e: any) {
       const map: Record<string, string> = {
         vale_invalido: 'Vale não encontrado',
@@ -238,14 +248,23 @@ const MecanicoAbastecimentoPage: React.FC = () => {
       {step === 'confirm' && vale && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           <div className="bg-emerald-500/10 border border-emerald-400/30 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 text-emerald-300 font-bold"><Check className="w-5 h-5" /> Vale válido</div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-300 font-bold"><Check className="w-5 h-5" /> Autorização válida</div>
+              {vale.vale.codigo?.startsWith('TOPAC-ABAST') && (
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                  TOPAC
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Info label="Mecânico" valor={vale.mecanico.nome} />
-              <Info label="Vale" valor={vale.vale.codigo} />
+              <Info label="Cargo" valor={vale.mecanico.cargo || '—'} />
+              <Info label="Autorização" valor={vale.vale.codigo} />
               <Info label="Veículo" valor={vale.veiculo ? `${vale.veiculo.modelo}` : '—'} />
               <Info label="Placa" valor={vale.veiculo?.placa || '—'} />
-              <Info label="Limite R$" valor={`R$ ${Number(vale.vale.valor_limite).toFixed(2)}`} />
-              <Info label="Litros máx." valor={`${vale.vale.litros_limite} L`} />
+              {vale.posto?.nome && <Info label="Posto" valor={vale.posto.nome} />}
+              {vale.vale.valor_limite > 0 && <Info label="Limite R$" valor={`R$ ${Number(vale.vale.valor_limite).toFixed(2)}`} />}
+              {vale.vale.litros_limite > 0 && <Info label="Litros máx." valor={`${vale.vale.litros_limite} L`} />}
             </div>
             <p className="text-[11px] text-white/50">{new Date(vale.agora).toLocaleString('pt-BR')}</p>
           </div>
