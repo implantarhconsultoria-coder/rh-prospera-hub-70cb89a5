@@ -79,6 +79,28 @@ const DashboardPage: React.FC = () => {
         ))}
       </div>
 
+      {/* Fechamentos por filial */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[
+          { label: 'Filiais Fechadas', value: fechStats.fechadas, icon: Lock, color: 'text-success' },
+          { label: 'Em Andamento', value: fechStats.abertas, icon: Unlock, color: 'text-warning' },
+          { label: 'Pendentes', value: fechStats.pendentes, icon: AlertTriangle, color: 'text-destructive' },
+        ].map((card, i) => (
+          <motion.div key={i} {...cardAnim} transition={{ delay: 0.05 + i * 0.05 }}
+            onClick={() => navigate('/admin/fechamentos-filiais')}
+            className="card-premium p-5 cursor-pointer hover:bg-sidebar-accent/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">{card.label}</p>
+                <p className={`text-2xl font-bold font-display mt-1 ${card.color}`}>{card.value}</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Competência {comp}</p>
+              </div>
+              <card.icon className={`w-8 h-8 ${card.color} opacity-30`} />
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {companyStats.map((cs, i) => (
           <motion.div key={cs.company.id} {...cardAnim} transition={{ delay: 0.1 + i * 0.05 }}
