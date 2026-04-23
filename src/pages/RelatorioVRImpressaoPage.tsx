@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
+import { buildVRReportRows, sumBenefitRows } from '@/lib/benefitReports';
 
 const RelatorioVRImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
@@ -23,22 +24,9 @@ const RelatorioVRImpressaoPage: React.FC = () => {
   const compEmps = employees.filter(e => e.companyId === companyId && e.status === 'ativo' && e.categoria === 'operacional' && e.vrAtivo);
   const compEntries = entries.filter(e => e.companyId === companyId && e.competencia === competencia);
 
-  const rows = useMemo(() => compEmps.map(emp => {
-    const entry = compEntries.find(e => e.employeeId === emp.id);
-    const faltasDias = entry?.faltasDias || 0;
-    const diasPrevistos = entry?.vrDias ?? diasUteis;
-    const diasDescontados = Math.min(faltasDias, diasPrevistos);
-    const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
-    const valorDiario = emp.vrDiario;
-    const valorTotal = valorDiario * diasFinais;
+  const rows = useMemo(() => buildVRReportRows(compEmps, compEntries, diasUteis), [compEmps, compEntries, diasUteis]);
 
-    return {
-      emp, valorDiario, diasPrevistos, diasDescontados, diasFinais, valorTotal,
-      motivo: diasDescontados > 0 ? `${faltasDias} falta(s)` : '',
-    };
-  }), [compEmps, compEntries, diasUteis]);
-
-  const totalFinal = rows.reduce((s, r) => s + r.valorTotal, 0);
+  const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
 
   const competenciaLabel = (() => {
     const [y, m] = competencia.split('-');

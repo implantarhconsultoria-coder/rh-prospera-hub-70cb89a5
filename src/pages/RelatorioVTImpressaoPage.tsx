@@ -24,9 +24,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
   const compEmps = employees.filter(e => e.companyId === companyId && e.status === 'ativo' && e.categoria === 'operacional' && e.vtAtivo);
   const compEntries = entries.filter(e => e.companyId === companyId && e.competencia === competencia);
 
-  const rows = useMemo(() => compEmps.map(emp => {
-    return buildVTReportRows(compEmps, compEntries, diasUteis);
-  }, [compEmps, compEntries, diasUteis]);
+  const rows = useMemo(() => buildVTReportRows(compEmps, compEntries, diasUteis), [compEmps, compEntries, diasUteis]);
 
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
 
