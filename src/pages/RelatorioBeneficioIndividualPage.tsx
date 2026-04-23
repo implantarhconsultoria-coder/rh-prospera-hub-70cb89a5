@@ -1,18 +1,20 @@
 import React, { useEffect, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getFirstBusinessDayOfNextMonth, getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
+import { buildIndividualBenefitData } from '@/lib/benefitReports';
 
 const RelatorioBeneficioIndividualPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, getFechamento } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const companyId = searchParams.get('empresa') || '';
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const funcionarioId = searchParams.get('funcionario') || '';
 
   const company = companies.find(c => c.id === companyId);
-  const emp = employees.find(e => e.id === funcionarioId);
+  const emp = employees.find(e => e.id === funcionarioId && e.companyId === companyId);
   const diasUteis = getWorkingDays(competencia);
   const fechamento = getFechamento(companyId, competencia);
   const dataFechamento = fechamento.dataFechamento || '';
@@ -21,8 +23,7 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
     if (companyId && competencia) getOrCreateEntries(companyId, competencia);
   }, [companyId, competencia]);
 
-  const entry = entries.find(e => e.employeeId === funcionarioId && e.competencia === competencia);
-  const faltasDias = entry?.faltasDias || 0;
+  const entry = entries.find(e => e.employeeId === funcionarioId && e.companyId === companyId && e.competencia === competencia);
 
   const competenciaLabel = (() => {
     const [y, m] = competencia.split('-');
@@ -33,26 +34,19 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
   const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
 
   // VR calculation
-  const vrData = useMemo(() => {
-    if (!emp?.vrAtivo) return null;
-    const diasPrevistos = entry?.vrDias ?? diasUteis;
-    const diasDescontados = Math.min(faltasDias, diasPrevistos);
-    const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
-    const valorDiario = emp.vrDiario;
-    const valorTotal = valorDiario * diasFinais;
-    return { valorDiario, diasPrevistos, diasDescontados, diasFinais, valorTotal, motivo: diasDescontados > 0 ? `${faltasDias} falta(s)` : '' };
-  }, [emp, entry, diasUteis, faltasDias]);
+  const vrData = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: 'vr' }), [emp, entry, diasUteis]);
 
   // VT calculation
-  const vtData = useMemo(() => {
-    if (!emp?.vtAtivo) return null;
-    const diasPrevistos = diasUteis;
-    const diasDescontados = Math.min(faltasDias, diasPrevistos);
-    const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
-    const valorDiario = emp.vtDiario;
-    const valorTotal = valorDiario * diasFinais;
-    return { valorDiario, diasPrevistos, diasDescontados, diasFinais, valorTotal, motivo: diasDescontados > 0 ? `${faltasDias} falta(s)` : '' };
-  }, [emp, entry, diasUteis, faltasDias]);
+  const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: 'vt' }), [emp, entry, diasUteis]);
+
+  if (loading || dataLoading || (isAuthenticated && (companies.length === 0 || employees.length === 0))) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-foreground">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Carregando ficha individual…</p>
+      </div>
+    );
+  }
 
   if (!company || !emp) return <div className="p-10 text-center">Dados não encontrados.</div>;
 

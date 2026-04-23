@@ -6,9 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Bus, FileText, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { buildVTReportRows, sumBenefitRows } from '@/lib/benefitReports';
 
 const RelatorioVTPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento } = useApp();
+  const navigate = useNavigate();
   const [selectedCompany, setSelectedCompany] = useState('');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [generated, setGenerated] = useState(false);
@@ -29,31 +32,20 @@ const RelatorioVTPage: React.FC = () => {
   const company = companies.find(c => c.id === selectedCompany);
 
   const rows = useMemo(() => {
-    return compEmps.map(emp => {
-      const entry = compEntries.find(e => e.employeeId === emp.id);
-      const faltasDias = entry?.faltasDias || 0;
-      const diasPrevistos = diasUteis;
-      const diasDescontados = Math.min(faltasDias, diasPrevistos);
-      const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
-      // VT diário já é valor por dia
-      const valorDiario = emp.vtDiario;
-      const valorTotal = valorDiario * diasFinais;
-      const motivo = diasDescontados > 0 ? `${faltasDias} falta(s)` : '';
-      return { emp, valorDiario, diasPrevistos, diasDescontados, diasFinais, valorTotal, motivo };
-    });
+    return buildVTReportRows(compEmps, compEntries, diasUteis);
   }, [compEmps, compEntries, diasUteis]);
 
-  const totalFinal = rows.reduce((s, r) => s + r.valorTotal, 0);
+  const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
 
   const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
 
   const handlePrint = () => {
     addBenefitReport({ type: 'vt', companyId: selectedCompany, competencia });
-    window.open(`/relatorio-vt-impressao?empresa=${selectedCompany}&competencia=${competencia}`, '_blank');
+    navigate(`/relatorio-vt-impressao?empresa=${selectedCompany}&competencia=${competencia}`);
   };
 
   const handlePrintIndividual = (employeeId: string) => {
-    window.open(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${employeeId}`, '_blank');
+    navigate(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${employeeId}`);
   };
 
   return (
