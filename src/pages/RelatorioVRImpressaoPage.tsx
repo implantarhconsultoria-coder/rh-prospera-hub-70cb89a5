@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { getFirstBusinessDayOfNextMonth, getWorkingDays } from '@/lib/workingDays';
+import { getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 
 const RelatorioVRImpressaoPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, getFechamento } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const companyId = searchParams.get('empresa') || '';
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
@@ -45,8 +46,14 @@ const RelatorioVRImpressaoPage: React.FC = () => {
     return `${meses[Number(m) - 1]} / ${y}`;
   })();
 
-  const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
-
+  if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-foreground">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Carregando relatório de VR…</p>
+      </div>
+    );
+  }
   if (!company) return <div className="p-10 text-center">Empresa não encontrada.</div>;
 
   return (
@@ -66,7 +73,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
 
       <div className="bg-white text-black min-h-screen print:bg-white" style={{ fontFamily: "'Segoe UI', Arial, sans-serif" }}>
         <div className="no-print flex items-center gap-3 px-8 py-3 bg-gray-100 border-b">
-          <button onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign('/relatorio-vr')}
+          <button onClick={() => window.history.length > 1 ? window.history.back() : window.location.assign('/admin/relatorio-vr')}
             className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
             ← Voltar
           </button>
@@ -86,7 +93,6 @@ const RelatorioVRImpressaoPage: React.FC = () => {
               <div className="text-right">
                 <p className="text-sm font-bold">RELATÓRIO DE VALE REFEIÇÃO</p>
                 <p className="text-xs">Competência: {competenciaLabel}</p>
-                <p className="text-xs">Emissão: {emissaoDate}</p>
                 <p className="text-xs">Dias úteis: {diasUteis}</p>
                 {dataFechamento && <p className="text-xs">Fechamento: {new Date(dataFechamento).toLocaleDateString('pt-BR')}</p>}
               </div>

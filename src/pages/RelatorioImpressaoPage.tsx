@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { calcTotalFuncionario, calcHE50, calcHE100, calcFalta, calcAtraso, formatCurrency, formatDate } from '@/lib/calculations';
+import { calcTotalFuncionario, calcHE50, calcHE100, calcFalta, calcAtraso, formatCurrency } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import { useSearchParams } from 'react-router-dom';
 
 const RelatorioImpressaoPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, getFechamento } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const companyId = searchParams.get('empresa') || '';
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
@@ -52,12 +53,21 @@ const RelatorioImpressaoPage: React.FC = () => {
     return `${meses[Number(m) - 1]} / ${y}`;
   })();
 
+  // Wait for auth + data hydration before declaring not-found (avoids race when opening in new tab)
+  if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-foreground">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Carregando relatório…</p>
+      </div>
+    );
+  }
   if (!company) return <div className="p-10 text-center text-lg">Empresa não encontrada. Acesse via relatório.</div>;
 
   return (
     <>
       <style>{`
-        @page { size: A4; margin: 12mm; }
+        @page { size: A4 landscape; margin: 10mm; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
           body * { visibility: hidden !important; }
@@ -79,18 +89,17 @@ const RelatorioImpressaoPage: React.FC = () => {
             🖨 Imprimir / PDF
           </button>
         </div>
-        <div id="fech-print-area" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
+        <div id="fech-print-area" className="max-w-[297mm] mx-auto px-6 py-5 print:px-4 print:py-3" style={{ fontSize: '11px' }}>
         {/* Header */}
         <div className="border-b-2 border-black pb-3 mb-4">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-lg font-bold">{company.name}</h1>
+              <h1 className="text-xl font-bold tracking-tight">{company.name}</h1>
               <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
             </div>
             <div className="text-right">
-              <p className="text-sm font-bold">RELATÓRIO DE FECHAMENTO</p>
+              <p className="text-base font-bold">RELATÓRIO DE FECHAMENTO</p>
               <p className="text-xs">Competência: {competenciaLabel}</p>
-              <p className="text-xs">Emissão: {new Date().toLocaleDateString('pt-BR')}</p>
               <p className="text-xs">Dias úteis: {diasUteis}</p>
             </div>
           </div>
