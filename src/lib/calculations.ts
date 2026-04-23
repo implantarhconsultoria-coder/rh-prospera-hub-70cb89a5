@@ -122,20 +122,15 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
   // VA: fixed monthly
   const vaVal = entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0;
 
-  // VT: proportional discount for faltas
-  const vtBruto = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario * diasUteis : 0;
-  const vtDescontoFalta = entry.vtAplicado && emp.vtAtivo
-    ? emp.vtDiario * entry.faltasDias
-    : 0;
-  const vtVal = Math.max(0, vtBruto - vtDescontoFalta);
+  // VT: benefício, sem desconto automático
+  const vtVal = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario * Math.max(0, diasUteis - entry.faltasDias) : 0;
 
   const beneficios = vrVal + vaVal + vtVal;
 
   const descontos = calcFalta(emp.salarioBase, entry.faltasDias)
     + calcAtraso(emp.salarioBase, entry.atrasos)
     + entry.descontosDiversos
-    + (entry.adiantamento || 0)
-    + (entry.vtDesconto || 0);
+    + (entry.adiantamento || 0);
 
   return {
     proventos,
@@ -145,7 +140,6 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
     vrVal,
     vaVal,
     vtVal,
-    vtDescontoFalta,
     vrDiasEfetivos,
     he50Val,
     he100Val,
