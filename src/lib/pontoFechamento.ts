@@ -61,6 +61,16 @@ export interface AtestadoLite {
   data_fim: string;    // YYYY-MM-DD (inclusive)
 }
 
+export type ClassificacaoDia =
+  | 'trabalhado'
+  | 'falta_sem_justificativa'
+  | 'falta_justificada'
+  | 'atestado_sem_falta'
+  | 'folga'
+  | 'ignorado';
+
+export type StatusFuncionario = 'pendente' | 'conferido' | 'divergente' | 'justificado' | 'ignorado';
+
 export interface ResultadoCruzamento {
   funcionario_nome: string;
   funcionario_id?: string;
@@ -75,7 +85,7 @@ export interface ResultadoCruzamento {
   dsrPerdido: number;        // 1 DSR por falta sem atestado (informativo p/ relatório)
   dias: Array<{
     data: string;
-    classificacao: 'trabalhado' | 'falta' | 'atestado' | 'folga' | 'ignorado';
+    classificacao: ClassificacaoDia;
     minutosTrabalhados: number;
     atrasoMin: number;
     he50Min: number;
@@ -85,6 +95,12 @@ export interface ResultadoCruzamento {
   ignorado: boolean;         // funcionário todo ignorado pelas regras
   motivoIgnorado?: string;
   warnings: string[];
+  /** Status agregado p/ tela de conferência. */
+  statusConferencia: StatusFuncionario;
+  /** Lista de divergências em texto p/ relatório. */
+  divergencias: string[];
+  /** Atestados que não casaram com falta no ponto. */
+  atestadosSemFalta: Array<{ data_inicio: string; data_fim: string }>;
 }
 
 const parseHHMM = (h?: string): number | null => {
