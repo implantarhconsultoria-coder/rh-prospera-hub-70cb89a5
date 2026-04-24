@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -6,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, User, Calendar, Clock, ShieldAlert, Wand2 } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, User, Calendar, Clock, ShieldAlert, Wand2, ClipboardCheck, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { renderPdfPagesToDataUrls } from '@/lib/pdf';
 import {
