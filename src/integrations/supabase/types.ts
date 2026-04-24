@@ -456,6 +456,7 @@ export type Database = {
           ocr_confianca: number
           ocr_texto_bruto: string
           status: string
+          status_conferencia: string
           updated_at: string
         }
         Insert: {
@@ -482,6 +483,7 @@ export type Database = {
           ocr_confianca?: number
           ocr_texto_bruto?: string
           status?: string
+          status_conferencia?: string
           updated_at?: string
         }
         Update: {
@@ -508,6 +510,7 @@ export type Database = {
           ocr_confianca?: number
           ocr_texto_bruto?: string
           status?: string
+          status_conferencia?: string
           updated_at?: string
         }
         Relationships: []
@@ -572,6 +575,90 @@ export type Database = {
           user_id?: string
           vencimento_ipva?: string | null
           vencimento_licenciamento?: string | null
+        }
+        Relationships: []
+      }
+      cartoes_ponto: {
+        Row: {
+          arquivo_nome: string
+          arquivo_url: string
+          company_id: string | null
+          competencia: string
+          conferido_em: string | null
+          conferido_por_nome: string
+          conferido_por_user_id: string | null
+          created_at: string
+          dias_json: Json
+          divergencias_json: Json
+          empresa_nome: string
+          enviado_fechamento: boolean
+          enviado_fechamento_em: string | null
+          funcionario_id: string | null
+          funcionario_nome: string
+          id: string
+          importado_por_nome: string
+          importado_por_user_id: string
+          motivo_ignorado: string
+          observacao: string
+          ocr_confianca: number
+          origem: string
+          status_conferencia: string
+          totais_json: Json
+          updated_at: string
+        }
+        Insert: {
+          arquivo_nome?: string
+          arquivo_url?: string
+          company_id?: string | null
+          competencia?: string
+          conferido_em?: string | null
+          conferido_por_nome?: string
+          conferido_por_user_id?: string | null
+          created_at?: string
+          dias_json?: Json
+          divergencias_json?: Json
+          empresa_nome?: string
+          enviado_fechamento?: boolean
+          enviado_fechamento_em?: string | null
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          importado_por_nome?: string
+          importado_por_user_id: string
+          motivo_ignorado?: string
+          observacao?: string
+          ocr_confianca?: number
+          origem?: string
+          status_conferencia?: string
+          totais_json?: Json
+          updated_at?: string
+        }
+        Update: {
+          arquivo_nome?: string
+          arquivo_url?: string
+          company_id?: string | null
+          competencia?: string
+          conferido_em?: string | null
+          conferido_por_nome?: string
+          conferido_por_user_id?: string | null
+          created_at?: string
+          dias_json?: Json
+          divergencias_json?: Json
+          empresa_nome?: string
+          enviado_fechamento?: boolean
+          enviado_fechamento_em?: string | null
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          importado_por_nome?: string
+          importado_por_user_id?: string
+          motivo_ignorado?: string
+          observacao?: string
+          ocr_confianca?: number
+          origem?: string
+          status_conferencia?: string
+          totais_json?: Json
+          updated_at?: string
         }
         Relationships: []
       }
