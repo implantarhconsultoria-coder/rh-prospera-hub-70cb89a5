@@ -1,166 +1,94 @@
 
 
-# Plano de Evolução — Topac RH Multiempresa PRO
+# Correção crítica — Fluxo Ponto + Atestado → Fechamento automático
 
-## Visão Geral
+## Objetivo
+Transformar a aba atual ("Importação para o Fechamento") de **"sobe arquivos"** para **"sobe → lê → cruza → confere → alimenta o fechamento"**, com tela de conferência dedicada, status visuais e relatório de divergências.
 
-Atualização incremental do projeto existente em 9 fases, sem refazer do zero, mantendo menu, identidade visual e fluxos atuais. Usa Lovable Cloud para autenticação real, banco de dados e armazenamento de arquivos.
+## O que vai ser corrigido
 
----
+### 1. Persistir o cartão de ponto (hoje só fica em memória)
+Criar tabela `cartoes_ponto` para armazenar cada cartão lido (funcionário, competência, dias com batidas, totais calculados, status de conferência, link do arquivo). Hoje, se o usuário recarrega a página, perde tudo. Vai persistir igual ao atestado.
 
-## Fase 1 — Login Real com Autenticação Lovable Cloud
+### 2. Status de conferência visual em cada linha
+Cada cartão vinculado vai mostrar um dos 4 status:
+- **Pendente** (cinza) — lido mas não conferido
+- **Conferido** (verde) — usuário validou
+- **Divergente** (laranja) — falta sem atestado, batida inconsistente, OCR baixa confiança
+- **Justificado** (azul) — falta coberta por atestado
 
-**O que muda:** Substituir login fake (admin/admin) por autenticação real com email/senha.
+### 3. Tela "Conferência de Ponto e Atestados" (nova rota dedicada)
+Rota: `/admin/conferencia-ponto`  
+Filtros: Empresa + Competência  
+Mostra por funcionário:
+| Funcionário | Dias trab. | Faltas no ponto | Atestados vinculados | Divergências | Status | Ações |
+|---|---|---|---|---|---|---|
+| João Silva | 20 | 2 | 1 atestado (3 dias) | 1 falta sem justificativa | ⚠️ Divergente | Ver detalhes / Conferir / Enviar p/ fechamento |
 
-- Criar tabela `profiles` no banco (nome completo, email, telefone, cargo)
-- Telas: Login, Cadastro, Recuperar Senha, Redefinir Senha
-- Campos do cadastro: nome completo, email, telefone, senha, confirmação
-- Proteger todas as rotas internas (só usuários logados acessam)
-- Manter o mesmo visual do login atual (gradient, logo, estilo premium)
-- Remover login hardcoded do AppContext, usar sessão real
-- Adicionar Google OAuth como opção de login
+Botões no topo: **"Enviar tudo conferido p/ fechamento"** e **"Gerar Relatório de Divergências (PDF)"**.
 
----
+### 4. Cruzamento automático ampliado
+Hoje o cruzamento só roda quando o usuário clica. Vai passar a rodar:
+- Automaticamente após salvar atestado (recalcula cartões da mesma competência/funcionário)
+- Automaticamente após upload/leitura de cartão
+- Classificando cada dia ausente em: `falta_justificada`, `falta_sem_justificativa`, `atestado_sem_falta_correspondente`
 
-## Fase 2 — Remover Campo "Responsável" de Todos os Documentos
+### 5. Alimentação do Fechamento sem digitação dupla
+Botão "Enviar p/ fechamento" no detalhe de cada funcionário (e em massa). Já existe a lógica em `aplicarNoFechamento` — vai ganhar:
+- Preview "antes vs. depois" antes de gravar
+- Preserva campos manuais (adicionais, descontos diversos, comissão)
+- Marca `lancamentos_mensais.observacoes` com origem ("Importado do cartão XYZ em DD/MM")
+- Bloqueia reenvio se a competência estiver fechada (status `fechado`)
 
-- Remover campo digitável e validação de `responsavel` de: EPIPage, UniformePage
-- Remover da interface e do `addDelivery`
-- Manter apenas a linha de assinatura no documento impresso/PDF
-- Aplicar a mesma regra em todos os novos documentos
+### 6. Tela manual assistida quando OCR falha
+Quando a IA não consegue ler (confiança < 0.5 ou erro), em vez de marcar erro e parar:
+- Mantém o arquivo anexado
+- Abre formulário lado a lado com o PDF embutido
+- Usuário digita batidas dia a dia (ou só faltas) e salva como cartão manual
 
----
+### 7. Relatório de Divergências (PDF)
+Gera lista por empresa/competência com:
+- Faltas sem atestado (nome, data, dias)
+- Atestados sem falta correspondente no ponto
+- Cartões com batidas inconsistentes
+- Cartões ignorados (Jerri, Rodrigo Sabino, Rodrigo Medrado, mecânicos de rua)
 
-## Fase 3 — Padronizar Visual de Todos os Documentos
+### 8. Estabilidade pós-save (regra crítica)
+Em todos os botões "Salvar / Confirmar / Aplicar":
+- Loading visível e botão desabilitado durante a operação
+- Toast de sucesso ao terminar
+- `await fetchData()` para atualizar lista sem reload manual
+- ErrorBoundary já está protegendo contra tela branca (já implementado)
 
-Usar o layout da ficha de Uniformes como referência para todos os documentos (tela e impressão):
-- Cabeçalho com empresa e CNPJ
-- Título do documento
-- Bloco de identificação do colaborador
-- Tabela central com itens
-- Termo/observação quando necessário
-- Linhas de assinatura no final
-- Rodapé padrão
+## Arquivos que serão alterados/criados
 
-Aplicar em: EPI, Uniformes, Recibos VR, Recibos VT, e todos os novos documentos.
+**Migration (banco):**
+- Nova tabela `cartoes_ponto` (funcionario_id, company_id, competencia, arquivo_url, dias_json, totais, status_conferencia, divergencias_json, criado_por, RLS)
+- Coluna `status_conferencia` em `atestados` (pendente/conferido/justificado)
 
----
+**Código novo:**
+- `src/pages/ConferenciaPontoPage.tsx` — tela de conferência consolidada
+- `src/lib/divergenciasReport.ts` — geração do PDF de divergências
+- `src/components/CartaoManualForm.tsx` — fallback manual quando OCR falha
 
-## Fase 4 — Corrigir VR e VT
-
-- Revisar dados de VR/VT dos funcionários de TOPAC MATRIZ, TOPAC PRAIA GRANDE, TOPAC GOIÂNIA e LMT (atualmente muitos estão com `vrAtivo: false, vtAtivo: false`)
-- Corrigir vínculo por funcionário conforme dados reais
-- Garantir que recibos VR e VT emitam corretamente com o padrão visual unificado
-- Impressão/PDF funcionando
-
----
-
-## Fase 5 — Novo Documento: Retirada de Combustível
-
-- Nova página `/combustivel` no menu lateral (seção Operacional)
-- Empresa padrão: TOPAC MATRIZ
-- Selecionar funcionário → preenche automaticamente: nome, empresa, CNPJ, cargo, CPF, data
-- Campos específicos: tipo de combustível (gasolina/diesel), quantidade (15L/20L), observações
-- Mesmo padrão visual da ficha de Uniformes
-- Impressão A4 com linhas de assinatura, sem campo de responsável
-
----
-
-## Fase 6 — Novo Documento: Protocolo / Liberação de Documento
-
-- Nova página `/protocolo` no menu lateral
-- Empresa padrão: TOPAC MATRIZ
-- Campos: empresa destinatária, local/canteiro, pessoa responsável pelo recebimento
-- Identificação do ativo: placa, renavam, chassi, ano fabricação, ano modelo, patrimônio, exercício
-- Observações e assinatura final
-- Mesmo padrão visual, impressão A4
-
----
-
-## Fase 7 — Novo Documento: Liberação de Locação de Compressores
-
-- Nova página `/compressores` no menu lateral
-- Empresa padrão: TOPAC MATRIZ
-- Campos: dados do compressor, veículo, empresa contratante, pessoa que recebe, patrimônio, placa, renavam, chassi, ano, exercício, observações
-- Gerar 2 vias na mesma impressão
-- Mesmo padrão visual, impressão A4
-
----
-
-## Fase 8 — Área Interna para PDFs de Veículos e Compressores
-
-**Banco de dados:**
-- Tabela `ativos` (tipo: veículo/compressor, descrição, placa, patrimônio, empresa, observação, status)
-- Storage bucket `documentos-ativos` para upload de PDFs
-
-**Interface:**
-- Nova página `/documentos-ativos` no menu lateral
-- Cadastro de ativos com upload de PDF
-- Consulta por placa ou patrimônio
-- Visualização e download do PDF vinculado
-- Possibilidade de imprimir documento principal + PDF anexo
-
----
-
-## Fase 9 — Revisão do Fechamento Mensal
-
-**Problema:** Valores variáveis aparecem preenchidos sem lançamento real.
-
-**Correção na função `generateDefaultEntries`:**
-- `vrAplicado`, `vaAplicado`, `vtAplicado` → usar valor real do cadastro do funcionário (só `true` se o benefício estiver ativo)
-- `insalubridadeAplicada` → só `true` se `emp.insalubridadeAtiva`
-- Todos os campos variáveis iniciam zerados: faltas, atrasos, HE50, HE100, comissão, descontos, adiantamento
-- `vtDesconto` inicia 0 (só calcula se vtAtivo e houver regra)
-- Adiantamento fixo de 40% do salário só aparece no fechamento quando calculado, não como dado pré-preenchido na entry
-
-**O que é fixo (vem da base):** salário, nome, cargo, empresa, matrícula, benefícios cadastrados
-**O que é variável (não nasce preenchido):** faltas, atrasos, HE, comissão, descontos, adiantamento
-
-**Manter:** layout atual, colunas, totais recalculados corretamente
-
----
-
-## Resumo de Tabelas no Banco (Migrações)
-
-| Tabela | Finalidade |
-|--------|-----------|
-| `profiles` | Dados do usuário logado (nome, email, telefone) |
-| `ativos` | Cadastro de veículos e compressores |
-| Storage: `documentos-ativos` | PDFs dos ativos |
-
----
-
-## Itens do Menu Lateral (Adições)
-
-Seção Operacional — adicionar:
-- Retirada de Combustível (`/combustivel`)
-- Protocolo de Documento (`/protocolo`)
-- Locação de Compressores (`/compressores`)
-- Documentos de Ativos (`/documentos-ativos`)
-
----
+**Código alterado:**
+- `src/pages/ImportacaoFechamentoPage.tsx` — persistir cartões, classificação ampliada, status visuais, fallback manual
+- `src/lib/pontoFechamento.ts` — adicionar classificação `atestado_sem_falta` e cálculo de status por funcionário
+- `src/App.tsx` + `src/components/AppSidebar.tsx` — rota e link "Conferência de Ponto"
+- `src/pages/FechamentoPage.tsx` — badge "Importado" nos lançamentos vindos do cartão
 
 ## O que NÃO será alterado
+- Layout geral, menus, permissões existentes, regras de cálculo do Fechamento (HE, INSS, FGTS, IRRF, VR, VT)
+- Exceções já implementadas (Jerri, Rodrigos, mecânicos, Marcelo HE 50%)
+- Tolerância de 15 min (mantida)
 
-- Layout geral e identidade visual
-- Menu existente (apenas adições)
-- Módulos que já funcionam corretamente
-- Rotas existentes
-- Dados estáticos de funcionários e empresas (mantidos no código por enquanto)
+## Risco de dados já salvos
+**Nenhum.** A migration só **cria** uma tabela nova e **adiciona** coluna nova com default. Os atestados já salvos continuam intactos.
 
----
-
-## Ordem de Implementação
-
-1. Login real + proteção de rotas
-2. Remover campo responsável
-3. Padronizar visual dos documentos
-4. Corrigir VR/VT
-5. Retirada de Combustível
-6. Protocolo de Documento
-7. Locação de Compressores
-8. Área de PDFs de ativos
-9. Revisão do fechamento
-
-Cada fase será implementada e testada antes de passar para a próxima.
+## Resultado esperado
+1. Sobe atestados → ficam arquivados e marcados como "pendente"
+2. Sobe cartões → ficam persistidos com status automático (Conferido / Divergente / Justificado)
+3. Abre "Conferência de Ponto" → vê tudo consolidado por funcionário com divergências destacadas
+4. Confere e clica "Enviar p/ Fechamento" → `lancamentos_mensais` é atualizado preservando dados manuais
+5. Imprime "Relatório de Divergências" para revisão final
 
