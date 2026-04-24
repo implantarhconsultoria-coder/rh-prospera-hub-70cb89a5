@@ -415,6 +415,10 @@ const ImportacaoFechamentoPage: React.FC = () => {
             <label className="text-xs text-muted-foreground block mb-1">Competência</label>
             <Input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} className="w-44" />
           </div>
+          <Link to="/admin/conferencia-ponto" className="inline-flex items-center gap-2 px-4 h-10 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium">
+            <ClipboardCheck className="w-4 h-4" /> Conferência de Ponto
+            <ExternalLink className="w-3 h-3 opacity-70" />
+          </Link>
         </div>
       </div>
 
