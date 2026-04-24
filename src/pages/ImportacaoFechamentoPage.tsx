@@ -228,6 +228,7 @@ const ImportacaoFechamentoPage: React.FC = () => {
     if (!files || files.length === 0) return;
     const userId = session?.user?.id;
     if (!userId) { toast.error('Sessão expirada'); return; }
+    const userName = session?.user?.email || 'Sistema';
 
     for (const file of Array.from(files)) {
       const safeName = `${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`;
@@ -259,17 +260,43 @@ const ImportacaoFechamentoPage: React.FC = () => {
         if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Falha OCR');
         const ext = data.data as CartaoPonto;
         const emp = matchFuncionario({ funcionario_nome: ext.funcionario_nome, cpf: ext.cpf });
+        const empresa = emp ? companies.find((c) => c.id === emp.companyId) : undefined;
+        const compCartao = ext.competencia || competencia;
+
+        // Persiste o cartão no banco para sobreviver a refresh / aparecer na conferência
+        const { error: errIns } = await supabase.from('cartoes_ponto').insert({
+          funcionario_id: emp?.id || null,
+          funcionario_nome: ext.funcionario_nome || emp?.name || '',
+          company_id: emp?.companyId || null,
+          empresa_nome: empresa?.name || '',
+          competencia: compCartao,
+          arquivo_nome: file.name,
+          arquivo_url: fileUrl,
+          origem: 'ocr',
+          ocr_confianca: Number(ext.confianca) || 0,
+          dias_json: ext.dias || [],
+          status_conferencia: 'pendente',
+          importado_por_user_id: userId,
+          importado_por_nome: userName,
+        });
+        if (errIns) {
+          // Não bloqueia o staging — apenas avisa
+          // eslint-disable-next-line no-console
+          console.warn('Falha ao persistir cartão:', errIns.message);
+        }
+
         setCartoesStaging((p) => p.map((s) => s.fileUrl === fileUrl ? {
           ...s, status: 'ok',
           funcionarioId: emp?.id,
           funcionarioNome: ext.funcionario_nome || emp?.name || '',
-          competencia: ext.competencia || '',
+          competencia: compCartao,
           cartao: ext,
           confianca: Number(ext.confianca) || 0,
         } : s));
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Erro desconhecido';
         setCartoesStaging((p) => p.map((s) => s.fileUrl === fileUrl
-          ? { ...s, status: 'erro', erro: e.message } : s));
+          ? { ...s, status: 'erro', erro: msg } : s));
       }
     }
   };
