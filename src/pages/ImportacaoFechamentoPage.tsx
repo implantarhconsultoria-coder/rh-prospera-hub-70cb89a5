@@ -264,7 +264,7 @@ const ImportacaoFechamentoPage: React.FC = () => {
         const compCartao = ext.competencia || competencia;
 
         // Persiste o cartão no banco para sobreviver a refresh / aparecer na conferência
-        const { error: errIns } = await supabase.from('cartoes_ponto').insert({
+        const { error: errIns } = await (supabase.from('cartoes_ponto') as unknown as { insert: (row: Record<string, unknown>) => Promise<{ error: { message: string } | null }> }).insert({
           funcionario_id: emp?.id || null,
           funcionario_nome: ext.funcionario_nome || emp?.name || '',
           company_id: emp?.companyId || null,
