@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation, useParams } from 'react-router-dom';
 import { Home, Clock, ClipboardList, Package, Gauge, Car, Fuel, History } from 'lucide-react';
 import { TecnicoAppProvider, useTecnicoApp } from '@/context/TecnicoAppContext';
 import { cn } from '@/lib/utils';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const tabs = [
   { label: 'Início', icon: Home, sub: '' },
@@ -99,7 +100,7 @@ const MecanicoLayoutInner: React.FC = () => (
     <HeaderInner />
     <main className="flex-1 overflow-y-auto pb-24">
       <div className="p-4 max-w-lg mx-auto text-white">
-        <Outlet />
+        <ErrorBoundary><Outlet /></ErrorBoundary>
       </div>
     </main>
     <TabBar />

@@ -6,6 +6,7 @@ import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -41,7 +42,7 @@ const AppLayout: React.FC = () => {
         collapsed ? "ml-16" : "ml-64"
       )}>
         <div className="p-6 max-w-[1600px] mx-auto">
-          <Outlet />
+          <ErrorBoundary><Outlet /></ErrorBoundary>
         </div>
       </main>
     </div>

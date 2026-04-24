@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const OperacionalLayout: React.FC = () => {
   const { userRole, roleLoading, logout } = useApp();
@@ -43,7 +44,7 @@ const OperacionalLayout: React.FC = () => {
       </header>
       <main className="flex-1 overflow-y-auto">
         <div className="p-6 max-w-[1200px] mx-auto">
-          <Outlet />
+          <ErrorBoundary><Outlet /></ErrorBoundary>
         </div>
       </main>
     </div>

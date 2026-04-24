@@ -83,6 +83,7 @@ import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
@@ -223,35 +224,37 @@ const AuthGate = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AppProvider>
-        <BrowserRouter>
-          <Routes>
-            {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
-            <Route path="/m/:token" element={<MecanicoLayout />}>
-              <Route index element={<MecanicoHomePage />} />
-              <Route path="ponto" element={<MecanicoPontoPage />} />
-              <Route path="chamados" element={<MecanicoChamadosPage />} />
-              <Route path="estoque" element={<MecanicoEstoquePage />} />
-              <Route path="km" element={<MecanicoKmPage />} />
-              <Route path="abastecimento" element={<MecanicoAbastecimentoPage />} />
-              <Route path="galoes" element={<MecanicoGaloesPage />} />
-              <Route path="historico" element={<MecanicoHistoricoPage />} />
-            </Route>
-            <Route path="/relatorio-impressao" element={<RelatorioImpressaoPage />} />
-            <Route path="/entrega-impressao" element={<EntregaImpressaoPage />} />
-            <Route path="/relatorio-vr-impressao" element={<RelatorioVRImpressaoPage />} />
-            <Route path="/relatorio-vt-impressao" element={<RelatorioVTImpressaoPage />} />
-            <Route path="/relatorio-beneficio-individual" element={<RelatorioBeneficioIndividualPage />} />
-            <Route path="/*" element={<AuthGate />} />
-          </Routes>
-        </BrowserRouter>
-      </AppProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <AppProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
+              <Route path="/m/:token" element={<MecanicoLayout />}>
+                <Route index element={<MecanicoHomePage />} />
+                <Route path="ponto" element={<MecanicoPontoPage />} />
+                <Route path="chamados" element={<MecanicoChamadosPage />} />
+                <Route path="estoque" element={<MecanicoEstoquePage />} />
+                <Route path="km" element={<MecanicoKmPage />} />
+                <Route path="abastecimento" element={<MecanicoAbastecimentoPage />} />
+                <Route path="galoes" element={<MecanicoGaloesPage />} />
+                <Route path="historico" element={<MecanicoHistoricoPage />} />
+              </Route>
+              <Route path="/relatorio-impressao" element={<ErrorBoundary><RelatorioImpressaoPage /></ErrorBoundary>} />
+              <Route path="/entrega-impressao" element={<ErrorBoundary><EntregaImpressaoPage /></ErrorBoundary>} />
+              <Route path="/relatorio-vr-impressao" element={<ErrorBoundary><RelatorioVRImpressaoPage /></ErrorBoundary>} />
+              <Route path="/relatorio-vt-impressao" element={<ErrorBoundary><RelatorioVTImpressaoPage /></ErrorBoundary>} />
+              <Route path="/relatorio-beneficio-individual" element={<ErrorBoundary><RelatorioBeneficioIndividualPage /></ErrorBoundary>} />
+              <Route path="/*" element={<AuthGate />} />
+            </Routes>
+          </BrowserRouter>
+        </AppProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
