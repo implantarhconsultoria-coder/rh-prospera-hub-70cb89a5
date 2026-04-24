@@ -61,6 +61,16 @@ export interface AtestadoLite {
   data_fim: string;    // YYYY-MM-DD (inclusive)
 }
 
+export type ClassificacaoDia =
+  | 'trabalhado'
+  | 'falta_sem_justificativa'
+  | 'falta_justificada'
+  | 'atestado_sem_falta'
+  | 'folga'
+  | 'ignorado';
+
+export type StatusFuncionario = 'pendente' | 'conferido' | 'divergente' | 'justificado' | 'ignorado';
+
 export interface ResultadoCruzamento {
   funcionario_nome: string;
   funcionario_id?: string;
@@ -75,7 +85,7 @@ export interface ResultadoCruzamento {
   dsrPerdido: number;        // 1 DSR por falta sem atestado (informativo p/ relatório)
   dias: Array<{
     data: string;
-    classificacao: 'trabalhado' | 'falta' | 'atestado' | 'folga' | 'ignorado';
+    classificacao: ClassificacaoDia;
     minutosTrabalhados: number;
     atrasoMin: number;
     he50Min: number;
@@ -85,6 +95,12 @@ export interface ResultadoCruzamento {
   ignorado: boolean;         // funcionário todo ignorado pelas regras
   motivoIgnorado?: string;
   warnings: string[];
+  /** Status agregado p/ tela de conferência. */
+  statusConferencia: StatusFuncionario;
+  /** Lista de divergências em texto p/ relatório. */
+  divergencias: string[];
+  /** Atestados que não casaram com falta no ponto. */
+  atestadosSemFalta: Array<{ data_inicio: string; data_fim: string }>;
 }
 
 const parseHHMM = (h?: string): number | null => {
@@ -188,9 +204,13 @@ export const cruzarCartaoComAtestados = (
     ignorado: ignorar.ignorar,
     motivoIgnorado: ignorar.motivo,
     warnings,
+    statusConferencia: 'pendente',
+    divergencias: [],
+    atestadosSemFalta: [],
   };
 
   if (ignorar.ignorar) {
+    baseRes.statusConferencia = 'ignorado';
     return baseRes;
   }
 
@@ -205,6 +225,21 @@ export const cruzarCartaoComAtestados = (
   let he50Min = 0;
   let he100Min = 0;
   let diasUteis = 0;
+
+  // Conjunto de datas cobertas por atestado (string ISO) p/ detectar atestado_sem_falta
+  const datasCobertasPorAtestado = new Set<string>();
+  for (const a of atestados) {
+    if (!a.data_inicio) continue;
+    const fim = a.data_fim || a.data_inicio;
+    const ini = new Date(a.data_inicio + 'T12:00:00');
+    const end = new Date(fim + 'T12:00:00');
+    for (let d = new Date(ini); d <= end; d.setDate(d.getDate() + 1)) {
+      datasCobertasPorAtestado.add(d.toISOString().slice(0, 10));
+    }
+  }
+
+  // Conjunto de datas em que houve falta no ponto (cobertas ou não)
+  const datasComFaltaNoPonto = new Set<string>();
 
   for (const dia of cartao.dias || []) {
     if (!dia.data) continue;
@@ -236,13 +271,15 @@ export const cruzarCartaoComAtestados = (
         baseRes.dias.push({ data: dia.data, classificacao: 'folga', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0 });
         continue;
       }
+      datasComFaltaNoPonto.add(dia.data);
       const coberto = marcaAtestado || cobertoPorAtestado(dia.data, atestados);
       if (coberto) {
         diasAtestado += 1;
-        baseRes.dias.push({ data: dia.data, classificacao: 'atestado', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0, motivo: 'Coberto por atestado' });
+        baseRes.dias.push({ data: dia.data, classificacao: 'falta_justificada', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0, motivo: 'Coberto por atestado' });
       } else {
         faltasDias += 1;
-        baseRes.dias.push({ data: dia.data, classificacao: 'falta', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0 });
+        baseRes.dias.push({ data: dia.data, classificacao: 'falta_sem_justificativa', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0 });
+        baseRes.divergencias.push(`Falta sem atestado em ${dia.data}`);
       }
       continue;
     }
@@ -251,6 +288,7 @@ export const cruzarCartaoComAtestados = (
     const calc = calcularMinutosDia(dia, jornadaMin, j.minutosAlmoco);
     if (!calc.valido) {
       warnings.push(`Dia ${dia.data}: batidas inconsistentes — verifique manualmente`);
+      baseRes.divergencias.push(`Batida inconsistente em ${dia.data}`);
       baseRes.dias.push({ data: dia.data, classificacao: 'ignorado', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0, motivo: 'Batidas inválidas' });
       continue;
     }
@@ -290,6 +328,23 @@ export const cruzarCartaoComAtestados = (
     });
   }
 
+  // Atestados que cobrem dias SEM falta no ponto (informativo / divergência leve)
+  for (const a of atestados) {
+    if (!a.data_inicio) continue;
+    const fim = a.data_fim || a.data_inicio;
+    let temFaltaNoPeriodo = false;
+    const ini = new Date(a.data_inicio + 'T12:00:00');
+    const end = new Date(fim + 'T12:00:00');
+    for (let d = new Date(ini); d <= end; d.setDate(d.getDate() + 1)) {
+      const iso = d.toISOString().slice(0, 10);
+      if (datasComFaltaNoPonto.has(iso)) { temFaltaNoPeriodo = true; break; }
+    }
+    if (!temFaltaNoPeriodo) {
+      baseRes.atestadosSemFalta.push({ data_inicio: a.data_inicio, data_fim: fim });
+      baseRes.divergencias.push(`Atestado ${a.data_inicio}→${fim} sem falta correspondente`);
+    }
+  }
+
   baseRes.diasUteis = diasUteis;
   baseRes.faltasDias = faltasDias;
   baseRes.diasAtestado = diasAtestado;
@@ -297,6 +352,15 @@ export const cruzarCartaoComAtestados = (
   baseRes.he50Horas = Math.round((he50Min / 60) * 100) / 100;
   baseRes.he100Horas = Math.round((he100Min / 60) * 100) / 100;
   baseRes.dsrPerdido = faltasDias; // 1 DSR por falta sem cobertura
+
+  // Determina o status agregado
+  if (faltasDias > 0 || baseRes.divergencias.length > 0) {
+    baseRes.statusConferencia = 'divergente';
+  } else if (diasAtestado > 0) {
+    baseRes.statusConferencia = 'justificado';
+  } else {
+    baseRes.statusConferencia = 'pendente';
+  }
 
   return baseRes;
 };

@@ -55,6 +55,7 @@ import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividu
 import HistoricoPage from "@/pages/HistoricoPage";
 import AtestadosImportPage from "@/pages/AtestadosImportPage";
 import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
+import ConferenciaPontoPage from "@/pages/ConferenciaPontoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
@@ -160,6 +161,7 @@ const AuthGate = () => {
         <Route path="/admin/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/admin/atestados" element={<AtestadosImportPage />} />
         <Route path="/admin/importar-fechamento" element={<ImportacaoFechamentoPage />} />
+        <Route path="/admin/conferencia-ponto" element={<ConferenciaPontoPage />} />
         <Route path="/admin/almoxarifado" element={<AlmoxarifadoPage />} />
         <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />

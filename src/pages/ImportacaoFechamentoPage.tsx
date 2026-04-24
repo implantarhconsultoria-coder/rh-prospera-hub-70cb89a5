@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -6,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, User, Calendar, Clock, ShieldAlert, Wand2 } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, User, Calendar, Clock, ShieldAlert, Wand2, ClipboardCheck, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { renderPdfPagesToDataUrls } from '@/lib/pdf';
 import {
@@ -227,6 +228,7 @@ const ImportacaoFechamentoPage: React.FC = () => {
     if (!files || files.length === 0) return;
     const userId = session?.user?.id;
     if (!userId) { toast.error('Sessão expirada'); return; }
+    const userName = session?.user?.email || 'Sistema';
 
     for (const file of Array.from(files)) {
       const safeName = `${Date.now()}-${file.name.replace(/[^\w.\-]/g, '_')}`;
@@ -258,17 +260,43 @@ const ImportacaoFechamentoPage: React.FC = () => {
         if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Falha OCR');
         const ext = data.data as CartaoPonto;
         const emp = matchFuncionario({ funcionario_nome: ext.funcionario_nome, cpf: ext.cpf });
+        const empresa = emp ? companies.find((c) => c.id === emp.companyId) : undefined;
+        const compCartao = ext.competencia || competencia;
+
+        // Persiste o cartão no banco para sobreviver a refresh / aparecer na conferência
+        const { error: errIns } = await (supabase.from('cartoes_ponto') as unknown as { insert: (row: Record<string, unknown>) => Promise<{ error: { message: string } | null }> }).insert({
+          funcionario_id: emp?.id || null,
+          funcionario_nome: ext.funcionario_nome || emp?.name || '',
+          company_id: emp?.companyId || null,
+          empresa_nome: empresa?.name || '',
+          competencia: compCartao,
+          arquivo_nome: file.name,
+          arquivo_url: fileUrl,
+          origem: 'ocr',
+          ocr_confianca: Number(ext.confianca) || 0,
+          dias_json: ext.dias || [],
+          status_conferencia: 'pendente',
+          importado_por_user_id: userId,
+          importado_por_nome: userName,
+        });
+        if (errIns) {
+          // Não bloqueia o staging — apenas avisa
+          // eslint-disable-next-line no-console
+          console.warn('Falha ao persistir cartão:', errIns.message);
+        }
+
         setCartoesStaging((p) => p.map((s) => s.fileUrl === fileUrl ? {
           ...s, status: 'ok',
           funcionarioId: emp?.id,
           funcionarioNome: ext.funcionario_nome || emp?.name || '',
-          competencia: ext.competencia || '',
+          competencia: compCartao,
           cartao: ext,
           confianca: Number(ext.confianca) || 0,
         } : s));
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Erro desconhecido';
         setCartoesStaging((p) => p.map((s) => s.fileUrl === fileUrl
-          ? { ...s, status: 'erro', erro: e.message } : s));
+          ? { ...s, status: 'erro', erro: msg } : s));
       }
     }
   };
@@ -387,6 +415,10 @@ const ImportacaoFechamentoPage: React.FC = () => {
             <label className="text-xs text-muted-foreground block mb-1">Competência</label>
             <Input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} className="w-44" />
           </div>
+          <Link to="/admin/conferencia-ponto" className="inline-flex items-center gap-2 px-4 h-10 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 text-sm font-medium">
+            <ClipboardCheck className="w-4 h-4" /> Conferência de Ponto
+            <ExternalLink className="w-3 h-3 opacity-70" />
+          </Link>
         </div>
       </div>
 

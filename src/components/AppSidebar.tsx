@@ -43,6 +43,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
   { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados' },
   { label: 'Importar p/ Fechamento', icon: Wand2, path: '/admin/importar-fechamento' },
+  { label: 'Conferência de Ponto', icon: ClipboardCheck, path: '/admin/conferencia-ponto' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
