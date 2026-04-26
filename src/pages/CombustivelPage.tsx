@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Droplet, Search, Printer, History as HistoryIcon, Save, Plus, Minus } from 'lucide-react';
 import { toast } from 'sonner';
+import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
 import { registrarDocumento } from '@/lib/documentoHistorico';
 
@@ -120,10 +121,8 @@ const CombustivelPage: React.FC = () => {
 
   const handlePrint = () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
-    const printWin = window.open('', '_blank');
-    if (!printWin) return;
     const co = topacMatriz || company;
-    printWin.document.write(`<!DOCTYPE html><html><head><title>Retirada de Combustível (Galão)</title>
+    const html = `<!DOCTYPE html><html><head><title>Retirada de Combustível (Galão)</title>
     <style>@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;font-size:12px;color:#000}
     .header{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px}
     .title{font-size:16px;font-weight:bold;text-align:right}
@@ -135,7 +134,6 @@ const CombustivelPage: React.FC = () => {
     th{background:#f5f5f5;font-weight:bold}
     .signatures{display:flex;justify-content:space-between;margin-top:60px}
     .sig-line{text-align:center;width:45%}.sig-line hr{border:0;border-top:1px solid #000;margin-bottom:4px}
-    .footer{margin-top:30px;text-align:center;font-size:9px;color:#999;border-top:1px solid #eee;padding-top:6px}
     </style></head><body>
     <div class="header"><div><strong>${co?.name || 'TOPAC MATRIZ'}</strong><br/><span style="font-size:10px">CNPJ: ${co?.cnpj || ''}</span></div>
     <div class="title">RETIRADA DE COMBUSTÍVEL<br/>(GALÃO INTERNO)</div></div>
@@ -154,10 +152,8 @@ const CombustivelPage: React.FC = () => {
     <div class="sig-line"><hr/><small>Assinatura do Colaborador</small></div>
     <div class="sig-line"><hr/><small>Assinatura do Responsável</small></div>
     </div>
-    <!-- rodapé limpo -->
-    </body></html>`);
-    printWin.document.close();
-    printWin.print();
+    </body></html>`;
+    printDocumentInPage(html);
   };
 
   return (
