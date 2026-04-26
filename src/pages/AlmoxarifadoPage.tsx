@@ -824,6 +824,9 @@ const AlmoxarifadoPage: React.FC = () => {
           </div>
         )}
 
+        {/* CARGA (Carro) — registra/confere, NÃO mexe no estoque */}
+        {tab === 'carga' && <div className="mt-5"><AlmoxarifadoCargaTab /></div>}
+
         {/* FECHAMENTO */}
         {tab === 'fechamento' && (
           <div className="card-premium p-5 space-y-4 mt-5">
