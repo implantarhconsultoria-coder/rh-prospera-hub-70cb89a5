@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { printDocumentInPage } from '@/lib/printInPage';
 
 interface Ativo {
   id: string;
@@ -176,8 +177,6 @@ const DocumentosVeiculosPage: React.FC = () => {
 
   const handlePrintBatch = () => {
     if (filtered.length === 0) { toast.error('Nenhum veículo para imprimir'); return; }
-    const printWin = window.open('', '_blank');
-    if (!printWin) return;
     const rows = filtered.map(a => `<tr>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.descricao}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '—'}</td>
@@ -193,20 +192,17 @@ const DocumentosVeiculosPage: React.FC = () => {
       filterType === 'ipva_vencido' ? 'IPVA Vencido' :
       filterType === 'lic_vencer' ? 'Licenciamento a Vencer' : 'Licenciamento Vencido';
 
-    printWin.document.write(`<!DOCTYPE html><html><head><title>Documentos de Veículos</title>
+    const html = `<!DOCTYPE html><html><head><title>Documentos de Veículos</title>
     <style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;font-size:12px;color:#000}
     h1{font-size:16px;margin-bottom:4px}h2{font-size:12px;color:#666;margin-bottom:12px}
     table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:6px 8px;border:1px solid #ccc;font-size:10px;text-transform:uppercase;text-align:left}
-    .footer{margin-top:20px;text-align:center;font-size:9px;color:#999}
     </style></head><body>
     <h1>Documentos de Veículos — ${filterLabel}</h1>
     <h2>${filtered.length} veículo(s) • Gerado em ${new Date().toLocaleDateString('pt-BR')}</h2>
     <table><thead><tr><th>Descrição</th><th>Placa</th><th>Patrimônio</th><th>Renavam</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <div class="footer">Topac RH Multiempresa PRO</div>
-    </body></html>`);
-    printWin.document.close();
-    setTimeout(() => printWin.print(), 400);
+    </body></html>`;
+    printDocumentInPage(html);
   };
 
   return (

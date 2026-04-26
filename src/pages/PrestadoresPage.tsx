@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Users, Plus, Printer, Save, X, ChevronLeft, Landmark } from 'lucide-react';
 import { toast } from 'sonner';
+import { printDocumentInPage } from '@/lib/printInPage';
 
 interface Prestador {
   id: string;
@@ -102,9 +103,7 @@ const PrestadoresPage: React.FC = () => {
     const mes = new Date().toISOString().slice(0, 7);
     const total = valorPago || diasTrabalhados * selected.valor_diario;
 
-    const printWin = window.open('', '_blank');
-    if (!printWin) return;
-    printWin.document.write(`<!DOCTYPE html><html><head><title>Recibo de Pagamento</title>
+    const html = `<!DOCTYPE html><html><head><title>Recibo de Pagamento</title>
     <style>@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;font-size:12px;color:#000}
     .header{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:16px}
     .title{font-size:16px;font-weight:bold;text-align:right}
@@ -115,7 +114,6 @@ const PrestadoresPage: React.FC = () => {
     table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:11px}th{background:#f5f5f5}
     .signatures{display:flex;justify-content:space-between;margin-top:50px}
     .sig-line{text-align:center;width:45%}.sig-line hr{border:0;border-top:1px solid #000;margin-bottom:4px}
-    .footer{margin-top:30px;text-align:center;font-size:9px;color:#999;border-top:1px solid #eee;padding-top:6px}
     </style></head><body>
     <div class="header"><div><strong>ALQUI OBRAS</strong></div>
     <div class="title">RECIBO DE<br/>PAGAMENTO</div></div>
@@ -142,10 +140,8 @@ const PrestadoresPage: React.FC = () => {
     <div class="sig-line"><hr/><small>Assinatura do Prestador</small></div>
     <div class="sig-line"><hr/><small>Assinatura — ALQUI OBRAS</small></div>
     </div>
-    <!-- rodapé limpo -->
-    </body></html>`);
-    printWin.document.close();
-    printWin.print();
+    </body></html>`;
+    printDocumentInPage(html);
     toast.success('Recibo gerado!');
   };
 

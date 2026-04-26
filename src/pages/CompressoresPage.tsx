@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Cog, Printer } from 'lucide-react';
 import { toast } from 'sonner';
+import { printDocumentInPage } from '@/lib/printInPage';
 
 const CompressoresPage: React.FC = () => {
   const { companies } = useApp();
@@ -50,9 +51,7 @@ const CompressoresPage: React.FC = () => {
 
   const handlePrint = () => {
     if (!descricaoCompressor) { toast.error('Informe a descrição do compressor'); return; }
-    const printWin = window.open('', '_blank');
-    if (!printWin) return;
-    printWin.document.write(`<!DOCTYPE html><html><head><title>Liberação de Compressor</title>
+    const html = `<!DOCTYPE html><html><head><title>Liberação de Compressor</title>
     <style>@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;font-size:12px;color:#000}
     .footer{margin-top:20px;text-align:center;font-size:9px;color:#999;border-top:1px solid #eee;padding-top:6px}
     </style></head><body>
@@ -61,10 +60,8 @@ const CompressoresPage: React.FC = () => {
     <hr style="border:0;border-top:1px dashed #ccc;margin:30px 0"/>
     <p style="text-align:center;font-size:10px;color:#999;margin-bottom:10px">2ª VIA — CONTRATANTE</p>
     ${buildVia()}
-    <!-- rodapé limpo -->
-    </body></html>`);
-    printWin.document.close();
-    printWin.print();
+    </body></html>`;
+    printDocumentInPage(html);
     toast.success('Liberação gerada com 2 vias!');
   };
 

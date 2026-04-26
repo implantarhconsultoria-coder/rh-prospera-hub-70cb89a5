@@ -223,6 +223,60 @@ export type Database = {
           },
         ]
       }
+      almoxarifado_carga: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          data_carga: string
+          email_bruto: string
+          empresa_nome: string
+          funcionario_id: string | null
+          funcionario_nome: string
+          id: string
+          itens_json: Json
+          observacao: string
+          status: string
+          updated_at: string
+          user_id: string
+          usuario_nome: string
+          veiculo: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          data_carga?: string
+          email_bruto?: string
+          empresa_nome?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          itens_json?: Json
+          observacao?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          usuario_nome?: string
+          veiculo?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          data_carga?: string
+          email_bruto?: string
+          empresa_nome?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          itens_json?: Json
+          observacao?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          usuario_nome?: string
+          veiculo?: string
+        }
+        Relationships: []
+      }
       almoxarifado_entradas: {
         Row: {
           created_at: string

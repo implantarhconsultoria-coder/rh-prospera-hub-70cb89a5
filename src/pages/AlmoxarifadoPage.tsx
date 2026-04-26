@@ -8,8 +8,9 @@ import { Package, Plus, ArrowDown, ArrowUp, Search, Trash2, Upload, FileText, Lo
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import AlmoxarifadoCargaTab from '@/components/AlmoxarifadoCargaTab';
 
-type Tab = 'estoque' | 'entrada' | 'saida' | 'carregamento' | 'fechamento' | 'relatorio';
+type Tab = 'estoque' | 'entrada' | 'saida' | 'carregamento' | 'carga' | 'fechamento' | 'relatorio';
 
 interface Item {
   id: string; nome: string; categoria: string; codigo_sku: string; unidade: string;
@@ -362,6 +363,7 @@ const AlmoxarifadoPage: React.FC = () => {
     { key: 'entrada', label: 'Entrada', icon: ArrowDown },
     { key: 'saida', label: 'Saída', icon: ArrowUp },
     { key: 'carregamento', label: 'Carregamento', icon: Truck },
+    { key: 'carga', label: 'Carga (Carro)', icon: Truck },
     { key: 'fechamento', label: 'Fechamento', icon: CheckCircle },
     { key: 'relatorio', label: 'Relatório', icon: FileText },
   ];
@@ -821,6 +823,9 @@ const AlmoxarifadoPage: React.FC = () => {
             </Button>
           </div>
         )}
+
+        {/* CARGA (Carro) — registra/confere, NÃO mexe no estoque */}
+        {tab === 'carga' && <div className="mt-5"><AlmoxarifadoCargaTab /></div>}
 
         {/* FECHAMENTO */}
         {tab === 'fechamento' && (
