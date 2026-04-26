@@ -6,6 +6,7 @@ import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { FileCheck, Printer, Sparkles, Upload, Loader2, Search, LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
 
 interface AtivoDoc {
@@ -287,13 +288,8 @@ const ProtocoloPage: React.FC = () => {
       return;
     }
 
-    const printWin = window.open('', '_blank');
-    if (!printWin) return;
-
-    // Build protocol HTML (2 vias)
     let fullHtml = buildProtocoloHtml(1, 2) + buildProtocoloHtml(2, 2);
 
-    // If there's a PDF, render the real document pages and append to the print flow
     if (pdfUrl) {
       try {
         const { pageUrls } = await renderPdfPagesToDataUrls(pdfUrl, 1.6);
@@ -307,12 +303,11 @@ const ProtocoloPage: React.FC = () => {
       }
     }
 
-    printWin.document.write(`<!DOCTYPE html><html><head><title>${titulo}</title>
+    const html = `<!DOCTYPE html><html><head><title>${titulo}</title>
     <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}.pdf-print-page{padding:0;margin:0}.pdf-print-page img{display:block;width:100%;height:auto}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
     ${fullHtml}
-    </body></html>`);
-    printWin.document.close();
-    setTimeout(() => printWin.print(), 800);
+    </body></html>`;
+    printDocumentInPage(html);
   };
 
   const handleClear = () => {
