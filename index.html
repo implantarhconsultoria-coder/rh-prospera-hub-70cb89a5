@@ -1,8 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR" translate="no">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Bloqueia tradução automática do navegador (Google Translate / Edge / etc).
+         A tradução automática reescreve o DOM e quebra o React com erros como
+         "insertBefore" e gera textos absurdos ("Cenoura", "Vegets", "Ay"). -->
+    <meta name="google" content="notranslate" />
+    <meta http-equiv="Content-Language" content="pt-BR" />
     <!-- Cache busting: força o navegador a sempre buscar a versão mais nova,
          essencial para o app dos mecânicos (/m/:token) refletir mudanças. -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -28,7 +33,7 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
 </head>
 
-  <body>
+  <body class="notranslate" translate="no">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
