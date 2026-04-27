@@ -5,12 +5,17 @@ import { getWorkingDays } from '@/lib/workingDays';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Save, Lock, FileText } from 'lucide-react';
+import { Save, Lock, FileText, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const FechamentoPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, updateEntry, getFechamento, updateFechamento } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, updateEntry, deleteEntry, refreshEntries, getFechamento, updateFechamento } = useApp();
   const navigate = useNavigate();
   const [selectedCompany, setSelectedCompany] = useState(companies[0]?.id || '');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
@@ -144,7 +149,7 @@ const FechamentoPage: React.FC = () => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              {['Funcionário','Salário','Faltas','Atrasos','HE50','HE100','DSR','Adic.','Insal.','VR','VT','Comissão','INSS','FGTS','IRRF','Desc.','Adiant.','Líquido'].map(h => (
+              {['Funcionário','Salário','Faltas','Atrasos','HE50','HE100','DSR','Adic.','Insal.','VR','VT','Comissão','INSS','FGTS','IRRF','Desc.','Adiant.','Líquido','Ações'].map(h => (
                 <th key={h} className="px-2 py-3 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -180,11 +185,60 @@ const FechamentoPage: React.FC = () => {
                   <td className="px-2 py-2"><Input type="number" value={entry.descontosDiversos} onChange={e => update({ descontosDiversos: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
                   <td className="px-2 py-2 text-xs">{formatCurrency(p.adiantamento)}</td>
                   <td className="px-2 py-2 font-bold text-xs">{formatCurrency(p.liquido)}</td>
+                  <td className="px-2 py-2">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" title="Apagar lançamento">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Apagar lançamento de {emp.name}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Os valores variáveis (faltas, atrasos, HE, descontos) serão removidos
+                            do fechamento de <b>{competencia}</b>. O histórico fica registrado para auditoria.
+                            Você pode reabrir a tela e os defaults serão recriados.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={async () => {
+                              try {
+                                await deleteEntry(emp.id, competencia);
+                                toast.success(`Lançamento de ${emp.name} apagado.`);
+                              } catch (err: any) {
+                                toast.error('Falha ao apagar: ' + (err?.message || ''));
+                              }
+                            }}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Apagar
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            await refreshEntries();
+            toast.success('Lançamentos recarregados do banco.');
+          }}
+        >
+          <RefreshCw className="w-3.5 h-3.5 mr-2" />
+          Recarregar do banco
+        </Button>
       </div>
 
       {/* Actions */}

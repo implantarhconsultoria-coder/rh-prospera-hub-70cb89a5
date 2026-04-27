@@ -26,6 +26,8 @@ export interface AppState {
   setEntries: React.Dispatch<React.SetStateAction<MonthlyEntry[]>>;
   getOrCreateEntries: (companyId: string, competencia: string) => MonthlyEntry[];
   updateEntry: (employeeId: string, competencia: string, data: Partial<MonthlyEntry>) => void;
+  deleteEntry: (employeeId: string, competencia: string) => Promise<void>;
+  refreshEntries: () => Promise<void>;
   fechamentos: Fechamento[];
   setFechamentos: React.Dispatch<React.SetStateAction<Fechamento[]>>;
   getFechamento: (companyId: string, competencia: string) => Fechamento;
