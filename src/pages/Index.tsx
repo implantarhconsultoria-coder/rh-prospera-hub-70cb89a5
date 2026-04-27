@@ -56,3 +56,33 @@ const Index = () => {
 };
 
 export default Index;
+import React, { ReactNode, useRef } from "react";
+
+type PrintOnlyProps = {
+  title?: string;
+  children: ReactNode;
+  className?: string;
+};
+
+export default function PrintOnly({ title, children, className }: PrintOnlyProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className={className}>
+      <div className="no-print mb-4">
+        <button onClick={handlePrint} className="px-4 py-2 rounded bg-blue-600 text-white">
+          Imprimir Ficha
+        </button>
+      </div>
+
+      <div id="print-root" ref={ref} className="print-sheet bg-white text-black">
+        {title ? <h1 className="text-xl font-bold text-center mb-4">{title}</h1> : null}
+        {children}
+      </div>
+    </div>
+  );
+}
