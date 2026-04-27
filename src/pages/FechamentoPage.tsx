@@ -50,7 +50,11 @@ const FechamentoPage: React.FC = () => {
 
   // Calculate per-employee payroll
   const calcPayroll = (emp: typeof compEmps[0], entry: typeof compEntries[0]) => {
-    const adiantamento = Math.round(emp.salarioBase * 0.4 * 100) / 100;
+    // Adiantamento: respeita o que o usuário lançou manualmente. Só usa 40% como
+    // sugestão quando o entry ainda não tem valor explícito (zero/undefined).
+    const adiantamento = (entry.adiantamento && entry.adiantamento > 0)
+      ? entry.adiantamento
+      : Math.round(emp.salarioBase * 0.4 * 100) / 100;
     const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
     const baseHE = emp.salarioBase + insVal;
     const valorHora = baseHE / 220;
