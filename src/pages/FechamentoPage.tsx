@@ -5,12 +5,17 @@ import { getWorkingDays } from '@/lib/workingDays';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Save, Lock, FileText } from 'lucide-react';
+import { Save, Lock, FileText, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const FechamentoPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, updateEntry, getFechamento, updateFechamento } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, updateEntry, deleteEntry, refreshEntries, getFechamento, updateFechamento } = useApp();
   const navigate = useNavigate();
   const [selectedCompany, setSelectedCompany] = useState(companies[0]?.id || '');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
