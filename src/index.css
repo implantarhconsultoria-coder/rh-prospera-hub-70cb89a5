@@ -375,4 +375,200 @@ export default function FuncionarioCombobox({
       )}
     </div>
   )
+}import FuncionarioCombobox, { FuncionarioOption } from '@/componentes/FuncionarioCombobox'
+
+const funcionarios: FuncionarioOption[] = listaFuncionarios.map((f) => ({
+  id: f.id,
+  nome: f.nome,
+  cpf: f.cpf,
+  matricula: f.matricula,
+  funcao: f.funcao,
+}))
+
+const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<FuncionarioOption | null>(null)
+
+<FuncionarioCombobox
+  options={funcionarios}
+  value={funcionarioSelecionado}
+  onChange={setFuncionarioSelecionado}
+/>import React, { useMemo, useState } from 'react'
+
+export type ItemOption = {
+  id: string
+  nome: string
+  categoria?: string
+  unidade?: string
+  saldo?: number
 }
+
+type ManualItem = {
+  descricao: string
+  categoria?: string
+  unidade?: string
+}
+
+type Props = {
+  options: ItemOption[]
+  value?: ItemOption | null
+  onChange: (value: ItemOption | null) => void
+  onManualCreate?: (item: ManualItem) => void
+}
+
+export default function ItemCombobox({
+  options,
+  value,
+  onChange,
+  onManualCreate
+}: Props) {
+  const [query, setQuery] = useState(value?.nome || '')
+  const [open, setOpen] = useState(false)
+  const [manualMode, setManualMode] = useState(false)
+  const [manualCategoria, setManualCategoria] = useState('')
+  const [manualUnidade, setManualUnidade] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return options.slice(0, 15)
+
+    return options
+      .filter((i) => {
+        const text = [i.nome, i.categoria || '', i.unidade || ''].join(' ').toLowerCase()
+        return text.includes(q)
+      })
+      .slice(0, 20)
+  }, [query, options])
+
+  const notFound = query.trim().length > 1 && filtered.length === 0
+
+  return (
+    <div className="relative w-full">
+      <label className="block text-sm mb-1">Item</label>
+
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+          setManualMode(false)
+          if (!e.target.value.trim()) onChange(null)
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Digite produto, ferramenta, material ou equipamento..."
+        className="w-full border rounded px-3 py-2"
+      />
+
+      {open && filtered.length > 0 && !manualMode && (
+        <div className="absolute z-50 mt-1 w-full rounded border bg-white shadow max-h-64 overflow-auto">
+          {filtered.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="block w-full text-left px-3 py-2 hover:bg-gray-100"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                setQuery(item.nome)
+                onChange(item)
+                setOpen(false)
+              }}
+            >
+              <div className="font-medium">{item.nome}</div>
+              <div className="text-xs text-gray-500">
+                {item.categoria || 'Sem categoria'} • {item.unidade || '-'} • Saldo: {item.saldo ?? 0}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {notFound && !manualMode && (
+        <div className="mt-2 rounded border bg-yellow-50 p-3 text-sm">
+          <div className="mb-2">Item não encontrado no estoque.</div>
+          <button
+            type="button"
+            className="px-3 py-2 rounded bg-amber-600 text-white"
+            onClick={() => {
+              setManualMode(true)
+              setOpen(false)
+              onChange(null)
+            }}
+          >
+            Lançar manualmente
+          </button>
+        </div>
+      )}
+
+      {manualMode && (
+        <div className="mt-3 rounded border p-3 bg-gray-50">
+          <div className="mb-2 font-medium">Lançamento manual provisório</div>
+
+          <input
+            className="w-full border rounded px-3 py-2 mb-2"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Descrição manual do item"
+          />
+
+          <input
+            className="w-full border rounded px-3 py-2 mb-2"
+            value={manualCategoria}
+            onChange={(e) => setManualCategoria(e.target.value)}
+            placeholder="Categoria opcional"
+          />
+
+          <input
+            className="w-full border rounded px-3 py-2 mb-2"
+            value={manualUnidade}
+            onChange={(e) => setManualUnidade(e.target.value)}
+            placeholder="Unidade opcional"
+          />
+
+          <button
+            type="button"
+            className="px-3 py-2 rounded bg-blue-600 text-white"
+            onClick={() => {
+              onManualCreate?.({
+                descricao: query.trim(),
+                categoria: manualCategoria.trim(),
+                unidade: manualUnidade.trim(),
+              })
+              setOpen(false)
+            }}
+          >
+            Salvar item manual
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}import ItemCombobox, { ItemOption } from '@/componentes/ItemCombobox'
+
+const itens: ItemOption[] = estoque.map((i) => ({
+  id: i.id,
+  nome: i.nome,
+  categoria: i.categoria,
+  unidade: i.unidade,
+  saldo: i.saldo,
+}))
+
+const [itemSelecionado, setItemSelecionado] = useState<ItemOption | null>(null)
+
+<ItemCombobox
+  options={itens}
+  value={itemSelecionado}
+  onChange={setItemSelecionado}
+  onManualCreate={(manual) => {
+    console.log('item manual', manual)
+  }}
+/>const labelsFixos = {
+  'Apresentadores de ay': 'Prestadores de Serviço',
+  'Doc. Vegets': 'Doc. Veículos',
+  'preceito de Ponto': 'Conferência de Ponto',
+  'Carga (Cenoura)': 'Carga',
+  'Às vezes, isso acontece por si só.': '',
+}[
+  { label: 'Prestadores de Serviço', path: '/admin/prestadores' },
+  { label: 'Doc. Veículos', path: '/admin/doc-veiculos' },
+  { label: 'Conferência de Ponto', path: '/admin/conferencia-ponto' },
+  { label: 'Carga', path: '/admin/almoxarifado/carga' },
+]
