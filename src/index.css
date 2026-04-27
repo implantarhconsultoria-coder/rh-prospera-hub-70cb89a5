@@ -256,3 +256,36 @@
   margin: 0 auto;
   background: #fff;
 }
+import PrintOnly from '@/componentes/PrintOnly'
+
+export default function FichaRetiradaPage() {
+  return (
+    <PrintOnly title="FICHA DE RETIRADA — ALMOXARIFADO">
+      <div className="text-sm">
+        <p><strong>Funcionário:</strong> AGLES NATHAN ALVES DOS SANTOS</p>
+        <p><strong>Data:</strong> 27/04/2026</p>
+
+        <table className="w-full border-collapse mt-4">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Item</th>
+              <th>Qtd</th>
+              <th>Motivo</th>
+              <th>Obs</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>10:24</td>
+              <td>1</td>
+              <td>1</td>
+              <td>--</td>
+              <td>1 - CHAVE - L10</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </PrintOnly>
+  )
+}
