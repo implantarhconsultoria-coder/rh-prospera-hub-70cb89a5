@@ -128,6 +128,60 @@ export type Database = {
         }
         Relationships: []
       }
+      acesso_excepcional: {
+        Row: {
+          aprovado_em: string | null
+          aprovado_por_nome: string | null
+          aprovado_por_user_id: string | null
+          created_at: string
+          data_solicitada: string
+          hora_fim: string
+          hora_inicio: string
+          id: string
+          motivo: string
+          observacao: string | null
+          status: string
+          updated_at: string
+          user_email: string
+          user_id: string
+          user_nome: string
+        }
+        Insert: {
+          aprovado_em?: string | null
+          aprovado_por_nome?: string | null
+          aprovado_por_user_id?: string | null
+          created_at?: string
+          data_solicitada: string
+          hora_fim: string
+          hora_inicio: string
+          id?: string
+          motivo?: string
+          observacao?: string | null
+          status?: string
+          updated_at?: string
+          user_email?: string
+          user_id: string
+          user_nome?: string
+        }
+        Update: {
+          aprovado_em?: string | null
+          aprovado_por_nome?: string | null
+          aprovado_por_user_id?: string | null
+          created_at?: string
+          data_solicitada?: string
+          hora_fim?: string
+          hora_inicio?: string
+          id?: string
+          motivo?: string
+          observacao?: string | null
+          status?: string
+          updated_at?: string
+          user_email?: string
+          user_id?: string
+          user_nome?: string
+        }
+        Relationships: []
+      }
       activity_log: {
         Row: {
           action: string
@@ -2283,6 +2337,9 @@ export type Database = {
         Row: {
           adiantamento: number
           adicionais: number
+          apagado_em: string | null
+          apagado_por_nome: string | null
+          apagado_por_user_id: string | null
           atrasos: number
           bloqueado: boolean
           comissao_base: number
@@ -2310,6 +2367,9 @@ export type Database = {
         Insert: {
           adiantamento?: number
           adicionais?: number
+          apagado_em?: string | null
+          apagado_por_nome?: string | null
+          apagado_por_user_id?: string | null
           atrasos?: number
           bloqueado?: boolean
           comissao_base?: number
@@ -2337,6 +2397,9 @@ export type Database = {
         Update: {
           adiantamento?: number
           adicionais?: number
+          apagado_em?: string | null
+          apagado_por_nome?: string | null
+          apagado_por_user_id?: string | null
           atrasos?: number
           bloqueado?: boolean
           comissao_base?: number
@@ -3479,6 +3542,54 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_sessions: {
+        Row: {
+          created_at: string
+          duracao_segundos: number | null
+          encerrou_em: string | null
+          id: string
+          iniciou_em: string
+          ip: string | null
+          rota_inicial: string
+          ultima_atividade_em: string
+          ultima_rota: string
+          user_agent: string | null
+          user_email: string
+          user_id: string
+          user_nome: string
+        }
+        Insert: {
+          created_at?: string
+          duracao_segundos?: number | null
+          encerrou_em?: string | null
+          id?: string
+          iniciou_em?: string
+          ip?: string | null
+          rota_inicial?: string
+          ultima_atividade_em?: string
+          ultima_rota?: string
+          user_agent?: string | null
+          user_email?: string
+          user_id: string
+          user_nome?: string
+        }
+        Update: {
+          created_at?: string
+          duracao_segundos?: number | null
+          encerrou_em?: string | null
+          id?: string
+          iniciou_em?: string
+          ip?: string | null
+          rota_inicial?: string
+          ultima_atividade_em?: string
+          ultima_rota?: string
+          user_agent?: string | null
+          user_email?: string
+          user_id?: string
+          user_nome?: string
         }
         Relationships: []
       }
