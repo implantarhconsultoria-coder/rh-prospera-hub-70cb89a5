@@ -49,7 +49,7 @@ const AppOperacionalPage: React.FC = () => {
     setLoading(true);
     const { data: tcs } = await supabase
       .from('tecnicos_campo')
-      .select('id, apelido, status, user_id, access_token, link_bloqueado, link_regenerado_em, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf, empresa), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)' as any)
+      .select('id, apelido, status, user_id, access_token, link_bloqueado, link_regenerado_em, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf, company_id, companies:company_id(nome)), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)' as any)
       .order('apelido');
 
     const userIds = (tcs || []).map((t: any) => t.user_id).filter(Boolean) as string[];
