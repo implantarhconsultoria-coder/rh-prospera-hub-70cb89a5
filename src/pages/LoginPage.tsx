@@ -8,6 +8,12 @@ import { lovable } from '@/integrations/lovable/index';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+// Aliases curtos para acessos de teste
+const LOGIN_ALIASES: Record<string, string> = {
+  fat: 'fat@topac.local',
+  fin: 'fin@topac.local',
+};
+
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,7 +22,9 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const raw = email.trim().toLowerCase();
+    const finalEmail = LOGIN_ALIASES[raw] || raw;
+    const { error } = await supabase.auth.signInWithPassword({ email: finalEmail, password });
     setLoading(false);
     if (error) toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha inválidos' : error.message);
   };
@@ -55,8 +63,8 @@ const LoginPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
             <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-            <Input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
-              className="pl-10" required />
+            <Input type="text" placeholder="Email ou usuário (ex: FAT, FIN)" value={email} onChange={e => setEmail(e.target.value)}
+              className="pl-10" required autoCapitalize="none" autoCorrect="off" />
           </div>
           <div className="relative">
             <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
