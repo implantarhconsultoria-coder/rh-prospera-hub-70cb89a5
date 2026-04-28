@@ -3409,6 +3409,9 @@ export type Database = {
           created_at: string
           funcionario_id: string
           id: string
+          link_bloqueado: boolean
+          link_bloqueado_em: string | null
+          link_regenerado_em: string | null
           observacoes: string | null
           status: string
           ultima_atividade_em: string | null
@@ -3422,6 +3425,9 @@ export type Database = {
           created_at?: string
           funcionario_id: string
           id?: string
+          link_bloqueado?: boolean
+          link_bloqueado_em?: string | null
+          link_regenerado_em?: string | null
           observacoes?: string | null
           status?: string
           ultima_atividade_em?: string | null
@@ -3435,6 +3441,9 @@ export type Database = {
           created_at?: string
           funcionario_id?: string
           id?: string
+          link_bloqueado?: boolean
+          link_bloqueado_em?: string | null
+          link_regenerado_em?: string | null
           observacoes?: string | null
           status?: string
           ultima_atividade_em?: string | null
@@ -3455,6 +3464,47 @@ export type Database = {
             columns: ["veiculo_id"]
             isOneToOne: false
             referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tecnicos_link_historico: {
+        Row: {
+          acao: string
+          created_at: string
+          id: string
+          realizado_por: string | null
+          realizado_por_nome: string
+          tecnico_id: string
+          token_anterior: string | null
+          token_novo: string | null
+        }
+        Insert: {
+          acao: string
+          created_at?: string
+          id?: string
+          realizado_por?: string | null
+          realizado_por_nome?: string
+          tecnico_id: string
+          token_anterior?: string | null
+          token_novo?: string | null
+        }
+        Update: {
+          acao?: string
+          created_at?: string
+          id?: string
+          realizado_por?: string | null
+          realizado_por_nome?: string
+          tecnico_id?: string
+          token_anterior?: string | null
+          token_novo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tecnicos_link_historico_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos_campo"
             referencedColumns: ["id"]
           },
         ]

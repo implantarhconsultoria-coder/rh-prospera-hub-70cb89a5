@@ -50,6 +50,7 @@ const AlmoxarifadoPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showNewItem, setShowNewItem] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Daily closing state
@@ -607,6 +608,41 @@ const AlmoxarifadoPage: React.FC = () => {
               )}
             </div>
 
+            {isAdmin && (
+              <div className="flex items-center gap-3 flex-wrap p-3 rounded-lg border bg-muted/20">
+                <span className="text-xs font-medium">
+                  {selectedIds.size > 0
+                    ? `${selectedIds.size} item(ns) selecionado(s)`
+                    : 'Nenhum item selecionado'}
+                </span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={selectedIds.size === 0}
+                  onClick={async () => {
+                    if (!selectedIds.size) return;
+                    if (!confirm(`Tem certeza que deseja excluir os itens selecionados? Essa ação não pode ser desfeita.`)) return;
+                    const ids = Array.from(selectedIds);
+                    const { error } = await supabase.from('almoxarifado_itens').delete().in('id', ids);
+                    if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
+                    toast.success(`${ids.length} item(ns) excluído(s)`);
+                    setSelectedIds(new Set());
+                    fetchAll();
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />Excluir selecionados
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={selectedIds.size === 0}
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Limpar seleção
+                </Button>
+              </div>
+            )}
+
             {showImport && (
               <div className="border rounded-lg p-4 bg-muted/20 space-y-2">
                 <p className="text-xs text-muted-foreground">
@@ -639,6 +675,28 @@ const AlmoxarifadoPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-background"><tr className="border-b bg-muted/50">
+                  {isAdmin && (
+                    <th className="px-3 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Selecionar todos"
+                        checked={filteredItens.length > 0 && filteredItens.every(i => selectedIds.has(i.id))}
+                        ref={el => {
+                          if (el) {
+                            const someSelected = filteredItens.some(i => selectedIds.has(i.id));
+                            const allSelected = filteredItens.length > 0 && filteredItens.every(i => selectedIds.has(i.id));
+                            el.indeterminate = someSelected && !allSelected;
+                          }
+                        }}
+                        onChange={(e) => {
+                          const next = new Set(selectedIds);
+                          if (e.target.checked) filteredItens.forEach(i => next.add(i.id));
+                          else filteredItens.forEach(i => next.delete(i.id));
+                          setSelectedIds(next);
+                        }}
+                      />
+                    </th>
+                  )}
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Nome</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Categoria</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Unid.</th>
@@ -650,6 +708,21 @@ const AlmoxarifadoPage: React.FC = () => {
                 <tbody>
                   {filteredItens.map(item => (
                     <tr key={item.id} className="border-b hover:bg-muted/20">
+                      {isAdmin && (
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar ${item.nome}`}
+                            checked={selectedIds.has(item.id)}
+                            onChange={(e) => {
+                              const next = new Set(selectedIds);
+                              if (e.target.checked) next.add(item.id);
+                              else next.delete(item.id);
+                              setSelectedIds(next);
+                            }}
+                          />
+                        </td>
+                      )}
                       <td className="px-3 py-2 text-xs font-medium">{item.nome}</td>
                       <td className="px-3 py-2 text-xs">{item.categoria || '—'}</td>
                       <td className="px-3 py-2 text-xs">{item.unidade}</td>
@@ -682,7 +755,12 @@ const AlmoxarifadoPage: React.FC = () => {
                           </Button>
                           {isAdmin && (
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Excluir"
-                              onClick={async () => { await supabase.from('almoxarifado_itens').delete().eq('id', item.id); fetchAll(); }}>
+                              onClick={async () => {
+                                if (!confirm(`Excluir o item "${item.nome}"?`)) return;
+                                await supabase.from('almoxarifado_itens').delete().eq('id', item.id);
+                                setSelectedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+                                fetchAll();
+                              }}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           )}
@@ -690,7 +768,7 @@ const AlmoxarifadoPage: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                  {filteredItens.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
+                  {filteredItens.length === 0 && <tr><td colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
                 </tbody>
               </table>
             </div>
