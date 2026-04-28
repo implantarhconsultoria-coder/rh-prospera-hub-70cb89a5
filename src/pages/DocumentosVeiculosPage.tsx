@@ -5,9 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
-import { Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle } from 'lucide-react';
+import {
+  Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2,
+  Save, X, AlertTriangle, FileCheck2, FileWarning, CheckCircle2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
 
@@ -15,6 +23,7 @@ interface Ativo {
   id: string;
   tipo: string;
   descricao: string;
+  marca?: string;
   placa: string;
   patrimonio: string;
   empresa: string;
@@ -25,27 +34,56 @@ interface Ativo {
   chassi: string;
   ano_fabricacao: string;
   ano_modelo: string;
+  responsavel_atual?: string;
   vencimento_ipva: string | null;
   vencimento_licenciamento: string | null;
+  ipva_valor?: number;
+  ipva_status?: string;
+  ipva_arquivo_url?: string;
+  ipva_comprovante_url?: string;
+  ipva_data_pagamento?: string | null;
+  ipva_observacao?: string;
+  lic_valor?: number;
+  lic_status?: string;
+  lic_arquivo_url?: string;
+  lic_comprovante_url?: string;
+  lic_data_pagamento?: string | null;
+  lic_observacao?: string;
+  seguro_vencimento?: string | null;
+  seguro_valor?: number;
+  seguro_arquivo_url?: string;
+  seguro_comprovante_url?: string;
 }
 
-type FilterType = 'todos' | 'ipva_vencer' | 'ipva_vencido' | 'lic_vencer' | 'lic_vencido';
+type FilterType = 'todos' | 'ipva_vencer' | 'ipva_vencido' | 'lic_vencer' | 'lic_vencido' | 'tudo_ok' | 'compr_falta' | 'mes';
 
-const getAlertStatus = (dateStr: string | null): 'em_dia' | 'a_vencer' | 'vencido' | 'sem_data' => {
-  if (!dateStr) return 'sem_data';
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diff = (d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-  if (diff < 0) return 'vencido';
-  if (diff <= 30) return 'a_vencer';
-  return 'em_dia';
+type DocStatus = 'ok' | 'pendente' | 'vencido' | 'comprovante_falta' | 'sem_data';
+
+const computeDocStatus = (vencimento: string | null | undefined, comprovanteUrl: string | undefined): DocStatus => {
+  if (!vencimento) return 'sem_data';
+  const venc = new Date(vencimento + 'T12:00:00');
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const venceu = venc.getTime() < hoje.getTime();
+  if (comprovanteUrl) return 'ok';
+  if (venceu) return 'vencido';
+  return 'pendente';
 };
 
-const statusBadge = (s: string) => {
-  if (s === 'em_dia') return <Badge className="text-[10px] bg-success text-success-foreground">Em dia</Badge>;
-  if (s === 'a_vencer') return <Badge className="text-[10px] bg-warning text-warning-foreground">A vencer</Badge>;
+const docBadge = (s: DocStatus) => {
+  if (s === 'ok') return <Badge className="text-[10px] bg-success text-success-foreground">OK</Badge>;
+  if (s === 'pendente') return <Badge className="text-[10px] bg-warning text-warning-foreground">Pendente</Badge>;
   if (s === 'vencido') return <Badge className="text-[10px] bg-destructive text-destructive-foreground">Vencido</Badge>;
+  if (s === 'comprovante_falta') return <Badge className="text-[10px] bg-warning text-warning-foreground">Sem comprovante</Badge>;
   return <Badge variant="outline" className="text-[10px]">—</Badge>;
+};
+
+const overallStatus = (a: Ativo): { label: string; cor: string } => {
+  const ipva = computeDocStatus(a.vencimento_ipva, a.ipva_comprovante_url);
+  const lic = computeDocStatus(a.vencimento_licenciamento, a.lic_comprovante_url);
+  if (ipva === 'vencido' || lic === 'vencido') return { label: 'Vencido', cor: 'bg-destructive text-destructive-foreground' };
+  if (ipva === 'pendente' || lic === 'pendente') return { label: 'Pendente', cor: 'bg-warning text-warning-foreground' };
+  if (ipva === 'ok' && lic === 'ok') return { label: 'Tudo OK', cor: 'bg-success text-success-foreground' };
+  return { label: 'Sem dados', cor: 'bg-muted text-muted-foreground' };
 };
 
 const DocumentosVeiculosPage: React.FC = () => {
@@ -55,8 +93,10 @@ const DocumentosVeiculosPage: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<{ url: string; descricao: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>('todos');
+  const [filterMonth, setFilterMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Ativo>>({});
+  const [docPanelId, setDocPanelId] = useState<string | null>(null);
 
   const fetchAtivos = async () => {
     const { data, error } = await supabase.from('ativos').select('*').eq('tipo', 'veiculo').order('created_at', { ascending: false });
@@ -76,11 +116,7 @@ const DocumentosVeiculosPage: React.FC = () => {
         type: 'documento_veiculo',
       },
     });
-
-    if (error) {
-      throw error;
-    }
-
+    if (error) throw error;
     return data?.data ?? {};
   };
 
@@ -97,9 +133,7 @@ const DocumentosVeiculosPage: React.FC = () => {
       const arquivo_url = urlData.publicUrl;
 
       let extracted: any = {};
-      try {
-        extracted = await analyzeVehiclePdf(file, file.name);
-      } catch {}
+      try { extracted = await analyzeVehiclePdf(file, file.name); } catch {}
 
       const { error } = await supabase.from('ativos').insert({
         user_id: session.user.id,
@@ -133,77 +167,136 @@ const DocumentosVeiculosPage: React.FC = () => {
   const handleEdit = (a: Ativo) => {
     setEditingId(a.id);
     setEditForm({
-      descricao: a.descricao, placa: a.placa, patrimonio: a.patrimonio,
+      descricao: a.descricao, marca: a.marca || '', placa: a.placa, patrimonio: a.patrimonio,
       renavam: a.renavam, chassi: a.chassi, empresa: a.empresa,
       ano_fabricacao: a.ano_fabricacao, ano_modelo: a.ano_modelo,
+      responsavel_atual: a.responsavel_atual || '',
       vencimento_ipva: a.vencimento_ipva || '', vencimento_licenciamento: a.vencimento_licenciamento || '',
+      observacao: a.observacao,
     });
   };
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
     const { error } = await supabase.from('ativos').update(editForm as any).eq('id', editingId);
-    if (!error) {
-      toast.success('Atualizado!');
-      setEditingId(null);
-      fetchAtivos();
-    } else toast.error('Erro ao salvar');
+    if (!error) { toast.success('Atualizado!'); setEditingId(null); fetchAtivos(); }
+    else toast.error('Erro ao salvar');
   };
 
+  // --- Documento (IPVA / Licenc) — upload e gestão ---
+  const uploadParaAtivo = async (ativoId: string, prefixo: string, file: File): Promise<string> => {
+    const ext = file.name.split('.').pop();
+    const path = `${session?.user?.id}/${ativoId}/${prefixo}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('documentos-ativos').upload(path, file);
+    if (error) { toast.error('Falha no upload'); return ''; }
+    const { data } = supabase.storage.from('documentos-ativos').getPublicUrl(path);
+    return data.publicUrl;
+  };
+
+  const updateAtivoFields = async (id: string, patch: Partial<Ativo>) => {
+    const { error } = await supabase.from('ativos').update(patch as any).eq('id', id);
+    if (error) { toast.error('Erro: ' + error.message); return false; }
+    fetchAtivos();
+    return true;
+  };
+
+  // --- Cálculos de filtros e alertas ---
   const filtered = useMemo(() => {
     let list = ativos;
     if (search) {
       const q = search.toLowerCase();
-        list = list.filter(a =>
+      list = list.filter(a =>
         (a.descricao || '').toLowerCase().includes(q) ||
         (a.placa || '').toLowerCase().includes(q) ||
-          (a.patrimonio || '').toLowerCase().includes(q) ||
-          (a.renavam || '').toLowerCase().includes(q)
+        (a.patrimonio || '').toLowerCase().includes(q) ||
+        (a.renavam || '').toLowerCase().includes(q) ||
+        (a.empresa || '').toLowerCase().includes(q)
       );
     }
-    if (filterType === 'ipva_vencer') list = list.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer');
-    if (filterType === 'ipva_vencido') list = list.filter(a => getAlertStatus(a.vencimento_ipva) === 'vencido');
-    if (filterType === 'lic_vencer') list = list.filter(a => getAlertStatus(a.vencimento_licenciamento) === 'a_vencer');
-    if (filterType === 'lic_vencido') list = list.filter(a => getAlertStatus(a.vencimento_licenciamento) === 'vencido');
+    const ipvaSt = (a: Ativo) => computeDocStatus(a.vencimento_ipva, a.ipva_comprovante_url);
+    const licSt = (a: Ativo) => computeDocStatus(a.vencimento_licenciamento, a.lic_comprovante_url);
+
+    if (filterType === 'ipva_vencer') list = list.filter(a => ipvaSt(a) === 'pendente');
+    if (filterType === 'ipva_vencido') list = list.filter(a => ipvaSt(a) === 'vencido');
+    if (filterType === 'lic_vencer') list = list.filter(a => licSt(a) === 'pendente');
+    if (filterType === 'lic_vencido') list = list.filter(a => licSt(a) === 'vencido');
+    if (filterType === 'tudo_ok') list = list.filter(a => ipvaSt(a) === 'ok' && licSt(a) === 'ok');
+    if (filterType === 'compr_falta') list = list.filter(a =>
+      (a.vencimento_ipva && !a.ipva_comprovante_url) || (a.vencimento_licenciamento && !a.lic_comprovante_url)
+    );
+    if (filterType === 'mes') {
+      list = list.filter(a => {
+        const matches = (d?: string | null) => !!d && d.slice(0, 7) === filterMonth;
+        return matches(a.vencimento_ipva) || matches(a.vencimento_licenciamento) || matches(a.seguro_vencimento || null);
+      });
+    }
     return list;
-  }, [ativos, search, filterType]);
+  }, [ativos, search, filterType, filterMonth]);
 
   const alertCounts = useMemo(() => ({
-    ipvaVencer: ativos.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer').length,
-    ipvaVencido: ativos.filter(a => getAlertStatus(a.vencimento_ipva) === 'vencido').length,
-    licVencer: ativos.filter(a => getAlertStatus(a.vencimento_licenciamento) === 'a_vencer').length,
-    licVencido: ativos.filter(a => getAlertStatus(a.vencimento_licenciamento) === 'vencido').length,
+    ipvaPend: ativos.filter(a => computeDocStatus(a.vencimento_ipva, a.ipva_comprovante_url) === 'pendente').length,
+    ipvaVencido: ativos.filter(a => computeDocStatus(a.vencimento_ipva, a.ipva_comprovante_url) === 'vencido').length,
+    licPend: ativos.filter(a => computeDocStatus(a.vencimento_licenciamento, a.lic_comprovante_url) === 'pendente').length,
+    licVencido: ativos.filter(a => computeDocStatus(a.vencimento_licenciamento, a.lic_comprovante_url) === 'vencido').length,
+    comprFalta: ativos.filter(a =>
+      (a.vencimento_ipva && !a.ipva_comprovante_url) || (a.vencimento_licenciamento && !a.lic_comprovante_url)
+    ).length,
+    tudoOk: ativos.filter(a =>
+      computeDocStatus(a.vencimento_ipva, a.ipva_comprovante_url) === 'ok' &&
+      computeDocStatus(a.vencimento_licenciamento, a.lic_comprovante_url) === 'ok'
+    ).length,
   }), [ativos]);
 
   const handlePrintBatch = () => {
     if (filtered.length === 0) { toast.error('Nenhum veículo para imprimir'); return; }
-    const rows = filtered.map(a => `<tr>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.descricao}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.patrimonio || '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.renavam || '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_ipva ? new Date(a.vencimento_ipva).toLocaleDateString('pt-BR') : '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_licenciamento ? new Date(a.vencimento_licenciamento).toLocaleDateString('pt-BR') : '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.empresa}</td>
-    </tr>`).join('');
+    const rows = filtered.map(a => {
+      const ipvaSt = computeDocStatus(a.vencimento_ipva, a.ipva_comprovante_url);
+      const licSt = computeDocStatus(a.vencimento_licenciamento, a.lic_comprovante_url);
+      const ov = overallStatus(a);
+      return `<tr>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.empresa || '—'}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '—'}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.descricao}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_ipva ? new Date(a.vencimento_ipva).toLocaleDateString('pt-BR') : '—'}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${(a.ipva_valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">IPVA: ${ipvaSt.toUpperCase()}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_licenciamento ? new Date(a.vencimento_licenciamento).toLocaleDateString('pt-BR') : '—'}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${(a.lic_valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">LIC: ${licSt.toUpperCase()}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">Compr.: ${(a.ipva_comprovante_url ? 'I✓' : 'I✗')} ${(a.lic_comprovante_url ? 'L✓' : 'L✗')}</td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px"><b>${ov.label}</b></td>
+        <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.responsavel_atual || '—'}</td>
+      </tr>`;
+    }).join('');
 
-    const filterLabel = filterType === 'todos' ? 'Todos os Veículos' :
-      filterType === 'ipva_vencer' ? 'IPVA a Vencer' :
-      filterType === 'ipva_vencido' ? 'IPVA Vencido' :
-      filterType === 'lic_vencer' ? 'Licenciamento a Vencer' : 'Licenciamento Vencido';
+    const filterLabel = filterType === 'mes'
+      ? `Vencimentos no mês ${filterMonth}`
+      : filterType === 'todos' ? 'Todos os Veículos'
+      : filterType === 'ipva_vencer' ? 'IPVA Pendente'
+      : filterType === 'ipva_vencido' ? 'IPVA Vencido'
+      : filterType === 'lic_vencer' ? 'Licenciamento Pendente'
+      : filterType === 'lic_vencido' ? 'Licenciamento Vencido'
+      : filterType === 'tudo_ok' ? 'Veículos com tudo OK'
+      : 'Comprovante faltando';
 
     const html = `<!DOCTYPE html><html><head><title>Documentos de Veículos</title>
-    <style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;font-size:12px;color:#000}
-    h1{font-size:16px;margin-bottom:4px}h2{font-size:12px;color:#666;margin-bottom:12px}
+    <style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;font-size:11px;color:#000}
+    h1{font-size:16px;margin:0 0 4px 0}h2{font-size:11px;color:#666;margin:0 0 12px 0}
     table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:6px 8px;border:1px solid #ccc;font-size:10px;text-transform:uppercase;text-align:left}
     </style></head><body>
     <h1>Documentos de Veículos — ${filterLabel}</h1>
     <h2>${filtered.length} veículo(s) • Gerado em ${new Date().toLocaleDateString('pt-BR')}</h2>
-    <table><thead><tr><th>Descrição</th><th>Placa</th><th>Patrimônio</th><th>Renavam</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th></tr></thead>
-    <tbody>${rows}</tbody></table>
+    <table><thead><tr>
+      <th>Empresa</th><th>Placa</th><th>Veículo</th>
+      <th>Venc. IPVA</th><th>Valor IPVA</th><th>Status IPVA</th>
+      <th>Venc. Lic.</th><th>Valor Lic.</th><th>Status Lic.</th>
+      <th>Comprovantes</th><th>Status Geral</th><th>Responsável</th>
+    </tr></thead><tbody>${rows}</tbody></table>
     </body></html>`;
     printDocumentInPage(html);
   };
+
+  const docPanelAtivo = docPanelId ? ativos.find(a => a.id === docPanelId) : null;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -214,60 +307,50 @@ const DocumentosVeiculosPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display">Documentos de Veículos</h1>
-            <p className="text-primary-foreground/70 text-sm">Upload múltiplo de PDFs com leitura automática por IA • Alertas de IPVA e Licenciamento</p>
+            <p className="text-primary-foreground/70 text-sm">IPVA, Licenciamento, Seguro e CRLV — alertas, comprovantes e impressão por mês</p>
           </div>
         </div>
       </div>
 
-      {/* Alertas */}
-      {(alertCounts.ipvaVencido > 0 || alertCounts.licVencido > 0 || alertCounts.ipvaVencer > 0 || alertCounts.licVencer > 0) && (
-        <div className="card-premium p-4 border-l-4 border-warning bg-warning/5 space-y-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-warning" />
-            <span className="text-sm font-bold text-foreground">Alertas de Documentação</span>
-          </div>
-          <div className="flex flex-wrap gap-2 text-xs">
-            {alertCounts.ipvaVencido > 0 && (
-              <button onClick={() => setFilterType('ipva_vencido')}
-                className="px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20">
-                {alertCounts.ipvaVencido} IPVA vencido(s)
-              </button>
-            )}
-            {alertCounts.ipvaVencer > 0 && (
-              <button onClick={() => setFilterType('ipva_vencer')}
-                className="px-2 py-1 rounded-full bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20">
-                {alertCounts.ipvaVencer} IPVA a vencer
-              </button>
-            )}
-            {alertCounts.licVencido > 0 && (
-              <button onClick={() => setFilterType('lic_vencido')}
-                className="px-2 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20">
-                {alertCounts.licVencido} Licenciamento vencido(s)
-              </button>
-            )}
-            {alertCounts.licVencer > 0 && (
-              <button onClick={() => setFilterType('lic_vencer')}
-                className="px-2 py-1 rounded-full bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20">
-                {alertCounts.licVencer} Licenciamento a vencer
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Painel de status */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        {[
+          { l: 'Tudo OK', v: alertCounts.tudoOk, cor: 'border-success', icon: CheckCircle2, click: () => setFilterType('tudo_ok') },
+          { l: 'Comprovante faltando', v: alertCounts.comprFalta, cor: 'border-warning', icon: FileWarning, click: () => setFilterType('compr_falta') },
+          { l: 'IPVA pendente', v: alertCounts.ipvaPend, cor: 'border-warning', icon: AlertTriangle, click: () => setFilterType('ipva_vencer') },
+          { l: 'IPVA vencido', v: alertCounts.ipvaVencido, cor: 'border-destructive', icon: AlertTriangle, click: () => setFilterType('ipva_vencido') },
+          { l: 'Lic. pendente', v: alertCounts.licPend, cor: 'border-warning', icon: AlertTriangle, click: () => setFilterType('lic_vencer') },
+          { l: 'Lic. vencido', v: alertCounts.licVencido, cor: 'border-destructive', icon: AlertTriangle, click: () => setFilterType('lic_vencido') },
+        ].map((c, i) => (
+          <button key={i} onClick={c.click}
+            className={`card-premium p-3 text-left border-l-4 ${c.cor} hover:bg-muted/30 transition`}>
+            <div className="flex items-center gap-1 text-[10px] uppercase font-semibold text-muted-foreground">
+              <c.icon className="w-3 h-3" />{c.l}
+            </div>
+            <p className="text-xl font-bold mt-1">{c.v}</p>
+          </button>
+        ))}
+      </div>
 
       <div className="card-premium p-5 space-y-4">
         <div className="flex items-center gap-3 flex-wrap">
           <Search className="w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar por descrição, placa ou patrimônio..." value={search}
+          <Input placeholder="Buscar por descrição, placa, empresa..." value={search}
             onChange={e => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
           <select value={filterType} onChange={e => setFilterType(e.target.value as FilterType)}
             className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
             <option value="todos">Todos</option>
-            <option value="ipva_vencer">IPVA a Vencer</option>
+            <option value="mes">Vencimentos do mês</option>
+            <option value="ipva_vencer">IPVA Pendente</option>
             <option value="ipva_vencido">IPVA Vencido</option>
-            <option value="lic_vencer">Lic. a Vencer</option>
+            <option value="lic_vencer">Lic. Pendente</option>
             <option value="lic_vencido">Lic. Vencido</option>
+            <option value="compr_falta">Comprovante faltando</option>
+            <option value="tudo_ok">Tudo OK</option>
           </select>
+          {filterType === 'mes' && (
+            <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-44" />
+          )}
           <label className="flex items-center gap-2 cursor-pointer">
             <Button size="sm" disabled={uploading} asChild>
               <span>
@@ -279,11 +362,11 @@ const DocumentosVeiculosPage: React.FC = () => {
               onChange={e => e.target.files && e.target.files.length > 0 && handleMultiUpload(e.target.files)} />
           </label>
           <Button size="sm" variant="outline" onClick={handlePrintBatch}>
-            <Printer className="w-4 h-4 mr-1" /> Imprimir Lote
+            <Printer className="w-4 h-4 mr-1" /> {filterType === 'mes' ? `Imprimir vencimentos ${filterMonth}` : 'Imprimir Lote'}
           </Button>
         </div>
         <p className="text-xs text-muted-foreground flex items-center gap-1">
-          <Sparkles className="w-3 h-3" /> Ao subir PDFs, a IA tenta extrair placa, renavam, chassi e outros dados. Dados reaproveitados no Protocolo.
+          <Sparkles className="w-3 h-3" /> Use "Vencimentos do mês" + Imprimir para gerar relatório do mês selecionado.
         </p>
       </div>
 
@@ -291,26 +374,29 @@ const DocumentosVeiculosPage: React.FC = () => {
       {editingId && (
         <div className="card-premium p-5 space-y-3 border-l-4 border-primary">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-foreground">Editando Documento</h3>
+            <h3 className="text-sm font-bold text-foreground">Editando Veículo</h3>
             <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}><X className="w-4 h-4" /></Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div><label className="text-xs text-muted-foreground block mb-1">Descrição</label>
-              <Input value={editForm.descricao || ''} onChange={e => setEditForm({ ...editForm, descricao: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Placa</label>
-              <Input value={editForm.placa || ''} onChange={e => setEditForm({ ...editForm, placa: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Patrimônio</label>
-              <Input value={editForm.patrimonio || ''} onChange={e => setEditForm({ ...editForm, patrimonio: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Renavam</label>
-              <Input value={editForm.renavam || ''} onChange={e => setEditForm({ ...editForm, renavam: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Chassi</label>
-              <Input value={editForm.chassi || ''} onChange={e => setEditForm({ ...editForm, chassi: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Empresa</label>
-              <Input value={editForm.empresa || ''} onChange={e => setEditForm({ ...editForm, empresa: e.target.value })} /></div>
+            {[
+              ['descricao', 'Modelo'], ['marca', 'Marca'], ['placa', 'Placa'], ['patrimonio', 'Patrimônio'],
+              ['renavam', 'Renavam'], ['chassi', 'Chassi'], ['empresa', 'Empresa/Filial'], ['responsavel_atual', 'Responsável'],
+              ['ano_fabricacao', 'Ano Fab.'], ['ano_modelo', 'Ano Modelo'],
+            ].map(([k, l]) => (
+              <div key={k}>
+                <label className="text-xs text-muted-foreground block mb-1">{l}</label>
+                <Input value={(editForm as any)[k] || ''} onChange={e => setEditForm({ ...editForm, [k]: e.target.value })} />
+              </div>
+            ))}
             <div><label className="text-xs text-muted-foreground block mb-1">Venc. IPVA</label>
-              <Input type="date" value={editForm.vencimento_ipva || ''} onChange={e => setEditForm({ ...editForm, vencimento_ipva: e.target.value })} /></div>
+              <Input type="date" value={(editForm.vencimento_ipva as string) || ''} onChange={e => setEditForm({ ...editForm, vencimento_ipva: e.target.value })} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Venc. Licenciamento</label>
-              <Input type="date" value={editForm.vencimento_licenciamento || ''} onChange={e => setEditForm({ ...editForm, vencimento_licenciamento: e.target.value })} /></div>
+              <Input type="date" value={(editForm.vencimento_licenciamento as string) || ''} onChange={e => setEditForm({ ...editForm, vencimento_licenciamento: e.target.value })} /></div>
+            <div className="col-span-full">
+              <label className="text-xs text-muted-foreground block mb-1">Observações</label>
+              <textarea value={editForm.observacao || ''} onChange={e => setEditForm({ ...editForm, observacao: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[60px]" />
+            </div>
           </div>
           <Button onClick={handleSaveEdit}><Save className="w-4 h-4 mr-1" /> Salvar</Button>
         </div>
@@ -319,46 +405,84 @@ const DocumentosVeiculosPage: React.FC = () => {
       <div className="card-premium overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b bg-muted/50 sticky top-0 z-10">
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Descrição</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Veículo</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Placa</th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Patrimônio</th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Renavam</th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">IPVA</th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Licenciamento</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">PDF</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">IPVA</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Licenc.</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status Geral</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Ações</th>
           </tr></thead>
           <tbody>
-            {filtered.map(a => (
-              <tr key={a.id} className="border-b hover:bg-muted/20">
-                <td className="px-3 py-2 text-xs font-medium">{a.descricao}</td>
-                <td className="px-3 py-2 text-xs">{a.placa || '—'}</td>
-                <td className="px-3 py-2 text-xs">{a.patrimonio || '—'}</td>
-                <td className="px-3 py-2 text-xs">{a.renavam || '—'}</td>
-                <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_ipva))}</td>
-                <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_licenciamento))}</td>
-                <td className="px-3 py-2 text-xs">{a.empresa}</td>
-                <td className="px-3 py-2 text-xs">
-                  {a.arquivo_url ? <button onClick={() => setViewingPdf({ url: a.arquivo_url, descricao: a.descricao })} className="text-primary hover:underline flex items-center gap-1 text-xs"><Eye className="w-3 h-3" />Ver</button> : '—'}
-                </td>
-                <td className="px-3 py-2 flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(a)}>
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(a.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
+            {filtered.map(a => {
+              const ipvaSt = computeDocStatus(a.vencimento_ipva, a.ipva_comprovante_url);
+              const licSt = computeDocStatus(a.vencimento_licenciamento, a.lic_comprovante_url);
+              const ov = overallStatus(a);
+              return (
+                <tr key={a.id} className="border-b hover:bg-muted/20">
+                  <td className="px-3 py-2 text-xs font-medium">
+                    <div>{a.descricao}</div>
+                    <div className="text-[10px] text-muted-foreground">{a.marca || ''} {a.ano_modelo || ''}</div>
+                  </td>
+                  <td className="px-3 py-2 text-xs">{a.placa || '—'}</td>
+                  <td className="px-3 py-2 text-xs">{a.empresa || '—'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-0.5">
+                      {docBadge(ipvaSt)}
+                      <span className="text-[10px] text-muted-foreground">{a.vencimento_ipva ? new Date(a.vencimento_ipva).toLocaleDateString('pt-BR') : '—'}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-0.5">
+                      {docBadge(licSt)}
+                      <span className="text-[10px] text-muted-foreground">{a.vencimento_licenciamento ? new Date(a.vencimento_licenciamento).toLocaleDateString('pt-BR') : '—'}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2"><Badge className={`text-[10px] ${ov.cor}`}>{ov.label}</Badge></td>
+                  <td className="px-3 py-2">
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Gerenciar documentos"
+                        onClick={() => setDocPanelId(a.id)}>
+                        <FileCheck2 className="w-3.5 h-3.5" />
+                      </Button>
+                      {a.arquivo_url && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Ver PDF principal"
+                          onClick={() => setViewingPdf({ url: a.arquivo_url, descricao: a.descricao })}>
+                          <Eye className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar" onClick={() => handleEdit(a)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Excluir">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir veículo?</AlertDialogTitle>
+                            <AlertDialogDescription>{a.descricao} {a.placa ? `(${a.placa})` : ''} — esta ação não pode ser desfeita.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDelete(a.id)} className="bg-destructive">Excluir</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
           </tbody>
         </table>
-        <div className="p-3 text-xs text-muted-foreground border-t">{filtered.length} documento(s)</div>
+        <div className="p-3 text-xs text-muted-foreground border-t">{filtered.length} veículo(s)</div>
       </div>
 
-      {/* Internal PDF Viewer Modal */}
+      {/* PDF Viewer Modal */}
       <Dialog open={!!viewingPdf} onOpenChange={(open) => !open && setViewingPdf(null)}>
         <DialogContent className="max-w-6xl overflow-hidden p-0 sm:max-w-6xl">
           <DialogHeader className="border-b px-6 py-4">
@@ -367,6 +491,129 @@ const DocumentosVeiculosPage: React.FC = () => {
           <div className="px-6 pb-6">
             <PdfDocumentViewer sourceUrl={viewingPdf?.url} title={viewingPdf?.descricao || 'Documento do veículo'} />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Painel detalhado de docs do veículo */}
+      <Dialog open={!!docPanelId} onOpenChange={(o) => !o && setDocPanelId(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Documentos — {docPanelAtivo?.descricao} {docPanelAtivo?.placa ? `(${docPanelAtivo.placa})` : ''}</DialogTitle>
+          </DialogHeader>
+          {docPanelAtivo && (
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              {(['ipva', 'lic'] as const).map((tipo) => {
+                const isIpva = tipo === 'ipva';
+                const titulo = isIpva ? 'IPVA' : 'Licenciamento';
+                const venc = isIpva ? docPanelAtivo.vencimento_ipva : docPanelAtivo.vencimento_licenciamento;
+                const valor = (isIpva ? docPanelAtivo.ipva_valor : docPanelAtivo.lic_valor) || 0;
+                const arq = isIpva ? docPanelAtivo.ipva_arquivo_url : docPanelAtivo.lic_arquivo_url;
+                const compr = isIpva ? docPanelAtivo.ipva_comprovante_url : docPanelAtivo.lic_comprovante_url;
+                const dataPg = isIpva ? docPanelAtivo.ipva_data_pagamento : docPanelAtivo.lic_data_pagamento;
+                const obs = isIpva ? docPanelAtivo.ipva_observacao : docPanelAtivo.lic_observacao;
+                const status = computeDocStatus(venc, compr || undefined);
+
+                const fieldVenc = isIpva ? 'vencimento_ipva' : 'vencimento_licenciamento';
+                const fieldValor = isIpva ? 'ipva_valor' : 'lic_valor';
+                const fieldArq = isIpva ? 'ipva_arquivo_url' : 'lic_arquivo_url';
+                const fieldCompr = isIpva ? 'ipva_comprovante_url' : 'lic_comprovante_url';
+                const fieldDataPg = isIpva ? 'ipva_data_pagamento' : 'lic_data_pagamento';
+                const fieldObs = isIpva ? 'ipva_observacao' : 'lic_observacao';
+
+                return (
+                  <div key={tipo} className="card-premium p-4 space-y-3 border-l-4 border-primary">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm">{titulo}</h4>
+                      {docBadge(status)}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">Vencimento</label>
+                        <Input type="date" defaultValue={venc || ''}
+                          onBlur={e => updateAtivoFields(docPanelAtivo.id, { [fieldVenc]: e.target.value || null } as any)} />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">Valor (R$)</label>
+                        <Input type="number" step="0.01" defaultValue={valor}
+                          onBlur={e => updateAtivoFields(docPanelAtivo.id, { [fieldValor]: Number(e.target.value || 0) } as any)} />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">Data de Pagamento</label>
+                        <Input type="date" defaultValue={dataPg || ''}
+                          onBlur={e => updateAtivoFields(docPanelAtivo.id, { [fieldDataPg]: e.target.value || null } as any)} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground block">Documento / Cobrança</label>
+                        <div className="flex gap-2">
+                          {arq ? (
+                            <>
+                              <Button size="sm" variant="outline" onClick={() => setViewingPdf({ url: arq, descricao: `${titulo} — ${docPanelAtivo.descricao}` })}>
+                                <Eye className="w-3.5 h-3.5 mr-1" /> Ver
+                              </Button>
+                              <Button size="sm" variant="outline" className="text-destructive"
+                                onClick={() => updateAtivoFields(docPanelAtivo.id, { [fieldArq]: '' } as any)}>
+                                <Trash2 className="w-3.5 h-3.5 mr-1" /> Remover
+                              </Button>
+                            </>
+                          ) : <span className="text-xs text-warning">Documento não anexado</span>}
+                          <label>
+                            <Button size="sm" asChild><span><Upload className="w-3.5 h-3.5 mr-1" /> Subir</span></Button>
+                            <input type="file" accept=".pdf,image/*" className="hidden"
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0]; if (!f) return;
+                                const url = await uploadParaAtivo(docPanelAtivo.id, `${tipo}-doc`, f);
+                                if (url) updateAtivoFields(docPanelAtivo.id, { [fieldArq]: url } as any);
+                              }} />
+                          </label>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground block">Comprovante de Pagamento</label>
+                        <div className="flex gap-2">
+                          {compr ? (
+                            <>
+                              <Button size="sm" variant="outline" onClick={() => setViewingPdf({ url: compr, descricao: `Comprovante ${titulo}` })}>
+                                <Eye className="w-3.5 h-3.5 mr-1" /> Ver
+                              </Button>
+                              <Button size="sm" variant="outline" className="text-destructive"
+                                onClick={() => updateAtivoFields(docPanelAtivo.id, { [fieldCompr]: '' } as any)}>
+                                <Trash2 className="w-3.5 h-3.5 mr-1" /> Remover
+                              </Button>
+                            </>
+                          ) : <span className="text-xs text-warning">Comprovante pendente</span>}
+                          <label>
+                            <Button size="sm" asChild><span><Upload className="w-3.5 h-3.5 mr-1" /> Subir</span></Button>
+                            <input type="file" accept=".pdf,image/*" className="hidden"
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0]; if (!f) return;
+                                const url = await uploadParaAtivo(docPanelAtivo.id, `${tipo}-compr`, f);
+                                if (url) {
+                                  await updateAtivoFields(docPanelAtivo.id, {
+                                    [fieldCompr]: url,
+                                    [fieldDataPg]: dataPg || new Date().toISOString().slice(0, 10),
+                                  } as any);
+                                  toast.success('Comprovante anexado — status: Regularizado');
+                                }
+                              }} />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">Observação</label>
+                      <textarea defaultValue={obs || ''} onBlur={e => updateAtivoFields(docPanelAtivo.id, { [fieldObs]: e.target.value } as any)}
+                        className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[50px]" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setDocPanelId(null)}>Fechar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

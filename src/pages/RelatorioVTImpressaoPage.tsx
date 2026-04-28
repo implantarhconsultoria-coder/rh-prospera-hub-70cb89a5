@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { getWorkingDays } from '@/lib/workingDays';
+import { getWorkingDays, getNextCompetencia, formatCompetencia } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildVTReportRows, sumBenefitRows } from '@/lib/benefitReports';
 
@@ -28,11 +28,8 @@ const RelatorioVTImpressaoPage: React.FC = () => {
 
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
 
-  const competenciaLabel = (() => {
-    const [y, m] = competencia.split('-');
-    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    return `${meses[Number(m) - 1]} / ${y}`;
-  })();
+  const competenciaLabel = formatCompetencia(competencia);
+  const competenciaPagamentoLabel = formatCompetencia(getNextCompetencia(competencia));
 
   if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
     return (
@@ -80,7 +77,8 @@ const RelatorioVTImpressaoPage: React.FC = () => {
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold">RELATÓRIO DE VALE TRANSPORTE</p>
-                <p className="text-xs">Competência: {competenciaLabel}</p>
+                <p className="text-xs">Apuração: {competenciaLabel}</p>
+                <p className="text-xs font-bold">Pagamento referente a: {competenciaPagamentoLabel}</p>
                 <p className="text-xs">Dias úteis: {diasUteis}</p>
                 {dataFechamento && <p className="text-xs">Fechamento: {new Date(dataFechamento).toLocaleDateString('pt-BR')}</p>}
               </div>

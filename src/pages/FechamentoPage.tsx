@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { calcFalta, calcAtraso, calcINSS, calcIRRF, calcFGTS, formatCurrency, calcTotalFuncionario } from '@/lib/calculations';
-import { getWorkingDays } from '@/lib/workingDays';
+import { getWorkingDays, formatCompetencia, getNextCompetencia } from '@/lib/workingDays';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -106,7 +106,15 @@ const FechamentoPage: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <h1 className="text-2xl font-bold font-display text-foreground">Fechamento por Empresa</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold font-display text-foreground">Fechamento por Empresa</h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Fechamento Salarial — Competência: <strong className="text-foreground">{formatCompetencia(competencia)}</strong>
+            {' • '}VR/VT serão pagos em <strong className="text-primary">{formatCompetencia(getNextCompetencia(competencia))}</strong>
+          </p>
+        </div>
+      </div>
 
       <div className="card-premium p-4 flex flex-wrap gap-3 items-center">
         <select value={selectedCompany} onChange={e => setSelectedCompany(e.target.value)}

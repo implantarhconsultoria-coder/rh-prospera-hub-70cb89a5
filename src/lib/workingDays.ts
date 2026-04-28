@@ -16,6 +16,27 @@ export const getWorkingDays = (competencia: string): number => {
 };
 
 /**
+ * Próxima competência no formato YYYY-MM (mês seguinte).
+ * Usado por VR/VT que são pagos no mês que vai entrar.
+ */
+export const getNextCompetencia = (competencia: string): string => {
+  const [y, m] = competencia.split('-').map(Number);
+  if (!y || !m) return competencia;
+  const next = new Date(y, m, 1); // m é 1-based; usar m gera o próximo mês
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+};
+
+/**
+ * Rótulo amigável da competência: "abril/2026"
+ */
+export const formatCompetencia = (competencia: string): string => {
+  const [y, m] = competencia.split('-').map(Number);
+  if (!y || !m) return competencia;
+  const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  return `${meses[m - 1]}/${y}`;
+};
+
+/**
  * First business day of the month after the selected competência.
  */
 export const getFirstBusinessDayOfNextMonth = (competencia: string): string => {

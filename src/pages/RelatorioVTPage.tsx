@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getWorkingDays, getFirstBusinessDayOfNextMonth } from '@/lib/workingDays';
+import { getWorkingDays, getFirstBusinessDayOfNextMonth, getNextCompetencia, formatCompetencia } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,7 +90,10 @@ const RelatorioVTPage: React.FC = () => {
             <div>
               <h2 className="font-bold text-foreground">{company.name}</h2>
               <p className="text-xs text-muted-foreground">
-                CNPJ: {company.cnpj} — Competência: {competencia} — Dias úteis: {diasUteis}
+                CNPJ: {company.cnpj} — Apuração: {formatCompetencia(competencia)} — Dias úteis: {diasUteis}
+              </p>
+              <p className="text-sm font-semibold text-primary">
+                Vale Transporte — Competência de pagamento: {formatCompetencia(getNextCompetencia(competencia))}
               </p>
               <p className="text-xs text-muted-foreground">
                 Emissão: {emissaoDate}
