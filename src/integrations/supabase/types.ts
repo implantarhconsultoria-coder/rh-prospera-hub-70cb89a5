@@ -633,10 +633,28 @@ export type Database = {
           descricao: string
           empresa: string | null
           id: string
+          ipva_arquivo_url: string | null
+          ipva_comprovante_url: string | null
+          ipva_data_pagamento: string | null
+          ipva_observacao: string | null
+          ipva_status: string | null
+          ipva_valor: number | null
+          lic_arquivo_url: string | null
+          lic_comprovante_url: string | null
+          lic_data_pagamento: string | null
+          lic_observacao: string | null
+          lic_status: string | null
+          lic_valor: number | null
+          marca: string | null
           observacao: string | null
           patrimonio: string | null
           placa: string | null
           renavam: string | null
+          responsavel_atual: string | null
+          seguro_arquivo_url: string | null
+          seguro_comprovante_url: string | null
+          seguro_valor: number | null
+          seguro_vencimento: string | null
           status: string
           tipo: string
           updated_at: string
@@ -653,10 +671,28 @@ export type Database = {
           descricao?: string
           empresa?: string | null
           id?: string
+          ipva_arquivo_url?: string | null
+          ipva_comprovante_url?: string | null
+          ipva_data_pagamento?: string | null
+          ipva_observacao?: string | null
+          ipva_status?: string | null
+          ipva_valor?: number | null
+          lic_arquivo_url?: string | null
+          lic_comprovante_url?: string | null
+          lic_data_pagamento?: string | null
+          lic_observacao?: string | null
+          lic_status?: string | null
+          lic_valor?: number | null
+          marca?: string | null
           observacao?: string | null
           patrimonio?: string | null
           placa?: string | null
           renavam?: string | null
+          responsavel_atual?: string | null
+          seguro_arquivo_url?: string | null
+          seguro_comprovante_url?: string | null
+          seguro_valor?: number | null
+          seguro_vencimento?: string | null
           status?: string
           tipo: string
           updated_at?: string
@@ -673,10 +709,28 @@ export type Database = {
           descricao?: string
           empresa?: string | null
           id?: string
+          ipva_arquivo_url?: string | null
+          ipva_comprovante_url?: string | null
+          ipva_data_pagamento?: string | null
+          ipva_observacao?: string | null
+          ipva_status?: string | null
+          ipva_valor?: number | null
+          lic_arquivo_url?: string | null
+          lic_comprovante_url?: string | null
+          lic_data_pagamento?: string | null
+          lic_observacao?: string | null
+          lic_status?: string | null
+          lic_valor?: number | null
+          marca?: string | null
           observacao?: string | null
           patrimonio?: string | null
           placa?: string | null
           renavam?: string | null
+          responsavel_atual?: string | null
+          seguro_arquivo_url?: string | null
+          seguro_comprovante_url?: string | null
+          seguro_valor?: number | null
+          seguro_vencimento?: string | null
           status?: string
           tipo?: string
           updated_at?: string
@@ -2101,6 +2155,81 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ferias_avisos: {
+        Row: {
+          assinado_pdf_url: string
+          aviso_pdf_url: string
+          company_id: string | null
+          created_at: string
+          data_entrega: string | null
+          data_retorno: string
+          dias_ferias: number
+          empresa_nome: string
+          funcionario_cargo: string
+          funcionario_cpf: string
+          funcionario_id: string | null
+          funcionario_nome: string
+          id: string
+          observacao: string
+          periodo_aquisitivo_fim: string | null
+          periodo_aquisitivo_inicio: string | null
+          periodo_gozo_fim: string
+          periodo_gozo_inicio: string
+          status: string
+          updated_at: string
+          user_id: string
+          user_nome: string
+        }
+        Insert: {
+          assinado_pdf_url?: string
+          aviso_pdf_url?: string
+          company_id?: string | null
+          created_at?: string
+          data_entrega?: string | null
+          data_retorno: string
+          dias_ferias?: number
+          empresa_nome?: string
+          funcionario_cargo?: string
+          funcionario_cpf?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          observacao?: string
+          periodo_aquisitivo_fim?: string | null
+          periodo_aquisitivo_inicio?: string | null
+          periodo_gozo_fim: string
+          periodo_gozo_inicio: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          user_nome?: string
+        }
+        Update: {
+          assinado_pdf_url?: string
+          aviso_pdf_url?: string
+          company_id?: string | null
+          created_at?: string
+          data_entrega?: string | null
+          data_retorno?: string
+          dias_ferias?: number
+          empresa_nome?: string
+          funcionario_cargo?: string
+          funcionario_cpf?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string
+          id?: string
+          observacao?: string
+          periodo_aquisitivo_fim?: string | null
+          periodo_aquisitivo_inicio?: string | null
+          periodo_gozo_fim?: string
+          periodo_gozo_inicio?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          user_nome?: string
+        }
+        Relationships: []
       }
       fornecedores: {
         Row: {
