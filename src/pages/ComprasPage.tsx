@@ -219,6 +219,7 @@ const ComprasPage: React.FC = () => {
                 <th className="p-2 text-left">Solicitante</th>
                 <th className="p-2 text-center">Status</th>
                 <th className="p-2 text-center">Mudar status</th>
+                <th className="p-2 text-right">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -243,16 +244,53 @@ const ComprasPage: React.FC = () => {
                         </SelectContent>
                       </Select>
                     </td>
+                    <td className="p-2 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(c)}><Pencil className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleDelete(c)}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={10} className="p-6 text-center text-muted-foreground">Nenhuma solicitação registrada.</td></tr>
+                <tr><td colSpan={11} className="p-6 text-center text-muted-foreground">Nenhuma solicitação registrada.</td></tr>
               )}
             </tbody>
           </table>
         )}
       </Card>
+
+      {/* Dialog de edição */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Editar Solicitação {editTarget?.numero_solicitacao}</DialogTitle></DialogHeader>
+          {editForm && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><Label>Item</Label><Input value={editForm.item || ''} onChange={e => setEditForm({ ...editForm, item: e.target.value })} /></div>
+              <div><Label>Fornecedor</Label><Input value={editForm.fornecedor || ''} onChange={e => setEditForm({ ...editForm, fornecedor: e.target.value })} /></div>
+              <div><Label>Quantidade</Label><Input type="number" value={editForm.quantidade || 0} onChange={e => setEditForm({ ...editForm, quantidade: Number(e.target.value) })} /></div>
+              <div><Label>Unidade</Label><Input value={editForm.unidade || 'un'} onChange={e => setEditForm({ ...editForm, unidade: e.target.value })} /></div>
+              <div><Label>Valor estimado (R$)</Label><Input type="number" step="0.01" value={editForm.valor_estimado || 0} onChange={e => setEditForm({ ...editForm, valor_estimado: Number(e.target.value) })} /></div>
+              <div><Label>Valor real (R$)</Label><Input type="number" step="0.01" value={editForm.valor_real || 0} onChange={e => setEditForm({ ...editForm, valor_real: Number(e.target.value) })} /></div>
+              <div><Label>Centro de custo</Label><Input value={editForm.centro_custo || ''} onChange={e => setEditForm({ ...editForm, centro_custo: e.target.value })} /></div>
+              <div><Label>Status</Label>
+                <Select value={editForm.status} onValueChange={v => setEditForm({ ...editForm, status: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{STATUS_OPTS.map(o => <SelectItem key={o.v} value={o.v}>{o.label}</SelectItem>)}</SelectContent>
+                </Select></div>
+              <div className="md:col-span-2"><Label>Observação</Label><Textarea value={editForm.observacao || ''} onChange={e => setEditForm({ ...editForm, observacao: e.target.value })} /></div>
+              <div className="md:col-span-2 flex justify-between pt-3 border-t">
+                <Button variant="destructive" onClick={() => { handleDelete(editTarget); setEditTarget(null); }}><Trash2 className="w-4 h-4 mr-1" /> Excluir</Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setEditTarget(null)}>Cancelar</Button>
+                  <Button onClick={saveEdit}>Salvar</Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
