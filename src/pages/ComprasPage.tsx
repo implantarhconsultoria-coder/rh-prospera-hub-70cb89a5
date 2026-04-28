@@ -82,7 +82,7 @@ const ComprasPage: React.FC = () => {
   };
 
   const handleEditField = async (compra: any, campo: string, valor: any) => {
-    const { error } = await supabase.from('compras').update({ [campo]: valor }).eq('id', compra.id);
+    const { error } = await supabase.from('compras').update({ [campo]: valor } as any).eq('id', compra.id);
     if (error) { toast.error('Erro: ' + error.message); return; }
     setList(prev => prev.map(c => c.id === compra.id ? { ...c, [campo]: valor } : c));
   };
