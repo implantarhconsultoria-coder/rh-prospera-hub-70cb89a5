@@ -9,6 +9,18 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import AlmoxarifadoCargaTab from '@/components/AlmoxarifadoCargaTab';
+import * as XLSX from 'xlsx';
+
+// Detecta nomes corrompidos vindos de importação binária ou linhas inválidas
+const INVALID_NAME_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFD]/;
+const isValidItemName = (n: unknown): n is string => {
+  if (typeof n !== 'string') return false;
+  const t = n.trim();
+  if (!t || t.length > 200) return false;
+  if (INVALID_NAME_RE.test(t)) return false;
+  if (!/[A-Za-z0-9]/.test(t)) return false;
+  return true;
+};
 
 type Tab = 'estoque' | 'entrada' | 'saida' | 'carregamento' | 'carga' | 'fechamento' | 'relatorio';
 
