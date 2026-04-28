@@ -22,7 +22,7 @@ interface TecnicoRow {
   access_token: string | null;
   link_bloqueado: boolean;
   link_regenerado_em: string | null;
-  funcionario: { id: string; nome: string; cargo: string; celular: string; cpf: string; empresa?: string };
+  funcionario: { id: string; nome: string; cargo: string; celular: string; cpf: string; companies?: { nome: string } | null };
   veiculo: { id: string; placa: string; modelo: string; identificacao_interna: string } | null;
   ultimaAtividade?: { last_activity_at: string; route: string; status: string } | null;
   ultimoPonto?: { tipo: string; created_at: string } | null;
