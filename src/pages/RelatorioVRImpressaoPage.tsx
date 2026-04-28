@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { getWorkingDays } from '@/lib/workingDays';
+import { getWorkingDays, getNextCompetencia, formatCompetencia } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, sumBenefitRows } from '@/lib/benefitReports';
 
@@ -28,11 +28,8 @@ const RelatorioVRImpressaoPage: React.FC = () => {
 
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
 
-  const competenciaLabel = (() => {
-    const [y, m] = competencia.split('-');
-    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    return `${meses[Number(m) - 1]} / ${y}`;
-  })();
+  const competenciaLabel = formatCompetencia(competencia);
+  const competenciaPagamentoLabel = formatCompetencia(getNextCompetencia(competencia));
 
   if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
     return (
