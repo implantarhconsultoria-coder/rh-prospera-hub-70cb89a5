@@ -20,17 +20,18 @@ const sb = () =>
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-// Resolve técnico from token; returns null if invalid.
+// Resolve técnico from token; returns null if invalid or blocked.
 async function resolveTecnico(token: string) {
   if (!token || token.length < 10) return null;
   const { data } = await sb()
     .from("tecnicos_campo")
     .select(
-      "id, apelido, status, user_id, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
+      "id, apelido, status, user_id, veiculo_id, funcionario_id, link_bloqueado, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
     )
     .eq("access_token", token)
     .maybeSingle();
   if (!data) return null;
+  if ((data as any).link_bloqueado) return null;
   // Carrega TODOS os veiculos vinculados a esse colaborador (suporte a multi-veiculo, ex: Rafael)
   let veiculos_disponiveis: any[] = [];
   if (data.user_id) {
