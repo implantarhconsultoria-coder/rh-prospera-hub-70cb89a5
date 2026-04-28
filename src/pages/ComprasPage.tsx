@@ -81,6 +81,37 @@ const ComprasPage: React.FC = () => {
     }
   };
 
+  const handleEditField = async (compra: any, campo: string, valor: any) => {
+    const { error } = await supabase.from('compras').update({ [campo]: valor }).eq('id', compra.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    setList(prev => prev.map(c => c.id === compra.id ? { ...c, [campo]: valor } : c));
+  };
+
+  const handleDelete = async (compra: any) => {
+    if (!confirm(`Excluir solicitação ${compra.numero_solicitacao}?`)) return;
+    const { error } = await supabase.from('compras').delete().eq('id', compra.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success('Solicitação excluída');
+    await fetchList();
+  };
+
+  const [editTarget, setEditTarget] = useState<any>(null);
+  const [editForm, setEditForm] = useState<any>(null);
+  const openEdit = (c: any) => { setEditTarget(c); setEditForm({ ...c }); };
+  const saveEdit = async () => {
+    if (!editTarget) return;
+    const { error } = await supabase.from('compras').update({
+      item: editForm.item, fornecedor: editForm.fornecedor, quantidade: Number(editForm.quantidade) || 0,
+      unidade: editForm.unidade, valor_estimado: Number(editForm.valor_estimado) || 0,
+      valor_real: Number(editForm.valor_real) || 0, observacao: editForm.observacao || '',
+      centro_custo: editForm.centro_custo || '', status: editForm.status,
+    }).eq('id', editTarget.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success('Compra atualizada');
+    setEditTarget(null);
+    await fetchList();
+  };
+
   const mudarStatus = async (compra: any, novo: Status) => {
     if (!session) return;
     const { error } = await supabase.from('compras').update({ status: novo }).eq('id', compra.id);
