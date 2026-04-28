@@ -450,7 +450,9 @@ const AlmoxarifadoPage: React.FC = () => {
   };
 
   const getItemName = (id: string) => itens.find(i => i.id === id)?.nome || '—';
-  const filteredItens = itens.filter(i => i.nome.toLowerCase().includes(search.toLowerCase()));
+  const filteredItens = itens
+    .filter(i => isValidItemName(i.nome))
+    .filter(i => i.nome.toLowerCase().includes(search.toLowerCase()));
 
   const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
     { key: 'estoque', label: 'Estoque', icon: Package },
