@@ -600,12 +600,25 @@ const AlmoxarifadoPage: React.FC = () => {
                   <Upload className="w-4 h-4 mr-1" />Importar Planilha
                 </Button>
               )}
+              {isAdmin && (
+                <Button size="sm" variant="outline" onClick={handleLimparInvalidos}>
+                  <Trash2 className="w-4 h-4 mr-1" />Limpar registros inválidos
+                </Button>
+              )}
             </div>
 
             {showImport && (
-              <div className="border rounded-lg p-4 bg-muted/20">
-                <p className="text-xs text-muted-foreground mb-2">Envie um CSV/TXT com colunas: Nome, Categoria, Unidade, Quantidade, Valor, Localização</p>
-                <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleImport} className="text-xs" />
+              <div className="border rounded-lg p-4 bg-muted/20 space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Envie XLSX, XLS ou CSV com as colunas: <strong>item, descrição, categoria, unidade, quantidade, estoque mínimo, localização, empresa/filial, observações</strong>.
+                </p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  onChange={handleImport}
+                  className="text-xs"
+                />
               </div>
             )}
 
