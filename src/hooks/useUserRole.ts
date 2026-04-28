@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 
-export type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario' | 'tecnico_campo' | 'operacional';
+export type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario' | 'tecnico_campo' | 'operacional' | 'faturamento' | 'financeiro';
 
 // Prioridade: admin sempre vence (usuário pode ter múltiplas roles, ex: admin + tecnico_campo de teste)
-const ROLE_PRIORITY: AppRole[] = ['admin', 'operacional', 'filial_praia', 'filial_goiania', 'almoxarifado', 'tecnico_campo', 'usuario'];
+const ROLE_PRIORITY: AppRole[] = ['admin', 'operacional', 'filial_praia', 'filial_goiania', 'almoxarifado', 'faturamento', 'financeiro', 'tecnico_campo', 'usuario'];
 
 export const useUserRole = (session: Session | null) => {
   const [role, setRole] = useState<AppRole | null>(null);
