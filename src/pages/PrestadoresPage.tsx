@@ -4,7 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Users, Plus, Printer, Save, X, ChevronLeft, Landmark } from 'lucide-react';
+import { Users, Plus, Printer, Save, X, ChevronLeft, Landmark, Pencil, Trash2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
 
@@ -54,6 +55,50 @@ const PrestadoresPage: React.FC = () => {
   const [valorPago, setValorPago] = useState(0);
   const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
+  const [editTarget, setEditTarget] = useState<Prestador | null>(null);
+  const [editForm, setEditForm] = useState<any>(null);
+
+  const openEdit = (p: Prestador) => {
+    setEditTarget(p);
+    setEditForm({ ...p });
+  };
+
+  const saveEdit = async () => {
+    if (!editTarget || !editForm) return;
+    setLoading(true);
+    const { error } = await supabase.from('prestadores').update({
+      nome: editForm.nome,
+      cpf: editForm.cpf,
+      funcao: editForm.funcao,
+      empresa_pagadora: editForm.empresa_pagadora,
+      dias_trabalho: editForm.dias_trabalho,
+      pagamento_tipo: editForm.pagamento_tipo,
+      valor_diario: Number(editForm.valor_diario) || 0,
+      observacao: editForm.observacao || '',
+      status: editForm.status,
+      banco: editForm.banco || '',
+      banco_titular: editForm.banco_titular || '',
+      banco_tipo_conta: editForm.banco_tipo_conta || '',
+      banco_agencia: editForm.banco_agencia || '',
+      banco_conta: editForm.banco_conta || '',
+      ultimo_pagamento: editForm.ultimo_pagamento || null,
+      proximo_pagamento: editForm.proximo_pagamento || null,
+    } as any).eq('id', editTarget.id);
+    setLoading(false);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success('Prestador atualizado');
+    setEditTarget(null);
+    fetchPrestadores();
+  };
+
+  const handleDelete = async (p: Prestador) => {
+    if (!confirm(`Excluir o prestador "${p.nome}"? Esta ação não pode ser desfeita.`)) return;
+    const { error } = await supabase.from('prestadores').delete().eq('id', p.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.success('Prestador excluído');
+    if (selectedId === p.id) setSelectedId('');
+    fetchPrestadores();
+  };
 
   const fetchPrestadores = async () => {
     const { data, error } = await supabase.from('prestadores').select('*').order('created_at', { ascending: false });
