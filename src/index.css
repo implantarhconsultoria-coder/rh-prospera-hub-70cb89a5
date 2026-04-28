@@ -200,17 +200,19 @@
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+/* Quando existir um #print-root na página, isolamos só ele.
+   Quando NÃO existir, deixamos a página inteira ser impressa
+   (apenas escondemos chrome de UI: sidebar, botões, toasts, etc.). */
 @media print {
-  body * {
+  /* Caso 1: página tem #print-root → isola */
+  body:has(#print-root) * {
     visibility: hidden !important;
   }
-
-  #print-root,
-  #print-root * {
+  body:has(#print-root) #print-root,
+  body:has(#print-root) #print-root * {
     visibility: visible !important;
   }
-
-  #print-root {
+  body:has(#print-root) #print-root {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
@@ -224,29 +226,25 @@
     border: none !important;
   }
 
-  .no-print {
-    display: none !important;
-  }
-
-  nav,
-  aside,
-  header,
-  footer,
-  button,
-  input,
-  select,
-  textarea,
-  .sidebar,
-  .topbar,
+  /* Caso 2 (sem #print-root) e também caso 1: esconder chrome */
+  .no-print,
+  [data-sidebar],
+  aside.sidebar,
+  .lovable-badge,
+  [data-sonner-toaster],
   .toast,
-  .modal-backdrop,
-  .lovable-badge {
+  .modal-backdrop {
     display: none !important;
   }
 
   @page {
     size: A4 portrait;
     margin: 8mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
   }
 }
 
