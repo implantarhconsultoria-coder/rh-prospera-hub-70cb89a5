@@ -776,6 +776,10 @@ const AlmoxarifadoPage: React.FC = () => {
                               <Settings2 className="w-3.5 h-3.5" />
                             </Button>
                           )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar item"
+                            onClick={() => abrirEdicao(item)}>
+                            <FileText className="w-3.5 h-3.5" />
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Histórico"
                             onClick={() => abrirHistorico(item)}>
                             <History className="w-3.5 h-3.5" />
@@ -784,7 +788,9 @@ const AlmoxarifadoPage: React.FC = () => {
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Excluir"
                               onClick={async () => {
                                 if (!confirm(`Excluir o item "${item.nome}"?`)) return;
-                                await supabase.from('almoxarifado_itens').delete().eq('id', item.id);
+                                const { error } = await supabase.from('almoxarifado_itens').delete().eq('id', item.id);
+                                if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
+                                toast.success('Item excluído');
                                 setSelectedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
                                 fetchAll();
                               }}>
