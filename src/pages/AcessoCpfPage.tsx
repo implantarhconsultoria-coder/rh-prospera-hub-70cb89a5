@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, AlertTriangle, Wrench } from 'lucide-react';
 
 const FN_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/tecnico-app`;
+const ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const formatCpf = (raw: string) => {
   const d = raw.replace(/\D/g, '').slice(0, 11);
