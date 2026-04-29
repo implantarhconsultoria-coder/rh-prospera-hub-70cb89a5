@@ -14,13 +14,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   CalendarCheck, Printer, Save, AlertTriangle, Plus, Upload, Eye, Trash2,
-  CheckCircle2, FileText, Plane, ArrowRight,
+  CheckCircle2, FileText, Plane, ArrowRight, Mail, DollarSign, Send,
 } from 'lucide-react';
 import { formatDate } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { gerarAvisoFeriasPdf, downloadPdf } from '@/lib/pdfGenerator';
 import { registrarDocumento, uploadDocumentoPdf } from '@/lib/documentoHistorico';
+import { openEmailClient } from '@/lib/emailUtils';
 
 interface FeriasAviso {
   id: string;
