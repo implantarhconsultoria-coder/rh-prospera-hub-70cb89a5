@@ -47,7 +47,62 @@ Deno.serve(async (req) => {
     if (!link) return json({ error: "link_invalido" }, 404);
     if (link.status !== "ativo") return json({ error: "link_bloqueado" }, 403);
 
-    // Chama a função SECURITY DEFINER que valida CPF + módulo + unidade
+    // Para Operacional: fluxo diferente — autoriza pela tabela tecnicos_campo + funcionarios.
+    // Não exige pré-cadastro em acessos_cpf (técnicos já estão na base).
+    if (link.modulo === "operacional") {
+      const { data: func } = await client
+        .from("funcionarios")
+        .select("id, nome, cpf, company_id")
+        .filter("cpf", "ilike", `%${cpfClean}%`)
+        .maybeSingle();
+
+      if (!func) return json({ error: "cpf_nao_encontrado" }, 403);
+
+      // Verifica se a empresa do funcionário corresponde à unidade do link
+      let empresaNome = "";
+      if (func.company_id) {
+        const { data: emp } = await client
+          .from("empresas")
+          .select("nome")
+          .eq("id", func.company_id)
+          .maybeSingle();
+        empresaNome = emp?.nome || "";
+      }
+
+      const empresasOk = (link.empresas_permitidas || []) as string[];
+      if (empresasOk.length > 0 && empresaNome && !empresasOk.includes(empresaNome)) {
+        return json({ error: "unidade_incorreta" }, 403);
+      }
+
+      const { data: tec } = await client
+        .from("tecnicos_campo")
+        .select("access_token, link_status, link_bloqueado")
+        .eq("funcionario_id", func.id)
+        .maybeSingle();
+
+      if (!tec) return json({ error: "tecnico_nao_encontrado" }, 403);
+      if (tec.link_status === "revogado") return json({ error: "revoked_link" }, 403);
+      if (tec.link_status === "bloqueado" || tec.link_bloqueado)
+        return json({ error: "blocked_link" }, 403);
+      if (!tec.access_token) return json({ error: "invalid_token" }, 403);
+
+      // Atualiza contadores do link
+      await client
+        .from("links_acesso_publico")
+        .update({ ultimo_acesso_em: new Date().toISOString() })
+        .eq("token", link.token);
+
+      return json({
+        ok: true,
+        modulo: "operacional",
+        unidade: link.unidade,
+        link_nome: link.nome,
+        usuario: { nome: func.nome, cpf: cpfClean, empresa: empresaNome },
+        tecnico_token: tec.access_token,
+      });
+    }
+
+    // Financeiro / Faturamento / outros: usa tabela acessos_cpf via SECURITY DEFINER
     const { data: result, error: rerr } = await client.rpc("validar_acesso_cpf", {
       p_token: link.token,
       p_cpf: cpfClean,
@@ -55,41 +110,6 @@ Deno.serve(async (req) => {
     if (rerr) return json({ error: "db_error", detalhe: rerr.message }, 500);
     const r = result as any;
     if (!r?.ok) return json({ error: r?.error || "negado" }, 403);
-
-    // Para Operacional: tenta resolver token do tecnico_campo via funcionarios.cpf
-    if (link.modulo === "operacional") {
-      const { data: func } = await client
-        .from("funcionarios")
-        .select("id")
-        .filter("cpf", "ilike", `%${cpfClean}%`)
-        .maybeSingle();
-      if (func) {
-        const { data: tec } = await client
-          .from("tecnicos_campo")
-          .select("access_token, link_status, link_bloqueado")
-          .eq("funcionario_id", func.id)
-          .maybeSingle();
-        if (tec?.access_token && tec.link_status !== "revogado" && !tec.link_bloqueado) {
-          return json({
-            ok: true,
-            modulo: "operacional",
-            unidade: link.unidade,
-            link_nome: link.nome,
-            usuario: r.usuario,
-            tecnico_token: tec.access_token,
-          });
-        }
-      }
-      // Operacional sem tecnico_campo vinculado: ainda autorizado, mas sem app de campo
-      return json({
-        ok: true,
-        modulo: "operacional",
-        unidade: link.unidade,
-        link_nome: link.nome,
-        usuario: r.usuario,
-        tecnico_token: null,
-      });
-    }
 
     return json({
       ok: true,
