@@ -226,7 +226,7 @@ const RescisaoPage: React.FC = () => {
     }
   };
 
-  const imprimir = (r: any) => {
+  const imprimir = async (r: any) => {
     const snap = (r.snapshot_json && (r.snapshot_json as any).resultado) || null;
     const resultado: TrctResultado = snap || {
       v50_saldoDiasSalario: Number(r.verba_50_saldo_dias || r.saldo_salario || 0),
