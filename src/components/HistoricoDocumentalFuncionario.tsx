@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { buscarHistoricoFuncionario } from '@/lib/documentoHistorico';
+import { openFile } from '@/lib/storageUrl';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Mail, Clock, User, Building2 } from 'lucide-react';
 
@@ -62,8 +63,10 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             </div>
           )}
           {doc.arquivo_url && (
-            <a href={doc.arquivo_url} target="_blank" rel="noopener noreferrer"
-              className="text-[10px] text-primary underline mt-1 inline-block">Ver documento</a>
+            <button
+              type="button"
+              onClick={() => openFile('documentos-funcionarios', doc.arquivo_url)}
+              className="text-[10px] text-primary underline mt-1 inline-block">Ver documento</button>
           )}
         </div>
       ))}
