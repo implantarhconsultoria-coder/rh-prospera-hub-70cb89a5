@@ -77,6 +77,13 @@ type SituacaoFerias =
   | { tipo: 'retornado'; label: string; cor: string }
   | { tipo: 'cancelado'; label: string; cor: string };
 
+type SituacaoPagamento =
+  | { tipo: 'pago'; label: string; cor: string }
+  | { tipo: 'enviado'; label: string; cor: string }
+  | { tipo: 'pendente'; dias: number; label: string; cor: string }
+  | { tipo: 'vencendo'; dias: number; label: string; cor: string }
+  | { tipo: 'vencido'; dias: number; label: string; cor: string };
+
 const computarSituacao = (a: FeriasAviso): SituacaoFerias => {
   if (a.status === 'cancelado') return { tipo: 'cancelado', label: 'Cancelado', cor: 'bg-muted text-muted-foreground' };
   const hoje = today();
@@ -96,6 +103,21 @@ const computarSituacao = (a: FeriasAviso): SituacaoFerias => {
     return { tipo: 'ate_retorno', dias: 0, label: 'Retorna HOJE', cor: 'bg-warning text-warning-foreground' };
   }
   return { tipo: 'retornado', label: 'Retornado', cor: 'bg-success text-success-foreground' };
+};
+
+const computarPagamento = (a: FeriasAviso): SituacaoPagamento => {
+  const sp = a.status_pagamento || 'pendente';
+  if (sp === 'pago') return { tipo: 'pago', label: 'Pago', cor: 'bg-success text-success-foreground' };
+  const prazo = a.prazo_pagamento;
+  if (!prazo) {
+    if (sp === 'enviado') return { tipo: 'enviado', label: 'Enviado p/ contabilidade', cor: 'bg-primary text-primary-foreground' };
+    return { tipo: 'pendente', dias: 0, label: 'Pendente', cor: 'bg-warning text-warning-foreground' };
+  }
+  const d = daysBetween(today(), prazo);
+  if (d < 0) return { tipo: 'vencido', dias: d, label: `Pagamento VENCIDO há ${Math.abs(d)}d`, cor: 'bg-destructive text-destructive-foreground' };
+  if (d <= 3) return { tipo: 'vencendo', dias: d, label: `Pagar em ${d}d`, cor: 'bg-destructive/80 text-destructive-foreground' };
+  if (sp === 'enviado') return { tipo: 'enviado', label: `Enviado — pagar em ${d}d`, cor: 'bg-primary text-primary-foreground' };
+  return { tipo: 'pendente', dias: d, label: `Pendente — pagar em ${d}d`, cor: 'bg-warning text-warning-foreground' };
 };
 
 const AvisoFeriasPage: React.FC = () => {
