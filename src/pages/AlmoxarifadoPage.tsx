@@ -99,6 +99,33 @@ const AlmoxarifadoPage: React.FC = () => {
   const [historicoItem, setHistoricoItem] = useState<Item | null>(null);
   const [historicoAjustes, setHistoricoAjustes] = useState<any[]>([]);
 
+  // Edição completa de item
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState<any | null>(null);
+
+  const abrirEdicao = (item: any) => { setEditItem({ ...item }); setEditOpen(true); };
+
+  const salvarEdicao = async () => {
+    if (!editItem) return;
+    const payload: any = {
+      nome: editItem.nome,
+      descricao: editItem.descricao || '',
+      categoria: editItem.categoria || '',
+      unidade: editItem.unidade || 'un',
+      quantidade: Number(editItem.quantidade) || 0,
+      estoque_minimo: Number(editItem.estoque_minimo) || 0,
+      localizacao: editItem.localizacao || '',
+      empresa: editItem.empresa || '',
+      observacoes: editItem.observacoes || '',
+      valor_unitario: Number(editItem.valor_unitario) || 0,
+    };
+    const { error } = await supabase.from('almoxarifado_itens').update(payload).eq('id', editItem.id);
+    if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
+    toast.success('Item atualizado');
+    setEditOpen(false); setEditItem(null);
+    fetchAll();
+  };
+
   const uid = session?.user?.id;
 
   // Employee autocomplete filtering
