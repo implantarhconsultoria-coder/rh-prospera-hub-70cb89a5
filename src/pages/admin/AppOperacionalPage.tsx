@@ -300,13 +300,33 @@ const AppOperacionalPage: React.FC = () => {
           )}
         </TabsContent>
 
-        <TabsContent value="links">
+        <TabsContent value="links" className="space-y-4">
+          <Card className="p-4 bg-blue-500/5 border-blue-500/20">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="font-bold text-sm flex items-center gap-2"><Link2 className="w-4 h-4 text-blue-600" />Link único Goiânia (acesso por CPF)</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                  Link permanente compartilhado: o colaborador abre, digita o CPF e o app valida pelo banco. Permite uso simultâneo, sem misturar dados entre usuários.
+                </p>
+                <code className="block mt-2 text-[11px] bg-muted px-2 py-1 rounded">{`${window.location.origin}/g`}</code>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/g`); toast.success('Link único copiado'); }}>
+                  <Copy className="w-3.5 h-3.5 mr-1" />Copiar
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => window.open(`${window.location.origin}/g`, '_blank')}>
+                  <ExternalLink className="w-3.5 h-3.5 mr-1" />Abrir
+                </Button>
+              </div>
+            </div>
+          </Card>
+
           <Card className="p-0 overflow-hidden">
             <div className="p-4 border-b">
               <h2 className="font-bold flex items-center gap-2"><Link2 className="w-4 h-4" />Links dos Aplicativos</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Cada técnico tem um link individual <strong>vitalício</strong> que abre o app direto com seus dados.
-                O link continua válido após atualizações; só deixa de funcionar se for bloqueado ou regenerado.
+                Cada técnico tem um link individual <strong>vitalício e permanente</strong> que abre o app direto com seus dados.
+                O link continua válido após publicação de novas versões; só deixa de funcionar se for bloqueado, revogado ou regenerado.
               </p>
             </div>
             <div className="overflow-x-auto">
