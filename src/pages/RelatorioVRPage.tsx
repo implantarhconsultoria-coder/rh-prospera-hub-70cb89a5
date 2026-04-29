@@ -1,13 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { getWorkingDays, getFirstBusinessDayOfNextMonth, getNextCompetencia, formatCompetencia } from '@/lib/workingDays';
+import { getFirstBusinessDayOfNextMonth, getNextCompetencia, formatCompetencia } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { UtensilsCrossed, FileText, User } from 'lucide-react';
+import { UtensilsCrossed, FileText, User, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { buildVRReportRows, sumBenefitRows } from '@/lib/benefitReports';
+import { calcularDiasUteisBeneficio, formatFeriadoData, type DiasUteisBeneficio, diasUteisBrutos } from '@/lib/feriados';
 
 const RelatorioVRPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento } = useApp();
@@ -15,10 +16,35 @@ const RelatorioVRPage: React.FC = () => {
   const [selectedCompany, setSelectedCompany] = useState('');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [generated, setGenerated] = useState(false);
+  const [feriadoInfo, setFeriadoInfo] = useState<DiasUteisBeneficio>({
+    diasUteisBrutos: diasUteisBrutos(new Date().toISOString().slice(0, 7)),
+    feriadosConsiderados: 0,
+    diasUteisFinais: diasUteisBrutos(new Date().toISOString().slice(0, 7)),
+    listaFeriados: [],
+  });
 
-  const diasUteis = getWorkingDays(competencia);
+  const company = companies.find(c => c.id === selectedCompany);
+  const diasUteis = feriadoInfo.diasUteisFinais;
   const fechamento = getFechamento(selectedCompany, competencia);
   const dataFechamento = fechamento.dataFechamento || '';
+
+  const recalcularFeriados = async () => {
+    if (!company) {
+      const brutos = diasUteisBrutos(competencia);
+      setFeriadoInfo({ diasUteisBrutos: brutos, feriadosConsiderados: 0, diasUteisFinais: brutos, listaFeriados: [] });
+      return;
+    }
+    const info = await calcularDiasUteisBeneficio(company.name, competencia, company.id);
+    setFeriadoInfo(info);
+    if (info.feriadosConsiderados === 0) {
+      toast.message('Não há feriados cadastrados para esta competência/filial. Cadastre no Calendário de Feriados para o cálculo considerar.');
+    }
+  };
+
+  useEffect(() => {
+    recalcularFeriados();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCompany, competencia]);
 
   const handleGenerate = () => {
     if (!selectedCompany) { toast.error('Selecione uma empresa'); return; }
@@ -29,7 +55,6 @@ const RelatorioVRPage: React.FC = () => {
 
   const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional' && e.vrAtivo);
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
-  const company = companies.find(c => c.id === selectedCompany);
 
   const rows = useMemo(() => {
     return buildVRReportRows(compEmps, compEntries, diasUteis);
@@ -75,7 +100,14 @@ const RelatorioVRPage: React.FC = () => {
           <label className="text-xs text-muted-foreground block mb-1">Competência</label>
           <Input type="month" value={competencia} onChange={e => { setCompetencia(e.target.value); setGenerated(false); }} className="w-48" />
         </div>
-        <span className="text-xs text-muted-foreground">Dias úteis: <strong className="text-foreground">{diasUteis}</strong></span>
+        <span className="text-xs text-muted-foreground">
+          Brutos: <strong className="text-foreground">{feriadoInfo.diasUteisBrutos}</strong> ·
+          Feriados: <strong className="text-foreground">{feriadoInfo.feriadosConsiderados}</strong> ·
+          Finais: <strong className="text-foreground">{feriadoInfo.diasUteisFinais}</strong>
+        </span>
+        <Button onClick={recalcularFeriados} variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" /> Recalcular com feriados
+        </Button>
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de VR
         </Button>
@@ -89,11 +121,15 @@ const RelatorioVRPage: React.FC = () => {
           <div className="flex justify-between mb-4">
           <div>
               <h2 className="font-bold text-foreground">{company.name}</h2>
-              <p className="text-xs text-muted-foreground">
-                CNPJ: {company.cnpj} — Apuração: {formatCompetencia(competencia)} — Dias úteis: {diasUteis}
-              </p>
+              <p className="text-xs text-muted-foreground">CNPJ: {company.cnpj}</p>
               <p className="text-sm font-semibold text-primary">
-                Vale Refeição — Competência de pagamento: {formatCompetencia(getNextCompetencia(competencia))}
+                Vale Refeição — Competência de apuração: {formatCompetencia(competencia)} —
+                Competência de pagamento: {formatCompetencia(getNextCompetencia(competencia))}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Dias úteis brutos: <strong>{feriadoInfo.diasUteisBrutos}</strong> ·
+                Feriados considerados: <strong>{feriadoInfo.feriadosConsiderados}</strong> ·
+                Dias úteis finais: <strong>{feriadoInfo.diasUteisFinais}</strong>
               </p>
               <p className="text-xs text-muted-foreground">
                 Emissão: {emissaoDate}
@@ -103,6 +139,13 @@ const RelatorioVRPage: React.FC = () => {
             <div className="text-right text-sm">
               <p>Total Final: <strong className="text-success">{formatCurrency(totalFinal)}</strong></p>
             </div>
+          </div>
+
+          <div className="text-[11px] text-muted-foreground mb-3">
+            Feriados considerados:{' '}
+            {feriadoInfo.listaFeriados.length === 0
+              ? 'nenhum'
+              : feriadoInfo.listaFeriados.map(f => `${formatFeriadoData(f.data)} - ${f.nome}`).join(' · ')}
           </div>
 
           <table className="w-full text-xs">
