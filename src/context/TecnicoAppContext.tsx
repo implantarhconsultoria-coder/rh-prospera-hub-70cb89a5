@@ -125,18 +125,29 @@ export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }
 
   if (error || !tecnico) {
+    const titulo =
+      error === 'blocked_link'
+        ? 'Link bloqueado'
+        : error === 'revoked_link'
+          ? 'Link revogado'
+          : 'Link inválido ou bloqueado';
+    const detalhe =
+      error === 'blocked_link'
+        ? 'Este link foi bloqueado pelo administrador. Solicite a reativação.'
+        : error === 'revoked_link'
+          ? 'Este link foi revogado. Solicite ao administrador um novo link.'
+          : 'Verifique com o administrador.';
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6 text-center">
         <div className="max-w-sm">
           <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-          <h1 className="text-xl font-bold mb-2">Link inválido ou expirado</h1>
-          <p className="text-sm text-white/70">
-            Solicite ao administrador um novo link de acesso ao app.
-          </p>
+          <h1 className="text-xl font-bold mb-2">{titulo}</h1>
+          <p className="text-sm text-white/70">{detalhe}</p>
         </div>
       </div>
     );
   }
+
 
   return (
     <Ctx.Provider
