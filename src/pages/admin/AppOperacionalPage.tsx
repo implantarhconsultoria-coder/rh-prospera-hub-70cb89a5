@@ -51,7 +51,7 @@ const AppOperacionalPage: React.FC = () => {
     setLoading(true);
     const { data: tcs } = await supabase
       .from('tecnicos_campo')
-      .select('id, apelido, status, user_id, access_token, link_bloqueado, link_regenerado_em, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf, company_id, companies:company_id(nome)), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)' as any)
+      .select('id, apelido, status, user_id, access_token, link_bloqueado, link_status, link_regenerado_em, ultimo_acesso_em, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf, company_id, companies:company_id(nome)), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)' as any)
       .order('apelido');
 
     const userIds = (tcs || []).map((t: any) => t.user_id).filter(Boolean) as string[];
@@ -80,7 +80,9 @@ const AppOperacionalPage: React.FC = () => {
       user_id: t.user_id,
       access_token: t.access_token,
       link_bloqueado: !!t.link_bloqueado,
+      link_status: (t.link_status || (t.link_bloqueado ? 'bloqueado' : 'ativo')) as TecnicoRow['link_status'],
       link_regenerado_em: t.link_regenerado_em,
+      ultimo_acesso_em: t.ultimo_acesso_em || null,
       funcionario: t.funcionarios,
       veiculo: t.veiculos,
       ultimaAtividade: t.user_id ? activityMap[t.user_id] : null,
