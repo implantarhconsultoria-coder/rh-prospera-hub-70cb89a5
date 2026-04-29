@@ -99,6 +99,33 @@ const AlmoxarifadoPage: React.FC = () => {
   const [historicoItem, setHistoricoItem] = useState<Item | null>(null);
   const [historicoAjustes, setHistoricoAjustes] = useState<any[]>([]);
 
+  // Edição completa de item
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState<any | null>(null);
+
+  const abrirEdicao = (item: any) => { setEditItem({ ...item }); setEditOpen(true); };
+
+  const salvarEdicao = async () => {
+    if (!editItem) return;
+    const payload: any = {
+      nome: editItem.nome,
+      descricao: editItem.descricao || '',
+      categoria: editItem.categoria || '',
+      unidade: editItem.unidade || 'un',
+      quantidade: Number(editItem.quantidade) || 0,
+      estoque_minimo: Number(editItem.estoque_minimo) || 0,
+      localizacao: editItem.localizacao || '',
+      empresa: editItem.empresa || '',
+      observacoes: editItem.observacoes || '',
+      valor_unitario: Number(editItem.valor_unitario) || 0,
+    };
+    const { error } = await supabase.from('almoxarifado_itens').update(payload).eq('id', editItem.id);
+    if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
+    toast.success('Item atualizado');
+    setEditOpen(false); setEditItem(null);
+    fetchAll();
+  };
+
   const uid = session?.user?.id;
 
   // Employee autocomplete filtering
@@ -749,6 +776,10 @@ const AlmoxarifadoPage: React.FC = () => {
                               <Settings2 className="w-3.5 h-3.5" />
                             </Button>
                           )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar item"
+                            onClick={() => abrirEdicao(item)}>
+                            <FileText className="w-3.5 h-3.5" />
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Histórico"
                             onClick={() => abrirHistorico(item)}>
                             <History className="w-3.5 h-3.5" />
@@ -757,7 +788,9 @@ const AlmoxarifadoPage: React.FC = () => {
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Excluir"
                               onClick={async () => {
                                 if (!confirm(`Excluir o item "${item.nome}"?`)) return;
-                                await supabase.from('almoxarifado_itens').delete().eq('id', item.id);
+                                const { error } = await supabase.from('almoxarifado_itens').delete().eq('id', item.id);
+                                if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
+                                toast.success('Item excluído');
                                 setSelectedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
                                 fetchAll();
                               }}>
@@ -1227,6 +1260,41 @@ const AlmoxarifadoPage: React.FC = () => {
               </table>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de edição completa do item */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Editar Item</DialogTitle></DialogHeader>
+          {editItem && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div><label className="text-xs text-muted-foreground block mb-1">Nome</label>
+                <Input value={editItem.nome || ''} onChange={e => setEditItem({ ...editItem, nome: e.target.value })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Categoria</label>
+                <Input value={editItem.categoria || ''} onChange={e => setEditItem({ ...editItem, categoria: e.target.value })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Unidade</label>
+                <Input value={editItem.unidade || ''} onChange={e => setEditItem({ ...editItem, unidade: e.target.value })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Quantidade</label>
+                <Input type="number" value={editItem.quantidade ?? 0} onChange={e => setEditItem({ ...editItem, quantidade: Number(e.target.value) })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Estoque mínimo</label>
+                <Input type="number" value={editItem.estoque_minimo ?? 0} onChange={e => setEditItem({ ...editItem, estoque_minimo: Number(e.target.value) })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Valor unitário</label>
+                <Input type="number" step="0.01" value={editItem.valor_unitario ?? 0} onChange={e => setEditItem({ ...editItem, valor_unitario: Number(e.target.value) })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Localização</label>
+                <Input value={editItem.localizacao || ''} onChange={e => setEditItem({ ...editItem, localizacao: e.target.value })} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Empresa/Filial</label>
+                <Input value={editItem.empresa || ''} onChange={e => setEditItem({ ...editItem, empresa: e.target.value })} /></div>
+              <div className="md:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Descrição</label>
+                <Textarea rows={2} value={editItem.descricao || ''} onChange={e => setEditItem({ ...editItem, descricao: e.target.value })} /></div>
+              <div className="md:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Observações</label>
+                <Textarea rows={2} value={editItem.observacoes || ''} onChange={e => setEditItem({ ...editItem, observacoes: e.target.value })} /></div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarEdicao}>Salvar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

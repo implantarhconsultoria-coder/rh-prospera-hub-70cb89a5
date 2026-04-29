@@ -15,9 +15,11 @@ import {
   type CausaAfastamento, type TrctResultado,
 } from '@/lib/trctCalc';
 import { buildTrctHtml } from '@/lib/trctPdf';
+import { buildRescisaoProHtml } from '@/lib/rescisaoProPdf';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { formatCurrency } from '@/lib/calculations';
 import { registrarAcao } from '@/lib/acoesLog';
+import { registrarDocumento, uploadDocumentoPdf } from '@/lib/documentoHistorico';
 
 type RubricaKey = keyof TrctResultado;
 
@@ -224,7 +226,7 @@ const RescisaoPage: React.FC = () => {
     }
   };
 
-  const imprimir = (r: any) => {
+  const imprimir = async (r: any) => {
     const snap = (r.snapshot_json && (r.snapshot_json as any).resultado) || null;
     const resultado: TrctResultado = snap || {
       v50_saldoDiasSalario: Number(r.verba_50_saldo_dias || r.saldo_salario || 0),
@@ -269,21 +271,43 @@ const RescisaoPage: React.FC = () => {
       totalDedu: Number(r.total_dedu || r.total_descontos || 0),
       liquidoRescisorio: Number(r.liquido_rescisorio || r.liquido || 0),
     };
-    printDocumentInPage(buildTrctHtml({
+    const html = buildRescisaoProHtml({
       empresaNome: r.empresa_nome,
       empresaCnpj: r.empresa_cnpj,
       funcionarioNome: r.funcionario_nome,
       cpf: r.cpf,
       cargo: r.cargo,
       causa: (r.tipo_rescisao || 'sj_empregador') as CausaAfastamento,
-      codigoAfastamento: r.codigo_afastamento,
+      avisoTrabalhado: r.aviso_previo === 'trabalhado',
       remuneracaoMesAnterior: Number(r.remuneracao_mes_anterior || r.salario_base || 0),
       dataAdmissao: r.data_admissao,
       dataAviso: r.data_aviso,
       dataAfastamento: r.data_desligamento,
       observacoes: r.observacoes,
       resultado,
-    }));
+    });
+    printDocumentInPage(html);
+
+    // Auto-save no histórico do funcionário (categoria Rescisões)
+    try {
+      if (r.funcionario_id) {
+        const arquivoUrl = await uploadDocumentoPdf(r.funcionario_id, 'rescisao_TRCT', html, 'html');
+        await registrarDocumento({
+          funcionarioId: r.funcionario_id,
+          funcionarioNome: r.funcionario_nome,
+          companyId: r.company_id,
+          empresaNome: r.empresa_nome || '',
+          tipoDocumento: 'Rescisão (TRCT)',
+          categoria: 'rescisoes',
+          competencia: r.data_desligamento ? r.data_desligamento.slice(0, 7) : '',
+          descricao: `Líquido ${formatCurrency(resultado.liquidoRescisorio)} — ${causaLabel((r.tipo_rescisao || 'sj_empregador') as CausaAfastamento)}`,
+          arquivoUrl,
+          geradoPorUserId: session?.user?.id || '',
+          geradoPorNome: session?.user?.email || '',
+          unidade: r.empresa_nome || '',
+        });
+      }
+    } catch (e) { console.warn('autosave doc rescisao', e); }
   };
 
   // Edição inline de uma rubrica numérica

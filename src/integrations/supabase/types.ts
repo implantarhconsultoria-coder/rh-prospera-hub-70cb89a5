@@ -428,6 +428,84 @@ export type Database = {
         }
         Relationships: []
       }
+      alertas_filial: {
+        Row: {
+          acao: string
+          cpf: string | null
+          created_at: string
+          dado_anterior: Json | null
+          dado_novo: Json | null
+          dispositivo: string | null
+          empresa_nome: string | null
+          filial: string
+          funcionario_id: string | null
+          funcionario_nome: string | null
+          id: string
+          ip: string | null
+          modulo: string
+          nivel: string
+          observacao: string | null
+          responsavel_cpf: string | null
+          responsavel_nome: string | null
+          responsavel_user_id: string | null
+          revisado_em: string | null
+          revisado_por_nome: string | null
+          revisado_por_user_id: string | null
+          situacao: string
+          updated_at: string
+        }
+        Insert: {
+          acao: string
+          cpf?: string | null
+          created_at?: string
+          dado_anterior?: Json | null
+          dado_novo?: Json | null
+          dispositivo?: string | null
+          empresa_nome?: string | null
+          filial: string
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          ip?: string | null
+          modulo: string
+          nivel?: string
+          observacao?: string | null
+          responsavel_cpf?: string | null
+          responsavel_nome?: string | null
+          responsavel_user_id?: string | null
+          revisado_em?: string | null
+          revisado_por_nome?: string | null
+          revisado_por_user_id?: string | null
+          situacao?: string
+          updated_at?: string
+        }
+        Update: {
+          acao?: string
+          cpf?: string | null
+          created_at?: string
+          dado_anterior?: Json | null
+          dado_novo?: Json | null
+          dispositivo?: string | null
+          empresa_nome?: string | null
+          filial?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          ip?: string | null
+          modulo?: string
+          nivel?: string
+          observacao?: string | null
+          responsavel_cpf?: string | null
+          responsavel_nome?: string | null
+          responsavel_user_id?: string | null
+          revisado_em?: string | null
+          revisado_por_nome?: string | null
+          revisado_por_user_id?: string | null
+          situacao?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       almoxarifado_ajustes: {
         Row: {
           created_at: string
@@ -581,13 +659,18 @@ export type Database = {
       }
       almoxarifado_itens: {
         Row: {
+          arquivo_url: string | null
+          ativo: boolean
           categoria: string | null
           codigo_sku: string | null
           created_at: string
           descricao: string | null
+          empresa: string | null
+          estoque_minimo: number
           id: string
           localizacao: string | null
           nome: string
+          observacoes: string | null
           quantidade: number
           unidade: string
           updated_at: string
@@ -595,13 +678,18 @@ export type Database = {
           valor_unitario: number | null
         }
         Insert: {
+          arquivo_url?: string | null
+          ativo?: boolean
           categoria?: string | null
           codigo_sku?: string | null
           created_at?: string
           descricao?: string | null
+          empresa?: string | null
+          estoque_minimo?: number
           id?: string
           localizacao?: string | null
           nome: string
+          observacoes?: string | null
           quantidade?: number
           unidade?: string
           updated_at?: string
@@ -609,13 +697,18 @@ export type Database = {
           valor_unitario?: number | null
         }
         Update: {
+          arquivo_url?: string | null
+          ativo?: boolean
           categoria?: string | null
           codigo_sku?: string | null
           created_at?: string
           descricao?: string | null
+          empresa?: string | null
+          estoque_minimo?: number
           id?: string
           localizacao?: string | null
           nome?: string
+          observacoes?: string | null
           quantidade?: number
           unidade?: string
           updated_at?: string
@@ -901,6 +994,81 @@ export type Database = {
             referencedColumns: ["funcionario_id"]
           },
         ]
+      }
+      apontamentos_filial: {
+        Row: {
+          anexo_url: string | null
+          competencia: string
+          conferido_em: string | null
+          conferido_por_nome: string | null
+          conferido_por_user_id: string | null
+          created_at: string
+          data: string | null
+          devolucao_motivo: string | null
+          empresa_nome: string | null
+          enviado_em: string | null
+          filial: string
+          funcionario_id: string | null
+          funcionario_nome: string | null
+          id: string
+          observacao: string | null
+          quantidade: number | null
+          registrado_por_nome: string | null
+          registrado_por_user_id: string | null
+          status: string
+          tipo: string
+          updated_at: string
+          valor: number | null
+        }
+        Insert: {
+          anexo_url?: string | null
+          competencia: string
+          conferido_em?: string | null
+          conferido_por_nome?: string | null
+          conferido_por_user_id?: string | null
+          created_at?: string
+          data?: string | null
+          devolucao_motivo?: string | null
+          empresa_nome?: string | null
+          enviado_em?: string | null
+          filial: string
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          observacao?: string | null
+          quantidade?: number | null
+          registrado_por_nome?: string | null
+          registrado_por_user_id?: string | null
+          status?: string
+          tipo: string
+          updated_at?: string
+          valor?: number | null
+        }
+        Update: {
+          anexo_url?: string | null
+          competencia?: string
+          conferido_em?: string | null
+          conferido_por_nome?: string | null
+          conferido_por_user_id?: string | null
+          created_at?: string
+          data?: string | null
+          devolucao_motivo?: string | null
+          empresa_nome?: string | null
+          enviado_em?: string | null
+          filial?: string
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          observacao?: string | null
+          quantidade?: number | null
+          registrado_por_nome?: string | null
+          registrado_por_user_id?: string | null
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor?: number | null
+        }
+        Relationships: []
       }
       aso_agendamentos: {
         Row: {
@@ -2058,10 +2226,13 @@ export type Database = {
       }
       documentos_funcionario: {
         Row: {
+          arquivo_assinado_url: string | null
           arquivo_url: string | null
+          categoria: string
           company_id: string
           competencia: string | null
           created_at: string
+          deleted_at: string | null
           descricao: string | null
           destinatarios: string | null
           empresa_nome: string
@@ -2073,16 +2244,20 @@ export type Database = {
           gerado_por_nome: string
           gerado_por_user_id: string
           id: string
+          status: string
           status_envio: string
           tipo_documento: string
           unidade: string | null
           updated_at: string
         }
         Insert: {
+          arquivo_assinado_url?: string | null
           arquivo_url?: string | null
+          categoria?: string
           company_id: string
           competencia?: string | null
           created_at?: string
+          deleted_at?: string | null
           descricao?: string | null
           destinatarios?: string | null
           empresa_nome?: string
@@ -2094,16 +2269,20 @@ export type Database = {
           gerado_por_nome?: string
           gerado_por_user_id: string
           id?: string
+          status?: string
           status_envio?: string
           tipo_documento?: string
           unidade?: string | null
           updated_at?: string
         }
         Update: {
+          arquivo_assinado_url?: string | null
           arquivo_url?: string | null
+          categoria?: string
           company_id?: string
           competencia?: string | null
           created_at?: string
+          deleted_at?: string | null
           descricao?: string | null
           destinatarios?: string | null
           empresa_nome?: string
@@ -2115,6 +2294,7 @@ export type Database = {
           gerado_por_nome?: string
           gerado_por_user_id?: string
           id?: string
+          status?: string
           status_envio?: string
           tipo_documento?: string
           unidade?: string | null

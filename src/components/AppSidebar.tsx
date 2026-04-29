@@ -62,6 +62,7 @@ const adminItems: MenuItem[] = [
   { label: 'Links de Acesso por CPF', icon: Link2, path: '/admin/links-acesso-cpf' },
   { label: 'Permissões por Funcionário', icon: Shield, path: '/admin/permissoes-funcionarios' },
   { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
+  { label: 'Monitoramento das Filiais', icon: Monitor, path: '/admin/monitoramento-filiais' },
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
 

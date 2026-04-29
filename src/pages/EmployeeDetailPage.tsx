@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Save } from 'lucide-react';
-import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
+import DocumentosFuncionarioPastas from '@/components/DocumentosFuncionarioPastas';
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
@@ -149,7 +149,7 @@ const EmployeeDetailPage: React.FC = () => {
         )}
         {activeTab === 5 && (
           <div className="space-y-6">
-            <HistoricoDocumentalFuncionario funcionarioId={emp.id} />
+            <DocumentosFuncionarioPastas funcionarioId={emp.id} />
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Observações Gerais</label>
               <textarea value={emp.observacoes} onChange={e => updateEmployee(emp.id, { observacoes: e.target.value })}

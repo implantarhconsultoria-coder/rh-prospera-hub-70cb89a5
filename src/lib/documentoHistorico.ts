@@ -1,27 +1,70 @@
 import { supabase } from '@/integrations/supabase/client';
 
+export type CategoriaDoc =
+  | 'epi' | 'uniformes' | 'vr' | 'vt' | 'ferias' | 'atestados'
+  | 'rescisoes' | 'aso' | 'ponto' | 'apontamentos' | 'advertencias'
+  | 'protocolos' | 'outros';
+
+export const CATEGORIAS_DOC: { v: CategoriaDoc; l: string }[] = [
+  { v: 'epi', l: 'EPI' },
+  { v: 'uniformes', l: 'Uniformes' },
+  { v: 'vr', l: 'VR' },
+  { v: 'vt', l: 'VT' },
+  { v: 'ferias', l: 'Férias' },
+  { v: 'atestados', l: 'Atestados' },
+  { v: 'rescisoes', l: 'Rescisões' },
+  { v: 'aso', l: 'ASO / Exames' },
+  { v: 'ponto', l: 'Ponto' },
+  { v: 'apontamentos', l: 'Apontamentos' },
+  { v: 'advertencias', l: 'Advertências' },
+  { v: 'protocolos', l: 'Protocolos' },
+  { v: 'outros', l: 'Outros' },
+];
+
+/** Detecta categoria a partir do tipo do documento */
+export const detectarCategoria = (tipo: string): CategoriaDoc => {
+  const t = (tipo || '').toLowerCase();
+  if (t.includes('epi')) return 'epi';
+  if (t.includes('uniforme')) return 'uniformes';
+  if (t.includes('rescis') || t.includes('trct')) return 'rescisoes';
+  if (t.includes('feri')) return 'ferias';
+  if (t.includes('atestad')) return 'atestados';
+  if (t.includes('aso') || t.includes('exame')) return 'aso';
+  if (t.includes('vr')) return 'vr';
+  if (t.includes('vt')) return 'vt';
+  if (t.includes('ponto') || t.includes('cartão')) return 'ponto';
+  if (t.includes('apontament')) return 'apontamentos';
+  if (t.includes('advert')) return 'advertencias';
+  if (t.includes('protocolo')) return 'protocolos';
+  return 'outros';
+};
+
 export interface DocumentoRegistro {
   funcionarioId: string;
   funcionarioNome: string;
   companyId: string;
   empresaNome: string;
   tipoDocumento: string;
+  categoria?: CategoriaDoc;
   competencia?: string;
   descricao: string;
   arquivoUrl?: string;
   geradoPorUserId: string;
   geradoPorNome: string;
   unidade?: string;
+  status?: 'emitido' | 'assinado' | 'arquivado' | 'cancelado';
 }
 
 /** Registra um documento no histórico do funcionário */
 export const registrarDocumento = async (doc: DocumentoRegistro) => {
+  const categoria = doc.categoria || detectarCategoria(doc.tipoDocumento);
   const { data, error } = await supabase.from('documentos_funcionario').insert({
     funcionario_id: doc.funcionarioId,
     funcionario_nome: doc.funcionarioNome,
     company_id: doc.companyId,
     empresa_nome: doc.empresaNome,
     tipo_documento: doc.tipoDocumento,
+    categoria,
     competencia: doc.competencia || '',
     descricao: doc.descricao,
     arquivo_url: doc.arquivoUrl || '',
@@ -29,6 +72,7 @@ export const registrarDocumento = async (doc: DocumentoRegistro) => {
     gerado_por_nome: doc.geradoPorNome,
     unidade: doc.unidade || '',
     status_envio: 'gerado',
+    status: doc.status || 'emitido',
   } as any).select().single();
 
   if (error) {

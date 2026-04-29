@@ -27,8 +27,9 @@ import DashboardPage from "@/pages/DashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
-import FilialFechamentoPage from "@/pages/filial/FilialFechamentoPage";
+import FilialApontamentoPage from "@/pages/filial/FilialApontamentoPage";
 import FechamentosFiliaisPage from "@/pages/admin/FechamentosFiliaisPage";
+import MonitoramentoFiliaisPage from "@/pages/admin/MonitoramentoFiliaisPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
 import ASOPage from "@/pages/ASOPage";
@@ -181,6 +182,7 @@ const AuthGate = () => {
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
         <Route path="/admin/compras" element={<ComprasPage />} />
         <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
+        <Route path="/admin/monitoramento-filiais" element={<MonitoramentoFiliaisPage />} />
         <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
         <Route path="/admin/chamados" element={<DespacharChamadoPage />} />
         <Route path="/admin/app-operacional" element={<AppOperacionalPage />} />
@@ -221,7 +223,8 @@ const AuthGate = () => {
         <Route path="/filial/protocolo" element={<ProtocoloPage />} />
         <Route path="/filial/alertas" element={<FilialAlertasPage />} />
         <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
-        <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
+        <Route path="/filial/apontamento" element={<FilialApontamentoPage />} />
+        <Route path="/filial/fechamento" element={<Navigate to="/filial/apontamento" replace />} />
       </Route>
 
       {/* ========== CAMPO PORTAL ========== */}
