@@ -36,7 +36,12 @@ const AcessoCpfPage: React.FC = () => {
     try {
       const res = await fetch(FN_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+          apikey: ANON,
+          Authorization: `Bearer ${ANON}`,
+        },
         cache: 'no-store',
         body: JSON.stringify({ action: 'resolver_cpf', token: '', payload: { cpf: digits } }),
       });
