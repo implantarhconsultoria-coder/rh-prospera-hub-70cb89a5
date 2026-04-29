@@ -889,11 +889,15 @@ export type Database = {
       apontamentos_contabilidade_itens: {
         Row: {
           adiantamento: number
+          adiantamento_manual: boolean
           alterado_em: string | null
           alterado_por_nome: string | null
           apontamento_id: string
           assistencia_medica: number
           comissao: number
+          comissao_base: number
+          comissao_percentual: number
+          comissao_valor: number
           cpf: string | null
           created_at: string
           desconto_dsr: number
@@ -912,16 +916,21 @@ export type Database = {
           insalubridade: number
           nome: string
           salario: number
+          tem_comissao: boolean
           total: number
           updated_at: string
         }
         Insert: {
           adiantamento?: number
+          adiantamento_manual?: boolean
           alterado_em?: string | null
           alterado_por_nome?: string | null
           apontamento_id: string
           assistencia_medica?: number
           comissao?: number
+          comissao_base?: number
+          comissao_percentual?: number
+          comissao_valor?: number
           cpf?: string | null
           created_at?: string
           desconto_dsr?: number
@@ -940,16 +949,21 @@ export type Database = {
           insalubridade?: number
           nome: string
           salario?: number
+          tem_comissao?: boolean
           total?: number
           updated_at?: string
         }
         Update: {
           adiantamento?: number
+          adiantamento_manual?: boolean
           alterado_em?: string | null
           alterado_por_nome?: string | null
           apontamento_id?: string
           assistencia_medica?: number
           comissao?: number
+          comissao_base?: number
+          comissao_percentual?: number
+          comissao_valor?: number
           cpf?: string | null
           created_at?: string
           desconto_dsr?: number
@@ -968,6 +982,7 @@ export type Database = {
           insalubridade?: number
           nome?: string
           salario?: number
+          tem_comissao?: boolean
           total?: number
           updated_at?: string
         }
@@ -2806,6 +2821,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      feriados: {
+        Row: {
+          ativo: boolean
+          cidade: string | null
+          created_at: string
+          data: string
+          empresa_id: string | null
+          filial_id: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          tipo: string
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cidade?: string | null
+          created_at?: string
+          data: string
+          empresa_id?: string | null
+          filial_id?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          tipo?: string
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cidade?: string | null
+          created_at?: string
+          data?: string
+          empresa_id?: string | null
+          filial_id?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          tipo?: string
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       ferias_avisos: {
         Row: {
