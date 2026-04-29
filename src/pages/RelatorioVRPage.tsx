@@ -45,7 +45,7 @@ const RelatorioVRPage: React.FC = () => {
   };
 
   const handlePrintIndividual = (employeeId: string) => {
-    navigate(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${employeeId}`);
+    navigate(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${employeeId}&tipo=vr`);
   };
 
   return (
