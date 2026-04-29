@@ -15,9 +15,11 @@ import {
   type CausaAfastamento, type TrctResultado,
 } from '@/lib/trctCalc';
 import { buildTrctHtml } from '@/lib/trctPdf';
+import { buildRescisaoProHtml } from '@/lib/rescisaoProPdf';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { formatCurrency } from '@/lib/calculations';
 import { registrarAcao } from '@/lib/acoesLog';
+import { registrarDocumento, uploadDocumentoPdf } from '@/lib/documentoHistorico';
 
 type RubricaKey = keyof TrctResultado;
 
