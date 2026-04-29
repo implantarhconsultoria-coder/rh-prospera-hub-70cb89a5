@@ -89,6 +89,9 @@ import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import AcessoCpfPage from "@/pages/AcessoCpfPage";
+import AcessoModuloCpfPage from "@/pages/AcessoModuloCpfPage";
+import { FinanceiroCpfLayout, FaturamentoCpfLayout } from "@/components/CpfPortalLayout";
+import LinksAcessoCpfPage from "@/pages/admin/LinksAcessoCpfPage";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
