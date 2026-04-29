@@ -128,6 +128,42 @@ export type Database = {
         }
         Relationships: []
       }
+      acesso_cpf_logs: {
+        Row: {
+          cpf: string
+          created_at: string
+          id: string
+          ip: string
+          modulo: string
+          motivo: string
+          resultado: string
+          unidade: string
+          user_agent: string
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          id?: string
+          ip?: string
+          modulo: string
+          motivo?: string
+          resultado: string
+          unidade?: string
+          user_agent?: string
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          id?: string
+          ip?: string
+          modulo?: string
+          motivo?: string
+          resultado?: string
+          unidade?: string
+          user_agent?: string
+        }
+        Relationships: []
+      }
       acesso_excepcional: {
         Row: {
           aprovado_em: string | null
@@ -179,6 +215,60 @@ export type Database = {
           user_email?: string
           user_id?: string
           user_nome?: string
+        }
+        Relationships: []
+      }
+      acessos_cpf: {
+        Row: {
+          cpf: string
+          created_at: string
+          criado_por: string | null
+          criado_por_nome: string
+          empresa: string
+          id: string
+          modulo: string
+          nome: string
+          observacoes: string
+          perfil: string
+          status: string
+          total_acessos: number
+          ultimo_acesso_em: string | null
+          unidade: string
+          updated_at: string
+        }
+        Insert: {
+          cpf: string
+          created_at?: string
+          criado_por?: string | null
+          criado_por_nome?: string
+          empresa?: string
+          id?: string
+          modulo: string
+          nome: string
+          observacoes?: string
+          perfil?: string
+          status?: string
+          total_acessos?: number
+          ultimo_acesso_em?: string | null
+          unidade?: string
+          updated_at?: string
+        }
+        Update: {
+          cpf?: string
+          created_at?: string
+          criado_por?: string | null
+          criado_por_nome?: string
+          empresa?: string
+          id?: string
+          modulo?: string
+          nome?: string
+          observacoes?: string
+          perfil?: string
+          status?: string
+          total_acessos?: number
+          ultimo_acesso_em?: string | null
+          unidade?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2610,6 +2700,51 @@ export type Database = {
           },
         ]
       }
+      links_acesso_publico: {
+        Row: {
+          created_at: string
+          empresas_permitidas: string[]
+          id: string
+          modulo: string
+          nome: string
+          slug: string
+          status: string
+          token: string
+          total_acessos: number
+          ultimo_acesso_em: string | null
+          unidade: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          empresas_permitidas?: string[]
+          id?: string
+          modulo: string
+          nome: string
+          slug: string
+          status?: string
+          token: string
+          total_acessos?: number
+          ultimo_acesso_em?: string | null
+          unidade?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          empresas_permitidas?: string[]
+          id?: string
+          modulo?: string
+          nome?: string
+          slug?: string
+          status?: string
+          token?: string
+          total_acessos?: number
+          ultimo_acesso_em?: string | null
+          unidade?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       medicao_itens: {
         Row: {
           ajuste: number
@@ -4007,6 +4142,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      validar_acesso_cpf: {
+        Args: { p_cpf: string; p_token: string }
+        Returns: Json
       }
     }
     Enums: {
