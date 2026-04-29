@@ -738,6 +738,14 @@ Topac RH PRO`;
                 <Button size="sm" variant="outline" onClick={() => baixarAviso(detail)}>
                   <Printer className="w-3.5 h-3.5 mr-1" /> Baixar PDF
                 </Button>
+                <Button size="sm" className="gradient-primary text-primary-foreground" onClick={() => enviarParaContabilidade(detail)}>
+                  <Send className="w-3.5 h-3.5 mr-1" /> {detail.enviado_contabilidade_em ? 'Reenviar para Contabilidade' : 'Enviar para Contabilidade'}
+                </Button>
+                {detail.pagamento.tipo !== 'pago' && (
+                  <Button size="sm" variant="outline" className="border-success text-success" onClick={() => marcarPago(detail)}>
+                    <DollarSign className="w-3.5 h-3.5 mr-1" /> Marcar como pago
+                  </Button>
+                )}
                 {detail.aviso_pdf_url && (
                   <Button size="sm" variant="outline" asChild>
                     <a href={detail.aviso_pdf_url} target="_blank" rel="noreferrer"><Eye className="w-3.5 h-3.5 mr-1" /> Ver PDF original</a>
