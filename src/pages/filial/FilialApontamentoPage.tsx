@@ -21,7 +21,7 @@ const TIPOS: { v: Tipo; l: string }[] = [
 ];
 
 const FilialApontamentoPage: React.FC = () => {
-  const { userRole, employees } = useApp();
+  const { userRole, employees, companies } = useApp();
   const filial = userRole === 'filial_praia' ? 'Praia Grande' : userRole === 'filial_goiania' ? 'Goiânia' : '';
   const empresaNome = userRole === 'filial_praia' ? 'TOPAC FILIAL PRAIA GRANDE' : 'TOPAC FILIAL GOIÂNIA';
 
@@ -51,7 +51,8 @@ const FilialApontamentoPage: React.FC = () => {
   useEffect(() => { if (filial) fetchItems(); }, [filial, competencia]);
 
   const funcionariosFilial = employees.filter(e => {
-    const emp = (e.companyName || '').toUpperCase();
+    const company = companies.find(c => c.id === e.companyId);
+    const emp = (company?.name || '').toUpperCase();
     if (userRole === 'filial_praia') return emp.includes('PRAIA');
     if (userRole === 'filial_goiania') return emp.includes('GOI');
     return true;
