@@ -8,7 +8,7 @@ import {
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
   ChevronDown, ChevronRight, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
   ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch, Wand2,
-  ShoppingCart,
+  ShoppingCart, Link2,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -58,6 +58,7 @@ const operationalItems: MenuItem[] = [
 
 const adminItems: MenuItem[] = [
   { label: 'Gerenciar Usuários', icon: Shield, path: '/admin/gerenciar-usuarios' },
+  { label: 'Links de Acesso por CPF', icon: Link2, path: '/admin/links-acesso-cpf' },
   { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
