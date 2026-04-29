@@ -22,17 +22,21 @@ const SLUG_LABEL: Record<string, { titulo: string; subtitulo: string; icon: Reac
 };
 
 const ERRO_LABEL: Record<string, string> = {
-  cpf_invalido:           'CPF inválido. Confira os 11 dígitos.',
-  cpf_nao_encontrado:     'CPF não encontrado para este módulo/unidade.',
-  cpf_bloqueado:          'CPF sem permissão para este acesso (bloqueado).',
-  unidade_incorreta:      'Este CPF pertence a outra unidade. Use o link da unidade correta.',
-  link_invalido:          'Link inválido. Solicite um novo link ao administrador.',
-  link_bloqueado:         'Link temporariamente bloqueado. Fale com o administrador.',
-  tecnico_nao_encontrado: 'Este CPF ainda não está vinculado ao app operacional.',
-  blocked_link:           'Acesso bloqueado pelo administrador.',
-  revoked_link:           'Acesso revogado. Solicite um novo link.',
-  invalid_token:          'Token de acesso inválido.',
-  db_error:               'Falha temporária ao consultar o banco. Tente novamente em instantes.',
+  cpf_invalido:                     'CPF inválido. Confira os 11 dígitos.',
+  cpf_nao_encontrado:               'CPF não encontrado na base de funcionários. Solicite o cadastro ao administrador.',
+  cpf_nao_encontrado_funcionarios:  'CPF não encontrado na base de funcionários. Solicite o cadastro ao administrador.',
+  funcionario_inativo:              'Funcionário inativo. Fale com o administrador.',
+  sem_permissao_modulo:             'CPF encontrado, mas sem permissão para este módulo.',
+  modulo_bloqueado:                 'Acesso a este módulo está bloqueado. Fale com o administrador.',
+  cpf_bloqueado:                    'CPF sem permissão para este acesso (bloqueado).',
+  unidade_incorreta:                'Este CPF pertence a outra unidade. Use o link da unidade correta.',
+  link_invalido:                    'Link inválido. Solicite um novo link ao administrador.',
+  link_bloqueado:                   'Link temporariamente bloqueado. Fale com o administrador.',
+  tecnico_nao_encontrado:           'Este CPF ainda não está vinculado ao app operacional.',
+  blocked_link:                     'Acesso bloqueado pelo administrador.',
+  revoked_link:                     'Acesso revogado. Solicite um novo link.',
+  invalid_token:                    'Token de acesso inválido.',
+  db_error:                         'Falha temporária ao consultar o banco. Tente novamente em instantes.',
 };
 
 const AcessoModuloCpfPage: React.FC = () => {
