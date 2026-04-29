@@ -137,7 +137,7 @@ const AvisoFeriasPage: React.FC = () => {
   const [diasFerias, setDiasFerias] = useState(30);
   const [observacao, setObservacao] = useState('');
 
-  const [filterStatus, setFilterStatus] = useState<'todos' | 'proximas' | 'em_ferias' | 'retorno' | 'concluidos' | 'cancelados'>('todos');
+  const [filterStatus, setFilterStatus] = useState<'todos' | 'proximas' | 'em_ferias' | 'retorno' | 'concluidos' | 'cancelados' | 'pgto_pendente' | 'pgto_vencendo' | 'pgto_vencido'>('todos');
 
   // dialog detalhes
   const [detailId, setDetailId] = useState<string | null>(null);
