@@ -59,6 +59,7 @@ const operationalItems: MenuItem[] = [
 const adminItems: MenuItem[] = [
   { label: 'Gerenciar Usuários', icon: Shield, path: '/admin/gerenciar-usuarios' },
   { label: 'Links de Acesso por CPF', icon: Link2, path: '/admin/links-acesso-cpf' },
+  { label: 'Permissões por Funcionário', icon: Shield, path: '/admin/permissoes-funcionarios' },
   { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
