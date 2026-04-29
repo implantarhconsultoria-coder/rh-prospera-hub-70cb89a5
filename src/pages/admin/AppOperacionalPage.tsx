@@ -21,7 +21,9 @@ interface TecnicoRow {
   user_id: string | null;
   access_token: string | null;
   link_bloqueado: boolean;
+  link_status: 'ativo' | 'bloqueado' | 'revogado';
   link_regenerado_em: string | null;
+  ultimo_acesso_em: string | null;
   funcionario: { id: string; nome: string; cargo: string; celular: string; cpf: string; companies?: { nome: string } | null };
   veiculo: { id: string; placa: string; modelo: string; identificacao_interna: string } | null;
   ultimaAtividade?: { last_activity_at: string; route: string; status: string } | null;
