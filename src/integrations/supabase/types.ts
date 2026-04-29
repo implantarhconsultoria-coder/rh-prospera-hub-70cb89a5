@@ -3519,6 +3519,13 @@ export type Database = {
             referencedRelation: "tecnicos_campo"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tecnicos_link_historico_tecnico_id_fkey"
+            columns: ["tecnico_id"]
+            isOneToOne: false
+            referencedRelation: "tecnicos_campo_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       titulos_pagar: {
@@ -3915,7 +3922,81 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tecnicos_campo_safe: {
+        Row: {
+          apelido: string | null
+          created_at: string | null
+          funcionario_id: string | null
+          id: string | null
+          link_bloqueado: boolean | null
+          link_bloqueado_em: string | null
+          link_regenerado_em: string | null
+          link_status: string | null
+          observacoes: string | null
+          revogado_em: string | null
+          revogado_por: string | null
+          status: string | null
+          ultima_atividade_em: string | null
+          ultimo_acesso_em: string | null
+          updated_at: string | null
+          user_id: string | null
+          veiculo_id: string | null
+        }
+        Insert: {
+          apelido?: string | null
+          created_at?: string | null
+          funcionario_id?: string | null
+          id?: string | null
+          link_bloqueado?: boolean | null
+          link_bloqueado_em?: string | null
+          link_regenerado_em?: string | null
+          link_status?: string | null
+          observacoes?: string | null
+          revogado_em?: string | null
+          revogado_por?: string | null
+          status?: string | null
+          ultima_atividade_em?: string | null
+          ultimo_acesso_em?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          veiculo_id?: string | null
+        }
+        Update: {
+          apelido?: string | null
+          created_at?: string | null
+          funcionario_id?: string | null
+          id?: string | null
+          link_bloqueado?: boolean | null
+          link_bloqueado_em?: string | null
+          link_regenerado_em?: string | null
+          link_status?: string | null
+          observacoes?: string | null
+          revogado_em?: string | null
+          revogado_por?: string | null
+          status?: string | null
+          ultima_atividade_em?: string | null
+          ultimo_acesso_em?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          veiculo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tecnicos_campo_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: true
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tecnicos_campo_veiculo_id_fkey"
+            columns: ["veiculo_id"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       gen_tecnico_access_token: { Args: never; Returns: string }
