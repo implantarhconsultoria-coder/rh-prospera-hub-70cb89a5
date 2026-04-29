@@ -88,6 +88,7 @@ import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
 import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
+import AcessoCpfPage from "@/pages/AcessoCpfPage";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
