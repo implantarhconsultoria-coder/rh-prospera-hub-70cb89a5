@@ -1,15 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Save, Printer, FileText, Loader2 } from 'lucide-react';
+import { ClipboardList, Save, Printer, FileText, Loader2, RefreshCw } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
-import { formatCurrency } from '@/lib/calculations';
 import { formatCompetencia } from '@/lib/workingDays';
 import { registrarAcao } from '@/lib/acoesLog';
+import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
 const usaHE60 = (nomeEmpresa: string) =>
   /goi[âa]nia/i.test(nomeEmpresa || '');
+
+/** Funcionários com comissão default por nome (case-insensitive). */
+const COMISSIONADOS_DEFAULT: Array<{ nomeMatch: RegExp; empresaMatch: RegExp; pct: number }> = [
+  { nomeMatch: /aldenei.*pereira.*santos/i, empresaMatch: /goi[âa]nia/i, pct: 2 },
+];
+
+const defaultComissaoPct = (nomeEmp: string, nomeFunc: string): number => {
+  for (const r of COMISSIONADOS_DEFAULT) {
+    if (r.empresaMatch.test(nomeEmp) && r.nomeMatch.test(nomeFunc)) return r.pct;
+  }
+  return 0;
+};
 
 interface ItemRow {
   id?: string;
@@ -18,7 +30,11 @@ interface ItemRow {
   cpf: string;
   salario: number;
   insalubridade: number;
-  comissao: number;
+  // Comissão estruturada
+  tem_comissao: boolean;
+  comissao_base: number;
+  comissao_percentual: number;
+  comissao_valor: number;
   // HE 50%
   hora_extra_50_horas: number;
   hora_extra_50: number;
@@ -34,20 +50,105 @@ interface ItemRow {
   dsr_qtd: number;
   desconto_dsr: number;
   adiantamento: number;
+  adiantamento_manual: boolean;
   total: number;
 }
 
+const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
+const calcAdiantamentoAuto = (salario: number) => round2(Number(salario || 0) * 0.4);
+
+const calcComissaoValor = (base: number, pct: number) =>
+  round2(Number(base || 0) * (Number(pct || 0) / 100));
+
 const calcTotal = (r: ItemRow) =>
-  Number(r.salario || 0) +
-  Number(r.insalubridade || 0) +
-  Number(r.comissao || 0) +
-  Number(r.hora_extra_50 || 0) +
-  Number(r.hora_extra_60 || 0) +
-  Number(r.hora_extra_100 || 0) -
-  Number(r.assistencia_medica || 0) -
-  Number(r.desconto_falta || 0) -
-  Number(r.desconto_dsr || 0) -
-  Number(r.adiantamento || 0);
+  round2(
+    Number(r.salario || 0) +
+    Number(r.insalubridade || 0) +
+    Number(r.comissao_valor || 0) +
+    Number(r.hora_extra_50 || 0) +
+    Number(r.hora_extra_60 || 0) +
+    Number(r.hora_extra_100 || 0) -
+    Number(r.assistencia_medica || 0) -
+    Number(r.desconto_falta || 0) -
+    Number(r.desconto_dsr || 0) -
+    Number(r.adiantamento || 0)
+  );
+
+/** Campo de moeda com máscara BR */
+const CurrencyInput: React.FC<{
+  value: number;
+  onCommit: (n: number) => void;
+  className?: string;
+}> = ({ value, onCommit, className }) => {
+  const [draft, setDraft] = useState<string>(formatBRL(Number(value || 0)));
+  useEffect(() => { setDraft(formatBRL(Number(value || 0))); }, [value]);
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={() => {
+        const n = parseCurrencyBR(draft);
+        setDraft(formatBRL(n));
+        onCommit(n);
+      }}
+      className={className}
+    />
+  );
+};
+
+/** Campo numérico simples (horas/qtd) */
+const NumberInput: React.FC<{
+  value: number;
+  onCommit: (n: number) => void;
+  className?: string;
+}> = ({ value, onCommit, className }) => {
+  const [draft, setDraft] = useState<string>(String(value ?? 0));
+  useEffect(() => { setDraft(String(value ?? 0)); }, [value]);
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={() => {
+        const n = Number(String(draft).replace(',', '.')) || 0;
+        setDraft(String(n));
+        onCommit(n);
+      }}
+      className={className}
+    />
+  );
+};
+
+/** Campo percentual */
+const PercentInput: React.FC<{
+  value: number;
+  onCommit: (n: number) => void;
+  className?: string;
+}> = ({ value, onCommit, className }) => {
+  const [draft, setDraft] = useState<string>(String(value ?? 0));
+  useEffect(() => { setDraft(String(value ?? 0)); }, [value]);
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={() => {
+        const n = Number(String(draft).replace(',', '.')) || 0;
+        setDraft(String(n));
+        onCommit(n);
+      }}
+      className={className}
+    />
+  );
+};
 
 const ApontamentoContabilidadePage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, config } = useApp();
@@ -60,6 +161,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
 
   const company = companies.find(c => c.id === companyId);
   const isGO = !!company && usaHE60(company.name);
+  const heLabelPct = isGO ? '60%' : '50%';
 
   useEffect(() => {
     if (!companyId || !competencia) return;
@@ -80,14 +182,29 @@ const ApontamentoContabilidadePage: React.FC = () => {
           .eq('apontamento_id', (header as any).id)
           .order('nome');
         const rows = ((itens as any[]) || []).map(r => {
+          // Compat: se nao houver comissao_base/_percentual/_valor mas houver "comissao", trata como valor
+          const hasStructured = (Number(r.comissao_base || 0) + Number(r.comissao_percentual || 0) + Number(r.comissao_valor || 0)) > 0
+            || r.tem_comissao === true;
+          const comissaoValor = hasStructured ? Number(r.comissao_valor || 0) : Number(r.comissao || 0);
+          const comissaoPct = Number(r.comissao_percentual || 0);
+          const comissaoBase = Number(r.comissao_base || 0);
+          const adiantamento = Number(r.adiantamento || 0);
+          const adiantManual = r.adiantamento_manual === true;
+          const salario = Number(r.salario || 0);
+          const adiantamentoFinal = adiantManual
+            ? adiantamento
+            : (adiantamento > 0 ? adiantamento : calcAdiantamentoAuto(salario));
           const row: ItemRow = {
             id: r.id,
             funcionario_id: r.funcionario_id,
             nome: r.nome,
             cpf: r.cpf,
-            salario: Number(r.salario || 0),
+            salario,
             insalubridade: Number(r.insalubridade || 0),
-            comissao: Number(r.comissao || 0),
+            tem_comissao: r.tem_comissao === true || comissaoValor > 0 || comissaoBase > 0,
+            comissao_base: comissaoBase,
+            comissao_percentual: comissaoPct,
+            comissao_valor: comissaoValor,
             hora_extra_50_horas: Number(r.hora_extra_50_horas || 0),
             hora_extra_50: Number(r.hora_extra_50 || 0),
             hora_extra_60_horas: Number(r.hora_extra_60_horas || 0),
@@ -99,7 +216,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
             desconto_falta: Number(r.desconto_falta || r.falta_dsr || 0),
             dsr_qtd: Number(r.dsr_qtd || 0),
             desconto_dsr: Number(r.desconto_dsr || 0),
-            adiantamento: Number(r.adiantamento || 0),
+            adiantamento: adiantamentoFinal,
+            adiantamento_manual: adiantManual,
             total: 0,
           };
           row.total = calcTotal(row);
@@ -115,23 +233,29 @@ const ApontamentoContabilidadePage: React.FC = () => {
           const ent = compEntries.find(e => e.employeeId === emp.id);
           const salario = Number(emp.salarioBase || 0);
           const insal = emp.insalubridadeAtiva ? Number(emp.insalubridadeValor || config.valorInsalubridade || 0) : 0;
-          const comissao = Number(ent?.comissaoBase || 0);
           const valorHora = salario / 220;
-          // ent.he50 representa horas extras "padrão" do fechamento; em GO interpretamos como 60%
           const heExtraHoras = Number(ent?.he50 || 0);
           const he100Horas = Number(ent?.he100 || 0);
-          const he50Valor = !empGO ? Math.round(heExtraHoras * valorHora * 1.5 * 100) / 100 : 0;
-          const he60Valor = empGO ? Math.round(heExtraHoras * valorHora * 1.6 * 100) / 100 : 0;
-          const he100Valor = Math.round(he100Horas * valorHora * 2 * 100) / 100;
+          const he50Valor = !empGO ? round2(heExtraHoras * valorHora * 1.5) : 0;
+          const he60Valor = empGO ? round2(heExtraHoras * valorHora * 1.6) : 0;
+          const he100Valor = round2(he100Horas * valorHora * 2);
           const faltasQtd = Number(ent?.faltasDias || 0);
-          const descFalta = Math.round(faltasQtd * (salario / 30) * 100) / 100;
+          const descFalta = round2(faltasQtd * (salario / 30));
+          const empNome = company?.name || '';
+          const pctDefault = defaultComissaoPct(empNome, emp.name);
+          const baseDefault = Number(ent?.comissaoBase || 0);
+          const temComissao = pctDefault > 0 || baseDefault > 0;
+          const comissaoValor = temComissao ? calcComissaoValor(baseDefault, pctDefault) : 0;
           const r: ItemRow = {
             funcionario_id: emp.id,
             nome: emp.name,
             cpf: emp.cpf,
             salario,
             insalubridade: insal,
-            comissao,
+            tem_comissao: temComissao,
+            comissao_base: baseDefault,
+            comissao_percentual: pctDefault,
+            comissao_valor: comissaoValor,
             hora_extra_50_horas: empGO ? 0 : heExtraHoras,
             hora_extra_50: he50Valor,
             hora_extra_60_horas: empGO ? heExtraHoras : 0,
@@ -143,7 +267,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
             desconto_falta: descFalta,
             dsr_qtd: 0,
             desconto_dsr: 0,
-            adiantamento: 0,
+            adiantamento: calcAdiantamentoAuto(salario),
+            adiantamento_manual: false,
             total: 0,
           };
           r.total = calcTotal(r);
@@ -156,30 +281,71 @@ const ApontamentoContabilidadePage: React.FC = () => {
   }, [companyId, competencia]); // eslint-disable-line
 
   const totalGeral = useMemo(
-    () => items.reduce((s, r) => s + Number(r.total || 0), 0),
+    () => round2(items.reduce((s, r) => s + Number(r.total || 0), 0)),
     [items],
   );
 
-  const updateField = (idx: number, field: keyof ItemRow, value: number) => {
+  const updateRow = (idx: number, patch: Partial<ItemRow>) => {
     setItems(prev => {
       const next = [...prev];
-      const row = { ...next[idx], [field]: value } as ItemRow;
-      // recalcular automaticamente valor a partir das horas quando o usuário edita as horas
+      const row: ItemRow = { ...next[idx], ...patch } as ItemRow;
+      // Recalcular dependentes
       const valorHora = Number(row.salario || 0) / 220;
-      if (field === 'hora_extra_50_horas')
-        row.hora_extra_50 = Math.round(value * valorHora * 1.5 * 100) / 100;
-      if (field === 'hora_extra_60_horas')
-        row.hora_extra_60 = Math.round(value * valorHora * 1.6 * 100) / 100;
-      if (field === 'hora_extra_100_horas')
-        row.hora_extra_100 = Math.round(value * valorHora * 2 * 100) / 100;
-      if (field === 'faltas_qtd')
-        row.desconto_falta = Math.round(value * (Number(row.salario) / 30) * 100) / 100;
-      if (field === 'dsr_qtd')
-        row.desconto_dsr = Math.round(value * (Number(row.salario) / 30) * 100) / 100;
+      // se editou horas, recalcular valor de HE
+      if ('hora_extra_50_horas' in patch)
+        row.hora_extra_50 = round2(Number(row.hora_extra_50_horas) * valorHora * 1.5);
+      if ('hora_extra_60_horas' in patch)
+        row.hora_extra_60 = round2(Number(row.hora_extra_60_horas) * valorHora * 1.6);
+      if ('hora_extra_100_horas' in patch)
+        row.hora_extra_100 = round2(Number(row.hora_extra_100_horas) * valorHora * 2);
+      if ('faltas_qtd' in patch)
+        row.desconto_falta = round2(Number(row.faltas_qtd) * (Number(row.salario) / 30));
+      if ('dsr_qtd' in patch)
+        row.desconto_dsr = round2(Number(row.dsr_qtd) * (Number(row.salario) / 30));
+      // Comissão: se base/% mudaram, recalcular valor
+      if ('comissao_base' in patch || 'comissao_percentual' in patch || 'tem_comissao' in patch) {
+        if (!row.tem_comissao) {
+          row.comissao_base = 0;
+          row.comissao_percentual = 0;
+          row.comissao_valor = 0;
+        } else {
+          row.comissao_valor = calcComissaoValor(row.comissao_base, row.comissao_percentual);
+        }
+      }
+      // Salário mudou: se adiantamento não foi marcado manual, atualizar auto
+      if ('salario' in patch && !row.adiantamento_manual) {
+        row.adiantamento = calcAdiantamentoAuto(row.salario);
+      }
+      // Marca adiantamento manual quando o usuário edita explicitamente
+      if ('adiantamento' in patch && !('adiantamento_manual' in patch)) {
+        row.adiantamento_manual = true;
+      }
       row.total = calcTotal(row);
       next[idx] = row;
       return next;
     });
+  };
+
+  const recalcularTudo = () => {
+    setItems(prev => prev.map(r => {
+      const valorHora = Number(r.salario || 0) / 220;
+      const adiant = r.adiantamento_manual ? r.adiantamento : calcAdiantamentoAuto(r.salario);
+      const comissaoValor = r.tem_comissao ? calcComissaoValor(r.comissao_base, r.comissao_percentual) : 0;
+      const next: ItemRow = {
+        ...r,
+        adiantamento: adiant,
+        comissao_valor: comissaoValor,
+        hora_extra_50: round2(Number(r.hora_extra_50_horas) * valorHora * 1.5),
+        hora_extra_60: round2(Number(r.hora_extra_60_horas) * valorHora * 1.6),
+        hora_extra_100: round2(Number(r.hora_extra_100_horas) * valorHora * 2),
+        desconto_falta: round2(Number(r.faltas_qtd) * (Number(r.salario) / 30)),
+        desconto_dsr: round2(Number(r.dsr_qtd) * (Number(r.salario) / 30)),
+        total: 0,
+      };
+      next.total = calcTotal(next);
+      return next;
+    }));
+    toast.success('Apontamento recalculado');
   };
 
   const salvar = async () => {
@@ -223,7 +389,11 @@ const ApontamentoContabilidadePage: React.FC = () => {
         cpf: r.cpf,
         salario: r.salario,
         insalubridade: r.insalubridade,
-        comissao: r.comissao,
+        comissao: r.comissao_valor, // compat: coluna antiga = valor calculado
+        tem_comissao: r.tem_comissao,
+        comissao_base: r.comissao_base,
+        comissao_percentual: r.comissao_percentual,
+        comissao_valor: r.comissao_valor,
         hora_extra_50_horas: r.hora_extra_50_horas,
         hora_extra_50: r.hora_extra_50,
         hora_extra_60_horas: r.hora_extra_60_horas,
@@ -236,7 +406,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
         dsr_qtd: r.dsr_qtd,
         desconto_dsr: r.desconto_dsr,
         adiantamento: r.adiantamento,
-        falta_dsr: r.desconto_falta + r.desconto_dsr, // compatibilidade
+        adiantamento_manual: r.adiantamento_manual,
+        falta_dsr: r.desconto_falta + r.desconto_dsr,
         total: r.total,
         alterado_por_nome: userNome,
         alterado_em: new Date().toISOString(),
@@ -265,12 +436,25 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const imprimir = () => window.print();
 
   const exportarExcel = () => {
-    const headers = isGO
-      ? ['Nome','CPF','Salario','Insalubridade','Comissao','HE60-Horas','HE60-Valor','HE100-Horas','HE100-Valor','Assist.Medica','Faltas-Qtd','Desconto Falta','DSR-Qtd','Desconto DSR','Adiantamento','Total']
-      : ['Nome','CPF','Salario','Insalubridade','Comissao','HE50-Horas','HE50-Valor','HE100-Horas','HE100-Valor','Assist.Medica','Faltas-Qtd','Desconto Falta','DSR-Qtd','Desconto DSR','Adiantamento','Total'];
-    const rows = items.map(r => isGO
-      ? [r.nome,r.cpf,r.salario,r.insalubridade,r.comissao,r.hora_extra_60_horas,r.hora_extra_60,r.hora_extra_100_horas,r.hora_extra_100,r.assistencia_medica,r.faltas_qtd,r.desconto_falta,r.dsr_qtd,r.desconto_dsr,r.adiantamento,r.total]
-      : [r.nome,r.cpf,r.salario,r.insalubridade,r.comissao,r.hora_extra_50_horas,r.hora_extra_50,r.hora_extra_100_horas,r.hora_extra_100,r.assistencia_medica,r.faltas_qtd,r.desconto_falta,r.dsr_qtd,r.desconto_dsr,r.adiantamento,r.total]);
+    const heLabel = isGO ? 'HE60' : 'HE50';
+    const headers = [
+      'Nome','CPF','Salario','Insalubridade',
+      'Tem Comissao','Base Comissao','Comissao %','Comissao Valor',
+      `${heLabel}-Horas`, `${heLabel}-Valor`,
+      'HE100-Horas','HE100-Valor',
+      'Assist.Medica','Faltas-Qtd','Desconto Falta','DSR-Qtd','Desconto DSR',
+      'Adiantamento','Total'
+    ];
+    const rows = items.map(r => [
+      r.nome, r.cpf,
+      r.salario, r.insalubridade,
+      r.tem_comissao ? 'Sim' : 'Não', r.comissao_base, r.comissao_percentual, r.comissao_valor,
+      isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas,
+      isGO ? r.hora_extra_60 : r.hora_extra_50,
+      r.hora_extra_100_horas, r.hora_extra_100,
+      r.assistencia_medica, r.faltas_qtd, r.desconto_falta, r.dsr_qtd, r.desconto_dsr,
+      r.adiantamento, r.total,
+    ]);
     const csv = [headers, ...rows].map(l => l.join(';')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -281,24 +465,35 @@ const ApontamentoContabilidadePage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Colunas dinâmicas conforme empresa
-  const headerLabels = isGO
-    ? ['Nome','CPF','Salário','Insalubridade','Comissão','H. Extra 60% Horas','H. Extra 60% Valor','H. Extra 100% Horas','H. Extra 100% Valor','Assist. Médica','Faltas Qtd','Desconto Falta','DSR Qtd','Desconto DSR','Adiantamento','Total']
-    : ['Nome','CPF','Salário','Insalubridade','Comissão','H. Extra 50% Horas','H. Extra 50% Valor','H. Extra 100% Horas','H. Extra 100% Valor','Assist. Médica','Faltas Qtd','Desconto Falta','DSR Qtd','Desconto DSR','Adiantamento','Total'];
-
-  type FieldKey = keyof ItemRow;
-  const editableFields: FieldKey[] = isGO
-    ? ['salario','insalubridade','comissao','hora_extra_60_horas','hora_extra_60','hora_extra_100_horas','hora_extra_100','assistencia_medica','faltas_qtd','desconto_falta','dsr_qtd','desconto_dsr','adiantamento']
-    : ['salario','insalubridade','comissao','hora_extra_50_horas','hora_extra_50','hora_extra_100_horas','hora_extra_100','assistencia_medica','faltas_qtd','desconto_falta','dsr_qtd','desconto_dsr','adiantamento'];
-
   return (
     <div className="space-y-5 animate-fade-in">
-      <style>{`@media print {
-        .no-print { display: none !important; }
-        body { background: white !important; }
-        .print-area { padding: 0 !important; }
-        @page { size: A4 landscape; margin: 10mm; }
-      }`}</style>
+      {/* CSS de impressão A4 paisagem cobrindo a folha inteira */}
+      <style>{`
+        @media print {
+          @page { size: A4 landscape; margin: 8mm; }
+          html, body { background: #fff !important; }
+          body * { visibility: hidden !important; }
+          .apont-print, .apont-print * { visibility: visible !important; }
+          .apont-print {
+            position: absolute !important;
+            left: 0 !important; top: 0 !important;
+            width: 100% !important; max-width: 100% !important;
+            margin: 0 !important; padding: 0 !important;
+            transform: none !important; zoom: 1 !important;
+            box-shadow: none !important; border: none !important;
+            background: #fff !important; color: #000 !important;
+          }
+          .apont-print table { width: 100% !important; table-layout: fixed; border-collapse: collapse; font-size: 8.5px; }
+          .apont-print th, .apont-print td {
+            padding: 3px !important; border: 1px solid #000 !important;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          }
+          .apont-print thead { display: table-header-group; }
+          .apont-print tr { page-break-inside: avoid; }
+          .no-print, aside, nav, header, .sidebar, .lovable-badge, [data-sonner-toaster] { display: none !important; }
+        }
+      `}</style>
+
       <div className="card-premium p-6 gradient-primary text-primary-foreground no-print">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center">
@@ -307,7 +502,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold font-display">Apontamento Contabilidade</h1>
             <p className="text-primary-foreground/70 text-sm">
-              Conferência da contabilidade — sem VR, VT ou reembolso. Goiânia usa HE 60%, demais usam HE 50%.
+              Sem VR, VT ou reembolso. Goiânia usa HE 60%, demais usam HE 50%. Adiantamento automático = 40% do salário.
             </p>
           </div>
         </div>
@@ -327,6 +522,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
           <input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)}
             className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground" />
         </div>
+        <button onClick={recalcularTudo} disabled={items.length === 0}
+          className="btn-secondary inline-flex items-center gap-2">
+          <RefreshCw className="w-4 h-4" /> Recalcular apontamento
+        </button>
         <button onClick={salvar} disabled={saving || !companyId}
           className="btn-primary inline-flex items-center gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
@@ -335,7 +534,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         <button onClick={exportarExcel} className="btn-secondary inline-flex items-center gap-2"><FileText className="w-4 h-4" /> Exportar CSV</button>
       </div>
 
-      <div className="card-premium p-5 print-area">
+      <div className="card-premium p-5 apont-print">
         <div className="text-center border-b-2 border-foreground pb-2 mb-4">
           <h2 className="font-bold text-base uppercase">
             {company
@@ -349,48 +548,108 @@ const ApontamentoContabilidadePage: React.FC = () => {
         ) : items.length === 0 ? (
           <p className="text-center text-muted-foreground p-6">Selecione uma empresa.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px] border-collapse">
-              <thead>
-                <tr className="bg-muted/50 border-b border-foreground">
-                  {headerLabels.map(h => (
-                    <th key={h} className="px-2 py-2 text-left font-semibold border border-border whitespace-nowrap">{h}</th>
-                  ))}
+          <table className="w-full text-[11px] border-collapse">
+            <thead>
+              <tr className="bg-muted/50 border-b border-foreground">
+                <th className="px-2 py-2 text-left font-semibold border border-border">Nome</th>
+                <th className="px-2 py-2 text-left font-semibold border border-border">CPF</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Salário</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Insalub.</th>
+                <th className="px-2 py-2 text-center font-semibold border border-border">Tem Com.</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Base Com.</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Com. %</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Com. Valor</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE {heLabelPct} h</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE {heLabelPct}</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE 100% h</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE 100%</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Assist. Méd.</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Faltas</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Desc. Falta</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">DSR Qtd</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Desc. DSR</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Adiantamento</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r, idx) => (
+                <tr key={idx} className="border-b border-border">
+                  <td className="px-2 py-1 border border-border whitespace-nowrap">{r.nome}</td>
+                  <td className="px-2 py-1 border border-border font-mono">{r.cpf}</td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <CurrencyInput value={r.salario} onCommit={(n) => updateRow(idx, { salario: n })}
+                      className="w-24 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <CurrencyInput value={r.insalubridade} onCommit={(n) => updateRow(idx, { insalubridade: n })}
+                      className="w-20 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-center">
+                    <input type="checkbox" checked={r.tem_comissao}
+                      onChange={(e) => updateRow(idx, { tem_comissao: e.target.checked })} />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <CurrencyInput value={r.comissao_base} onCommit={(n) => updateRow(idx, { comissao_base: n })}
+                      className="w-28 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px] disabled:opacity-50"
+                      />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <PercentInput value={r.comissao_percentual} onCommit={(n) => updateRow(idx, { comissao_percentual: n })}
+                      className="w-14 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right font-semibold">
+                    {formatBRL(r.comissao_valor)}
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <NumberInput
+                      value={isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas}
+                      onCommit={(n) => updateRow(idx, isGO ? { hora_extra_60_horas: n } : { hora_extra_50_horas: n })}
+                      className="w-14 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    {formatBRL(isGO ? r.hora_extra_60 : r.hora_extra_50)}
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <NumberInput value={r.hora_extra_100_horas} onCommit={(n) => updateRow(idx, { hora_extra_100_horas: n })}
+                      className="w-14 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">{formatBRL(r.hora_extra_100)}</td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <CurrencyInput value={r.assistencia_medica} onCommit={(n) => updateRow(idx, { assistencia_medica: n })}
+                      className="w-20 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <NumberInput value={r.faltas_qtd} onCommit={(n) => updateRow(idx, { faltas_qtd: n })}
+                      className="w-12 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">{formatBRL(r.desconto_falta)}</td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <NumberInput value={r.dsr_qtd} onCommit={(n) => updateRow(idx, { dsr_qtd: n })}
+                      className="w-12 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-1 py-1 border border-border text-right">{formatBRL(r.desconto_dsr)}</td>
+                  <td className="px-1 py-1 border border-border text-right">
+                    <CurrencyInput value={r.adiantamento}
+                      onCommit={(n) => updateRow(idx, { adiantamento: n, adiantamento_manual: true })}
+                      className="w-24 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
+                  </td>
+                  <td className="px-2 py-1 border border-border text-right font-bold">{formatBRL(r.total)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {items.map((r, idx) => (
-                  <tr key={idx} className="border-b border-border">
-                    <td className="px-2 py-1 border border-border whitespace-nowrap">{r.nome}</td>
-                    <td className="px-2 py-1 border border-border font-mono">{r.cpf}</td>
-                    {editableFields.map(field => (
-                      <td key={String(field)} className="px-1 py-1 border border-border">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={Number(r[field] as number) || 0}
-                          onChange={e => updateField(idx, field, Number(e.target.value.replace(',', '.')) || 0)}
-                          className="w-20 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]"
-                        />
-                      </td>
-                    ))}
-                    <td className="px-2 py-1 border border-border text-right font-bold">{formatCurrency(r.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-muted font-bold">
-                  <td colSpan={headerLabels.length - 1} className="px-2 py-2 border border-border text-right">TOTAL GERAL</td>
-                  <td className="px-2 py-2 border border-border text-right">{formatCurrency(totalGeral)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-muted font-bold">
+                <td colSpan={18} className="px-2 py-2 border border-border text-right">TOTAL GERAL</td>
+                <td className="px-2 py-2 border border-border text-right">{formatBRL(totalGeral)}</td>
+              </tr>
+            </tfoot>
+          </table>
         )}
 
         <p className="text-[10px] text-muted-foreground mt-4 text-center">
           Documento para conferência da contabilidade. Não inclui VR, VT nem reembolso.
-          Total considera salário, insalubridade, comissão, valores de horas extras e descontos de assistência médica, faltas/DSR e adiantamento.
+          Total = Salário + Insalubridade + Comissão Valor + HE {heLabelPct} + HE 100% − Assistência Médica − Desconto Falta − Desconto DSR − Adiantamento.
         </p>
       </div>
     </div>
