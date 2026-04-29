@@ -20,18 +20,22 @@ const sb = () =>
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-// Resolve técnico from token; returns null if invalid or blocked.
-async function resolveTecnico(token: string) {
-  if (!token || token.length < 10) return null;
+// Resolve técnico from token. Returns { ok, tec, reason }.
+// reason ∈ 'invalid_token' | 'blocked_link' | 'revoked_link'
+async function resolveTecnico(token: string): Promise<{ ok: boolean; tec: any | null; reason?: string }> {
+  if (!token || token.length < 10) return { ok: false, tec: null, reason: "invalid_token" };
   const { data } = await sb()
     .from("tecnicos_campo")
     .select(
-      "id, apelido, status, user_id, veiculo_id, funcionario_id, link_bloqueado, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
+      "id, apelido, status, user_id, veiculo_id, funcionario_id, link_bloqueado, link_status, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
     )
     .eq("access_token", token)
     .maybeSingle();
-  if (!data) return null;
-  if ((data as any).link_bloqueado) return null;
+  if (!data) return { ok: false, tec: null, reason: "invalid_token" };
+  const status = ((data as any).link_status || "ativo") as string;
+  if (status === "revogado") return { ok: false, tec: null, reason: "revoked_link" };
+  if (status === "bloqueado" || (data as any).link_bloqueado)
+    return { ok: false, tec: null, reason: "blocked_link" };
   // Carrega TODOS os veiculos vinculados a esse colaborador (suporte a multi-veiculo, ex: Rafael)
   let veiculos_disponiveis: any[] = [];
   if (data.user_id) {
