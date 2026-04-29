@@ -288,6 +288,29 @@ const App = () => (
               </Route>
               {/* Link único permanente por CPF (Goiânia e demais filiais com link compartilhado) */}
               <Route path="/g" element={<AcessoCpfPage />} />
+              {/* Links permanentes por módulo/unidade — acesso por CPF */}
+              <Route path="/acesso/:slug" element={<AcessoModuloCpfPage />} />
+              {/* Portais isolados Financeiro/Faturamento por CPF */}
+              <Route path="/financeiro-cpf" element={<FinanceiroCpfLayout />}>
+                <Route index element={<FinanceiroDashboardPage />} />
+                <Route path="contas-receber" element={<ContasReceberPage />} />
+                <Route path="contas-pagar" element={<ContasPagarPage />} />
+                <Route path="bancos" element={<BancosPage />} />
+                <Route path="fluxo-caixa" element={<FluxoCaixaPage />} />
+                <Route path="inadimplencia" element={<InadimplenciaPage />} />
+                <Route path="conciliacao" element={<ConciliacaoPage />} />
+              </Route>
+              <Route path="/faturamento-cpf" element={<FaturamentoCpfLayout />}>
+                <Route index element={<FaturamentoDashboardPage />} />
+                <Route path="clientes" element={<ClientesFatPage />} />
+                <Route path="clientes/:id" element={<ClienteDetailPage />} />
+                <Route path="contratos" element={<ContratosPage />} />
+                <Route path="contratos/:id" element={<ContratoDetailPage />} />
+                <Route path="faturas" element={<FaturasPage />} />
+                <Route path="medicoes" element={<MedicoesPage />} />
+                <Route path="reajustes" element={<ReajustesPage />} />
+                <Route path="pendencias" element={<PendenciasPage />} />
+              </Route>
               <Route path="/relatorio-impressao" element={<ErrorBoundary><RelatorioImpressaoPage /></ErrorBoundary>} />
               <Route path="/entrega-impressao" element={<ErrorBoundary><EntregaImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-vr-impressao" element={<ErrorBoundary><RelatorioVRImpressaoPage /></ErrorBoundary>} />
