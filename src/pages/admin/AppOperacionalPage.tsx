@@ -109,17 +109,21 @@ const AppOperacionalPage: React.FC = () => {
 
   const regenerar = async (tec: TecnicoRow) => {
     if (!confirm(`Regenerar o link do ${tec.apelido}? O link anterior deixará de funcionar.`)) return;
-    // gera novo token via DEFAULT da coluna chamando a função
     const { data: novo, error: errFn } = await supabase.rpc('gen_tecnico_access_token' as any).single();
     let novoToken: string | null = null;
     if (!errFn && novo && typeof novo === 'string') novoToken = novo as any;
     if (!novoToken) {
-      // fallback simples client-side
       novoToken = (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, '').slice(0, 40);
     }
     const { error } = await supabase
       .from('tecnicos_campo')
-      .update({ access_token: novoToken, link_regenerado_em: new Date().toISOString(), link_bloqueado: false } as any)
+      .update({
+        access_token: novoToken,
+        link_regenerado_em: new Date().toISOString(),
+        link_bloqueado: false,
+        link_status: 'ativo',
+        revogado_em: null,
+      } as any)
       .eq('id', tec.id);
     if (error) { toast.error('Erro: ' + error.message); return; }
     await supabase.from('tecnicos_link_historico' as any).insert({
@@ -129,7 +133,7 @@ const AppOperacionalPage: React.FC = () => {
       token_novo: novoToken,
       realizado_por_nome: '',
     });
-    toast.success('Link regenerado');
+    toast.success('Link regenerado e ativado');
     load();
   };
 
@@ -138,7 +142,12 @@ const AppOperacionalPage: React.FC = () => {
     if (!confirm(`Confirma ${acao} o link de ${tec.apelido}?`)) return;
     const { error } = await supabase
       .from('tecnicos_campo')
-      .update({ link_bloqueado: bloqueado, link_bloqueado_em: bloqueado ? new Date().toISOString() : null } as any)
+      .update({
+        link_bloqueado: bloqueado,
+        link_bloqueado_em: bloqueado ? new Date().toISOString() : null,
+        link_status: bloqueado ? 'bloqueado' : 'ativo',
+        revogado_em: null,
+      } as any)
       .eq('id', tec.id);
     if (error) { toast.error('Erro: ' + error.message); return; }
     await supabase.from('tecnicos_link_historico' as any).insert({
@@ -151,6 +160,23 @@ const AppOperacionalPage: React.FC = () => {
     toast.success(bloqueado ? 'Link bloqueado' : 'Link reativado');
     load();
   };
+
+  const revogar = async (tec: TecnicoRow) => {
+    if (!confirm(`Revogar o link de ${tec.apelido}? Para reativar é preciso regenerar.`)) return;
+    const { error } = await supabase
+      .from('tecnicos_campo')
+      .update({ link_status: 'revogado', revogado_em: new Date().toISOString(), link_bloqueado: false } as any)
+      .eq('id', tec.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    await supabase.from('tecnicos_link_historico' as any).insert({
+      tecnico_id: tec.id, acao: 'revogado', token_anterior: tec.access_token, token_novo: tec.access_token, realizado_por_nome: '',
+    });
+    toast.success('Link revogado');
+    load();
+  };
+
+  const reativarRevogado = async (tec: TecnicoRow) => regenerar(tec);
+
 
   const excluirTecnico = async (tec: TecnicoRow) => {
     if (!confirm(`Excluir o técnico ${tec.apelido}? Essa ação não pode ser desfeita.`)) return;
