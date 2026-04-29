@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { DollarSign, FileText, LogOut, Home, Banknote, Users, Receipt, BarChart3, AlertCircle, Wallet, Activity } from 'lucide-react';
+import { DollarSign, FileText, LogOut, Home, Banknote, Users, Receipt, BarChart3, AlertCircle, Wallet, Activity, ArrowLeftRight } from 'lucide-react';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface CpfSession {
   modulo: 'financeiro' | 'faturamento';
@@ -67,6 +69,30 @@ const Layout: React.FC<{ modulo: 'financeiro' | 'faturamento' }> = ({ modulo }) 
     navigate(`/acesso/${modulo}`, { replace: true });
   };
 
+  const outroModulo: 'financeiro' | 'faturamento' = modulo === 'financeiro' ? 'faturamento' : 'financeiro';
+  const [podeAlternar, setPodeAlternar] = useState(false);
+
+  useEffect(() => {
+    const fid = session?.usuario?.funcionario_id;
+    if (!fid) return;
+    supabase
+      .from('funcionario_modulos')
+      .select('status')
+      .eq('funcionario_id', fid)
+      .eq('modulo', outroModulo)
+      .eq('status', 'ativo')
+      .maybeSingle()
+      .then(({ data }) => setPodeAlternar(!!data));
+  }, [session, outroModulo]);
+
+  const alternar = () => {
+    if (!session) return;
+    const nova: CpfSession = { ...session, modulo: outroModulo, ts: Date.now() };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(nova));
+    toast.success(`Acessando ${outroModulo === 'financeiro' ? 'Financeiro' : 'Faturamento'}`);
+    navigate(outroModulo === 'financeiro' ? '/financeiro-cpf' : '/faturamento-cpf', { replace: true });
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="sticky top-0 z-30 bg-card border-b border-border px-4 py-3 flex items-center justify-between">
@@ -81,9 +107,19 @@ const Layout: React.FC<{ modulo: 'financeiro' | 'faturamento' }> = ({ modulo }) 
             </p>
           </div>
         </div>
-        <button onClick={sair} className="p-2 rounded-lg hover:bg-muted text-muted-foreground" title="Sair">
-          <LogOut className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          {podeAlternar && (
+            <button onClick={alternar}
+              className="text-xs px-3 py-1.5 rounded-lg border border-border hover:bg-muted flex items-center gap-1"
+              title={`Ir para ${outroModulo}`}>
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              Ir para {outroModulo === 'financeiro' ? 'Financeiro' : 'Faturamento'}
+            </button>
+          )}
+          <button onClick={sair} className="p-2 rounded-lg hover:bg-muted text-muted-foreground" title="Sair">
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </header>
       <div className="flex-1 flex">
         <nav className="w-56 bg-card/50 border-r border-border p-3 hidden md:block">

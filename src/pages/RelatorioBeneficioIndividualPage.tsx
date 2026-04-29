@@ -2,72 +2,72 @@ import React, { useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { getFirstBusinessDayOfNextMonth, getWorkingDays } from '@/lib/workingDays';
+import { getFirstBusinessDayOfNextMonth, getWorkingDays, getNextCompetencia, formatCompetencia } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildIndividualBenefitData } from '@/lib/benefitReports';
 
+/**
+ * Recibo individual de VR OU VT (NUNCA os dois juntos).
+ * Use ?tipo=vr ou ?tipo=vt
+ * Compatibilidade: sem tipo, redireciona mostrando VR como padrão e avisa.
+ *
+ * Competência:
+ *  - Fechamento (folha) = competência informada na URL (mês trabalhado)
+ *  - VR/VT pagos no mês seguinte (mês que vai entrar) — automaticamente +1 mês
+ */
 const RelatorioBeneficioIndividualPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const companyId = searchParams.get('empresa') || '';
-  const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
+  const competenciaFolha = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const funcionarioId = searchParams.get('funcionario') || '';
+  const tipoParam = (searchParams.get('tipo') || 'vr').toLowerCase() as 'vr' | 'vt';
+  const tipo: 'vr' | 'vt' = tipoParam === 'vt' ? 'vt' : 'vr';
+
+  // Competência do benefício (mês seguinte ao fechamento)
+  const competenciaBeneficio = getNextCompetencia(competenciaFolha);
 
   const company = companies.find(c => c.id === companyId);
   const emp = employees.find(e => e.id === funcionarioId && e.companyId === companyId);
-  const diasUteis = getWorkingDays(competencia);
-  const fechamento = getFechamento(companyId, competencia);
+  const diasUteis = getWorkingDays(competenciaFolha);
+  const fechamento = getFechamento(companyId, competenciaFolha);
   const dataFechamento = fechamento.dataFechamento || '';
 
   useEffect(() => {
-    if (companyId && competencia) getOrCreateEntries(companyId, competencia);
-  }, [companyId, competencia]);
+    if (companyId && competenciaFolha) getOrCreateEntries(companyId, competenciaFolha);
+  }, [companyId, competenciaFolha]);
 
-  const entry = entries.find(e => e.employeeId === funcionarioId && e.companyId === companyId && e.competencia === competencia);
+  const entry = entries.find(e => e.employeeId === funcionarioId && e.companyId === companyId && e.competencia === competenciaFolha);
 
-  const competenciaLabel = (() => {
-    const [y, m] = competencia.split('-');
+  const competenciaFolhaLabel = (() => {
+    const [y, m] = competenciaFolha.split('-');
+    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    return `${meses[Number(m) - 1]} / ${y}`;
+  })();
+  const competenciaBeneficioLabel = (() => {
+    const [y, m] = competenciaBeneficio.split('-');
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     return `${meses[Number(m) - 1]} / ${y}`;
   })();
 
-  const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
+  const emissaoDate = getFirstBusinessDayOfNextMonth(competenciaFolha);
 
-  // VR calculation
-  const vrData = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: 'vr' }), [emp, entry, diasUteis]);
-
-  // VT calculation
-  const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: 'vt' }), [emp, entry, diasUteis]);
+  const data = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: tipo }), [emp, entry, diasUteis, tipo]);
 
   if (loading || dataLoading || (isAuthenticated && (companies.length === 0 || employees.length === 0))) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-foreground">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Carregando ficha individual…</p>
+        <p className="text-sm text-muted-foreground">Carregando recibo…</p>
       </div>
     );
   }
 
   if (!company || !emp) return <div className="p-10 text-center">Dados não encontrados.</div>;
 
-  const renderBenefitTable = (label: string, data: typeof vrData) => {
-    if (!data) return null;
-    return (
-      <div className="mb-6">
-        <h3 className="text-sm font-bold mb-2 bg-gray-200 px-2 py-1">{label}</h3>
-        <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
-          <tbody>
-            <tr><td className="border border-gray-300 px-2 py-1 font-medium w-1/2">Valor Diário</td><td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(data.valorDiario)}</td></tr>
-            <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Previstos</td><td className="border border-gray-300 px-2 py-1 text-right">{data.diasPrevistos}</td></tr>
-            <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Descontados</td><td className="border border-gray-300 px-2 py-1 text-right">{data.diasDescontados}</td></tr>
-            <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Finais</td><td className="border border-gray-300 px-2 py-1 text-right">{data.diasFinais}</td></tr>
-            <tr><td className="border border-gray-300 px-2 py-1 font-medium">Motivo Desconto</td><td className="border border-gray-300 px-2 py-1 text-right">{data.motivo || '—'}</td></tr>
-            <tr className="bg-gray-100 font-bold"><td className="border border-gray-400 px-2 py-1">Valor Total</td><td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(data.valorTotal)}</td></tr>
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+  const titulo = tipo === 'vr' ? 'RECIBO INDIVIDUAL DE VALE REFEIÇÃO' : 'RECIBO INDIVIDUAL DE VALE TRANSPORTE';
+  const sigla = tipo === 'vr' ? 'VR' : 'VT';
+  const labelLinha = tipo === 'vr' ? 'VALE REFEIÇÃO (VR)' : 'VALE TRANSPORTE (VT)';
 
   return (
     <>
@@ -94,10 +94,10 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
             className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
             🖨 Imprimir / PDF
           </button>
+          <span className="text-xs text-gray-600 ml-auto">{sigla} · {competenciaBeneficioLabel}</span>
         </div>
 
         <div id="benefit-individual-print" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
-          {/* Header */}
           <div className="border-b-2 border-black pb-3 mb-4">
             <div className="flex justify-between items-start">
               <div>
@@ -105,15 +105,15 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
                 <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold">FICHA INDIVIDUAL DE BENEFÍCIOS</p>
-                <p className="text-xs">Competência: {competenciaLabel}</p>
+                <p className="text-sm font-bold">{titulo}</p>
+                <p className="text-xs">Fechamento Salarial: Competência {competenciaFolhaLabel}</p>
+                <p className="text-xs font-semibold">{sigla === 'VR' ? 'Vale Refeição' : 'Vale Transporte'}: Competência {competenciaBeneficioLabel}</p>
                 <p className="text-xs">Emissão: {emissaoDate}</p>
                 {dataFechamento && <p className="text-xs">Fechamento: {new Date(dataFechamento).toLocaleDateString('pt-BR')}</p>}
               </div>
             </div>
           </div>
 
-          {/* Employee data */}
           <div className="border border-gray-400 rounded p-3 mb-4" style={{ fontSize: '10px' }}>
             <div className="grid grid-cols-2 gap-1">
               <p><strong>Nome:</strong> {emp.name}</p>
@@ -121,19 +121,33 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
               <p><strong>CPF:</strong> {emp.cpf}</p>
               <p><strong>Registro:</strong> {emp.registro}</p>
               <p><strong>Admissão:</strong> {emp.dataAdmissao ? new Date(emp.dataAdmissao).toLocaleDateString('pt-BR') : '—'}</p>
-              <p><strong>Dias úteis:</strong> {diasUteis}</p>
+              <p><strong>Dias úteis (folha):</strong> {diasUteis}</p>
             </div>
           </div>
 
-          {/* VR section */}
-          {renderBenefitTable('VALE REFEIÇÃO (VR)', vrData)}
+          {data && (
+            <div className="mb-6">
+              <h3 className="text-sm font-bold mb-2 bg-gray-200 px-2 py-1">{labelLinha}</h3>
+              <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
+                <tbody>
+                  <tr><td className="border border-gray-300 px-2 py-1 font-medium w-1/2">Valor Diário</td><td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(data.valorDiario)}</td></tr>
+                  <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Previstos</td><td className="border border-gray-300 px-2 py-1 text-right">{data.diasPrevistos}</td></tr>
+                  <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Descontados</td><td className="border border-gray-300 px-2 py-1 text-right">{data.diasDescontados}</td></tr>
+                  <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Finais</td><td className="border border-gray-300 px-2 py-1 text-right">{data.diasFinais}</td></tr>
+                  <tr><td className="border border-gray-300 px-2 py-1 font-medium">Motivo Desconto</td><td className="border border-gray-300 px-2 py-1 text-right">{data.motivo || '—'}</td></tr>
+                  <tr className="bg-gray-100 font-bold"><td className="border border-gray-400 px-2 py-1">Valor Total</td><td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(data.valorTotal)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          {/* VT section */}
-          {renderBenefitTable('VALE TRANSPORTE (VT)', vtData)}
-
-          {/* Footer */}
-          <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
-            {' '}
+          <div className="mt-12 grid grid-cols-2 gap-12 text-center text-[10px]">
+            <div>
+              <div className="border-t border-black pt-1">Assinatura do Funcionário</div>
+            </div>
+            <div>
+              <div className="border-t border-black pt-1">Empresa</div>
+            </div>
           </div>
         </div>
       </div>

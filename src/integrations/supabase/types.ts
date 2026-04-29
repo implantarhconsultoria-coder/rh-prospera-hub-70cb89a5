@@ -308,6 +308,81 @@ export type Database = {
           },
         ]
       }
+      acoes_log: {
+        Row: {
+          acao: string
+          antes: Json | null
+          arquivo_url: string | null
+          cpf: string | null
+          created_at: string
+          depois: Json | null
+          empresa: string | null
+          entidade: string
+          entidade_id: string | null
+          funcionario_id: string | null
+          funcionario_nome: string | null
+          id: string
+          modulo: string
+          observacao: string | null
+          origem: string | null
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          acao: string
+          antes?: Json | null
+          arquivo_url?: string | null
+          cpf?: string | null
+          created_at?: string
+          depois?: Json | null
+          empresa?: string | null
+          entidade: string
+          entidade_id?: string | null
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          modulo: string
+          observacao?: string | null
+          origem?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          acao?: string
+          antes?: Json | null
+          arquivo_url?: string | null
+          cpf?: string | null
+          created_at?: string
+          depois?: Json | null
+          empresa?: string | null
+          entidade?: string
+          entidade_id?: string | null
+          funcionario_id?: string | null
+          funcionario_nome?: string | null
+          id?: string
+          modulo?: string
+          observacao?: string | null
+          origem?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "acoes_log_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acoes_log_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
+        ]
+      }
       activity_log: {
         Row: {
           action: string
@@ -587,6 +662,155 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "almoxarifado_itens"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      apontamentos_contabilidade: {
+        Row: {
+          atualizado_por_nome: string | null
+          company_id: string | null
+          competencia: string
+          created_at: string
+          criado_por_funcionario_id: string | null
+          criado_por_nome: string | null
+          criado_por_user_id: string | null
+          empresa_nome: string | null
+          id: string
+          status: string
+          total_geral: number
+          updated_at: string
+        }
+        Insert: {
+          atualizado_por_nome?: string | null
+          company_id?: string | null
+          competencia: string
+          created_at?: string
+          criado_por_funcionario_id?: string | null
+          criado_por_nome?: string | null
+          criado_por_user_id?: string | null
+          empresa_nome?: string | null
+          id?: string
+          status?: string
+          total_geral?: number
+          updated_at?: string
+        }
+        Update: {
+          atualizado_por_nome?: string | null
+          company_id?: string | null
+          competencia?: string
+          created_at?: string
+          criado_por_funcionario_id?: string | null
+          criado_por_nome?: string | null
+          criado_por_user_id?: string | null
+          empresa_nome?: string | null
+          id?: string
+          status?: string
+          total_geral?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apontamentos_contabilidade_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apontamentos_contabilidade_criado_por_funcionario_id_fkey"
+            columns: ["criado_por_funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apontamentos_contabilidade_criado_por_funcionario_id_fkey"
+            columns: ["criado_por_funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
+        ]
+      }
+      apontamentos_contabilidade_itens: {
+        Row: {
+          alterado_em: string | null
+          alterado_por_nome: string | null
+          apontamento_id: string
+          assistencia_medica: number
+          comissao: number
+          cpf: string | null
+          created_at: string
+          falta_dsr: number
+          funcionario_id: string | null
+          hora_extra_100: number
+          hora_extra_60: number
+          id: string
+          insalubridade: number
+          nome: string
+          salario: number
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          alterado_em?: string | null
+          alterado_por_nome?: string | null
+          apontamento_id: string
+          assistencia_medica?: number
+          comissao?: number
+          cpf?: string | null
+          created_at?: string
+          falta_dsr?: number
+          funcionario_id?: string | null
+          hora_extra_100?: number
+          hora_extra_60?: number
+          id?: string
+          insalubridade?: number
+          nome: string
+          salario?: number
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          alterado_em?: string | null
+          alterado_por_nome?: string | null
+          apontamento_id?: string
+          assistencia_medica?: number
+          comissao?: number
+          cpf?: string | null
+          created_at?: string
+          falta_dsr?: number
+          funcionario_id?: string | null
+          hora_extra_100?: number
+          hora_extra_60?: number
+          id?: string
+          insalubridade?: number
+          nome?: string
+          salario?: number
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apontamentos_contabilidade_itens_apontamento_id_fkey"
+            columns: ["apontamento_id"]
+            isOneToOne: false
+            referencedRelation: "apontamentos_contabilidade"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apontamentos_contabilidade_itens_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "apontamentos_contabilidade_itens_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
           },
         ]
       }

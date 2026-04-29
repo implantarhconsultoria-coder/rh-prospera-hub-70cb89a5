@@ -32,6 +32,7 @@ const menuItems: MenuItem[] = [
   { label: 'Folha de Pagamento', icon: Wallet, path: '/admin/folha-pagamento' },
   { label: 'Rescisões', icon: FileX, path: '/admin/rescisoes' },
   { label: 'Relatório', icon: FileText, path: '/admin/relatorio' },
+  { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
 ];
 
 const operationalItems: MenuItem[] = [

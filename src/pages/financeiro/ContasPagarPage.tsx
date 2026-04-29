@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowUpCircle, Plus, X, Search, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import { registrarAcao, obterAtorAtual } from '@/lib/acoesLog';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -107,12 +108,22 @@ const ContasPagarPage: React.FC = () => {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: prof } = await supabase.from('profiles').select('nome_completo').eq('user_id', user?.id || '').single();
 
-    const { error } = await supabase.from('pagamentos').insert({
+    const ator = await obterAtorAtual();
+    const nomeAtor = ator.funcionarioNome || prof?.nome_completo || user?.email || '';
+    const { data: pag, error } = await supabase.from('pagamentos').insert({
       titulo_id: showBaixa.id, data: baixa.data, valor: Number(baixa.valor),
       forma_pagamento: baixa.forma, conta_bancaria_id: baixa.conta_bancaria_id || null,
-      observacoes: baixa.observacoes, user_id: user?.id, usuario_nome: prof?.nome_completo || '',
-    });
+      observacoes: baixa.observacoes, user_id: user?.id, usuario_nome: nomeAtor,
+    } as any).select().single();
     if (error) return toast.error(error.message);
+    await registrarAcao({
+      modulo: 'financeiro',
+      entidade: 'titulo_pagar',
+      entidadeId: showBaixa.id,
+      acao: 'baixou',
+      depois: { pagamento_id: (pag as any)?.id, valor: Number(baixa.valor), forma: baixa.forma },
+      observacao: `Pagamento de ${showBaixa.numero || ''}`,
+    }, ator);
     toast.success('Pagamento registrado');
     setShowBaixa(null);
     carregar();
