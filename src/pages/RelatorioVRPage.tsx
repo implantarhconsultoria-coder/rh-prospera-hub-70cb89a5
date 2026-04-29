@@ -100,7 +100,14 @@ const RelatorioVRPage: React.FC = () => {
           <label className="text-xs text-muted-foreground block mb-1">Competência</label>
           <Input type="month" value={competencia} onChange={e => { setCompetencia(e.target.value); setGenerated(false); }} className="w-48" />
         </div>
-        <span className="text-xs text-muted-foreground">Dias úteis: <strong className="text-foreground">{diasUteis}</strong></span>
+        <span className="text-xs text-muted-foreground">
+          Brutos: <strong className="text-foreground">{feriadoInfo.diasUteisBrutos}</strong> ·
+          Feriados: <strong className="text-foreground">{feriadoInfo.feriadosConsiderados}</strong> ·
+          Finais: <strong className="text-foreground">{feriadoInfo.diasUteisFinais}</strong>
+        </span>
+        <Button onClick={recalcularFeriados} variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" /> Recalcular com feriados
+        </Button>
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de VR
         </Button>
@@ -114,11 +121,15 @@ const RelatorioVRPage: React.FC = () => {
           <div className="flex justify-between mb-4">
           <div>
               <h2 className="font-bold text-foreground">{company.name}</h2>
-              <p className="text-xs text-muted-foreground">
-                CNPJ: {company.cnpj} — Apuração: {formatCompetencia(competencia)} — Dias úteis: {diasUteis}
-              </p>
+              <p className="text-xs text-muted-foreground">CNPJ: {company.cnpj}</p>
               <p className="text-sm font-semibold text-primary">
-                Vale Refeição — Competência de pagamento: {formatCompetencia(getNextCompetencia(competencia))}
+                Vale Refeição — Competência de apuração: {formatCompetencia(competencia)} —
+                Competência de pagamento: {formatCompetencia(getNextCompetencia(competencia))}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Dias úteis brutos: <strong>{feriadoInfo.diasUteisBrutos}</strong> ·
+                Feriados considerados: <strong>{feriadoInfo.feriadosConsiderados}</strong> ·
+                Dias úteis finais: <strong>{feriadoInfo.diasUteisFinais}</strong>
               </p>
               <p className="text-xs text-muted-foreground">
                 Emissão: {emissaoDate}
@@ -128,6 +139,13 @@ const RelatorioVRPage: React.FC = () => {
             <div className="text-right text-sm">
               <p>Total Final: <strong className="text-success">{formatCurrency(totalFinal)}</strong></p>
             </div>
+          </div>
+
+          <div className="text-[11px] text-muted-foreground mb-3">
+            Feriados considerados:{' '}
+            {feriadoInfo.listaFeriados.length === 0
+              ? 'nenhum'
+              : feriadoInfo.listaFeriados.map(f => `${formatFeriadoData(f.data)} - ${f.nome}`).join(' · ')}
           </div>
 
           <table className="w-full text-xs">
