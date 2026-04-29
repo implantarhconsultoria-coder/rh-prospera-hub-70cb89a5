@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { FileCheck, Lock, Unlock, RefreshCw, ArrowRight, Building2, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { FileCheck, Lock, Unlock, RefreshCw, ArrowRight, Building2, AlertTriangle, CheckCircle2, Clock, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/lib/calculations';
@@ -80,6 +80,47 @@ const FechamentosFiliaisPage: React.FC = () => {
     setHistoricoOpen(fechId);
   };
 
+  // Recalcula status de cada empresa com base em dados reais
+  const sincronizarStatus = async () => {
+    setLoading(true);
+    try {
+      // Para cada empresa, ver se tem lançamentos ou apontamentos na competência
+      for (const c of companies) {
+        const { count: lancCount } = await supabase
+          .from('lancamentos_mensais').select('*', { count: 'exact', head: true })
+          .eq('company_id', c.id).eq('competencia', competencia);
+        const { count: apontCount } = await supabase
+          .from('apontamentos_filial').select('*', { count: 'exact', head: true })
+          .eq('empresa_nome', c.name).eq('competencia', competencia);
+        const fech = fechamentos.find(f => f.company_id === c.id);
+
+        // Já fechado? não mexe
+        if (fech?.status === 'fechado' || fech?.status === 'reaberto') continue;
+
+        const totalDados = (lancCount || 0) + (apontCount || 0);
+        let novoStatus: string | null = null;
+        if (totalDados === 0) novoStatus = null; // sem dados = pendente (não cria registro)
+        else if ((apontCount || 0) > 0) novoStatus = 'enviado_central';
+        else novoStatus = 'aberto';
+
+        if (novoStatus && fech) {
+          await supabase.from('fechamentos_filial').update({ status: novoStatus, total_funcionarios: lancCount || 0 } as any).eq('id', fech.id);
+        } else if (novoStatus && !fech) {
+          await supabase.from('fechamentos_filial').insert({
+            company_id: c.id, empresa_nome: c.name, competencia,
+            status: novoStatus, total_funcionarios: lancCount || 0,
+          } as any);
+        }
+      }
+      toast.success('Status sincronizado com base nos dados reais');
+      await carregar();
+    } catch (e: any) {
+      toast.error('Erro ao sincronizar: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -94,6 +135,9 @@ const FechamentosFiliaisPage: React.FC = () => {
             <label className="text-xs text-muted-foreground block mb-1">Competência</label>
             <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="w-44" />
           </div>
+          <Button variant="default" size="sm" onClick={sincronizarStatus} disabled={loading}>
+            <Wand2 className="w-4 h-4 mr-2" /> Sincronizar Status
+          </Button>
           <Button variant="outline" size="sm" onClick={carregar}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
