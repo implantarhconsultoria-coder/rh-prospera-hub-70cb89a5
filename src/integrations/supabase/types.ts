@@ -132,6 +132,7 @@ export type Database = {
         Row: {
           cpf: string
           created_at: string
+          funcionario_id: string | null
           id: string
           ip: string
           modulo: string
@@ -143,6 +144,7 @@ export type Database = {
         Insert: {
           cpf: string
           created_at?: string
+          funcionario_id?: string | null
           id?: string
           ip?: string
           modulo: string
@@ -154,6 +156,7 @@ export type Database = {
         Update: {
           cpf?: string
           created_at?: string
+          funcionario_id?: string | null
           id?: string
           ip?: string
           modulo?: string
@@ -162,7 +165,22 @@ export type Database = {
           unidade?: string
           user_agent?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "acesso_cpf_logs_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acesso_cpf_logs_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
+        ]
       }
       acesso_excepcional: {
         Row: {
@@ -225,6 +243,7 @@ export type Database = {
           criado_por: string | null
           criado_por_nome: string
           empresa: string
+          funcionario_id: string | null
           id: string
           modulo: string
           nome: string
@@ -242,6 +261,7 @@ export type Database = {
           criado_por?: string | null
           criado_por_nome?: string
           empresa?: string
+          funcionario_id?: string | null
           id?: string
           modulo: string
           nome: string
@@ -259,6 +279,7 @@ export type Database = {
           criado_por?: string | null
           criado_por_nome?: string
           empresa?: string
+          funcionario_id?: string | null
           id?: string
           modulo?: string
           nome?: string
@@ -270,7 +291,22 @@ export type Database = {
           unidade?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "acessos_cpf_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "acessos_cpf_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
+        ]
       }
       activity_log: {
         Row: {
@@ -2396,6 +2432,66 @@ export type Database = {
         }
         Relationships: []
       }
+      funcionario_modulos: {
+        Row: {
+          autorizado_em: string
+          autorizado_por: string | null
+          autorizado_por_nome: string
+          created_at: string
+          funcionario_id: string
+          id: string
+          modulo: string
+          observacoes: string
+          status: string
+          total_acessos: number
+          ultimo_acesso_em: string | null
+          updated_at: string
+        }
+        Insert: {
+          autorizado_em?: string
+          autorizado_por?: string | null
+          autorizado_por_nome?: string
+          created_at?: string
+          funcionario_id: string
+          id?: string
+          modulo: string
+          observacoes?: string
+          status?: string
+          total_acessos?: number
+          ultimo_acesso_em?: string | null
+          updated_at?: string
+        }
+        Update: {
+          autorizado_em?: string
+          autorizado_por?: string | null
+          autorizado_por_nome?: string
+          created_at?: string
+          funcionario_id?: string
+          id?: string
+          modulo?: string
+          observacoes?: string
+          status?: string
+          total_acessos?: number
+          ultimo_acesso_em?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funcionario_modulos_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "funcionario_modulos_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
+        ]
+      }
       funcionarios: {
         Row: {
           agencia: string
@@ -2698,6 +2794,13 @@ export type Database = {
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lancamentos_mensais_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
         ]
       }
       links_acesso_publico: {
@@ -2991,6 +3094,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movimento_diario_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
           },
         ]
       }
@@ -3607,6 +3717,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tecnicos_campo_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: true
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
+          {
             foreignKeyName: "tecnicos_campo_veiculo_id_fkey"
             columns: ["veiculo_id"]
             isOneToOne: false
@@ -4124,6 +4241,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tecnicos_campo_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: true
+            referencedRelation: "vw_funcionario_permissoes"
+            referencedColumns: ["funcionario_id"]
+          },
+          {
             foreignKeyName: "tecnicos_campo_veiculo_id_fkey"
             columns: ["veiculo_id"]
             isOneToOne: false
@@ -4131,6 +4255,23 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      vw_funcionario_permissoes: {
+        Row: {
+          autorizado_em: string | null
+          autorizado_por_nome: string | null
+          cargo: string | null
+          cpf: string | null
+          empresa: string | null
+          funcionario_id: string | null
+          modulo: string | null
+          nome: string | null
+          status_funcionario: string | null
+          status_modulo: string | null
+          total_acessos: number | null
+          ultimo_acesso_em: string | null
+        }
+        Relationships: []
       }
     }
     Functions: {
