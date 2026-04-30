@@ -11,9 +11,16 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const MODULOS = ['operacional','financeiro','faturamento','almoxarifado','compras','chamados','abastecimento','ponto','km','documentos','fechamento'];
+const MODULOS = ['operacional','financeiro','faturamento','rh','almoxarifado','mecanicos','filial','compras','chamados','abastecimento','ponto','km','documentos','fechamento'];
 
-interface FuncionarioRow { id: string; nome: string; cpf: string; cargo: string; status: string; company_id: string; empresa_nome?: string; }
+const STATUS_OPCOES: { value: string; label: string; color: string }[] = [
+  { value: 'ativo',     label: 'ATIVO',     color: 'bg-emerald-600 text-white' },
+  { value: 'bloqueado', label: 'BLOQUEADO', color: 'bg-amber-600 text-white' },
+  { value: 'ferias',    label: 'FÉRIAS',    color: 'bg-blue-600 text-white' },
+  { value: 'desligado', label: 'DESLIGADO', color: 'bg-rose-600 text-white' },
+];
+
+interface FuncionarioRow { id: string; nome: string; cpf: string; cargo: string; setor: string | null; status: string; acesso_status: string | null; company_id: string; empresa_nome?: string; }
 interface PermissaoRow { id: string; funcionario_id: string; modulo: string; status: string; ultimo_acesso_em: string | null; total_acessos: number; }
 interface LogRow { id: string; cpf: string; modulo: string; unidade: string; resultado: string; motivo: string; created_at: string; funcionario_id: string | null; }
 
@@ -34,7 +41,7 @@ const PermissoesFuncionariosPage: React.FC = () => {
     setLoading(true);
     const [{ data: e }, { data: f }, { data: p }, { data: l }] = await Promise.all([
       supabase.from('empresas').select('id,nome'),
-      supabase.from('funcionarios').select('id,nome,cpf,cargo,status,company_id').order('nome'),
+      supabase.from('funcionarios').select('id,nome,cpf,cargo,setor,status,acesso_status,company_id').order('nome'),
       supabase.from('funcionario_modulos').select('id,funcionario_id,modulo,status,ultimo_acesso_em,total_acessos'),
       supabase.from('acesso_cpf_logs').select('id,cpf,modulo,unidade,resultado,motivo,created_at,funcionario_id').order('created_at', { ascending: false }).limit(50),
     ]);
