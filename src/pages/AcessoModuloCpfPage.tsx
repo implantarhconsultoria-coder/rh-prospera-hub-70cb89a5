@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, AlertTriangle, Wrench, DollarSign, FileText } from 'lucide-react';
+import { Loader2, AlertTriangle, Wrench, DollarSign, FileText, Users, Package, Cog, Building2, MapPin } from 'lucide-react';
 
 const FN_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/acesso-cpf`;
 const ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -14,24 +14,33 @@ const formatCpf = (raw: string) => {
 };
 
 const SLUG_LABEL: Record<string, { titulo: string; subtitulo: string; icon: React.ReactNode; cor: string }> = {
-  'op-sp':       { titulo: 'App Operacional · SP',         subtitulo: 'Topac Matriz · São Paulo',        icon: <Wrench className="w-5 h-5 text-white" />,      cor: 'from-primary to-blue-600' },
-  'op-pg':       { titulo: 'App Operacional · Praia Grande', subtitulo: 'Topac Filial Praia Grande',     icon: <Wrench className="w-5 h-5 text-white" />,      cor: 'from-cyan-500 to-blue-600' },
-  'op-go':       { titulo: 'App Operacional · Goiânia',    subtitulo: 'Topac Filial Goiânia',            icon: <Wrench className="w-5 h-5 text-white" />,      cor: 'from-emerald-500 to-teal-600' },
-  'financeiro':  { titulo: 'Portal Financeiro TOPAC',      subtitulo: 'Acesso por CPF',                  icon: <DollarSign className="w-5 h-5 text-white" />,  cor: 'from-cyan-600 to-sky-700' },
-  'faturamento': { titulo: 'Portal Faturamento TOPAC',     subtitulo: 'Acesso por CPF',                  icon: <FileText className="w-5 h-5 text-white" />,    cor: 'from-indigo-500 to-violet-600' },
+  'op-sp':       { titulo: 'App Operacional · SP',          subtitulo: 'Topac Matriz · São Paulo',     icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-primary to-blue-600' },
+  'op-pg':       { titulo: 'App Operacional · Praia Grande',subtitulo: 'Topac Filial Praia Grande',    icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-cyan-500 to-blue-600' },
+  'op-go':       { titulo: 'App Operacional · Goiânia',     subtitulo: 'Topac Filial Goiânia',         icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-emerald-500 to-teal-600' },
+  'financeiro':  { titulo: 'Portal Financeiro TOPAC',       subtitulo: 'Acesso por CPF',               icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
+  'faturamento': { titulo: 'Portal Faturamento TOPAC',      subtitulo: 'Acesso por CPF',               icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
+  'rh':          { titulo: 'Portal RH',                     subtitulo: 'Acesso por CPF',               icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
+  'almoxarifado':{ titulo: 'Portal Almoxarifado',           subtitulo: 'Acesso por CPF',               icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
+  'mecanicos':   { titulo: 'Portal Mecânicos',              subtitulo: 'Acesso por CPF',               icon: <Cog className="w-5 h-5 text-white" />,      cor: 'from-slate-500 to-zinc-700' },
+  'matriz':      { titulo: 'Filial · Matriz',               subtitulo: 'Topac Matriz / Alqui / LMT',   icon: <Building2 className="w-5 h-5 text-white" />,cor: 'from-indigo-600 to-blue-700' },
+  'filial-pg':   { titulo: 'Filial · Praia Grande',         subtitulo: 'Topac Filial Praia Grande',    icon: <MapPin className="w-5 h-5 text-white" />,   cor: 'from-cyan-600 to-blue-700' },
+  'filial-go':   { titulo: 'Filial · Goiânia',              subtitulo: 'Topac Filial Goiânia',         icon: <MapPin className="w-5 h-5 text-white" />,   cor: 'from-emerald-600 to-teal-700' },
 };
 
 const ERRO_LABEL: Record<string, string> = {
   cpf_invalido:                     'CPF inválido. Confira os 11 dígitos.',
-  cpf_nao_encontrado:               'CPF não encontrado na base de funcionários. Solicite o cadastro ao administrador.',
-  cpf_nao_encontrado_funcionarios:  'CPF não encontrado na base de funcionários. Solicite o cadastro ao administrador.',
-  funcionario_inativo:              'Funcionário inativo. Fale com o administrador.',
-  sem_permissao_modulo:             'CPF encontrado, mas sem permissão para este módulo.',
-  modulo_bloqueado:                 'Acesso a este módulo está bloqueado. Fale com o administrador.',
-  cpf_bloqueado:                    'CPF sem permissão para este acesso (bloqueado).',
+  cpf_nao_encontrado:               'CPF não encontrado. Procure o RH.',
+  cpf_nao_encontrado_funcionarios:  'CPF não encontrado. Procure o RH.',
+  funcionario_inativo:              'Acesso temporariamente bloqueado. Procure o RH.',
+  funcionario_bloqueado:            'Acesso temporariamente bloqueado. Procure o RH.',
+  funcionario_ferias:               'Funcionário em férias. Acesso bloqueado até o retorno.',
+  funcionario_desligado:            'Acesso encerrado (funcionário desligado).',
+  sem_permissao_modulo:             'CPF sem permissão para este setor. Procure o RH.',
+  modulo_bloqueado:                 'Acesso a este setor está bloqueado. Procure o RH.',
+  cpf_bloqueado:                    'Acesso temporariamente bloqueado. Procure o RH.',
   unidade_incorreta:                'Este CPF pertence a outra unidade. Use o link da unidade correta.',
-  link_invalido:                    'Link inválido. Solicite um novo link ao administrador.',
-  link_bloqueado:                   'Link temporariamente bloqueado. Fale com o administrador.',
+  link_invalido:                    'Link inválido. Solicite o link correto ao RH.',
+  link_bloqueado:                   'Link temporariamente bloqueado. Procure o RH.',
   tecnico_nao_encontrado:           'Este CPF ainda não está vinculado ao app operacional.',
   blocked_link:                     'Acesso bloqueado pelo administrador.',
   revoked_link:                     'Acesso revogado. Solicite um novo link.',
