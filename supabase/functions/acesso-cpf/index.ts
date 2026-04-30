@@ -51,16 +51,15 @@ Deno.serve(async (req) => {
     if (link.status !== "ativo") return json({ error: "link_bloqueado" }, 403);
 
     // 2. SEMPRE busca o funcionário na BASE OFICIAL.
-    // Filtro por CPF normalizado (remove pontos/traços) — usa LIKE com últimos 11 dígitos.
+    // Filtro por CPF normalizado (remove pontos/traços).
     const { data: funcs, error: ferr } = await client
       .from("funcionarios")
-      .select("id, nome, cpf, cargo, status, company_id");
+      .select("id, nome, cpf, cargo, status, acesso_status, setor, company_id");
     if (ferr) return json({ error: "db_error", detalhe: ferr.message }, 500);
     const func = (funcs || []).find(
       (f) => onlyDigits(String(f.cpf || "")) === cpfClean,
     );
     if (!func) {
-      // log de tentativa
       await client.from("acesso_cpf_logs").insert({
         cpf: cpfClean, modulo: link.modulo, unidade: link.unidade,
         resultado: "negado", motivo: "cpf_nao_encontrado_funcionarios",
@@ -68,15 +67,22 @@ Deno.serve(async (req) => {
       return json({ error: "cpf_nao_encontrado_funcionarios" }, 403);
     }
 
-    // 3. Funcionário ativo?
-    const statusFunc = String(func.status || "").toLowerCase();
-    if (statusFunc && !["ativo", "active"].includes(statusFunc)) {
+    // 3. Status de acesso (ativo / bloqueado / ferias / desligado)
+    const acessoStatus = String((func as any).acesso_status || func.status || "ativo").toLowerCase();
+    const statusErrMap: Record<string, string> = {
+      desligado: "funcionario_desligado",
+      ferias:    "funcionario_ferias",
+      "férias":  "funcionario_ferias",
+      bloqueado: "funcionario_bloqueado",
+      inativo:   "funcionario_inativo",
+    };
+    if (statusErrMap[acessoStatus]) {
       await client.from("acesso_cpf_logs").insert({
         cpf: cpfClean, modulo: link.modulo, unidade: link.unidade,
-        resultado: "negado", motivo: "funcionario_inativo",
+        resultado: "negado", motivo: statusErrMap[acessoStatus],
         funcionario_id: func.id,
       });
-      return json({ error: "funcionario_inativo" }, 403);
+      return json({ error: statusErrMap[acessoStatus] }, 403);
     }
 
     // 4. Empresa do funcionário
