@@ -93,6 +93,7 @@ import NotFound from "@/pages/NotFound";
 import AcessoCpfPage from "@/pages/AcessoCpfPage";
 import AcessoModuloCpfPage from "@/pages/AcessoModuloCpfPage";
 import { FinanceiroCpfLayout, FaturamentoCpfLayout } from "@/components/CpfPortalLayout";
+import SetorCpfPage from "@/pages/SetorCpfPage";
 import LinksAcessoCpfPage from "@/pages/admin/LinksAcessoCpfPage";
 import PermissoesFuncionariosPage from "@/pages/admin/PermissoesFuncionariosPage";
 import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
@@ -320,6 +321,8 @@ const App = () => (
                 <Route path="reajustes" element={<ReajustesPage />} />
                 <Route path="pendencias" element={<PendenciasPage />} />
               </Route>
+              {/* Portais isolados por CPF para os demais setores (RH, Almoxarifado, Mecânicos, Filial) */}
+              <Route path="/setor-cpf/:modulo" element={<SetorCpfPage />} />
               <Route path="/relatorio-impressao" element={<ErrorBoundary><RelatorioImpressaoPage /></ErrorBoundary>} />
               <Route path="/entrega-impressao" element={<ErrorBoundary><EntregaImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-vr-impressao" element={<ErrorBoundary><RelatorioVRImpressaoPage /></ErrorBoundary>} />
