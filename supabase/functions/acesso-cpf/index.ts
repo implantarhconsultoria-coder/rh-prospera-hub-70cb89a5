@@ -144,6 +144,7 @@ Deno.serve(async (req) => {
           nome: func.nome,
           empresa: empresaNome,
           cargo: func.cargo,
+          setor: (func as any).setor || "",
           company_id: func.company_id,
         },
         tecnico_token: tec.access_token,
@@ -199,6 +200,7 @@ Deno.serve(async (req) => {
         nome: func.nome,
         empresa: empresaNome,
         cargo: func.cargo,
+        setor: (func as any).setor || "",
         company_id: func.company_id,
       },
     });
