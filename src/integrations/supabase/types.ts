@@ -3100,6 +3100,9 @@ export type Database = {
       }
       funcionarios: {
         Row: {
+          acesso_atualizado_em: string | null
+          acesso_motivo: string | null
+          acesso_status: string
           agencia: string
           banco: string
           cargo: string
@@ -3127,6 +3130,7 @@ export type Database = {
           registro: string
           rg: string
           salario_base: number
+          setor: string | null
           status: string
           telefone: string
           updated_at: string
@@ -3138,6 +3142,9 @@ export type Database = {
           vt_diario: number
         }
         Insert: {
+          acesso_atualizado_em?: string | null
+          acesso_motivo?: string | null
+          acesso_status?: string
           agencia?: string
           banco?: string
           cargo?: string
@@ -3165,6 +3172,7 @@ export type Database = {
           registro?: string
           rg?: string
           salario_base?: number
+          setor?: string | null
           status?: string
           telefone?: string
           updated_at?: string
@@ -3176,6 +3184,9 @@ export type Database = {
           vt_diario?: number
         }
         Update: {
+          acesso_atualizado_em?: string | null
+          acesso_motivo?: string | null
+          acesso_status?: string
           agencia?: string
           banco?: string
           cargo?: string
@@ -3203,6 +3214,7 @@ export type Database = {
           registro?: string
           rg?: string
           salario_base?: number
+          setor?: string | null
           status?: string
           telefone?: string
           updated_at?: string
