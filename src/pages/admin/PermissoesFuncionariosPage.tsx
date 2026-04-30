@@ -87,6 +87,22 @@ const PermissoesFuncionariosPage: React.FC = () => {
     carregar();
   };
 
+  const mudarStatusAcesso = async (func: FuncionarioRow, novoStatus: string) => {
+    const { error } = await supabase
+      .from('funcionarios')
+      .update({
+        acesso_status: novoStatus,
+        // mantém status legado coerente para compatibilidade
+        status: novoStatus === 'desligado' ? 'desligado' : 'ativo',
+        acesso_atualizado_em: new Date().toISOString(),
+      })
+      .eq('id', func.id);
+    if (error) { toast.error(error.message); return; }
+    const labels: Record<string,string> = { ativo:'ATIVO', bloqueado:'BLOQUEADO', ferias:'FÉRIAS', desligado:'DESLIGADO' };
+    toast.success(`${func.nome}: status alterado para ${labels[novoStatus] || novoStatus}`);
+    carregar();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -142,30 +158,54 @@ const PermissoesFuncionariosPage: React.FC = () => {
           {loading ? <div className="py-12 flex justify-center"><Loader2 className="w-5 h-5 animate-spin" /></div> : (
             <Table>
               <TableHeader>
-                <TableRow><TableHead>Funcionário</TableHead><TableHead>CPF</TableHead><TableHead>Empresa</TableHead><TableHead>Módulos autorizados</TableHead></TableRow>
+                <TableRow>
+                  <TableHead>Funcionário</TableHead>
+                  <TableHead>CPF</TableHead>
+                  <TableHead>Empresa / Setor</TableHead>
+                  <TableHead>Status do acesso</TableHead>
+                  <TableHead>Módulos autorizados</TableHead>
+                </TableRow>
               </TableHeader>
               <TableBody>
-                {filtrados.map(f => (
-                  <TableRow key={f.id}>
-                    <TableCell>
-                      <div className="font-medium">{f.nome}</div>
-                      <div className="text-[11px] text-muted-foreground">{f.cargo}</div>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{fmtCpf(f.cpf)}</TableCell>
-                    <TableCell><Badge variant="outline">{empresas[f.company_id] || '—'}</Badge></TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {(permsByFunc[f.id] || []).length === 0 && <span className="text-xs text-muted-foreground">nenhum</span>}
-                        {(permsByFunc[f.id] || []).map(p => (
-                          <Button key={p.id} size="sm" variant={p.status === 'ativo' ? 'default' : 'secondary'} className="h-7 text-[11px]" onClick={() => togglePermissao(p)} title={`Clique para ${p.status === 'ativo' ? 'bloquear' : 'reativar'}`}>
-                            {p.status === 'ativo' ? <Unlock className="w-3 h-3 mr-1" /> : <Lock className="w-3 h-3 mr-1" />}
-                            {p.modulo}
-                          </Button>
-                        ))}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filtrados.map(f => {
+                  const statusAtual = (f.acesso_status || (f.status === 'desligado' ? 'desligado' : 'ativo')).toLowerCase();
+                  const statusOpt = STATUS_OPCOES.find(s => s.value === statusAtual) || STATUS_OPCOES[0];
+                  return (
+                    <TableRow key={f.id}>
+                      <TableCell>
+                        <div className="font-medium">{f.nome}</div>
+                        <div className="text-[11px] text-muted-foreground">{f.cargo}</div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{fmtCpf(f.cpf)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="block w-fit mb-1">{empresas[f.company_id] || '—'}</Badge>
+                        {f.setor && <span className="text-[10px] text-muted-foreground">{f.setor}</span>}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge className={statusOpt.color}>{statusOpt.label}</Badge>
+                          <Select value={statusAtual} onValueChange={(v) => mudarStatusAcesso(f, v)}>
+                            <SelectTrigger className="h-7 w-28 text-[11px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {STATUS_OPCOES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {(permsByFunc[f.id] || []).length === 0 && <span className="text-xs text-muted-foreground">nenhum</span>}
+                          {(permsByFunc[f.id] || []).map(p => (
+                            <Button key={p.id} size="sm" variant={p.status === 'ativo' ? 'default' : 'secondary'} className="h-7 text-[11px]" onClick={() => togglePermissao(p)} title={`Clique para ${p.status === 'ativo' ? 'bloquear' : 'reativar'}`}>
+                              {p.status === 'ativo' ? <Unlock className="w-3 h-3 mr-1" /> : <Lock className="w-3 h-3 mr-1" />}
+                              {p.modulo}
+                            </Button>
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
