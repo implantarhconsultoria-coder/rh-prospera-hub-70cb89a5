@@ -97,6 +97,46 @@ const DocumentosVeiculosPage: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Ativo>>({});
   const [docPanelId, setDocPanelId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkDeleting(true);
+    const alvos = ativos.filter(a => ids.includes(a.id));
+    const { error } = await supabase.from('ativos').delete().in('id', ids);
+    if (error) {
+      toast.error('Erro ao excluir: ' + error.message);
+      setBulkDeleting(false);
+      return;
+    }
+    try {
+      await supabase.from('acoes_log').insert(
+        alvos.map(a => ({
+          user_id: session?.user?.id || null,
+          modulo: 'documentos-veiculos',
+          acao: 'exclusao_lote',
+          descricao: `Excluído veículo ${a.descricao || ''} ${a.placa ? '(' + a.placa + ')' : ''}`.trim(),
+          referencia_id: a.id,
+        })) as any
+      );
+    } catch {}
+    toast.success(`${ids.length} veículo(s) excluído(s)`);
+    setSelectedIds(new Set());
+    setBulkDeleteOpen(false);
+    setBulkDeleting(false);
+    fetchAtivos();
+  };
 
   const fetchAtivos = async () => {
     const { data, error } = await supabase.from('ativos').select('*').eq('tipo', 'veiculo').order('created_at', { ascending: false });
@@ -402,9 +442,40 @@ const DocumentosVeiculosPage: React.FC = () => {
         </div>
       )}
 
+      {selectedIds.size > 0 && (
+        <div className="card-premium p-3 flex items-center justify-between border-l-4 border-destructive bg-destructive/5">
+          <div className="text-sm font-medium">
+            {selectedIds.size} selecionado(s)
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
+              <X className="w-4 h-4 mr-1" /> Limpar
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="w-4 h-4 mr-1" /> Excluir selecionados
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="card-premium overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b bg-muted/50 sticky top-0 z-10">
+            <th className="px-3 py-3 w-8">
+              <input
+                type="checkbox"
+                aria-label="Selecionar todos"
+                checked={filtered.length > 0 && filtered.every(a => selectedIds.has(a.id))}
+                onChange={(e) => {
+                  setSelectedIds(prev => {
+                    const n = new Set(prev);
+                    if (e.target.checked) filtered.forEach(a => n.add(a.id));
+                    else filtered.forEach(a => n.delete(a.id));
+                    return n;
+                  });
+                }}
+              />
+            </th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Veículo</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Placa</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
@@ -420,6 +491,14 @@ const DocumentosVeiculosPage: React.FC = () => {
               const ov = overallStatus(a);
               return (
                 <tr key={a.id} className="border-b hover:bg-muted/20">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Selecionar ${a.descricao}`}
+                      checked={selectedIds.has(a.id)}
+                      onChange={() => toggleSelect(a.id)}
+                    />
+                  </td>
                   <td className="px-3 py-2 text-xs font-medium">
                     <div>{a.descricao}</div>
                     <div className="text-[10px] text-muted-foreground">{a.marca || ''} {a.ano_modelo || ''}</div>
@@ -476,7 +555,7 @@ const DocumentosVeiculosPage: React.FC = () => {
                 </tr>
               );
             })}
-            {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
           </tbody>
         </table>
         <div className="p-3 text-xs text-muted-foreground border-t">{filtered.length} veículo(s)</div>
@@ -616,6 +695,25 @@ const DocumentosVeiculosPage: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmação de exclusão em lote */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedIds.size} veículo(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação removerá permanentemente os registros selecionados e será registrada na auditoria. Não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete} disabled={bulkDeleting} className="bg-destructive">
+              {bulkDeleting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
+              Excluir selecionados
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
