@@ -5,9 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Users, Shield, Loader2, Search } from 'lucide-react';
+import { Users, Shield, Loader2, Search, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { useApp } from '@/context/AppContext';
 import type { AppRole } from '@/hooks/useUserRole';
 
 interface UserWithRole {
@@ -34,9 +40,12 @@ const ROLE_LABELS: Record<AppRole, { label: string; color: string; portal: strin
 const ALL_ROLES: AppRole[] = ['admin', 'filial_praia', 'filial_goiania', 'almoxarifado', 'tecnico_campo', 'operacional', 'faturamento', 'financeiro', 'usuario'];
 
 const GerenciarUsuariosPage: React.FC = () => {
+  const { userRole, session } = useApp();
+  const isAdmin = userRole === 'admin';
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const fetchUsers = async () => {
