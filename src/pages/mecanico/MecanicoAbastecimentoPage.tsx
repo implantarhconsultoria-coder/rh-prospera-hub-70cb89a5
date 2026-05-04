@@ -295,6 +295,30 @@ const MecanicoAbastecimentoPage: React.FC = () => {
         </motion.div>
       )}
 
+      {step === 'photo_painel' && vale && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+          {fotoUrl && (
+            <div>
+              <p className="text-[10px] text-white/50 uppercase font-semibold mb-1">Foto da bomba (ok)</p>
+              <img src={fotoUrl} alt="bomba" className="w-full rounded-2xl border border-emerald-400/30 max-h-48 object-cover" />
+            </div>
+          )}
+          <div className="bg-blue-500/10 border border-blue-400/30 rounded-xl p-3 text-xs text-blue-200 flex gap-2">
+            <Camera className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>Agora tire uma foto do <strong>painel do veículo</strong> mostrando o KM/odômetro. Essa foto comprova o uso real e fica anexada à conferência.</span>
+          </div>
+          <Button
+            onClick={() => filePainelRef.current?.click()}
+            className="w-full h-16 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl border-0"
+          >
+            <Camera className="w-5 h-5 mr-2" /> Tirar foto do painel do veículo
+          </Button>
+          <Button variant="outline" onClick={reset} className="w-full bg-white/5 border-white/10 text-white">Cancelar</Button>
+          <input ref={filePainelRef} type="file" accept="image/*" capture="environment" hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) onFilePainelSelected(f); }} />
+        </motion.div>
+      )}
+
       {step === 'fill' && vale && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           {fotoUrl && (
