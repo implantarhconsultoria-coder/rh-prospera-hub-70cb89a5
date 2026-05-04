@@ -465,6 +465,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const enviarParaContabilidade = async () => {
     if (!company) { toast.error('Selecione uma empresa'); return; }
     if (items.length === 0) { toast.error('Sem itens para enviar'); return; }
 
