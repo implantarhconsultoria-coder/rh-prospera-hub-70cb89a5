@@ -433,7 +433,38 @@ const ApontamentoContabilidadePage: React.FC = () => {
     }
   };
 
-  const enviarParaContabilidade = async () => {
+  const imprimir = () => window.print();
+
+  const exportarExcel = () => {
+    const heLabel = isGO ? 'HE60' : 'HE50';
+    const headers = [
+      'Nome','CPF','Salario','Insalubridade',
+      'Tem Comissao','Base Comissao','Comissao %','Comissao Valor',
+      `${heLabel}-Horas`, `${heLabel}-Valor`,
+      'HE100-Horas','HE100-Valor',
+      'Assist.Medica','Faltas-Qtd','Desconto Falta','DSR-Qtd','Desconto DSR',
+      'Adiantamento','Total'
+    ];
+    const rows = items.map(r => [
+      r.nome, r.cpf,
+      r.salario, r.insalubridade,
+      r.tem_comissao ? 'Sim' : 'Não', r.comissao_base, r.comissao_percentual, r.comissao_valor,
+      isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas,
+      isGO ? r.hora_extra_60 : r.hora_extra_50,
+      r.hora_extra_100_horas, r.hora_extra_100,
+      r.assistencia_medica, r.faltas_qtd, r.desconto_falta, r.dsr_qtd, r.desconto_dsr,
+      r.adiantamento, r.total,
+    ]);
+    const csv = [headers, ...rows].map(l => l.join(';')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `apontamento_${company?.name || ''}_${competencia}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
     if (!company) { toast.error('Selecione uma empresa'); return; }
     if (items.length === 0) { toast.error('Sem itens para enviar'); return; }
 
