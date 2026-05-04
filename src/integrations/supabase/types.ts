@@ -5305,6 +5305,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      calc_inss: { Args: { p_base: number }; Returns: number }
+      calc_irrf: { Args: { p_base: number }; Returns: number }
       fechamento_filial_executar: {
         Args: {
           p_company_id: string
