@@ -47,6 +47,7 @@ const MecanicoAbastecimentoPage: React.FC = () => {
   const [confirm, setConfirm] = useState<{ titulo: string; detalhes: { label: string; valor: string }[] } | null>(null);
   const [recentes, setRecentes] = useState<any[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const filePainelRef = useRef<HTMLInputElement>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerDivId = 'qr-reader-mec';
 
