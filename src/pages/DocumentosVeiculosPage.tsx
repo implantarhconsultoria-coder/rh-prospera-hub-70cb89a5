@@ -442,9 +442,40 @@ const DocumentosVeiculosPage: React.FC = () => {
         </div>
       )}
 
+      {selectedIds.size > 0 && (
+        <div className="card-premium p-3 flex items-center justify-between border-l-4 border-destructive bg-destructive/5">
+          <div className="text-sm font-medium">
+            {selectedIds.size} selecionado(s)
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
+              <X className="w-4 h-4 mr-1" /> Limpar
+            </Button>
+            <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 className="w-4 h-4 mr-1" /> Excluir selecionados
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="card-premium overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b bg-muted/50 sticky top-0 z-10">
+            <th className="px-3 py-3 w-8">
+              <input
+                type="checkbox"
+                aria-label="Selecionar todos"
+                checked={filtered.length > 0 && filtered.every(a => selectedIds.has(a.id))}
+                onChange={(e) => {
+                  setSelectedIds(prev => {
+                    const n = new Set(prev);
+                    if (e.target.checked) filtered.forEach(a => n.add(a.id));
+                    else filtered.forEach(a => n.delete(a.id));
+                    return n;
+                  });
+                }}
+              />
+            </th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Veículo</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Placa</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
