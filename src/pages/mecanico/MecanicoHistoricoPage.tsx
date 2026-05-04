@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, ClipboardList, Gauge, Fuel, History } from 'lucide-react';
+import { Clock, ClipboardList, Gauge, Fuel, History, Calendar } from 'lucide-react';
 import { useTecnicoApp } from '@/context/TecnicoAppContext';
 
 type Filter = 'todos' | 'ponto' | 'chamado' | 'km' | 'abastecimento';
@@ -12,9 +12,20 @@ const TIPO_PONTO: Record<string, string> = {
   saida: 'Saída expediente',
 };
 
+const currentMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const monthLabel = (mes: string) => {
+  const [y, m] = mes.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+};
+
 const MecanicoHistoricoPage: React.FC = () => {
   const { call } = useTecnicoApp();
   const [filter, setFilter] = useState<Filter>('todos');
+  const [mes, setMes] = useState<string>(currentMonth());
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -22,12 +33,12 @@ const MecanicoHistoricoPage: React.FC = () => {
     (async () => {
       setLoading(true);
       try {
-        const r: any = await call('historico', { tipo: filter });
+        const r: any = await call('historico', { tipo: filter, mes });
         setItems(r.historico || []);
       } catch { /* noop */ }
       setLoading(false);
     })();
-  }, [call, filter]);
+  }, [call, filter, mes]);
 
   return (
     <div className="space-y-5">
@@ -35,7 +46,24 @@ const MecanicoHistoricoPage: React.FC = () => {
         <h2 className="text-2xl font-bold font-display text-white flex items-center gap-2">
           <History className="w-6 h-6 text-primary" /> Histórico
         </h2>
-        <p className="text-sm text-white/60 mt-1">Pontos, chamados, KM e abastecimentos</p>
+        <p className="text-sm text-white/60 mt-1">Pontos, chamados, KM e abastecimentos do mês</p>
+      </div>
+
+      {/* Mês */}
+      <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
+        <Calendar className="w-4 h-4 text-primary" />
+        <div className="flex-1">
+          <p className="text-[10px] text-white/50 uppercase font-semibold tracking-wider">Mês</p>
+          <p className="text-sm text-white font-semibold capitalize">{monthLabel(mes)}</p>
+        </div>
+        <input
+          type="month"
+          value={mes}
+          onChange={(e) => setMes(e.target.value || currentMonth())}
+          max={currentMonth()}
+          className="bg-white/10 border border-white/15 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-primary/50"
+          aria-label="Selecionar mês"
+        />
       </div>
 
       <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-2">
@@ -53,7 +81,7 @@ const MecanicoHistoricoPage: React.FC = () => {
       </div>
 
       {loading && <p className="text-white/50 text-sm text-center py-6">Carregando…</p>}
-      {!loading && items.length === 0 && <p className="text-white/50 text-sm text-center py-6">Nenhum registro</p>}
+      {!loading && items.length === 0 && <p className="text-white/50 text-sm text-center py-6">Nenhum registro neste mês</p>}
 
       <div className="space-y-2">
         {items.map((it, idx) => {
