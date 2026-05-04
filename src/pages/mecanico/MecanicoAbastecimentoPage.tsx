@@ -321,9 +321,20 @@ const MecanicoAbastecimentoPage: React.FC = () => {
 
       {step === 'fill' && vale && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-          {fotoUrl && (
-            <img src={fotoUrl} alt="bomba" className="w-full rounded-2xl border border-white/10 max-h-64 object-cover" />
-          )}
+          <div className="grid grid-cols-2 gap-2">
+            {fotoUrl && (
+              <div>
+                <p className="text-[10px] text-white/50 uppercase font-semibold mb-1">Bomba</p>
+                <img src={fotoUrl} alt="bomba" className="w-full rounded-xl border border-white/10 h-28 object-cover" />
+              </div>
+            )}
+            {fotoPainelUrl && (
+              <div>
+                <p className="text-[10px] text-white/50 uppercase font-semibold mb-1">Painel</p>
+                <img src={fotoPainelUrl} alt="painel" className="w-full rounded-xl border border-white/10 h-28 object-cover" />
+              </div>
+            )}
+          </div>
           <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-3 text-xs text-amber-200 flex gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>Confira o valor e os litros lendo a bomba. Esta foto fica anexada à conferência.</span>
