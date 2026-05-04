@@ -142,6 +142,8 @@ const GerenciarUsuariosPage: React.FC = () => {
       setDeleting(null);
     }
   };
+
+  const filtered = users.filter(u =>
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.nome_completo.toLowerCase().includes(search.toLowerCase())
   );
@@ -207,6 +209,7 @@ const GerenciarUsuariosPage: React.FC = () => {
                     <TableHead>Role / Perfil</TableHead>
                     <TableHead>Portal de Entrada</TableHead>
                     <TableHead>Alterar Role</TableHead>
+                    {isAdmin && <TableHead className="text-right">Excluir</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -250,6 +253,41 @@ const GerenciarUsuariosPage: React.FC = () => {
                           {saving === user.user_id && <Loader2 className="w-4 h-4 animate-spin" />}
                         </div>
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-right">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive"
+                                disabled={deleting === user.user_id || user.user_id === session?.user?.id}
+                                title={user.user_id === session?.user?.id ? 'Não é possível excluir o próprio usuário' : 'Excluir usuário'}
+                              >
+                                {deleting === user.user_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Excluir este usuário?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {user.nome_completo || user.email} — esta ação não pode ser desfeita. Permissões e
+                                  acessos por CPF associados também serão removidos.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDelete(user.user_id, user.nome_completo || user.email)}
+                                  className="bg-destructive hover:bg-destructive/90"
+                                >
+                                  Excluir
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

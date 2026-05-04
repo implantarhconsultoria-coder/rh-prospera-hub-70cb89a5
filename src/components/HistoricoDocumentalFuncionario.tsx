@@ -1,16 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { buscarHistoricoFuncionario } from '@/lib/documentoHistorico';
-import { openFile } from '@/lib/storageUrl';
+import { getFileUrl } from '@/lib/storageUrl';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Mail, Clock, User, Building2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import PdfDocumentViewer from '@/components/PdfDocumentViewer';
+import { FileText, Mail, Clock, User, Building2, Eye } from 'lucide-react';
+import { toast } from 'sonner';
 
-interface Props {
-  funcionarioId: string;
-}
+interface Props { funcionarioId: string; }
+
+const detectarBucket = (url: string): string => {
+  const m = url.match(/\/object\/(?:public|sign)\/([^/]+)\//);
+  if (m?.[1]) return m[1];
+  const lc = url.toLowerCase();
+  if (lc.includes('ferias')) return 'ferias-avisos';
+  if (lc.includes('atestado')) return 'atestados';
+  return 'documentos-funcionarios';
+};
 
 const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewing, setViewing] = useState<{ url: string; titulo: string; doc: any } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -21,16 +33,31 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     return () => { active = false; };
   }, [funcionarioId]);
 
-  if (loading) return <p className="text-sm text-muted-foreground py-4">Carregando histórico...</p>;
+  const abrir = async (doc: any) => {
+    if (!doc.arquivo_url) {
+      setViewing({ url: '', titulo: doc.tipo_documento || 'Documento', doc });
+      return;
+    }
+    try {
+      const bucket = detectarBucket(doc.arquivo_url);
+      const url = await getFileUrl(bucket, doc.arquivo_url);
+      if (!url) {
+        toast.error('Documento não localizado. Verifique o arquivo anexado.');
+        return;
+      }
+      setViewing({ url, titulo: doc.tipo_documento || 'Documento', doc });
+    } catch {
+      toast.error('Documento não localizado. Verifique o arquivo anexado.');
+    }
+  };
 
-  if (docs.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-        <p className="text-sm">Nenhum documento registrado ainda.</p>
-      </div>
-    );
-  }
+  if (loading) return <p className="text-sm text-muted-foreground py-4">Carregando histórico...</p>;
+  if (docs.length === 0) return (
+    <div className="text-center py-8 text-muted-foreground">
+      <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+      <p className="text-sm">Nenhum documento registrado ainda.</p>
+    </div>
+  );
 
   return (
     <div className="space-y-3">
@@ -62,14 +89,37 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
               {doc.destinatarios && <span className="ml-1">→ {doc.destinatarios}</span>}
             </div>
           )}
-          {doc.arquivo_url && (
-            <button
-              type="button"
-              onClick={() => openFile('documentos-funcionarios', doc.arquivo_url)}
-              className="text-[10px] text-primary underline mt-1 inline-block">Ver documento</button>
-          )}
+          <Button size="sm" variant="ghost" className="mt-1 h-7 text-xs" onClick={() => abrir(doc)}>
+            <Eye className="w-3 h-3 mr-1" /> Visualizar
+          </Button>
         </div>
       ))}
+
+      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">{viewing?.titulo}</DialogTitle>
+          </DialogHeader>
+          {viewing && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-muted/30 rounded-lg p-3">
+                <div><strong>Funcionário:</strong> {viewing.doc.funcionario_nome}</div>
+                <div><strong>Empresa:</strong> {viewing.doc.empresa_nome}</div>
+                <div><strong>Tipo:</strong> {viewing.doc.tipo_documento}</div>
+                <div><strong>Data:</strong> {new Date(viewing.doc.created_at).toLocaleString('pt-BR')}</div>
+                {viewing.doc.competencia && <div><strong>Competência:</strong> {viewing.doc.competencia}</div>}
+              </div>
+              {viewing.url ? (
+                <PdfDocumentViewer sourceUrl={viewing.url} title={viewing.titulo} />
+              ) : (
+                <div className="border border-dashed rounded-lg p-6 text-center text-sm text-muted-foreground">
+                  Pré-visualização indisponível. Sem arquivo anexado a este registro.
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
