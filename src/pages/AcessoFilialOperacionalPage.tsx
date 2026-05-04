@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
 /**
  * Atalho amigável: /operacional/sp | /operacional/praia-grande | /operacional/goiania
@@ -20,8 +20,9 @@ const FILIAL_SLUG_MAP: Record<string, string> = {
 };
 
 const AcessoFilialOperacionalPage: React.FC = () => {
-  const { filial = '' } = useParams<{ filial: string }>();
-  const slug = FILIAL_SLUG_MAP[filial.toLowerCase()];
+  const loc = useLocation();
+  const last = loc.pathname.split('/').filter(Boolean).pop() || '';
+  const slug = FILIAL_SLUG_MAP[last.toLowerCase()];
   if (!slug) return <Navigate to="/" replace />;
   return <Navigate to={`/acesso/${slug}`} replace />;
 };
