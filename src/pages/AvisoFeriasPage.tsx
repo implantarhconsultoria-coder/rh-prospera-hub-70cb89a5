@@ -662,6 +662,78 @@ Topac RH PRO`;
         </select>
       </div>
 
+      {/* === Funcionários ativos com cálculo automático de férias === */}
+      <div className="card-premium overflow-hidden">
+        <div className="p-4 border-b bg-muted/30 flex flex-wrap gap-3 items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-sm flex items-center gap-2">
+              <Plane className="w-4 h-4 text-primary" /> Funcionários — Férias a vencer
+            </h2>
+            <p className="text-xs text-muted-foreground">Cálculo automático com base na data de admissão. Gere o aviso direto sem precisar cadastrar manualmente.</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Input placeholder="Buscar..." value={funcSearch} onChange={e => setFuncSearch(e.target.value)} className="w-48 h-9" />
+            <select value={funcFilter} onChange={e => setFuncFilter(e.target.value as any)}
+              className="border rounded-lg px-3 py-2 text-xs bg-background text-foreground">
+              <option value="urgentes">Apenas urgentes/próximas</option>
+              <option value="sem_aviso">Sem aviso ativo</option>
+              <option value="todos">Todos os ativos</option>
+            </select>
+          </div>
+        </div>
+        <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-muted/50">
+              <tr className="border-b">
+                <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase">Funcionário</th>
+                <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase">Empresa</th>
+                <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase">Admissão</th>
+                <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase">Aquisitivo</th>
+                <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase">Limite p/ conceder</th>
+                <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase">Status</th>
+                <th className="px-3 py-2 text-left text-[10px] font-medium text-muted-foreground uppercase">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {funcionariosFiltrados.length === 0 && (
+                <tr><td colSpan={7} className="p-6 text-center text-muted-foreground text-xs">Nenhum funcionário encontrado.</td></tr>
+              )}
+              {funcionariosFiltrados.map(f => (
+                <tr key={f.emp.id} className="border-b hover:bg-muted/20">
+                  <td className="px-3 py-2 font-medium text-xs">
+                    {f.emp.name}
+                    <div className="text-[10px] text-muted-foreground">{f.emp.cargo}</div>
+                  </td>
+                  <td className="px-3 py-2 text-[11px]">{f.empresaNome}</td>
+                  <td className="px-3 py-2 text-[11px]">{f.emp.dataAdmissao ? formatDate(f.emp.dataAdmissao) : '—'}</td>
+                  <td className="px-3 py-2 text-[11px]">
+                    {f.aquisitivoIni ? `${formatDate(f.aquisitivoIni)} → ${formatDate(f.aquisitivoFim)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-[11px]">{f.limiteConcessao ? formatDate(f.limiteConcessao) : '—'}</td>
+                  <td className="px-3 py-2">
+                    <Badge className={`text-[10px] ${f.cor}`}>{f.label}</Badge>
+                    {f.temAvisoAtivo && <Badge variant="outline" className="ml-1 text-[10px] border-success text-success">Aviso ativo</Badge>}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="default" className="h-7 text-[11px]" onClick={() => gerarAvisoDireto(f)}>
+                        <Plus className="w-3 h-3 mr-1" /> Gerar Aviso
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Imprimir rascunho" onClick={() => imprimirAvisoFuncionario(f)}>
+                        <Printer className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="p-2 text-[11px] text-muted-foreground border-t bg-muted/20">
+          {funcionariosFiltrados.length} funcionário(s) • Limite legal CLT: férias devem ser concedidas em até 11 meses após o fim do período aquisitivo.
+        </div>
+      </div>
+
       <div className="card-premium overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
