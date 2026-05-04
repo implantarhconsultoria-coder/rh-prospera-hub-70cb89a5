@@ -92,6 +92,7 @@ import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import AcessoCpfPage from "@/pages/AcessoCpfPage";
 import AcessoModuloCpfPage from "@/pages/AcessoModuloCpfPage";
+import AcessoFilialOperacionalPage from "@/pages/AcessoFilialOperacionalPage";
 import { FinanceiroCpfLayout, FaturamentoCpfLayout } from "@/components/CpfPortalLayout";
 import SetorCpfPage from "@/pages/SetorCpfPage";
 import LinksAcessoCpfPage from "@/pages/admin/LinksAcessoCpfPage";
@@ -289,6 +290,14 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <Routes>
+              {/* ========== Atalhos fixos por filial — vão para tela de CPF do slug ========== */}
+              <Route path="/operacional/sp" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/matriz" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/praia-grande" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/praia" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/pg" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/goiania" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/go" element={<AcessoFilialOperacionalPage />} />
               {/* ========== PORTAL OPERACIONAL (canônico) — token único por CPF ========== */}
               <Route path="/operacional/:token" element={<MecanicoLayout />}>
                 <Route index element={<MecanicoHomePage />} />

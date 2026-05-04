@@ -302,22 +302,37 @@ const AppOperacionalPage: React.FC = () => {
 
         <TabsContent value="links" className="space-y-4">
           <Card className="p-4 bg-blue-500/5 border-blue-500/20">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h3 className="font-bold text-sm flex items-center gap-2"><Link2 className="w-4 h-4 text-blue-600" />Link único Goiânia (acesso por CPF)</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xl">
-                  Link permanente compartilhado: o colaborador abre, digita o CPF e o app valida pelo banco. Permite uso simultâneo, sem misturar dados entre usuários.
-                </p>
-                <code className="block mt-2 text-[11px] bg-muted px-2 py-1 rounded">{`${window.location.origin}/g`}</code>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/g`); toast.success('Link único copiado'); }}>
-                  <Copy className="w-3.5 h-3.5 mr-1" />Copiar
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => window.open(`${window.location.origin}/g`, '_blank')}>
-                  <ExternalLink className="w-3.5 h-3.5 mr-1" />Abrir
-                </Button>
-              </div>
+            <h3 className="font-bold text-sm flex items-center gap-2 mb-3">
+              <Link2 className="w-4 h-4 text-blue-600" />
+              Links permanentes por Filial — acesso por CPF
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3 max-w-2xl">
+              Cada link abre a tela de CPF da filial correta. Funcionário ativo daquela filial entra; CPF de outra filial, inativo, em férias ou bloqueado é recusado.
+              Sessão por dispositivo válida até 23:59. Links não expiram.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                { label: 'São Paulo / Matriz', path: '/operacional/sp', cor: 'from-primary to-blue-600' },
+                { label: 'Praia Grande', path: '/operacional/praia-grande', cor: 'from-cyan-500 to-blue-600' },
+                { label: 'Goiânia', path: '/operacional/goiania', cor: 'from-emerald-500 to-teal-600' },
+              ].map(l => {
+                const url = `${window.location.origin}${l.path}`;
+                return (
+                  <div key={l.path} className={`rounded-xl p-3 bg-gradient-to-br ${l.cor} text-white shadow-lg`}>
+                    <p className="text-[11px] uppercase tracking-wider opacity-80">Link Operacional</p>
+                    <p className="font-bold text-sm mb-2">{l.label}</p>
+                    <code className="block text-[11px] bg-black/20 px-2 py-1 rounded mb-2 truncate" title={url}>{url}</code>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="secondary" className="h-7 text-[11px]" onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copiado'); }}>
+                        <Copy className="w-3 h-3 mr-1" />Copiar
+                      </Button>
+                      <Button size="sm" variant="secondary" className="h-7 text-[11px]" onClick={() => window.open(url, '_blank')}>
+                        <ExternalLink className="w-3 h-3 mr-1" />Abrir
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
