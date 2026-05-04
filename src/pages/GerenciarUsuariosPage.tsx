@@ -63,7 +63,7 @@ const GerenciarUsuariosPage: React.FC = () => {
     setLoading(true);
     const { data: profiles, error: pErr } = await supabase
       .from('profiles')
-      .select('user_id, email, nome_completo, created_at')
+      .select('user_id, email, nome_completo, created_at, cpf, cpf_clean')
       .order('created_at', { ascending: false });
 
     if (pErr) {
@@ -76,13 +76,15 @@ const GerenciarUsuariosPage: React.FC = () => {
       .from('user_roles')
       .select('id, user_id, role');
 
-    const merged: UserWithRole[] = (profiles || []).map(p => {
+    const merged: UserWithRole[] = (profiles || []).map((p: any) => {
       const r = roles?.find(r => r.user_id === p.user_id);
       return {
         user_id: p.user_id,
         email: p.email,
         nome_completo: p.nome_completo,
         created_at: p.created_at,
+        cpf: p.cpf || null,
+        cpf_clean: p.cpf_clean || null,
         role: (r?.role as AppRole) || null,
         role_id: r?.id || null,
       };
