@@ -56,6 +56,8 @@ const GerenciarUsuariosPage: React.FC = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [savingCpf, setSavingCpf] = useState<string | null>(null);
+  const [cpfDrafts, setCpfDrafts] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
