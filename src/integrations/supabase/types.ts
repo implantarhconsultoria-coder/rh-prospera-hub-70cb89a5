@@ -3851,6 +3851,8 @@ export type Database = {
       profiles: {
         Row: {
           cargo: string | null
+          cpf: string | null
+          cpf_clean: string | null
           created_at: string
           email: string
           id: string
@@ -3861,6 +3863,8 @@ export type Database = {
         }
         Insert: {
           cargo?: string | null
+          cpf?: string | null
+          cpf_clean?: string | null
           created_at?: string
           email: string
           id?: string
@@ -3871,6 +3875,8 @@ export type Database = {
         }
         Update: {
           cargo?: string | null
+          cpf?: string | null
+          cpf_clean?: string | null
           created_at?: string
           email?: string
           id?: string
