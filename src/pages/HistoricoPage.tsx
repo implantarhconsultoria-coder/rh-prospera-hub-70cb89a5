@@ -146,7 +146,10 @@ const HistoricoPage: React.FC = () => {
 
   const abrirArquivo = async (url: string) => {
     try {
-      const finalUrl = await getFileUrl(url);
+      // Tenta detectar bucket pela URL; se vier só path com prefixo de funcionário, usa bucket padrão
+      const m = url.match(/\/object\/(?:public|sign)\/([^/]+)\//);
+      const bucket = m?.[1] || 'documentos-funcionarios';
+      const finalUrl = await getFileUrl(bucket, url);
       if (finalUrl) window.open(finalUrl, '_blank');
       else toast.error('Não foi possível abrir o arquivo');
     } catch {
