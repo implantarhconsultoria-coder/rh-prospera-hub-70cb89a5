@@ -5311,6 +5311,10 @@ export type Database = {
       }
       calc_inss: { Args: { p_base: number }; Returns: number }
       calc_irrf: { Args: { p_base: number }; Returns: number }
+      fechamento_filial_breakdown: {
+        Args: { p_company_id: string; p_competencia: string }
+        Returns: Json
+      }
       fechamento_filial_executar: {
         Args: {
           p_company_id: string
