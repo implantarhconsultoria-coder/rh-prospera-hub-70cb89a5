@@ -31,7 +31,7 @@ const TIPOS_DISPONIVEIS: { v: string; l: string }[] = [
 ];
 
 const HistoricoPage: React.FC = () => {
-  const { companies, userRole } = useApp();
+  const { companies } = useApp();
   const [tipo, setTipo] = useState<string>('todos');
   const [empresaId, setEmpresaId] = useState('');
   const [funcionarioBusca, setFuncionarioBusca] = useState('');

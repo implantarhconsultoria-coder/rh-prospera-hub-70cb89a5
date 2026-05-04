@@ -23,11 +23,9 @@ const ConfiguracoesPage: React.FC = () => {
   const links = [
     { name: 'Plataforma Administrativa', path: '/admin', tag: 'Admin', color: 'bg-red-500' },
     { name: 'Portal das Filiais (Praia Grande / Goiânia)', path: '/filial', tag: 'Filial', color: 'bg-blue-500' },
-    { name: 'Portal de Campo', path: '/campo', tag: 'Campo', color: 'bg-purple-500' },
-    { name: 'Portal Operacional', path: '/operacional', tag: 'Operacional', color: 'bg-teal-500' },
-    { name: 'App Mecânicos (link individual gerado em /admin/app-operacional)', path: '/admin/app-operacional', tag: 'Mecânicos', color: 'bg-orange-500' },
-    { name: 'Portal de Faturamento (login: FAT • senha: TOPAC2026)', path: '/faturamento', tag: 'Faturamento', color: 'bg-indigo-500' },
-    { name: 'Portal Financeiro (login: FIN • senha: TOPAC2026)', path: '/financeiro', tag: 'Financeiro', color: 'bg-cyan-600' },
+    { name: 'Portal Operacional / Campo (acesso por CPF)', path: '/operacional', tag: 'Operacional', color: 'bg-teal-500' },
+    { name: 'Portal de Faturamento', path: '/faturamento', tag: 'Faturamento', color: 'bg-indigo-500' },
+    { name: 'Portal Financeiro', path: '/financeiro', tag: 'Financeiro', color: 'bg-cyan-600' },
   ];
 
   const copy = async (txt: string, key: string) => {
@@ -90,10 +88,9 @@ const ConfiguracoesPage: React.FC = () => {
           })}
         </div>
         <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
-          <p><strong>Acessos de teste criados:</strong></p>
-          <p>• <span className="font-mono bg-background px-1.5 py-0.5 rounded">FAT</span> + senha <span className="font-mono bg-background px-1.5 py-0.5 rounded">TOPAC2026</span> → vai direto para <span className="font-mono">/faturamento</span></p>
-          <p>• <span className="font-mono bg-background px-1.5 py-0.5 rounded">FIN</span> + senha <span className="font-mono bg-background px-1.5 py-0.5 rounded">TOPAC2026</span> → vai direto para <span className="font-mono">/financeiro</span></p>
-          <p className="text-muted-foreground pt-1">Estes acessos têm permissão somente de leitura nos respectivos módulos.</p>
+          <p className="text-muted-foreground">
+            Os portais Faturamento e Financeiro também estão disponíveis para os usuários habilitados após o login normal.
+          </p>
         </div>
       </Card>
 
