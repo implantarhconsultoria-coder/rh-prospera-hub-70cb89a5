@@ -92,6 +92,7 @@ import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import AcessoCpfPage from "@/pages/AcessoCpfPage";
 import AcessoModuloCpfPage from "@/pages/AcessoModuloCpfPage";
+import AbastecerPublicoPage from "@/pages/AbastecerPublicoPage";
 import AcessoFilialOperacionalPage from "@/pages/AcessoFilialOperacionalPage";
 import { FinanceiroCpfLayout, FaturamentoCpfLayout } from "@/components/CpfPortalLayout";
 import SetorCpfPage from "@/pages/SetorCpfPage";
@@ -340,6 +341,8 @@ const App = () => (
                 <Route path="galoes" element={<MecanicoGaloesPage />} />
                 <Route path="historico" element={<MecanicoHistoricoPage />} />
               </Route>
+              {/* QR público de abastecimento de combustível */}
+              <Route path="/abastecer/:codigo" element={<AbastecerPublicoPage />} />
               {/* Link único permanente por CPF (Goiânia e demais filiais com link compartilhado) */}
               <Route path="/g" element={<AcessoCpfPage />} />
               {/* Links permanentes por módulo/unidade — acesso por CPF */}
