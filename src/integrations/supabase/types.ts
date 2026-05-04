@@ -5150,6 +5150,57 @@ export type Database = {
       }
     }
     Functions: {
+      _cpf_check_modulo: {
+        Args: { p_cpf: string; p_modulo: string }
+        Returns: {
+          acesso_atualizado_em: string | null
+          acesso_motivo: string | null
+          acesso_status: string
+          agencia: string
+          banco: string
+          cargo: string
+          categoria: string
+          celular: string
+          codigo: string
+          company_id: string
+          conta: string
+          cpf: string
+          created_at: string
+          data_admissao: string | null
+          data_exame_medico: string | null
+          email: string
+          endereco: string
+          id: string
+          insalubridade_ativa: boolean
+          insalubridade_valor: number
+          inss: number | null
+          liquido: number | null
+          matricula_esocial: string
+          nome: string
+          observacoes: string
+          pix: string
+          referencia_competencia: string | null
+          registro: string
+          rg: string
+          salario_base: number
+          setor: string | null
+          status: string
+          telefone: string
+          updated_at: string
+          va_ativo: boolean
+          va_mensal: number
+          vr_ativo: boolean
+          vr_diario: number
+          vt_ativo: boolean
+          vt_diario: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "funcionarios"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       gen_tecnico_access_token: { Args: never; Returns: string }
       get_user_empresas: { Args: never; Returns: string[] }
       has_role: {
@@ -5159,6 +5210,12 @@ export type Database = {
         }
         Returns: boolean
       }
+      portal_cpf_almoxarifado: { Args: { p_cpf: string }; Returns: Json }
+      portal_cpf_dados_filial: {
+        Args: { p_cpf: string; p_modulo?: string }
+        Returns: Json
+      }
+      portal_cpf_mecanico_token: { Args: { p_cpf: string }; Returns: Json }
       validar_acesso_cpf: {
         Args: { p_cpf: string; p_token: string }
         Returns: Json
