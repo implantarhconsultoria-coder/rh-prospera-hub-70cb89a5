@@ -35,6 +35,8 @@ const MecanicoAbastecimentoPage: React.FC = () => {
   const [vale, setVale] = useState<ValeData | null>(null);
   const [fotoBomba, setFotoBomba] = useState<Blob | null>(null);
   const [fotoUrl, setFotoUrl] = useState<string>('');
+  const [fotoPainel, setFotoPainel] = useState<Blob | null>(null);
+  const [fotoPainelUrl, setFotoPainelUrl] = useState<string>('');
   const [valor, setValor] = useState('');
   const [litros, setLitros] = useState('');
   const [combustivel, setCombustivel] = useState('Diesel S10');
