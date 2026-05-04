@@ -155,7 +155,7 @@ const AcessoModuloCpfPage: React.FC = () => {
       const expiresAt = fim.getTime();
 
       // Operacional vai para o portal canônico /operacional/:token
-      if (data.modulo === 'operacional' && data.tecnico_token) {
+      if ((data.area === 'operacional' || data.modulo === 'operacional') && data.tecnico_token) {
         const dest = `/operacional/${data.tecnico_token}`;
         try {
           localStorage.setItem(`cpf_device_session_${slug}`, JSON.stringify({ expiresAt, redirect: dest }));
@@ -164,9 +164,11 @@ const AcessoModuloCpfPage: React.FC = () => {
         return;
       }
 
-      // Sessão isolada por CPF (válida para financeiro, faturamento, rh, almoxarifado, mecanicos, filial)
+      // Sessão isolada por CPF
       const sessao = {
         modulo: data.modulo,
+        area: data.area,
+        filial: data.filial || null,
         unidade: data.unidade,
         link_nome: data.link_nome,
         usuario: data.usuario,
@@ -175,16 +177,19 @@ const AcessoModuloCpfPage: React.FC = () => {
       };
       sessionStorage.setItem('cpf_session', JSON.stringify(sessao));
 
-      // Cada módulo tem seu portal CPF dedicado
+      const area = data.area || data.modulo || '';
+      const filialQS = data.filial ? `?filial=${data.filial}` : '';
+
       const destino: Record<string, string> = {
-        financeiro:   '/financeiro-cpf',
-        faturamento:  '/faturamento-cpf',
-        rh:           '/setor-cpf/rh',
-        almoxarifado: '/setor-cpf/almoxarifado',
-        mecanicos:    '/setor-cpf/mecanicos',
-        filial:       '/setor-cpf/filial',
+        financeiro:   `/financeiro-cpf${filialQS}`,
+        faturamento:  `/faturamento-cpf${filialQS}`,
+        rh:           `/setor-cpf/rh${filialQS}`,
+        almoxarifado: `/setor-cpf/almoxarifado${filialQS}`,
+        documentos_rh: `/setor-cpf/documentos-rh${filialQS}`,
+        mecanicos:    `/setor-cpf/mecanicos${filialQS}`,
+        filial:       `/setor-cpf/filial${filialQS}`,
       };
-      const dest = destino[data.modulo] || `/setor-cpf/${data.modulo}`;
+      const dest = destino[area] || `/setor-cpf/${area}${filialQS}`;
       try {
         localStorage.setItem(`cpf_device_session_${slug}`, JSON.stringify({ expiresAt, redirect: dest }));
       } catch { /* noop */ }
