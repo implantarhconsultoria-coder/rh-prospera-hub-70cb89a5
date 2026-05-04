@@ -10,7 +10,7 @@ import { getBrowserLocation } from '@/lib/browserGeo';
 import ConfirmacaoVisual from '@/components/ConfirmacaoVisual';
 import { Html5Qrcode } from 'html5-qrcode';
 
-type Step = 'idle' | 'scan' | 'confirm' | 'photo' | 'fill' | 'done';
+type Step = 'idle' | 'scan' | 'confirm' | 'photo' | 'photo_painel' | 'fill' | 'done';
 
 interface ValeData {
   vale: { id: string; codigo: string; valor_limite: number; litros_limite: number; tipo?: string };
