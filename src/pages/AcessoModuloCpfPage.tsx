@@ -156,10 +156,17 @@ const AcessoModuloCpfPage: React.FC = () => {
       const fim = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
       const expiresAt = fim.getTime();
 
-      // Operacional vai para o portal canônico /operacional/:token
-      if ((data.area === 'operacional' || data.modulo === 'operacional') && data.tecnico_token) {
-        const dest = `/operacional/${data.tecnico_token}`;
+      // Operacional: token é dado complementar. Se faltar, cai no portal de mecânicos por CPF.
+      if (data.area === 'operacional' || data.modulo === 'operacional') {
+        const dest = data.tecnico_token
+          ? `/operacional/${data.tecnico_token}`
+          : `/setor-cpf/mecanicos${data.filial ? `?filial=${data.filial}` : ''}`;
         try {
+          sessionStorage.setItem('cpf_session', JSON.stringify({
+            modulo: data.modulo, area: data.area, filial: data.filial || null,
+            unidade: data.unidade, link_nome: data.link_nome, usuario: data.usuario,
+            ts: Date.now(), expiresAt,
+          }));
           localStorage.setItem(`cpf_device_session_${slug}`, JSON.stringify({ expiresAt, redirect: dest }));
         } catch { /* noop */ }
         navigate(dest, { replace: true });
