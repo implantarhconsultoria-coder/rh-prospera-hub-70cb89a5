@@ -3779,6 +3779,45 @@ export type Database = {
           },
         ]
       }
+      postos: {
+        Row: {
+          ativo: boolean
+          cidade: string | null
+          cnpj: string | null
+          created_at: string
+          endereco: string | null
+          id: string
+          nome: string
+          observacao: string | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cidade?: string | null
+          cnpj?: string | null
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          nome: string
+          observacao?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cidade?: string | null
+          cnpj?: string | null
+          created_at?: string
+          endereco?: string | null
+          id?: string
+          nome?: string
+          observacao?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       prestadores: {
         Row: {
           banco: string | null
@@ -4961,6 +5000,8 @@ export type Database = {
         Row: {
           codigo: string
           created_at: string
+          deleted_at: string | null
+          deleted_by_nome: string | null
           emitido_por: string | null
           emitido_por_nome: string
           id: string
@@ -4968,6 +5009,7 @@ export type Database = {
           observacao: string
           posto_cnpj: string
           posto_endereco: string
+          posto_id: string | null
           posto_nome: string
           status: string
           tecnico_id: string | null
@@ -4982,6 +5024,8 @@ export type Database = {
         Insert: {
           codigo: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_nome?: string | null
           emitido_por?: string | null
           emitido_por_nome?: string
           id?: string
@@ -4989,6 +5033,7 @@ export type Database = {
           observacao?: string
           posto_cnpj?: string
           posto_endereco?: string
+          posto_id?: string | null
           posto_nome?: string
           status?: string
           tecnico_id?: string | null
@@ -5003,6 +5048,8 @@ export type Database = {
         Update: {
           codigo?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_nome?: string | null
           emitido_por?: string | null
           emitido_por_nome?: string
           id?: string
@@ -5010,6 +5057,7 @@ export type Database = {
           observacao?: string
           posto_cnpj?: string
           posto_endereco?: string
+          posto_id?: string | null
           posto_nome?: string
           status?: string
           tecnico_id?: string | null
@@ -5021,7 +5069,15 @@ export type Database = {
           valor_limite?: number
           veiculo_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vales_combustivel_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       veiculos: {
         Row: {
@@ -5207,6 +5263,28 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      fechamento_filial_executar: {
+        Args: {
+          p_company_id: string
+          p_competencia: string
+          p_user_id: string
+          p_user_nome: string
+        }
+        Returns: Json
+      }
+      fechamento_filial_reabrir: {
+        Args: {
+          p_fechamento_id: string
+          p_motivo: string
+          p_user_id: string
+          p_user_nome: string
+        }
+        Returns: Json
+      }
+      fechamento_filial_sincronizar: {
+        Args: { p_company_id: string; p_competencia: string }
+        Returns: Json
+      }
       gen_tecnico_access_token: { Args: never; Returns: string }
       get_user_empresas: { Args: never; Returns: string[] }
       has_role: {
@@ -5222,12 +5300,30 @@ export type Database = {
         Returns: Json
       }
       portal_cpf_mecanico_token: { Args: { p_cpf: string }; Returns: Json }
+      registrar_abastecimento_publico: {
+        Args: {
+          p_codigo: string
+          p_combustivel: string
+          p_cpf: string
+          p_foto_bomba_url: string
+          p_foto_painel_url: string
+          p_km: number
+          p_litros: number
+          p_placa: string
+          p_valor: number
+        }
+        Returns: Json
+      }
       validar_acesso_cpf: {
         Args: { p_cpf: string; p_token: string }
         Returns: Json
       }
       validar_acesso_cpf_slug: {
         Args: { p_cpf: string; p_slug: string }
+        Returns: Json
+      }
+      validar_qr_combustivel_publico: {
+        Args: { p_codigo: string }
         Returns: Json
       }
     }
