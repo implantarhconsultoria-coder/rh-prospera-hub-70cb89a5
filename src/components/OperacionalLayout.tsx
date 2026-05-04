@@ -21,9 +21,9 @@ const OperacionalLayout: React.FC = () => {
 
   if (!userRole) return <AguardandoAcesso />;
 
-  if (userRole !== 'operacional') {
-    const redirect = userRole === 'admin' ? '/'
-      : userRole === 'tecnico_campo' ? '/campo'
+  // Permitir admin OU operacional (admin pode usar o dispatcher)
+  if (userRole !== 'operacional' && userRole !== 'admin') {
+    const redirect = userRole === 'tecnico_campo' ? '/'
       : userRole?.startsWith('filial_') ? '/filial'
       : '/';
     return <Navigate to={redirect} replace />;
