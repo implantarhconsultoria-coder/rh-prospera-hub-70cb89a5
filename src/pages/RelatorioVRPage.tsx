@@ -69,6 +69,16 @@ const RelatorioVRPage: React.FC = () => {
     navigate(`/relatorio-vr-impressao?empresa=${selectedCompany}&competencia=${competencia}`);
   };
 
+  const handlePrintAll = () => {
+    if (companies.length === 0) { toast.error('Nenhuma empresa cadastrada'); return; }
+    companies.forEach(c => {
+      getOrCreateEntries(c.id, competencia);
+      addBenefitReport({ type: 'vr', companyId: c.id, competencia });
+    });
+    const ids = companies.map(c => c.id).join(',');
+    navigate(`/relatorio-vr-impressao?empresas=${ids}&competencia=${competencia}`);
+  };
+
   const handlePrintIndividual = (employeeId: string) => {
     navigate(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${employeeId}&tipo=vr`);
   };
@@ -112,8 +122,11 @@ const RelatorioVRPage: React.FC = () => {
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de VR
         </Button>
         {generated && (
-          <Button onClick={handlePrint} variant="outline"><FileText className="w-4 h-4 mr-2" /> Imprimir / PDF</Button>
+          <Button onClick={handlePrint} variant="outline"><FileText className="w-4 h-4 mr-2" /> Imprimir / PDF (empresa selecionada)</Button>
         )}
+        <Button onClick={handlePrintAll} variant="outline" title="1 empresa por página">
+          <FileText className="w-4 h-4 mr-2" /> Imprimir TODAS as empresas
+        </Button>
       </div>
 
       {generated && company && (

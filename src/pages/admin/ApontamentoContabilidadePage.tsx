@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Save, Printer, FileText, Loader2, RefreshCw } from 'lucide-react';
+import { ClipboardList, Save, Printer, FileText, Loader2, RefreshCw, Send } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCompetencia } from '@/lib/workingDays';
@@ -465,6 +465,62 @@ const ApontamentoContabilidadePage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const enviarParaContabilidade = async () => {
+    if (!company) { toast.error('Selecione uma empresa'); return; }
+    if (items.length === 0) { toast.error('Sem itens para enviar'); return; }
+
+    const isGyn = /goi[âa]nia/i.test(company.name);
+    let para: string[] = [];
+    let cc: string[] = ['robson@topac.com.br'];
+
+    if (isGyn) {
+      para = ['gyn@topac.com.br', 'requisicao@incocontabilidade.com.br'];
+    } else {
+      const { data: cfg } = await supabase
+        .from('config_emails_contabilidade' as any)
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      const c = (cfg as any) || {};
+      if (c.email_marisa) para.push(c.email_marisa);
+      if (c.email_robson && !cc.includes(c.email_robson)) cc.push(c.email_robson);
+      if (c.emails_copia) {
+        c.emails_copia.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
+          .forEach((e: string) => { if (!cc.includes(e)) cc.push(e); });
+      }
+      if (para.length === 0) {
+        toast.error('Configure os e-mails da contabilidade em Configurações → E-mails Contabilidade');
+        return;
+      }
+    }
+
+    // 1) gera e baixa o CSV automaticamente para anexar
+    exportarExcel();
+
+    // 2) registra no histórico
+    await registrarAcao({
+      modulo: 'contabilidade',
+      entidade: 'apontamento_contabilidade',
+      entidadeId: apontamentoId || undefined,
+      acao: 'enviou',
+      depois: { para, cc, total_geral: totalGeral, itens: items.length, competencia, empresa: company.name },
+      observacao: `Envio do apontamento ${formatCompetencia(competencia)} para contabilidade`,
+    });
+
+    // 3) abre o cliente de e-mail
+    const subject = encodeURIComponent(`Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`);
+    const body = encodeURIComponent(
+      `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
+      `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
+      `IMPORTANTE: o arquivo do apontamento foi baixado automaticamente em seu computador. Por favor, anexe-o a este e-mail antes de enviar.\n\n` +
+      `Atenciosamente,\nDepartamento Pessoal - TOPAC`
+    );
+    const mailto = `mailto:${para.join(',')}?cc=${cc.join(',')}&subject=${subject}&body=${body}`;
+    window.location.href = mailto;
+    toast.success('Arquivo baixado. Anexe ao e-mail antes de enviar.');
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* CSS de impressão A4 paisagem cobrindo a folha inteira */}
@@ -483,11 +539,12 @@ const ApontamentoContabilidadePage: React.FC = () => {
             box-shadow: none !important; border: none !important;
             background: #fff !important; color: #000 !important;
           }
-          .apont-print table { width: 100% !important; table-layout: fixed; border-collapse: collapse; font-size: 8.5px; }
+          .apont-print table { width: 100% !important; table-layout: auto; border-collapse: collapse; font-size: 8px; }
           .apont-print th, .apont-print td {
-            padding: 3px !important; border: 1px solid #000 !important;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            padding: 2px 3px !important; border: 1px solid #000 !important;
+            white-space: normal !important; word-break: break-word; overflow: visible !important;
           }
+          .apont-print input { border: none !important; padding: 0 !important; font-size: 8px !important; background: transparent !important; width: auto !important; }
           .apont-print thead { display: table-header-group; }
           .apont-print tr { page-break-inside: avoid; }
           .no-print, aside, nav, header, .sidebar, .lovable-badge, [data-sonner-toaster] { display: none !important; }
@@ -532,6 +589,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
         </button>
         <button onClick={imprimir} className="btn-secondary inline-flex items-center gap-2"><Printer className="w-4 h-4" /> Imprimir / PDF</button>
         <button onClick={exportarExcel} className="btn-secondary inline-flex items-center gap-2"><FileText className="w-4 h-4" /> Exportar CSV</button>
+        <button onClick={enviarParaContabilidade} disabled={!company || items.length === 0}
+          className="btn-primary inline-flex items-center gap-2">
+          <Send className="w-4 h-4" /> Enviar para Contabilidade
+        </button>
       </div>
 
       <div className="card-premium p-5 apont-print">
