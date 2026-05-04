@@ -52,7 +52,10 @@ const MecanicoHomePage: React.FC = () => {
     })();
   }, [call]);
 
-  const go = (sub: string) => navigate(`/m/${token}/${sub}`);
+  const go = (sub: string) => {
+    const base = window.location.pathname.startsWith('/operacional/') ? `/operacional/${token}` : `/m/${token}`;
+    navigate(`${base}/${sub}`);
+  };
   const veic = veiculoSelecionado;
 
   return (
