@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { FileCheck, Lock, Unlock, RefreshCw, ArrowRight, Building2, AlertTriangle, CheckCircle2, Clock, Wand2, Printer } from 'lucide-react';
+import { FileCheck, Lock, Unlock, RefreshCw, ArrowRight, Building2, AlertTriangle, CheckCircle2, Clock, Wand2, Printer, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/lib/calculations';
@@ -270,6 +270,9 @@ const FechamentosFiliaisPage: React.FC = () => {
                       <div className="flex flex-wrap gap-1">
                         <Button variant="outline" size="sm" onClick={() => navigate(`/admin/lancamentos?empresa=${l.company.id}&comp=${competencia}`)} title="Abrir fechamento">
                           <ArrowRight className="w-3.5 h-3.5 mr-1" /> Abrir
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => navigate(`/admin/fechamentos-filiais/${l.company.id}/conferencia?comp=${competencia}`)} title="Conferir detalhamento contábil">
+                          <Eye className="w-3.5 h-3.5 mr-1" /> Conferir
                         </Button>
                         <Button variant="ghost" size="sm" disabled={busy} onClick={() => sincronizarUma(l.company.id)} title="Recalcular">
                           <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
