@@ -20,13 +20,54 @@ const ConfiguracoesPage: React.FC = () => {
     supabase.from('config_acesso_horario').select('*').limit(1).maybeSingle().then(({ data }) => setHorario(data));
   }, []);
 
-  const links = [
-    { name: 'Plataforma Administrativa', path: '/admin', tag: 'Admin', color: 'bg-red-500' },
-    { name: 'Portal Operacional — São Paulo / Matriz', path: '/operacional/sp', tag: 'Operacional SP', color: 'bg-blue-500' },
-    { name: 'Portal Operacional — Praia Grande', path: '/operacional/praia-grande', tag: 'Operacional PG', color: 'bg-cyan-500' },
-    { name: 'Portal Operacional — Goiânia', path: '/operacional/goiania', tag: 'Operacional GO', color: 'bg-emerald-500' },
-    { name: 'Portal Financeiro (acesso por CPF)', path: '/acesso/financeiro', tag: 'Financeiro', color: 'bg-cyan-600' },
-    { name: 'Portal Faturamento (acesso por CPF)', path: '/acesso/faturamento', tag: 'Faturamento', color: 'bg-indigo-500' },
+  const grupos: { titulo: string; cor: string; links: { name: string; path: string }[] }[] = [
+    {
+      titulo: 'Operacional / Mecânicos', cor: 'bg-blue-500', links: [
+        { name: 'São Paulo / Matriz', path: '/operacional/sp' },
+        { name: 'Praia Grande',        path: '/operacional/praia-grande' },
+        { name: 'Goiânia',             path: '/operacional/goiania' },
+      ],
+    },
+    {
+      titulo: 'Faturamento', cor: 'bg-indigo-500', links: [
+        { name: 'São Paulo / Matriz', path: '/faturamento/sp' },
+        { name: 'Praia Grande',        path: '/faturamento/praia-grande' },
+        { name: 'Goiânia',             path: '/faturamento/goiania' },
+      ],
+    },
+    {
+      titulo: 'Financeiro', cor: 'bg-cyan-600', links: [
+        { name: 'São Paulo / Matriz', path: '/financeiro/sp' },
+        { name: 'Praia Grande',        path: '/financeiro/praia-grande' },
+        { name: 'Goiânia',             path: '/financeiro/goiania' },
+      ],
+    },
+    {
+      titulo: 'RH / Filiais', cor: 'bg-rose-500', links: [
+        { name: 'São Paulo / Matriz', path: '/rh/sp' },
+        { name: 'Praia Grande',        path: '/rh/praia-grande' },
+        { name: 'Goiânia',             path: '/rh/goiania' },
+      ],
+    },
+    {
+      titulo: 'Almoxarifado', cor: 'bg-amber-600', links: [
+        { name: 'São Paulo / Matriz', path: '/almoxarifado/sp' },
+        { name: 'Praia Grande',        path: '/almoxarifado/praia-grande' },
+        { name: 'Goiânia',             path: '/almoxarifado/goiania' },
+      ],
+    },
+    {
+      titulo: 'Documentos RH (EPI / Uniformes)', cor: 'bg-fuchsia-500', links: [
+        { name: 'São Paulo / Matriz', path: '/documentos-rh/sp' },
+        { name: 'Praia Grande',        path: '/documentos-rh/praia-grande' },
+        { name: 'Goiânia',             path: '/documentos-rh/goiania' },
+      ],
+    },
+    {
+      titulo: 'Plataforma Administrativa', cor: 'bg-red-500', links: [
+        { name: 'Acesso Admin (login normal)', path: '/admin' },
+      ],
+    },
   ];
 
   const copy = async (txt: string, key: string) => {
@@ -71,25 +112,32 @@ const ConfiguracoesPage: React.FC = () => {
           Distribua estes links aos times. Acesso por CPF — sem necessidade de senha. Sessão por dispositivo válida até 23:59.
           Domínio detectado automaticamente: <span className="font-mono">{origin}</span>
         </p>
-        <div className="space-y-2">
-          {links.map(l => {
-            const fullUrl = origin + l.path;
-            return (
-              <div key={l.path} className="flex items-center gap-2 p-3 border border-border rounded-lg hover:bg-muted/30">
-                <Badge className={`${l.color} text-white whitespace-nowrap`}>{l.tag}</Badge>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{l.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono truncate">{fullUrl}</div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => copy(fullUrl, l.path)}>
-                  {copied === l.path ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => window.open(fullUrl, '_blank')}>
-                  Abrir
-                </Button>
+        <div className="space-y-5">
+          {grupos.map(g => (
+            <div key={g.titulo} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge className={`${g.cor} text-white whitespace-nowrap`}>{g.titulo}</Badge>
+                <span className="text-[11px] text-muted-foreground">link único · acesso por CPF + permissão do Admin</span>
               </div>
-            );
-          })}
+              {g.links.map(l => {
+                const fullUrl = origin + l.path;
+                return (
+                  <div key={l.path} className="flex items-center gap-2 p-3 border border-border rounded-lg hover:bg-muted/30">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{l.name}</div>
+                      <div className="text-xs text-muted-foreground font-mono truncate">{fullUrl}</div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => copy(fullUrl, l.path)}>
+                      {copied === l.path ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => window.open(fullUrl, '_blank')}>
+                      Abrir
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </Card>
 

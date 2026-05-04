@@ -11,7 +11,22 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const MODULOS = ['operacional','financeiro','faturamento','rh','almoxarifado','mecanicos','filial','compras','chamados','abastecimento','ponto','km','documentos','fechamento'];
+const MODULOS = [
+  // Operacional / Mecânicos
+  'operacional_sp', 'operacional_praia_grande', 'operacional_goiania',
+  // Faturamento
+  'faturamento_sp', 'faturamento_praia_grande', 'faturamento_goiania',
+  // Financeiro
+  'financeiro_sp', 'financeiro_praia_grande', 'financeiro_goiania',
+  // RH
+  'rh_sp', 'rh_praia_grande', 'rh_goiania',
+  // Almoxarifado
+  'almoxarifado_sp', 'almoxarifado_praia_grande', 'almoxarifado_goiania',
+  // Documentos RH (EPI / Uniformes)
+  'documentos_rh_sp', 'documentos_rh_praia_grande', 'documentos_rh_goiania',
+  // Genéricos legados (cobrem todas as filiais)
+  'operacional', 'faturamento', 'financeiro', 'rh', 'almoxarifado', 'mecanicos', 'filial',
+];
 
 const STATUS_OPCOES: { value: string; label: string; color: string }[] = [
   { value: 'ativo',     label: 'ATIVO',     color: 'bg-emerald-600 text-white' },

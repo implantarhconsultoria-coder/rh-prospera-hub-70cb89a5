@@ -16,6 +16,21 @@ const SLUG_LABEL: Record<string, { titulo: string; subtitulo: string; icon: Reac
   'op-sp':       { titulo: 'App Operacional · SP',          subtitulo: 'Topac Matriz · São Paulo',     icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-primary to-blue-600' },
   'op-pg':       { titulo: 'App Operacional · Praia Grande',subtitulo: 'Topac Filial Praia Grande',    icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-cyan-500 to-blue-600' },
   'op-go':       { titulo: 'App Operacional · Goiânia',     subtitulo: 'Topac Filial Goiânia',         icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-emerald-500 to-teal-600' },
+  'fat-sp':      { titulo: 'Faturamento · SP',              subtitulo: 'Topac Matriz · São Paulo',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
+  'fat-pg':      { titulo: 'Faturamento · Praia Grande',    subtitulo: 'Topac Filial Praia Grande',    icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
+  'fat-go':      { titulo: 'Faturamento · Goiânia',         subtitulo: 'Topac Filial Goiânia',         icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
+  'fin-sp':      { titulo: 'Financeiro · SP',               subtitulo: 'Topac Matriz · São Paulo',     icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
+  'fin-pg':      { titulo: 'Financeiro · Praia Grande',     subtitulo: 'Topac Filial Praia Grande',    icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
+  'fin-go':      { titulo: 'Financeiro · Goiânia',          subtitulo: 'Topac Filial Goiânia',         icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
+  'rh-sp':       { titulo: 'RH · SP',                       subtitulo: 'Topac Matriz · São Paulo',     icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
+  'rh-pg':       { titulo: 'RH · Praia Grande',             subtitulo: 'Topac Filial Praia Grande',    icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
+  'rh-go':       { titulo: 'RH · Goiânia',                  subtitulo: 'Topac Filial Goiânia',         icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
+  'alm-sp':      { titulo: 'Almoxarifado · SP',             subtitulo: 'Topac Matriz · São Paulo',     icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
+  'alm-pg':      { titulo: 'Almoxarifado · Praia Grande',   subtitulo: 'Topac Filial Praia Grande',    icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
+  'alm-go':      { titulo: 'Almoxarifado · Goiânia',        subtitulo: 'Topac Filial Goiânia',         icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
+  'docrh-sp':    { titulo: 'Documentos RH · SP',            subtitulo: 'EPI · Uniformes · Avisos',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-fuchsia-500 to-rose-600' },
+  'docrh-pg':    { titulo: 'Documentos RH · Praia Grande',  subtitulo: 'EPI · Uniformes · Avisos',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-fuchsia-500 to-rose-600' },
+  'docrh-go':    { titulo: 'Documentos RH · Goiânia',       subtitulo: 'EPI · Uniformes · Avisos',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-fuchsia-500 to-rose-600' },
   'financeiro':  { titulo: 'Portal Financeiro TOPAC',       subtitulo: 'Acesso por CPF',               icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
   'faturamento': { titulo: 'Portal Faturamento TOPAC',      subtitulo: 'Acesso por CPF',               icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
   'rh':          { titulo: 'Portal RH',                     subtitulo: 'Acesso por CPF',               icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
@@ -52,6 +67,8 @@ type AcessoCpfResponse = {
   ok?: boolean;
   error?: string;
   modulo?: string;
+  area?: string;
+  filial?: string | null;
   unidade?: string;
   link_nome?: string;
   tecnico_token?: string;
@@ -138,7 +155,7 @@ const AcessoModuloCpfPage: React.FC = () => {
       const expiresAt = fim.getTime();
 
       // Operacional vai para o portal canônico /operacional/:token
-      if (data.modulo === 'operacional' && data.tecnico_token) {
+      if ((data.area === 'operacional' || data.modulo === 'operacional') && data.tecnico_token) {
         const dest = `/operacional/${data.tecnico_token}`;
         try {
           localStorage.setItem(`cpf_device_session_${slug}`, JSON.stringify({ expiresAt, redirect: dest }));
@@ -147,9 +164,11 @@ const AcessoModuloCpfPage: React.FC = () => {
         return;
       }
 
-      // Sessão isolada por CPF (válida para financeiro, faturamento, rh, almoxarifado, mecanicos, filial)
+      // Sessão isolada por CPF
       const sessao = {
         modulo: data.modulo,
+        area: data.area,
+        filial: data.filial || null,
         unidade: data.unidade,
         link_nome: data.link_nome,
         usuario: data.usuario,
@@ -158,16 +177,19 @@ const AcessoModuloCpfPage: React.FC = () => {
       };
       sessionStorage.setItem('cpf_session', JSON.stringify(sessao));
 
-      // Cada módulo tem seu portal CPF dedicado
+      const area = data.area || data.modulo || '';
+      const filialQS = data.filial ? `?filial=${data.filial}` : '';
+
       const destino: Record<string, string> = {
-        financeiro:   '/financeiro-cpf',
-        faturamento:  '/faturamento-cpf',
-        rh:           '/setor-cpf/rh',
-        almoxarifado: '/setor-cpf/almoxarifado',
-        mecanicos:    '/setor-cpf/mecanicos',
-        filial:       '/setor-cpf/filial',
+        financeiro:   `/financeiro-cpf${filialQS}`,
+        faturamento:  `/faturamento-cpf${filialQS}`,
+        rh:           `/setor-cpf/rh${filialQS}`,
+        almoxarifado: `/setor-cpf/almoxarifado${filialQS}`,
+        documentos_rh: `/setor-cpf/documentos-rh${filialQS}`,
+        mecanicos:    `/setor-cpf/mecanicos${filialQS}`,
+        filial:       `/setor-cpf/filial${filialQS}`,
       };
-      const dest = destino[data.modulo] || `/setor-cpf/${data.modulo}`;
+      const dest = destino[area] || `/setor-cpf/${area}${filialQS}`;
       try {
         localStorage.setItem(`cpf_device_session_${slug}`, JSON.stringify({ expiresAt, redirect: dest }));
       } catch { /* noop */ }
