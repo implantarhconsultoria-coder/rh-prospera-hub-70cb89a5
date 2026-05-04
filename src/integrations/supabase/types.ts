@@ -25,6 +25,7 @@ export type Database = {
           data: string
           forma_pagamento: string
           foto_bomba_url: string
+          foto_painel_url: string
           hora: string
           id: string
           km_atual: number | null
@@ -62,6 +63,7 @@ export type Database = {
           data?: string
           forma_pagamento?: string
           foto_bomba_url?: string
+          foto_painel_url?: string
           hora?: string
           id?: string
           km_atual?: number | null
@@ -99,6 +101,7 @@ export type Database = {
           data?: string
           forma_pagamento?: string
           foto_bomba_url?: string
+          foto_painel_url?: string
           hora?: string
           id?: string
           km_atual?: number | null
