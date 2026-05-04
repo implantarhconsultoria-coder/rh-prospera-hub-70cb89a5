@@ -601,21 +601,67 @@ Deno.serve(async (req) => {
         return json({ galoes: data || [] });
       }
 
+      // ---------- HEARTBEAT (status online) ----------
+      case "heartbeat": {
+        // touch() já foi chamado; apenas confirma
+        return json({ ok: true, ts: new Date().toISOString() });
+      }
+
+      // ---------- EXCLUIR REGISTRO (somente ADMIN) ----------
+      case "excluir_registro": {
+        const p = payload || {};
+        const kind = String(p.kind || "");
+        const id = String(p.id || "");
+        if (!id || !kind) return json({ error: "params_invalidos" }, 400);
+        // Apenas admin (verifica via user_roles do user_id vinculado ao tecnico OU header opcional)
+        if (!userId) return json({ error: "sem_permissao" }, 403);
+        const { data: roleRows } = await sb()
+          .from("user_roles").select("role").eq("user_id", userId);
+        const isAdmin = (roleRows || []).some((r: any) => r.role === "admin");
+        if (!isAdmin) return json({ error: "apenas_admin" }, 403);
+        const tableMap: Record<string, string> = {
+          ponto: "registros_ponto",
+          km: "registros_km",
+          chamado: "chamados",
+          abastecimento: "abastecimentos",
+          galao: "combustivel_galoes",
+        };
+        const table = tableMap[kind];
+        if (!table) return json({ error: "kind_invalido" }, 400);
+        const { error } = await sb().from(table).delete().eq("id", id);
+        if (error) return json({ error: "delete_falhou", detalhe: error.message }, 500);
+        return json({ ok: true });
+      }
+
       // ---------- HISTÓRICO UNIFICADO ----------
       case "historico": {
         if (!userId) return json({ historico: [] });
         const p = payload || {};
         const tipo = String(p.tipo || "todos");
-        const limit = 30;
+        const mes = typeof p.mes === "string" ? p.mes : ""; // YYYY-MM
+        const limit = 200;
+        // Se mes informado: filtra por created_at no intervalo [mes-01, prox-mes-01)
+        let dateFrom = "";
+        let dateTo = "";
+        if (/^\d{4}-\d{2}$/.test(mes)) {
+          const [y, m] = mes.split("-").map(Number);
+          dateFrom = new Date(Date.UTC(y, m - 1, 1)).toISOString();
+          dateTo = new Date(Date.UTC(y, m, 1)).toISOString();
+        }
+        const applyMes = (q: any) => {
+          if (dateFrom && dateTo) return q.gte("created_at", dateFrom).lt("created_at", dateTo);
+          return q;
+        };
         const out: any[] = [];
 
         if (tipo === "todos" || tipo === "ponto") {
-          const { data } = await sb()
+          const q = sb()
             .from("registros_ponto")
             .select("id, tipo, data, hora, selfie_url, latitude, longitude, created_at")
             .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(limit);
+          const { data } = await applyMes(q);
           (data || []).forEach((r) => out.push({ ...r, _kind: "ponto" }));
         }
         if (tipo === "todos" || tipo === "km") {
