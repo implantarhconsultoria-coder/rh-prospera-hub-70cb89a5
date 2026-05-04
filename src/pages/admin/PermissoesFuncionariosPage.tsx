@@ -35,7 +35,7 @@ const STATUS_OPCOES: { value: string; label: string; color: string }[] = [
   { value: 'desligado', label: 'DESLIGADO', color: 'bg-rose-600 text-white' },
 ];
 
-interface FuncionarioRow { id: string; nome: string; cpf: string; cargo: string; setor: string | null; status: string; acesso_status: string | null; company_id: string; empresa_nome?: string; }
+interface FuncionarioRow { id: string; nome: string; cpf: string; cargo: string; setor: string | null; status: string; acesso_status: string | null; acesso_cpf_liberado: boolean; company_id: string; empresa_nome?: string; }
 interface PermissaoRow { id: string; funcionario_id: string; modulo: string; status: string; ultimo_acesso_em: string | null; total_acessos: number; }
 interface LogRow { id: string; cpf: string; modulo: string; unidade: string; resultado: string; motivo: string; created_at: string; funcionario_id: string | null; }
 
@@ -56,7 +56,7 @@ const PermissoesFuncionariosPage: React.FC = () => {
     setLoading(true);
     const [{ data: e }, { data: f }, { data: p }, { data: l }] = await Promise.all([
       supabase.from('empresas').select('id,nome'),
-      supabase.from('funcionarios').select('id,nome,cpf,cargo,setor,status,acesso_status,company_id').order('nome'),
+      supabase.from('funcionarios').select('id,nome,cpf,cargo,setor,status,acesso_status,acesso_cpf_liberado,company_id').order('nome'),
       supabase.from('funcionario_modulos').select('id,funcionario_id,modulo,status,ultimo_acesso_em,total_acessos'),
       supabase.from('acesso_cpf_logs').select('id,cpf,modulo,unidade,resultado,motivo,created_at,funcionario_id').order('created_at', { ascending: false }).limit(50),
     ]);
@@ -100,6 +100,14 @@ const PermissoesFuncionariosPage: React.FC = () => {
     if (error) { toast.error(error.message); return; }
     toast.success(novo === 'ativo' ? 'Permissão reativada' : 'Permissão bloqueada');
     carregar();
+  };
+
+  const toggleLoginCpf = async (func: FuncionarioRow) => {
+    const novo = !func.acesso_cpf_liberado;
+    const { error } = await supabase.from('funcionarios').update({ acesso_cpf_liberado: novo }).eq('id', func.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${func.nome}: login por CPF ${novo ? 'LIBERADO' : 'BLOQUEADO'}`);
+    setFuncs(prev => prev.map(x => x.id === func.id ? { ...x, acesso_cpf_liberado: novo } : x));
   };
 
   const mudarStatusAcesso = async (func: FuncionarioRow, novoStatus: string) => {
@@ -177,6 +185,7 @@ const PermissoesFuncionariosPage: React.FC = () => {
                   <TableHead>Funcionário</TableHead>
                   <TableHead>CPF</TableHead>
                   <TableHead>Empresa / Setor</TableHead>
+                  <TableHead>Login por CPF</TableHead>
                   <TableHead>Status do acesso</TableHead>
                   <TableHead>Módulos autorizados</TableHead>
                 </TableRow>
@@ -195,6 +204,17 @@ const PermissoesFuncionariosPage: React.FC = () => {
                       <TableCell>
                         <Badge variant="outline" className="block w-fit mb-1">{empresas[f.company_id] || '—'}</Badge>
                         {f.setor && <span className="text-[10px] text-muted-foreground">{f.setor}</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant={f.acesso_cpf_liberado ? 'default' : 'secondary'}
+                          className={`h-7 text-[11px] ${f.acesso_cpf_liberado ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-rose-600 hover:bg-rose-700 text-white'}`}
+                          onClick={() => toggleLoginCpf(f)}
+                          title={`Clique para ${f.acesso_cpf_liberado ? 'BLOQUEAR' : 'LIBERAR'} login por CPF`}
+                        >
+                          {f.acesso_cpf_liberado ? <><Unlock className="w-3 h-3 mr-1" /> LIBERADO</> : <><Lock className="w-3 h-3 mr-1" /> BLOQUEADO</>}
+                        </Button>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
