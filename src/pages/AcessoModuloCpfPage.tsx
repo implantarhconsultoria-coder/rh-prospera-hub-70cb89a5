@@ -101,48 +101,18 @@ const AcessoModuloCpfPage: React.FC = () => {
 
   useEffect(() => { setErro(null); }, [slug]);
 
-  const validarViaBancoInterno = async (slugAtual: string, digits: string): Promise<AcessoCpfResponse> => {
-    const { data: link, error: linkError } = await supabase
-      .from('links_acesso_publico')
-      .select('slug, modulo, unidade, nome, status')
-      .eq('slug', slugAtual)
-      .maybeSingle<LinkAcessoPublico>();
-
-    if (linkError || !link) {
-      return { ok: false, error: 'link_invalido' };
-    }
-
-    if (link.status !== 'ativo') {
-      return { ok: false, error: 'link_bloqueado' };
-    }
-
+  const validarAcesso = async (slugAtual: string, digits: string): Promise<AcessoCpfResponse> => {
+    // Chamada direta ao RPC (anon tem GRANT EXECUTE).
+    // A função no banco infere o módulo pelo slug se o registro de link
+    // não existir ou estiver inativo, então não retornamos mais "link_invalido".
     const { data, error } = await supabase.rpc('validar_acesso_cpf_slug', {
-      p_slug: link.slug,
+      p_slug: slugAtual,
       p_cpf: digits,
     });
-
     if (error) {
       return { ok: false, error: 'db_error' };
     }
-
     return (data as AcessoCpfResponse) || { ok: false, error: 'db_error' };
-  };
-
-  const validarViaFuncao = async (slugAtual: string, digits: string): Promise<AcessoCpfResponse> => {
-    const res = await fetch(FN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store',
-        apikey: ANON,
-        Authorization: `Bearer ${ANON}`,
-      },
-      cache: 'no-store',
-      body: JSON.stringify({ action: 'entrar', slug: slugAtual, cpf: digits }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-    return { ...(data as AcessoCpfResponse), ok: res.ok && !!data?.ok };
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -155,13 +125,7 @@ const AcessoModuloCpfPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      let data: AcessoCpfResponse;
-
-      try {
-        data = await validarViaFuncao(slug, digits);
-      } catch {
-        data = await validarViaBancoInterno(slug, digits);
-      }
+      const data = await validarAcesso(slug, digits);
 
       if (!data?.ok) {
         const code = data?.error || 'db_error';
