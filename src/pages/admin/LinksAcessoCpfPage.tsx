@@ -11,6 +11,7 @@ import { Link2, Copy, ExternalLink, Lock, Unlock, RefreshCw, Loader2, UserPlus, 
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { buildPublicAccessUrl } from '@/lib/publicOrigin';
 
 interface Link {
   id: string;
@@ -47,7 +48,7 @@ const formatCpf = (raw: string) => {
     .replace(/\.(\d{3})(\d)/, '.$1-$2');
 };
 
-const buildUrl = (slug: string) => `${window.location.origin}/acesso/${slug}`;
+const buildUrl = (slug: string) => buildPublicAccessUrl(slug);
 
 const LinksAcessoCpfPage: React.FC = () => {
   const [links, setLinks] = useState<Link[]>([]);
