@@ -85,6 +85,22 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!dataUrl && fileUrl) {
+      // SSRF guard: only allow HTTPS URLs hosted on the Supabase storage host.
+      try {
+        const allowedHost = new URL(Deno.env.get('SUPABASE_URL') || '').host;
+        const target = new URL(fileUrl);
+        if (target.protocol !== 'https:' || target.host !== allowedHost || !target.pathname.startsWith('/storage/v1/')) {
+          return new Response(
+            JSON.stringify({ error: 'fileUrl_not_allowed' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      } catch {
+        return new Response(
+          JSON.stringify({ error: 'fileUrl_invalido' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
       const mime = guessMimeFromUrl(fileUrl);
       if (mime === 'application/pdf') {
         return new Response(
