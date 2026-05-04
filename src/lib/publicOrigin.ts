@@ -9,13 +9,12 @@ export const getPublicOrigin = () => {
   return isPreviewHost ? FALLBACK_PUBLIC_ORIGIN : origin;
 };
 
+// Mapeamento de slugs para caminhos amigáveis. Mantém os 3 links únicos por
+// região como rotas curtas: /sp, /pg, /go.
 const FRIENDLY_PATHS: Record<string, string> = {
-  'op-sp': '/operacional/sp',
-  'op-pg': '/operacional/praia-grande',
-  'op-go': '/operacional/goiania',
-  matriz: '/rh/sp',
-  'filial-pg': '/rh/praia-grande',
-  'filial-go': '/rh/goiania',
+  sp: '/sp',
+  pg: '/pg',
+  go: '/go',
 };
 
 export const getAccessPathBySlug = (slug: string) => FRIENDLY_PATHS[slug] || `/acesso/${slug}`;

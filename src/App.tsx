@@ -292,35 +292,15 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <Routes>
-              {/* ========== LINKS ÚNICOS POR MÓDULO/FILIAL — abrem tela de CPF ========== */}
-              {/* Operacional/Mecânicos */}
-              <Route path="/operacional/sp" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/operacional/matriz" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/operacional/praia-grande" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/operacional/praia" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/operacional/pg" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/operacional/goiania" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/operacional/go" element={<AcessoFilialOperacionalPage />} />
-              {/* Faturamento por filial */}
-              <Route path="/faturamento/sp" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/faturamento/praia-grande" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/faturamento/goiania" element={<AcessoFilialOperacionalPage />} />
-              {/* Financeiro por filial */}
-              <Route path="/financeiro/sp" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/financeiro/praia-grande" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/financeiro/goiania" element={<AcessoFilialOperacionalPage />} />
-              {/* RH por filial */}
-              <Route path="/rh/sp" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/rh/praia-grande" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/rh/goiania" element={<AcessoFilialOperacionalPage />} />
-              {/* Almoxarifado por filial */}
-              <Route path="/almoxarifado/sp" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/almoxarifado/praia-grande" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/almoxarifado/goiania" element={<AcessoFilialOperacionalPage />} />
-              {/* Documentos RH (EPI/Uniformes) por filial */}
-              <Route path="/documentos-rh/sp" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/documentos-rh/praia-grande" element={<AcessoFilialOperacionalPage />} />
-              <Route path="/documentos-rh/goiania" element={<AcessoFilialOperacionalPage />} />
+              {/* ========== 3 LINKS ÚNICOS POR REGIÃO — abrem tela de CPF ==========
+                  /sp  -> link único São Paulo
+                  /pg  -> link único Praia Grande
+                  /go  -> link único Goiânia
+                  Após informar o CPF, o sistema redireciona para o módulo
+                  liberado para o funcionário em funcionario_modulos. */}
+              <Route path="/sp" element={<AcessoModuloCpfPage />} />
+              <Route path="/pg" element={<AcessoModuloCpfPage />} />
+              <Route path="/go" element={<AcessoModuloCpfPage />} />
               {/* ========== PORTAL OPERACIONAL (canônico) — token único por CPF ========== */}
               <Route path="/operacional/:token" element={<MecanicoLayout />}>
                 <Route index element={<MecanicoHomePage />} />

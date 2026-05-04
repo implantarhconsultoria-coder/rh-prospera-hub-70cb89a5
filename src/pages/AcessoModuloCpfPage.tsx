@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, AlertTriangle, Wrench, DollarSign, FileText, Users, Package, Cog, Building2, MapPin } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
-
 const formatCpf = (raw: string) => {
   const d = raw.replace(/\D/g, '').slice(0, 11);
   return d
@@ -12,69 +11,45 @@ const formatCpf = (raw: string) => {
     .replace(/\.(\d{3})(\d)/, '.$1-$2');
 };
 
-const SLUG_LABEL: Record<string, { titulo: string; subtitulo: string; icon: React.ReactNode; cor: string }> = {
-  'op-sp':       { titulo: 'App Operacional · SP',          subtitulo: 'Topac Matriz · São Paulo',     icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-primary to-blue-600' },
-  'op-pg':       { titulo: 'App Operacional · Praia Grande',subtitulo: 'Topac Filial Praia Grande',    icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-cyan-500 to-blue-600' },
-  'op-go':       { titulo: 'App Operacional · Goiânia',     subtitulo: 'Topac Filial Goiânia',         icon: <Wrench className="w-5 h-5 text-white" />,   cor: 'from-emerald-500 to-teal-600' },
-  'fat-sp':      { titulo: 'Faturamento · SP',              subtitulo: 'Topac Matriz · São Paulo',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
-  'fat-pg':      { titulo: 'Faturamento · Praia Grande',    subtitulo: 'Topac Filial Praia Grande',    icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
-  'fat-go':      { titulo: 'Faturamento · Goiânia',         subtitulo: 'Topac Filial Goiânia',         icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
-  'fin-sp':      { titulo: 'Financeiro · SP',               subtitulo: 'Topac Matriz · São Paulo',     icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
-  'fin-pg':      { titulo: 'Financeiro · Praia Grande',     subtitulo: 'Topac Filial Praia Grande',    icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
-  'fin-go':      { titulo: 'Financeiro · Goiânia',          subtitulo: 'Topac Filial Goiânia',         icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
-  'rh-sp':       { titulo: 'RH · SP',                       subtitulo: 'Topac Matriz · São Paulo',     icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
-  'rh-pg':       { titulo: 'RH · Praia Grande',             subtitulo: 'Topac Filial Praia Grande',    icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
-  'rh-go':       { titulo: 'RH · Goiânia',                  subtitulo: 'Topac Filial Goiânia',         icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
-  'alm-sp':      { titulo: 'Almoxarifado · SP',             subtitulo: 'Topac Matriz · São Paulo',     icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
-  'alm-pg':      { titulo: 'Almoxarifado · Praia Grande',   subtitulo: 'Topac Filial Praia Grande',    icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
-  'alm-go':      { titulo: 'Almoxarifado · Goiânia',        subtitulo: 'Topac Filial Goiânia',         icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
-  'docrh-sp':    { titulo: 'Documentos RH · SP',            subtitulo: 'EPI · Uniformes · Avisos',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-fuchsia-500 to-rose-600' },
-  'docrh-pg':    { titulo: 'Documentos RH · Praia Grande',  subtitulo: 'EPI · Uniformes · Avisos',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-fuchsia-500 to-rose-600' },
-  'docrh-go':    { titulo: 'Documentos RH · Goiânia',       subtitulo: 'EPI · Uniformes · Avisos',     icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-fuchsia-500 to-rose-600' },
-  'financeiro':  { titulo: 'Portal Financeiro TOPAC',       subtitulo: 'Acesso por CPF',               icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700' },
-  'faturamento': { titulo: 'Portal Faturamento TOPAC',      subtitulo: 'Acesso por CPF',               icon: <FileText className="w-5 h-5 text-white" />, cor: 'from-indigo-500 to-violet-600' },
-  'rh':          { titulo: 'Portal RH',                     subtitulo: 'Acesso por CPF',               icon: <Users className="w-5 h-5 text-white" />,    cor: 'from-rose-500 to-pink-600' },
-  'almoxarifado':{ titulo: 'Portal Almoxarifado',           subtitulo: 'Acesso por CPF',               icon: <Package className="w-5 h-5 text-white" />,  cor: 'from-amber-500 to-orange-600' },
-  'mecanicos':   { titulo: 'Portal Mecânicos',              subtitulo: 'Acesso por CPF',               icon: <Cog className="w-5 h-5 text-white" />,      cor: 'from-slate-500 to-zinc-700' },
-  'matriz':      { titulo: 'Filial · Matriz',               subtitulo: 'Topac Matriz / Alqui / LMT',   icon: <Building2 className="w-5 h-5 text-white" />,cor: 'from-indigo-600 to-blue-700' },
-  'filial-pg':   { titulo: 'Filial · Praia Grande',         subtitulo: 'Topac Filial Praia Grande',    icon: <MapPin className="w-5 h-5 text-white" />,   cor: 'from-cyan-600 to-blue-700' },
-  'filial-go':   { titulo: 'Filial · Goiânia',              subtitulo: 'Topac Filial Goiânia',         icon: <MapPin className="w-5 h-5 text-white" />,   cor: 'from-emerald-600 to-teal-700' },
+// Slug curto -> rótulo da região
+const REGION_LABEL: Record<string, { titulo: string; subtitulo: string; cor: string; icon: React.ReactNode }> = {
+  sp: { titulo: 'Topac · São Paulo',     subtitulo: 'Acesso por CPF',  cor: 'from-primary to-blue-600',     icon: <Building2 className="w-5 h-5 text-white" /> },
+  pg: { titulo: 'Topac · Praia Grande',  subtitulo: 'Acesso por CPF',  cor: 'from-cyan-600 to-blue-700',    icon: <MapPin className="w-5 h-5 text-white" /> },
+  go: { titulo: 'Topac · Goiânia',       subtitulo: 'Acesso por CPF',  cor: 'from-emerald-600 to-teal-700', icon: <MapPin className="w-5 h-5 text-white" /> },
+};
+
+// Metadados de cada módulo (rótulo, ícone, destino, cor)
+const MODULO_META: Record<string, { label: string; icon: React.ReactNode; cor: string; destino: (filialQS: string) => string }> = {
+  operacional:   { label: 'App Operacional',  icon: <Wrench className="w-5 h-5 text-white" />,    cor: 'from-primary to-blue-600',     destino: (qs) => `/setor-cpf/mecanicos${qs}` },
+  mecanicos:     { label: 'App Mecânicos',    icon: <Cog className="w-5 h-5 text-white" />,       cor: 'from-slate-500 to-zinc-700',   destino: (qs) => `/setor-cpf/mecanicos${qs}` },
+  financeiro:    { label: 'Financeiro',       icon: <DollarSign className="w-5 h-5 text-white" />,cor: 'from-cyan-600 to-sky-700',     destino: (qs) => `/financeiro-cpf${qs}` },
+  faturamento:   { label: 'Faturamento',      icon: <FileText className="w-5 h-5 text-white" />,  cor: 'from-indigo-500 to-violet-600',destino: (qs) => `/faturamento-cpf${qs}` },
+  rh:            { label: 'RH',               icon: <Users className="w-5 h-5 text-white" />,     cor: 'from-rose-500 to-pink-600',    destino: (qs) => `/setor-cpf/rh${qs}` },
+  almoxarifado:  { label: 'Almoxarifado',     icon: <Package className="w-5 h-5 text-white" />,   cor: 'from-amber-500 to-orange-600', destino: (qs) => `/setor-cpf/almoxarifado${qs}` },
+  documentos_rh: { label: 'Documentos RH',    icon: <FileText className="w-5 h-5 text-white" />,  cor: 'from-fuchsia-500 to-rose-600', destino: (qs) => `/setor-cpf/documentos-rh${qs}` },
+  filial:        { label: 'Painel da Filial', icon: <Building2 className="w-5 h-5 text-white" />, cor: 'from-indigo-600 to-blue-700',  destino: (qs) => `/setor-cpf/filial${qs}` },
+  abastecimento: { label: 'Abastecimento',    icon: <Wrench className="w-5 h-5 text-white" />,    cor: 'from-amber-500 to-orange-600', destino: (qs) => `/setor-cpf/almoxarifado${qs}` },
 };
 
 const ERRO_LABEL: Record<string, string> = {
-  cpf_invalido:                     'CPF inválido. Confira os 11 dígitos.',
-  cpf_sem_permissao_cadastrada:     'CPF sem permissão cadastrada.',
-  cpf_nao_encontrado:               'CPF sem permissão cadastrada.',
-  cpf_nao_encontrado_funcionarios:  'CPF sem permissão cadastrada.',
-  sem_permissao_modulo:             'CPF sem permissão para este módulo.',
-  acesso_bloqueado:                 'Acesso bloqueado.',
-  acesso_bloqueado_admin:           'Seu acesso por CPF foi bloqueado pelo administrador.',
-  funcionario_inativo:              'Acesso bloqueado.',
-  funcionario_bloqueado:            'Acesso bloqueado.',
-  funcionario_ferias:               'Acesso bloqueado.',
-  funcionario_desligado:            'Acesso bloqueado.',
-  modulo_bloqueado:                 'Acesso bloqueado.',
-  cpf_bloqueado:                    'Acesso bloqueado.',
-  unidade_incorreta:                'Este CPF pertence a outra unidade.',
-  link_invalido:                    'Link inválido. Solicite o link correto ao RH.',
-  link_bloqueado:                   'Acesso bloqueado.',
-  tecnico_nao_encontrado:           'CPF sem permissão para este módulo.',
-  blocked_link:                     'Acesso bloqueado.',
-  revoked_link:                     'Acesso bloqueado.',
-  invalid_token:                    'Acesso bloqueado.',
-  db_error:                         'Falha temporária. Tente novamente em instantes.',
-  internal:                         'Falha temporária. Tente novamente em instantes.',
+  cpf_invalido:                'CPF inválido. Confira os 11 dígitos.',
+  cpf_nao_encontrado:          'CPF não encontrado.',
+  sem_permissao_modulo:        'Este CPF não tem nenhum módulo liberado. Procure o RH.',
+  acesso_bloqueado:            'Acesso bloqueado.',
+  acesso_bloqueado_admin:      'Seu acesso foi bloqueado pelo administrador.',
+  link_invalido:               'Link inválido. Use o link correto.',
+  db_error:                    'Falha temporária. Tente novamente.',
+  internal:                    'Falha temporária. Tente novamente.',
 };
 
+type ModuloItem = { modulo: string; status?: string };
 type AcessoCpfResponse = {
   ok?: boolean;
   error?: string;
-  modulo?: string;
-  area?: string;
-  filial?: string | null;
+  slug?: string;
   unidade?: string;
-  link_nome?: string;
-  tecnico_token?: string;
+  modulos?: ModuloItem[];
+  tecnico_token?: string | null;
   usuario?: {
     funcionario_id: string;
     cpf: string;
@@ -82,133 +57,138 @@ type AcessoCpfResponse = {
     empresa?: string;
     cargo?: string;
     setor?: string;
-    company_id?: string;
+    company_id?: string | null;
   };
 };
 
-type LinkAcessoPublico = {
-  slug: string;
-  modulo: string;
-  unidade: string;
-  nome: string;
-  status: string;
-};
-
 const AcessoModuloCpfPage: React.FC = () => {
-  const { slug = '' } = useParams<{ slug: string }>();
+  const { slug: rawSlug = '' } = useParams<{ slug: string }>();
+  // Rotas curtas (/sp, /pg, /go) não têm :slug — derivar do pathname
+  const slug = (rawSlug || (typeof window !== 'undefined' ? window.location.pathname.replace('/', '') : '')).toLowerCase();
   const navigate = useNavigate();
-  const meta = SLUG_LABEL[slug] || { titulo: 'Acesso por CPF', subtitulo: '', icon: <Wrench className="w-5 h-5 text-white" />, cor: 'from-primary to-blue-600' };
+  const meta = REGION_LABEL[slug] || { titulo: 'Acesso por CPF', subtitulo: '', cor: 'from-primary to-blue-600', icon: <Wrench className="w-5 h-5 text-white" /> };
+
   const [cpf, setCpf] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [resposta, setResposta] = useState<AcessoCpfResponse | null>(null);
 
-  // Sessão por dispositivo válida até 23:59:59 do mesmo dia
-  useEffect(() => {
+  useEffect(() => { setErro(null); setResposta(null); }, [slug]);
+
+  const filialQS = slug === 'sp' ? '?filial=sp' : slug === 'pg' ? '?filial=praia_grande' : slug === 'go' ? '?filial=goiania' : '';
+
+  const navegarParaModulo = (modulo: string, data: AcessoCpfResponse) => {
+    // Salva sessão isolada por CPF até 23:59:59 do dia
+    const now = new Date();
+    const fim = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const expiresAt = fim.getTime();
     try {
-      const raw = localStorage.getItem(`cpf_device_session_${slug}`);
-      if (!raw) return;
-      const sess = JSON.parse(raw) as { expiresAt: number; redirect: string };
-      if (sess.expiresAt > Date.now() && sess.redirect) {
-        navigate(sess.redirect, { replace: true });
-      } else {
-        localStorage.removeItem(`cpf_device_session_${slug}`);
-      }
+      sessionStorage.setItem('cpf_session', JSON.stringify({
+        modulo, area: modulo, filial: filialQS.replace('?filial=', '') || null,
+        unidade: data.unidade, link_nome: meta.titulo, usuario: data.usuario,
+        ts: Date.now(), expiresAt,
+      }));
     } catch { /* noop */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
 
-  useEffect(() => { setErro(null); }, [slug]);
-
-  const validarAcesso = async (slugAtual: string, digits: string): Promise<AcessoCpfResponse> => {
-    // Chamada direta ao RPC (anon tem GRANT EXECUTE).
-    // A função no banco infere o módulo pelo slug se o registro de link
-    // não existir ou estiver inativo, então não retornamos mais "link_invalido".
-    const { data, error } = await supabase.rpc('validar_acesso_cpf_slug', {
-      p_slug: slugAtual,
-      p_cpf: digits,
-    });
-    if (error) {
-      return { ok: false, error: 'db_error' };
+    // Operacional/mecanicos: usa token do técnico se existir
+    if ((modulo === 'operacional' || modulo === 'mecanicos') && data.tecnico_token) {
+      const dest = `/operacional/${data.tecnico_token}`;
+      try { localStorage.setItem(`cpf_device_session_${slug}_${modulo}`, JSON.stringify({ expiresAt, redirect: dest })); } catch { /* noop */ }
+      navigate(dest, { replace: true });
+      return;
     }
-    return (data as AcessoCpfResponse) || { ok: false, error: 'db_error' };
+
+    const m = MODULO_META[modulo];
+    const dest = m ? m.destino(filialQS) : `/setor-cpf/${modulo}${filialQS}`;
+    try { localStorage.setItem(`cpf_device_session_${slug}_${modulo}`, JSON.stringify({ expiresAt, redirect: dest })); } catch { /* noop */ }
+    navigate(dest, { replace: true });
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErro(null);
+    setResposta(null);
     const digits = cpf.replace(/\D/g, '');
-    if (digits.length !== 11) {
-      setErro(ERRO_LABEL.cpf_invalido);
-      return;
-    }
+    if (digits.length !== 11) { setErro(ERRO_LABEL.cpf_invalido); return; }
     setLoading(true);
     try {
-      const data = await validarAcesso(slug, digits);
+      const { data, error } = await supabase.rpc('validar_acesso_cpf_slug', { p_slug: slug, p_cpf: digits });
+      if (error) { setErro(ERRO_LABEL.db_error); setLoading(false); return; }
+      const resp = (data as AcessoCpfResponse) || { ok: false, error: 'db_error' };
 
-      if (!data?.ok) {
-        const code = data?.error || 'db_error';
-        setErro(ERRO_LABEL[code] || `Acesso negado (${code}).`);
+      if (!resp.ok) {
+        setErro(ERRO_LABEL[resp.error || 'db_error'] || `Acesso negado (${resp.error}).`);
         setLoading(false);
         return;
       }
 
-      // Sessão por dispositivo válida até 23:59:59 do mesmo dia
-      const now = new Date();
-      const fim = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      const expiresAt = fim.getTime();
+      const lista = (resp.modulos || []).filter(m => MODULO_META[m.modulo]);
 
-      // Operacional: token é dado complementar. Se faltar, cai no portal de mecânicos por CPF.
-      if (data.area === 'operacional' || data.modulo === 'operacional') {
-        const dest = data.tecnico_token
-          ? `/operacional/${data.tecnico_token}`
-          : `/setor-cpf/mecanicos${data.filial ? `?filial=${data.filial}` : ''}`;
-        try {
-          sessionStorage.setItem('cpf_session', JSON.stringify({
-            modulo: data.modulo, area: data.area, filial: data.filial || null,
-            unidade: data.unidade, link_nome: data.link_nome, usuario: data.usuario,
-            ts: Date.now(), expiresAt,
-          }));
-          localStorage.setItem(`cpf_device_session_${slug}`, JSON.stringify({ expiresAt, redirect: dest }));
-        } catch { /* noop */ }
-        navigate(dest, { replace: true });
+      if (lista.length === 0) {
+        setErro(ERRO_LABEL.sem_permissao_modulo);
+        setLoading(false);
         return;
       }
 
-      // Sessão isolada por CPF
-      const sessao = {
-        modulo: data.modulo,
-        area: data.area,
-        filial: data.filial || null,
-        unidade: data.unidade,
-        link_nome: data.link_nome,
-        usuario: data.usuario,
-        ts: Date.now(),
-        expiresAt,
-      };
-      sessionStorage.setItem('cpf_session', JSON.stringify(sessao));
+      if (lista.length === 1) {
+        navegarParaModulo(lista[0].modulo, resp);
+        return;
+      }
 
-      const area = data.area || data.modulo || '';
-      const filialQS = data.filial ? `?filial=${data.filial}` : '';
-
-      const destino: Record<string, string> = {
-        financeiro:   `/financeiro-cpf${filialQS}`,
-        faturamento:  `/faturamento-cpf${filialQS}`,
-        rh:           `/setor-cpf/rh${filialQS}`,
-        almoxarifado: `/setor-cpf/almoxarifado${filialQS}`,
-        documentos_rh: `/setor-cpf/documentos-rh${filialQS}`,
-        mecanicos:    `/setor-cpf/mecanicos${filialQS}`,
-        filial:       `/setor-cpf/filial${filialQS}`,
-      };
-      const dest = destino[area] || `/setor-cpf/${area}${filialQS}`;
-      try {
-        localStorage.setItem(`cpf_device_session_${slug}`, JSON.stringify({ expiresAt, redirect: dest }));
-      } catch { /* noop */ }
-      navigate(dest, { replace: true });
+      // Múltiplos módulos: deixa o usuário escolher
+      setResposta(resp);
+      setLoading(false);
     } catch {
       setErro(ERRO_LABEL.db_error);
       setLoading(false);
     }
   };
+
+  // Tela de seleção de módulo
+  if (resposta?.ok && (resposta.modulos?.length || 0) > 1) {
+    const lista = (resposta.modulos || []).filter(m => MODULO_META[m.modulo]);
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
+        <div className="w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-white">
+          <div className="flex items-center gap-3 mb-5">
+            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${meta.cor} flex items-center justify-center shadow-lg`}>
+              {meta.icon}
+            </div>
+            <div>
+              <p className="text-[10px] text-white/50 uppercase tracking-wider leading-none">{meta.titulo}</p>
+              <h1 className="text-lg font-bold leading-tight">{resposta.usuario?.nome || 'Funcionário'}</h1>
+              <p className="text-[11px] text-white/60">{resposta.usuario?.empresa}</p>
+            </div>
+          </div>
+          <p className="text-xs text-white/60 mb-3">Você tem acesso a mais de um módulo. Escolha onde deseja entrar:</p>
+          <div className="grid gap-2">
+            {lista.map(m => {
+              const md = MODULO_META[m.modulo];
+              return (
+                <button
+                  key={m.modulo}
+                  onClick={() => navegarParaModulo(m.modulo, resposta)}
+                  className={`flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r ${md.cor} hover:opacity-90 text-white text-left shadow-lg transition-opacity`}
+                >
+                  <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center">{md.icon}</div>
+                  <div className="flex-1">
+                    <div className="font-bold text-sm">{md.label}</div>
+                    <div className="text-[10px] text-white/70">Entrar no módulo</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => { setResposta(null); setCpf(''); }}
+            className="w-full mt-4 text-xs text-white/50 hover:text-white/80"
+          >
+            Sair / trocar CPF
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
@@ -218,13 +198,13 @@ const AcessoModuloCpfPage: React.FC = () => {
             {meta.icon}
           </div>
           <div>
-            <p className="text-[10px] text-white/50 uppercase tracking-wider leading-none">Acesso por CPF · link permanente</p>
+            <p className="text-[10px] text-white/50 uppercase tracking-wider leading-none">Link único · {slug.toUpperCase()}</p>
             <h1 className="text-lg font-bold font-display leading-tight">{meta.titulo}</h1>
-            {meta.subtitulo && <p className="text-[11px] text-white/60 leading-tight">{meta.subtitulo}</p>}
+            <p className="text-[11px] text-white/60 leading-tight">{meta.subtitulo}</p>
           </div>
         </div>
         <p className="text-xs text-white/60 mb-4">
-          Informe seu CPF para entrar. Cada CPF abre uma sessão isolada e segura.
+          Informe seu CPF. O sistema vai abrir os módulos em que você tem permissão.
         </p>
         <form onSubmit={submit} className="space-y-3">
           <input
@@ -252,7 +232,7 @@ const AcessoModuloCpfPage: React.FC = () => {
           </button>
         </form>
         <p className="text-center text-[10px] text-white/30 mt-5">
-          Topac · link permanente · acesso por CPF
+          Topac · link único permanente · acesso por CPF
         </p>
       </div>
     </div>
