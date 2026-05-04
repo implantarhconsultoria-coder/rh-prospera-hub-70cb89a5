@@ -158,10 +158,44 @@ const GerenciarUsuariosPage: React.FC = () => {
     }
   };
 
-  const filtered = users.filter(u =>
-    u.email.toLowerCase().includes(search.toLowerCase()) ||
-    u.nome_completo.toLowerCase().includes(search.toLowerCase())
-  );
+  const handleSaveCpf = async (userId: string) => {
+    if (!isAdmin) { toast.error('Apenas o Admin pode editar CPF'); return; }
+    const raw = cpfDrafts[userId] ?? '';
+    const clean = cleanCpf(raw);
+    if (clean && clean.length !== 11) { toast.error('CPF deve ter 11 dígitos'); return; }
+    setSavingCpf(userId);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ cpf: clean ? maskCpf(clean) : null } as any)
+        .eq('user_id', userId);
+      if (error) throw error;
+      toast.success(clean ? 'CPF salvo' : 'CPF removido');
+      setCpfDrafts(prev => { const n = { ...prev }; delete n[userId]; return n; });
+      await fetchUsers();
+    } catch (e: any) {
+      toast.error('Erro ao salvar CPF: ' + (e?.message || ''));
+    } finally {
+      setSavingCpf(null);
+    }
+  };
+
+  const q = search.trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, '');
+  const filtered = users.filter(u => {
+    if (!q) return true;
+    const role = u.role ? ROLE_LABELS[u.role].label.toLowerCase() : '';
+    const portal = u.role ? ROLE_LABELS[u.role].portal.toLowerCase() : '';
+    if (
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.nome_completo || '').toLowerCase().includes(q) ||
+      (u.cpf || '').toLowerCase().includes(q) ||
+      role.includes(q) ||
+      portal.includes(q)
+    ) return true;
+    if (qDigits && (u.cpf_clean || '').includes(qDigits)) return true;
+    return false;
+  });
 
   return (
     <div className="space-y-6">
