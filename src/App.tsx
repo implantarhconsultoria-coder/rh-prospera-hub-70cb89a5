@@ -220,19 +220,11 @@ const AuthGate = () => {
         <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
       </Route>
 
-      {/* ========== CAMPO PORTAL ========== */}
-      <Route element={<CampoLayout />}>
-        <Route path="/campo" element={<CampoHomePage />} />
-        <Route path="/campo/ponto" element={<PontoPage />} />
-        <Route path="/campo/chamados" element={<ChamadosPage />} />
-        <Route path="/campo/estoque" element={<EstoqueVeiculoPage />} />
-        <Route path="/campo/km" element={<RegistroKmPage />} />
-      </Route>
-
-      {/* ========== OPERACIONAL PORTAL ========== */}
-      <Route element={<OperacionalLayout />}>
-        <Route path="/operacional" element={<DespacharChamadoPage />} />
-      </Route>
+      {/* ========== CAMPO/OPERACIONAL → redirecionam para /mecanico (link único) ========== */}
+      <Route path="/campo" element={<Navigate to="/mecanico" replace />} />
+      <Route path="/campo/*" element={<Navigate to="/mecanico" replace />} />
+      <Route path="/operacional" element={<Navigate to="/mecanico" replace />} />
+      <Route path="/operacional/*" element={<Navigate to="/mecanico" replace />} />
 
       {/* ========== FATURAMENTO PORTAL (acesso teste FAT) ========== */}
       <Route element={<FaturamentoLayout />}>
