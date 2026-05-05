@@ -93,9 +93,7 @@ export const uploadDocumentoPdf = async (
     return '';
   }
 
-  const { data: urlData } = supabase.storage
-    .from('documentos-funcionarios')
-    .getPublicUrl(fileName);
-
-  return urlData.publicUrl;
+  // Bucket é privado: armazena o caminho (storage path) no banco.
+  // O visualizador (PdfDocumentViewer/getDocumentUrl) gera signed URL sob demanda.
+  return fileName;
 };
