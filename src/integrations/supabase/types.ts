@@ -131,93 +131,6 @@ export type Database = {
         }
         Relationships: []
       }
-      acesso_cpf_logs: {
-        Row: {
-          cpf: string
-          created_at: string
-          funcionario_id: string | null
-          id: string
-          ip: string
-          modulo: string
-          motivo: string
-          resultado: string
-          unidade: string
-          user_agent: string
-        }
-        Insert: {
-          cpf: string
-          created_at?: string
-          funcionario_id?: string | null
-          id?: string
-          ip?: string
-          modulo: string
-          motivo?: string
-          resultado: string
-          unidade?: string
-          user_agent?: string
-        }
-        Update: {
-          cpf?: string
-          created_at?: string
-          funcionario_id?: string | null
-          id?: string
-          ip?: string
-          modulo?: string
-          motivo?: string
-          resultado?: string
-          unidade?: string
-          user_agent?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "acesso_cpf_logs_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "funcionarios"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acesso_cpf_logs_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
-        ]
-      }
-      acesso_cpf_simples_log: {
-        Row: {
-          cpf: string
-          created_at: string
-          funcionario_id: string | null
-          id: string
-          modulo: string | null
-          motivo: string | null
-          resultado: string
-          unidade: string
-        }
-        Insert: {
-          cpf: string
-          created_at?: string
-          funcionario_id?: string | null
-          id?: string
-          modulo?: string | null
-          motivo?: string | null
-          resultado: string
-          unidade: string
-        }
-        Update: {
-          cpf?: string
-          created_at?: string
-          funcionario_id?: string | null
-          id?: string
-          modulo?: string | null
-          motivo?: string | null
-          resultado?: string
-          unidade?: string
-        }
-        Relationships: []
-      }
       acesso_excepcional: {
         Row: {
           aprovado_em: string | null
@@ -335,13 +248,6 @@ export type Database = {
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "acessos_cpf_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
         ]
       }
       acoes_log: {
@@ -409,13 +315,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_log_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
           },
         ]
       }
@@ -846,13 +745,6 @@ export type Database = {
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "apontamento_falta_dsr_detalhe_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
         ]
       }
       apontamentos_contabilidade: {
@@ -912,13 +804,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "apontamentos_contabilidade_criado_por_funcionario_id_fkey"
-            columns: ["criado_por_funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
           },
         ]
       }
@@ -1036,13 +921,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "apontamentos_contabilidade_itens_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
           },
         ]
       }
@@ -3074,66 +2952,6 @@ export type Database = {
         }
         Relationships: []
       }
-      funcionario_modulos: {
-        Row: {
-          autorizado_em: string
-          autorizado_por: string | null
-          autorizado_por_nome: string
-          created_at: string
-          funcionario_id: string
-          id: string
-          modulo: string
-          observacoes: string
-          status: string
-          total_acessos: number
-          ultimo_acesso_em: string | null
-          updated_at: string
-        }
-        Insert: {
-          autorizado_em?: string
-          autorizado_por?: string | null
-          autorizado_por_nome?: string
-          created_at?: string
-          funcionario_id: string
-          id?: string
-          modulo: string
-          observacoes?: string
-          status?: string
-          total_acessos?: number
-          ultimo_acesso_em?: string | null
-          updated_at?: string
-        }
-        Update: {
-          autorizado_em?: string
-          autorizado_por?: string | null
-          autorizado_por_nome?: string
-          created_at?: string
-          funcionario_id?: string
-          id?: string
-          modulo?: string
-          observacoes?: string
-          status?: string
-          total_acessos?: number
-          ultimo_acesso_em?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "funcionario_modulos_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "funcionarios"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "funcionario_modulos_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
-        ]
-      }
       funcionarios: {
         Row: {
           acesso_atualizado_em: string | null
@@ -3493,59 +3311,7 @@ export type Database = {
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "lancamentos_mensais_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
         ]
-      }
-      links_acesso_publico: {
-        Row: {
-          created_at: string
-          empresas_permitidas: string[]
-          id: string
-          modulo: string
-          nome: string
-          slug: string
-          status: string
-          token: string
-          total_acessos: number
-          ultimo_acesso_em: string | null
-          unidade: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          empresas_permitidas?: string[]
-          id?: string
-          modulo: string
-          nome: string
-          slug: string
-          status?: string
-          token: string
-          total_acessos?: number
-          ultimo_acesso_em?: string | null
-          unidade?: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          empresas_permitidas?: string[]
-          id?: string
-          modulo?: string
-          nome?: string
-          slug?: string
-          status?: string
-          token?: string
-          total_acessos?: number
-          ultimo_acesso_em?: string | null
-          unidade?: string
-          updated_at?: string
-        }
-        Relationships: []
       }
       medicao_itens: {
         Row: {
@@ -3794,13 +3560,6 @@ export type Database = {
             referencedRelation: "funcionarios"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "movimento_diario_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
         ]
       }
       pagamentos: {
@@ -3854,48 +3613,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "titulos_pagar"
             referencedColumns: ["id"]
-          },
-        ]
-      }
-      permissoes_acesso: {
-        Row: {
-          ativo: boolean
-          created_at: string
-          funcionario_id: string
-          id: string
-          modulo: string
-          updated_at: string
-        }
-        Insert: {
-          ativo?: boolean
-          created_at?: string
-          funcionario_id: string
-          id?: string
-          modulo: string
-          updated_at?: string
-        }
-        Update: {
-          ativo?: boolean
-          created_at?: string
-          funcionario_id?: string
-          id?: string
-          modulo?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "permissoes_acesso_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "funcionarios"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "permissoes_acesso_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: false
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
           },
         ]
       }
@@ -4757,13 +4474,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tecnicos_campo_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: true
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
-          {
             foreignKeyName: "tecnicos_campo_veiculo_id_fkey"
             columns: ["veiculo_id"]
             isOneToOne: false
@@ -5298,13 +5008,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tecnicos_campo_funcionario_id_fkey"
-            columns: ["funcionario_id"]
-            isOneToOne: true
-            referencedRelation: "vw_funcionario_permissoes"
-            referencedColumns: ["funcionario_id"]
-          },
-          {
             foreignKeyName: "tecnicos_campo_veiculo_id_fkey"
             columns: ["veiculo_id"]
             isOneToOne: false
@@ -5313,81 +5016,8 @@ export type Database = {
           },
         ]
       }
-      vw_funcionario_permissoes: {
-        Row: {
-          autorizado_em: string | null
-          autorizado_por_nome: string | null
-          cargo: string | null
-          cpf: string | null
-          empresa: string | null
-          funcionario_id: string | null
-          modulo: string | null
-          nome: string | null
-          status_funcionario: string | null
-          status_modulo: string | null
-          total_acessos: number | null
-          ultimo_acesso_em: string | null
-        }
-        Relationships: []
-      }
     }
     Functions: {
-      _cpf_check_modulo: {
-        Args: { p_cpf: string; p_modulo: string }
-        Returns: {
-          acesso_atualizado_em: string | null
-          acesso_cpf_liberado: boolean
-          acesso_motivo: string | null
-          acesso_status: string
-          agencia: string
-          banco: string
-          cargo: string
-          categoria: string
-          celular: string
-          codigo: string
-          company_id: string
-          conta: string
-          cpf: string
-          created_at: string
-          data_admissao: string | null
-          data_exame_medico: string | null
-          email: string
-          endereco: string
-          id: string
-          insalubridade_ativa: boolean
-          insalubridade_valor: number
-          inss: number | null
-          liquido: number | null
-          matricula_esocial: string
-          nome: string
-          observacoes: string
-          pix: string
-          referencia_competencia: string | null
-          registro: string
-          rg: string
-          salario_base: number
-          setor: string | null
-          status: string
-          telefone: string
-          updated_at: string
-          va_ativo: boolean
-          va_mensal: number
-          vr_ativo: boolean
-          vr_diario: number
-          vt_ativo: boolean
-          vt_diario: number
-        }
-        SetofOptions: {
-          from: "*"
-          to: "funcionarios"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      acesso_cpf_simples: {
-        Args: { p_cpf: string; p_unidade: string }
-        Returns: Json
-      }
       calc_inss: { Args: { p_base: number }; Returns: number }
       calc_irrf: { Args: { p_base: number }; Returns: number }
       fechamento_filial_breakdown: {
@@ -5425,12 +5055,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      portal_cpf_almoxarifado: { Args: { p_cpf: string }; Returns: Json }
-      portal_cpf_dados_filial: {
-        Args: { p_cpf: string; p_modulo?: string }
-        Returns: Json
-      }
-      portal_cpf_mecanico_token: { Args: { p_cpf: string }; Returns: Json }
       registrar_abastecimento_publico: {
         Args: {
           p_codigo: string
@@ -5443,14 +5067,6 @@ export type Database = {
           p_placa: string
           p_valor: number
         }
-        Returns: Json
-      }
-      validar_acesso_cpf: {
-        Args: { p_cpf: string; p_token: string }
-        Returns: Json
-      }
-      validar_acesso_cpf_slug: {
-        Args: { p_cpf: string; p_slug: string }
         Returns: Json
       }
       validar_qr_combustivel_publico: {
