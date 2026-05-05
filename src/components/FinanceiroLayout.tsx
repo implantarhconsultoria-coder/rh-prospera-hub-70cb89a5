@@ -5,6 +5,7 @@ import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { Loader2, Wallet, ArrowDownCircle, ArrowUpCircle, Building, Landmark, TrendingDown, AlertTriangle, Layers, GitMerge, LogOut, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import ModuleSwitcher from '@/components/ModuleSwitcher';
 
 const ITEMS = [
   { to: '/financeiro', label: 'Dashboard', icon: Wallet, end: true },
@@ -55,7 +56,10 @@ const FinanceiroLayout: React.FC = () => {
         </div>
       </aside>
       <main className="ml-64 min-h-screen">
-        <div className="p-6 max-w-[1600px] mx-auto"><Outlet /></div>
+        <div className="p-6 max-w-[1600px] mx-auto">
+          <div className="flex justify-end mb-3 no-print"><ModuleSwitcher /></div>
+          <Outlet />
+        </div>
       </main>
     </div>
   );
