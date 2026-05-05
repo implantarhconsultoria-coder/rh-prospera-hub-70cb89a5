@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Fuel, Plus, QrCode, CheckCircle2, AlertTriangle, Filter as FilterIcon, Download, Printer } from 'lucide-react';
+import { Fuel, Plus, QrCode, CheckCircle2, AlertTriangle, Filter as FilterIcon, Download, Printer, Ban, RotateCcw, Trash2, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -152,6 +152,41 @@ const CombustivelAdminPage: React.FC = () => {
     setOpenConf(null); setObs(''); reload();
   };
 
+  const setStatusVale = async (v: Vale, novoStatus: 'ativo' | 'inativo' | 'cancelado') => {
+    const labels: Record<string, string> = { ativo: 'reativar', inativo: 'inativar', cancelado: 'cancelar' };
+    if (!window.confirm(`Confirma ${labels[novoStatus]} a autorização ${v.codigo}?`)) return;
+    const { error } = await supabase.from('vales_combustivel').update({ status: novoStatus } as any).eq('id', v.id);
+    if (error) return toast.error(error.message);
+    toast.success(`Autorização ${labels[novoStatus]}da`);
+    reload();
+  };
+
+  const excluirVale = async (v: Vale) => {
+    // Só permite exclusão física se nunca foi utilizado
+    const { count } = await supabase.from('abastecimentos').select('id', { count: 'exact', head: true }).eq('vale_id', v.id);
+    if ((count || 0) > 0) {
+      if (!window.confirm(`Esta autorização já tem ${count} abastecimento(s) vinculado(s). Não pode ser excluída — será CANCELADA para preservar o histórico. Continuar?`)) return;
+      const { error } = await supabase.from('vales_combustivel').update({ status: 'cancelado' } as any).eq('id', v.id);
+      if (error) return toast.error(error.message);
+      toast.success('Autorização cancelada (histórico preservado)');
+      reload();
+      return;
+    }
+    if (!window.confirm(`EXCLUIR definitivamente a autorização ${v.codigo}? Esta ação não pode ser desfeita.`)) return;
+    const { error } = await supabase.from('vales_combustivel').update({ deleted_at: new Date().toISOString() } as any).eq('id', v.id);
+    if (error) return toast.error(error.message);
+    toast.success('Autorização excluída');
+    reload();
+  };
+
+  const imprimirIndividual = (v: Vale) => {
+    window.open(`/admin/combustivel/imprimir?codigos=${encodeURIComponent(v.codigo)}`, '_blank');
+  };
+
+  const visualizarQR = (v: Vale) => {
+    window.open(`https://implantarhprpro.com/abastecimento/${v.codigo}`, '_blank');
+  };
+
   const exportarQRsTopac = () => {
     const codigos = vales.filter(v => v.codigo.startsWith('TOPAC-ABAST') && v.status === 'ativo').map(v => v.codigo);
     if (!codigos.length) return toast.info('Nenhum vale TOPAC ativo');
@@ -198,11 +233,13 @@ const CombustivelAdminPage: React.FC = () => {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-muted-foreground border-b"><th className="py-2">Código</th><th>Posto</th><th>Veículo</th><th>Limite R$</th><th>Litros</th><th>Validade</th><th>Status</th></tr></thead>
+            <thead><tr className="text-left text-xs text-muted-foreground border-b"><th className="py-2">Código</th><th>Posto</th><th>Veículo</th><th>Limite R$</th><th>Litros</th><th>Validade</th><th>Status</th><th className="text-right">Ações</th></tr></thead>
             <tbody>
               {vales.map(v => {
                 const ve = veiculos.find(x => x.id === v.veiculo_id);
                 const isTopac = v.codigo.startsWith('TOPAC-ABAST');
+                const isAtivo = v.status === 'ativo';
+                const isInativo = v.status === 'inativo';
                 return (
                   <tr key={v.id} className="border-b last:border-0">
                     <td className="py-2 font-mono text-xs">
@@ -214,11 +251,21 @@ const CombustivelAdminPage: React.FC = () => {
                     <td>{Number(v.valor_limite) > 0 ? `R$ ${Number(v.valor_limite).toFixed(2)}` : 'Sem limite'}</td>
                     <td>{Number(v.litros_limite) > 0 ? `${v.litros_limite} L` : '—'}</td>
                     <td>{v.validade || '—'}</td>
-                    <td><span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${v.status === 'ativo' ? 'bg-emerald-500/15 text-emerald-700' : 'bg-muted text-muted-foreground'}`}>{v.status}</span></td>
+                    <td><span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${isAtivo ? 'bg-emerald-500/15 text-emerald-700' : v.status === 'cancelado' ? 'bg-rose-500/15 text-rose-700' : 'bg-muted text-muted-foreground'}`}>{v.status}</span></td>
+                    <td className="text-right whitespace-nowrap">
+                      <div className="inline-flex gap-1">
+                        <Button size="sm" variant="ghost" title="Visualizar QR" onClick={() => visualizarQR(v)}><Eye className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" title="Imprimir individual" onClick={() => imprimirIndividual(v)}><Printer className="w-3.5 h-3.5" /></Button>
+                        {isAtivo && <Button size="sm" variant="ghost" title="Inativar" onClick={() => setStatusVale(v, 'inativo')}><Ban className="w-3.5 h-3.5" /></Button>}
+                        {isInativo && <Button size="sm" variant="ghost" title="Reativar" onClick={() => setStatusVale(v, 'ativo')}><RotateCcw className="w-3.5 h-3.5" /></Button>}
+                        {v.status !== 'cancelado' && <Button size="sm" variant="ghost" title="Cancelar" onClick={() => setStatusVale(v, 'cancelado')}><AlertTriangle className="w-3.5 h-3.5 text-amber-600" /></Button>}
+                        <Button size="sm" variant="ghost" title="Excluir" onClick={() => excluirVale(v)}><Trash2 className="w-3.5 h-3.5 text-rose-600" /></Button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
-              {vales.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">Nenhuma autorização</td></tr>}
+              {vales.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">Nenhuma autorização</td></tr>}
             </tbody>
           </table>
         </div>
