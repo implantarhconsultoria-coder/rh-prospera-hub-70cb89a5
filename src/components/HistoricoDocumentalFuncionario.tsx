@@ -1,15 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { buscarHistoricoFuncionario } from '@/lib/documentoHistorico';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Mail, Clock, User, Building2 } from 'lucide-react';
+import { FileText, Mail, Clock, User, Building2, Eye } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 
 interface Props {
   funcionarioId: string;
 }
 
+const inferTipo = (tipoDocumento: string): string => {
+  const t = (tipoDocumento || '').toLowerCase();
+  if (t.includes('atestado')) return 'atestado';
+  if (t.includes('férias') || t.includes('ferias')) return 'ferias';
+  if (t.includes('veículo') || t.includes('veiculo')) return 'veiculo';
+  return 'funcionario';
+};
+
 const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewing, setViewing] = useState<{ url: string; tipo: string; titulo: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -62,11 +73,30 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             </div>
           )}
           {doc.arquivo_url && (
-            <a href={doc.arquivo_url} target="_blank" rel="noopener noreferrer"
-              className="text-[10px] text-primary underline mt-1 inline-block">Ver documento</a>
+            <button
+              type="button"
+              onClick={() => setViewing({ url: doc.arquivo_url, tipo: inferTipo(doc.tipo_documento), titulo: `${doc.tipo_documento}${doc.competencia ? ' • ' + doc.competencia : ''}` })}
+              className="text-[11px] text-primary underline mt-2 inline-flex items-center gap-1"
+            >
+              <Eye className="w-3 h-3" /> Ver documento
+            </button>
           )}
         </div>
       ))}
+
+      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
+        <DialogContent className="max-w-5xl p-0 overflow-hidden">
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle className="text-base">{viewing?.titulo || 'Documento'}</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6 pt-3">
+            <PdfDocumentViewer
+              source={viewing ? { url: viewing.url, tipo: viewing.tipo } : undefined}
+              title={viewing?.titulo || 'Documento'}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
