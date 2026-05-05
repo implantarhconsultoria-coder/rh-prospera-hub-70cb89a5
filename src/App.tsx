@@ -72,6 +72,12 @@ import ClienteDetailPage from "@/pages/faturamento/ClienteDetailPage";
 import ContratosPage from "@/pages/faturamento/ContratosPage";
 import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
 import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
+import FaturamentoDN4Layout from "@/pages/admin/faturamento-dn4/FaturamentoDN4Layout";
+import FaturamentoDN4DashboardPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4DashboardPage";
+import FaturamentoDN4NovoPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4NovoPage";
+import FaturamentoDN4ConferenciaPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4ConferenciaPage";
+import FaturamentoDN4HistoricoPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4HistoricoPage";
+import FaturamentoDN4RelatorioPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4RelatorioPage";
 import FinanceiroDashboardPage from "@/pages/financeiro/FinanceiroDashboardPage";
 import ContasReceberPage from "@/pages/financeiro/ContasReceberPage";
 import ContasPagarPage from "@/pages/financeiro/ContasPagarPage";
@@ -187,6 +193,14 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/medicoes" element={<MedicoesPage />} />
         <Route path="/admin/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
+        {/* Faturamento DN4 Automatizado */}
+        <Route path="/admin/faturamento/dn4" element={<FaturamentoDN4Layout />}>
+          <Route index element={<FaturamentoDN4DashboardPage />} />
+          <Route path="novo" element={<FaturamentoDN4NovoPage />} />
+          <Route path="conferencia" element={<FaturamentoDN4ConferenciaPage />} />
+          <Route path="historico" element={<FaturamentoDN4HistoricoPage />} />
+          <Route path="relatorio" element={<FaturamentoDN4RelatorioPage />} />
+        </Route>
         {/* Financeiro */}
         <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
         <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />

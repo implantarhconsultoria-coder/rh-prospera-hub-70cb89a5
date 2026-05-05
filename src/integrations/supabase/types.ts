@@ -1533,6 +1533,42 @@ export type Database = {
           },
         ]
       }
+      clientes_dn4: {
+        Row: {
+          cnpj_cpf: string | null
+          created_at: string
+          empresa_vinculada: string | null
+          endereco: string | null
+          forma_pagamento_padrao: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          updated_at: string
+        }
+        Insert: {
+          cnpj_cpf?: string | null
+          created_at?: string
+          empresa_vinculada?: string | null
+          endereco?: string | null
+          forma_pagamento_padrao?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cnpj_cpf?: string | null
+          created_at?: string
+          empresa_vinculada?: string | null
+          endereco?: string | null
+          forma_pagamento_padrao?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       clientes_fat: {
         Row: {
           cep: string | null
@@ -2385,6 +2421,86 @@ export type Database = {
             columns: ["fatura_id"]
             isOneToOne: false
             referencedRelation: "faturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faturamento_dn4: {
+        Row: {
+          cliente_id: string | null
+          cliente_nome: string
+          cnpj_cpf: string | null
+          competencia: string | null
+          created_at: string
+          criado_por_nome: string | null
+          criado_por_user_id: string | null
+          data_emissao: string
+          data_servico: string | null
+          descricao: string
+          empresa_filial: string | null
+          forma_pagamento: string | null
+          id: string
+          numero_pedido: string | null
+          observacoes: string | null
+          quantidade: number
+          status: string
+          updated_at: string
+          valor_total: number
+          valor_unitario: number
+          vencimento: string | null
+        }
+        Insert: {
+          cliente_id?: string | null
+          cliente_nome: string
+          cnpj_cpf?: string | null
+          competencia?: string | null
+          created_at?: string
+          criado_por_nome?: string | null
+          criado_por_user_id?: string | null
+          data_emissao?: string
+          data_servico?: string | null
+          descricao: string
+          empresa_filial?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          numero_pedido?: string | null
+          observacoes?: string | null
+          quantidade?: number
+          status?: string
+          updated_at?: string
+          valor_total?: number
+          valor_unitario?: number
+          vencimento?: string | null
+        }
+        Update: {
+          cliente_id?: string | null
+          cliente_nome?: string
+          cnpj_cpf?: string | null
+          competencia?: string | null
+          created_at?: string
+          criado_por_nome?: string | null
+          criado_por_user_id?: string | null
+          data_emissao?: string
+          data_servico?: string | null
+          descricao?: string
+          empresa_filial?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          numero_pedido?: string | null
+          observacoes?: string | null
+          quantidade?: number
+          status?: string
+          updated_at?: string
+          valor_total?: number
+          valor_unitario?: number
+          vencimento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faturamento_dn4_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes_dn4"
             referencedColumns: ["id"]
           },
         ]
