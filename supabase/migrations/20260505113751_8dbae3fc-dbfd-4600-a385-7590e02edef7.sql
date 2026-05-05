@@ -1,0 +1,1 @@
+ALTER TABLE public.funcionario_modulos DROP CONSTRAINT IF EXISTS funcionario_modulos_modulo_check;
