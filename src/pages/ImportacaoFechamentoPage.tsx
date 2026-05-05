@@ -118,8 +118,8 @@ const ImportacaoFechamentoPage: React.FC = () => {
           ? { ...s, status: 'erro', erro: up.error.message } : s));
         continue;
       }
-      const { data: signed } = await supabase.storage.from('atestados').createSignedUrl(path, 3600);
-      const fileUrl = signed?.signedUrl || '';
+      const { data: pub } = supabase.storage.from('atestados').getPublicUrl(path);
+      const fileUrl = pub.publicUrl;
 
       setAtestadosStaging((p) => p.map((s) => s.fileName === file.name && s.status === 'subindo'
         ? { ...s, status: 'processando', fileUrl } : s));
@@ -241,8 +241,8 @@ const ImportacaoFechamentoPage: React.FC = () => {
           ? { ...s, status: 'erro', erro: up.error.message } : s));
         continue;
       }
-      const { data: signed2 } = await supabase.storage.from('atestados').createSignedUrl(path, 3600);
-      const fileUrl = signed2?.signedUrl || '';
+      const { data: pub } = supabase.storage.from('atestados').getPublicUrl(path);
+      const fileUrl = pub.publicUrl;
 
       setCartoesStaging((p) => p.map((s) => s.fileName === file.name && s.status === 'subindo'
         ? { ...s, status: 'processando', fileUrl } : s));

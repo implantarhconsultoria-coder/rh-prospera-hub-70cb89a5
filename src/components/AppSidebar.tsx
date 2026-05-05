@@ -8,7 +8,7 @@ import {
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
   ChevronDown, ChevronRight, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
   ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch, Wand2,
-  ShoppingCart, Link2, Mail,
+  ShoppingCart,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -32,7 +32,6 @@ const menuItems: MenuItem[] = [
   { label: 'Folha de Pagamento', icon: Wallet, path: '/admin/folha-pagamento' },
   { label: 'Rescisões', icon: FileX, path: '/admin/rescisoes' },
   { label: 'Relatório', icon: FileText, path: '/admin/relatorio' },
-  { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
 ];
 
 const operationalItems: MenuItem[] = [
@@ -52,12 +51,14 @@ const operationalItems: MenuItem[] = [
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
+  { label: 'Despachar Chamados', icon: ClipboardList, path: '/admin/chamados' },
+  { label: 'App Operacional', icon: Wrench, path: '/admin/app-operacional' },
   { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 
 const adminItems: MenuItem[] = [
-  { label: 'Usuários e Permissões', icon: Shield, path: '/admin/permissoes-acesso' },
-  { label: 'E-mails Contabilidade', icon: Mail, path: '/admin/emails-contabilidade' },
+  { label: 'Gerenciar Usuários', icon: Shield, path: '/admin/gerenciar-usuarios' },
+  { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
 

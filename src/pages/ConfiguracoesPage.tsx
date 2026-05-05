@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Clock, Save, Award, Link as LinkIcon, Copy, ShieldCheck } from 'lucide-react';
+import { Building2, Award, Link2, Copy, Check, Clock, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -9,22 +9,33 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
-const LINKS = [
-  { label: 'Login principal',     url: 'https://implantarhprpro.com/' },
-  { label: 'Administração',       url: 'https://implantarhprpro.com/admin' },
-  { label: 'Escolha de módulo',   url: 'https://implantarhprpro.com/escolher-modulo' },
-  { label: 'Financeiro',          url: 'https://implantarhprpro.com/financeiro' },
-  { label: 'Faturamento',         url: 'https://implantarhprpro.com/faturamento' },
-  { label: 'App Mecânico',        url: 'https://implantarhprpro.com/mecanico' },
-];
-
 const ConfiguracoesPage: React.FC = () => {
+  const [origin, setOrigin] = useState('');
+  const [copied, setCopied] = useState<string | null>(null);
   const [horario, setHorario] = useState<any>(null);
   const [savingH, setSavingH] = useState(false);
 
   useEffect(() => {
+    setOrigin(window.location.origin);
     supabase.from('config_acesso_horario').select('*').limit(1).maybeSingle().then(({ data }) => setHorario(data));
   }, []);
+
+  const links = [
+    { name: 'Plataforma Administrativa', path: '/admin', tag: 'Admin', color: 'bg-red-500' },
+    { name: 'Portal das Filiais (Praia Grande / Goiânia)', path: '/filial', tag: 'Filial', color: 'bg-blue-500' },
+    { name: 'Portal de Campo', path: '/campo', tag: 'Campo', color: 'bg-purple-500' },
+    { name: 'Portal Operacional', path: '/operacional', tag: 'Operacional', color: 'bg-teal-500' },
+    { name: 'App Mecânicos (link individual gerado em /admin/app-operacional)', path: '/admin/app-operacional', tag: 'Mecânicos', color: 'bg-orange-500' },
+    { name: 'Portal de Faturamento (login: FAT • senha: TOPAC2026)', path: '/faturamento', tag: 'Faturamento', color: 'bg-indigo-500' },
+    { name: 'Portal Financeiro (login: FIN • senha: TOPAC2026)', path: '/financeiro', tag: 'Financeiro', color: 'bg-cyan-600' },
+  ];
+
+  const copy = async (txt: string, key: string) => {
+    await navigator.clipboard.writeText(txt);
+    setCopied(key);
+    toast.success('Link copiado');
+    setTimeout(() => setCopied(null), 2000);
+  };
 
   const salvarHorario = async () => {
     if (!horario) return;
@@ -43,11 +54,6 @@ const ConfiguracoesPage: React.FC = () => {
     else toast.success('Configuração salva');
   };
 
-  const copiar = async (texto: string) => {
-    try { await navigator.clipboard.writeText(texto); toast.success('Link copiado'); }
-    catch { toast.error('Não foi possível copiar'); }
-  };
-
   return (
     <div className="space-y-6 animate-fade-in max-w-4xl">
       <div className="flex items-center gap-3">
@@ -57,6 +63,41 @@ const ConfiguracoesPage: React.FC = () => {
         <h1 className="text-2xl font-bold font-display text-foreground">Configurações da Plataforma</h1>
       </div>
 
+      {/* Links dos portais */}
+      <Card className="p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Link2 className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-bold font-display">Links de acesso aos portais</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Use estes links para distribuir aos times. O domínio base é detectado automaticamente: <span className="font-mono">{origin}</span>
+        </p>
+        <div className="space-y-2">
+          {links.map(l => {
+            const fullUrl = origin + l.path;
+            return (
+              <div key={l.path} className="flex items-center gap-2 p-3 border border-border rounded-lg hover:bg-muted/30">
+                <Badge className={`${l.color} text-white`}>{l.tag}</Badge>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{l.name}</div>
+                  <div className="text-xs text-muted-foreground font-mono truncate">{fullUrl}</div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => copy(fullUrl, l.path)}>
+                  {copied === l.path ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
+          <p><strong>Acessos de teste criados:</strong></p>
+          <p>• <span className="font-mono bg-background px-1.5 py-0.5 rounded">FAT</span> + senha <span className="font-mono bg-background px-1.5 py-0.5 rounded">TOPAC2026</span> → vai direto para <span className="font-mono">/faturamento</span></p>
+          <p>• <span className="font-mono bg-background px-1.5 py-0.5 rounded">FIN</span> + senha <span className="font-mono bg-background px-1.5 py-0.5 rounded">TOPAC2026</span> → vai direto para <span className="font-mono">/financeiro</span></p>
+          <p className="text-muted-foreground pt-1">Estes acessos têm permissão somente de leitura nos respectivos módulos.</p>
+        </div>
+      </Card>
+
+      {/* Bloqueio de horário */}
       {horario && (
         <Card className="p-6 space-y-4">
           <div className="flex items-center gap-2">
@@ -65,7 +106,7 @@ const ConfiguracoesPage: React.FC = () => {
             <Badge variant={horario.enabled ? 'default' : 'secondary'}>{horario.enabled ? 'Ativo' : 'Desligado'}</Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            Quando ativo, restringe o login dos usuários (exceto administradores) ao intervalo definido.
+            Quando ativo, restringe o login dos usuários (exceto administradores) ao intervalo definido. Recomendado deixar desligado até validar.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="md:col-span-1 flex items-center gap-2">
@@ -95,58 +136,15 @@ const ConfiguracoesPage: React.FC = () => {
         </Card>
       )}
 
-      {/* ============ LINKS DE ACESSO ============ */}
-      <Card className="p-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <LinkIcon className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-bold font-display">Links para acesso dos usuários</h2>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Atalhos para envio aos colaboradores. Todos os acessos são por <strong>e-mail e senha</strong> — sem CPF, sem link individual.
-        </p>
-        <div className="space-y-2">
-          {LINKS.map(l => (
-            <div key={l.url} className="flex items-center gap-2 border rounded-lg p-2 bg-muted/30">
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold">{l.label}</div>
-                <div className="text-xs text-muted-foreground truncate font-mono">{l.url}</div>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => copiar(l.url)}>
-                <Copy className="w-3 h-3 mr-1" /> Copiar
-              </Button>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* ============ SOBRE / DIREITOS AUTORAIS ============ */}
+      {/* Sobre */}
       <Card className="p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Award className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-bold font-display">Sobre</h2>
         </div>
-        <div className="space-y-3 text-sm leading-relaxed">
-          <p>
-            Sistema desenvolvido pela <strong>ImplantaRH ConsultoriaPRO</strong>.
-          </p>
-          <p>
-            Plataforma interna personalizada para gestão de RH, financeiro, faturamento, documentos e operação da
-            <strong> TOPAC / LMT / ALQUI</strong>.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t">
-            <div><strong>Desenvolvedora:</strong> ImplantaRH ConsultoriaPRO</div>
-            <div><strong>Responsável:</strong> Rodrigo de Souza Sabino</div>
-            <div><strong>Versão:</strong> 1.0.0 — Multiempresa PRO</div>
-            <div><strong>Suporte:</strong> implantarhprpro.com</div>
-          </div>
-          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
-            <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <p>
-              Direitos autorais e propriedade intelectual reservados à <strong>ImplantaRH ConsultoriaPRO</strong>.
-              É proibida a cópia, reprodução, revenda, redistribuição, engenharia reversa ou utilização deste
-              sistema fora do ambiente autorizado, sem autorização expressa da ImplantaRH ConsultoriaPRO.
-            </p>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div><strong>Versão:</strong> 1.0.0 — Multiempresa PRO</div>
+          <div><strong>Finalidade:</strong> Gestão completa de RH, faturamento e financeiro.</div>
         </div>
       </Card>
     </div>

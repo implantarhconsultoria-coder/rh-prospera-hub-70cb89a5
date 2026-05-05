@@ -6,15 +6,29 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import AppLayout from "@/components/AppLayout";
 import FilialLayout from "@/components/FilialLayout";
-import FinanceiroLayout from "@/components/FinanceiroLayout";
+import OperacionalLayout from "@/components/OperacionalLayout";
+import CampoLayout from "@/components/CampoLayout";
+import MecanicoLayout from "@/components/MecanicoLayout";
 import FaturamentoLayout from "@/components/FaturamentoLayout";
+import FinanceiroLayout from "@/components/FinanceiroLayout";
+import MecanicoHomePage from "@/pages/mecanico/MecanicoHomePage";
+import MecanicoPontoPage from "@/pages/mecanico/MecanicoPontoPage";
+import MecanicoChamadosPage from "@/pages/mecanico/MecanicoChamadosPage";
+import MecanicoEstoquePage from "@/pages/mecanico/MecanicoEstoquePage";
+import MecanicoKmPage from "@/pages/mecanico/MecanicoKmPage";
+import MecanicoAbastecimentoPage from "@/pages/mecanico/MecanicoAbastecimentoPage";
+import MecanicoGaloesPage from "@/pages/mecanico/MecanicoGaloesPage";
+import MecanicoHistoricoPage from "@/pages/mecanico/MecanicoHistoricoPage";
 import LoginPage from "@/pages/LoginPage";
+import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
-import EscolherModuloPage from "@/pages/EscolherModuloPage";
 import DashboardPage from "@/pages/DashboardPage";
+import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
+import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
+import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
+import FilialFechamentoPage from "@/pages/filial/FilialFechamentoPage";
 import FechamentosFiliaisPage from "@/pages/admin/FechamentosFiliaisPage";
-import ConferenciaFechamentoPage from "@/pages/admin/ConferenciaFechamentoPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
 import ASOPage from "@/pages/ASOPage";
@@ -40,7 +54,6 @@ import RelatorioVTPage from "@/pages/RelatorioVTPage";
 import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
 import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
 import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividualPage";
-import ApontamentoContabilidadePage from "@/pages/admin/ApontamentoContabilidadePage";
 import HistoricoPage from "@/pages/HistoricoPage";
 import AtestadosImportPage from "@/pages/AtestadosImportPage";
 import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
@@ -49,44 +62,31 @@ import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
-import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
-import PermissoesAcessoPage from "@/pages/admin/PermissoesAcessoPage";
-import CampoLayout from "@/components/CampoLayout";
+import MonitoramentoPage from "@/pages/MonitoramentoPage";
+import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
+import AppOperacionalPage from "@/pages/admin/AppOperacionalPage";
+import TecnicoDetailPage from "@/pages/admin/TecnicoDetailPage";
 import CampoHomePage from "@/pages/campo/CampoHomePage";
 import PontoPage from "@/pages/campo/PontoPage";
 import ChamadosPage from "@/pages/campo/ChamadosPage";
 import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
 import RegistroKmPage from "@/pages/campo/RegistroKmPage";
-
-// Filial pages
-import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
-import FilialApontamentoPage from "@/pages/filial/FilialApontamentoPage";
-import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
-import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
-
-// Financeiro pages
+import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
+import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
+import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
+import ClienteDetailPage from "@/pages/faturamento/ClienteDetailPage";
+import ContratosPage from "@/pages/faturamento/ContratosPage";
+import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
+import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
 import FinanceiroDashboardPage from "@/pages/financeiro/FinanceiroDashboardPage";
-import ContasPagarPage from "@/pages/financeiro/ContasPagarPage";
 import ContasReceberPage from "@/pages/financeiro/ContasReceberPage";
+import ContasPagarPage from "@/pages/financeiro/ContasPagarPage";
 import FornecedoresPage from "@/pages/financeiro/FornecedoresPage";
 import BancosPage from "@/pages/financeiro/BancosPage";
 import FluxoCaixaPage from "@/pages/financeiro/FluxoCaixaPage";
 import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
 import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
-
-// Faturamento pages
-import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
-import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
-import ClienteDetailPage from "@/pages/faturamento/ClienteDetailPage";
-import ContratosPage from "@/pages/faturamento/ContratosPage";
-import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
-import FaturasPage from "@/pages/faturamento/FaturasPage";
-import MedicoesPage from "@/pages/faturamento/MedicoesPage";
-import ReajustesPage from "@/pages/faturamento/ReajustesPage";
-import PendenciasPage from "@/pages/faturamento/PendenciasPage";
-
-import AbastecimentoPublicoPage from "@/pages/AbastecimentoPublicoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -94,31 +94,25 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 const queryClient = new QueryClient();
 
 /**
- * Decide para onde mandar o usuário após login.
- * - admin → /admin
- * - 1 módulo → direto pro portal
- * - múltiplos → /escolher-modulo
+ * RoleRedirect — after login, sends user to the correct portal based on role.
  */
 const RoleRedirect = () => {
-  const { roleLoading, userRoles } = useApp();
+  const { userRoles, roleLoading } = useApp();
+
   if (roleLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
+
+  // Priority: admin always wins (admin can also have tecnico_campo for testing the field app)
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
+  if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
+  if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
+  if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
+  if (userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
+  if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
+  if (userRoles.includes('tecnico_campo')) return <Navigate to="/campo" replace />;
 
-  const filiais = userRoles.filter(r => r === 'filial_praia' || r === 'filial_goiania');
-  const outros = userRoles.filter(r => r === 'financeiro' || r === 'faturamento');
-  const temMecanicos = userRoles.includes('tecnico_campo');
-  const total = filiais.length + outros.length + (temMecanicos ? 1 : 0);
-
-  if (total === 0) return <Navigate to="/escolher-modulo" replace />;
-  if (total === 1) {
-    if (filiais.length) return <Navigate to="/filial" replace />;
-    if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
-    if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
-    if (temMecanicos) return <Navigate to="/campo" replace />;
-  }
-  return <Navigate to="/escolher-modulo" replace />;
+  return <Navigate to="/admin" replace />;
 };
 
 const AuthGate = () => {
@@ -135,7 +129,7 @@ const AuthGate = () => {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/cadastro" element={<Navigate to="/" replace />} />
+        <Route path="/cadastro" element={<CadastroPage />} />
         <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
         <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
         <Route path="*" element={<LoginPage />} />
@@ -145,10 +139,10 @@ const AuthGate = () => {
 
   return (
     <Routes>
+      {/* Root → redirect to correct portal */}
       <Route path="/" element={<RoleRedirect />} />
-      <Route path="/escolher-modulo" element={<EscolherModuloPage />} />
 
-      {/* ========== ADMIN ========== */}
+      {/* ========== ADMIN PORTAL ========== */}
       <Route element={<AppLayout />}>
         <Route path="/admin" element={<DashboardPage />} />
         <Route path="/admin/empresas" element={<EmpresasPage />} />
@@ -159,13 +153,11 @@ const AuthGate = () => {
         <Route path="/admin/fechamento" element={<FechamentoPage />} />
         <Route path="/admin/fechamento-ponto" element={<FechamentoPontoPage />} />
         <Route path="/admin/fechamentos-filiais" element={<FechamentosFiliaisPage />} />
-        <Route path="/admin/fechamentos-filiais/:companyId/conferencia" element={<ConferenciaFechamentoPage />} />
         <Route path="/admin/relatorio" element={<RelatorioPage />} />
         <Route path="/admin/epi" element={<EPIPage />} />
         <Route path="/admin/uniformes" element={<UniformePage />} />
         <Route path="/admin/relatorio-vr" element={<RelatorioVRPage />} />
         <Route path="/admin/relatorio-vt" element={<RelatorioVTPage />} />
-        <Route path="/admin/apontamento-contabilidade" element={<ApontamentoContabilidadePage />} />
         <Route path="/admin/historico" element={<HistoricoPage />} />
         <Route path="/admin/aso" element={<ASOPage />} />
         <Route path="/admin/prestadores" element={<PrestadoresPage />} />
@@ -181,61 +173,86 @@ const AuthGate = () => {
         <Route path="/admin/folha-pagamento" element={<FolhaPagamentoPage />} />
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
         <Route path="/admin/compras" element={<ComprasPage />} />
-        <Route path="/admin/emails-contabilidade" element={<EmailsContabilidadePage />} />
+        <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
+        <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
+        <Route path="/admin/chamados" element={<DespacharChamadoPage />} />
+        <Route path="/admin/app-operacional" element={<AppOperacionalPage />} />
+        <Route path="/admin/app-operacional/:id" element={<TecnicoDetailPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
-        <Route path="/admin/permissoes-acesso" element={<PermissoesAcessoPage />} />
-        <Route path="/admin/usuarios" element={<PermissoesAcessoPage />} />
+        {/* Faturamento */}
+        <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
+        <Route path="/admin/faturamento/clientes" element={<ClientesFatPage />} />
+        <Route path="/admin/faturamento/clientes/:id" element={<ClienteDetailPage />} />
+        <Route path="/admin/faturamento/contratos" element={<ContratosPage />} />
+        <Route path="/admin/faturamento/contratos/:id" element={<ContratoDetailPage />} />
+        <Route path="/admin/faturamento/faturas" element={<FaturasPage />} />
+        <Route path="/admin/faturamento/medicoes" element={<MedicoesPage />} />
+        <Route path="/admin/faturamento/reajustes" element={<ReajustesPage />} />
+        <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
+        {/* Financeiro */}
+        <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
+        <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />
+        <Route path="/admin/financeiro/contas-pagar" element={<ContasPagarPage />} />
+        <Route path="/admin/financeiro/fornecedores" element={<FornecedoresPage />} />
+        <Route path="/admin/financeiro/bancos" element={<BancosPage />} />
+        <Route path="/admin/financeiro/fluxo-caixa" element={<FluxoCaixaPage />} />
+        <Route path="/admin/financeiro/inadimplencia" element={<InadimplenciaPage />} />
+        <Route path="/admin/financeiro/centros-custo" element={<CentrosCustoPage />} />
+        <Route path="/admin/financeiro/conciliacao" element={<ConciliacaoPage />} />
       </Route>
 
-      {/* ========== RH FILIAL (PRAIA / GOIÂNIA) ========== */}
-      <Route path="/filial" element={<FilialLayout />}>
-        <Route index element={<FilialDashboardPage />} />
-        <Route path="funcionarios" element={<FuncionariosPage />} />
-        <Route path="funcionarios/:id" element={<EmployeeDetailPage />} />
-        <Route path="movimento-diario" element={<MovimentoDiarioPage />} />
-        <Route path="apontamento" element={<FilialApontamentoPage />} />
-        <Route path="epi" element={<EPIPage />} />
-        <Route path="uniformes" element={<UniformePage />} />
-        <Route path="aviso-ferias" element={<AvisoFeriasPage />} />
-        <Route path="aso" element={<ASOPage />} />
-        <Route path="protocolo" element={<ProtocoloPage />} />
-        <Route path="historico" element={<HistoricoPage />} />
-        <Route path="alertas" element={<FilialAlertasPage />} />
+      {/* ========== FILIAL PORTAL ========== */}
+      <Route element={<FilialLayout />}>
+        <Route path="/filial" element={<FilialDashboardPage />} />
+        <Route path="/filial/funcionarios" element={<FuncionariosPage />} />
+        <Route path="/filial/funcionarios/:id" element={<EmployeeDetailPage />} />
+        <Route path="/filial/aviso-ferias" element={<AvisoFeriasPage />} />
+        <Route path="/filial/aso" element={<ASOPage />} />
+        <Route path="/filial/atestados" element={<AtestadosImportPage />} />
+        <Route path="/filial/protocolo" element={<ProtocoloPage />} />
+        <Route path="/filial/alertas" element={<FilialAlertasPage />} />
+        <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
+        <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
       </Route>
 
-      {/* ========== FINANCEIRO ========== */}
-      <Route path="/financeiro" element={<FinanceiroLayout />}>
-        <Route index element={<FinanceiroDashboardPage />} />
-        <Route path="contas-receber" element={<ContasReceberPage />} />
-        <Route path="contas-pagar" element={<ContasPagarPage />} />
-        <Route path="fornecedores" element={<FornecedoresPage />} />
-        <Route path="bancos" element={<BancosPage />} />
-        <Route path="fluxo-caixa" element={<FluxoCaixaPage />} />
-        <Route path="inadimplencia" element={<InadimplenciaPage />} />
-        <Route path="centros-custo" element={<CentrosCustoPage />} />
-        <Route path="conciliacao" element={<ConciliacaoPage />} />
+      {/* ========== CAMPO PORTAL ========== */}
+      <Route element={<CampoLayout />}>
+        <Route path="/campo" element={<CampoHomePage />} />
+        <Route path="/campo/ponto" element={<PontoPage />} />
+        <Route path="/campo/chamados" element={<ChamadosPage />} />
+        <Route path="/campo/estoque" element={<EstoqueVeiculoPage />} />
+        <Route path="/campo/km" element={<RegistroKmPage />} />
       </Route>
 
-      {/* ========== FATURAMENTO ========== */}
-      <Route path="/faturamento" element={<FaturamentoLayout />}>
-        <Route index element={<FaturamentoDashboardPage />} />
-        <Route path="clientes" element={<ClientesFatPage />} />
-        <Route path="clientes/:id" element={<ClienteDetailPage />} />
-        <Route path="contratos" element={<ContratosPage />} />
-        <Route path="contratos/:id" element={<ContratoDetailPage />} />
-        <Route path="faturas" element={<FaturasPage />} />
-        <Route path="medicoes" element={<MedicoesPage />} />
-        <Route path="reajustes" element={<ReajustesPage />} />
-        <Route path="pendencias" element={<PendenciasPage />} />
+      {/* ========== OPERACIONAL PORTAL ========== */}
+      <Route element={<OperacionalLayout />}>
+        <Route path="/operacional" element={<DespacharChamadoPage />} />
       </Route>
 
-      {/* ========== APP MECÂNICOS ========== */}
-      <Route path="/campo" element={<CampoLayout />}>
-        <Route index element={<CampoHomePage />} />
-        <Route path="ponto" element={<PontoPage />} />
-        <Route path="chamados" element={<ChamadosPage />} />
-        <Route path="estoque" element={<EstoqueVeiculoPage />} />
-        <Route path="km" element={<RegistroKmPage />} />
+      {/* ========== FATURAMENTO PORTAL (acesso teste FAT) ========== */}
+      <Route element={<FaturamentoLayout />}>
+        <Route path="/faturamento" element={<FaturamentoDashboardPage />} />
+        <Route path="/faturamento/clientes" element={<ClientesFatPage />} />
+        <Route path="/faturamento/clientes/:id" element={<ClienteDetailPage />} />
+        <Route path="/faturamento/contratos" element={<ContratosPage />} />
+        <Route path="/faturamento/contratos/:id" element={<ContratoDetailPage />} />
+        <Route path="/faturamento/faturas" element={<FaturasPage />} />
+        <Route path="/faturamento/medicoes" element={<MedicoesPage />} />
+        <Route path="/faturamento/reajustes" element={<ReajustesPage />} />
+        <Route path="/faturamento/pendencias" element={<PendenciasPage />} />
+      </Route>
+
+      {/* ========== FINANCEIRO PORTAL (acesso teste FIN) ========== */}
+      <Route element={<FinanceiroLayout />}>
+        <Route path="/financeiro" element={<FinanceiroDashboardPage />} />
+        <Route path="/financeiro/contas-receber" element={<ContasReceberPage />} />
+        <Route path="/financeiro/contas-pagar" element={<ContasPagarPage />} />
+        <Route path="/financeiro/fornecedores" element={<FornecedoresPage />} />
+        <Route path="/financeiro/bancos" element={<BancosPage />} />
+        <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaPage />} />
+        <Route path="/financeiro/inadimplencia" element={<InadimplenciaPage />} />
+        <Route path="/financeiro/centros-custo" element={<CentrosCustoPage />} />
+        <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
       </Route>
 
       {/* Catch-all */}
@@ -253,44 +270,22 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <Routes>
-              {/* Páginas de impressão (uso interno admin) */}
+              {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
+              <Route path="/m/:token" element={<MecanicoLayout />}>
+                <Route index element={<MecanicoHomePage />} />
+                <Route path="ponto" element={<MecanicoPontoPage />} />
+                <Route path="chamados" element={<MecanicoChamadosPage />} />
+                <Route path="estoque" element={<MecanicoEstoquePage />} />
+                <Route path="km" element={<MecanicoKmPage />} />
+                <Route path="abastecimento" element={<MecanicoAbastecimentoPage />} />
+                <Route path="galoes" element={<MecanicoGaloesPage />} />
+                <Route path="historico" element={<MecanicoHistoricoPage />} />
+              </Route>
               <Route path="/relatorio-impressao" element={<ErrorBoundary><RelatorioImpressaoPage /></ErrorBoundary>} />
               <Route path="/entrega-impressao" element={<ErrorBoundary><EntregaImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-vr-impressao" element={<ErrorBoundary><RelatorioVRImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-vt-impressao" element={<ErrorBoundary><RelatorioVTImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-beneficio-individual" element={<ErrorBoundary><RelatorioBeneficioIndividualPage /></ErrorBoundary>} />
-
-              {/* Rota pública do QR de abastecimento — NÃO exige login */}
-              <Route path="/abastecimento/:codigo" element={<ErrorBoundary><AbastecimentoPublicoPage /></ErrorBoundary>} />
-              <Route path="/abastecer/:codigo" element={<ErrorBoundary><AbastecimentoPublicoPage /></ErrorBoundary>} />
-
-              {/* Atalhos amigáveis para módulos */}
-              <Route path="/mecanico" element={<Navigate to="/campo" replace />} />
-              <Route path="/mecanicos" element={<Navigate to="/campo" replace />} />
-
-              {/* Rotas legadas — todas redirecionam pro login */}
-              <Route path="/sp" element={<Navigate to="/" replace />} />
-              <Route path="/pg" element={<Navigate to="/" replace />} />
-              <Route path="/go" element={<Navigate to="/" replace />} />
-              <Route path="/portal/*" element={<Navigate to="/" replace />} />
-              <Route path="/operacional/*" element={<Navigate to="/" replace />} />
-              <Route path="/setor-cpf/*" element={<Navigate to="/" replace />} />
-              <Route path="/financeiro-cpf/*" element={<Navigate to="/" replace />} />
-              <Route path="/faturamento-cpf/*" element={<Navigate to="/" replace />} />
-              <Route path="/r/:slug" element={<Navigate to="/" replace />} />
-              <Route path="/m/*" element={<Navigate to="/" replace />} />
-              <Route path="/g" element={<Navigate to="/" replace />} />
-              
-              <Route path="/admin/links-acesso-cpf" element={<Navigate to="/admin/permissoes-acesso" replace />} />
-              <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin/permissoes-acesso" replace />} />
-              <Route path="/admin/permissoes-funcionarios" element={<Navigate to="/admin/permissoes-acesso" replace />} />
-              <Route path="/admin/permissoes-funcionario" element={<Navigate to="/admin/permissoes-acesso" replace />} />
-              <Route path="/admin/monitoramento" element={<Navigate to="/admin" replace />} />
-              <Route path="/admin/monitoramento-filiais" element={<Navigate to="/admin" replace />} />
-              <Route path="/admin/app-operacional" element={<Navigate to="/admin" replace />} />
-              <Route path="/admin/app-operacional/*" element={<Navigate to="/admin" replace />} />
-              <Route path="/admin/chamados" element={<Navigate to="/admin" replace />} />
-
               <Route path="/*" element={<AuthGate />} />
             </Routes>
           </BrowserRouter>

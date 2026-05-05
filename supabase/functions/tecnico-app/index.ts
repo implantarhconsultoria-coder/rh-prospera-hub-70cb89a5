@@ -20,22 +20,17 @@ const sb = () =>
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-// Resolve técnico from token. Returns { ok, tec, reason }.
-// reason ∈ 'invalid_token' | 'blocked_link' | 'revoked_link'
-async function resolveTecnico(token: string): Promise<{ ok: boolean; tec: any | null; reason?: string }> {
-  if (!token || token.length < 10) return { ok: false, tec: null, reason: "invalid_token" };
+// Resolve técnico from token; returns null if invalid.
+async function resolveTecnico(token: string) {
+  if (!token || token.length < 10) return null;
   const { data } = await sb()
     .from("tecnicos_campo")
     .select(
-      "id, apelido, status, user_id, veiculo_id, funcionario_id, link_bloqueado, link_status, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
+      "id, apelido, status, user_id, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
     )
     .eq("access_token", token)
     .maybeSingle();
-  if (!data) return { ok: false, tec: null, reason: "invalid_token" };
-  const status = ((data as any).link_status || "ativo") as string;
-  if (status === "revogado") return { ok: false, tec: null, reason: "revoked_link" };
-  if (status === "bloqueado" || (data as any).link_bloqueado)
-    return { ok: false, tec: null, reason: "blocked_link" };
+  if (!data) return null;
   // Carrega TODOS os veiculos vinculados a esse colaborador (suporte a multi-veiculo, ex: Rafael)
   let veiculos_disponiveis: any[] = [];
   if (data.user_id) {
@@ -51,30 +46,7 @@ async function resolveTecnico(token: string): Promise<{ ok: boolean; tec: any | 
   if (!veiculos_disponiveis.length && (data as any).veiculos) {
     veiculos_disponiveis = [(data as any).veiculos];
   }
-  return { ok: true, tec: { ...data, veiculos_disponiveis } };
-}
-
-// Tela única de Goiânia: resolve técnico pelo CPF (link permanente compartilhado).
-async function resolveTokenPorCpf(cpf: string): Promise<{ ok: boolean; token?: string; reason?: string }> {
-  const cpfDigits = (cpf || "").replace(/\D/g, "");
-  if (cpfDigits.length < 11) return { ok: false, reason: "cpf_invalido" };
-  const { data: func } = await sb()
-    .from("funcionarios")
-    .select("id")
-    .filter("cpf", "ilike", `%${cpfDigits}%`)
-    .maybeSingle();
-  if (!func) return { ok: false, reason: "funcionario_nao_encontrado" };
-  const { data: tec } = await sb()
-    .from("tecnicos_campo")
-    .select("access_token, link_status, link_bloqueado")
-    .eq("funcionario_id", func.id)
-    .maybeSingle();
-  if (!tec) return { ok: false, reason: "tecnico_nao_encontrado" };
-  const status = ((tec as any).link_status || "ativo") as string;
-  if (status === "revogado") return { ok: false, reason: "revoked_link" };
-  if (status === "bloqueado" || (tec as any).link_bloqueado) return { ok: false, reason: "blocked_link" };
-  if (!(tec as any).access_token) return { ok: false, reason: "invalid_token" };
-  return { ok: true, token: (tec as any).access_token as string };
+  return { ...data, veiculos_disponiveis };
 }
 
 // Resolve veiculo a usar nesta operacao: payload.veiculo_id se valido, senao o padrao.
@@ -88,12 +60,11 @@ function resolveVeiculo(tec: any, payload: any): { id: string | null; placa: str
   return { id: chosen.id, placa: chosen.placa || "", modelo: chosen.modelo || "" };
 }
 
-// Touch ultima_atividade_em + ultimo_acesso_em + status online
+// Touch ultima_atividade_em + status online
 async function touch(tecnicoId: string) {
-  const nowIso = new Date().toISOString();
   await sb()
     .from("tecnicos_campo")
-    .update({ ultima_atividade_em: nowIso, ultimo_acesso_em: nowIso, status: "online" })
+    .update({ ultima_atividade_em: new Date().toISOString(), status: "online" })
     .eq("id", tecnicoId);
 }
 
@@ -108,25 +79,12 @@ Deno.serve(async (req) => {
       payload?: Record<string, unknown>;
     };
 
-    // Ação pública: resolver token a partir do CPF (link único permanente, ex.: Goiânia).
-    if (action === "resolver_cpf") {
-      const cpf = String((payload || {} as any).cpf || "");
-      const r = await resolveTokenPorCpf(cpf);
-      if (!r.ok) return json({ error: r.reason || "invalid_token" }, 404);
-      return json({ ok: true, token: r.token });
-    }
-
-    const r = await resolveTecnico(token);
-    if (!r.ok) return json({ error: r.reason || "invalid_token" }, 401);
-    const tec = r.tec;
+    const tec = await resolveTecnico(token);
+    if (!tec) return json({ error: "invalid_token" }, 401);
 
     const userId = tec.user_id as string | null;
     const veiculoId = tec.veiculo_id as string | null;
     const veiculosDisponiveis = (tec as any).veiculos_disponiveis || [];
-
-    // Marca último acesso de forma assíncrona (não bloqueia a resposta)
-    sb().from("tecnicos_campo").update({ ultimo_acesso_em: new Date().toISOString() }).eq("id", tec.id).then(() => {});
-
     switch (action) {
       // ---------- BOOTSTRAP ----------
       case "perfil": {
@@ -456,7 +414,6 @@ Deno.serve(async (req) => {
         const litros = Number(p.litros) || 0;
         if (valor <= 0 || litros <= 0) return json({ error: "valor_litros_invalido" }, 400);
         if (!p.foto_bomba_base64) return json({ error: "foto_obrigatoria" }, 400);
-        if (!p.foto_painel_base64) return json({ error: "foto_painel_obrigatoria" }, 400);
         if (!p.vale_codigo) return json({ error: "vale_obrigatorio" }, 400);
 
         const { data: vale } = await sb()
@@ -475,20 +432,6 @@ Deno.serve(async (req) => {
           .upload(path, bytes, { contentType: "image/jpeg", upsert: false });
         if (up.error) return json({ error: "upload_foto", detalhe: up.error.message }, 500);
         const { data: pub } = sb().storage.from("abastecimento-fotos").getPublicUrl(path);
-
-        // Foto do painel (km/odômetro) — opcional mas obrigatória pelo app
-        let fotoPainelUrl = "";
-        if (p.foto_painel_base64) {
-          const b2 = String(p.foto_painel_base64).replace(/^data:image\/\w+;base64,/, "");
-          const bytes2 = Uint8Array.from(atob(b2), (c) => c.charCodeAt(0));
-          const path2 = `${tec.id}/${Date.now()}-painel.jpg`;
-          const up2 = await sb()
-            .storage.from("abastecimento-fotos")
-            .upload(path2, bytes2, { contentType: "image/jpeg", upsert: false });
-          if (up2.error) return json({ error: "upload_foto_painel", detalhe: up2.error.message }, 500);
-          const { data: pub2 } = sb().storage.from("abastecimento-fotos").getPublicUrl(path2);
-          fotoPainelUrl = pub2.publicUrl;
-        }
 
         const veicSel = resolveVeiculo(tec, p);
         const func = (tec as any).funcionarios || null;
@@ -511,7 +454,6 @@ Deno.serve(async (req) => {
             latitude: p.latitude ?? null,
             longitude: p.longitude ?? null,
             foto_bomba_url: pub.publicUrl,
-            foto_painel_url: fotoPainelUrl,
             valor,
             litros,
             combustivel: String(p.combustivel || ""),
@@ -617,111 +559,61 @@ Deno.serve(async (req) => {
         return json({ galoes: data || [] });
       }
 
-      // ---------- HEARTBEAT (status online) ----------
-      case "heartbeat": {
-        // touch() já foi chamado; apenas confirma
-        return json({ ok: true, ts: new Date().toISOString() });
-      }
-
-      // ---------- EXCLUIR REGISTRO (somente ADMIN) ----------
-      case "excluir_registro": {
-        const p = payload || {};
-        const kind = String(p.kind || "");
-        const id = String(p.id || "");
-        if (!id || !kind) return json({ error: "params_invalidos" }, 400);
-        // Apenas admin (verifica via user_roles do user_id vinculado ao tecnico OU header opcional)
-        if (!userId) return json({ error: "sem_permissao" }, 403);
-        const { data: roleRows } = await sb()
-          .from("user_roles").select("role").eq("user_id", userId);
-        const isAdmin = (roleRows || []).some((r: any) => r.role === "admin");
-        if (!isAdmin) return json({ error: "apenas_admin" }, 403);
-        const tableMap: Record<string, string> = {
-          ponto: "registros_ponto",
-          km: "registros_km",
-          chamado: "chamados",
-          abastecimento: "abastecimentos",
-          galao: "combustivel_galoes",
-        };
-        const table = tableMap[kind];
-        if (!table) return json({ error: "kind_invalido" }, 400);
-        const { error } = await sb().from(table).delete().eq("id", id);
-        if (error) return json({ error: "delete_falhou", detalhe: error.message }, 500);
-        return json({ ok: true });
-      }
-
       // ---------- HISTÓRICO UNIFICADO ----------
       case "historico": {
         if (!userId) return json({ historico: [] });
         const p = payload || {};
         const tipo = String(p.tipo || "todos");
-        const mes = typeof p.mes === "string" ? p.mes : ""; // YYYY-MM
-        const limit = 200;
-        // Se mes informado: filtra por created_at no intervalo [mes-01, prox-mes-01)
-        let dateFrom = "";
-        let dateTo = "";
-        if (/^\d{4}-\d{2}$/.test(mes)) {
-          const [y, m] = mes.split("-").map(Number);
-          dateFrom = new Date(Date.UTC(y, m - 1, 1)).toISOString();
-          dateTo = new Date(Date.UTC(y, m, 1)).toISOString();
-        }
-        const applyMes = (q: any) => {
-          if (dateFrom && dateTo) return q.gte("created_at", dateFrom).lt("created_at", dateTo);
-          return q;
-        };
+        const limit = 30;
         const out: any[] = [];
 
         if (tipo === "todos" || tipo === "ponto") {
-          const q = sb()
+          const { data } = await sb()
             .from("registros_ponto")
             .select("id, tipo, data, hora, selfie_url, latitude, longitude, created_at")
             .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(limit);
-          const { data } = await applyMes(q);
           (data || []).forEach((r) => out.push({ ...r, _kind: "ponto" }));
         }
         if (tipo === "todos" || tipo === "km") {
-          const q = sb()
+          const { data } = await sb()
             .from("registros_km")
             .select("id, km_valor, foto_url, data, hora, created_at")
             .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(limit);
-          const { data } = await applyMes(q);
           (data || []).forEach((r) => out.push({ ...r, _kind: "km" }));
         }
         if (tipo === "todos" || tipo === "chamado") {
-          const q = sb()
+          const { data } = await sb()
             .from("chamados")
             .select("id, cliente, local_servico, tipo_servico, status, created_at, concluido_em")
             .eq("colaborador_id", userId)
             .order("created_at", { ascending: false })
             .limit(limit);
-          const { data } = await applyMes(q);
           (data || []).forEach((r) => out.push({ ...r, _kind: "chamado" }));
         }
         if (tipo === "todos" || tipo === "abastecimento") {
-          const q = sb()
+          const { data } = await sb()
             .from("abastecimentos")
-            .select("id, valor, litros, placa, foto_bomba_url, foto_painel_url, data, hora, status, created_at")
+            .select("id, valor, litros, placa, foto_bomba_url, data, hora, status, created_at")
             .eq("tecnico_id", tec.id)
             .order("created_at", { ascending: false })
             .limit(limit);
-          const { data } = await applyMes(q);
           (data || []).forEach((r) => out.push({ ...r, _kind: "abastecimento" }));
         }
         if (tipo === "todos" || tipo === "galao") {
-          const q = sb()
+          const { data } = await sb()
             .from("combustivel_galoes")
             .select("id, tipo_combustivel, quantidade_litros, placa, foto_url, data, hora, observacao, created_at")
             .eq("tecnico_id", tec.id)
             .order("created_at", { ascending: false })
             .limit(limit);
-          const { data } = await applyMes(q);
           (data || []).forEach((r) => out.push({ ...r, _kind: "galao" }));
         }
         out.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        return json({ historico: out.slice(0, dateFrom ? 500 : 60) });
+        return json({ historico: out.slice(0, 60) });
       }
 
       default:

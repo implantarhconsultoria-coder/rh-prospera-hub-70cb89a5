@@ -4,9 +4,15 @@ import { Building2, Lock, Mail, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import FooterSobre from '@/components/FooterSobre';
+
+// Aliases curtos para acessos de teste
+const LOGIN_ALIASES: Record<string, string> = {
+  fat: 'fat@topac.local',
+  fin: 'fin@topac.local',
+};
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -16,10 +22,25 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const finalEmail = email.trim().toLowerCase();
+    const raw = email.trim().toLowerCase();
+    const finalEmail = LOGIN_ALIASES[raw] || raw;
     const { error } = await supabase.auth.signInWithPassword({ email: finalEmail, password });
     setLoading(false);
     if (error) toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha inválidos' : error.message);
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    const result = await lovable.auth.signInWithOAuth('google', {
+      redirect_uri: window.location.origin,
+    });
+    if (result.error) {
+      toast.error('Erro ao entrar com Google');
+      setLoading(false);
+      return;
+    }
+    if (result.redirected) return;
+    setLoading(false);
   };
 
   return (
@@ -42,7 +63,7 @@ const LoginPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
             <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-            <Input type="email" placeholder="E-mail" value={email} onChange={e => setEmail(e.target.value)}
+            <Input type="text" placeholder="Email ou usuário (ex: FAT, FIN)" value={email} onChange={e => setEmail(e.target.value)}
               className="pl-10" required autoCapitalize="none" autoCorrect="off" />
           </div>
           <div className="relative">
@@ -54,13 +75,15 @@ const LoginPage: React.FC = () => {
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Entrar
           </Button>
+          <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={loading}>
+            Entrar com Google
+          </Button>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span />
+            <Link to="/cadastro" className="hover:text-primary underline">Criar conta</Link>
             <Link to="/recuperar-senha" className="hover:text-primary underline">Esqueci minha senha</Link>
           </div>
         </form>
       </motion.div>
-      <FooterSobre />
     </div>
   );
 };

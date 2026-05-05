@@ -1,153 +1,91 @@
-## Plano de correção
+## Plano de execução — Pente fino + acessos de teste + editabilidade
 
-Vou corrigir somente a validação dos links do App Operacional, sem mexer em login, menus, layout geral, permissões existentes ou rotas já aprovadas.
+Sigo a fila já definida sem abrir nova pergunta. Itens novos desta rodada estão integrados.
 
-### O que já confirmei no projeto
-- O app dos técnicos abre pela rota `/m/:token`.
-- A validação real hoje acontece na função backend `tecnico-app`, usando o `access_token` salvo em `tecnicos_campo`.
-- Hoje não existe expiração automática por data nessa validação.
-- A função atual só bloqueia o acesso quando:
-  - o token não existe,
-  - ou `link_bloqueado = true`.
-- O banco já tem 8 técnicos com token salvo e nenhum está bloqueado no momento.
-- Um teste direto do token existente retornou sucesso no backend, então o problema não é uma expiração real do link, e sim a camada de tratamento/estado dos links e a mensagem genérica mostrada no cliente.
+### 1. Acessos de teste (FAT e FINANCEIRO) — prioridade alta
+Como o Supabase Auth exige e-mail, vou criar duas contas internas com e-mail "técnico" mas login amigável:
+- **fat@topac.local** — senha `TOPAC2026` — role nova `faturamento`
+- **fin@topac.local** — senha `TOPAC2026` — role nova `financeiro`
 
-## Implementação proposta
+Na tela de login, aceitar o atalho **`FAT`** e **`FIN`** (sem @) e converter automaticamente para o e-mail interno antes de chamar `signInWithPassword`. Assim o usuário digita só `FAT` / `FIN` + senha.
 
-### 1. Consolidar o modelo de link permanente
-Vou transformar o controle atual em um modelo explícito de status do link, sem qualquer noção de validade por data.
+Migration:
+- Adicionar valores `faturamento` e `financeiro` ao enum `app_role`.
+- Criar/garantir as contas via edge function `provision-test-user` (já existe) chamada uma vez, e inserir as roles em `user_roles`.
+- Criar policies `SELECT` para essas roles nas tabelas `clientes_fat`, `contratos`, `contrato_equipamentos`, `titulos_receber`, `titulos_pagar`, `contas_bancarias`, `categorias_financeiras`, `centros_custo`, `cobrancas_tentativas`, `conciliacoes`, `movimentacoes_bancarias`, `recebimentos`, `pagamentos` (somente leitura nesta fase de teste — evita estragar dados enquanto o pessoal só está olhando).
 
-Mudanças previstas:
-- manter `access_token` como identificador permanente do link;
-- adicionar status real do link com os estados:
-  - `ativo`
-  - `bloqueado`
-  - `revogado`
-- registrar também campos de auditoria, como:
-  - `ultimo_acesso_em`
-  - `revogado_em`
-  - `revogado_por` / equivalente de auditoria
-- preservar o histórico já existente em `tecnicos_link_historico`.
+Roteamento:
+- `RoleRedirect` envia `faturamento` → `/faturamento` e `financeiro` → `/financeiro`.
+- Layouts de Faturamento e Financeiro ficam acessíveis com essas roles (além de admin).
 
-Regra final de acesso:
-- abre normalmente se o token existir e o status for `ativo`;
-- mostra erro apenas se:
-  - token inexistente,
-  - status `bloqueado`,
-  - status `revogado`,
-  - técnico excluído.
+### 2. Links dos portais visíveis e copiáveis
+Adicionar bloco **"Links de acesso"** em `/admin/configuracoes` (seção nova "Acessos de teste e portais"), com botão Copiar para cada link:
+- Plataforma admin: `/admin`
+- Filial Praia Grande: `/filial`
+- Filial Goiânia: `/filial`
+- App Operacional / Mecânicos: `/mecanico` (e link individual por técnico já gerado em `/admin/app-operacional`)
+- Campo: `/campo`
+- Faturamento: `/faturamento` (login `FAT` / `TOPAC2026`)
+- Financeiro: `/financeiro` (login `FIN` / `TOPAC2026`)
 
-### 2. Ajustar a função backend do app do técnico
-Vou atualizar a função `tecnico-app` para:
-- resolver o técnico pelo token permanente salvo no banco;
-- parar de usar resposta genérica única para todos os casos;
-- devolver motivo claro de falha, por exemplo:
-  - `invalid_token`
-  - `blocked_link`
-  - `revoked_link`
-  - `deleted_or_missing_technician`
-- atualizar `ultimo_acesso_em` quando o link válido for usado;
-- manter o app funcionando sem login tradicional.
+URL base = `window.location.origin` (funciona tanto em preview quanto no domínio publicado `https://implantarhprpro.com`).
 
-Também vou revisar a busca do técnico para garantir estabilidade após publicação de novas versões, já que a validação continuará 100% baseada no token salvo no banco.
+### 3. Prestadores totalmente editável
+Refatorar `PrestadoresPage`:
+- Adicionar botão **Editar** em cada linha → abre painel lateral com TODOS os campos editáveis: nome, CPF, função, empresa pagadora (select), valor diário/quinzenal, próximo pagamento (date), status (ativo/inativo), banco/titular/tipo conta/agência/conta, observação, dias de trabalho, dias trabalhados, valor a pagar, data de referência.
+- Botão **Excluir** com confirmação.
+- Botão **Recibo** já existente: garantir que pega dados atualizados.
+- Persistir via `supabase.from('prestadores').update(...)` — sem voltar ao valor antigo.
+- Histórico de pagamentos: tabela `prestadores_pagamentos` (já existe ou criar) listada abaixo, editável e excluível.
 
-### 3. Corrigir a mensagem no app móvel
-Vou ajustar `TecnicoAppContext` para:
-- remover totalmente a palavra “expirado”; 
-- trocar a mensagem padrão para:
-  - `Link inválido ou bloqueado. Verifique com o administrador.`
-- diferenciar a exibição conforme o motivo retornado pela função;
-- evitar falso negativo quando a função responder com sucesso.
+### 4. Compras editável
+Em `ComprasPage`: adicionar coluna ações com **Editar** (abre dialog reaproveitando o de criação, pré-preenchido) e **Excluir**. Permite alterar item, quantidade, fornecedor, valor estimado, valor real, observação, status e datas.
 
-### 4. Ajustar a tela admin “Links dos Aplicativos”
-Vou completar a aba já existente em `AppOperacionalPage` para exibir e operar os campos pedidos:
-- nome do técnico
-- empresa/filial
-- CPF
-- veículo vinculado
-- link
-- status do link
-- último acesso
-- copiar link
-- abrir link
-- regenerar link
-- bloquear link
-- reativar link
+Policies já permitem UPDATE/DELETE para admin; adicionar DELETE para filial dona.
 
-Também vou:
-- mostrar `Revogado` quando aplicável;
-- garantir que “bloquear” e “reativar” usem o status real;
-- manter “regenerar” invalidando apenas o token anterior e deixando o novo como `ativo`;
-- atualizar o histórico de auditoria a cada ação.
+### 5. Editabilidade geral nos demais módulos
+Auditar e garantir botão Editar/Excluir nos cards/linhas de:
+- Almoxarifado (itens, entradas, saídas) — já existe, validar.
+- Combustível (lançamentos do admin) — adicionar editar/excluir.
+- Protocolos — adicionar editar/excluir.
+- Avisos de férias — adicionar editar/excluir.
+- Documentos de veículos — adicionar editar/excluir.
+- Folha de pagamento e Rescisão — campos editáveis antes de gerar PDF (já estão).
+- Fechamento — soft-delete já existe; garantir que UPDATE em campo individual persiste (já está corrigido em wave 1).
 
-### 5. Corrigir e regularizar os links já existentes
-Vou fazer um saneamento dos vínculos já cadastrados para os técnicos citados:
-- Diego
-- Tiago Toledo
-- Tiago Moreira
-- Leandro
-- Rafael
-- Jerri
-- Naciel
-- Vitor Praia Grande
+Padrão: reaproveitar Dialog + form controlado, `supabase.update().eq('id', x)`, refresh local imediato.
 
-Ação planejada:
-- localizar cada técnico já existente;
-- garantir que todos tenham `access_token` salvo;
-- se houver token quebrado, ausente ou inconsistente, gerar novo token;
-- salvar como `ativo`;
-- refletir imediatamente na tela de links.
+### 6. Continuação da fila já definida
+- Build estável: ok (já corrigido).
+- Telas quebradas (uniformes/atestados/importar-fechamento/conferência-ponto): trocar `<table>` aninhadas dentro de `<div>` com `whitespace` por estruturas válidas; envolver listas dinâmicas com `key` estável; usar `ItemCombobox`/`EmployeeCombobox` onde houver busca; eliminar `insertBefore` causados por translate.
+- Marca d'água: já removida via `vite.config.ts`. Adicionar `<meta name="lovable-badge" content="false">` por garantia.
+- Impressão/PDF: revisar `printInPage.ts` para usar `@media print { body * { visibility: hidden } .print-sheet, .print-sheet * { visibility: visible } }` — isola área de impressão.
+- Importações separadas: já estão (atestados em `/admin/atestados`, fechamento em `/admin/importar-fechamento`).
+- Arquivamento automático: ao gerar PDF (folha, rescisão, recibo), inserir registro em `documentos_funcionario` com `arquivo_url` do storage.
+- Busca fácil: integrar `EmployeeCombobox` em ASO, EPI, Uniforme, Atestados, Folha, Rescisão.
+- Estoque/almoxarifado: ajustar lógica de **recarga** (ItemCombobox + "lançar manualmente" para item não cadastrado, sem travar).
+- Monitoramento: tela já existe; garantir consulta em `activity_log` com "online agora" (last_activity_at > now()-5min) e histórico por pessoa.
+- Bloqueio por horário: tabela `config_acesso_horario` com flag `enabled=false` por padrão; admin (você) sempre liberado via `acesso_excepcional` ou bypass por role admin.
+- Módulos visíveis no menu: Combustível, Doc. Veículos, Protocolo, Liberação, Aviso Férias, Compras, Folha, Rescisão — já roteados; revisar `AppSidebar` para garantir que aparecem.
 
-Isso inclui corrigir os links antigos sem apagar técnicos válidos.
+### 7. Resumo das mudanças técnicas
+- **Migration nova**: extender enum `app_role` (+ faturamento, +financeiro), policies SELECT, tabela `config_acesso_horario` (se não existir).
+- **Edge function**: chamar `provision-test-user` para criar `fat@topac.local` e `fin@topac.local`.
+- **Front**:
+  - `LoginPage`: alias `FAT`/`FIN` → e-mail interno.
+  - `App.tsx` + `RoleRedirect`: roteamento das novas roles.
+  - `ConfiguracoesPage`: bloco "Links de acesso" com copy-to-clipboard.
+  - `PrestadoresPage`: edição completa + exclusão.
+  - `ComprasPage`: edição + exclusão.
+  - Diversos módulos: botão editar/excluir consistente.
+  - `index.css`: regras de impressão isoladas.
+  - `useUserRole`: incluir `faturamento` e `financeiro` na lista de prioridade.
 
-### 6. Implantar o link único permanente de Goiânia por CPF
-Como esse fluxo ainda não aparece implementado no código atual, vou completar essa parte.
+### Entrega final
+Devolverei:
+- Lista do que foi corrigido.
+- Acessos criados (FAT / FIN).
+- Links prontos para copiar/testar.
+- Pendências de validação visual (telas que dependem de dados reais para conferir).
 
-Implementação prevista:
-- criar um link único permanente para Goiânia;
-- abrir uma tela simples de acesso por CPF;
-- localizar o funcionário/técnico pelo CPF informado;
-- redirecionar para o app correto, sem misturar dados entre usuários;
-- permitir uso simultâneo por mais de um CPF;
-- sem expiração automática.
-
-Esse fluxo será isolado do restante e não vai alterar as rotas já aprovadas do portal principal.
-
-### 7. Garantir persistência real em banco
-Vou garantir que tudo fique salvo no banco:
-- token atual
-- status do link
-- último acesso
-- bloqueio/reativação
-- revogação
-- histórico de regeneração/ações
-
-### 8. Testes finais obrigatórios
-Depois da implementação, vou validar este roteiro:
-- abrir link do Tiago no celular
-- abrir link do Diego no celular
-- abrir link do Vitor Praia Grande
-- copiar link na tela admin
-- colar em navegador anônimo
-- confirmar abertura normal do app
-- bloquear um link e confirmar bloqueio
-- reativar o link e confirmar volta do acesso
-- abrir o link único de Goiânia
-- informar CPF
-- confirmar abertura do app correto
-- atualizar página e confirmar persistência
-
-## Detalhes técnicos
-- Banco: migração para adicionar status real do link e campos de auditoria em `tecnicos_campo`.
-- Backend: ajuste da função `supabase/functions/tecnico-app/index.ts` para retornar motivos específicos e registrar último acesso.
-- Frontend móvel: ajuste em `src/context/TecnicoAppContext.tsx` para tratar mensagens corretas.
-- Admin: ajuste em `src/pages/admin/AppOperacionalPage.tsx` para refletir status, ações e último acesso.
-- Goiânia: criação do fluxo permanente por CPF, reaproveitando a mesma base de técnicos sem alterar login tradicional.
-
-## Resultado esperado
-Ao final:
-- os links dos técnicos serão permanentes;
-- não haverá mais mensagem de “expirado” para link ativo;
-- o admin terá controle real de status e histórico;
-- os links antigos quebrados serão regularizados;
-- o fluxo único de Goiânia por CPF ficará permanente e isolado.
+Sem questionários intermediários.

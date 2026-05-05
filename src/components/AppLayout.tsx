@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import FooterSobre from '@/components/FooterSobre';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -25,9 +24,14 @@ const AppLayout: React.FC = () => {
 
   if (!userRole) return <AguardandoAcesso />;
 
-  // Apenas admin acessa o painel central
+  // Only admin can access central panel
   if (userRole !== 'admin') {
-    return <Navigate to="/" replace />;
+    const redirect = userRole === 'tecnico_campo' ? '/campo'
+      : userRole === 'operacional' ? '/operacional'
+      : userRole?.startsWith('filial_') ? '/filial'
+      : userRole === 'almoxarifado' ? '/filial'
+      : '/';
+    return <Navigate to={redirect} replace />;
   }
 
   return (
@@ -40,7 +44,6 @@ const AppLayout: React.FC = () => {
         <div className="p-6 max-w-[1600px] mx-auto">
           <ErrorBoundary><Outlet /></ErrorBoundary>
         </div>
-        <FooterSobre />
       </main>
     </div>
   );

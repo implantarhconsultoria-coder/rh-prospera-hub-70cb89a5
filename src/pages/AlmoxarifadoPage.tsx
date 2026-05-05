@@ -9,18 +9,6 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import AlmoxarifadoCargaTab from '@/components/AlmoxarifadoCargaTab';
-import * as XLSX from 'xlsx';
-
-// Detecta nomes corrompidos vindos de importação binária ou linhas inválidas
-const INVALID_NAME_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFD]/;
-const isValidItemName = (n: unknown): n is string => {
-  if (typeof n !== 'string') return false;
-  const t = n.trim();
-  if (!t || t.length > 200) return false;
-  if (INVALID_NAME_RE.test(t)) return false;
-  if (!/[A-Za-z0-9]/.test(t)) return false;
-  return true;
-};
 
 type Tab = 'estoque' | 'entrada' | 'saida' | 'carregamento' | 'carga' | 'fechamento' | 'relatorio';
 
@@ -50,7 +38,6 @@ const AlmoxarifadoPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showNewItem, setShowNewItem] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Daily closing state
@@ -98,33 +85,6 @@ const AlmoxarifadoPage: React.FC = () => {
   const [historicoOpen, setHistoricoOpen] = useState(false);
   const [historicoItem, setHistoricoItem] = useState<Item | null>(null);
   const [historicoAjustes, setHistoricoAjustes] = useState<any[]>([]);
-
-  // Edição completa de item
-  const [editOpen, setEditOpen] = useState(false);
-  const [editItem, setEditItem] = useState<any | null>(null);
-
-  const abrirEdicao = (item: any) => { setEditItem({ ...item }); setEditOpen(true); };
-
-  const salvarEdicao = async () => {
-    if (!editItem) return;
-    const payload: any = {
-      nome: editItem.nome,
-      descricao: editItem.descricao || '',
-      categoria: editItem.categoria || '',
-      unidade: editItem.unidade || 'un',
-      quantidade: Number(editItem.quantidade) || 0,
-      estoque_minimo: Number(editItem.estoque_minimo) || 0,
-      localizacao: editItem.localizacao || '',
-      empresa: editItem.empresa || '',
-      observacoes: editItem.observacoes || '',
-      valor_unitario: Number(editItem.valor_unitario) || 0,
-    };
-    const { error } = await supabase.from('almoxarifado_itens').update(payload).eq('id', editItem.id);
-    if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
-    toast.success('Item atualizado');
-    setEditOpen(false); setEditItem(null);
-    fetchAll();
-  };
 
   const uid = session?.user?.id;
 
@@ -210,123 +170,41 @@ const AlmoxarifadoPage: React.FC = () => {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !uid) return;
-
-    const name = file.name.toLowerCase();
-    const ext = name.split('.').pop() || '';
-    const allowedExt = ['xlsx', 'xls', 'csv'];
-    if (!allowedExt.includes(ext)) {
-      toast.error('Arquivo inválido. Envie uma planilha XLSX, XLS ou CSV no modelo correto.');
-      if (fileRef.current) fileRef.current.value = '';
-      return;
-    }
-
     setLoading(true);
     try {
-      const buf = await file.arrayBuffer();
-      let wb: XLSX.WorkBook;
-      try {
-        wb = XLSX.read(buf, { type: 'array' });
-      } catch {
-        toast.error('Arquivo inválido. Envie uma planilha XLSX, XLS ou CSV no modelo correto.');
-        setLoading(false);
-        if (fileRef.current) fileRef.current.value = '';
-        return;
-      }
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      if (!ws) {
-        toast.error('Planilha vazia ou ilegível.');
-        setLoading(false);
-        if (fileRef.current) fileRef.current.value = '';
-        return;
-      }
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '', raw: false });
-      if (!rows.length) {
-        toast.error('Planilha sem linhas de dados.');
-        setLoading(false);
-        if (fileRef.current) fileRef.current.value = '';
-        return;
-      }
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim());
+      const header = lines[0].split(/[;\t,]/).map(h => h.trim().toLowerCase());
+      const nameIdx = header.findIndex(h => h.includes('nome') || h.includes('item') || h.includes('descri'));
+      const catIdx = header.findIndex(h => h.includes('categ'));
+      const unIdx = header.findIndex(h => h.includes('unid'));
+      const qtdIdx = header.findIndex(h => h.includes('qtd') || h.includes('quant'));
+      const valIdx = header.findIndex(h => h.includes('valor') || h.includes('preco') || h.includes('preço'));
+      const locIdx = header.findIndex(h => h.includes('local'));
 
-      // Normaliza headers
-      const norm = (s: string) => s.toString().trim().toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const headers = Object.keys(rows[0]).map(norm);
-      const findKey = (orig: string[], match: (h: string) => boolean) => {
-        const idx = headers.findIndex(match);
-        return idx >= 0 ? orig[idx] : null;
-      };
-      const origKeys = Object.keys(rows[0]);
-      const kNome = findKey(origKeys, h => h === 'item' || h.includes('nome'));
-      const kDesc = findKey(origKeys, h => h.includes('descri'));
-      const kCat = findKey(origKeys, h => h.includes('categ'));
-      const kUn = findKey(origKeys, h => h.includes('unid'));
-      const kQtd = findKey(origKeys, h => h.includes('quant') || h === 'qtd');
-      const kMin = findKey(origKeys, h => h.includes('minim'));
-      const kLoc = findKey(origKeys, h => h.includes('local'));
-      const kEmp = findKey(origKeys, h => h.includes('empresa') || h.includes('filial'));
-      const kObs = findKey(origKeys, h => h.includes('observ'));
-
-      if (!kNome) {
-        toast.error('Cabeçalho inválido. Colunas obrigatórias: item, descrição, categoria, unidade, quantidade, estoque mínimo, localização, empresa/filial, observações.');
-        setLoading(false);
-        if (fileRef.current) fileRef.current.value = '';
-        return;
+      let imported = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(/[;\t,]/).map(c => c.trim());
+        const nome = nameIdx >= 0 ? cols[nameIdx] : cols[0];
+        if (!nome) continue;
+        await supabase.from('almoxarifado_itens').insert({
+          user_id: uid, nome,
+          categoria: catIdx >= 0 ? cols[catIdx] || '' : '',
+          unidade: unIdx >= 0 ? cols[unIdx] || 'un' : 'un',
+          quantidade: qtdIdx >= 0 ? Number(cols[qtdIdx]) || 0 : 0,
+          valor_unitario: valIdx >= 0 ? Number(cols[valIdx]?.replace(',', '.')) || 0 : 0,
+          localizacao: locIdx >= 0 ? cols[locIdx] || '' : '',
+        } as any);
+        imported++;
       }
-
-      const toInsert: any[] = [];
-      let invalid = 0;
-      for (const row of rows) {
-        const nome = String(row[kNome] ?? '').trim();
-        if (!isValidItemName(nome)) { invalid++; continue; }
-        toInsert.push({
-          user_id: uid,
-          nome,
-          descricao: kDesc ? String(row[kDesc] ?? '').trim().slice(0, 500) : '',
-          categoria: kCat ? String(row[kCat] ?? '').trim().slice(0, 100) : '',
-          unidade: kUn ? (String(row[kUn] ?? '').trim().slice(0, 20) || 'un') : 'un',
-          quantidade: kQtd ? (Number(String(row[kQtd] ?? '0').replace(',', '.')) || 0) : 0,
-          valor_unitario: 0,
-          localizacao: kLoc ? String(row[kLoc] ?? '').trim().slice(0, 100) : '',
-        });
-      }
-
-      if (!toInsert.length) {
-        toast.error('Nenhuma linha válida encontrada na planilha.');
-        setLoading(false);
-        if (fileRef.current) fileRef.current.value = '';
-        return;
-      }
-
-      // Insere em lote
-      const { error } = await supabase.from('almoxarifado_itens').insert(toInsert as any);
-      if (error) {
-        toast.error('Erro ao importar: ' + error.message);
-      } else {
-        toast.success(`${toInsert.length} itens importados${invalid ? ` (${invalid} linhas inválidas ignoradas)` : ''}.`);
-        fetchAll();
-      }
+      toast.success(`${imported} itens importados!`);
+      fetchAll();
     } catch {
-      toast.error('Arquivo inválido. Envie uma planilha XLSX, XLS ou CSV no modelo correto.');
+      toast.error('Erro ao importar planilha');
     }
     setLoading(false);
     setShowImport(false);
-    if (fileRef.current) fileRef.current.value = '';
   };
-
-  const handleLimparInvalidos = async () => {
-    if (!confirm('Remover todos os registros corrompidos/inválidos do estoque? Itens válidos serão mantidos.')) return;
-    setLoading(true);
-    const { data, error } = await supabase.from('almoxarifado_itens').select('id, nome');
-    if (error || !data) { toast.error('Erro ao listar itens'); setLoading(false); return; }
-    const badIds = data.filter(r => !isValidItemName(r.nome)).map(r => r.id);
-    if (!badIds.length) { toast.success('Nenhum registro inválido encontrado.'); setLoading(false); return; }
-    const { error: delErr } = await supabase.from('almoxarifado_itens').delete().in('id', badIds);
-    if (delErr) toast.error('Erro ao remover: ' + delErr.message);
-    else toast.success(`${badIds.length} registros inválidos removidos.`);
-    fetchAll();
-    setLoading(false);
-  };
-
 
   const handleEntrada = async () => {
     if (!entItemId || entQtd <= 0 || !uid) { toast.error('Preencha item e quantidade'); return; }
@@ -478,9 +356,7 @@ const AlmoxarifadoPage: React.FC = () => {
   };
 
   const getItemName = (id: string) => itens.find(i => i.id === id)?.nome || '—';
-  const filteredItens = itens
-    .filter(i => isValidItemName(i.nome))
-    .filter(i => i.nome.toLowerCase().includes(search.toLowerCase()));
+  const filteredItens = itens.filter(i => i.nome.toLowerCase().includes(search.toLowerCase()));
 
   const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
     { key: 'estoque', label: 'Estoque', icon: Package },
@@ -628,60 +504,12 @@ const AlmoxarifadoPage: React.FC = () => {
                   <Upload className="w-4 h-4 mr-1" />Importar Planilha
                 </Button>
               )}
-              {isAdmin && (
-                <Button size="sm" variant="outline" onClick={handleLimparInvalidos}>
-                  <Trash2 className="w-4 h-4 mr-1" />Limpar registros inválidos
-                </Button>
-              )}
             </div>
 
-            {isAdmin && (
-              <div className="flex items-center gap-3 flex-wrap p-3 rounded-lg border bg-muted/20">
-                <span className="text-xs font-medium">
-                  {selectedIds.size > 0
-                    ? `${selectedIds.size} item(ns) selecionado(s)`
-                    : 'Nenhum item selecionado'}
-                </span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={selectedIds.size === 0}
-                  onClick={async () => {
-                    if (!selectedIds.size) return;
-                    if (!confirm(`Tem certeza que deseja excluir os itens selecionados? Essa ação não pode ser desfeita.`)) return;
-                    const ids = Array.from(selectedIds);
-                    const { error } = await supabase.from('almoxarifado_itens').delete().in('id', ids);
-                    if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
-                    toast.success(`${ids.length} item(ns) excluído(s)`);
-                    setSelectedIds(new Set());
-                    fetchAll();
-                  }}
-                >
-                  <Trash2 className="w-4 h-4 mr-1" />Excluir selecionados
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={selectedIds.size === 0}
-                  onClick={() => setSelectedIds(new Set())}
-                >
-                  Limpar seleção
-                </Button>
-              </div>
-            )}
-
             {showImport && (
-              <div className="border rounded-lg p-4 bg-muted/20 space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Envie XLSX, XLS ou CSV com as colunas: <strong>item, descrição, categoria, unidade, quantidade, estoque mínimo, localização, empresa/filial, observações</strong>.
-                </p>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-                  onChange={handleImport}
-                  className="text-xs"
-                />
+              <div className="border rounded-lg p-4 bg-muted/20">
+                <p className="text-xs text-muted-foreground mb-2">Envie um CSV/TXT com colunas: Nome, Categoria, Unidade, Quantidade, Valor, Localização</p>
+                <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleImport} className="text-xs" />
               </div>
             )}
 
@@ -702,28 +530,6 @@ const AlmoxarifadoPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-background"><tr className="border-b bg-muted/50">
-                  {isAdmin && (
-                    <th className="px-3 py-3 text-left w-10">
-                      <input
-                        type="checkbox"
-                        aria-label="Selecionar todos"
-                        checked={filteredItens.length > 0 && filteredItens.every(i => selectedIds.has(i.id))}
-                        ref={el => {
-                          if (el) {
-                            const someSelected = filteredItens.some(i => selectedIds.has(i.id));
-                            const allSelected = filteredItens.length > 0 && filteredItens.every(i => selectedIds.has(i.id));
-                            el.indeterminate = someSelected && !allSelected;
-                          }
-                        }}
-                        onChange={(e) => {
-                          const next = new Set(selectedIds);
-                          if (e.target.checked) filteredItens.forEach(i => next.add(i.id));
-                          else filteredItens.forEach(i => next.delete(i.id));
-                          setSelectedIds(next);
-                        }}
-                      />
-                    </th>
-                  )}
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Nome</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Categoria</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Unid.</th>
@@ -735,21 +541,6 @@ const AlmoxarifadoPage: React.FC = () => {
                 <tbody>
                   {filteredItens.map(item => (
                     <tr key={item.id} className="border-b hover:bg-muted/20">
-                      {isAdmin && (
-                        <td className="px-3 py-2">
-                          <input
-                            type="checkbox"
-                            aria-label={`Selecionar ${item.nome}`}
-                            checked={selectedIds.has(item.id)}
-                            onChange={(e) => {
-                              const next = new Set(selectedIds);
-                              if (e.target.checked) next.add(item.id);
-                              else next.delete(item.id);
-                              setSelectedIds(next);
-                            }}
-                          />
-                        </td>
-                      )}
                       <td className="px-3 py-2 text-xs font-medium">{item.nome}</td>
                       <td className="px-3 py-2 text-xs">{item.categoria || '—'}</td>
                       <td className="px-3 py-2 text-xs">{item.unidade}</td>
@@ -776,24 +567,13 @@ const AlmoxarifadoPage: React.FC = () => {
                               <Settings2 className="w-3.5 h-3.5" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar item"
-                            onClick={() => abrirEdicao(item)}>
-                            <FileText className="w-3.5 h-3.5" />
-                          </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Histórico"
                             onClick={() => abrirHistorico(item)}>
                             <History className="w-3.5 h-3.5" />
                           </Button>
                           {isAdmin && (
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Excluir"
-                              onClick={async () => {
-                                if (!confirm(`Excluir o item "${item.nome}"?`)) return;
-                                const { error } = await supabase.from('almoxarifado_itens').delete().eq('id', item.id);
-                                if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
-                                toast.success('Item excluído');
-                                setSelectedIds(prev => { const n = new Set(prev); n.delete(item.id); return n; });
-                                fetchAll();
-                              }}>
+                              onClick={async () => { await supabase.from('almoxarifado_itens').delete().eq('id', item.id); fetchAll(); }}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           )}
@@ -801,7 +581,7 @@ const AlmoxarifadoPage: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                  {filteredItens.length === 0 && <tr><td colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
+                  {filteredItens.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1260,41 +1040,6 @@ const AlmoxarifadoPage: React.FC = () => {
               </table>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de edição completa do item */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Editar Item</DialogTitle></DialogHeader>
-          {editItem && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div><label className="text-xs text-muted-foreground block mb-1">Nome</label>
-                <Input value={editItem.nome || ''} onChange={e => setEditItem({ ...editItem, nome: e.target.value })} /></div>
-              <div><label className="text-xs text-muted-foreground block mb-1">Categoria</label>
-                <Input value={editItem.categoria || ''} onChange={e => setEditItem({ ...editItem, categoria: e.target.value })} /></div>
-              <div><label className="text-xs text-muted-foreground block mb-1">Unidade</label>
-                <Input value={editItem.unidade || ''} onChange={e => setEditItem({ ...editItem, unidade: e.target.value })} /></div>
-              <div><label className="text-xs text-muted-foreground block mb-1">Quantidade</label>
-                <Input type="number" value={editItem.quantidade ?? 0} onChange={e => setEditItem({ ...editItem, quantidade: Number(e.target.value) })} /></div>
-              <div><label className="text-xs text-muted-foreground block mb-1">Estoque mínimo</label>
-                <Input type="number" value={editItem.estoque_minimo ?? 0} onChange={e => setEditItem({ ...editItem, estoque_minimo: Number(e.target.value) })} /></div>
-              <div><label className="text-xs text-muted-foreground block mb-1">Valor unitário</label>
-                <Input type="number" step="0.01" value={editItem.valor_unitario ?? 0} onChange={e => setEditItem({ ...editItem, valor_unitario: Number(e.target.value) })} /></div>
-              <div><label className="text-xs text-muted-foreground block mb-1">Localização</label>
-                <Input value={editItem.localizacao || ''} onChange={e => setEditItem({ ...editItem, localizacao: e.target.value })} /></div>
-              <div><label className="text-xs text-muted-foreground block mb-1">Empresa/Filial</label>
-                <Input value={editItem.empresa || ''} onChange={e => setEditItem({ ...editItem, empresa: e.target.value })} /></div>
-              <div className="md:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Descrição</label>
-                <Textarea rows={2} value={editItem.descricao || ''} onChange={e => setEditItem({ ...editItem, descricao: e.target.value })} /></div>
-              <div className="md:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Observações</label>
-                <Textarea rows={2} value={editItem.observacoes || ''} onChange={e => setEditItem({ ...editItem, observacoes: e.target.value })} /></div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
-            <Button onClick={salvarEdicao}>Salvar</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -68,13 +68,13 @@ const LancamentosPage: React.FC = () => {
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold font-display text-foreground tracking-tight">Lançamentos Mensais</h1>
-          <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
+          <p className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
             <Building2 className="w-4 h-4" />
             <span className="font-medium text-foreground">{empresaNome}</span>
             <span className="text-muted-foreground/60">•</span>
             <span>{competencia}</span>
             {isAdmin && <Badge variant="outline" className="ml-2 text-[10px]">Admin</Badge>}
-          </div>
+          </p>
         </div>
         <Button onClick={() => toast.success('Lançamentos salvos!')} size="lg" className="gradient-primary text-primary-foreground shadow-premium">
           <Save className="w-4 h-4 mr-2" /> Salvar Alterações

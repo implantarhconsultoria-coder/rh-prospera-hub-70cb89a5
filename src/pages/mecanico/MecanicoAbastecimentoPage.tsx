@@ -10,7 +10,7 @@ import { getBrowserLocation } from '@/lib/browserGeo';
 import ConfirmacaoVisual from '@/components/ConfirmacaoVisual';
 import { Html5Qrcode } from 'html5-qrcode';
 
-type Step = 'idle' | 'scan' | 'confirm' | 'photo' | 'photo_painel' | 'fill' | 'done';
+type Step = 'idle' | 'scan' | 'confirm' | 'photo' | 'fill' | 'done';
 
 interface ValeData {
   vale: { id: string; codigo: string; valor_limite: number; litros_limite: number; tipo?: string };
@@ -35,8 +35,6 @@ const MecanicoAbastecimentoPage: React.FC = () => {
   const [vale, setVale] = useState<ValeData | null>(null);
   const [fotoBomba, setFotoBomba] = useState<Blob | null>(null);
   const [fotoUrl, setFotoUrl] = useState<string>('');
-  const [fotoPainel, setFotoPainel] = useState<Blob | null>(null);
-  const [fotoPainelUrl, setFotoPainelUrl] = useState<string>('');
   const [valor, setValor] = useState('');
   const [litros, setLitros] = useState('');
   const [combustivel, setCombustivel] = useState('Diesel S10');
@@ -47,7 +45,6 @@ const MecanicoAbastecimentoPage: React.FC = () => {
   const [confirm, setConfirm] = useState<{ titulo: string; detalhes: { label: string; valor: string }[] } | null>(null);
   const [recentes, setRecentes] = useState<any[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-  const filePainelRef = useRef<HTMLInputElement>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerDivId = 'qr-reader-mec';
 
@@ -129,18 +126,11 @@ const MecanicoAbastecimentoPage: React.FC = () => {
   const onFileSelected = async (file: File) => {
     setFotoBomba(file);
     setFotoUrl(URL.createObjectURL(file));
-    setStep('photo_painel');
-  };
-
-  const onFilePainelSelected = async (file: File) => {
-    setFotoPainel(file);
-    setFotoPainelUrl(URL.createObjectURL(file));
     setStep('fill');
   };
 
   const finalizar = async () => {
     if (!vale || !fotoBomba) return;
-    if (!fotoPainel) { toast.error('Tire também a foto do painel do veículo'); return; }
     const v = Number(valor.replace(',', '.'));
     const l = Number(litros.replace(',', '.'));
     if (!v || !l) { toast.error('Informe valor e litros'); return; }
@@ -148,7 +138,6 @@ const MecanicoAbastecimentoPage: React.FC = () => {
     try {
       const geo = await getBrowserLocation();
       const foto64 = await blobToBase64(fotoBomba);
-      const fotoPainel64 = await blobToBase64(fotoPainel);
       const r: any = await call('registrar_abastecimento', {
         vale_codigo: vale.vale.codigo,
         valor: v,
@@ -160,7 +149,6 @@ const MecanicoAbastecimentoPage: React.FC = () => {
         latitude: geo.latitude,
         longitude: geo.longitude,
         foto_bomba_base64: foto64,
-        foto_painel_base64: fotoPainel64,
         preenchimento: 'manual',
       });
       setConfirm({
@@ -189,8 +177,6 @@ const MecanicoAbastecimentoPage: React.FC = () => {
     setVale(null);
     setFotoBomba(null);
     setFotoUrl('');
-    setFotoPainel(null);
-    setFotoPainelUrl('');
     setValor(''); setLitros(''); setKmAtual('');
     setPostoNome(''); setPostoCnpj('');
   };
@@ -295,46 +281,11 @@ const MecanicoAbastecimentoPage: React.FC = () => {
         </motion.div>
       )}
 
-      {step === 'photo_painel' && vale && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-          {fotoUrl && (
-            <div>
-              <p className="text-[10px] text-white/50 uppercase font-semibold mb-1">Foto da bomba (ok)</p>
-              <img src={fotoUrl} alt="bomba" className="w-full rounded-2xl border border-emerald-400/30 max-h-48 object-cover" />
-            </div>
-          )}
-          <div className="bg-blue-500/10 border border-blue-400/30 rounded-xl p-3 text-xs text-blue-200 flex gap-2">
-            <Camera className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <span>Agora tire uma foto do <strong>painel do veículo</strong> mostrando o KM/odômetro. Essa foto comprova o uso real e fica anexada à conferência.</span>
-          </div>
-          <Button
-            onClick={() => filePainelRef.current?.click()}
-            className="w-full h-16 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl border-0"
-          >
-            <Camera className="w-5 h-5 mr-2" /> Tirar foto do painel do veículo
-          </Button>
-          <Button variant="outline" onClick={reset} className="w-full bg-white/5 border-white/10 text-white">Cancelar</Button>
-          <input ref={filePainelRef} type="file" accept="image/*" capture="environment" hidden
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) onFilePainelSelected(f); }} />
-        </motion.div>
-      )}
-
       {step === 'fill' && vale && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-          <div className="grid grid-cols-2 gap-2">
-            {fotoUrl && (
-              <div>
-                <p className="text-[10px] text-white/50 uppercase font-semibold mb-1">Bomba</p>
-                <img src={fotoUrl} alt="bomba" className="w-full rounded-xl border border-white/10 h-28 object-cover" />
-              </div>
-            )}
-            {fotoPainelUrl && (
-              <div>
-                <p className="text-[10px] text-white/50 uppercase font-semibold mb-1">Painel</p>
-                <img src={fotoPainelUrl} alt="painel" className="w-full rounded-xl border border-white/10 h-28 object-cover" />
-              </div>
-            )}
-          </div>
+          {fotoUrl && (
+            <img src={fotoUrl} alt="bomba" className="w-full rounded-2xl border border-white/10 max-h-64 object-cover" />
+          )}
           <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-3 text-xs text-amber-200 flex gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>Confira o valor e os litros lendo a bomba. Esta foto fica anexada à conferência.</span>

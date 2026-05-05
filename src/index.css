@@ -200,59 +200,54 @@
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-/* Padrão de impressão cirúrgico:
-   - se existir #print-root OU .print-area → isola somente essa área
-   - sempre esconde sidebar, header, botões, toasts, badges Lovable
-   - nunca imprime tela inteira do app */
 @media print {
-  /* Esconder TODO chrome de UI sempre */
-  .no-print,
-  [data-sidebar],
-  aside.sidebar,
-  nav.sidebar,
-  header.app-header,
-  .app-sidebar,
-  .lovable-badge,
-  [data-sonner-toaster],
-  .toast,
-  .modal-backdrop,
-  button:not(.print-keep),
-  .filtros-bar,
-  .toolbar:not(.print-keep) {
-    display: none !important;
-  }
-
-  /* Caso 1: página tem #print-root ou .print-area → isola */
-  body:has(#print-root) *,
-  body:has(.print-area) * {
+  body * {
     visibility: hidden !important;
   }
-  body:has(#print-root) #print-root,
-  body:has(#print-root) #print-root *,
-  body:has(.print-area) .print-area,
-  body:has(.print-area) .print-area * {
+
+  #print-root,
+  #print-root * {
     visibility: visible !important;
   }
-  body:has(#print-root) #print-root,
-  body:has(.print-area) .print-area {
+
+  #print-root {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 6mm !important;
+    width: 190mm !important;
+    min-height: 277mm !important;
+    margin: 0 auto !important;
+    padding: 10mm !important;
     background: #fff !important;
     color: #000 !important;
     box-shadow: none !important;
     border: none !important;
   }
 
-  @page { size: A4 portrait; margin: 8mm; }
-  @page landscape { size: A4 landscape; margin: 8mm; }
+  .no-print {
+    display: none !important;
+  }
 
-  body { background: #fff !important; color: #000 !important; }
-  table { page-break-inside: auto; }
-  tr { page-break-inside: avoid; page-break-after: auto; }
+  nav,
+  aside,
+  header,
+  footer,
+  button,
+  input,
+  select,
+  textarea,
+  .sidebar,
+  .topbar,
+  .toast,
+  .modal-backdrop,
+  .lovable-badge {
+    display: none !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
 }
 
 .print-sheet {
@@ -260,18 +255,4 @@
   max-width: 190mm;
   margin: 0 auto;
   background: #fff;
-}
-
-/* Remove spinners de TODOS inputs number — Chrome/Safari/Edge/Firefox */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none !important;
-  appearance: none !important;
-  margin: 0 !important;
-}
-input[type="number"],
-input[type="number"]:hover,
-input[type="number"]:focus {
-  -moz-appearance: textfield !important;
-  appearance: textfield !important;
 }

@@ -89,8 +89,8 @@ const AtestadosImportPage: React.FC = () => {
         continue;
       }
 
-      const { data: signed } = await supabase.storage.from('atestados').createSignedUrl(path, 3600);
-      const fileUrl = signed?.signedUrl || '';
+      const { data: pub } = supabase.storage.from('atestados').getPublicUrl(path);
+      const fileUrl = pub.publicUrl;
 
       setStaging(prev => prev.map(s => s.fileName === file.name && s.status === 'subindo'
         ? { ...s, status: 'processando', fileUrl } : s));

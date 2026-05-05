@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import FooterSobre from '@/components/FooterSobre';
 
 const tabs = [
   { label: 'Início', icon: Home, path: '/campo' },
@@ -59,7 +58,6 @@ const CampoLayout: React.FC = () => {
         <div className="p-4 max-w-lg mx-auto text-white">
           <ErrorBoundary><Outlet /></ErrorBoundary>
         </div>
-        <FooterSobre variant="dark" />
       </main>
 
       {/* Bottom tab bar */}

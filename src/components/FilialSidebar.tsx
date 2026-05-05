@@ -2,24 +2,19 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, CalendarCheck, Stethoscope,
-  FileCheck, Bell, Building2, ChevronLeft, Menu, LogOut, CalendarDays, Send,
-  HardHat, Shirt, History,
+  FileCheck, Bell, Building2, ChevronLeft, Menu, LogOut, CalendarDays, Lock,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 
-// Filial NÃO faz fechamento. Apenas alimenta apontamentos para a central.
 const menuItems = [
   { label: 'Painel da Filial', icon: LayoutDashboard, path: '/filial' },
   { label: 'Funcionários', icon: Users, path: '/filial/funcionarios' },
   { label: 'Movimento Diário', icon: CalendarDays, path: '/filial/movimento-diario' },
-  { label: 'Apontamento', icon: Send, path: '/filial/apontamento' },
-  { label: 'Entrega de EPI', icon: HardHat, path: '/filial/epi' },
-  { label: 'Entrega de Uniformes', icon: Shirt, path: '/filial/uniformes' },
+  { label: 'Fechamento', icon: Lock, path: '/filial/fechamento' },
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/filial/aviso-ferias' },
   { label: 'ASO / Agendamento', icon: Stethoscope, path: '/filial/aso' },
   { label: 'Protocolos', icon: FileCheck, path: '/filial/protocolo' },
-  { label: 'Histórico', icon: History, path: '/filial/historico' },
   { label: 'Alertas', icon: Bell, path: '/filial/alertas' },
 ];
 

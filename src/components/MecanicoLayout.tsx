@@ -61,8 +61,7 @@ const HeaderInner: React.FC = () => {
 const TabBar: React.FC = () => {
   const { token = '' } = useParams<{ token: string }>();
   const location = useLocation();
-  // base derived from current URL → suporta /m/:token (legado) E /operacional/:token (canônico)
-  const base = location.pathname.startsWith('/operacional/') ? `/operacional/${token}` : `/m/${token}`;
+  const base = `/m/${token}`;
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-xl border-t border-white/5 shadow-2xl">
       <div className="flex justify-around items-center max-w-lg mx-auto px-1 py-1.5 overflow-x-auto">
