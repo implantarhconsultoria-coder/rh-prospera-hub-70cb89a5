@@ -73,6 +73,7 @@ const EscolherModuloPage: React.FC = () => {
         <div className="mt-6 text-center">
           <Button variant="ghost" size="sm" onClick={logout}><LogOut className="w-4 h-4 mr-1" /> Sair</Button>
         </div>
+        <div className="mt-4 border-t pt-2"><FooterSobre /></div>
       </div>
     </div>
   );

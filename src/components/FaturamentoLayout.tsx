@@ -5,6 +5,7 @@ import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { Loader2, FileText, Users, FileSignature, Receipt, TrendingUp, AlertTriangle, LogOut, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import FooterSobre from '@/components/FooterSobre';
 
 const ITEMS = [
   { to: '/faturamento', label: 'Dashboard', icon: TrendingUp, end: true },
@@ -52,8 +53,9 @@ const FaturamentoLayout: React.FC = () => {
           </Button>
         </div>
       </aside>
-      <main className="ml-64 min-h-screen">
-        <div className="p-6 max-w-[1600px] mx-auto"><Outlet /></div>
+      <main className="ml-64 min-h-screen flex flex-col">
+        <div className="p-6 max-w-[1600px] mx-auto flex-1 w-full"><Outlet /></div>
+        <FooterSobre />
       </main>
     </div>
   );
