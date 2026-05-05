@@ -25,7 +25,7 @@ const ROLE_LABELS: Record<AppRole, { label: string; color: string; portal: strin
   filial_goiania: { label: 'Filial Goiânia', color: 'bg-emerald-500', portal: 'Portal RH Goiânia' },
   almoxarifado: { label: 'Almoxarifado', color: 'bg-amber-500', portal: 'Portal Filial' },
   tecnico_campo: { label: 'Técnico de Campo', color: 'bg-purple-500', portal: 'Portal Campo' },
-  operacional: { label: 'Operacional', color: 'bg-teal-500', portal: 'Portal Operacional' },
+  operacional: { label: 'Mecânico', color: 'bg-teal-500', portal: 'App Mecânico' },
   faturamento: { label: 'Faturamento', color: 'bg-indigo-500', portal: 'Portal Faturamento' },
   financeiro: { label: 'Financeiro', color: 'bg-cyan-600', portal: 'Portal Financeiro' },
   usuario: { label: 'Usuário Básico', color: 'bg-gray-500', portal: 'Sem portal' },
