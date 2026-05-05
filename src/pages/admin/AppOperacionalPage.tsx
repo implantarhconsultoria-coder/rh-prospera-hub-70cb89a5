@@ -94,12 +94,12 @@ const AppOperacionalPage: React.FC = () => {
         <div>
           <h1 className="text-3xl font-bold font-display flex items-center gap-2">
             <Wrench className="w-7 h-7 text-primary" />
-            App Operacional — Mecânicos Externos
+            App Mecânico — Mecânicos Externos
           </h1>
-          <p className="text-muted-foreground mt-1">Monitoramento em tempo real dos técnicos de campo</p>
+          <p className="text-muted-foreground mt-1">Monitoramento em tempo real dos mecânicos de campo</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => window.open('/campo', '_blank')} className="bg-amber-500/10 border-amber-500/30 text-amber-700 hover:bg-amber-500/20">
+          <Button variant="outline" onClick={() => window.open('/mecanico', '_blank')} className="bg-amber-500/10 border-amber-500/30 text-amber-700 hover:bg-amber-500/20">
             👁 Visualizar App
           </Button>
           <Button variant="outline" onClick={load}>Atualizar</Button>
