@@ -1,10 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { Loader2, Building2, DollarSign, FileText, LogOut } from 'lucide-react';
+import { Loader2, Building2, DollarSign, FileText, LogOut, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'financeiro' | 'faturamento';
+type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'financeiro' | 'faturamento' | 'tecnico_campo';
 
 interface ModuloInfo { label: string; desc: string; path: string; icon: React.ReactNode; cor: string; }
 
@@ -13,6 +13,7 @@ const MODULO: Record<Exclude<AppRole,'admin'>, ModuloInfo> = {
   filial_goiania: { label: 'RH Goiânia',      desc: 'TOPAC GOIÂNIA',       path: '/filial',      icon: <Building2 className="w-6 h-6" />, cor: 'from-emerald-500 to-emerald-700' },
   financeiro:     { label: 'Financeiro',      desc: 'Módulo financeiro',   path: '/financeiro',  icon: <DollarSign className="w-6 h-6" />, cor: 'from-cyan-500 to-cyan-700' },
   faturamento:    { label: 'Faturamento',     desc: 'Módulo faturamento',  path: '/faturamento', icon: <FileText className="w-6 h-6" />,   cor: 'from-indigo-500 to-indigo-700' },
+  tecnico_campo:  { label: 'App Mecânicos',   desc: 'Topac Campo',         path: '/campo',       icon: <Wrench className="w-6 h-6" />,    cor: 'from-amber-500 to-orange-700' },
 };
 
 const EscolherModuloPage: React.FC = () => {
