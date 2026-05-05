@@ -48,6 +48,8 @@ import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
 import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
 import AcessoRemovidoPage from "@/pages/AcessoRemovidoPage";
+import AcessoCpfSimplesPage from "@/pages/AcessoCpfSimplesPage";
+import PermissoesAcessoPage from "@/pages/admin/PermissoesAcessoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -151,11 +153,10 @@ const App = () => (
               <Route path="/relatorio-vt-impressao" element={<ErrorBoundary><RelatorioVTImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-beneficio-individual" element={<ErrorBoundary><RelatorioBeneficioIndividualPage /></ErrorBoundary>} />
 
-              {/* ===== Rotas externas legadas — TODAS removidas =====
-                  Mostram tela "Acesso removido pelo administrador". */}
-              <Route path="/sp" element={<AcessoRemovidoPage />} />
-              <Route path="/pg" element={<AcessoRemovidoPage />} />
-              <Route path="/go" element={<AcessoRemovidoPage />} />
+              {/* ===== Acesso por CPF simples (links fixos) ===== */}
+              <Route path="/sp" element={<AcessoCpfSimplesPage />} />
+              <Route path="/pg" element={<AcessoCpfSimplesPage />} />
+              <Route path="/go" element={<AcessoCpfSimplesPage />} />
               <Route path="/g" element={<AcessoRemovidoPage />} />
               <Route path="/r/:slug" element={<AcessoRemovidoPage />} />
               <Route path="/acesso/:slug" element={<AcessoRemovidoPage />} />
