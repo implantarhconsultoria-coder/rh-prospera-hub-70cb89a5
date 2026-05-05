@@ -129,6 +129,15 @@ const CombustivelAdminPage: React.FC = () => {
     reload();
   };
 
+  const excluirAbast = async (id: string) => {
+    if (!isAdmin) return toast.error('Somente Admin pode excluir');
+    if (!confirm('Excluir este abastecimento? Esta ação não pode ser desfeita.')) return;
+    const { error } = await supabase.from('abastecimentos').delete().eq('id', id);
+    if (error) return toast.error(error.message);
+    toast.success('Abastecimento excluído');
+    reload();
+  };
+
   const toggleSel = (id: string) => {
     const s = new Set(selecionados);
     if (s.has(id)) s.delete(id); else s.add(id);
