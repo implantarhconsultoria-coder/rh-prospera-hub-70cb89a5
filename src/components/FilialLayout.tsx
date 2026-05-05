@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import FooterSobre from '@/components/FooterSobre';
 
 const FilialLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -40,6 +41,7 @@ const FilialLayout: React.FC = () => {
         <div className="p-6 max-w-[1600px] mx-auto">
           <ErrorBoundary><Outlet /></ErrorBoundary>
         </div>
+        <FooterSobre />
       </main>
     </div>
   );
