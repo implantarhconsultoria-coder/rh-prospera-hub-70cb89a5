@@ -5,14 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Trash2, KeyRound, Save, ShieldCheck, X } from 'lucide-react';
+import { Loader2, Plus, Trash2, KeyRound, Save, ShieldCheck, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 
-type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'financeiro' | 'faturamento';
+type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'financeiro' | 'faturamento' | 'tecnico_campo';
+
+const SENHA_PADRAO = 'TOPAC2026';
 
 const ROLE_LABELS: Record<AppRole, { label: string; desc: string; cor: string }> = {
   admin:          { label: 'ADMIN',        desc: 'Acesso total à plataforma',                 cor: 'bg-red-100 text-red-700 border-red-300' },
@@ -20,8 +21,9 @@ const ROLE_LABELS: Record<AppRole, { label: string; desc: string; cor: string }>
   filial_goiania: { label: 'RH GOIÂNIA',   desc: 'RH da TOPAC GOIÂNIA',                       cor: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
   financeiro:     { label: 'FINANCEIRO',   desc: 'Módulo financeiro (todas as empresas)',     cor: 'bg-cyan-100 text-cyan-700 border-cyan-300' },
   faturamento:    { label: 'FATURAMENTO',  desc: 'Módulo faturamento (todas as empresas)',    cor: 'bg-indigo-100 text-indigo-700 border-indigo-300' },
+  tecnico_campo:  { label: 'MECÂNICOS',    desc: 'App operacional dos mecânicos',             cor: 'bg-amber-100 text-amber-700 border-amber-300' },
 };
-const ALL_ROLES: AppRole[] = ['admin','filial_praia','filial_goiania','financeiro','faturamento'];
+const ALL_ROLES: AppRole[] = ['admin','filial_praia','filial_goiania','financeiro','faturamento','tecnico_campo'];
 
 interface UsuarioRow {
   user_id: string;
@@ -30,26 +32,39 @@ interface UsuarioRow {
   roles: AppRole[];
 }
 
+const CopyButton: React.FC<{ value: string; small?: boolean }> = ({ value, small }) => {
+  const [ok, setOk] = useState(false);
+  const copiar = async () => {
+    try { await navigator.clipboard.writeText(value); setOk(true); setTimeout(()=>setOk(false),1500); toast.success('Copiado'); }
+    catch { toast.error('Falha ao copiar'); }
+  };
+  return (
+    <Button type="button" size={small ? 'sm' : 'sm'} variant="ghost" onClick={copiar} className="h-7 px-2">
+      {ok ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+    </Button>
+  );
+};
+
 const PermissoesAcessoPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [usuarios, setUsuarios] = useState<UsuarioRow[]>([]);
 
-  // Dialog criar
   const [openNovo, setOpenNovo] = useState(false);
   const [novoEmail, setNovoEmail] = useState('');
   const [novoNome, setNovoNome] = useState('');
-  const [novaSenha, setNovaSenha] = useState('');
+  const [novaSenha, setNovaSenha] = useState(SENHA_PADRAO);
   const [novosRoles, setNovosRoles] = useState<AppRole[]>([]);
 
-  // Dialog senha
+  // Modal pós-criação mostrando email + senha pra copiar
+  const [criadoInfo, setCriadoInfo] = useState<{ email: string; senha: string } | null>(null);
+
   const [openSenha, setOpenSenha] = useState<UsuarioRow | null>(null);
   const [senhaNova, setSenhaNova] = useState('');
 
   const carregar = async () => {
     setLoading(true);
     try {
-      // Lista todos os usuários a partir de profiles + user_roles
       const { data: profs } = await supabase
         .from('profiles')
         .select('user_id, email, nome_completo')
@@ -87,21 +102,24 @@ const PermissoesAcessoPage: React.FC = () => {
   };
 
   const criarUsuario = async () => {
-    if (!novoEmail.trim() || novaSenha.length < 6 || novosRoles.length === 0) {
+    const senhaFinal = (novaSenha || '').trim() || SENHA_PADRAO;
+    if (!novoEmail.trim() || senhaFinal.length < 6 || novosRoles.length === 0) {
       toast.error('Preencha email, senha (mínimo 6) e ao menos 1 módulo'); return;
     }
     setBusy(true);
     try {
+      const emailFinal = novoEmail.trim().toLowerCase();
       await callFn({
         action: 'create',
-        email: novoEmail.trim().toLowerCase(),
-        password: novaSenha,
+        email: emailFinal,
+        password: senhaFinal,
         nome: novoNome,
         roles: novosRoles,
       });
       toast.success('Usuário criado');
+      setCriadoInfo({ email: emailFinal, senha: senhaFinal });
       setOpenNovo(false);
-      setNovoEmail(''); setNovoNome(''); setNovaSenha(''); setNovosRoles([]);
+      setNovoEmail(''); setNovoNome(''); setNovaSenha(SENHA_PADRAO); setNovosRoles([]);
       carregar();
     } catch (e) {
       toast.error('Erro: ' + (e as Error).message);
@@ -124,11 +142,12 @@ const PermissoesAcessoPage: React.FC = () => {
   };
 
   const resetSenha = async () => {
-    if (!openSenha || senhaNova.length < 6) { toast.error('Senha mínima de 6 caracteres'); return; }
+    const senhaFinal = (senhaNova || '').trim() || SENHA_PADRAO;
+    if (!openSenha || senhaFinal.length < 6) { toast.error('Senha mínima de 6 caracteres'); return; }
     setBusy(true);
     try {
-      await callFn({ action: 'reset_password', user_id: openSenha.user_id, password: senhaNova });
-      toast.success('Senha redefinida');
+      await callFn({ action: 'reset_password', user_id: openSenha.user_id, password: senhaFinal });
+      toast.success('Senha redefinida para: ' + senhaFinal);
       setOpenSenha(null); setSenhaNova('');
     } catch (e) {
       toast.error('Erro: ' + (e as Error).message);
@@ -154,15 +173,15 @@ const PermissoesAcessoPage: React.FC = () => {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ShieldCheck className="w-6 h-6 text-primary" /> Usuários e Permissões
           </h1>
-          <p className="text-sm text-muted-foreground">Login por email e senha. Cada usuário pode ter múltiplos módulos.</p>
+          <p className="text-sm text-muted-foreground">Login por e-mail e senha. E-mails fictícios são aceitos (ex: paula@topac.app). Senha padrão: <strong>{SENHA_PADRAO}</strong></p>
         </div>
-        <Button onClick={() => setOpenNovo(true)}><Plus className="w-4 h-4 mr-1" /> Novo usuário</Button>
+        <Button onClick={() => { setNovaSenha(SENHA_PADRAO); setOpenNovo(true); }}><Plus className="w-4 h-4 mr-1" /> Novo usuário</Button>
       </div>
 
       <Card>
         <CardHeader><CardTitle className="text-base">Módulos disponíveis</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {ALL_ROLES.map(r => (
               <div key={r} className={`border rounded-lg p-3 ${ROLE_LABELS[r].cor}`}>
                 <div className="font-bold text-xs">{ROLE_LABELS[r].label}</div>
@@ -185,7 +204,7 @@ const PermissoesAcessoPage: React.FC = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs text-muted-foreground">
-                    <th className="py-2">Nome / Email</th>
+                    <th className="py-2">Nome / E-mail</th>
                     <th className="py-2">Módulos liberados</th>
                     <th className="py-2 w-32 text-right">Ações</th>
                   </tr>
@@ -195,7 +214,10 @@ const PermissoesAcessoPage: React.FC = () => {
                     <tr key={u.user_id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="py-3">
                         <div className="font-medium">{u.nome || '—'}</div>
-                        <div className="text-xs text-muted-foreground">{u.email}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <span>{u.email}</span>
+                          {u.email && <CopyButton value={u.email} small />}
+                        </div>
                       </td>
                       <td className="py-3">
                         <div className="flex flex-wrap gap-1.5">
@@ -218,10 +240,10 @@ const PermissoesAcessoPage: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3 text-right">
-                        <Button size="sm" variant="outline" onClick={() => setOpenSenha(u)} className="mr-1">
+                        <Button size="sm" variant="outline" onClick={() => { setSenhaNova(SENHA_PADRAO); setOpenSenha(u); }} className="mr-1" title="Redefinir senha">
                           <KeyRound className="w-3 h-3" />
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => apagar(u)} className="text-destructive hover:bg-destructive/10">
+                        <Button size="sm" variant="outline" onClick={() => apagar(u)} className="text-destructive hover:bg-destructive/10" title="Apagar">
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       </td>
@@ -241,15 +263,19 @@ const PermissoesAcessoPage: React.FC = () => {
           <div className="space-y-3">
             <div>
               <Label>Nome completo</Label>
-              <Input value={novoNome} onChange={e => setNovoNome(e.target.value)} />
+              <Input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder="Ex: Paula Silva" />
             </div>
             <div>
-              <Label>Email</Label>
-              <Input type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} />
+              <Label>E-mail (pode ser fictício, ex: paula@topac.app)</Label>
+              <Input type="email" value={novoEmail} onChange={e => setNovoEmail(e.target.value)} placeholder="paula@topac.app" autoCapitalize="none" />
             </div>
             <div>
               <Label>Senha inicial</Label>
-              <Input type="text" value={novaSenha} onChange={e => setNovaSenha(e.target.value)} placeholder="mínimo 6 caracteres" />
+              <div className="flex gap-2">
+                <Input type="text" value={novaSenha} onChange={e => setNovaSenha(e.target.value)} placeholder="mínimo 6 caracteres" />
+                <Button type="button" variant="outline" onClick={() => setNovaSenha(SENHA_PADRAO)}>Padrão</Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">Senha padrão sugerida: <strong>{SENHA_PADRAO}</strong></p>
             </div>
             <div>
               <Label>Módulos liberados</Label>
@@ -278,12 +304,42 @@ const PermissoesAcessoPage: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog pós-criação: copiar email + senha */}
+      <Dialog open={!!criadoInfo} onOpenChange={(o) => !o && setCriadoInfo(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Usuário criado com sucesso</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Copie e envie estes dados de acesso. A senha não será exibida novamente.</p>
+          <div className="space-y-3 mt-3">
+            <div>
+              <Label className="text-xs">E-mail</Label>
+              <div className="flex items-center gap-2 mt-1 p-2 border rounded-md bg-muted/30">
+                <code className="flex-1 text-sm">{criadoInfo?.email}</code>
+                {criadoInfo && <CopyButton value={criadoInfo.email} />}
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Senha</Label>
+              <div className="flex items-center gap-2 mt-1 p-2 border rounded-md bg-muted/30">
+                <code className="flex-1 text-sm font-mono">{criadoInfo?.senha}</code>
+                {criadoInfo && <CopyButton value={criadoInfo.senha} />}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setCriadoInfo(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog senha */}
       <Dialog open={!!openSenha} onOpenChange={(o) => !o && setOpenSenha(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Redefinir senha</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">{openSenha?.email}</p>
-          <Input type="text" value={senhaNova} onChange={e => setSenhaNova(e.target.value)} placeholder="Nova senha (mínimo 6)" />
+          <div className="flex gap-2">
+            <Input type="text" value={senhaNova} onChange={e => setSenhaNova(e.target.value)} placeholder="Nova senha (mínimo 6)" />
+            <Button type="button" variant="outline" onClick={() => setSenhaNova(SENHA_PADRAO)}>Padrão</Button>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setOpenSenha(null); setSenhaNova(''); }}>Cancelar</Button>
             <Button onClick={resetSenha} disabled={busy}>
