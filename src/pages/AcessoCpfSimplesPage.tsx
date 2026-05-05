@@ -18,9 +18,10 @@ const UNIDADE_META: Record<string, { titulo: string; cor: string; icon: React.Re
 };
 
 const MODULO_META: Record<string, { label: string; icon: React.ReactNode; cor: string; rota: string }> = {
-  financeiro:  { label: 'Financeiro',     icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700',      rota: '/financeiro' },
-  faturamento: { label: 'Faturamento',    icon: <FileText className="w-5 h-5 text-white" />,   cor: 'from-indigo-500 to-violet-600', rota: '/faturamento' },
-  mecanicos:   { label: 'App Mecânicos',  icon: <Wrench className="w-5 h-5 text-white" />,     cor: 'from-amber-500 to-orange-600',  rota: '/app-mecanicos' },
+  rh_filial:   { label: 'RH da Filial',   icon: <Building2 className="w-5 h-5 text-white" />,  cor: 'from-rose-500 to-pink-600',     rota: '/portal/rh_filial' },
+  financeiro:  { label: 'Financeiro',     icon: <DollarSign className="w-5 h-5 text-white" />, cor: 'from-cyan-600 to-sky-700',      rota: '/portal/financeiro' },
+  faturamento: { label: 'Faturamento',    icon: <FileText className="w-5 h-5 text-white" />,   cor: 'from-indigo-500 to-violet-600', rota: '/portal/faturamento' },
+  mecanicos:   { label: 'App Mecânicos',  icon: <Wrench className="w-5 h-5 text-white" />,     cor: 'from-amber-500 to-orange-600',  rota: '/portal/mecanicos' },
 };
 
 const ERRO_LABEL: Record<string, string> = {
