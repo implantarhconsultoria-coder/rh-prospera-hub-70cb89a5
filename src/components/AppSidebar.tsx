@@ -52,7 +52,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
   { label: 'Despachar Chamados', icon: ClipboardList, path: '/admin/chamados' },
-  { label: 'App Operacional', icon: Wrench, path: '/admin/app-operacional' },
+  { label: 'App Mecânico', icon: Wrench, path: '/admin/app-operacional' },
   { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 

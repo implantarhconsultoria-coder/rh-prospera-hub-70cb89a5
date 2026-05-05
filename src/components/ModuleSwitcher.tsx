@@ -24,8 +24,8 @@ const ALL_MODULES: ModuleDef[] = [
   { role: 'filial_goiania', label: 'RH Goiânia', path: '/filial' },
   { role: 'faturamento', label: 'Faturamento', path: '/faturamento' },
   { role: 'financeiro', label: 'Financeiro', path: '/financeiro' },
-  { role: 'tecnico_campo', label: 'App Mecânico', path: '/campo' },
-  { role: 'operacional', label: 'Operacional', path: '/operacional' },
+  // App Mecânico — link único; cobre tanto tecnico_campo quanto operacional
+  { role: 'tecnico_campo', label: 'App Mecânico', path: '/mecanico' },
 ];
 
 /**
@@ -37,9 +37,13 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const navigate = useNavigate();
 
   const isAdmin = userRoles.includes('admin');
+  // operacional é sinônimo de tecnico_campo → ambos abrem App Mecânico
+  const effectiveRoles = userRoles.includes('operacional')
+    ? [...userRoles, 'tecnico_campo']
+    : userRoles;
   const available = isAdmin
     ? ALL_MODULES
-    : ALL_MODULES.filter((m) => userRoles.includes(m.role as any));
+    : ALL_MODULES.filter((m) => effectiveRoles.includes(m.role as any));
 
   if (available.length < 2) return null;
 

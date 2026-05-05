@@ -23,9 +23,7 @@ const ConfiguracoesPage: React.FC = () => {
   const links = [
     { name: 'Plataforma Administrativa', path: '/admin', tag: 'Admin', color: 'bg-red-500' },
     { name: 'Portal das Filiais (Praia Grande / Goiânia)', path: '/filial', tag: 'Filial', color: 'bg-blue-500' },
-    { name: 'Portal de Campo', path: '/campo', tag: 'Campo', color: 'bg-purple-500' },
-    { name: 'Portal Operacional', path: '/operacional', tag: 'Operacional', color: 'bg-teal-500' },
-    { name: 'App Mecânicos (link individual gerado em /admin/app-operacional)', path: '/admin/app-operacional', tag: 'Mecânicos', color: 'bg-orange-500' },
+    { name: 'App Mecânico (link único — login por e-mail e senha)', path: '/mecanico', tag: 'Mecânico', color: 'bg-orange-500' },
     { name: 'Portal de Faturamento (login: FAT • senha: TOPAC2026)', path: '/faturamento', tag: 'Faturamento', color: 'bg-indigo-500' },
     { name: 'Portal Financeiro (login: FIN • senha: TOPAC2026)', path: '/financeiro', tag: 'Financeiro', color: 'bg-cyan-600' },
   ];

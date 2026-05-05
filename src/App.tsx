@@ -7,8 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import AppLayout from "@/components/AppLayout";
 import FilialLayout from "@/components/FilialLayout";
-import OperacionalLayout from "@/components/OperacionalLayout";
-import CampoLayout from "@/components/CampoLayout";
 import MecanicoLayout from "@/components/MecanicoLayout";
 import FaturamentoLayout from "@/components/FaturamentoLayout";
 import FinanceiroLayout from "@/components/FinanceiroLayout";
@@ -67,11 +65,6 @@ import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
 import AppOperacionalPage from "@/pages/admin/AppOperacionalPage";
 import TecnicoDetailPage from "@/pages/admin/TecnicoDetailPage";
-import CampoHomePage from "@/pages/campo/CampoHomePage";
-import PontoPage from "@/pages/campo/PontoPage";
-import ChamadosPage from "@/pages/campo/ChamadosPage";
-import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
-import RegistroKmPage from "@/pages/campo/RegistroKmPage";
 import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
 import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
 import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
@@ -91,6 +84,7 @@ import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import PublicAbastecimentoPage from "@/pages/PublicAbastecimentoPage";
 import ImprimirQRCombustivelPage from "@/pages/admin/ImprimirQRCombustivelPage";
+import MecanicoRedirectPage from "@/pages/MecanicoRedirectPage";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
@@ -100,21 +94,9 @@ const queryClient = new QueryClient();
  * RoleRedirect — after login, sends user to the correct portal based on role.
  */
 const RoleRedirect = () => {
-  const { userRoles, roleLoading, session } = useApp();
-  const [tecnicoToken, setTecnicoToken] = React.useState<string | null | undefined>(undefined);
+  const { userRoles, roleLoading } = useApp();
 
-  React.useEffect(() => {
-    if (!session?.user?.id) return;
-    if (!userRoles.includes('tecnico_campo')) { setTecnicoToken(null); return; }
-    (async () => {
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { data } = await supabase.from('tecnicos_campo')
-        .select('access_token').eq('user_id', session.user.id).maybeSingle();
-      setTecnicoToken((data as any)?.access_token || null);
-    })();
-  }, [session, userRoles]);
-
-  if (roleLoading || tecnicoToken === undefined) {
+  if (roleLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
@@ -122,13 +104,10 @@ const RoleRedirect = () => {
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
-  if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
+  if (userRoles.includes('operacional')) return <Navigate to="/mecanico" replace />;
   if (userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
-  if (userRoles.includes('tecnico_campo')) {
-    if (tecnicoToken) return <Navigate to={`/m/${tecnicoToken}`} replace />;
-    return <Navigate to="/campo" replace />;
-  }
+  if (userRoles.includes('tecnico_campo')) return <Navigate to="/mecanico" replace />;
 
   return <Navigate to="/admin" replace />;
 };
@@ -234,19 +213,11 @@ const AuthGate = () => {
         <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
       </Route>
 
-      {/* ========== CAMPO PORTAL ========== */}
-      <Route element={<CampoLayout />}>
-        <Route path="/campo" element={<CampoHomePage />} />
-        <Route path="/campo/ponto" element={<PontoPage />} />
-        <Route path="/campo/chamados" element={<ChamadosPage />} />
-        <Route path="/campo/estoque" element={<EstoqueVeiculoPage />} />
-        <Route path="/campo/km" element={<RegistroKmPage />} />
-      </Route>
-
-      {/* ========== OPERACIONAL PORTAL ========== */}
-      <Route element={<OperacionalLayout />}>
-        <Route path="/operacional" element={<DespacharChamadoPage />} />
-      </Route>
+      {/* ========== CAMPO/OPERACIONAL → redirecionam para /mecanico (link único) ========== */}
+      <Route path="/campo" element={<Navigate to="/mecanico" replace />} />
+      <Route path="/campo/*" element={<Navigate to="/mecanico" replace />} />
+      <Route path="/operacional" element={<Navigate to="/mecanico" replace />} />
+      <Route path="/operacional/*" element={<Navigate to="/mecanico" replace />} />
 
       {/* ========== FATURAMENTO PORTAL (acesso teste FAT) ========== */}
       <Route element={<FaturamentoLayout />}>
@@ -291,6 +262,9 @@ const App = () => (
             <Routes>
               {/* ========== ROTA PÚBLICA: QR de abastecimento (sem login) ========== */}
               <Route path="/abastecimento/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
+
+              {/* ========== APP MECÂNICO — LINK ÚNICO /mecanico (exige login) ========== */}
+              <Route path="/mecanico" element={<ErrorBoundary><MecanicoRedirectPage /></ErrorBoundary>} />
 
               {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
               <Route path="/m/:token" element={<MecanicoLayout />}>
