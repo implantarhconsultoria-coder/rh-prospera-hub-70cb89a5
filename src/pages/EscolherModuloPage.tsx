@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Loader2, Building2, DollarSign, FileText, LogOut, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import FooterSobre from '@/components/FooterSobre';
 
 type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'financeiro' | 'faturamento' | 'tecnico_campo';
 

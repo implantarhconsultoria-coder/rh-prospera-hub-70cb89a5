@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import FooterSobre from '@/components/FooterSobre';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
