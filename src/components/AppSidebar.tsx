@@ -52,17 +52,11 @@ const operationalItems: MenuItem[] = [
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
-  { label: 'Despachar Chamados', icon: ClipboardList, path: '/admin/chamados' },
-  { label: 'App Operacional', icon: Wrench, path: '/admin/app-operacional' },
   { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 
 const adminItems: MenuItem[] = [
-  { label: 'Gerenciar Usuários', icon: Shield, path: '/admin/gerenciar-usuarios' },
-  { label: 'Links de Acesso por CPF', icon: Link2, path: '/admin/links-acesso-cpf' },
-  { label: 'Permissões por Funcionário', icon: Shield, path: '/admin/permissoes-funcionarios' },
   { label: 'E-mails Contabilidade', icon: Mail, path: '/admin/emails-contabilidade' },
-  { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
 
