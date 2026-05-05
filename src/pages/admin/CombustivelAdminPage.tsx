@@ -233,11 +233,13 @@ const CombustivelAdminPage: React.FC = () => {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="text-left text-xs text-muted-foreground border-b"><th className="py-2">Código</th><th>Posto</th><th>Veículo</th><th>Limite R$</th><th>Litros</th><th>Validade</th><th>Status</th></tr></thead>
+            <thead><tr className="text-left text-xs text-muted-foreground border-b"><th className="py-2">Código</th><th>Posto</th><th>Veículo</th><th>Limite R$</th><th>Litros</th><th>Validade</th><th>Status</th><th className="text-right">Ações</th></tr></thead>
             <tbody>
               {vales.map(v => {
                 const ve = veiculos.find(x => x.id === v.veiculo_id);
                 const isTopac = v.codigo.startsWith('TOPAC-ABAST');
+                const isAtivo = v.status === 'ativo';
+                const isInativo = v.status === 'inativo';
                 return (
                   <tr key={v.id} className="border-b last:border-0">
                     <td className="py-2 font-mono text-xs">
@@ -249,11 +251,21 @@ const CombustivelAdminPage: React.FC = () => {
                     <td>{Number(v.valor_limite) > 0 ? `R$ ${Number(v.valor_limite).toFixed(2)}` : 'Sem limite'}</td>
                     <td>{Number(v.litros_limite) > 0 ? `${v.litros_limite} L` : '—'}</td>
                     <td>{v.validade || '—'}</td>
-                    <td><span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${v.status === 'ativo' ? 'bg-emerald-500/15 text-emerald-700' : 'bg-muted text-muted-foreground'}`}>{v.status}</span></td>
+                    <td><span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${isAtivo ? 'bg-emerald-500/15 text-emerald-700' : v.status === 'cancelado' ? 'bg-rose-500/15 text-rose-700' : 'bg-muted text-muted-foreground'}`}>{v.status}</span></td>
+                    <td className="text-right whitespace-nowrap">
+                      <div className="inline-flex gap-1">
+                        <Button size="sm" variant="ghost" title="Visualizar QR" onClick={() => visualizarQR(v)}><Eye className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" title="Imprimir individual" onClick={() => imprimirIndividual(v)}><Printer className="w-3.5 h-3.5" /></Button>
+                        {isAtivo && <Button size="sm" variant="ghost" title="Inativar" onClick={() => setStatusVale(v, 'inativo')}><Ban className="w-3.5 h-3.5" /></Button>}
+                        {isInativo && <Button size="sm" variant="ghost" title="Reativar" onClick={() => setStatusVale(v, 'ativo')}><RotateCcw className="w-3.5 h-3.5" /></Button>}
+                        {v.status !== 'cancelado' && <Button size="sm" variant="ghost" title="Cancelar" onClick={() => setStatusVale(v, 'cancelado')}><AlertTriangle className="w-3.5 h-3.5 text-amber-600" /></Button>}
+                        <Button size="sm" variant="ghost" title="Excluir" onClick={() => excluirVale(v)}><Trash2 className="w-3.5 h-3.5 text-rose-600" /></Button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
-              {vales.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-muted-foreground">Nenhuma autorização</td></tr>}
+              {vales.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">Nenhuma autorização</td></tr>}
             </tbody>
           </table>
         </div>
