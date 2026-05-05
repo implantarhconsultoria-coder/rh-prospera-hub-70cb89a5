@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Clock, Save, Award } from 'lucide-react';
+import { Building2, Clock, Save, Award, Link as LinkIcon, Copy, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -8,6 +8,15 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+
+const LINKS = [
+  { label: 'Login principal',     url: 'https://implantarhprpro.com/' },
+  { label: 'Administração',       url: 'https://implantarhprpro.com/admin' },
+  { label: 'Escolha de módulo',   url: 'https://implantarhprpro.com/escolher-modulo' },
+  { label: 'Financeiro',          url: 'https://implantarhprpro.com/financeiro' },
+  { label: 'Faturamento',         url: 'https://implantarhprpro.com/faturamento' },
+  { label: 'App Mecânico',        url: 'https://implantarhprpro.com/mecanico' },
+];
 
 const ConfiguracoesPage: React.FC = () => {
   const [horario, setHorario] = useState<any>(null);
@@ -32,6 +41,11 @@ const ConfiguracoesPage: React.FC = () => {
     setSavingH(false);
     if (error) toast.error(error.message);
     else toast.success('Configuração salva');
+  };
+
+  const copiar = async (texto: string) => {
+    try { await navigator.clipboard.writeText(texto); toast.success('Link copiado'); }
+    catch { toast.error('Não foi possível copiar'); }
   };
 
   return (
@@ -81,14 +95,58 @@ const ConfiguracoesPage: React.FC = () => {
         </Card>
       )}
 
+      {/* ============ LINKS DE ACESSO ============ */}
+      <Card className="p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <LinkIcon className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-bold font-display">Links para acesso dos usuários</h2>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Atalhos para envio aos colaboradores. Todos os acessos são por <strong>e-mail e senha</strong> — sem CPF, sem link individual.
+        </p>
+        <div className="space-y-2">
+          {LINKS.map(l => (
+            <div key={l.url} className="flex items-center gap-2 border rounded-lg p-2 bg-muted/30">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold">{l.label}</div>
+                <div className="text-xs text-muted-foreground truncate font-mono">{l.url}</div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => copiar(l.url)}>
+                <Copy className="w-3 h-3 mr-1" /> Copiar
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* ============ SOBRE / DIREITOS AUTORAIS ============ */}
       <Card className="p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Award className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-bold font-display">Sobre</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div><strong>Versão:</strong> 1.0.0 — Multiempresa PRO</div>
-          <div><strong>Finalidade:</strong> Gestão completa de RH, faturamento e financeiro.</div>
+        <div className="space-y-3 text-sm leading-relaxed">
+          <p>
+            Sistema desenvolvido pela <strong>ImplantaRH ConsultoriaPRO</strong>.
+          </p>
+          <p>
+            Plataforma interna personalizada para gestão de RH, financeiro, faturamento, documentos e operação da
+            <strong> TOPAC / LMT / ALQUI</strong>.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t">
+            <div><strong>Desenvolvedora:</strong> ImplantaRH ConsultoriaPRO</div>
+            <div><strong>Responsável:</strong> Rodrigo de Souza Sabino</div>
+            <div><strong>Versão:</strong> 1.0.0 — Multiempresa PRO</div>
+            <div><strong>Suporte:</strong> implantarhprpro.com</div>
+          </div>
+          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+            <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <p>
+              Direitos autorais e propriedade intelectual reservados à <strong>ImplantaRH ConsultoriaPRO</strong>.
+              É proibida a cópia, reprodução, revenda, redistribuição, engenharia reversa ou utilização deste
+              sistema fora do ambiente autorizado, sem autorização expressa da ImplantaRH ConsultoriaPRO.
+            </p>
+          </div>
         </div>
       </Card>
     </div>
