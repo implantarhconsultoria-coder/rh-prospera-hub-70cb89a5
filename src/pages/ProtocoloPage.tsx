@@ -468,7 +468,7 @@ const ProtocoloPage: React.FC = () => {
               <div className="space-y-2 mt-1">
                 <p className="text-xs text-success">✓ PDF vinculado — será impresso como via adicional</p>
                 {loadingPdf && <p className="text-xs text-muted-foreground">Carregando PDF...</p>}
-                <PdfDocumentViewer sourceUrl={pdfUrl} title="PDF do documento" />
+                <PdfDocumentViewer source={{ url: pdfUrl, tipo: 'protocolo' }} title="PDF do documento" />
               </div>
             )}
             {!pdfUrl && <p className="text-xs text-muted-foreground mt-1">Sem PDF: imprime apenas 2 vias do protocolo</p>}
