@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Link2, Copy, Check, Clock, Save, Award } from 'lucide-react';
+import { Building2, Clock, Save, Award } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -10,72 +10,12 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
 const ConfiguracoesPage: React.FC = () => {
-  const [origin, setOrigin] = useState('');
-  const [copied, setCopied] = useState<string | null>(null);
   const [horario, setHorario] = useState<any>(null);
   const [savingH, setSavingH] = useState(false);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
     supabase.from('config_acesso_horario').select('*').limit(1).maybeSingle().then(({ data }) => setHorario(data));
   }, []);
-
-  const grupos: { titulo: string; cor: string; links: { name: string; path: string }[] }[] = [
-    {
-      titulo: 'Operacional / Mecânicos', cor: 'bg-blue-500', links: [
-        { name: 'São Paulo / Matriz', path: '/sp' },
-        { name: 'Praia Grande',        path: '/pg' },
-        { name: 'Goiânia',             path: '/go' },
-      ],
-    },
-    {
-      titulo: 'Faturamento', cor: 'bg-indigo-500', links: [
-        { name: 'São Paulo / Matriz', path: '/sp' },
-        { name: 'Praia Grande',        path: '/pg' },
-        { name: 'Goiânia',             path: '/go' },
-      ],
-    },
-    {
-      titulo: 'Financeiro', cor: 'bg-cyan-600', links: [
-        { name: 'São Paulo / Matriz', path: '/sp' },
-        { name: 'Praia Grande',        path: '/pg' },
-        { name: 'Goiânia',             path: '/go' },
-      ],
-    },
-    {
-      titulo: 'RH / Filiais', cor: 'bg-rose-500', links: [
-        { name: 'São Paulo / Matriz', path: '/sp' },
-        { name: 'Praia Grande',        path: '/pg' },
-        { name: 'Goiânia',             path: '/go' },
-      ],
-    },
-    {
-      titulo: 'Almoxarifado', cor: 'bg-amber-600', links: [
-        { name: 'São Paulo / Matriz', path: '/sp' },
-        { name: 'Praia Grande',        path: '/pg' },
-        { name: 'Goiânia',             path: '/go' },
-      ],
-    },
-    {
-      titulo: 'Documentos RH (EPI / Uniformes)', cor: 'bg-fuchsia-500', links: [
-        { name: 'São Paulo / Matriz', path: '/sp' },
-        { name: 'Praia Grande',        path: '/pg' },
-        { name: 'Goiânia',             path: '/go' },
-      ],
-    },
-    {
-      titulo: 'Plataforma Administrativa', cor: 'bg-red-500', links: [
-        { name: 'Acesso Admin (login normal)', path: '/admin' },
-      ],
-    },
-  ];
-
-  const copy = async (txt: string, key: string) => {
-    await navigator.clipboard.writeText(txt);
-    setCopied(key);
-    toast.success('Link copiado');
-    setTimeout(() => setCopied(null), 2000);
-  };
 
   const salvarHorario = async () => {
     if (!horario) return;
@@ -102,44 +42,6 @@ const ConfiguracoesPage: React.FC = () => {
         </div>
         <h1 className="text-2xl font-bold font-display text-foreground">Configurações da Plataforma</h1>
       </div>
-
-      <Card className="p-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Link2 className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-bold font-display">Links de acesso aos portais</h2>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Distribua estes links aos times. Acesso por CPF — sem necessidade de senha. Sessão por dispositivo válida até 23:59.
-          Domínio detectado automaticamente: <span className="font-mono">{origin}</span>
-        </p>
-        <div className="space-y-5">
-          {grupos.map(g => (
-            <div key={g.titulo} className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Badge className={`${g.cor} text-white whitespace-nowrap`}>{g.titulo}</Badge>
-                <span className="text-[11px] text-muted-foreground">link único · acesso por CPF + permissão do Admin</span>
-              </div>
-              {g.links.map(l => {
-                const fullUrl = origin + l.path;
-                return (
-                  <div key={l.path} className="flex items-center gap-2 p-3 border border-border rounded-lg hover:bg-muted/30">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{l.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono truncate">{fullUrl}</div>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => copy(fullUrl, l.path)}>
-                      {copied === l.path ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => window.open(fullUrl, '_blank')}>
-                      Abrir
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </Card>
 
       {horario && (
         <Card className="p-6 space-y-4">
