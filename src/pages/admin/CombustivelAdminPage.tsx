@@ -86,6 +86,9 @@ const CombustivelAdminPage: React.FC = () => {
   };
 
   const criarVale = async () => {
+    if (!novoVale.posto_nome.trim()) {
+      return toast.error('Informe o nome do posto antes de gerar a autorização');
+    }
     const qtd = Math.max(1, Math.min(50, Number(novoVale.quantidade) || 1));
     const rows: any[] = [];
 
