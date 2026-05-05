@@ -101,21 +101,9 @@ const queryClient = new QueryClient();
  * RoleRedirect — after login, sends user to the correct portal based on role.
  */
 const RoleRedirect = () => {
-  const { userRoles, roleLoading, session } = useApp();
-  const [tecnicoToken, setTecnicoToken] = React.useState<string | null | undefined>(undefined);
+  const { userRoles, roleLoading } = useApp();
 
-  React.useEffect(() => {
-    if (!session?.user?.id) return;
-    if (!userRoles.includes('tecnico_campo')) { setTecnicoToken(null); return; }
-    (async () => {
-      const { supabase } = await import('@/integrations/supabase/client');
-      const { data } = await supabase.from('tecnicos_campo')
-        .select('access_token').eq('user_id', session.user.id).maybeSingle();
-      setTecnicoToken((data as any)?.access_token || null);
-    })();
-  }, [session, userRoles]);
-
-  if (roleLoading || tecnicoToken === undefined) {
+  if (roleLoading) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
