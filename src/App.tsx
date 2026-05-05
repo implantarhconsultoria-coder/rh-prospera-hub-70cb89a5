@@ -9,7 +9,6 @@ import FilialLayout from "@/components/FilialLayout";
 import FinanceiroLayout from "@/components/FinanceiroLayout";
 import FaturamentoLayout from "@/components/FaturamentoLayout";
 import LoginPage from "@/pages/LoginPage";
-import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import EscolherModuloPage from "@/pages/EscolherModuloPage";
@@ -52,6 +51,12 @@ import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
 import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
 import PermissoesAcessoPage from "@/pages/admin/PermissoesAcessoPage";
+import CampoLayout from "@/components/CampoLayout";
+import CampoHomePage from "@/pages/campo/CampoHomePage";
+import PontoPage from "@/pages/campo/PontoPage";
+import ChamadosPage from "@/pages/campo/ChamadosPage";
+import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
+import RegistroKmPage from "@/pages/campo/RegistroKmPage";
 
 // Filial pages
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
@@ -102,13 +107,15 @@ const RoleRedirect = () => {
 
   const filiais = userRoles.filter(r => r === 'filial_praia' || r === 'filial_goiania');
   const outros = userRoles.filter(r => r === 'financeiro' || r === 'faturamento');
-  const total = filiais.length + outros.length;
+  const temMecanicos = userRoles.includes('tecnico_campo');
+  const total = filiais.length + outros.length + (temMecanicos ? 1 : 0);
 
   if (total === 0) return <Navigate to="/escolher-modulo" replace />;
   if (total === 1) {
     if (filiais.length) return <Navigate to="/filial" replace />;
     if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
     if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
+    if (temMecanicos) return <Navigate to="/campo" replace />;
   }
   return <Navigate to="/escolher-modulo" replace />;
 };
@@ -127,7 +134,7 @@ const AuthGate = () => {
   if (!isAuthenticated) {
     return (
       <Routes>
-        <Route path="/cadastro" element={<CadastroPage />} />
+        <Route path="/cadastro" element={<Navigate to="/" replace />} />
         <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
         <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
         <Route path="*" element={<LoginPage />} />
@@ -219,6 +226,15 @@ const AuthGate = () => {
         <Route path="medicoes" element={<MedicoesPage />} />
         <Route path="reajustes" element={<ReajustesPage />} />
         <Route path="pendencias" element={<PendenciasPage />} />
+      </Route>
+
+      {/* ========== APP MECÂNICOS ========== */}
+      <Route path="/campo" element={<CampoLayout />}>
+        <Route index element={<CampoHomePage />} />
+        <Route path="ponto" element={<PontoPage />} />
+        <Route path="chamados" element={<ChamadosPage />} />
+        <Route path="estoque" element={<EstoqueVeiculoPage />} />
+        <Route path="km" element={<RegistroKmPage />} />
       </Route>
 
       {/* Catch-all */}
