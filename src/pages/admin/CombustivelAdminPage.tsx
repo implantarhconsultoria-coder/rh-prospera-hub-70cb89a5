@@ -41,18 +41,23 @@ const CombustivelAdminPage: React.FC = () => {
   const [openConf, setOpenConf] = useState<Abast | null>(null);
   const [filterStatus, setFilterStatus] = useState('todos');
   const [obs, setObs] = useState('');
-  const [novoVale, setNovoVale] = useState({
-    tipo: 'autorizacao_abastecimento',
-    serie: 'topac', // 'topac' | 'livre'
-    sequencial: '',
-    veiculo_id: '',
-    posto_nome: '',
-    posto_cnpj: '',
-    posto_endereco: '',
-    valor_limite: '0',
-    litros_limite: '0',
-    validade: '',
-    quantidade: '1',
+  const [novoVale, setNovoVale] = useState(() => {
+    // Lembra o último posto cadastrado para evitar gerar QR sem posto
+    let saved: any = {};
+    try { saved = JSON.parse(localStorage.getItem('topac_ultimo_posto') || '{}'); } catch { /* noop */ }
+    return {
+      tipo: 'autorizacao_abastecimento',
+      serie: 'topac',
+      sequencial: '',
+      veiculo_id: '',
+      posto_nome: saved.nome || '',
+      posto_cnpj: saved.cnpj || '',
+      posto_endereco: saved.endereco || '',
+      valor_limite: '0',
+      litros_limite: '0',
+      validade: '',
+      quantidade: '1',
+    };
   });
 
   const reload = async () => {
