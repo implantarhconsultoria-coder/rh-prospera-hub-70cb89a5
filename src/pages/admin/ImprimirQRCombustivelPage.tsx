@@ -99,13 +99,14 @@ const ImprimirQRCombustivelPage: React.FC = () => {
     <div className="min-h-screen bg-slate-100">
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          html, body { background: white !important; }
+          .no-print, nav, aside, header.no-print { display: none !important; }
+          html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
           body * { visibility: hidden; }
           #print-area, #print-area * { visibility: visible; }
-          #print-area { position: absolute; left: 0; top: 0; width: 100%; }
-          .qr-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8mm !important; }
-          .qr-card { break-inside: avoid; page-break-inside: avoid; border: 2px solid #0f172a !important; }
+          #print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 0 !important; }
+          .qr-grid { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 6mm !important; padding: 0 !important; max-width: none !important; margin: 0 !important; }
+          .qr-card { break-inside: avoid; page-break-inside: avoid; border: 2px solid #0f172a !important; padding: 4mm !important; }
+          .qr-card img { width: 38mm !important; height: 38mm !important; }
         }
         @page { size: A4 portrait; margin: 8mm; }
       `}</style>
