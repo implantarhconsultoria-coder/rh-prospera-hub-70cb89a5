@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Fuel, Plus, QrCode, CheckCircle2, AlertTriangle, Filter as FilterIcon, Download } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Fuel, Plus, QrCode, CheckCircle2, AlertTriangle, Filter as FilterIcon, Download, Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -159,6 +160,9 @@ const CombustivelAdminPage: React.FC = () => {
           <p className="text-sm text-muted-foreground">Autorizações TOPAC-ABAST, abastecimentos e conferência</p>
         </div>
         <div className="flex gap-2">
+          <Link to="/admin/combustivel/imprimir">
+            <Button variant="outline"><Printer className="w-4 h-4 mr-2" /> Imprimir QR Codes</Button>
+          </Link>
           <Button variant="outline" onClick={exportarQRsTopac}><Download className="w-4 h-4 mr-2" /> Exportar códigos TOPAC</Button>
           <Button onClick={() => setOpenVale(true)}><Plus className="w-4 h-4 mr-2" /> Gerar autorização</Button>
         </div>
