@@ -10,6 +10,16 @@ import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { Search } from 'lucide-react';
+
+interface FuncionarioSugestao {
+  id: string;
+  nome: string;
+  cpf: string | null;
+  cargo: string | null;
+  email: string | null;
+  empresa: string | null;
+}
 
 type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'financeiro' | 'faturamento' | 'tecnico_campo';
 
