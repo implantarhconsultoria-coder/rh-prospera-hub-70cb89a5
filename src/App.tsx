@@ -88,6 +88,8 @@ import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
 import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
+import PublicAbastecimentoPage from "@/pages/PublicAbastecimentoPage";
+import ImprimirQRCombustivelPage from "@/pages/admin/ImprimirQRCombustivelPage";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
@@ -179,6 +181,7 @@ const AuthGate = () => {
         <Route path="/admin/app-operacional" element={<AppOperacionalPage />} />
         <Route path="/admin/app-operacional/:id" element={<TecnicoDetailPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
+        <Route path="/admin/combustivel/imprimir" element={<ImprimirQRCombustivelPage />} />
         {/* Faturamento */}
         <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
         <Route path="/admin/faturamento/clientes" element={<ClientesFatPage />} />
@@ -270,6 +273,9 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <Routes>
+              {/* ========== ROTA PÚBLICA: QR de abastecimento (sem login) ========== */}
+              <Route path="/abastecimento/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
+
               {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
               <Route path="/m/:token" element={<MecanicoLayout />}>
                 <Route index element={<MecanicoHomePage />} />
