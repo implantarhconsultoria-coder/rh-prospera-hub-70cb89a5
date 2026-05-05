@@ -13,6 +13,7 @@ import QRCodeLib from 'qrcode';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Printer, ArrowLeft, Loader2 } from 'lucide-react';
+import { printDocumentInPage } from '@/lib/printInPage';
 
 interface Vale {
   id: string;
@@ -25,6 +26,14 @@ interface Vale {
 }
 
 const PUBLIC_BASE = 'https://implantarhprpro.com/abastecimento';
+
+const escapeHtml = (value?: string | null) =>
+  (value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 
 const ImprimirQRCombustivelPage: React.FC = () => {
   const [vales, setVales] = useState<Vale[]>([]);
@@ -68,6 +77,65 @@ const ImprimirQRCombustivelPage: React.FC = () => {
     })();
   }, [search]);
 
+  const handlePrint = () => {
+    const cards = vales.map((v) => `
+      <article class="qr-card">
+        <div class="brand">TOPAC</div>
+        <div class="subtitle">Autorização de Abastecimento</div>
+        ${v.posto_nome ? `<div class="posto">${escapeHtml(v.posto_nome)}</div>` : ''}
+        ${v.posto_cnpj ? `<div class="meta">CNPJ: ${escapeHtml(v.posto_cnpj)}</div>` : ''}
+        ${v.posto_endereco ? `<div class="meta endereco">${escapeHtml(v.posto_endereco)}</div>` : ''}
+        ${v.qrDataUrl ? `<img class="qr" src="${v.qrDataUrl}" alt="${escapeHtml(v.codigo)}" />` : ''}
+        <div class="codigo">${escapeHtml(v.codigo)}</div>
+        <div class="hint">Escaneie o QR Code, informe os dados e tire foto da bomba e do painel.</div>
+      </article>
+    `).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>QR Codes TOPAC-ABAST</title>
+          <style>
+            * { box-sizing: border-box; }
+            html, body { margin: 0; padding: 0; background: #ffffff; font-family: Arial, Helvetica, sans-serif; color: #0f172a; }
+            body { padding: 8mm; }
+            .qr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8mm; }
+            .qr-card {
+              border: 2px solid #0f172a;
+              border-radius: 8mm;
+              padding: 5mm;
+              min-height: 88mm;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: flex-start;
+              text-align: center;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+            .brand { font-size: 14pt; font-weight: 800; line-height: 1; margin-bottom: 2mm; }
+            .subtitle { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.18em; color: #475569; margin-bottom: 3mm; }
+            .posto { font-size: 10pt; font-weight: 700; line-height: 1.2; }
+            .meta { font-size: 7pt; color: #64748b; line-height: 1.3; }
+            .endereco { margin-bottom: 2.5mm; }
+            .qr { width: 42mm; height: 42mm; object-fit: contain; display: block; margin: 1mm 0 2mm; }
+            .codigo { font-size: 11pt; font-weight: 800; letter-spacing: 0.12em; margin-top: 1mm; }
+            .hint { font-size: 6.5pt; color: #64748b; line-height: 1.25; margin-top: 2.5mm; }
+            @page { size: A4 portrait; margin: 8mm; }
+          </style>
+        </head>
+        <body>
+          <main class="qr-grid">${cards}</main>
+        </body>
+      </html>
+    `;
+
+    printDocumentInPage(html);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -101,7 +169,7 @@ const ImprimirQRCombustivelPage: React.FC = () => {
             <p className="text-xs text-muted-foreground">{vales.length} autorização(ões) prontas para impressão</p>
           </div>
         </div>
-        <Button onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" /> Imprimir</Button>
+        <Button onClick={handlePrint}><Printer className="w-4 h-4 mr-2" /> Imprimir</Button>
       </div>
 
       <div id="print-area" className="p-6">
