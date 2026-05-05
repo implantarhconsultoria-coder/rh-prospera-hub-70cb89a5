@@ -30,8 +30,7 @@ const uploadFoto = async (blob: Blob, prefixo: string): Promise<string> => {
     .from('abastecimento-fotos')
     .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
   if (error) throw error;
-  const { data } = supabase.storage.from('abastecimento-fotos').createSignedUrl(path, 60 * 60 * 24 * 365);
-  return (await data) ? path : path;
+  return path;
 };
 
 const PublicAbastecimentoPage: React.FC = () => {
