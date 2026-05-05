@@ -99,20 +99,35 @@ const queryClient = new QueryClient();
  * RoleRedirect — after login, sends user to the correct portal based on role.
  */
 const RoleRedirect = () => {
-  const { userRoles, roleLoading } = useApp();
+  const { userRoles, roleLoading, session } = useApp();
+  const [tecnicoToken, setTecnicoToken] = React.useState<string | null | undefined>(undefined);
 
-  if (roleLoading) {
+  React.useEffect(() => {
+    if (!session?.user?.id) return;
+    if (!userRoles.includes('tecnico_campo')) { setTecnicoToken(null); return; }
+    (async () => {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data } = await supabase.from('tecnicos_campo')
+        .select('access_token').eq('user_id', session.user.id).maybeSingle();
+      setTecnicoToken((data as any)?.access_token || null);
+    })();
+  }, [session, userRoles]);
+
+  if (roleLoading || tecnicoToken === undefined) {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
-  // Priority: admin always wins (admin can also have tecnico_campo for testing the field app)
+  // Priority: admin always wins
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
   if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
   if (userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
-  if (userRoles.includes('tecnico_campo')) return <Navigate to="/campo" replace />;
+  if (userRoles.includes('tecnico_campo')) {
+    if (tecnicoToken) return <Navigate to={`/m/${tecnicoToken}`} replace />;
+    return <Navigate to="/campo" replace />;
+  }
 
   return <Navigate to="/admin" replace />;
 };
