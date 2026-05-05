@@ -5055,6 +5055,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      qr_abastecimento_dados: { Args: { p_codigo: string }; Returns: Json }
       registrar_abastecimento_publico: {
         Args: {
           p_codigo: string
