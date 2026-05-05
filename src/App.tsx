@@ -123,13 +123,10 @@ const RoleRedirect = () => {
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
-  if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
+  if (userRoles.includes('operacional')) return <Navigate to="/mecanico" replace />;
   if (userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
-  if (userRoles.includes('tecnico_campo')) {
-    if (tecnicoToken) return <Navigate to={`/m/${tecnicoToken}`} replace />;
-    return <Navigate to="/campo" replace />;
-  }
+  if (userRoles.includes('tecnico_campo')) return <Navigate to="/mecanico" replace />;
 
   return <Navigate to="/admin" replace />;
 };
