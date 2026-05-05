@@ -13,7 +13,6 @@ import QRCodeLib from 'qrcode';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Printer, ArrowLeft, Loader2 } from 'lucide-react';
-import { printDocumentInPage } from '@/lib/printInPage';
 
 interface Vale {
   id: string;
@@ -133,7 +132,28 @@ const ImprimirQRCombustivelPage: React.FC = () => {
       </html>
     `;
 
-    printDocumentInPage(html);
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=900');
+    if (!printWindow) {
+      window.alert('Libere a abertura da janela de impressão neste navegador e tente novamente.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    const waitForImages = Array.from(printWindow.document.images).map((img) => {
+      if (img.complete) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        img.addEventListener('load', () => resolve(), { once: true });
+        img.addEventListener('error', () => resolve(), { once: true });
+      });
+    });
+
+    Promise.all(waitForImages).finally(() => {
+      printWindow.focus();
+      printWindow.print();
+    });
   };
 
   if (loading) {
