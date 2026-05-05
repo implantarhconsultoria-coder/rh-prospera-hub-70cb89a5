@@ -260,6 +260,10 @@ const App = () => (
               <Route path="/relatorio-vt-impressao" element={<ErrorBoundary><RelatorioVTImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-beneficio-individual" element={<ErrorBoundary><RelatorioBeneficioIndividualPage /></ErrorBoundary>} />
 
+              {/* Rota pública do QR de abastecimento — NÃO exige login */}
+              <Route path="/abastecimento/:codigo" element={<ErrorBoundary><AbastecimentoPublicoPage /></ErrorBoundary>} />
+              <Route path="/abastecer/:codigo" element={<ErrorBoundary><AbastecimentoPublicoPage /></ErrorBoundary>} />
+
               {/* Rotas legadas — todas redirecionam pro login */}
               <Route path="/sp" element={<Navigate to="/" replace />} />
               <Route path="/pg" element={<Navigate to="/" replace />} />
