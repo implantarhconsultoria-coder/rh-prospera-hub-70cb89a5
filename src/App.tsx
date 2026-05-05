@@ -270,6 +270,9 @@ const App = () => (
               {/* ========== ROTA PÚBLICA: QR de abastecimento (sem login) ========== */}
               <Route path="/abastecimento/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
 
+              {/* ========== APP MECÂNICO — LINK ÚNICO /mecanico (exige login) ========== */}
+              <Route path="/mecanico" element={<ErrorBoundary><MecanicoRedirectPage /></ErrorBoundary>} />
+
               {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
               <Route path="/m/:token" element={<MecanicoLayout />}>
                 <Route index element={<MecanicoHomePage />} />
