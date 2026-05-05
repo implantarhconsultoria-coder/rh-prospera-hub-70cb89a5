@@ -311,9 +311,46 @@ const PermissoesAcessoPage: React.FC = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Novo usuário</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div>
+            <div className="relative">
               <Label>Nome completo</Label>
-              <Input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder="Ex: Paula Silva" />
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  value={novoNome}
+                  onChange={e => { setNovoNome(e.target.value); setShowSugestoes(true); setFuncInfo(null); }}
+                  onFocus={() => setShowSugestoes(true)}
+                  placeholder="Digite o nome do funcionário..."
+                  autoComplete="off"
+                />
+              </div>
+              {showSugestoes && novoNome.trim().length >= 2 && (
+                <div className="absolute z-50 left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-64 overflow-auto">
+                  {buscandoFunc ? (
+                    <div className="p-3 text-xs text-muted-foreground flex items-center gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Buscando...</div>
+                  ) : sugestoes.length === 0 ? (
+                    <div className="p-3 text-xs text-muted-foreground">Nenhum funcionário encontrado. Você pode digitar livremente.</div>
+                  ) : sugestoes.map(f => (
+                    <button
+                      key={f.id} type="button"
+                      onClick={() => escolherFuncionario(f)}
+                      className="w-full text-left px-3 py-2 hover:bg-muted/60 border-b last:border-0"
+                    >
+                      <div className="text-sm font-medium">{f.nome}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {[f.cargo, f.empresa, f.cpf].filter(Boolean).join(' · ')}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {funcInfo && (
+                <div className="mt-2 p-2 rounded-md bg-muted/40 border text-[11px] space-y-0.5">
+                  <div><strong>Empresa:</strong> {funcInfo.empresa || '—'}</div>
+                  <div><strong>Cargo:</strong> {funcInfo.cargo || '—'}</div>
+                  <div><strong>CPF:</strong> {funcInfo.cpf || '—'} <span className="text-muted-foreground">(somente para vínculo, não usado no login)</span></div>
+                </div>
+              )}
             </div>
             <div>
               <Label>E-mail (pode ser fictício, ex: paula@topac.app)</Label>
