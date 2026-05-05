@@ -29,11 +29,11 @@ const PUBLIC_BASE = 'https://implantarhprpro.com/abastecimento';
 
 const escapeHtml = (value?: string | null) =>
   (value || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 const ImprimirQRCombustivelPage: React.FC = () => {
   const [vales, setVales] = useState<Vale[]>([]);
