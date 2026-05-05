@@ -86,6 +86,7 @@ import MedicoesPage from "@/pages/faturamento/MedicoesPage";
 import ReajustesPage from "@/pages/faturamento/ReajustesPage";
 import PendenciasPage from "@/pages/faturamento/PendenciasPage";
 
+import AbastecimentoPublicoPage from "@/pages/AbastecimentoPublicoPage";
 import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
