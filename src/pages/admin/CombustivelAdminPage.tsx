@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Fuel, Plus, QrCode, CheckCircle2, AlertTriangle, Filter as FilterIcon, Download, Printer } from 'lucide-react';
+import { Fuel, Plus, QrCode, CheckCircle2, AlertTriangle, Filter as FilterIcon, Download, Printer, Ban, RotateCcw, Trash2, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
