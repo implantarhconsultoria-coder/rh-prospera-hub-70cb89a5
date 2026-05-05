@@ -365,7 +365,10 @@ const DocumentosVeiculosPage: React.FC = () => {
             <DialogTitle className="text-base">{viewingPdf?.descricao || 'Documento do veículo'}</DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6">
-            <PdfDocumentViewer sourceUrl={viewingPdf?.url} title={viewingPdf?.descricao || 'Documento do veículo'} />
+            <PdfDocumentViewer
+              source={viewingPdf ? { url: viewingPdf.url, tipo: 'veiculo' } : undefined}
+              title={viewingPdf?.descricao || 'Documento do veículo'}
+            />
           </div>
         </DialogContent>
       </Dialog>
