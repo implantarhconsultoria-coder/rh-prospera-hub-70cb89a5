@@ -301,6 +301,25 @@ const App = () => (
               <Route path="/sp" element={<AcessoModuloCpfPage />} />
               <Route path="/pg" element={<AcessoModuloCpfPage />} />
               <Route path="/go" element={<AcessoModuloCpfPage />} />
+              {/* Aliases legados exibidos em telas antigas/configuração */}
+              <Route path="/operacional/sp" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/praia-grande" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/operacional/goiania" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/faturamento/sp" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/faturamento/praia-grande" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/faturamento/goiania" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/financeiro/sp" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/financeiro/praia-grande" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/financeiro/goiania" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/rh/sp" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/rh/praia-grande" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/rh/goiania" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/almoxarifado/sp" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/almoxarifado/praia-grande" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/almoxarifado/goiania" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/documentos-rh/sp" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/documentos-rh/praia-grande" element={<AcessoFilialOperacionalPage />} />
+              <Route path="/documentos-rh/goiania" element={<AcessoFilialOperacionalPage />} />
               {/* ========== PORTAL OPERACIONAL (canônico) — token único por CPF ========== */}
               <Route path="/operacional/:token" element={<MecanicoLayout />}>
                 <Route index element={<MecanicoHomePage />} />

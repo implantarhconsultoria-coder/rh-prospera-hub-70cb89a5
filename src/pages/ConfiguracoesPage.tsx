@@ -23,44 +23,44 @@ const ConfiguracoesPage: React.FC = () => {
   const grupos: { titulo: string; cor: string; links: { name: string; path: string }[] }[] = [
     {
       titulo: 'Operacional / Mecânicos', cor: 'bg-blue-500', links: [
-        { name: 'São Paulo / Matriz', path: '/operacional/sp' },
-        { name: 'Praia Grande',        path: '/operacional/praia-grande' },
-        { name: 'Goiânia',             path: '/operacional/goiania' },
+        { name: 'São Paulo / Matriz', path: '/sp' },
+        { name: 'Praia Grande',        path: '/pg' },
+        { name: 'Goiânia',             path: '/go' },
       ],
     },
     {
       titulo: 'Faturamento', cor: 'bg-indigo-500', links: [
-        { name: 'São Paulo / Matriz', path: '/faturamento/sp' },
-        { name: 'Praia Grande',        path: '/faturamento/praia-grande' },
-        { name: 'Goiânia',             path: '/faturamento/goiania' },
+        { name: 'São Paulo / Matriz', path: '/sp' },
+        { name: 'Praia Grande',        path: '/pg' },
+        { name: 'Goiânia',             path: '/go' },
       ],
     },
     {
       titulo: 'Financeiro', cor: 'bg-cyan-600', links: [
-        { name: 'São Paulo / Matriz', path: '/financeiro/sp' },
-        { name: 'Praia Grande',        path: '/financeiro/praia-grande' },
-        { name: 'Goiânia',             path: '/financeiro/goiania' },
+        { name: 'São Paulo / Matriz', path: '/sp' },
+        { name: 'Praia Grande',        path: '/pg' },
+        { name: 'Goiânia',             path: '/go' },
       ],
     },
     {
       titulo: 'RH / Filiais', cor: 'bg-rose-500', links: [
-        { name: 'São Paulo / Matriz', path: '/rh/sp' },
-        { name: 'Praia Grande',        path: '/rh/praia-grande' },
-        { name: 'Goiânia',             path: '/rh/goiania' },
+        { name: 'São Paulo / Matriz', path: '/sp' },
+        { name: 'Praia Grande',        path: '/pg' },
+        { name: 'Goiânia',             path: '/go' },
       ],
     },
     {
       titulo: 'Almoxarifado', cor: 'bg-amber-600', links: [
-        { name: 'São Paulo / Matriz', path: '/almoxarifado/sp' },
-        { name: 'Praia Grande',        path: '/almoxarifado/praia-grande' },
-        { name: 'Goiânia',             path: '/almoxarifado/goiania' },
+        { name: 'São Paulo / Matriz', path: '/sp' },
+        { name: 'Praia Grande',        path: '/pg' },
+        { name: 'Goiânia',             path: '/go' },
       ],
     },
     {
       titulo: 'Documentos RH (EPI / Uniformes)', cor: 'bg-fuchsia-500', links: [
-        { name: 'São Paulo / Matriz', path: '/documentos-rh/sp' },
-        { name: 'Praia Grande',        path: '/documentos-rh/praia-grande' },
-        { name: 'Goiânia',             path: '/documentos-rh/goiania' },
+        { name: 'São Paulo / Matriz', path: '/sp' },
+        { name: 'Praia Grande',        path: '/pg' },
+        { name: 'Goiânia',             path: '/go' },
       ],
     },
     {

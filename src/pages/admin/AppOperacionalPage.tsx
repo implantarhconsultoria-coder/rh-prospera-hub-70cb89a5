@@ -313,9 +313,9 @@ const AppOperacionalPage: React.FC = () => {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {[
-                { label: 'São Paulo / Matriz', path: '/operacional/sp', cor: 'from-primary to-blue-600' },
-                { label: 'Praia Grande', path: '/operacional/praia-grande', cor: 'from-cyan-500 to-blue-600' },
-                { label: 'Goiânia', path: '/operacional/goiania', cor: 'from-emerald-500 to-teal-600' },
+                { label: 'São Paulo / Matriz', path: '/sp', cor: 'from-primary to-blue-600' },
+                { label: 'Praia Grande', path: '/pg', cor: 'from-cyan-500 to-blue-600' },
+                { label: 'Goiânia', path: '/go', cor: 'from-emerald-500 to-teal-600' },
               ].map(l => {
                 const url = `${window.location.origin}${l.path}`;
                 return (
