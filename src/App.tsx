@@ -276,7 +276,7 @@ const App = () => (
               <Route path="/r/:slug" element={<Navigate to="/" replace />} />
               <Route path="/m/*" element={<Navigate to="/" replace />} />
               <Route path="/g" element={<Navigate to="/" replace />} />
-              <Route path="/abastecer/*" element={<Navigate to="/" replace />} />
+              
               <Route path="/admin/links-acesso-cpf" element={<Navigate to="/admin/permissoes-acesso" replace />} />
               <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin/permissoes-acesso" replace />} />
               <Route path="/admin/permissoes-funcionarios" element={<Navigate to="/admin/permissoes-acesso" replace />} />
