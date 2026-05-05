@@ -152,6 +152,41 @@ const CombustivelAdminPage: React.FC = () => {
     setOpenConf(null); setObs(''); reload();
   };
 
+  const setStatusVale = async (v: Vale, novoStatus: 'ativo' | 'inativo' | 'cancelado') => {
+    const labels: Record<string, string> = { ativo: 'reativar', inativo: 'inativar', cancelado: 'cancelar' };
+    if (!window.confirm(`Confirma ${labels[novoStatus]} a autorização ${v.codigo}?`)) return;
+    const { error } = await supabase.from('vales_combustivel').update({ status: novoStatus } as any).eq('id', v.id);
+    if (error) return toast.error(error.message);
+    toast.success(`Autorização ${labels[novoStatus]}da`);
+    reload();
+  };
+
+  const excluirVale = async (v: Vale) => {
+    // Só permite exclusão física se nunca foi utilizado
+    const { count } = await supabase.from('abastecimentos').select('id', { count: 'exact', head: true }).eq('vale_id', v.id);
+    if ((count || 0) > 0) {
+      if (!window.confirm(`Esta autorização já tem ${count} abastecimento(s) vinculado(s). Não pode ser excluída — será CANCELADA para preservar o histórico. Continuar?`)) return;
+      const { error } = await supabase.from('vales_combustivel').update({ status: 'cancelado' } as any).eq('id', v.id);
+      if (error) return toast.error(error.message);
+      toast.success('Autorização cancelada (histórico preservado)');
+      reload();
+      return;
+    }
+    if (!window.confirm(`EXCLUIR definitivamente a autorização ${v.codigo}? Esta ação não pode ser desfeita.`)) return;
+    const { error } = await supabase.from('vales_combustivel').update({ deleted_at: new Date().toISOString() } as any).eq('id', v.id);
+    if (error) return toast.error(error.message);
+    toast.success('Autorização excluída');
+    reload();
+  };
+
+  const imprimirIndividual = (v: Vale) => {
+    window.open(`/admin/combustivel/imprimir?codigos=${encodeURIComponent(v.codigo)}`, '_blank');
+  };
+
+  const visualizarQR = (v: Vale) => {
+    window.open(`https://implantarhprpro.com/abastecimento/${v.codigo}`, '_blank');
+  };
+
   const exportarQRsTopac = () => {
     const codigos = vales.filter(v => v.codigo.startsWith('TOPAC-ABAST') && v.status === 'ativo').map(v => v.codigo);
     if (!codigos.length) return toast.info('Nenhum vale TOPAC ativo');
