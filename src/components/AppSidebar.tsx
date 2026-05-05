@@ -56,7 +56,7 @@ const operationalItems: MenuItem[] = [
 ];
 
 const adminItems: MenuItem[] = [
-  { label: 'Permissões de Acesso (CPF)', icon: Shield, path: '/admin/permissoes-acesso' },
+  { label: 'Usuários e Permissões', icon: Shield, path: '/admin/permissoes-acesso' },
   { label: 'E-mails Contabilidade', icon: Mail, path: '/admin/emails-contabilidade' },
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
