@@ -3879,6 +3879,36 @@ export type Database = {
         }
         Relationships: []
       }
+      qr_access_logs: {
+        Row: {
+          codigo_qr: string | null
+          data_hora_acesso: string
+          dispositivo: string | null
+          erro_retornado: string | null
+          id: string
+          navegador: string | null
+          status_abertura: string
+        }
+        Insert: {
+          codigo_qr?: string | null
+          data_hora_acesso?: string
+          dispositivo?: string | null
+          erro_retornado?: string | null
+          id?: string
+          navegador?: string | null
+          status_abertura?: string
+        }
+        Update: {
+          codigo_qr?: string | null
+          data_hora_acesso?: string
+          dispositivo?: string | null
+          erro_retornado?: string | null
+          id?: string
+          navegador?: string | null
+          status_abertura?: string
+        }
+        Relationships: []
+      }
       reajustes: {
         Row: {
           aplicado_por: string | null
