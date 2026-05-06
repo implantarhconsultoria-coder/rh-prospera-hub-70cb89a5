@@ -54,8 +54,7 @@ import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
-import AppOperacionalPage from "@/pages/admin/AppOperacionalPage";
-import TecnicoDetailPage from "@/pages/admin/TecnicoDetailPage";
+import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
 import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
 import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
 import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
@@ -236,8 +235,10 @@ const AuthGate = () => {
         <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
         <Route path="/admin/chamados" element={<DespacharChamadoPage />} />
-        <Route path="/admin/app-operacional" element={<AppOperacionalPage />} />
-        <Route path="/admin/app-operacional/:id" element={<TecnicoDetailPage />} />
+        {/* App Mecânico antigo desativado — em reconstrução */}
+        <Route path="/admin/app-mecanico" element={<AppMecanicoEmReconstrucaoPage />} />
+        <Route path="/admin/app-operacional" element={<Navigate to="/admin/app-mecanico" replace />} />
+        <Route path="/admin/app-operacional/:id" element={<Navigate to="/admin/app-mecanico" replace />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="/admin/acessos-externos" element={<AcessosExternosPage />} />
         <Route path="/admin/combustivel/imprimir" element={<ImprimirQRCombustivelPage />} />
@@ -344,8 +345,8 @@ const App = () => (
               <Route path="/acesso-faturamento" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               {/* RH externo desativado — filial cobre RH */}
               <Route path="/acesso-rh" element={<Navigate to="/acesso-filial" replace />} />
-              {/* App Mecânico antigo removido — rota desativada */}
-              <Route path="/acesso-mecanico" element={<Navigate to="/" replace />} />
+              {/* App Mecânico antigo removido — rota desativada, mostra placeholder */}
+              <Route path="/acesso-mecanico" element={<ErrorBoundary><AppMecanicoEmReconstrucaoPage /></ErrorBoundary>} />
 
               {/* ========== ACESSO EXTERNO POR PIN — MÓDULOS (sem login) ========== */}
               <Route path="/financeiro-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="financeiro" titulo="Portal Financeiro" cor="bg-cyan-600" items={EXT_ITEMS_FINANCEIRO} /></ErrorBoundary>}>
@@ -385,8 +386,8 @@ const App = () => (
               <Route path="/operacional-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="operacional" titulo="Operacional" cor="bg-blue-600" items={EXT_ITEMS_OP} /></ErrorBoundary>}>
                 <Route index element={<DespacharChamadoPage />} />
                 <Route path="chamados" element={<DespacharChamadoPage />} />
-                <Route path="tecnicos" element={<AppOperacionalPage />} />
-                <Route path="tecnicos/:id" element={<TecnicoDetailPage />} />
+                <Route path="tecnicos" element={<AppMecanicoEmReconstrucaoPage />} />
+                <Route path="tecnicos/:id" element={<AppMecanicoEmReconstrucaoPage />} />
               </Route>
 
               <Route path="/filial-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="filial" titulo="Portal Filial" cor="bg-purple-600" items={EXT_ITEMS_FILIAL} /></ErrorBoundary>}>
