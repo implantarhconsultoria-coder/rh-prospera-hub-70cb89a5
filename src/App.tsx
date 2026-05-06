@@ -92,6 +92,8 @@ import NotFound from "@/pages/NotFound";
 import PublicAbastecimentoPage from "@/pages/PublicAbastecimentoPage";
 import ImprimirQRCombustivelPage from "@/pages/admin/ImprimirQRCombustivelPage";
 import MecanicoRedirectPage from "@/pages/MecanicoRedirectPage";
+import AcessoExternoPage from "@/pages/AcessoExternoPage";
+import AcessosExternosPage from "@/pages/admin/AcessosExternosPage";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
@@ -188,6 +190,7 @@ const AuthGate = () => {
         <Route path="/admin/app-operacional" element={<AppOperacionalPage />} />
         <Route path="/admin/app-operacional/:id" element={<TecnicoDetailPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
+        <Route path="/admin/acessos-externos" element={<AcessosExternosPage />} />
         <Route path="/admin/combustivel/imprimir" element={<ImprimirQRCombustivelPage />} />
         {/* Faturamento */}
         <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
@@ -289,6 +292,15 @@ const App = () => (
 
               {/* ========== APP MECÂNICO — LINK ÚNICO /mecanico (exige login) ========== */}
               <Route path="/mecanico" element={<ErrorBoundary><MecanicoRedirectPage /></ErrorBoundary>} />
+
+              {/* ========== ACESSO EXTERNO POR PIN (sem login) ========== */}
+              <Route path="/acesso-mecanico" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-financeiro" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-rh" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-almoxarifado" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-operacional" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-campo" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
 
               {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
               <Route path="/m/:token" element={<MecanicoLayout />}>

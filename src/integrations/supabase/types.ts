@@ -250,6 +250,77 @@ export type Database = {
           },
         ]
       }
+      acessos_externos: {
+        Row: {
+          acesso_liberado: boolean
+          cpf: string
+          cpf_clean: string
+          created_at: string
+          empresa: string | null
+          filial: string | null
+          funcao: string | null
+          funcionario_id: string | null
+          id: string
+          modulo: string
+          nome: string
+          observacoes: string | null
+          perfil_acesso: string
+          pin: string
+          profile_user_id: string | null
+          status: string
+          ultimo_acesso_em: string | null
+          updated_at: string
+        }
+        Insert: {
+          acesso_liberado?: boolean
+          cpf: string
+          cpf_clean: string
+          created_at?: string
+          empresa?: string | null
+          filial?: string | null
+          funcao?: string | null
+          funcionario_id?: string | null
+          id?: string
+          modulo: string
+          nome: string
+          observacoes?: string | null
+          perfil_acesso: string
+          pin: string
+          profile_user_id?: string | null
+          status?: string
+          ultimo_acesso_em?: string | null
+          updated_at?: string
+        }
+        Update: {
+          acesso_liberado?: boolean
+          cpf?: string
+          cpf_clean?: string
+          created_at?: string
+          empresa?: string | null
+          filial?: string | null
+          funcao?: string | null
+          funcionario_id?: string | null
+          id?: string
+          modulo?: string
+          nome?: string
+          observacoes?: string | null
+          perfil_acesso?: string
+          pin?: string
+          profile_user_id?: string | null
+          status?: string
+          ultimo_acesso_em?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "acessos_externos_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       acoes_log: {
         Row: {
           acao: string
@@ -5235,6 +5306,14 @@ export type Database = {
       }
     }
     Functions: {
+      acesso_externo_obter: {
+        Args: { p_id: string; p_modulo: string }
+        Returns: Json
+      }
+      acesso_externo_validar_pin: {
+        Args: { p_modulo: string; p_pin: string }
+        Returns: Json
+      }
       calc_inss: { Args: { p_base: number }; Returns: number }
       calc_irrf: { Args: { p_base: number }; Returns: number }
       dashboard_faturamento_kpis: { Args: never; Returns: Json }
