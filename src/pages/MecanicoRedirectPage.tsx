@@ -103,14 +103,15 @@ const MecanicoRedirectPage: React.FC = () => {
     return <Navigate to={`/m/${token}`} replace />;
   }
 
-  // Admin/Operacional sem vínculo: modo seleção assistida
-  if (isAdmin || isOperacional) {
+  // Admin/Operacional/Tecnico sem vínculo: modo seleção assistida
+  if (isAdmin || isOperacional || isTecnico) {
+    const badgeLabel = isAdmin ? 'Modo teste · Admin' : isOperacional ? 'Operacional' : 'Técnico de Campo';
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-4">
         <div className="max-w-md mx-auto pt-8">
           <div className="text-center mb-6">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-bold uppercase tracking-wider mb-3">
-              <Wrench className="w-3 h-3" /> Modo teste · Admin
+              <Wrench className="w-3 h-3" /> {badgeLabel}
             </div>
             <h1 className="text-2xl font-bold">Selecione um mecânico</h1>
             <p className="text-sm text-white/60 mt-1">Você entrará no app no perfil escolhido.</p>
@@ -167,15 +168,14 @@ const MecanicoRedirectPage: React.FC = () => {
     );
   }
 
-  // Outros usuários sem vínculo
+  // Outros usuários sem vínculo — mensagem limpa
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6 text-center">
       <div className="max-w-sm">
         <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-        <h1 className="text-xl font-bold mb-2">Acesso de mecânico não habilitado</h1>
+        <h1 className="text-xl font-bold mb-2">Acesso não liberado</h1>
         <p className="text-sm text-white/70">
-          Seu usuário não está vinculado a um cadastro de mecânico. Solicite ao
-          administrador a liberação do App Mecânico.
+          Solicite ao administrador a liberação do App Mecânico.
         </p>
       </div>
     </div>
