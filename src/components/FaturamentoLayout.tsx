@@ -2,7 +2,7 @@ import React from 'react';
 import { Outlet, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
-import { Loader2, FileText, Users, FileSignature, Receipt, TrendingUp, AlertTriangle, LogOut, Building2 } from 'lucide-react';
+import { Loader2, FileText, Users, FileSignature, Receipt, TrendingUp, AlertTriangle, LogOut, Building2, ClipboardCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
@@ -11,8 +11,9 @@ const ITEMS = [
   { to: '/faturamento', label: 'Dashboard', icon: TrendingUp, end: true },
   { to: '/faturamento/clientes', label: 'Clientes', icon: Users },
   { to: '/faturamento/contratos', label: 'Contratos', icon: FileSignature },
-  { to: '/faturamento/faturas', label: 'Faturas', icon: Receipt },
   { to: '/faturamento/medicoes', label: 'Medições', icon: FileText },
+  { to: '/faturamento/conferencia', label: 'Conferência', icon: ClipboardCheck },
+  { to: '/faturamento/faturas', label: 'Faturas', icon: Receipt },
   { to: '/faturamento/reajustes', label: 'Reajustes', icon: TrendingUp },
   { to: '/faturamento/pendencias', label: 'Pendências', icon: AlertTriangle },
 ];
