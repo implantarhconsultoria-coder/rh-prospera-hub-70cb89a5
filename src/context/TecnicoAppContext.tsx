@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, LogIn, Home, RefreshCw, Shield } from 'lucide-react';
+import { useApp } from '@/hooks/useApp';
+import { supabase } from '@/integrations/supabase/client';
 
 const FN_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/tecnico-app`;
 

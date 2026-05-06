@@ -1,1 +1,45 @@
-\n# Diagnóstico Técnico — TOPAC (somente leitura)\n\nEste é um relatório de mapeamento. **Nenhum arquivo será editado.** Para cada item, lista-se o arquivo, função/responsabilidade e a causa provável dos sintomas relatados.\n\n---\n\n## 1) Login do ADMIN\n\n**Arquivos / funções**\n- `src/pages/LoginPage.tsx` → componente `LoginPage` + `handleSubmit` (chama `supabase.auth.signInWithPassword`) e `handleGoogleLogin` (`lovable.auth.signInWithOAuth('google')`).\n- `src/integrations/supabase/client.ts` → instancia `supabase` com `persistSession: true`, `autoRefreshToken: true` (auto-gerado, intocável).\n- `src/context/AppContext.tsx` (linhas 36-48) → `AppProvider`: registra `supabase.auth.onAuthStateChange` e `getSession()`, alimenta `session` + `loading`.\n- `src/hooks/useUserRole.ts` → `useUserRole(session)`: lê `user_roles` por `user_id`, escolhe role primária via `ROLE_PRIORITY` (`admin` no topo).\n\n**Causas prováveis**\n- Login propriamente dito está íntegro (Supabase + Google funcionam). \n- O “travamento” após login normalmente vem de `roleLoading` ou de redirecionamento (item 2), não do login em si.\n- Aliases `fat`/`fin` em `LOGIN_ALIASES` esperam usuários `fat@topac.local` e `fin@topac.local` no auth — se não existirem, retornam “credenciais inválidas”.\n\n---\n\n## 2) Roteamento após login\n\n**Arquivos / funções**\n- `src/App.tsx` → `RoleRedirect` (linhas 102-119) decide para onde mandar o usuário:\n  - `admin` → `/admin`\n  - `faturamento` → `/faturamento`\n  - `financeiro` → `/financeiro`\n  - `operacional` → `/mecanico`\n  - `filial_*`, `almoxarifado` → `/filial`\n  - `tecnico_campo` → `/mecanico`\n  - fallback → `/admin`\n- `AuthGate` (`src/App.tsx` 121-141) gatekeeper de rotas autenticadas vs públicas.\n- `src/components/AppLayout.tsx` → faz **segundo** redirecionamento se `userRole !== 'admin'` (lógica duplicada com `RoleRedirect`).\n\n**Causas prováveis**\n- **Conflito de prioridade quando admin tem múltiplas roles**: o usuário pode ter `admin` + `tecnico_campo`. Em `RoleRedirect` o admin vence (correto). Mas em `AppLayout` a checagem é `userRole !== 'admin'`. Como `useUserRole` usa `ROLE_PRIORITY` com `admin` no topo, isso bate — porém qualquer dessincronia entre `userRole` e `userRoles` (race condition durante carregamento) pode disparar redirect indevido para `/mecanico`.\n- **Race condition `roleLoading`**: se `RoleRedirect` renderiza enquanto `userRoles=[]` e `roleLoading=false` (janela curtíssima entre `useEffect` e fetch concluir), cai no fallback `/admin` — geralmente ok, mas pode causar “flash” de tela.\n- A rota `/index` (que o usuário está vendo agora) **não existe** em `App.tsx` — ela cai em `<Route path=\
+## Objetivo
+
+Corrigir o travamento da tela "Link inválido ou expirado" (rotas `/m/:token`, e qualquer link antigo de `/campo`, `/operacional`, `/mecanico`, `/acesso`) adicionando botões de saída. Sem mexer em layout dos módulos, cálculos, autenticação ou criação de acessos.
+
+## Arquivo único a alterar
+
+`src/context/TecnicoAppContext.tsx` — bloco do `if (error || !tecnico)` (linhas 127–139). Hoje só mostra ícone + texto, sem nenhuma ação. É o único lugar do projeto que renderiza essa mensagem (`rg` confirmou).
+
+## O que será feito
+
+Substituir o bloco de erro por uma tela com os mesmos visuais (mesma cor de fundo, ícone, tipografia) acrescentando 3 botões fixos + 1 condicional para admin:
+
+1. **Ir para Login** → `window.location.href = '/login'`
+2. **Voltar ao Início**:
+   - Se `userRole === 'admin'` → `/admin`
+   - Caso contrário → `/login`
+3. **Limpar sessão e tentar novamente**:
+   - `await supabase.auth.signOut()`
+   - `localStorage.clear()`
+   - `sessionStorage.clear()`
+   - `window.location.href = '/login'`
+4. **Abrir Painel Admin** (só renderiza se `userRole === 'admin'`) → `/admin`
+
+Para detectar admin, usar o hook `useApp()` (`src/hooks/useApp.ts`) já presente no projeto, que expõe `userRole` e `session`. Importar `supabase` de `@/integrations/supabase/client`.
+
+## Cobertura das rotas antigas
+
+- `/m/:token` — usa `TecnicoAppProvider`, então já é coberto pela alteração.
+- `/mecanico` — `MecanicoRedirectPage` já trata token ausente com lista/aviso próprio (não usa a tela de "link inválido"); nada a mudar lá.
+- `/campo`, `/operacional`, `/acesso` — não renderizam essa mensagem específica; quem renderiza é só o provider do app mecânico. Se o usuário cair em link antigo `/m/<token-velho>`, a nova tela permitirá sair.
+
+## Detalhes técnicos
+
+- Manter `loading` state inalterado (apenas o spinner).
+- Manter o texto "Link inválido ou expirado" e a frase explicativa atuais.
+- Botões usando classes Tailwind já adotadas no projeto (`bg-primary`, `bg-white/10`, `border border-white/15`, `rounded-xl`, `py-2.5 px-4 text-sm font-semibold`) para não criar novo padrão visual.
+- Botão "Limpar sessão" deve ser `async` e tolerante a falha do `signOut` (try/catch silencioso, sempre redireciona).
+- Sem nova rota, sem novo componente, sem mudança em router, sem mudança em RLS/edge functions.
+
+## Fora do escopo (não tocar)
+
+- `src/App.tsx`, `AppLayout`, `CampoLayout`, `OperacionalLayout`, `MecanicoLayout`, `MecanicoRedirectPage`, `AguardandoAcesso`.
+- Qualquer cálculo (`pontoCalc`, `rescisaoCalc`, etc.).
+- Tabelas/migrations Supabase, roles, edge functions.
+- Login, signup, recuperar/redefinir senha.
