@@ -9,13 +9,13 @@ import { toast } from "sonner";
 
 const MODULOS: Record<string, { label: string; redirect: (id: string) => string }> = {
   mecanico: { label: "App Mecânico", redirect: (id) => `/mecanico-ext/${id}` },
-  financeiro: { label: "Financeiro", redirect: () => `/financeiro` },
-  faturamento: { label: "Faturamento", redirect: () => `/faturamento` },
-  rh: { label: "RH", redirect: () => `/admin` },
-  almoxarifado: { label: "Almoxarifado", redirect: () => `/admin/almoxarifado` },
-  operacional: { label: "Operacional", redirect: (id) => `/mecanico-ext/${id}` },
-  filial: { label: "Filial", redirect: () => `/filial` },
-  campo: { label: "Campo", redirect: (id) => `/mecanico-ext/${id}` },
+  financeiro: { label: "Financeiro", redirect: (id) => `/financeiro-ext/${id}` },
+  faturamento: { label: "Faturamento", redirect: (id) => `/faturamento-ext/${id}` },
+  rh: { label: "RH", redirect: (id) => `/rh-ext/${id}` },
+  almoxarifado: { label: "Almoxarifado", redirect: (id) => `/almoxarifado-ext/${id}` },
+  operacional: { label: "Operacional", redirect: (id) => `/operacional-ext/${id}` },
+  filial: { label: "Filial", redirect: (id) => `/filial-ext/${id}` },
+  campo: { label: "Campo", redirect: (id) => `/campo-ext/${id}` },
 };
 
 interface UsuarioOpcao {
