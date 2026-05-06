@@ -49,8 +49,27 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
 
   const sair = () => {
     localStorage.removeItem('acesso_externo');
-    nav(`/acesso-${modulo}`, { replace: true });
+    sessionStorage.removeItem('acesso_externo_sessao');
+    nav(`/acesso-filial`, { replace: true });
   };
+
+  const trocarPortal = () => {
+    // Não limpa sessão — apenas volta para a tela de escolha
+    const sess = sessionStorage.getItem('acesso_externo_sessao');
+    if (sess) {
+      nav('/portais');
+    } else {
+      // Sem sessão multi-portal, manda para login PIN
+      nav('/acesso-filial');
+    }
+  };
+
+  // Mostra "Trocar portal" só se houver mais de um portal na sessão
+  let temMultiplosPortais = false;
+  try {
+    const s = JSON.parse(sessionStorage.getItem('acesso_externo_sessao') || 'null');
+    temMultiplosPortais = !!(s?.portais && s.portais.length > 1);
+  } catch { /* ignore */ }
 
   if (estado === 'loading') {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
