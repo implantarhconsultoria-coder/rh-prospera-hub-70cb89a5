@@ -301,6 +301,7 @@ const App = () => (
               <Route path="/acesso-operacional" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso-campo" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-faturamento" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
 
               {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
               <Route path="/m/:token" element={<MecanicoLayout />}>

@@ -9,11 +9,12 @@ import { toast } from "sonner";
 
 const MODULOS: Record<string, { label: string; redirect: (id: string) => string }> = {
   mecanico: { label: "App Mecânico", redirect: (id) => `/mecanico-ext/${id}` },
-  financeiro: { label: "Financeiro", redirect: (id) => `/financeiro` },
-  rh: { label: "RH", redirect: (id) => `/admin` },
-  almoxarifado: { label: "Almoxarifado", redirect: (id) => `/admin/almoxarifado` },
+  financeiro: { label: "Financeiro", redirect: () => `/financeiro` },
+  faturamento: { label: "Faturamento", redirect: () => `/faturamento` },
+  rh: { label: "RH", redirect: () => `/admin` },
+  almoxarifado: { label: "Almoxarifado", redirect: () => `/admin/almoxarifado` },
   operacional: { label: "Operacional", redirect: (id) => `/mecanico-ext/${id}` },
-  filial: { label: "Filial", redirect: (id) => `/filial` },
+  filial: { label: "Filial", redirect: () => `/filial` },
   campo: { label: "Campo", redirect: (id) => `/mecanico-ext/${id}` },
 };
 
