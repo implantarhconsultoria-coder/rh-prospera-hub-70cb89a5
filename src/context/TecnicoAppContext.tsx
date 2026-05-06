@@ -127,17 +127,7 @@ export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }
 
   if (error || !tecnico) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6 text-center">
-        <div className="max-w-sm">
-          <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-          <h1 className="text-xl font-bold mb-2">Link inválido ou expirado</h1>
-          <p className="text-sm text-white/70">
-            Solicite ao administrador um novo link de acesso ao app.
-          </p>
-        </div>
-      </div>
-    );
+    return <LinkInvalidoScreen />;
   }
 
   return (
