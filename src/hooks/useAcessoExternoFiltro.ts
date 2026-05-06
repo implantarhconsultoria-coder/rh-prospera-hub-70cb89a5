@@ -1,74 +1,83 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 
 /**
  * Hook que detecta se o usuário está num portal de acesso externo (rotas *-ext/:acessoId)
- * e resolve o filtro de empresa (empresa_id) a partir do nome da empresa salvo no acesso.
+ * e resolve o filtro de empresa via RPC SECURITY DEFINER no servidor.
  *
- * - Em rotas internas (admin/portais autenticados) retorna { isExterno: false, empresaIds: null }
- *   => sem restrição (mantém comportamento original).
- * - Em rotas externas, retorna { isExterno: true, empresaIds: [...] } com os ids de empresa
- *   permitidos. Se a empresa não bate com nenhum cadastro, retorna [] (bloqueia tudo).
+ * - Em rotas internas/admin: { isExterno: false, empresaIds: null } => sem restrição.
+ * - Em rotas externas: { isExterno: true, empresaIds: [...] } => restringe.
+ *   Se algo falhar, empresaIds = [] => bloqueia tudo (fail-closed).
+ *
+ * IMPORTANTE: Não usa localStorage para resolver permissões — apenas o acessoId
+ * da URL, validado contra o banco. Sem fallback/mock.
  */
 export interface AcessoExternoFiltro {
   isExterno: boolean;
   loading: boolean;
-  acesso: any | null;
-  empresaIds: string[] | null;     // null = sem filtro; [] = nenhuma; [...] = restritos
+  empresaIds: string[] | null;
   empresaNome: string;
   filialNome: string;
+  funcionarioId: string | null;
 }
 
-const EXT_ROUTE_RE = /\/(financeiro|faturamento|almoxarifado|operacional|filial|campo|mecanico)-ext\//;
+const EXT_ROUTE_RE = /^\/(financeiro|faturamento|almoxarifado|operacional|filial|campo|mecanico)-ext\/([^/]+)/;
 
 export const useAcessoExternoFiltro = (): AcessoExternoFiltro => {
   const location = useLocation();
-  const isExterno = EXT_ROUTE_RE.test(location.pathname);
+  const params = useParams<{ acessoId?: string }>();
+  const match = location.pathname.match(EXT_ROUTE_RE);
+  const isExterno = !!match;
+  const modulo = match?.[1] || '';
+  const acessoId = params.acessoId || match?.[2] || '';
 
   const [loading, setLoading] = useState(isExterno);
-  const [acesso, setAcesso] = useState<any | null>(null);
   const [empresaIds, setEmpresaIds] = useState<string[] | null>(null);
+  const [empresaNome, setEmpresaNome] = useState('');
+  const [filialNome, setFilialNome] = useState('');
+  const [funcionarioId, setFuncionarioId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isExterno) {
       setLoading(false);
-      setAcesso(null);
       setEmpresaIds(null);
+      setEmpresaNome('');
+      setFilialNome('');
+      setFuncionarioId(null);
       return;
     }
     let cancel = false;
     (async () => {
       setLoading(true);
-      let local: any = null;
-      try { local = JSON.parse(localStorage.getItem('acesso_externo') || 'null'); } catch { /* ignore */ }
-      if (!local) { if (!cancel) { setEmpresaIds([]); setLoading(false); } return; }
-      setAcesso(local);
-
-      const nomeEmpresa = (local.empresa || '').trim();
-      if (!nomeEmpresa) {
-        // Sem empresa definida no acesso => não vê nada (segurança)
+      if (!acessoId || !modulo) {
         if (!cancel) { setEmpresaIds([]); setLoading(false); }
         return;
       }
-      const { data } = await supabase
-        .from('empresas')
-        .select('id, nome')
-        .ilike('nome', nomeEmpresa);
+      const { data, error } = await supabase.rpc('acesso_externo_filtro_empresa' as any, {
+        p_acesso_id: acessoId,
+        p_modulo: modulo,
+      });
       if (cancel) return;
-      const ids = (data || []).map((e: any) => e.id);
+      if (error || !(data as any)?.ok) {
+        // Fail-closed: bloqueia tudo
+        setEmpresaIds([]);
+        setEmpresaNome('');
+        setFilialNome('');
+        setFuncionarioId(null);
+        setLoading(false);
+        return;
+      }
+      const d = data as any;
+      const ids: string[] = Array.isArray(d.empresa_ids) ? d.empresa_ids : [];
       setEmpresaIds(ids);
+      setEmpresaNome(d.empresa || '');
+      setFilialNome(d.filial || '');
+      setFuncionarioId(d.funcionario_id || null);
       setLoading(false);
     })();
     return () => { cancel = true; };
-  }, [isExterno, location.pathname]);
+  }, [isExterno, acessoId, modulo]);
 
-  return {
-    isExterno,
-    loading,
-    acesso,
-    empresaIds,
-    empresaNome: acesso?.empresa || '',
-    filialNome: acesso?.filial || '',
-  };
+  return { isExterno, loading, empresaIds, empresaNome, filialNome, funcionarioId };
 };
