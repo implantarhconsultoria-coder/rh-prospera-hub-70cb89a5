@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowUpCircle, Plus, X, Search, Lock } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -15,6 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const ContasPagarPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [titulos, setTitulos] = useState<any[]>([]);
   const [fornecedores, setFornecedores] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
@@ -38,15 +40,18 @@ const ContasPagarPage: React.FC = () => {
   const carregar = async () => {
     setLoading(true);
     const hoje = new Date().toISOString().slice(0, 10);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const applyEmp = (q: any) => empIds !== null ? q.in('empresa_id', empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : q;
+
     await supabase.from('titulos_pagar').update({ status: 'vencido' }).in('status', ['aberto', 'parcial']).lt('data_vencimento', hoje);
 
     const [t, f, e, c, cc, cb, cfg] = await Promise.all([
-      supabase.from('titulos_pagar').select('*, fornecedores(razao_social), empresas(nome), categorias_financeiras(nome), centros_custo(nome)').order('data_vencimento'),
+      applyEmp(supabase.from('titulos_pagar').select('*, fornecedores(razao_social), empresas(nome), categorias_financeiras(nome), centros_custo(nome)').order('data_vencimento')),
       supabase.from('fornecedores').select('id, razao_social').eq('status', 'ativo'),
-      supabase.from('empresas').select('id, nome'),
+      empIds !== null ? supabase.from('empresas').select('id, nome').in('id', empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : supabase.from('empresas').select('id, nome'),
       supabase.from('categorias_financeiras').select('id, nome').eq('tipo', 'despesa'),
       supabase.from('centros_custo').select('id, nome, codigo').eq('status', 'ativo'),
-      supabase.from('contas_bancarias').select('id, nome, banco').eq('status', 'ativa'),
+      applyEmp(supabase.from('contas_bancarias').select('id, nome, banco, empresa_id').eq('status', 'ativa')),
       supabase.from('config_financeiro').select('valor').eq('chave', 'valor_minimo_aprovacao').single(),
     ]);
     setTitulos(t.data || []);
@@ -59,7 +64,7 @@ const ContasPagarPage: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const handleCreate = async () => {
     if (!form.fornecedor_id || !form.empresa_id || !form.descricao || !form.data_vencimento || !form.valor_previsto) {

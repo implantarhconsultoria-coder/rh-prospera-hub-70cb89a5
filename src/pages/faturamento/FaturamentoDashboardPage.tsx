@@ -3,11 +3,13 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw, ClipboardCheck, UserX } from 'lucide-react';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const FaturamentoDashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const ext = useAcessoExternoFiltro();
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<any>(null);
   const [stats, setStats] = useState({
@@ -22,19 +24,26 @@ const FaturamentoDashboardPage: React.FC = () => {
     setLoading(true);
     const hoje = new Date().toISOString().slice(0, 10);
     const em30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+    const applyEmp = (q: any) => safeIds ? q.in('empresa_id', safeIds) : q;
 
-    // KPIs vivos via RPC (já marca faturas vencidas automaticamente)
-    const { data: kpiData } = await supabase.rpc('dashboard_faturamento_kpis' as any);
-    setKpis(kpiData || null);
+    // KPIs vivos via RPC (apenas para visão admin/global)
+    if (!ext.isExterno) {
+      const { data: kpiData } = await supabase.rpc('dashboard_faturamento_kpis' as any);
+      setKpis(kpiData || null);
+    } else {
+      setKpis(null);
+    }
 
     const [faturas, contratos, clientes, contratoEquip, pendencias, contratosReaj, empresas] = await Promise.all([
-      supabase.from('faturas').select('total, status, data_vencimento, empresa_id, cliente_id'),
-      supabase.from('contratos').select('id, status'),
+      applyEmp(supabase.from('faturas').select('total, status, data_vencimento, empresa_id, cliente_id')),
+      applyEmp(supabase.from('contratos').select('id, status, empresa_id')),
       supabase.from('clientes_fat').select('id, razao_social, status'),
-      supabase.from('contrato_equipamentos').select('id, status'),
+      supabase.from('contrato_equipamentos').select('id, status, contrato_id, contratos!inner(empresa_id)'),
       supabase.from('faturamento_pendencias').select('id').eq('status', 'aberta'),
-      supabase.from('contratos').select('id, proximo_reajuste').not('proximo_reajuste', 'is', null).lte('proximo_reajuste', em30),
-      supabase.from('empresas').select('id, nome'),
+      applyEmp(supabase.from('contratos').select('id, proximo_reajuste, empresa_id').not('proximo_reajuste', 'is', null).lte('proximo_reajuste', em30)),
+      safeIds ? supabase.from('empresas').select('id, nome').in('id', safeIds) : supabase.from('empresas').select('id, nome'),
     ]);
 
     const f = faturas.data || [];
@@ -48,7 +57,7 @@ const FaturamentoDashboardPage: React.FC = () => {
       previsto, emitido, pago, vencidos, aVencer,
       contratosAtivos: (contratos.data || []).filter(c => c.status === 'ativo').length,
       clientesAtivos: (clientes.data || []).filter(c => c.status === 'ativo').length,
-      equipamentosFaturando: (contratoEquip.data || []).filter(e => e.status === 'ativo').length,
+      equipamentosFaturando: (contratoEquip.data || []).filter((e: any) => e.status === 'ativo' && (!safeIds || safeIds.includes(e.contratos?.empresa_id))).length,
       pendencias: pendencias.data?.length || 0,
       reajustesProximos: contratosReaj.data?.length || 0,
     });
@@ -74,7 +83,7 @@ const FaturamentoDashboardPage: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const cards = [
     { label: 'Faturamento Previsto', value: fmtBRL(stats.previsto), icon: TrendingUp, color: 'text-primary' },

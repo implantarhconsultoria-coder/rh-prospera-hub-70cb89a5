@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Landmark, Plus, X, Eye, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const BancosPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [contas, setContas] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [movs, setMovs] = useState<any[]>([]);
@@ -21,16 +23,17 @@ const BancosPage: React.FC = () => {
 
   const carregar = async () => {
     setLoading(true);
-    const [c, e] = await Promise.all([
-      supabase.from('contas_bancarias').select('*, empresas(nome)').order('nome'),
-      supabase.from('empresas').select('id, nome'),
-    ]);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+    const cQ = safeIds ? supabase.from('contas_bancarias').select('*, empresas(nome)').in('empresa_id', safeIds).order('nome') : supabase.from('contas_bancarias').select('*, empresas(nome)').order('nome');
+    const eQ = safeIds ? supabase.from('empresas').select('id, nome').in('id', safeIds) : supabase.from('empresas').select('id, nome');
+    const [c, e] = await Promise.all([cQ, eQ]);
     setContas(c.data || []);
     setEmpresas(e.data || []);
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const verExtrato = async (conta: any) => {
     setVendoConta(conta);

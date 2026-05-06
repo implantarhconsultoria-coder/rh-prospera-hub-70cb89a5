@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtBR = (d?: string | null) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -20,6 +21,7 @@ const REGRAS = [
 
 const ContratosPage: React.FC = () => {
   const navigate = useNavigate();
+  const ext = useAcessoExternoFiltro();
   const [contratos, setContratos] = useState<any[]>([]);
   const [clientes, setClientes] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
@@ -31,17 +33,25 @@ const ContratosPage: React.FC = () => {
 
   const carregar = async () => {
     setLoading(true);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+    const ctQ = safeIds
+      ? supabase.from('contratos').select('*, clientes_fat(razao_social), empresas(nome)').in('empresa_id', safeIds).order('created_at', { ascending: false })
+      : supabase.from('contratos').select('*, clientes_fat(razao_social), empresas(nome)').order('created_at', { ascending: false });
+    const emQ = safeIds
+      ? supabase.from('empresas').select('id, nome').eq('status', 'ativa').in('id', safeIds).order('nome')
+      : supabase.from('empresas').select('id, nome').eq('status', 'ativa').order('nome');
     const [ct, cl, em] = await Promise.all([
-      supabase.from('contratos').select('*, clientes_fat(razao_social), empresas(nome)').order('created_at', { ascending: false }),
+      ctQ,
       supabase.from('clientes_fat').select('id, razao_social').eq('status', 'ativo').order('razao_social'),
-      supabase.from('empresas').select('id, nome').eq('status', 'ativa').order('nome'),
+      emQ,
     ]);
     setContratos(ct.data || []);
     setClientes(cl.data || []);
     setEmpresas(em.data || []);
     setLoading(false);
   };
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const filtrados = contratos.filter(c =>
     c.numero?.toLowerCase().includes(busca.toLowerCase()) ||

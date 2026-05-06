@@ -3,11 +3,13 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Clock, Building2, RefreshCw, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const FinanceiroDashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const ext = useAcessoExternoFiltro();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     aReceber: 0, aReceberVencido: 0, recebido30d: 0,
@@ -22,12 +24,16 @@ const FinanceiroDashboardPage: React.FC = () => {
     const hoje = new Date().toISOString().slice(0, 10);
     const ha30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
+    // Filtro por empresa para acesso externo
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const applyEmp = (q: any) => empIds !== null ? q.in('empresa_id', empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : q;
+
     const [tRec, tPag, recs, pags, cb, clis] = await Promise.all([
-      supabase.from('titulos_receber').select('saldo, status, data_vencimento, cliente_id'),
-      supabase.from('titulos_pagar').select('saldo, status, data_vencimento'),
-      supabase.from('recebimentos').select('valor, data').gte('data', ha30),
-      supabase.from('pagamentos').select('valor, data').gte('data', ha30),
-      supabase.from('contas_bancarias').select('nome, saldo_atual, empresas(nome)').eq('status', 'ativa'),
+      applyEmp(supabase.from('titulos_receber').select('saldo, status, data_vencimento, cliente_id, empresa_id')),
+      applyEmp(supabase.from('titulos_pagar').select('saldo, status, data_vencimento, empresa_id')),
+      supabase.from('recebimentos').select('valor, data, titulos_receber!inner(empresa_id)').gte('data', ha30),
+      supabase.from('pagamentos').select('valor, data, titulos_pagar!inner(empresa_id)').gte('data', ha30),
+      applyEmp(supabase.from('contas_bancarias').select('nome, saldo_atual, empresa_id, empresas(nome)').eq('status', 'ativa')),
       supabase.from('clientes_fat').select('id, razao_social'),
     ]);
 
@@ -36,11 +42,13 @@ const FinanceiroDashboardPage: React.FC = () => {
 
     const aReceber = tr.filter(t => ['aberto', 'parcial', 'vencido'].includes(t.status)).reduce((s, t) => s + Number(t.saldo || 0), 0);
     const aReceberVencido = tr.filter(t => ['aberto', 'parcial'].includes(t.status) && t.data_vencimento < hoje || t.status === 'vencido').reduce((s, t) => s + Number(t.saldo || 0), 0);
-    const recebido30d = (recs.data || []).reduce((s, r) => s + Number(r.valor || 0), 0);
+    const recsFiltered = (recs.data || []).filter((r: any) => empIds === null || empIds.includes(r.titulos_receber?.empresa_id));
+    const pagsFiltered = (pags.data || []).filter((p: any) => empIds === null || empIds.includes(p.titulos_pagar?.empresa_id));
+    const recebido30d = recsFiltered.reduce((s, r: any) => s + Number(r.valor || 0), 0);
 
     const aPagar = tp.filter(t => ['aberto', 'parcial', 'vencido'].includes(t.status)).reduce((s, t) => s + Number(t.saldo || 0), 0);
     const aPagarVencido = tp.filter(t => ['aberto', 'parcial'].includes(t.status) && t.data_vencimento < hoje || t.status === 'vencido').reduce((s, t) => s + Number(t.saldo || 0), 0);
-    const pago30d = (pags.data || []).reduce((s, p) => s + Number(p.valor || 0), 0);
+    const pago30d = pagsFiltered.reduce((s, p: any) => s + Number(p.valor || 0), 0);
 
     const saldoBancos = (cb.data || []).reduce((s, c) => s + Number(c.saldo_atual || 0), 0);
     const saldoPrevisto = saldoBancos + aReceber - aPagar;
@@ -67,7 +75,7 @@ const FinanceiroDashboardPage: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const cards = [
     { label: 'Saldo em Bancos', value: fmtBRL(stats.saldoBancos), icon: Wallet, color: 'text-primary', onClick: () => navigate('/admin/financeiro/bancos') },

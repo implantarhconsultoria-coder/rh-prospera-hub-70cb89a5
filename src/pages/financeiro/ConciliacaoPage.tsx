@@ -2,21 +2,30 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckSquare, Check, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const ConciliacaoPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [contas, setContas] = useState<any[]>([]);
   const [contaSel, setContaSel] = useState<string>('');
   const [movs, setMovs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.from('contas_bancarias').select('id, nome, banco').eq('status', 'ativa').then(({ data }) => {
+    if (ext.loading) return;
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+    const q = safeIds
+      ? supabase.from('contas_bancarias').select('id, nome, banco, empresa_id').eq('status', 'ativa').in('empresa_id', safeIds)
+      : supabase.from('contas_bancarias').select('id, nome, banco').eq('status', 'ativa');
+    q.then(({ data }) => {
       setContas(data || []);
       if (data?.[0]) setContaSel(data[0].id);
     });
-  }, []);
+  }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
+
 
   useEffect(() => {
     if (!contaSel) return;

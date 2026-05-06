@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Receipt, Plus, X, Search, FileText, Send, Trash2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (d: string) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
@@ -25,6 +26,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const FaturasPage: React.FC = () => {
   const navigate = useNavigate();
+  const ext = useAcessoExternoFiltro();
   const [searchParams] = useSearchParams();
   const statusFilter = searchParams.get('status') || '';
 
@@ -43,11 +45,14 @@ const FaturasPage: React.FC = () => {
 
   const carregar = async () => {
     setLoading(true);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+    const applyEmp = (q: any) => safeIds ? q.in('empresa_id', safeIds) : q;
     const [f, c, ct, e] = await Promise.all([
-      supabase.from('faturas').select('*, clientes_fat(razao_social), contratos(numero), empresas(nome)').order('data_vencimento', { ascending: false }),
+      applyEmp(supabase.from('faturas').select('*, clientes_fat(razao_social), contratos(numero), empresas(nome)').order('data_vencimento', { ascending: false })),
       supabase.from('clientes_fat').select('id, razao_social').eq('status', 'ativo'),
-      supabase.from('contratos').select('id, numero, cliente_id, empresa_id, valor_mensal').eq('status', 'ativo'),
-      supabase.from('empresas').select('id, nome'),
+      applyEmp(supabase.from('contratos').select('id, numero, cliente_id, empresa_id, valor_mensal').eq('status', 'ativo')),
+      safeIds ? supabase.from('empresas').select('id, nome').in('id', safeIds) : supabase.from('empresas').select('id, nome'),
     ]);
     setFaturas(f.data || []);
     setClientes(c.data || []);
@@ -56,7 +61,7 @@ const FaturasPage: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const proximoNumero = () => {
     const ano = new Date().getFullYear();

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowDownCircle, Plus, X, Search, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -16,6 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const ContasReceberPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [titulos, setTitulos] = useState<any[]>([]);
   const [contas, setContas] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -27,20 +29,23 @@ const ContasReceberPage: React.FC = () => {
 
   const carregar = async () => {
     setLoading(true);
-    // Atualiza status dos vencidos
     const hoje = new Date().toISOString().slice(0, 10);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const applyEmp = (q: any) => empIds !== null ? q.in('empresa_id', empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : q;
+
+    // Atualiza status dos vencidos
     await supabase.from('titulos_receber').update({ status: 'vencido' }).in('status', ['aberto', 'parcial']).lt('data_vencimento', hoje);
 
     const [t, cb] = await Promise.all([
-      supabase.from('titulos_receber').select('*, clientes_fat(razao_social), contratos(numero), empresas(nome)').order('data_vencimento'),
-      supabase.from('contas_bancarias').select('id, nome, banco').eq('status', 'ativa'),
+      applyEmp(supabase.from('titulos_receber').select('*, clientes_fat(razao_social), contratos(numero), empresas(nome)').order('data_vencimento')),
+      applyEmp(supabase.from('contas_bancarias').select('id, nome, banco, empresa_id').eq('status', 'ativa')),
     ]);
     setTitulos(t.data || []);
     setContas(cb.data || []);
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const abrirBaixa = (t: any) => {
     setShowBaixa(t);

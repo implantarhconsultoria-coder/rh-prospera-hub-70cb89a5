@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { RefreshCw, Plus, X, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const ReajustesPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [reajustes, setReajustes] = useState<any[]>([]);
   const [contratos, setContratos] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -18,16 +20,21 @@ const ReajustesPage: React.FC = () => {
 
   const carregar = async () => {
     setLoading(true);
-    const [r, c] = await Promise.all([
-      supabase.from('reajustes').select('*, contratos(numero, valor_mensal, cliente_id, clientes_fat(razao_social))').order('created_at', { ascending: false }),
-      supabase.from('contratos').select('id, numero, valor_mensal, indice_reajuste, proximo_reajuste, cliente_id, clientes_fat(razao_social)').eq('status', 'ativo'),
-    ]);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+    const rQ = safeIds
+      ? supabase.from('reajustes').select('*, contratos!inner(numero, valor_mensal, empresa_id, cliente_id, clientes_fat(razao_social))').in('contratos.empresa_id', safeIds).order('created_at', { ascending: false })
+      : supabase.from('reajustes').select('*, contratos(numero, valor_mensal, cliente_id, clientes_fat(razao_social))').order('created_at', { ascending: false });
+    const cQ = safeIds
+      ? supabase.from('contratos').select('id, numero, valor_mensal, indice_reajuste, proximo_reajuste, cliente_id, empresa_id, clientes_fat(razao_social)').eq('status', 'ativo').in('empresa_id', safeIds)
+      : supabase.from('contratos').select('id, numero, valor_mensal, indice_reajuste, proximo_reajuste, cliente_id, clientes_fat(razao_social)').eq('status', 'ativo');
+    const [r, c] = await Promise.all([rQ, cQ]);
     setReajustes(r.data || []);
     setContratos(c.data || []);
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const valorSimulado = () => {
     const c = contratos.find(ct => ct.id === form.contrato_id);
