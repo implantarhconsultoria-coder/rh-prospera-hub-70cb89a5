@@ -20,6 +20,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const MedicoesPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [medicoes, setMedicoes] = useState<any[]>([]);
   const [contratos, setContratos] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -34,16 +35,21 @@ const MedicoesPage: React.FC = () => {
 
   const carregar = async () => {
     setLoading(true);
-    const [m, c] = await Promise.all([
-      supabase.from('medicoes').select('*, contratos(numero, cliente_id, clientes_fat(razao_social))').order('created_at', { ascending: false }),
-      supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, clientes_fat(razao_social)').eq('status', 'ativo'),
-    ]);
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+    const cQ = safeIds
+      ? supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, clientes_fat(razao_social)').eq('status', 'ativo').in('empresa_id', safeIds)
+      : supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, clientes_fat(razao_social)').eq('status', 'ativo');
+    const mQ = safeIds
+      ? supabase.from('medicoes').select('*, contratos!inner(numero, cliente_id, empresa_id, clientes_fat(razao_social))').in('contratos.empresa_id', safeIds).order('created_at', { ascending: false })
+      : supabase.from('medicoes').select('*, contratos(numero, cliente_id, clientes_fat(razao_social))').order('created_at', { ascending: false });
+    const [m, c] = await Promise.all([mQ, cQ]);
     setMedicoes(m.data || []);
     setContratos(c.data || []);
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const abrirEdicao = async (med: any) => {
     setEditingId(med.id);
