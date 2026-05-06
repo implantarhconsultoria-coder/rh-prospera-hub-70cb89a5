@@ -11,7 +11,6 @@ const MODULOS: Record<string, { label: string; redirect: (id: string) => string 
   mecanico: { label: "App Mecânico", redirect: (id) => `/mecanico-ext/${id}` },
   financeiro: { label: "Financeiro", redirect: (id) => `/financeiro-ext/${id}` },
   faturamento: { label: "Faturamento", redirect: (id) => `/faturamento-ext/${id}` },
-  rh: { label: "RH", redirect: (id) => `/rh-ext/${id}` },
   almoxarifado: { label: "Almoxarifado", redirect: (id) => `/almoxarifado-ext/${id}` },
   operacional: { label: "Operacional", redirect: (id) => `/operacional-ext/${id}` },
   filial: { label: "Filial", redirect: (id) => `/filial-ext/${id}` },
