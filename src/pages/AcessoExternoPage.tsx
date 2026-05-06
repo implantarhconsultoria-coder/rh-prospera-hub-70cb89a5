@@ -8,7 +8,6 @@ import { Loader2, Lock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const MODULOS: Record<string, { label: string; redirect: (id: string) => string }> = {
-  mecanico: { label: "App Mecânico", redirect: (id) => `/mecanico-ext/${id}` },
   financeiro: { label: "Financeiro", redirect: (id) => `/financeiro-ext/${id}` },
   faturamento: { label: "Faturamento", redirect: (id) => `/faturamento-ext/${id}` },
   almoxarifado: { label: "Almoxarifado", redirect: (id) => `/almoxarifado-ext/${id}` },
@@ -27,9 +26,9 @@ interface UsuarioOpcao {
 
 export default function AcessoExternoPage() {
   const location = useLocation();
-  const modulo = location.pathname.replace(/^\/acesso-/, "") || "mecanico";
+  const modulo = location.pathname.replace(/^\/acesso-/, "") || "filial";
   const navigate = useNavigate();
-  const cfg = MODULOS[modulo] || MODULOS.mecanico;
+  const cfg = MODULOS[modulo] || MODULOS.filial;
 
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
@@ -85,22 +84,6 @@ export default function AcessoExternoPage() {
       JSON.stringify({ ...acesso, ts: Date.now() })
     );
 
-    // Mecânico/Campo/Operacional: usa link único por token do tecnico_campo
-    if (["mecanico", "campo", "operacional"].includes(modulo) && acesso.funcionario_id) {
-      const { data: tc } = await supabase
-        .from("tecnicos_campo")
-        .select("access_token, link_status")
-        .eq("funcionario_id", acesso.funcionario_id)
-        .eq("link_status", "ativo")
-        .maybeSingle();
-      setLoading(false);
-      if (tc?.access_token) {
-        navigate(`/m/${tc.access_token}`);
-        return;
-      }
-      toast.error("Mecânico sem link ativo. Procure o administrador.");
-      return;
-    }
     setLoading(false);
     navigate(cfg.redirect(acesso.id));
   };

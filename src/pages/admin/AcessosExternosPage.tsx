@@ -44,7 +44,6 @@ const PERFIS = [
   { v: "almoxarifado", l: "Almoxarifado", modulo: "almoxarifado" },
   { v: "operacional", l: "Operacional", modulo: "operacional" },
   { v: "tecnico_campo", l: "Técnico de Campo", modulo: "campo" },
-  { v: "mecanico_externo", l: "Mecânico Externo", modulo: "mecanico" },
 ];
 
 export default function AcessosExternosPage() {
@@ -56,7 +55,7 @@ export default function AcessosExternosPage() {
   const [funcionarioId, setFuncionarioId] = useState<string | null>(null);
   const [form, setForm] = useState({
     nome: "", cpf: "", empresa: "", filial: "", funcao: "",
-    perfis_acesso: ["mecanico_externo"] as string[],
+    perfis_acesso: ["filial"] as string[],
   });
 
   const carregar = async () => {
@@ -101,7 +100,7 @@ export default function AcessosExternosPage() {
   };
 
   const resetForm = () => {
-    setForm({ nome: "", cpf: "", empresa: "", filial: "", funcao: "", perfis_acesso: ["mecanico_externo"] });
+    setForm({ nome: "", cpf: "", empresa: "", filial: "", funcao: "", perfis_acesso: ["filial"] });
     setFuncionarioId(null);
   };
 
@@ -173,12 +172,7 @@ export default function AcessosExternosPage() {
   };
 
   const testar = async (a: Acesso) => {
-    // Para mecânico, busca o link único e abre /m/:token
-    if (a.modulo === 'mecanico') {
-      window.open(`/acesso-mecanico`, '_blank');
-      return;
-    }
-    // Demais módulos: grava sessão deste acesso específico e abre o portal direto
+    // Grava sessão deste acesso específico e abre o portal direto
     const sess = {
       id: a.id, nome: a.nome,
       empresa: a.empresa || '', filial: a.filial || '', funcao: a.funcao || '',

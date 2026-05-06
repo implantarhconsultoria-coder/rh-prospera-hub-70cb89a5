@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 export type ExternoNavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }>; end?: boolean };
 
 interface ExternoLayoutProps {
-  modulo: string;            // 'financeiro' | 'faturamento' | 'rh' | 'almoxarifado' | 'operacional' | 'filial' | 'campo' | 'mecanico'
+  modulo: string;            // 'financeiro' | 'faturamento' | 'almoxarifado' | 'operacional' | 'filial' | 'campo'
   titulo: string;
   cor?: string;              // tailwind bg color class
   items: ExternoNavItem[];   // sidebar items, paths já com /:acessoId

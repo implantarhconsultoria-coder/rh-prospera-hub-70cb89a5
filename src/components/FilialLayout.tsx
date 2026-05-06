@@ -24,10 +24,7 @@ const FilialLayout: React.FC = () => {
 
   // Only filial roles allowed
   if (userRole !== 'filial_praia' && userRole !== 'filial_goiania') {
-    const redirect = userRole === 'admin' ? '/'
-      : userRole === 'tecnico_campo' ? '/mecanico'
-      : userRole === 'operacional' ? '/mecanico'
-      : '/';
+    const redirect = userRole === 'admin' ? '/' : '/';
     return <Navigate to={redirect} replace />;
   }
 

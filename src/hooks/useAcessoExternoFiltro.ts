@@ -22,7 +22,7 @@ export interface AcessoExternoFiltro {
   funcionarioId: string | null;
 }
 
-const EXT_ROUTE_RE = /^\/(financeiro|faturamento|almoxarifado|operacional|filial|campo|mecanico)-ext\/([^/]+)/;
+const EXT_ROUTE_RE = /^\/(financeiro|faturamento|almoxarifado|operacional|filial|campo)-ext\/([^/]+)/;
 
 export const useAcessoExternoFiltro = (): AcessoExternoFiltro => {
   const location = useLocation();

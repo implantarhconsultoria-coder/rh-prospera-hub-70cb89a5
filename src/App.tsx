@@ -7,17 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import AppLayout from "@/components/AppLayout";
 import FilialLayout from "@/components/FilialLayout";
-import MecanicoLayout from "@/components/MecanicoLayout";
 import FaturamentoLayout from "@/components/FaturamentoLayout";
 import FinanceiroLayout from "@/components/FinanceiroLayout";
-import MecanicoHomePage from "@/pages/mecanico/MecanicoHomePage";
-import MecanicoPontoPage from "@/pages/mecanico/MecanicoPontoPage";
-import MecanicoChamadosPage from "@/pages/mecanico/MecanicoChamadosPage";
-import MecanicoEstoquePage from "@/pages/mecanico/MecanicoEstoquePage";
-import MecanicoKmPage from "@/pages/mecanico/MecanicoKmPage";
-import MecanicoAbastecimentoPage from "@/pages/mecanico/MecanicoAbastecimentoPage";
-import MecanicoGaloesPage from "@/pages/mecanico/MecanicoGaloesPage";
-import MecanicoHistoricoPage from "@/pages/mecanico/MecanicoHistoricoPage";
 import LoginPage from "@/pages/LoginPage";
 import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
@@ -91,8 +82,6 @@ import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import PublicAbastecimentoPage from "@/pages/PublicAbastecimentoPage";
 import ImprimirQRCombustivelPage from "@/pages/admin/ImprimirQRCombustivelPage";
-import MecanicoRedirectPage from "@/pages/MecanicoRedirectPage";
-import MecanicoExtRedirect from "@/pages/MecanicoExtRedirect";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
 import AcessosExternosPage from "@/pages/admin/AcessosExternosPage";
 import { Loader2 } from "lucide-react";
@@ -105,7 +94,6 @@ import {
   Package, Shirt, Shield,
   Wrench, Headphones,
   LayoutDashboard, Bell, Activity,
-  Home, Clock, ClipboardList, Boxes, Gauge, Fuel, Container, History,
 } from "lucide-react";
 
 const EXT_ITEMS_FINANCEIRO = [
@@ -159,21 +147,12 @@ const EXT_ITEMS_FILIAL = [
 const EXT_ITEMS_CAMPO = [
   { to: '', label: 'Chamados', icon: Headphones, end: true },
 ];
-const EXT_ITEMS_MEC = [
-  { to: '', label: 'Início', icon: Home, end: true },
-  { to: 'ponto', label: 'Ponto', icon: Clock },
-  { to: 'chamados', label: 'Chamados', icon: ClipboardList },
-  { to: 'estoque', label: 'Estoque', icon: Boxes },
-  { to: 'km', label: 'KM', icon: Gauge },
-  { to: 'abastecimento', label: 'Abastecimento', icon: Fuel },
-  { to: 'galoes', label: 'Galões', icon: Container },
-  { to: 'historico', label: 'Histórico', icon: History },
-];
 
 const queryClient = new QueryClient();
 
 /**
  * RoleRedirect — after login, sends user to the correct portal based on role.
+ * App Mecânico antigo removido; tecnico_campo/operacional caem no admin como fallback.
  */
 const RoleRedirect = () => {
   const { userRoles, roleLoading } = useApp();
@@ -182,14 +161,11 @@ const RoleRedirect = () => {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
-  // Priority: admin always wins
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
-  if (userRoles.includes('operacional')) return <Navigate to="/mecanico" replace />;
   if (userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
-  if (userRoles.includes('tecnico_campo')) return <Navigate to="/mecanico" replace />;
 
   return <Navigate to="/admin" replace />;
 };
@@ -310,11 +286,7 @@ const AuthGate = () => {
         <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
       </Route>
 
-      {/* ========== CAMPO/OPERACIONAL → redirecionam para /mecanico (link único) ========== */}
-      <Route path="/campo" element={<Navigate to="/mecanico" replace />} />
-      <Route path="/campo/*" element={<Navigate to="/mecanico" replace />} />
-      <Route path="/operacional" element={<Navigate to="/mecanico" replace />} />
-      <Route path="/operacional/*" element={<Navigate to="/mecanico" replace />} />
+      {/* App Mecânico antigo removido — campo/operacional não têm portal próprio por enquanto */}
 
       {/* ========== FATURAMENTO PORTAL (acesso teste FAT) ========== */}
       <Route element={<FaturamentoLayout />}>
@@ -363,11 +335,7 @@ const App = () => (
               <Route path="/qr/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
               <Route path="/voucher/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
 
-              {/* ========== APP MECÂNICO — LINK ÚNICO /mecanico (exige login) ========== */}
-              <Route path="/mecanico" element={<ErrorBoundary><MecanicoRedirectPage /></ErrorBoundary>} />
-
-              {/* ========== ACESSO EXTERNO POR PIN (sem login) ========== */}
-              <Route path="/acesso-mecanico" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              {/* ========== ACESSO EXTERNO POR PIN (sem login) — App Mecânico removido ========== */}
               <Route path="/acesso-financeiro" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso-almoxarifado" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso-operacional" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
@@ -376,18 +344,8 @@ const App = () => (
               <Route path="/acesso-faturamento" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               {/* RH externo desativado — filial cobre RH */}
               <Route path="/acesso-rh" element={<Navigate to="/acesso-filial" replace />} />
-
-              {/* ========== APP MECÂNICO POR LINK EXCLUSIVO (sem login) ========== */}
-              <Route path="/m/:token" element={<MecanicoLayout />}>
-                <Route index element={<MecanicoHomePage />} />
-                <Route path="ponto" element={<MecanicoPontoPage />} />
-                <Route path="chamados" element={<MecanicoChamadosPage />} />
-                <Route path="estoque" element={<MecanicoEstoquePage />} />
-                <Route path="km" element={<MecanicoKmPage />} />
-                <Route path="abastecimento" element={<MecanicoAbastecimentoPage />} />
-                <Route path="galoes" element={<MecanicoGaloesPage />} />
-                <Route path="historico" element={<MecanicoHistoricoPage />} />
-              </Route>
+              {/* App Mecânico antigo removido — rota desativada */}
+              <Route path="/acesso-mecanico" element={<Navigate to="/" replace />} />
 
               {/* ========== ACESSO EXTERNO POR PIN — MÓDULOS (sem login) ========== */}
               <Route path="/financeiro-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="financeiro" titulo="Portal Financeiro" cor="bg-cyan-600" items={EXT_ITEMS_FINANCEIRO} /></ErrorBoundary>}>
@@ -449,8 +407,8 @@ const App = () => (
                 <Route path="chamados" element={<DespacharChamadoPage />} />
               </Route>
 
-              {/* App Mecânico externo via PIN: redireciona para /m/:token (com TecnicoAppProvider) */}
-              <Route path="/mecanico-ext/:acessoId" element={<ErrorBoundary><MecanicoExtRedirect /></ErrorBoundary>} />
+              {/* App Mecânico antigo removido — /m/:token e /mecanico-ext/:acessoId desativados */}
+
               <Route path="/relatorio-impressao" element={<ErrorBoundary><RelatorioImpressaoPage /></ErrorBoundary>} />
               <Route path="/entrega-impressao" element={<ErrorBoundary><EntregaImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-vr-impressao" element={<ErrorBoundary><RelatorioVRImpressaoPage /></ErrorBoundary>} />

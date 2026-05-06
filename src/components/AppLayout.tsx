@@ -27,9 +27,7 @@ const AppLayout: React.FC = () => {
 
   // Only admin can access central panel
   if (userRole !== 'admin') {
-    const redirect = userRole === 'tecnico_campo' ? '/mecanico'
-      : userRole === 'operacional' ? '/mecanico'
-      : userRole?.startsWith('filial_') ? '/filial'
+    const redirect = userRole?.startsWith('filial_') ? '/filial'
       : userRole === 'almoxarifado' ? '/filial'
       : userRole === 'faturamento' ? '/faturamento'
       : userRole === 'financeiro' ? '/financeiro'
