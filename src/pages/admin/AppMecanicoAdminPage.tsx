@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Copy, ExternalLink, Lock, Unlock, Wrench } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Copy, ExternalLink, Lock, Unlock, Wrench, History, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Acesso {
@@ -13,9 +15,17 @@ interface Acesso {
   status: string; acesso_liberado: boolean; ultimo_acesso_em: string | null;
 }
 
+const TIPO_LABEL: Record<string, string> = {
+  entrada: "Entrada", saida: "Saída",
+  almoco_inicio: "Início Almoço", almoco_fim: "Retorno Almoço",
+};
+
 export default function AppMecanicoAdminPage() {
   const [lista, setLista] = useState<Acesso[]>([]);
   const [loading, setLoading] = useState(true);
+  const [histAberto, setHistAberto] = useState<Acesso | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
+  const [hist, setHist] = useState<{ pontos: any[]; abastecimentos: any[] }>({ pontos: [], abastecimentos: [] });
 
   const carregar = async () => {
     setLoading(true);
@@ -44,6 +54,16 @@ export default function AppMecanicoAdminPage() {
     carregar();
   };
 
+  const abrirHistorico = async (a: Acesso) => {
+    setHistAberto(a);
+    setHistLoading(true);
+    setHist({ pontos: [], abastecimentos: [] });
+    const { data } = await supabase.rpc("admin_app_mecanico_historico" as any, { p_acesso_id: a.id });
+    const r = data as any;
+    if (r?.ok) setHist({ pontos: r.pontos || [], abastecimentos: r.abastecimentos || [] });
+    setHistLoading(false);
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -51,9 +71,7 @@ export default function AppMecanicoAdminPage() {
           <Wrench className="w-7 h-7 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">App Mecânico</h1>
-            <p className="text-sm text-muted-foreground">
-              Lista de mecânicos com acesso ao app via link + PIN.
-            </p>
+            <p className="text-sm text-muted-foreground">Lista de mecânicos com acesso ao app via link + PIN.</p>
           </div>
         </div>
         <Button onClick={copiarPin} variant="outline">
@@ -67,9 +85,7 @@ export default function AppMecanicoAdminPage() {
           {loading ? (
             <p className="text-center text-muted-foreground py-8">Carregando...</p>
           ) : lista.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              Nenhum mecânico. Cadastre um acesso externo com perfil "Mecânico Externo" / módulo "mecanico".
-            </p>
+            <p className="text-center text-muted-foreground py-8">Nenhum mecânico cadastrado.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -100,6 +116,9 @@ export default function AppMecanicoAdminPage() {
                         {a.ultimo_acesso_em ? new Date(a.ultimo_acesso_em).toLocaleString("pt-BR") : "-"}
                       </TableCell>
                       <TableCell className="text-right space-x-1">
+                        <Button size="sm" variant="ghost" onClick={() => abrirHistorico(a)} title="Ver histórico">
+                          <History className="w-4 h-4" />
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => visualizar(a)} title="Visualizar App">
                           <ExternalLink className="w-4 h-4" />
                         </Button>
@@ -116,6 +135,78 @@ export default function AppMecanicoAdminPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!histAberto} onOpenChange={(o) => !o && setHistAberto(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Histórico — {histAberto?.nome}</DialogTitle></DialogHeader>
+          {histLoading ? (
+            <div className="py-10 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          ) : (
+            <Tabs defaultValue="pontos">
+              <TabsList>
+                <TabsTrigger value="pontos">Pontos ({hist.pontos.length})</TabsTrigger>
+                <TabsTrigger value="abast">Abastecimentos ({hist.abastecimentos.length})</TabsTrigger>
+              </TabsList>
+              <TabsContent value="pontos">
+                {hist.pontos.length === 0 ? <p className="text-sm text-muted-foreground py-4">Sem registros.</p> : (
+                  <Table>
+                    <TableHeader><TableRow>
+                      <TableHead>Data/Hora</TableHead><TableHead>Tipo</TableHead>
+                      <TableHead>GPS</TableHead><TableHead>Selfie</TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {hist.pontos.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="text-sm">{p.data} {p.hora?.slice(0,5)}</TableCell>
+                          <TableCell><Badge variant="outline">{TIPO_LABEL[p.tipo] || p.tipo}</Badge></TableCell>
+                          <TableCell className="text-xs">
+                            {p.latitude ? (
+                              <a className="text-primary inline-flex items-center gap-1" target="_blank" rel="noreferrer"
+                                 href={`https://maps.google.com/?q=${p.latitude},${p.longitude}`}>
+                                <MapPin className="w-3 h-3" /> {p.latitude.toFixed(4)}, {p.longitude?.toFixed(4)}
+                              </a>
+                            ) : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {p.selfie_url ? <a href={p.selfie_url} target="_blank" rel="noreferrer"><img src={p.selfie_url} alt="selfie" className="w-12 h-12 object-cover rounded" /></a> : "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </TabsContent>
+              <TabsContent value="abast">
+                {hist.abastecimentos.length === 0 ? <p className="text-sm text-muted-foreground py-4">Sem abastecimentos.</p> : (
+                  <Table>
+                    <TableHeader><TableRow>
+                      <TableHead>Data/Hora</TableHead><TableHead>Placa</TableHead>
+                      <TableHead>Valor</TableHead><TableHead>Litros</TableHead>
+                      <TableHead>KM</TableHead><TableHead>Posto</TableHead><TableHead>Fotos</TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {hist.abastecimentos.map((a) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="text-sm">{a.data} {a.hora?.slice(0,5)}</TableCell>
+                          <TableCell>{a.placa || "-"}</TableCell>
+                          <TableCell>R$ {a.valor}</TableCell>
+                          <TableCell>{a.litros}L</TableCell>
+                          <TableCell>{a.km || "-"}</TableCell>
+                          <TableCell className="text-xs">{a.posto || "-"}</TableCell>
+                          <TableCell className="space-x-1">
+                            {a.foto_bomba_url && <a href={a.foto_bomba_url} target="_blank" rel="noreferrer"><img src={a.foto_bomba_url} alt="bomba" className="inline w-10 h-10 object-cover rounded" /></a>}
+                            {a.foto_painel_url && <a href={a.foto_painel_url} target="_blank" rel="noreferrer"><img src={a.foto_painel_url} alt="painel" className="inline w-10 h-10 object-cover rounded" /></a>}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMecanicoApp } from "../MecanicoAppContext";
-import { LogIn, LogOut, Headphones, Truck, Fuel, History } from "lucide-react";
+import { LogIn, LogOut, Coffee, Sun, Fuel, History } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 export default function HomePage() {
@@ -9,10 +9,10 @@ export default function HomePage() {
 
   const acoes = [
     { to: `${base}/ponto?tipo=entrada`, label: "Entrada", icon: LogIn, color: "text-emerald-600" },
+    { to: `${base}/ponto?tipo=almoco_inicio`, label: "Início Almoço", icon: Coffee, color: "text-amber-600" },
+    { to: `${base}/ponto?tipo=almoco_fim`, label: "Retorno Almoço", icon: Sun, color: "text-orange-600" },
     { to: `${base}/ponto?tipo=saida`, label: "Saída", icon: LogOut, color: "text-rose-600" },
-    { to: `${base}/chamados`, label: "Chamados", icon: Headphones, color: "text-blue-600" },
-    { to: `${base}/veiculo`, label: "Veículo / KM", icon: Truck, color: "text-amber-600" },
-    { to: `${base}/abastecimento`, label: "Abastecimento", icon: Fuel, color: "text-orange-600" },
+    { to: `${base}/abastecimento`, label: "Abastecimento", icon: Fuel, color: "text-blue-600" },
     { to: `${base}/historico`, label: "Histórico", icon: History, color: "text-purple-600" },
   ];
 

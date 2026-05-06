@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       abastecimentos: {
         Row: {
+          acesso_externo_id: string | null
           combustivel: string
           competencia: string
           conferido_em: string | null
@@ -23,6 +24,9 @@ export type Database = {
           conferido_por_nome: string
           created_at: string
           data: string
+          empresa: string | null
+          endereco: string | null
+          filial: string | null
           forma_pagamento: string
           foto_bomba_url: string
           foto_painel_url: string
@@ -38,12 +42,14 @@ export type Database = {
           nfce_numero: string
           nfce_protocolo: string
           nfce_serie: string
+          observacao: string | null
           observacao_conferencia: string
           placa: string
           posto_cnpj: string
           posto_endereco: string
           posto_nome: string
           preenchimento: string
+          qr_codigo: string | null
           status: string
           tecnico_id: string | null
           updated_at: string
@@ -54,6 +60,7 @@ export type Database = {
           veiculo_id: string | null
         }
         Insert: {
+          acesso_externo_id?: string | null
           combustivel?: string
           competencia?: string
           conferido_em?: string | null
@@ -61,6 +68,9 @@ export type Database = {
           conferido_por_nome?: string
           created_at?: string
           data?: string
+          empresa?: string | null
+          endereco?: string | null
+          filial?: string | null
           forma_pagamento?: string
           foto_bomba_url?: string
           foto_painel_url?: string
@@ -76,12 +86,14 @@ export type Database = {
           nfce_numero?: string
           nfce_protocolo?: string
           nfce_serie?: string
+          observacao?: string | null
           observacao_conferencia?: string
           placa?: string
           posto_cnpj?: string
           posto_endereco?: string
           posto_nome?: string
           preenchimento?: string
+          qr_codigo?: string | null
           status?: string
           tecnico_id?: string | null
           updated_at?: string
@@ -92,6 +104,7 @@ export type Database = {
           veiculo_id?: string | null
         }
         Update: {
+          acesso_externo_id?: string | null
           combustivel?: string
           competencia?: string
           conferido_em?: string | null
@@ -99,6 +112,9 @@ export type Database = {
           conferido_por_nome?: string
           created_at?: string
           data?: string
+          empresa?: string | null
+          endereco?: string | null
+          filial?: string | null
           forma_pagamento?: string
           foto_bomba_url?: string
           foto_painel_url?: string
@@ -114,12 +130,14 @@ export type Database = {
           nfce_numero?: string
           nfce_protocolo?: string
           nfce_serie?: string
+          observacao?: string | null
           observacao_conferencia?: string
           placa?: string
           posto_cnpj?: string
           posto_endereco?: string
           posto_nome?: string
           preenchimento?: string
+          qr_codigo?: string | null
           status?: string
           tecnico_id?: string | null
           updated_at?: string
@@ -4178,42 +4196,57 @@ export type Database = {
       }
       registros_ponto: {
         Row: {
+          acesso_externo_id: string | null
           created_at: string
           data: string
+          dispositivo: string | null
+          empresa: string | null
           endereco_formatado: string | null
+          filial: string | null
           hora: string
           id: string
           latitude: number | null
           longitude: number | null
+          mecanico_nome: string | null
           selfie_url: string | null
           tipo: string
-          user_id: string
+          user_id: string | null
           veiculo_id: string | null
         }
         Insert: {
+          acesso_externo_id?: string | null
           created_at?: string
           data?: string
+          dispositivo?: string | null
+          empresa?: string | null
           endereco_formatado?: string | null
+          filial?: string | null
           hora?: string
           id?: string
           latitude?: number | null
           longitude?: number | null
+          mecanico_nome?: string | null
           selfie_url?: string | null
           tipo: string
-          user_id: string
+          user_id?: string | null
           veiculo_id?: string | null
         }
         Update: {
+          acesso_externo_id?: string | null
           created_at?: string
           data?: string
+          dispositivo?: string | null
+          empresa?: string | null
           endereco_formatado?: string | null
+          filial?: string | null
           hora?: string
           id?: string
           latitude?: number | null
           longitude?: number | null
+          mecanico_nome?: string | null
           selfie_url?: string | null
           tipo?: string
-          user_id?: string
+          user_id?: string | null
           veiculo_id?: string | null
         }
         Relationships: [
@@ -5347,6 +5380,10 @@ export type Database = {
         Args: { p_modulo: string; p_pin: string }
         Returns: Json
       }
+      admin_app_mecanico_historico: {
+        Args: { p_acesso_id: string }
+        Returns: Json
+      }
       app_mecanico_atualizar_chamado: {
         Args: {
           p_acao: string
@@ -5364,16 +5401,49 @@ export type Database = {
         Args: { p_acesso_id: string }
         Returns: Json
       }
-      app_mecanico_registrar_ponto: {
+      app_mecanico_registrar_abastecimento: {
         Args: {
           p_acesso_id: string
+          p_combustivel: string
           p_endereco?: string
+          p_foto_bomba_url?: string
+          p_foto_painel_url?: string
+          p_km: number
           p_latitude?: number
+          p_litros: number
           p_longitude?: number
-          p_tipo: string
+          p_observacao?: string
+          p_placa?: string
+          p_posto_nome?: string
+          p_qr_codigo: string
+          p_valor: number
         }
         Returns: Json
       }
+      app_mecanico_registrar_ponto:
+        | {
+            Args: {
+              p_acesso_id: string
+              p_endereco?: string
+              p_latitude?: number
+              p_longitude?: number
+              p_tipo: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_acesso_id: string
+              p_dispositivo?: string
+              p_endereco?: string
+              p_latitude?: number
+              p_longitude?: number
+              p_selfie_url?: string
+              p_tipo: string
+            }
+            Returns: Json
+          }
+      app_mecanico_status_dia: { Args: { p_acesso_id: string }; Returns: Json }
       app_mecanico_validar_acesso: {
         Args: { p_acesso_id: string }
         Returns: Json
