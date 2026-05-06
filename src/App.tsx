@@ -144,6 +144,8 @@ const AuthGate = () => {
     <Routes>
       {/* Root → redirect to correct portal */}
       <Route path="/" element={<RoleRedirect />} />
+      <Route path="/index" element={<Navigate to="/" replace />} />
+      <Route path="/login" element={<Navigate to="/" replace />} />
 
       {/* ========== ADMIN PORTAL ========== */}
       <Route element={<AppLayout />}>

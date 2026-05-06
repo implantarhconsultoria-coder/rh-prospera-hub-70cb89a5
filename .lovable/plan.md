@@ -1,45 +1,29 @@
-## Objetivo
+## Diagnóstico
 
-Corrigir o travamento da tela "Link inválido ou expirado" (rotas `/m/:token`, e qualquer link antigo de `/campo`, `/operacional`, `/mecanico`, `/acesso`) adicionando botões de saída. Sem mexer em layout dos módulos, cálculos, autenticação ou criação de acessos.
+A tela 404 "Oops! Page not found" do screenshot **não** é a tela "Link inválido ou expirado" — é o `NotFound` do React Router. Causa raiz:
 
-## Arquivo único a alterar
+1. Em `src/App.tsx`, o `AuthGate` (autenticado) **não tem rota `/login` nem `/index`**. Qualquer URL fora do conjunto admin/filial/faturamento/financeiro cai em `<Route path="*" element={<NotFound />} />` → tela cinza com "404".
+2. O botão "Ir para Login" / "Limpar sessão" que adicionei na tela de link inválido manda para `/login`. Como essa rota não existe, o usuário (já autenticado, ex.: admin) cai no 404 e não consegue voltar.
+3. Mesma coisa quando o navegador chega em `/index` (rota literal vista no print) — não há mapeamento.
+4. Para usuário **não** autenticado, `AuthGate` já renderiza `LoginPage` em `path="*"`, então `/login` funcionaria; o problema só ocorre quando há sessão.
 
-`src/context/TecnicoAppContext.tsx` — bloco do `if (error || !tecnico)` (linhas 127–139). Hoje só mostra ícone + texto, sem nenhuma ação. É o único lugar do projeto que renderiza essa mensagem (`rg` confirmou).
+Resumindo: o "ninguém entra, nem o admin" é causado pelas redireções do app baterem em `/login` quando o admin já está logado, gerando 404.
 
-## O que será feito
+## Correção (1 arquivo)
 
-Substituir o bloco de erro por uma tela com os mesmos visuais (mesma cor de fundo, ícone, tipografia) acrescentando 3 botões fixos + 1 condicional para admin:
+`src/App.tsx` — dentro do `AuthGate` autenticado, adicionar duas rotas de compatibilidade que delegam ao `RoleRedirect`:
 
-1. **Ir para Login** → `window.location.href = '/login'`
-2. **Voltar ao Início**:
-   - Se `userRole === 'admin'` → `/admin`
-   - Caso contrário → `/login`
-3. **Limpar sessão e tentar novamente**:
-   - `await supabase.auth.signOut()`
-   - `localStorage.clear()`
-   - `sessionStorage.clear()`
-   - `window.location.href = '/login'`
-4. **Abrir Painel Admin** (só renderiza se `userRole === 'admin'`) → `/admin`
+```tsx
+<Route path="/" element={<RoleRedirect />} />
+<Route path="/index" element={<Navigate to="/" replace />} />
+<Route path="/login" element={<Navigate to="/" replace />} />
+```
 
-Para detectar admin, usar o hook `useApp()` (`src/hooks/useApp.ts`) já presente no projeto, que expõe `userRole` e `session`. Importar `supabase` de `@/integrations/supabase/client`.
+Efeitos:
+- Admin logado que cair em `/login` ou `/index` → vai para `/` → `RoleRedirect` → `/admin`.
+- Filial/operacional/etc. seguem para o portal correto via `RoleRedirect`.
+- Usuário não autenticado continua vendo `LoginPage` (nada muda no fluxo de login).
 
-## Cobertura das rotas antigas
+## Fora do escopo
 
-- `/m/:token` — usa `TecnicoAppProvider`, então já é coberto pela alteração.
-- `/mecanico` — `MecanicoRedirectPage` já trata token ausente com lista/aviso próprio (não usa a tela de "link inválido"); nada a mudar lá.
-- `/campo`, `/operacional`, `/acesso` — não renderizam essa mensagem específica; quem renderiza é só o provider do app mecânico. Se o usuário cair em link antigo `/m/<token-velho>`, a nova tela permitirá sair.
-
-## Detalhes técnicos
-
-- Manter `loading` state inalterado (apenas o spinner).
-- Manter o texto "Link inválido ou expirado" e a frase explicativa atuais.
-- Botões usando classes Tailwind já adotadas no projeto (`bg-primary`, `bg-white/10`, `border border-white/15`, `rounded-xl`, `py-2.5 px-4 text-sm font-semibold`) para não criar novo padrão visual.
-- Botão "Limpar sessão" deve ser `async` e tolerante a falha do `signOut` (try/catch silencioso, sempre redireciona).
-- Sem nova rota, sem novo componente, sem mudança em router, sem mudança em RLS/edge functions.
-
-## Fora do escopo (não tocar)
-
-- `src/App.tsx`, `AppLayout`, `CampoLayout`, `OperacionalLayout`, `MecanicoLayout`, `MecanicoRedirectPage`, `AguardandoAcesso`.
-- Qualquer cálculo (`pontoCalc`, `rescisaoCalc`, etc.).
-- Tabelas/migrations Supabase, roles, edge functions.
-- Login, signup, recuperar/redefinir senha.
+Não mexer em: `LoginPage`, layouts dos portais, `useUserRole`, RLS, edge functions, cálculos. Sem novas tabelas. Sem mudança visual.
