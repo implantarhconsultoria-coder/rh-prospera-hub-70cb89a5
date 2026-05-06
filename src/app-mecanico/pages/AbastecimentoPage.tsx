@@ -13,7 +13,7 @@ import QRScanner from "../components/QRScanner";
 import CameraCapture from "../components/CameraCapture";
 import { uploadFoto } from "../lib/upload";
 import { useGeolocation } from "@/hooks/useGeolocation";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 type Etapa = "qr" | "dados_qr" | "foto_bomba" | "foto_painel" | "form" | "concluido";
 
