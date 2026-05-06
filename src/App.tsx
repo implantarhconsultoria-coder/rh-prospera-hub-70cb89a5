@@ -92,6 +92,7 @@ import NotFound from "@/pages/NotFound";
 import PublicAbastecimentoPage from "@/pages/PublicAbastecimentoPage";
 import ImprimirQRCombustivelPage from "@/pages/admin/ImprimirQRCombustivelPage";
 import MecanicoRedirectPage from "@/pages/MecanicoRedirectPage";
+import MecanicoExtRedirect from "@/pages/MecanicoExtRedirect";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
 import AcessosExternosPage from "@/pages/admin/AcessosExternosPage";
 import { Loader2 } from "lucide-react";
