@@ -37,9 +37,40 @@ export default function AbastecimentoPage() {
   const [km, setKm] = useState(""); const [obs, setObs] = useState("");
   const [enviando, setEnviando] = useState(false);
 
-  const validarQR = async (codigo: string) => {
+  /**
+   * Extrai o código do QR. O QR pode ser:
+   *  - apenas o código (TOPAC-ABAST-047)
+   *  - uma URL contendo o código (https://implantarhprpro.com/abastecimento/TOPAC-ABAST-047)
+   *  - URL com query string ou trailing slash
+   */
+  const extrairCodigo = (raw: string): string => {
+    const txt = (raw || "").trim();
+    if (!txt) return "";
+    // Se for URL, pega o último segmento útil
+    try {
+      if (/^https?:\/\//i.test(txt)) {
+        const u = new URL(txt);
+        const partes = u.pathname.split("/").filter(Boolean);
+        const last = partes[partes.length - 1] || "";
+        return decodeURIComponent(last);
+      }
+    } catch { /* ignore */ }
+    // Caso contrário, devolve o texto puro
+    return txt;
+  };
+
+  const validarQR = async (raw: string) => {
     setScannerOpen(false);
-    const { data } = await supabase.rpc("qr_abastecimento_dados" as any, { p_codigo: codigo });
+    const codigo = extrairCodigo(raw);
+    if (!codigo) {
+      toast.error("QR Code inválido.");
+      return;
+    }
+    const { data, error } = await supabase.rpc("qr_abastecimento_dados" as any, { p_codigo: codigo });
+    if (error) {
+      toast.error("Erro ao validar QR Code.");
+      return;
+    }
     const r = data as any;
     if (!r?.ok) {
       toast.error(r?.error === "qr_bloqueado" ? "QR Code bloqueado." : "QR Code não encontrado ou bloqueado.");
@@ -106,6 +137,22 @@ export default function AbastecimentoPage() {
         <Button className="w-full h-12" onClick={() => setScannerOpen(true)}>
           <QrCode className="w-5 h-5 mr-2" /> Ler QR Code
         </Button>
+        <div className="pt-2 border-t space-y-2">
+          <p className="text-xs text-muted-foreground">Ou digite o código manualmente:</p>
+          <div className="flex gap-2">
+            <Input
+              id="codigo-manual"
+              placeholder="TOPAC-ABAST-047"
+              className="uppercase"
+            />
+            <Button variant="outline" onClick={() => {
+              const el = document.getElementById("codigo-manual") as HTMLInputElement | null;
+              const c = el?.value?.trim();
+              if (!c) { toast.error("Digite o código"); return; }
+              validarQR(c);
+            }}>Validar</Button>
+          </div>
+        </div>
         {scannerOpen && <QRScanner onResult={validarQR} onCancel={() => setScannerOpen(false)} />}
       </Card>
     );
