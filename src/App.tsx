@@ -251,6 +251,7 @@ const AuthGate = () => {
         <Route path="/faturamento/medicoes" element={<MedicoesPage />} />
         <Route path="/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/faturamento/pendencias" element={<PendenciasPage />} />
+        <Route path="/faturamento/conferencia" element={<ConferenciaPage />} />
       </Route>
 
       {/* ========== FINANCEIRO PORTAL (acesso teste FIN) ========== */}
