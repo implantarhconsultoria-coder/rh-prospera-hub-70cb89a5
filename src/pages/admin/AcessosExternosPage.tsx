@@ -51,6 +51,9 @@ export default function AcessosExternosPage() {
   const [lista, setLista] = useState<Acesso[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [funcOpen, setFuncOpen] = useState(false);
+  const [funcionarioId, setFuncionarioId] = useState<string | null>(null);
   const [form, setForm] = useState({
     nome: "", cpf: "", empresa: "", filial: "", funcao: "", perfil_acesso: "mecanico_externo",
   });
@@ -66,7 +69,41 @@ export default function AcessosExternosPage() {
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  const carregarFuncionarios = async () => {
+    const { data } = await supabase
+      .from("funcionarios")
+      .select("id, nome, cpf, cargo, empresas(nome)")
+      .eq("status", "ativo")
+      .order("nome");
+    const lista: Funcionario[] = (data || []).map((f: any) => ({
+      id: f.id,
+      nome: f.nome,
+      cpf: f.cpf || "",
+      cargo: f.cargo || "",
+      empresa_nome: f.empresas?.nome || "",
+    }));
+    setFuncionarios(lista);
+  };
+
+  useEffect(() => { carregar(); carregarFuncionarios(); }, []);
+
+  const selecionarFuncionario = (f: Funcionario) => {
+    setFuncionarioId(f.id);
+    setForm((prev) => ({
+      ...prev,
+      nome: f.nome,
+      cpf: f.cpf || prev.cpf,
+      empresa: f.empresa_nome || prev.empresa,
+      funcao: f.cargo || prev.funcao,
+    }));
+    setFuncOpen(false);
+  };
+
+  const resetForm = () => {
+    setForm({ nome: "", cpf: "", empresa: "", filial: "", funcao: "", perfil_acesso: "mecanico_externo" });
+    setFuncionarioId(null);
+  };
+
 
   const criar = async () => {
     if (!form.nome || !form.cpf) { toast.error("Nome e CPF obrigatórios"); return; }
