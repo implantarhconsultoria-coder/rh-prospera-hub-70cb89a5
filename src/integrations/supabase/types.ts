@@ -5306,6 +5306,35 @@ export type Database = {
       }
     }
     Functions: {
+      _app_mecanico_get_acesso: {
+        Args: { p_acesso_id: string }
+        Returns: {
+          acesso_liberado: boolean
+          cpf: string
+          cpf_clean: string
+          created_at: string
+          empresa: string | null
+          filial: string | null
+          funcao: string | null
+          funcionario_id: string | null
+          id: string
+          modulo: string
+          nome: string
+          observacoes: string | null
+          perfil_acesso: string
+          pin: string
+          profile_user_id: string | null
+          status: string
+          ultimo_acesso_em: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "acessos_externos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       acesso_externo_filtro_empresa: {
         Args: { p_acesso_id: string; p_modulo: string }
         Returns: Json
@@ -5316,6 +5345,37 @@ export type Database = {
       }
       acesso_externo_validar_pin: {
         Args: { p_modulo: string; p_pin: string }
+        Returns: Json
+      }
+      app_mecanico_atualizar_chamado: {
+        Args: {
+          p_acao: string
+          p_acesso_id: string
+          p_chamado_id: string
+          p_observacao?: string
+        }
+        Returns: Json
+      }
+      app_mecanico_listar_chamados: {
+        Args: { p_acesso_id: string }
+        Returns: Json
+      }
+      app_mecanico_listar_historico: {
+        Args: { p_acesso_id: string }
+        Returns: Json
+      }
+      app_mecanico_registrar_ponto: {
+        Args: {
+          p_acesso_id: string
+          p_endereco?: string
+          p_latitude?: number
+          p_longitude?: number
+          p_tipo: string
+        }
+        Returns: Json
+      }
+      app_mecanico_validar_acesso: {
+        Args: { p_acesso_id: string }
         Returns: Json
       }
       calc_inss: { Args: { p_base: number }; Returns: number }
