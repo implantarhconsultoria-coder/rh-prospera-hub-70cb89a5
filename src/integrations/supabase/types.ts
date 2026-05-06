@@ -5306,6 +5306,10 @@ export type Database = {
       }
     }
     Functions: {
+      acesso_externo_filtro_empresa: {
+        Args: { p_acesso_id: string; p_modulo: string }
+        Returns: Json
+      }
       acesso_externo_obter: {
         Args: { p_id: string; p_modulo: string }
         Returns: Json
