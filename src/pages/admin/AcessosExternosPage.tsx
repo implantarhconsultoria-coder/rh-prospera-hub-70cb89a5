@@ -56,7 +56,8 @@ export default function AcessosExternosPage() {
   const [funcOpen, setFuncOpen] = useState(false);
   const [funcionarioId, setFuncionarioId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    nome: "", cpf: "", empresa: "", filial: "", funcao: "", perfil_acesso: "mecanico_externo",
+    nome: "", cpf: "", empresa: "", filial: "", funcao: "",
+    perfis_acesso: ["mecanico_externo"] as string[],
   });
 
   const carregar = async () => {
