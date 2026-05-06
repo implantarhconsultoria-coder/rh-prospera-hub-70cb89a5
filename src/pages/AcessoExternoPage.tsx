@@ -26,7 +26,8 @@ interface UsuarioOpcao {
 }
 
 export default function AcessoExternoPage() {
-  const { modulo = "mecanico" } = useParams();
+  const location = useLocation();
+  const modulo = location.pathname.replace(/^\/acesso-/, "") || "mecanico";
   const navigate = useNavigate();
   const cfg = MODULOS[modulo] || MODULOS.mecanico;
 
