@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,33 +7,50 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Lock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
-const MODULOS: Record<string, { label: string; redirect: (id: string) => string }> = {
-  financeiro: { label: "Financeiro", redirect: (id) => `/financeiro-ext/${id}` },
-  faturamento: { label: "Faturamento", redirect: (id) => `/faturamento-ext/${id}` },
-  almoxarifado: { label: "Almoxarifado", redirect: (id) => `/almoxarifado-ext/${id}` },
-  operacional: { label: "Operacional", redirect: (id) => `/operacional-ext/${id}` },
-  filial: { label: "Filial", redirect: (id) => `/filial-ext/${id}` },
-  campo: { label: "Campo", redirect: (id) => `/campo-ext/${id}` },
-};
+/**
+ * Página unificada de acesso externo por PIN.
+ * Rota canônica: /acesso-filial
+ * (todas as outras /acesso-* não-mecânico redirecionam aqui)
+ *
+ * Fluxo:
+ *  - Digita PIN (4 últimos do CPF)
+ *  - Se 1 usuário e 1 portal -> entra direto
+ *  - Se 1 usuário e múltiplos portais -> /portais (escolher)
+ *  - Se múltiplos usuários (PINs colidem) -> escolher usuário, depois portais
+ */
 
-interface UsuarioOpcao {
-  id: string;
+type Portal = {
+  acesso_id: string;
+  modulo: string;
+  perfil_acesso: string;
+  empresa: string;
+  filial: string;
+  funcao: string;
+};
+type Usuario = {
+  cpf_clean: string;
   nome: string;
   empresa: string;
   filial: string;
   funcao: string;
-}
+  portais: Portal[];
+};
+
+export const MODULO_REDIRECT: Record<string, (id: string) => string> = {
+  filial: (id) => `/filial-ext/${id}`,
+  financeiro: (id) => `/financeiro-ext/${id}`,
+  faturamento: (id) => `/faturamento-ext/${id}`,
+  almoxarifado: (id) => `/almoxarifado-ext/${id}`,
+  operacional: (id) => `/operacional-ext/${id}`,
+  campo: (id) => `/campo-ext/${id}`,
+};
 
 export default function AcessoExternoPage() {
-  const location = useLocation();
-  const modulo = location.pathname.replace(/^\/acesso-/, "") || "filial";
   const navigate = useNavigate();
-  const cfg = MODULOS[modulo] || MODULOS.filial;
-
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [opcoes, setOpcoes] = useState<UsuarioOpcao[] | null>(null);
+  const [usuarios, setUsuarios] = useState<Usuario[] | null>(null);
 
   const validar = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -43,9 +60,8 @@ export default function AcessoExternoPage() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.rpc("acesso_externo_validar_pin" as any, {
+    const { data, error } = await supabase.rpc("acesso_externo_listar_portais" as any, {
       p_pin: pin,
-      p_modulo: modulo,
     });
     setLoading(false);
 
@@ -56,36 +72,60 @@ export default function AcessoExternoPage() {
     const res = data as any;
     if (!res?.ok) {
       if (res?.error === "bloqueado") setErro("Acesso bloqueado pelo administrador.");
-      else if (res?.error === "pin_nao_encontrado") setErro("PIN não encontrado. Procure o administrador.");
+      else if (res?.error === "pin_nao_encontrado") setErro("Acesso não liberado.");
       else setErro("PIN inválido.");
       return;
     }
-    if (res.count === 1) {
-      entrar(res.usuarios[0]);
+    const lista: Usuario[] = res.usuarios || [];
+    if (lista.length === 0) {
+      setErro("Acesso não liberado.");
+      return;
+    }
+    if (lista.length === 1) {
+      escolherUsuario(lista[0]);
     } else {
-      setOpcoes(res.usuarios);
+      setUsuarios(lista);
     }
   };
 
-  const entrar = async (u: UsuarioOpcao) => {
+  const escolherUsuario = (u: Usuario) => {
+    // Salva sessão do usuário escolhido
+    sessionStorage.setItem("acesso_externo_sessao", JSON.stringify({
+      cpf_clean: u.cpf_clean,
+      nome: u.nome,
+      portais: u.portais,
+      ts: Date.now(),
+    }));
+
+    if (u.portais.length === 1) {
+      // Entra direto
+      entrarPortal(u.portais[0]);
+    } else {
+      navigate("/portais");
+    }
+  };
+
+  const entrarPortal = async (p: Portal) => {
     setLoading(true);
+    // Valida e abre
     const { data, error } = await supabase.rpc("acesso_externo_obter" as any, {
-      p_id: u.id,
-      p_modulo: modulo,
+      p_id: p.acesso_id,
+      p_modulo: p.modulo,
     });
     if (error || !(data as any)?.ok) {
       setLoading(false);
-      toast.error("Não foi possível abrir o acesso.");
+      toast.error("Não foi possível abrir o portal.");
       return;
     }
     const acesso = (data as any).acesso;
-    localStorage.setItem(
-      "acesso_externo",
-      JSON.stringify({ ...acesso, ts: Date.now() })
-    );
-
+    localStorage.setItem("acesso_externo", JSON.stringify({ ...acesso, ts: Date.now() }));
     setLoading(false);
-    navigate(cfg.redirect(acesso.id));
+    const goto = MODULO_REDIRECT[p.modulo];
+    if (!goto) {
+      toast.error("Módulo desconhecido: " + p.modulo);
+      return;
+    }
+    navigate(goto(acesso.id));
   };
 
   return (
@@ -95,11 +135,13 @@ export default function AcessoExternoPage() {
           <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
             <Lock className="w-6 h-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">{cfg.label}</CardTitle>
-          <p className="text-sm text-muted-foreground">Digite seu código PIN para acessar</p>
+          <CardTitle className="text-2xl">Acesso Portais</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Digite seu código PIN para acessar.
+          </p>
         </CardHeader>
         <CardContent>
-          {!opcoes ? (
+          {!usuarios ? (
             <form onSubmit={validar} className="space-y-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">Código PIN</label>
@@ -131,13 +173,11 @@ export default function AcessoExternoPage() {
             </form>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Selecione seu nome:
-              </p>
-              {opcoes.map((u) => (
+              <p className="text-sm text-muted-foreground">Selecione seu nome:</p>
+              {usuarios.map((u) => (
                 <button
-                  key={u.id}
-                  onClick={() => entrar(u)}
+                  key={u.cpf_clean + u.nome}
+                  onClick={() => escolherUsuario(u)}
                   disabled={loading}
                   className="w-full text-left p-3 rounded-md border hover:bg-accent transition-colors"
                 >
@@ -145,9 +185,12 @@ export default function AcessoExternoPage() {
                   <div className="text-xs text-muted-foreground">
                     {[u.empresa, u.filial, u.funcao].filter(Boolean).join(" • ")}
                   </div>
+                  <div className="text-xs text-primary mt-1">
+                    {u.portais.length} portal(is) liberado(s)
+                  </div>
                 </button>
               ))}
-              <Button variant="ghost" className="w-full" onClick={() => { setOpcoes(null); setPin(""); }}>
+              <Button variant="ghost" className="w-full" onClick={() => { setUsuarios(null); setPin(""); }}>
                 Voltar
               </Button>
             </div>
