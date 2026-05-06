@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtBR = (d?: string | null) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
