@@ -5372,6 +5372,7 @@ export type Database = {
         Args: { p_acesso_id: string; p_modulo: string }
         Returns: Json
       }
+      acesso_externo_listar_portais: { Args: { p_pin: string }; Returns: Json }
       acesso_externo_obter: {
         Args: { p_id: string; p_modulo: string }
         Returns: Json
