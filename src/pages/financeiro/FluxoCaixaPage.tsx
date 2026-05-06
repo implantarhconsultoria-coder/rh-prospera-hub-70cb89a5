@@ -51,8 +51,8 @@ const FluxoCaixaPage: React.FC = () => {
 
     (tRec.data || []).filter(t => ['aberto', 'parcial', 'vencido'].includes(t.status)).forEach(t => add(t.data_vencimento, 'entradas_previstas', Number(t.saldo)));
     (tPag.data || []).filter(t => ['aberto', 'parcial', 'vencido'].includes(t.status)).forEach(t => add(t.data_vencimento, 'saidas_previstas', Number(t.saldo)));
-    (recs.data || []).forEach(r => add(r.data, 'entradas_realizadas', Number(r.valor)));
-    (pags.data || []).forEach(p => add(p.data, 'saidas_realizadas', Number(p.valor)));
+    recsF.forEach(r => add(r.data, 'entradas_realizadas', Number(r.valor)));
+    pagsF.forEach(p => add(p.data, 'saidas_realizadas', Number(p.valor)));
 
     const arr = Array.from(mapa.values()).sort((a, b) => a.data.localeCompare(b.data));
     let acum = saldo;
