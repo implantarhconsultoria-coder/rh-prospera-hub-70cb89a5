@@ -356,7 +356,18 @@ const AlmoxarifadoPage: React.FC = () => {
   };
 
   const getItemName = (id: string) => itens.find(i => i.id === id)?.nome || '—';
-  const filteredItens = itens.filter(i => i.nome.toLowerCase().includes(search.toLowerCase()));
+  // Em rotas de portal externo (-ext), oculta itens quebrados/lixo (#N/D, vazios) sem deletar do banco.
+  const isPortalExterno = typeof window !== 'undefined' && window.location.pathname.includes('-ext/');
+  const itensVisiveis = isPortalExterno
+    ? itens.filter(i => {
+        const n = (i.nome || '').trim();
+        if (!n) return false;
+        if (/^#?\s*n\/?d\s*$/i.test(n)) return false; // #N/D, N/D, ND
+        if (n === '-' || n === '—') return false;
+        return true;
+      })
+    : itens;
+  const filteredItens = itensVisiveis.filter(i => i.nome.toLowerCase().includes(search.toLowerCase()));
 
   const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
     { key: 'estoque', label: 'Estoque', icon: Package },
