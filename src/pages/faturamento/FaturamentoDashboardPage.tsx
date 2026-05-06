@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw } from 'lucide-react';
+import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw, ClipboardCheck, UserX } from 'lucide-react';
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const FaturamentoDashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [kpis, setKpis] = useState<any>(null);
   const [stats, setStats] = useState({
     previsto: 0, emitido: 0, pago: 0, vencidos: 0, aVencer: 0,
     contratosAtivos: 0, clientesAtivos: 0, equipamentosFaturando: 0,
