@@ -363,7 +363,6 @@ const App = () => (
                 <Route path="ponto" element={<MecPontoPage />} />
                 <Route path="chamados" element={<MecChamadosPage />} />
                 <Route path="veiculo" element={<MecVeiculoPage />} />
-                <Route path="abastecimento" element={<MecAbastecimentoPage />} />
                 <Route path="historico" element={<MecHistoricoPage />} />
               </Route>
 
