@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, LogIn, Home, RefreshCw, Shield } from 'lucide-react';
+import { useApp } from '@/hooks/useApp';
+import { supabase } from '@/integrations/supabase/client';
 
 const FN_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/tecnico-app`;
 
@@ -40,6 +42,68 @@ export const useTecnicoApp = () => {
 };
 
 const storageKey = (token: string) => `tecnico_veic_sel_${token}`;
+
+const LinkInvalidoScreen: React.FC = () => {
+  let isAdmin = false;
+  try {
+    // useApp pode falhar se provider não estiver presente; tolerar.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { userRole } = useApp();
+    isAdmin = userRole === 'admin';
+  } catch {
+    isAdmin = false;
+  }
+
+  const goLogin = () => { window.location.href = '/login'; };
+  const goHome = () => { window.location.href = isAdmin ? '/admin' : '/login'; };
+  const goAdmin = () => { window.location.href = '/admin'; };
+  const limparSessao = async () => {
+    try { await supabase.auth.signOut(); } catch { /* noop */ }
+    try { localStorage.clear(); } catch { /* noop */ }
+    try { sessionStorage.clear(); } catch { /* noop */ }
+    window.location.href = '/login';
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6">
+      <div className="max-w-sm w-full text-center">
+        <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+        <h1 className="text-xl font-bold mb-2">Link inválido ou expirado</h1>
+        <p className="text-sm text-white/70 mb-6">
+          Solicite ao administrador um novo link de acesso ao app, ou use uma das opções abaixo.
+        </p>
+        <div className="space-y-2">
+          <button
+            onClick={goLogin}
+            className="w-full inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl py-2.5 px-4 text-sm font-semibold transition-colors"
+          >
+            <LogIn className="w-4 h-4" /> Ir para Login
+          </button>
+          <button
+            onClick={goHome}
+            className="w-full inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/15 border border-white/15 text-white rounded-xl py-2.5 px-4 text-sm font-semibold transition-colors"
+          >
+            <Home className="w-4 h-4" /> Voltar ao Início
+          </button>
+          {isAdmin && (
+            <button
+              onClick={goAdmin}
+              className="w-full inline-flex items-center justify-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-200 rounded-xl py-2.5 px-4 text-sm font-semibold transition-colors"
+            >
+              <Shield className="w-4 h-4" /> Abrir Painel Admin
+            </button>
+          )}
+          <button
+            onClick={limparSessao}
+            className="w-full inline-flex items-center justify-center gap-2 bg-transparent hover:bg-white/5 border border-white/15 text-white/80 rounded-xl py-2.5 px-4 text-sm font-semibold transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" /> Limpar sessão e tentar novamente
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { token = '' } = useParams<{ token: string }>();
@@ -125,17 +189,7 @@ export const TecnicoAppProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }
 
   if (error || !tecnico) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6 text-center">
-        <div className="max-w-sm">
-          <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-          <h1 className="text-xl font-bold mb-2">Link inválido ou expirado</h1>
-          <p className="text-sm text-white/70">
-            Solicite ao administrador um novo link de acesso ao app.
-          </p>
-        </div>
-      </div>
-    );
+    return <LinkInvalidoScreen />;
   }
 
   return (
