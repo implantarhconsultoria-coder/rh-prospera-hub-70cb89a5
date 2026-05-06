@@ -135,6 +135,9 @@ const AuthGate = () => {
         <Route path="/cadastro" element={<CadastroPage />} />
         <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
         <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/index" element={<LoginPage />} />
+        <Route path="/" element={<LoginPage />} />
         <Route path="*" element={<LoginPage />} />
       </Routes>
     );
