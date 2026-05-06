@@ -58,6 +58,7 @@ const operationalItems: MenuItem[] = [
 
 const adminItems: MenuItem[] = [
   { label: 'Gerenciar Usuários', icon: Shield, path: '/admin/gerenciar-usuarios' },
+  { label: 'Acessos Externos (PIN)', icon: Shield, path: '/admin/acessos-externos' },
   { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
   { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
 ];
