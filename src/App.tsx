@@ -279,8 +279,10 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <Routes>
-              {/* ========== ROTA PÚBLICA: QR de abastecimento (sem login) ========== */}
+              {/* ========== ROTAS PÚBLICAS: QR de abastecimento (sem login) ========== */}
               <Route path="/abastecimento/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
+              <Route path="/qr/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
+              <Route path="/voucher/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
 
               {/* ========== APP MECÂNICO — LINK ÚNICO /mecanico (exige login) ========== */}
               <Route path="/mecanico" element={<ErrorBoundary><MecanicoRedirectPage /></ErrorBoundary>} />
