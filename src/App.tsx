@@ -414,15 +414,7 @@ const App = () => (
                 <Route path="pendencias" element={<PendenciasPage />} />
               </Route>
 
-              <Route path="/rh-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="rh" titulo="Portal RH" cor="bg-emerald-600" items={EXT_ITEMS_RH} /></ErrorBoundary>}>
-                <Route index element={<FuncionariosPage />} />
-                <Route path="funcionarios" element={<FuncionariosPage />} />
-                <Route path="funcionarios/:id" element={<EmployeeDetailPage />} />
-                <Route path="aso" element={<ASOPage />} />
-                <Route path="atestados" element={<AtestadosImportPage />} />
-                <Route path="aviso-ferias" element={<AvisoFeriasPage />} />
-                <Route path="protocolo" element={<ProtocoloPage />} />
-              </Route>
+              {/* RH externo removido — usar /acesso-filial */}
 
               <Route path="/almoxarifado-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="almoxarifado" titulo="Almoxarifado" cor="bg-orange-600" items={EXT_ITEMS_ALMOX} /></ErrorBoundary>}>
                 <Route index element={<AlmoxarifadoPage />} />
