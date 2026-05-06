@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { AlertTriangle, Phone, X, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const InadimplenciaPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [titulos, setTitulos] = useState<any[]>([]);
   const [tentativas, setTentativas] = useState<any[]>([]);
   const [vendoTitulo, setVendoTitulo] = useState<any | null>(null);
@@ -17,16 +19,19 @@ const InadimplenciaPage: React.FC = () => {
   const carregar = async () => {
     setLoading(true);
     const hoje = new Date().toISOString().slice(0, 10);
-    const { data } = await supabase.from('titulos_receber')
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    let q = supabase.from('titulos_receber')
       .select('*, clientes_fat(razao_social, telefone, email)')
       .in('status', ['aberto', 'parcial', 'vencido'])
       .lt('data_vencimento', hoje)
       .order('data_vencimento');
+    if (empIds !== null) q = q.in('empresa_id', empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']);
+    const { data } = await q;
     setTitulos(data || []);
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const verHistorico = async (t: any) => {
     setVendoTitulo(t);
