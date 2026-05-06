@@ -41,6 +41,7 @@ const PERFIS = [
   { v: "mecanico_externo", l: "Mecânico Externo", modulo: "mecanico" },
   { v: "tecnico_campo", l: "Técnico de Campo", modulo: "campo" },
   { v: "operacional", l: "Operacional", modulo: "operacional" },
+  { v: "faturamento", l: "Faturamento", modulo: "faturamento" },
   { v: "financeiro", l: "Financeiro", modulo: "financeiro" },
   { v: "rh", l: "RH", modulo: "rh" },
   { v: "almoxarifado", l: "Almoxarifado", modulo: "almoxarifado" },
