@@ -137,6 +137,22 @@ export default function AbastecimentoPage() {
         <Button className="w-full h-12" onClick={() => setScannerOpen(true)}>
           <QrCode className="w-5 h-5 mr-2" /> Ler QR Code
         </Button>
+        <div className="pt-2 border-t space-y-2">
+          <p className="text-xs text-muted-foreground">Ou digite o código manualmente:</p>
+          <div className="flex gap-2">
+            <Input
+              id="codigo-manual"
+              placeholder="TOPAC-ABAST-047"
+              className="uppercase"
+            />
+            <Button variant="outline" onClick={() => {
+              const el = document.getElementById("codigo-manual") as HTMLInputElement | null;
+              const c = el?.value?.trim();
+              if (!c) { toast.error("Digite o código"); return; }
+              validarQR(c);
+            }}>Validar</Button>
+          </div>
+        </div>
         {scannerOpen && <QRScanner onResult={validarQR} onCancel={() => setScannerOpen(false)} />}
       </Card>
     );
