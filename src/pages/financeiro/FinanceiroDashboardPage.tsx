@@ -9,6 +9,7 @@ const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'c
 
 const FinanceiroDashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const ext = useAcessoExternoFiltro();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     aReceber: 0, aReceberVencido: 0, recebido30d: 0,
@@ -23,12 +24,16 @@ const FinanceiroDashboardPage: React.FC = () => {
     const hoje = new Date().toISOString().slice(0, 10);
     const ha30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
+    // Filtro por empresa para acesso externo
+    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+    const applyEmp = (q: any) => empIds !== null ? q.in('empresa_id', empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : q;
+
     const [tRec, tPag, recs, pags, cb, clis] = await Promise.all([
-      supabase.from('titulos_receber').select('saldo, status, data_vencimento, cliente_id'),
-      supabase.from('titulos_pagar').select('saldo, status, data_vencimento'),
-      supabase.from('recebimentos').select('valor, data').gte('data', ha30),
-      supabase.from('pagamentos').select('valor, data').gte('data', ha30),
-      supabase.from('contas_bancarias').select('nome, saldo_atual, empresas(nome)').eq('status', 'ativa'),
+      applyEmp(supabase.from('titulos_receber').select('saldo, status, data_vencimento, cliente_id, empresa_id')),
+      applyEmp(supabase.from('titulos_pagar').select('saldo, status, data_vencimento, empresa_id')),
+      supabase.from('recebimentos').select('valor, data, titulos_receber!inner(empresa_id)').gte('data', ha30),
+      supabase.from('pagamentos').select('valor, data, titulos_pagar!inner(empresa_id)').gte('data', ha30),
+      applyEmp(supabase.from('contas_bancarias').select('nome, saldo_atual, empresa_id, empresas(nome)').eq('status', 'ativa')),
       supabase.from('clientes_fat').select('id, razao_social'),
     ]);
 
