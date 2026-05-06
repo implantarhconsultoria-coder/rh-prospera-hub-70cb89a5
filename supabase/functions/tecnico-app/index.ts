@@ -21,16 +21,21 @@ const sb = () =>
   );
 
 // Resolve técnico from token; returns null if invalid.
+// Token é VITALÍCIO: nunca expira por data. Só falha se inexistente ou bloqueado manualmente.
 async function resolveTecnico(token: string) {
   if (!token || token.length < 10) return null;
   const { data } = await sb()
     .from("tecnicos_campo")
     .select(
-      "id, apelido, status, user_id, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
+      "id, apelido, status, link_status, user_id, veiculo_id, funcionario_id, funcionarios:funcionario_id(id, nome, cargo, celular, cpf), veiculos:veiculo_id(id, placa, modelo, identificacao_interna)",
     )
     .eq("access_token", token)
     .maybeSingle();
   if (!data) return null;
+  // Bloqueio manual do admin
+  if ((data as any).link_status === 'bloqueado' || (data as any).status === 'bloqueado') {
+    return { __blocked: true } as any;
+  }
   // Carrega TODOS os veiculos vinculados a esse colaborador (suporte a multi-veiculo, ex: Rafael)
   let veiculos_disponiveis: any[] = [];
   if (data.user_id) {
@@ -80,7 +85,8 @@ Deno.serve(async (req) => {
     };
 
     const tec = await resolveTecnico(token);
-    if (!tec) return json({ error: "invalid_token" }, 401);
+    if (!tec) return json({ error: "acesso_nao_encontrado" }, 401);
+    if ((tec as any).__blocked) return json({ error: "acesso_bloqueado" }, 403);
 
     const userId = tec.user_id as string | null;
     const veiculoId = tec.veiculo_id as string | null;

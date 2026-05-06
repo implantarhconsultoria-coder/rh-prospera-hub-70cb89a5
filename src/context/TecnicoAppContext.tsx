@@ -68,9 +68,9 @@ const LinkInvalidoScreen: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white p-6">
       <div className="max-w-sm w-full text-center">
         <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-        <h1 className="text-xl font-bold mb-2">Link inválido ou expirado</h1>
+        <h1 className="text-xl font-bold mb-2">Acesso não encontrado</h1>
         <p className="text-sm text-white/70 mb-6">
-          Solicite ao administrador um novo link de acesso ao app, ou use uma das opções abaixo.
+          Acesso não encontrado ou bloqueado pelo administrador.
         </p>
         <div className="space-y-2">
           <button
