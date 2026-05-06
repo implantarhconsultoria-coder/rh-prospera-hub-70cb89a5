@@ -55,6 +55,15 @@ import ComprasPage from "@/pages/ComprasPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
 import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
+import AppMecanicoAdminPage from "@/pages/admin/AppMecanicoAdminPage";
+import AcessoMecanicoPage from "@/app-mecanico/AcessoMecanicoPage";
+import MecanicoAppLayout from "@/app-mecanico/MecanicoAppLayout";
+import MecHomePage from "@/app-mecanico/pages/HomePage";
+import MecPontoPage from "@/app-mecanico/pages/PontoPage";
+import MecChamadosPage from "@/app-mecanico/pages/ChamadosPage";
+import MecVeiculoPage from "@/app-mecanico/pages/VeiculoPage";
+import MecAbastecimentoPage from "@/app-mecanico/pages/AbastecimentoPage";
+import MecHistoricoPage from "@/app-mecanico/pages/HistoricoPage";
 import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
 import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
 import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
@@ -235,8 +244,8 @@ const AuthGate = () => {
         <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
         <Route path="/admin/chamados" element={<DespacharChamadoPage />} />
-        {/* App Mecânico antigo desativado — em reconstrução */}
-        <Route path="/admin/app-mecanico" element={<AppMecanicoEmReconstrucaoPage />} />
+        {/* App Mecânico (novo) */}
+        <Route path="/admin/app-mecanico" element={<AppMecanicoAdminPage />} />
         <Route path="/admin/app-operacional" element={<Navigate to="/admin/app-mecanico" replace />} />
         <Route path="/admin/app-operacional/:id" element={<Navigate to="/admin/app-mecanico" replace />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
@@ -345,8 +354,18 @@ const App = () => (
               <Route path="/acesso-faturamento" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               {/* RH externo desativado — filial cobre RH */}
               <Route path="/acesso-rh" element={<Navigate to="/acesso-filial" replace />} />
-              {/* App Mecânico antigo removido — rota desativada, mostra placeholder */}
-              <Route path="/acesso-mecanico" element={<ErrorBoundary><AppMecanicoEmReconstrucaoPage /></ErrorBoundary>} />
+              {/* App Mecânico (novo) — login por PIN */}
+              <Route path="/acesso-mecanico" element={<ErrorBoundary><AcessoMecanicoPage /></ErrorBoundary>} />
+
+              {/* App Mecânico (novo) — portal isolado */}
+              <Route path="/app-mecanico/:acessoId" element={<ErrorBoundary><MecanicoAppLayout /></ErrorBoundary>}>
+                <Route index element={<MecHomePage />} />
+                <Route path="ponto" element={<MecPontoPage />} />
+                <Route path="chamados" element={<MecChamadosPage />} />
+                <Route path="veiculo" element={<MecVeiculoPage />} />
+                <Route path="abastecimento" element={<MecAbastecimentoPage />} />
+                <Route path="historico" element={<MecHistoricoPage />} />
+              </Route>
 
               {/* ========== ACESSO EXTERNO POR PIN — MÓDULOS (sem login) ========== */}
               <Route path="/financeiro-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="financeiro" titulo="Portal Financeiro" cor="bg-cyan-600" items={EXT_ITEMS_FINANCEIRO} /></ErrorBoundary>}>
