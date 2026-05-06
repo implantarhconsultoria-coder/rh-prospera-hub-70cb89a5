@@ -16,6 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const ContasPagarPage: React.FC = () => {
+  const ext = useAcessoExternoFiltro();
   const [titulos, setTitulos] = useState<any[]>([]);
   const [fornecedores, setFornecedores] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
