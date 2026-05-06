@@ -172,8 +172,23 @@ export default function AcessosExternosPage() {
     toast.success("Link copiado: " + url);
   };
 
-  const testar = (a: Acesso) => {
-    window.open(`/acesso-${a.modulo}`, "_blank");
+  const testar = async (a: Acesso) => {
+    // Para mecânico, busca o link único e abre /m/:token
+    if (a.modulo === 'mecanico') {
+      window.open(`/acesso-mecanico`, '_blank');
+      return;
+    }
+    // Demais módulos: grava sessão deste acesso específico e abre o portal direto
+    const sess = {
+      id: a.id, nome: a.nome,
+      empresa: a.empresa || '', filial: a.filial || '', funcao: a.funcao || '',
+      perfil_acesso: a.perfil_acesso, modulo: a.modulo, ts: Date.now(),
+    };
+    // Abre rota com query para o ExternoLayout aceitar a sessão (validação no banco continua)
+    const url = `/${a.modulo}-ext/${a.id}`;
+    // Salva no localStorage da janela atual também não impacta — abrimos nova aba que validará no banco
+    localStorage.setItem('acesso_externo', JSON.stringify(sess));
+    window.open(url, '_blank');
   };
 
   return (
