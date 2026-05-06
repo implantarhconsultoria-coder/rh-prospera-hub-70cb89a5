@@ -69,11 +69,14 @@ const PublicAbastecimentoPage: React.FC = () => {
         if (error) throw error;
         if (!data?.ok) {
           const map: Record<string, string> = {
-            vale_invalido: 'Código TOPAC-ABAST não encontrado.',
-            vale_indisponivel: 'Esta autorização já foi utilizada ou está bloqueada.',
-            vale_vencido: 'Autorização fora da validade.',
+            qr_nao_encontrado: 'QR Code não encontrado.',
+            qr_bloqueado: 'QR Code bloqueado pelo administrador.',
+            // Compatibilidade com mensagens antigas
+            vale_invalido: 'QR Code não encontrado.',
+            vale_indisponivel: 'QR Code bloqueado pelo administrador.',
+            vale_vencido: 'QR Code bloqueado pelo administrador.',
           };
-          setErro(map[data?.error] || 'Autorização inválida.');
+          setErro(map[data?.error] || 'Não foi possível abrir este QR Code.');
         } else {
           setDados(data as DadosVale);
           if (data.veiculo?.placa) setPlaca(data.veiculo.placa);
