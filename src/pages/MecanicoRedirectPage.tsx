@@ -102,9 +102,9 @@ const MecanicoRedirectPage: React.FC = () => {
     return <Navigate to={`/m/${token}`} replace />;
   }
 
-  // Admin/Operacional/Tecnico sem vínculo: modo seleção assistida
-  if (isAdmin || isOperacional || isTecnico) {
-    const badgeLabel = isAdmin ? 'Modo teste · Admin' : isOperacional ? 'Operacional' : 'Técnico de Campo';
+  // Sem vínculo direto: modo seleção (qualquer usuário autenticado)
+  {
+    const badgeLabel = isAdmin ? 'Modo teste · Admin' : isOperacional ? 'Operacional' : isTecnico ? 'Técnico de Campo' : 'Acesso assistido';
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-4">
         <div className="max-w-md mx-auto pt-8">
