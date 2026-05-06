@@ -166,7 +166,9 @@ export default function AcessosExternosPage() {
   };
 
   const copiarLink = (a: Acesso) => {
-    const url = `${window.location.origin}/acesso-${a.modulo}`;
+    // App Mecânico continua separado; todos os outros usam o portal único
+    const path = a.modulo === "mecanico" ? "/acesso-mecanico" : "/acesso-filial";
+    const url = `${window.location.origin}${path}`;
     navigator.clipboard.writeText(url);
     toast.success("Link copiado: " + url);
   };

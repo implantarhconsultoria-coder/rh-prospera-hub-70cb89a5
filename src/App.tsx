@@ -91,6 +91,7 @@ import NotFound from "@/pages/NotFound";
 import PublicAbastecimentoPage from "@/pages/PublicAbastecimentoPage";
 import ImprimirQRCombustivelPage from "@/pages/admin/ImprimirQRCombustivelPage";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
+import PortaisPage from "@/pages/PortaisPage";
 import AcessosExternosPage from "@/pages/admin/AcessosExternosPage";
 import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -345,14 +346,16 @@ const App = () => (
               <Route path="/qr/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
               <Route path="/voucher/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
 
-              {/* ========== ACESSO EXTERNO POR PIN (sem login) — App Mecânico removido ========== */}
-              <Route path="/acesso-financeiro" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
-              <Route path="/acesso-almoxarifado" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
-              <Route path="/acesso-operacional" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              {/* ========== ACESSO EXTERNO POR PIN — PORTAL ÚNICO ========== */}
+              {/* /acesso-filial é a rota canônica única para todos os portais externos (exceto mecânico) */}
               <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
-              <Route path="/acesso-campo" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
-              <Route path="/acesso-faturamento" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
-              {/* RH externo desativado — filial cobre RH */}
+              <Route path="/portais" element={<ErrorBoundary><PortaisPage /></ErrorBoundary>} />
+              {/* Aliases legados redirecionam para o portal único */}
+              <Route path="/acesso-financeiro" element={<Navigate to="/acesso-filial" replace />} />
+              <Route path="/acesso-almoxarifado" element={<Navigate to="/acesso-filial" replace />} />
+              <Route path="/acesso-operacional" element={<Navigate to="/acesso-filial" replace />} />
+              <Route path="/acesso-campo" element={<Navigate to="/acesso-filial" replace />} />
+              <Route path="/acesso-faturamento" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-rh" element={<Navigate to="/acesso-filial" replace />} />
               {/* App Mecânico (novo) — login por PIN */}
               <Route path="/acesso-mecanico" element={<ErrorBoundary><AcessoMecanicoPage /></ErrorBoundary>} />
