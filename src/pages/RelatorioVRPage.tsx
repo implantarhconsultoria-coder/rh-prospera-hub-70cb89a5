@@ -128,6 +128,13 @@ const RelatorioVRPage: React.FC = () => {
           <label className="text-xs text-muted-foreground block mb-1">Competência</label>
           <Input type="month" value={competencia} onChange={e => { setCompetencia(e.target.value); setGenerated(false); }} className="w-48" />
         </div>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Formato dos recibos</label>
+          <select value={formato} onChange={(e) => setFormato(e.target.value as 'vr' | 'ambos')} className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+            <option value="vr">Somente VR</option>
+            <option value="ambos">VR + VT na mesma folha</option>
+          </select>
+        </div>
         <span className="text-xs text-muted-foreground">Dias úteis: <strong className="text-foreground">{diasUteis}</strong></span>
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório
