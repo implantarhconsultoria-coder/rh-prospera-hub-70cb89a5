@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Lock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { isMobileDevice } from "@/lib/isMobileDevice";
 
 /**
  * Página unificada de acesso externo por PIN.
