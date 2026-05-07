@@ -3979,6 +3979,111 @@ export type Database = {
           },
         ]
       }
+      recibos_correcoes: {
+        Row: {
+          company_id: string
+          competencia: string
+          corrigido_por_nome: string | null
+          corrigido_por_user_id: string | null
+          created_at: string
+          data_pagamento: string | null
+          dias_finais_corrigido: number | null
+          dias_finais_original: number | null
+          funcionario_id: string
+          id: string
+          motivo: string
+          observacao: string | null
+          tipo: string
+          updated_at: string
+          valor_diario_corrigido: number | null
+          valor_diario_original: number | null
+          valor_total_corrigido: number | null
+          valor_total_original: number | null
+        }
+        Insert: {
+          company_id: string
+          competencia: string
+          corrigido_por_nome?: string | null
+          corrigido_por_user_id?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          dias_finais_corrigido?: number | null
+          dias_finais_original?: number | null
+          funcionario_id: string
+          id?: string
+          motivo: string
+          observacao?: string | null
+          tipo: string
+          updated_at?: string
+          valor_diario_corrigido?: number | null
+          valor_diario_original?: number | null
+          valor_total_corrigido?: number | null
+          valor_total_original?: number | null
+        }
+        Update: {
+          company_id?: string
+          competencia?: string
+          corrigido_por_nome?: string | null
+          corrigido_por_user_id?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          dias_finais_corrigido?: number | null
+          dias_finais_original?: number | null
+          funcionario_id?: string
+          id?: string
+          motivo?: string
+          observacao?: string | null
+          tipo?: string
+          updated_at?: string
+          valor_diario_corrigido?: number | null
+          valor_diario_original?: number | null
+          valor_total_corrigido?: number | null
+          valor_total_original?: number | null
+        }
+        Relationships: []
+      }
+      recibos_correcoes_historico: {
+        Row: {
+          acao: string
+          company_id: string
+          competencia: string
+          correcao_id: string | null
+          created_at: string
+          funcionario_id: string
+          id: string
+          payload: Json | null
+          tipo: string
+          user_id: string | null
+          usuario_nome: string | null
+        }
+        Insert: {
+          acao: string
+          company_id: string
+          competencia: string
+          correcao_id?: string | null
+          created_at?: string
+          funcionario_id: string
+          id?: string
+          payload?: Json | null
+          tipo: string
+          user_id?: string | null
+          usuario_nome?: string | null
+        }
+        Update: {
+          acao?: string
+          company_id?: string
+          competencia?: string
+          correcao_id?: string | null
+          created_at?: string
+          funcionario_id?: string
+          id?: string
+          payload?: Json | null
+          tipo?: string
+          user_id?: string | null
+          usuario_nome?: string | null
+        }
+        Relationships: []
+      }
       registros_km: {
         Row: {
           created_at: string
