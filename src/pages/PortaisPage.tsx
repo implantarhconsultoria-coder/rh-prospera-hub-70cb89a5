@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, LogOut, Wallet, TrendingUp, LayoutDashboard, Package, Headphones, Wrench, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { MODULO_REDIRECT } from "./AcessoExternoPage";
+import { isMobileDevice } from "@/lib/isMobileDevice";
 
 type Portal = {
   acesso_id: string;
