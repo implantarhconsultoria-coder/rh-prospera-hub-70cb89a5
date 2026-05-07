@@ -363,6 +363,74 @@ const AlmoxarifadoCargaTab: React.FC = () => {
     setTimeout(() => { w.focus(); w.print(); }, 300);
   };
 
+  const gerarCargasSeparadas = async (imprimir: boolean) => {
+    if (!userId) { toast.error('Sessão expirada'); return; }
+    const validos = grupos.filter(g => g.funcionario && g.itens.length > 0);
+    if (validos.length === 0) {
+      toast.error('Nenhum funcionário válido. Selecione manualmente os pendentes.');
+      return;
+    }
+    setGerandoLote(true);
+    const responsavelNome = session?.user?.email || 'Sistema';
+    const criadas: CargaRow[] = [];
+    try {
+      for (const g of validos) {
+        const emp = g.funcionario!;
+        const co = companies.find(c => c.id === emp.companyId);
+        const payload = {
+          user_id: userId,
+          usuario_nome: responsavelNome,
+          funcionario_id: emp.id,
+          funcionario_nome: emp.name,
+          cpf: emp.cpf || '',
+          matricula: emp.matriculaEsocial || emp.registro || '',
+          funcao: emp.cargo || '',
+          setor: '', filial: '',
+          empresa_nome: co?.name || '',
+          company_id: emp.companyId || null,
+          veiculo: '',
+          data_carga: dataCarga,
+          email_bruto: emailBruto,
+          itens_json: g.itens,
+          observacao,
+          status: 'pendente',
+          tipo,
+          responsavel_nome: responsavelNome,
+          anexo_url: '',
+          anexo_nome: '',
+        };
+        const { data, error } = await (supabase.from('almoxarifado_carga') as any).insert(payload).select().single();
+        if (error) { toast.error(`Erro em ${emp.name}: ${error.message}`); continue; }
+        criadas.push(data as CargaRow);
+        await supabase.from('documentos_funcionario').insert({
+          funcionario_id: emp.id,
+          funcionario_nome: emp.name,
+          company_id: co?.id,
+          empresa_nome: co?.name || '',
+          tipo_documento: tipo === 'carga' ? 'Carga Almoxarifado' : 'Retirada Almoxarifado',
+          competencia: dataCarga.slice(0, 7),
+          descricao: `${g.itens.length} item(ns) — ${g.itens.slice(0, 3).map(i => `${i.quantidade}× ${i.nome}`).join(', ')}${g.itens.length > 3 ? '…' : ''}`,
+          arquivo_url: '',
+          gerado_por_user_id: userId,
+          gerado_por_nome: responsavelNome,
+          status_envio: 'arquivado',
+          unidade: co?.name || '',
+        } as any);
+      }
+      toast.success(`${criadas.length} carga(s) gerada(s).`);
+      if (imprimir) {
+        for (const c of criadas) {
+          imprimirComprovante(c);
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      limparForm();
+      await fetchCargas();
+    } finally {
+      setGerandoLote(false);
+    }
+  };
+
   const atualizarStatus = async (id: string, status: string) => {
     const { error } = await (supabase.from('almoxarifado_carga') as any).update({ status }).eq('id', id);
     if (error) { toast.error('Erro: ' + error.message); return; }
