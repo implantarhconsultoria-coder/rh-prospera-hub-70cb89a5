@@ -4,35 +4,145 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
-import { buildVRReportRows, sumBenefitRows } from '@/lib/benefitReports';
+import { buildVRReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { useFeriados } from '@/hooks/useFeriados';
+import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+
+const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const competenciaLabel = (competencia: string) => {
+  const [y, m] = competencia.split('-');
+  return `${meses[Number(m) - 1]} / ${y}`;
+};
+
+type EmpresaBlock = {
+  company: { id: string; name: string; cnpj: string };
+  diasUteis: number;
+  dataFechamento: string;
+  rows: BenefitReportRow[];
+  total: number;
+};
+
+const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consolidado: boolean }> = ({ block, competencia, consolidado }) => (
+  <div className="recibo-page" style={{ pageBreakAfter: 'always' }}>
+    <div className="border-b-2 border-black pb-3 mb-4">
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-lg font-bold">{block.company.name}</h1>
+          <p className="text-xs text-gray-600">CNPJ: {block.company.cnpj}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-bold">{consolidado ? 'RELATÓRIO CONSOLIDADO DE VALE REFEIÇÃO' : 'RELATÓRIO DE VALE REFEIÇÃO'}</p>
+          <p className="text-xs">Competência: {competenciaLabel(competencia)}</p>
+          <p className="text-xs">Dias úteis: {block.diasUteis}</p>
+          {block.dataFechamento && <p className="text-xs">Fechamento: {new Date(block.dataFechamento).toLocaleDateString('pt-BR')}</p>}
+        </div>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="border border-gray-400 rounded px-2 py-1 text-center">
+        <p className="text-[9px] text-gray-500 uppercase">Base VR / dia</p>
+        <p className="text-xs font-bold">{block.rows.length > 0 ? formatCurrency(block.rows[0].valorDiario) : '—'}</p>
+      </div>
+      <div className="border border-gray-400 rounded px-2 py-1 text-center">
+        <p className="text-[9px] text-gray-500 uppercase">Total Final</p>
+        <p className="text-xs font-bold">{formatCurrency(block.total)}</p>
+      </div>
+    </div>
+
+    <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
+      <thead>
+        <tr className="bg-gray-200">
+          {['Nome', 'Função', 'VR/Dia', 'Dias Prev.', 'Desc.', 'Dias Finais', 'Valor Total', 'Motivo'].map(h => (
+            <th key={h} className="border border-gray-400 px-2 py-1 text-left font-semibold">{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {block.rows.map(r => (
+          <tr key={r.emp.id} className="even:bg-gray-50">
+            <td className="border border-gray-300 px-2 py-1 font-medium">
+              {r.emp.name}{r.corrigido ? ' *' : ''}
+            </td>
+            <td className="border border-gray-300 px-2 py-1">{r.emp.cargo}</td>
+            <td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(r.valorDiario)}</td>
+            <td className="border border-gray-300 px-2 py-1 text-center">{r.diasPrevistos}</td>
+            <td className="border border-gray-300 px-2 py-1 text-center">{r.diasDescontados > 0 ? r.diasDescontados : '—'}</td>
+            <td className="border border-gray-300 px-2 py-1 text-center">{r.diasFinais}</td>
+            <td className="border border-gray-300 px-2 py-1 text-right font-bold">{formatCurrency(r.valorTotal)}</td>
+            <td className="border border-gray-300 px-2 py-1">{r.correcaoMotivo || r.motivo || '—'}</td>
+          </tr>
+        ))}
+        {block.rows.length === 0 && (
+          <tr><td colSpan={8} className="border border-gray-300 px-2 py-3 text-center text-gray-500">Nenhum funcionário com VR ativo nesta competência.</td></tr>
+        )}
+      </tbody>
+      <tfoot>
+        <tr className="bg-gray-200 font-bold">
+          <td colSpan={6} className="border border-gray-400 px-2 py-1">TOTAL</td>
+          <td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(block.total)}</td>
+          <td className="border border-gray-400 px-2 py-1"></td>
+        </tr>
+      </tfoot>
+    </table>
+    {block.rows.some(r => r.corrigido) && (
+      <p className="text-[9px] text-gray-600 mt-2">* Linha com correção manual aplicada.</p>
+    )}
+  </div>
+);
 
 const RelatorioVRImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
-  const companyId = searchParams.get('empresa') || '';
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
+  const empresasParam = searchParams.get('empresas') || '';
+  const empresaSingle = searchParams.get('empresa') || '';
 
-  const company = companies.find(c => c.id === companyId);
-  const diasUteis = getWorkingDays(competencia);
-  const fechamento = getFechamento(companyId, competencia);
-  const dataFechamento = fechamento.dataFechamento || '';
+  const empresaIds = useMemo(() => {
+    return empresasParam
+      ? empresasParam.split(',').map(s => s.trim()).filter(Boolean)
+      : (empresaSingle ? [empresaSingle] : []);
+  }, [empresasParam, empresaSingle]);
+
+  const consolidado = empresaIds.length > 1;
+
+  // Feriados — sem filtrar por empresa para PDF consolidado: pega todos do mês
+  const { datas: feriadosDatas } = useFeriados(competencia);
+  const correcoes = useRecibosCorrecoes({ tipo: 'vr', competencia });
 
   useEffect(() => {
-    if (companyId && competencia) getOrCreateEntries(companyId, competencia);
-  }, [companyId, competencia]);
+    empresaIds.forEach(id => getOrCreateEntries(id, competencia));
+  }, [empresaIds.join(','), competencia]);
 
-  const compEmps = employees.filter(e => e.companyId === companyId && e.status === 'ativo' && e.categoria === 'operacional' && e.vrAtivo);
-  const compEntries = entries.filter(e => e.companyId === companyId && e.competencia === competencia);
+  const blocks: EmpresaBlock[] = useMemo(() => {
+    const diasUteis = getWorkingDays(competencia, feriadosDatas);
+    return empresaIds
+      .map(id => companies.find(c => c.id === id))
+      .filter(Boolean)
+      .map((company: any) => {
+        const fech = getFechamento(company.id, competencia);
+        const compEmps = employees.filter(e => e.companyId === company.id && e.status === 'ativo' && e.categoria === 'operacional' && e.vrAtivo);
+        const compEntries = entries.filter(e => e.companyId === company.id && e.competencia === competencia);
+        const rawRows = buildVRReportRows(compEmps, compEntries, diasUteis);
+        const rows: BenefitReportRow[] = rawRows.map(r => {
+          const c = correcoes.findFor('vr', company.id, r.emp.id, competencia);
+          if (!c) return r;
+          return {
+            ...r,
+            valorDiario: Number(c.valor_diario_corrigido ?? r.valorDiario),
+            diasFinais: Number(c.dias_finais_corrigido ?? r.diasFinais),
+            valorTotal: Number(c.valor_total_corrigido ?? r.valorTotal),
+            corrigido: true,
+            correcaoMotivo: c.motivo,
+            correcaoObservacao: c.observacao,
+          };
+        });
+        const total = sumBenefitRows(rows);
+        return { company, diasUteis, dataFechamento: fech.dataFechamento || '', rows, total };
+      });
+  }, [empresaIds, companies, employees, entries, competencia, feriadosDatas, correcoes]);
 
-  const rows = useMemo(() => buildVRReportRows(compEmps, compEntries, diasUteis), [compEmps, compEntries, diasUteis]);
-
-  const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
-
-  const competenciaLabel = (() => {
-    const [y, m] = competencia.split('-');
-    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    return `${meses[Number(m) - 1]} / ${y}`;
-  })();
+  const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
 
   if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
     return (
@@ -42,7 +152,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
       </div>
     );
   }
-  if (!company) return <div className="p-10 text-center">Empresa não encontrada.</div>;
+  if (blocks.length === 0) return <div className="p-10 text-center">Empresa não encontrada.</div>;
 
   return (
     <>
@@ -53,6 +163,8 @@ const RelatorioVRImpressaoPage: React.FC = () => {
           body * { visibility: hidden !important; }
           #vr-print-area, #vr-print-area * { visibility: visible !important; }
           #vr-print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+          .recibo-page { page-break-after: always; }
+          .recibo-page:last-child { page-break-after: auto; }
           .no-print, .no-print *, iframe, nav, aside,
           [role="dialog"], [aria-modal="true"],
           [class*="lovable"], [id*="lovable"] { display: none !important; }
@@ -69,66 +181,52 @@ const RelatorioVRImpressaoPage: React.FC = () => {
             className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
             🖨 Imprimir / PDF
           </button>
+          {consolidado && (
+            <span className="text-xs text-gray-700 ml-2">
+              Consolidado · {blocks.length} empresas · Total geral <strong>{formatCurrency(totalGeral)}</strong>
+            </span>
+          )}
         </div>
 
         <div id="vr-print-area" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
-          <div className="border-b-2 border-black pb-3 mb-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-lg font-bold">{company.name}</h1>
-                <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
+          {blocks.map(b => (
+            <EmpresaPagina key={b.company.id} block={b} competencia={competencia} consolidado={consolidado} />
+          ))}
+
+          {consolidado && (
+            <div className="recibo-page">
+              <div className="border-b-2 border-black pb-3 mb-4">
+                <h1 className="text-lg font-bold text-center">RESUMO GERAL CONSOLIDADO</h1>
+                <p className="text-xs text-center text-gray-600">Vale Refeição — Competência: {competenciaLabel(competencia)}</p>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-bold">RELATÓRIO DE VALE REFEIÇÃO</p>
-                <p className="text-xs">Competência: {competenciaLabel}</p>
-                <p className="text-xs">Dias úteis: {diasUteis}</p>
-                {dataFechamento && <p className="text-xs">Fechamento: {new Date(dataFechamento).toLocaleDateString('pt-BR')}</p>}
-              </div>
+              <table className="w-full border-collapse" style={{ fontSize: '11px' }}>
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="border border-gray-400 px-2 py-1 text-left font-semibold">Empresa</th>
+                    <th className="border border-gray-400 px-2 py-1 text-left font-semibold">CNPJ</th>
+                    <th className="border border-gray-400 px-2 py-1 text-center font-semibold">Funcionários</th>
+                    <th className="border border-gray-400 px-2 py-1 text-right font-semibold">Total VR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {blocks.map(b => (
+                    <tr key={b.company.id} className="even:bg-gray-50">
+                      <td className="border border-gray-300 px-2 py-1 font-medium">{b.company.name}</td>
+                      <td className="border border-gray-300 px-2 py-1">{b.company.cnpj}</td>
+                      <td className="border border-gray-300 px-2 py-1 text-center">{b.rows.length}</td>
+                      <td className="border border-gray-300 px-2 py-1 text-right font-bold">{formatCurrency(b.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-200 font-bold">
+                    <td colSpan={3} className="border border-gray-400 px-2 py-1">TOTAL GERAL</td>
+                    <td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(totalGeral)}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            <div className="border border-gray-400 rounded px-2 py-1 text-center">
-              <p className="text-[9px] text-gray-500 uppercase">Base VR / dia</p>
-              <p className="text-xs font-bold">{rows.length > 0 ? formatCurrency(rows[0].valorDiario) : '—'}</p>
-            </div>
-            <div className="border border-gray-400 rounded px-2 py-1 text-center">
-              <p className="text-[9px] text-gray-500 uppercase">Total Final</p>
-              <p className="text-xs font-bold">{formatCurrency(totalFinal)}</p>
-            </div>
-          </div>
-
-          <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
-            <thead>
-              <tr className="bg-gray-200">
-                {['Nome', 'Função', 'VR/Dia', 'Dias Prev.', 'Desc.', 'Dias Finais', 'Valor Total', 'Motivo'].map(header => (
-                  <th key={header} className="border border-gray-400 px-2 py-1 text-left font-semibold">{header}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => (
-                <tr key={row.emp.id} className="even:bg-gray-50">
-                  <td className="border border-gray-300 px-2 py-1 font-medium">{row.emp.name}</td>
-                  <td className="border border-gray-300 px-2 py-1">{row.emp.cargo}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(row.valorDiario)}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{row.diasPrevistos}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{row.diasDescontados > 0 ? row.diasDescontados : '—'}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{row.diasFinais}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-right font-bold">{formatCurrency(row.valorTotal)}</td>
-                  <td className="border border-gray-300 px-2 py-1">{row.motivo || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-200 font-bold">
-                <td colSpan={6} className="border border-gray-400 px-2 py-1">TOTAL</td>
-                <td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(totalFinal)}</td>
-                <td className="border border-gray-400 px-2 py-1"></td>
-              </tr>
-            </tfoot>
-          </table>
-
+          )}
         </div>
       </div>
     </>
