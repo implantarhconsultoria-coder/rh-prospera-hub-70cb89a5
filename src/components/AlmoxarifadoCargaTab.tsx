@@ -236,9 +236,27 @@ const AlmoxarifadoCargaTab: React.FC = () => {
 
   const preencherAuto = () => {
     if (!emailBruto.trim()) { toast.error('Cole o e-mail antes.'); return; }
+
+    // 1) Tenta agrupar por funcionário (multi)
+    const gs = agruparPorFuncionario(emailBruto, employees);
+    if (gs.length >= 2) {
+      setGrupos(gs);
+      setItens([]);
+      toast.success(`${gs.length} funcionários identificados.`);
+      return;
+    }
+    if (gs.length === 1 && gs[0].funcionario) {
+      setGrupos([]);
+      aplicarFuncionario(gs[0].funcionario);
+      setItens(gs[0].itens);
+      toast.success(`Funcionário e ${gs[0].itens.length} item(ns) detectado(s).`);
+      return;
+    }
+
+    // 2) Fallback: extração simples de itens
+    setGrupos([]);
     const its = parseEmailItens(emailBruto);
     if (its.length) setItens(its);
-    // tenta achar funcionário pelo nome no texto
     if (!funcionarioId) {
       const lc = emailBruto.toLowerCase();
       const emp = employees.find(e => {
@@ -250,10 +268,20 @@ const AlmoxarifadoCargaTab: React.FC = () => {
     toast.success(`${its.length} item(ns) detectado(s).`);
   };
 
+  const atualizarGrupoFuncionario = (idx: number, empId: string) => {
+    const emp = employees.find(e => e.id === empId) || null;
+    setGrupos(prev => prev.map((g, i) => i === idx ? { ...g, funcionario: emp } : g));
+  };
+
+  const removerGrupo = (idx: number) => {
+    setGrupos(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const limparForm = () => {
     setEmailBruto(''); setFuncionarioId(''); setFuncionarioNome(''); setCpf('');
     setMatricula(''); setFuncao(''); setSetor(''); setEmpresaNome(''); setFilial('');
     setVeiculo(''); setItens([]); setObservacao(''); setAnexo(null);
+    setGrupos([]);
     setDataCarga(new Date().toISOString().slice(0, 10));
   };
 
