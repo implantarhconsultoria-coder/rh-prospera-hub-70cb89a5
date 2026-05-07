@@ -146,7 +146,6 @@ const MedicoesPage: React.FC = () => {
 
     const { error } = await supabase.from('medicoes').insert({
       contrato_id: form.contrato_id,
-      empresa_id: contrato.empresa_id,
       competencia: form.competencia,
       data_inicio: form.data_inicio,
       data_fim: form.data_fim,
