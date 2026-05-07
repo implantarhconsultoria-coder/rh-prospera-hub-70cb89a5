@@ -41,7 +41,20 @@ const RelatorioVTPage: React.FC = () => {
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
   const company = companies.find(c => c.id === selectedCompany);
 
-  const rows = useMemo(() => buildVTReportRows(compEmps, compEntries, diasUteis), [compEmps, compEntries, diasUteis]);
+  const rawRows = useMemo(() => buildVTReportRows(compEmps, compEntries, diasUteis), [compEmps, compEntries, diasUteis]);
+  const rows = useMemo<BenefitReportRow[]>(() => rawRows.map(r => {
+    const c = correcoes.findFor('vt', selectedCompany, r.emp.id, competencia);
+    if (!c) return r;
+    return {
+      ...r,
+      valorDiario: Number(c.valor_diario_corrigido ?? r.valorDiario),
+      diasFinais: Number(c.dias_finais_corrigido ?? r.diasFinais),
+      valorTotal: Number(c.valor_total_corrigido ?? r.valorTotal),
+      corrigido: true,
+      correcaoMotivo: c.motivo,
+      correcaoObservacao: c.observacao,
+    };
+  }), [rawRows, correcoes, selectedCompany, competencia]);
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
   const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
 
