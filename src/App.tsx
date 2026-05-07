@@ -436,6 +436,7 @@ const App = () => (
               <Route path="/relatorio-vr-impressao" element={<ErrorBoundary><RelatorioVRImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-vt-impressao" element={<ErrorBoundary><RelatorioVTImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-beneficio-individual" element={<ErrorBoundary><RelatorioBeneficioIndividualPage /></ErrorBoundary>} />
+              <Route path="/recibos-beneficio" element={<ErrorBoundary><RecibosBeneficioImpressaoPage /></ErrorBoundary>} />
               <Route path="/*" element={<AuthGate />} />
             </Routes>
           </BrowserRouter>
