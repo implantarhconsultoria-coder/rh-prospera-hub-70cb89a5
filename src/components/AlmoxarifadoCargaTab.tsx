@@ -67,6 +67,53 @@ const parseEmailItens = (texto: string): CargaItem[] => {
   return itens;
 };
 
+/** Tenta extrair (nome, qtd, item) de uma única linha tipo "Ednaldo - 1 alicate de corte" */
+const parseLinhaFuncionarioItem = (linha: string): { nome: string; quantidade: number; item: string } | null => {
+  const l = linha.trim();
+  if (!l) return null;
+  // padrão: Nome <sep> qtd <unid?> item
+  const re = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s]{1,60}?)\s*[-—–:]\s*(\d+(?:[.,]\d+)?)\s*(?:un|und|unidade|pç|peças?|x)?\s*[-–—:]?\s*(.+)$/i;
+  const reSemSep = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s]{1,60}?)\s+(\d+(?:[.,]\d+)?)\s+(.+)$/i;
+  let m = l.match(re) || l.match(reSemSep);
+  if (!m) return null;
+  const nome = m[1].trim();
+  const quantidade = Number(m[2].replace(',', '.'));
+  const item = m[3].trim();
+  if (!nome || !item || nome.split(/\s+/).length > 5) return null;
+  // descarta saudações
+  if (/^(boa|bom|prezad|olá|ola|att|obrigad|veio|email|e-mail|solicit)/i.test(nome)) return null;
+  return { nome, quantidade, item };
+};
+
+interface GrupoFunc {
+  nomeOriginal: string;
+  funcionario: Employee | null;
+  candidatos: Employee[];
+  itens: CargaItem[];
+}
+
+const agruparPorFuncionario = (texto: string, employees: Employee[]): GrupoFunc[] => {
+  const linhas = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const mapa = new Map<string, GrupoFunc>();
+  for (const linha of linhas) {
+    const p = parseLinhaFuncionarioItem(linha);
+    if (!p) continue;
+    const chave = p.nome.toLowerCase();
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const alvo = norm(p.nome);
+    const candidatos = employees.filter(e => {
+      const n = norm(e.name);
+      return n === alvo || n.split(/\s+/).includes(alvo) || n.startsWith(alvo + ' ');
+    });
+    const exato = candidatos.length === 1 ? candidatos[0] : null;
+    if (!mapa.has(chave)) {
+      mapa.set(chave, { nomeOriginal: p.nome, funcionario: exato, candidatos, itens: [] });
+    }
+    mapa.get(chave)!.itens.push({ nome: p.item, quantidade: p.quantidade });
+  }
+  return Array.from(mapa.values());
+};
+
 /** Gera HTML imprimível e abre janela de impressão (PDF nativo do navegador). */
 const gerarComprovanteHTML = (c: Partial<CargaRow>): string => {
   const itens = (c.itens_json || []) as CargaItem[];
