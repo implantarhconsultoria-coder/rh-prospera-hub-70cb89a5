@@ -99,14 +99,21 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       `}</style>
 
       <div className="bg-white text-black min-h-screen" style={{ fontFamily: "'Segoe UI', Arial, sans-serif" }}>
-        <div className="no-print flex items-center gap-3 px-8 py-3 bg-gray-100 border-b">
+        <div className="no-print flex flex-wrap items-center gap-3 px-8 py-3 bg-gray-100 border-b sticky top-0 z-10">
           <button onClick={() => window.history.back()} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">
             ← Voltar
           </button>
           <button onClick={() => window.print()} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">
             🖨 Imprimir / PDF
           </button>
-          <span className="text-sm text-gray-600">{recibos.length} recibo(s)</span>
+          <div className="text-sm text-gray-700 ml-2">
+            <strong>Pré-visualização:</strong> {recibos.length} recibo(s) — {recibos.length} página(s) ({tipo.toUpperCase()})
+            {recibos.some(r => r.row.corrigido) && (
+              <span className="ml-2 inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-0.5 text-xs">
+                ⚠ Inclui recibo(s) com correção administrativa
+              </span>
+            )}
+          </div>
         </div>
 
         <div id="recibos-print" className="max-w-[210mm] mx-auto">
