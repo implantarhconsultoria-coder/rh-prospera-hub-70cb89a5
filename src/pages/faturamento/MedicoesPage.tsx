@@ -182,6 +182,12 @@ const MedicoesPage: React.FC = () => {
         <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> Nova Medição</button>
       </div>
 
+      {loadError && (
+        <div className="card-premium p-4 border border-destructive/40 bg-destructive/5 text-sm text-destructive flex items-center justify-between">
+          <span>Falha ao carregar medições: {loadError}</span>
+          <button onClick={carregar} className="btn-secondary text-xs">Tentar novamente</button>
+        </div>
+      )}
       {loading ? <p className="text-center text-muted-foreground p-8">Carregando...</p> : (
         <div className="card-premium overflow-hidden">
           <table className="w-full text-sm">
