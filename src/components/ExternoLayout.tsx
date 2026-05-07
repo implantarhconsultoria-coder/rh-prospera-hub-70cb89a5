@@ -76,6 +76,21 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
+  if (isMobileDevice()) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-card border rounded-lg p-6 text-center space-y-3">
+          <AlertCircle className="w-10 h-10 text-amber-500 mx-auto" />
+          <h2 className="text-lg font-bold">Acesso restrito no celular</h2>
+          <p className="text-sm text-muted-foreground">
+            Este acesso está disponível apenas no computador. No celular, use o App Mecânico.
+          </p>
+          <Button onClick={sair} className="w-full">Sair</Button>
+        </div>
+      </div>
+    );
+  }
+
   if (estado !== 'ok') {
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
@@ -88,6 +103,7 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-background">
