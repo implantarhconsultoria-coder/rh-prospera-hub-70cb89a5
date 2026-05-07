@@ -87,6 +87,22 @@ export default function PortaisPage() {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
+  if (isMobileDevice()) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader><CardTitle>Acesso restrito no celular</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Este acesso está disponível apenas no computador. No celular, use o App Mecânico.
+            </p>
+            <Button className="w-full" onClick={sair}><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
