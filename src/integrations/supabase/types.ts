@@ -5125,6 +5125,39 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_command_history: {
+        Row: {
+          cancelled: boolean
+          confirmed: boolean
+          created_at: string
+          id: string
+          interpreted_action: Json | null
+          result: string | null
+          spoken_text: string
+          user_id: string
+        }
+        Insert: {
+          cancelled?: boolean
+          confirmed?: boolean
+          created_at?: string
+          id?: string
+          interpreted_action?: Json | null
+          result?: string | null
+          spoken_text: string
+          user_id: string
+        }
+        Update: {
+          cancelled?: boolean
+          confirmed?: boolean
+          created_at?: string
+          id?: string
+          interpreted_action?: Json | null
+          result?: string | null
+          spoken_text?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       tecnicos_campo_safe: {
