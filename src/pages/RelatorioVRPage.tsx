@@ -248,6 +248,20 @@ const RelatorioVRPage: React.FC = () => {
           </table>
         </div>
       )}
+
+      <ReciboCorrecaoModal
+        open={!!editingRow}
+        onOpenChange={(o) => !o && setEditingRow(null)}
+        tipo="vr"
+        companyId={selectedCompany}
+        companyName={company?.name || ''}
+        competencia={competencia}
+        row={editingRow}
+        existing={editingRow ? correcoes.findFor('vr', selectedCompany, editingRow.emp.id, competencia) : undefined}
+        defaultDataPagamento={emissaoDate}
+        onSave={correcoes.upsert}
+        onRemove={correcoes.remove}
+      />
     </div>
   );
 };
