@@ -108,9 +108,17 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   }
 
   if (recibos.length === 0) {
+    const empresasNomes = empresaIds.map(id => companies.find(c => c.id === id)?.name || `(id ${id.slice(0,8)}…)`).join(', ') || '— nenhuma —';
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-10 text-center">
-        <p className="text-base font-medium">Nenhum recibo encontrado para a competência selecionada.</p>
+        <p className="text-base font-medium">Nenhum recibo encontrado para esta competência/empresa.</p>
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p><strong>Formato:</strong> {formato}</p>
+          <p><strong>Competência:</strong> {competencia}</p>
+          <p><strong>Empresas:</strong> {empresasNomes}</p>
+          {funcionarioIds && <p><strong>Funcionários:</strong> {funcionarioIds.length}</p>}
+          {empresaIds.length === 0 && <p className="text-amber-600">Nenhum ID de empresa foi recebido na URL.</p>}
+        </div>
         <button onClick={() => window.history.back()} className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg">← Voltar</button>
       </div>
     );
