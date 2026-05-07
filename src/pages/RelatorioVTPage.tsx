@@ -188,6 +188,12 @@ const RelatorioVTPage: React.FC = () => {
           <Button onClick={handleRecibosEmpresasSelecionadas} variant="outline" size="sm" disabled={multiCompanies.size === 0}>
             <Printer className="w-4 h-4 mr-2" /> Recibos das empresas selecionadas ({multiCompanies.size})
           </Button>
+          <Button onClick={handlePrintConsolidadoTodas} size="sm">
+            <Printer className="w-4 h-4 mr-2" /> Relatório consolidado (todas)
+          </Button>
+          <Button onClick={handlePrintConsolidadoSelecionadas} size="sm" disabled={multiCompanies.size === 0}>
+            <Printer className="w-4 h-4 mr-2" /> Relatório consolidado (selecionadas)
+          </Button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto border rounded-lg p-3">
           {companies.map(c => (
