@@ -5,10 +5,13 @@ import { formatCurrency } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Bus, FileText, User, Printer, Building2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Bus, FileText, User, Printer, Building2, Pencil, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
-import { buildVTReportRows, sumBenefitRows } from '@/lib/benefitReports';
+import { buildVTReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 
 const RelatorioVTPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento } = useApp();
