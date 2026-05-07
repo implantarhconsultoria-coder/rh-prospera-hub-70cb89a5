@@ -6,30 +6,60 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é o Assistente Operacional da plataforma de RH/Operações ImplantaRH.
-Fala em português do Brasil, de forma natural, curta e profissional.
+const MESES: Record<string, string> = {
+  janeiro: "01", fevereiro: "02", marco: "03", "março": "03", abril: "04",
+  maio: "05", junho: "06", julho: "07", agosto: "08", setembro: "09",
+  outubro: "10", novembro: "11", dezembro: "12",
+  jan: "01", fev: "02", mar: "03", abr: "04", mai: "05", jun: "06",
+  jul: "07", ago: "08", set: "09", out: "10", nov: "11", dez: "12",
+};
 
-REGRAS:
-- Use as ferramentas disponíveis para buscar dados reais antes de responder.
-- Se o usuário citar uma pessoa, use buscar_funcionario para resolver o ID.
-- Para período, se não informado, use o mês atual (formato YYYY-MM em "competencia").
-- Para AÇÕES sensíveis (gerar PDF, registrar retirada, lançar dado, baixar documento, alterar dados): SEMPRE chame propor_acao primeiro com a prévia para o usuário confirmar — nunca execute direto.
-- Para CONSULTAS: gere um RESUMO claro e organizado em markdown (tabelas curtas, listas, totais). Não abra telas, apenas resuma.
-- Se faltar informação obrigatória (ex.: empresa quando há dois funcionários com mesmo nome), pergunte de forma curta.
-- Nunca invente dados. Se a busca não retornar nada, diga claramente.
-- Hoje é ${new Date().toISOString().slice(0, 10)}. Mês atual: ${new Date().toISOString().slice(0, 7)}.`;
+function compMesAtual() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function anoAtual() {
+  return new Date().getFullYear();
+}
+
+const SYSTEM_PROMPT = `Você é o Assistente Operacional da plataforma ImplantaRH.
+Fala em português do Brasil, de forma natural, curta e profissional.
+Hoje é ${new Date().toISOString().slice(0, 10)}. Mês atual: ${compMesAtual()}. Ano atual: ${anoAtual()}.
+
+REGRAS DE FLUXO:
+1. Sempre que o usuário citar uma pessoa, chame buscar_funcionario primeiro.
+   - Se vier 0 → responda "Não encontrei nenhum funcionário com esse nome".
+   - Se vier 1 → use direto.
+   - Se vier mais de 1 → liste os candidatos (nome, empresa, cargo) e peça para o usuário escolher. NUNCA escolha sozinho.
+2. Para período: entenda meses em português ("abril", "mês de abril", "abr") como ${anoAtual()}-MM.
+   Se não houver período, use ${compMesAtual()}.
+3. Para CONSULTAS (faltas, horas extras, ponto, abastecimento, EPIs, documentos, almoxarifado):
+   - Chame as ferramentas necessárias para buscar dados reais.
+   - Resuma em markdown com tabelas curtas, listas e totais.
+   - Se a busca retornar zero registros, responda CLARAMENTE:
+     "Não encontrei lançamentos para {Nome} na competência {YYYY-MM}."
+   - NUNCA diga "erro ao consultar" — diga exatamente o que faltou.
+4. Para AÇÕES sensíveis (gerar PDF, registrar retirada, abrir tela, imprimir):
+   chame propor_acao com prévia e aguarde a confirmação do usuário.
+5. Nunca invente dados.
+
+ESPECÍFICO DE FALTAS / HE / PONTO:
+- Use consultar_ponto_mensal(funcionario_id, competencia).
+- Responda com: funcionário, empresa, competência, faltas (dias), atrasos (h),
+  HE 50% (h), HE 100% (h), total HE, observações.
+- Se for "relatório/apuração", entregue um resumo completo no formato acima.`;
 
 const tools = [
   {
     type: "function",
     function: {
       name: "buscar_funcionario",
-      description: "Busca funcionário por nome (parcial), CPF ou matrícula. Retorna até 5 candidatos.",
+      description: "Busca funcionário por nome (parcial, fuzzy), CPF ou matrícula. Retorna até 8 candidatos.",
       parameters: {
         type: "object",
         properties: {
           termo: { type: "string", description: "Nome, CPF ou matrícula" },
-          empresa: { type: "string", description: "Nome ou código da empresa/filial (opcional, para desambiguar)" },
+          empresa: { type: "string", description: "Nome ou código da empresa/filial (opcional)" },
         },
         required: ["termo"],
       },
@@ -39,7 +69,7 @@ const tools = [
     type: "function",
     function: {
       name: "consultar_ponto_mensal",
-      description: "Atrasos, faltas, HE e demais lançamentos do funcionário em uma competência (YYYY-MM).",
+      description: "Lançamentos mensais (faltas, atrasos, HE 50/100, etc) de um funcionário em uma competência YYYY-MM.",
       parameters: {
         type: "object",
         properties: {
@@ -54,12 +84,12 @@ const tools = [
     type: "function",
     function: {
       name: "consultar_abastecimentos",
-      description: "Lista abastecimentos (combustivel_galoes) de um funcionário/motorista em um período.",
+      description: "Lista abastecimentos de um motorista em um período.",
       parameters: {
         type: "object",
         properties: {
-          funcionario_id: { type: "string", description: "Opcional se passar nome" },
-          nome: { type: "string", description: "Nome do motorista (busca parcial em motorista_nome)" },
+          funcionario_id: { type: "string" },
+          nome: { type: "string" },
           data_ini: { type: "string", description: "YYYY-MM-DD" },
           data_fim: { type: "string", description: "YYYY-MM-DD" },
         },
@@ -70,14 +100,14 @@ const tools = [
     type: "function",
     function: {
       name: "consultar_documentos",
-      description: "Lista documentos gerados (EPI, Uniforme, VR, VT, recibos, etc.) por funcionário e categoria.",
+      description: "Lista documentos do funcionário (EPI, Uniforme, VR, VT, recibos, etc).",
       parameters: {
         type: "object",
         properties: {
           funcionario_id: { type: "string" },
-          categoria: { type: "string", description: "epi, uniforme, vr, vt, ferias, recibo, outros (opcional)" },
-          competencia: { type: "string", description: "YYYY-MM (opcional)" },
-          limite: { type: "number", description: "Default 20" },
+          categoria: { type: "string" },
+          competencia: { type: "string" },
+          limite: { type: "number" },
         },
         required: ["funcionario_id"],
       },
@@ -116,7 +146,7 @@ const tools = [
     function: {
       name: "propor_acao",
       description:
-        "Apresenta uma prévia de AÇÃO sensível para o usuário CONFIRMAR antes de executar. Use para: gerar/imprimir documento, registrar retirada de almoxarifado, lançar dado, etc. NÃO executa nada — apenas mostra a prévia.",
+        "Mostra prévia de uma ação sensível para o usuário CONFIRMAR antes de executar.",
       parameters: {
         type: "object",
         properties: {
@@ -130,18 +160,14 @@ const tools = [
             ],
           },
           titulo: { type: "string" },
-          descricao: { type: "string", description: "Resumo em markdown da prévia" },
-          payload: { type: "object", description: "Dados que serão usados ao confirmar" },
+          descricao: { type: "string" },
+          payload: { type: "object" },
         },
         required: ["tipo", "titulo", "descricao", "payload"],
       },
     },
   },
 ];
-
-function compMesAtual() {
-  return new Date().toISOString().slice(0, 7);
-}
 
 async function execTool(
   name: string,
@@ -151,39 +177,83 @@ async function execTool(
   try {
     switch (name) {
       case "buscar_funcionario": {
-        const termo = String(args.termo || "").trim();
+        const termoRaw = String(args.termo || "").trim();
+        const cpfDigits = termoRaw.replace(/\D/g, "");
         let q = supabase
           .from("funcionarios")
           .select("id, nome, cpf, matricula_esocial, cargo, setor, status, company_id, empresas:company_id(nome,codigo)")
-          .limit(5);
-        if (/^\d{11}$/.test(termo.replace(/\D/g, ""))) {
-          q = q.eq("cpf", termo.replace(/\D/g, ""));
+          .limit(8);
+        if (cpfDigits.length === 11) {
+          q = q.eq("cpf", cpfDigits);
         } else {
-          q = q.ilike("nome", `%${termo}%`);
+          // busca por cada token do termo (fuzzy: "rodrigo medrado")
+          const tokens = termoRaw.split(/\s+/).filter(t => t.length >= 2);
+          if (tokens.length === 0) return { ok: false, error: "termo_vazio" };
+          for (const t of tokens) q = q.ilike("nome", `%${t}%`);
         }
         const { data, error } = await q;
         if (error) throw error;
         let res = data ?? [];
         if (args.empresa && res.length > 1) {
           const e = String(args.empresa).toLowerCase();
-          res = res.filter(
+          const filtered = res.filter(
             (f: any) =>
               f.empresas?.nome?.toLowerCase().includes(e) ||
               f.empresas?.codigo?.toLowerCase().includes(e),
           );
+          if (filtered.length > 0) res = filtered;
         }
-        return { ok: true, funcionarios: res };
+        return {
+          ok: true,
+          qtd: res.length,
+          funcionarios: res.map((f: any) => ({
+            id: f.id, nome: f.nome, cargo: f.cargo, setor: f.setor,
+            status: f.status, empresa: f.empresas?.nome,
+          })),
+        };
       }
       case "consultar_ponto_mensal": {
         const comp = args.competencia || compMesAtual();
-        const { data, error } = await supabase
+        const { data: lanc, error } = await supabase
           .from("lancamentos_mensais")
           .select("*")
           .eq("funcionario_id", args.funcionario_id)
           .eq("competencia", comp)
+          .is("apagado_em", null)
           .maybeSingle();
         if (error) throw error;
-        return { ok: true, competencia: comp, lancamento: data };
+        const { data: func } = await supabase
+          .from("funcionarios")
+          .select("nome, cargo, empresas:company_id(nome)")
+          .eq("id", args.funcionario_id)
+          .maybeSingle();
+        if (!lanc) {
+          return {
+            ok: true,
+            encontrado: false,
+            funcionario: func,
+            competencia: comp,
+            mensagem: `Não há lançamentos para ${func?.nome ?? "este funcionário"} na competência ${comp}.`,
+          };
+        }
+        return {
+          ok: true,
+          encontrado: true,
+          funcionario: func,
+          competencia: comp,
+          faltas_dias: lanc.faltas_dias,
+          atrasos_horas: lanc.atrasos,
+          he50_horas: lanc.he50,
+          he100_horas: lanc.he100,
+          total_he: Number(lanc.he50 || 0) + Number(lanc.he100 || 0),
+          adicionais: lanc.adicionais,
+          descontos_diversos: lanc.descontos_diversos,
+          adiantamento: lanc.adiantamento,
+          vr_aplicado: lanc.vr_aplicado,
+          vt_aplicado: lanc.vt_aplicado,
+          observacoes: lanc.observacoes,
+          status: lanc.status_conferencia,
+        };
       }
       case "consultar_abastecimentos": {
         let q = supabase
@@ -230,7 +300,7 @@ async function execTool(
       case "buscar_item_almoxarifado": {
         const { data, error } = await supabase
           .from("almoxarifado_itens")
-          .select("id, nome, codigo, unidade, saldo_atual")
+          .select("id, nome, codigo_sku, unidade, quantidade")
           .ilike("nome", `%${args.termo}%`)
           .limit(10);
         if (error) throw error;
@@ -242,20 +312,25 @@ async function execTool(
         return { ok: false, error: `Ferramenta desconhecida: ${name}` };
     }
   } catch (e) {
+    console.error(`execTool[${name}] erro:`, e, "args:", args);
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+function reply200(reply: string, proposta: any = null) {
+  return new Response(JSON.stringify({ reply, proposta }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  let payloadDebug: any = null;
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return reply200("⚠️ Sessão expirada. Faça login novamente.");
     }
 
     const supabase = createClient(
@@ -265,37 +340,25 @@ Deno.serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsErr } = await supabase.auth.getClaims(token);
-    if (claimsErr || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const userId = claimsData.claims.sub;
+    const { data: claimsData } = await supabase.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub;
+    if (!userId) return reply200("⚠️ Não consegui validar sua sessão.");
 
     const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
+      .from("user_roles").select("role").eq("user_id", userId);
     const isAdmin = (roleData || []).some((r: any) => r.role === "admin");
-    if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Acesso restrito a administradores" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!isAdmin) return reply200("⚠️ Acesso restrito a administradores.");
 
     const body = await req.json();
+    payloadDebug = body;
     const messages = Array.isArray(body.messages) ? body.messages : [];
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurado");
+    if (!LOVABLE_API_KEY) return reply200("⚠️ IA não configurada (LOVABLE_API_KEY ausente).");
 
     const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...messages];
     let proposta: any = null;
 
-    // Loop de tool-calling (máx 6 voltas)
     for (let i = 0; i < 6; i++) {
       const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -312,42 +375,30 @@ Deno.serve(async (req) => {
 
       if (!r.ok) {
         const t = await r.text();
-        if (r.status === 429)
-          return new Response(JSON.stringify({ error: "Limite atingido, tente em instantes." }), {
-            status: 429,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        if (r.status === 402)
-          return new Response(JSON.stringify({ error: "Créditos da IA esgotados." }), {
-            status: 402,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
         console.error("AI gateway error", r.status, t);
-        return new Response(JSON.stringify({ error: "Erro no gateway de IA" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (r.status === 429) return reply200("⏳ Muitas requisições à IA agora. Tente em alguns segundos.");
+        if (r.status === 402) return reply200("💳 Créditos da IA esgotados. Avise o administrador.");
+        return reply200(`⚠️ Falha na IA (${r.status}). Tente novamente.`);
       }
 
       const j = await r.json();
       const msg = j.choices?.[0]?.message;
-      if (!msg) break;
+      if (!msg) return reply200("⚠️ Sem resposta da IA. Tente reformular.");
 
       const calls = msg.tool_calls;
       if (!calls || calls.length === 0) {
-        return new Response(
-          JSON.stringify({ reply: msg.content || "", proposta }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+        return reply200(msg.content || "Não consegui formular a resposta.", proposta);
       }
 
       convo.push(msg);
       for (const c of calls) {
         let parsed: any = {};
-        try { parsed = JSON.parse(c.function.arguments || "{}"); } catch {}
+        try { parsed = JSON.parse(c.function.arguments || "{}"); } catch (e) {
+          console.error("parse args error", c.function.name, e);
+        }
         const result = await execTool(c.function.name, parsed, supabase);
-        if (c.function.name === "propor_acao" && result.ok) {
-          proposta = result._proposta;
+        if (c.function.name === "propor_acao" && (result as any).ok) {
+          proposta = (result as any)._proposta;
         }
         convo.push({
           role: "tool",
@@ -357,15 +408,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ reply: "Não consegui finalizar a resposta. Tente reformular.", proposta }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return reply200("Não consegui finalizar a resposta após várias tentativas. Tente reformular.", proposta);
   } catch (e) {
-    console.error("assistente-operacional error", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    console.error("assistente-operacional fatal:", e, "payload:", payloadDebug);
+    const msg = e instanceof Error ? e.message : String(e);
+    return reply200(`⚠️ Erro interno: ${msg}`);
   }
 });
