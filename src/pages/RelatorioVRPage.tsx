@@ -202,7 +202,19 @@ const RelatorioVRPage: React.FC = () => {
                   <td className="px-2 py-2">
                     <Checkbox checked={selectedEmployees.has(r.emp.id)} onCheckedChange={() => toggleEmp(r.emp.id)} />
                   </td>
-                  <td className="px-2 py-2 font-medium">{r.emp.name}</td>
+                  <td className="px-2 py-2 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{r.emp.name}</span>
+                      {r.corrigido && (
+                        <Badge variant="secondary" className="text-[9px] gap-1" title={r.correcaoMotivo || ''}>
+                          <ShieldCheck className="w-3 h-3" /> Corrigido
+                        </Badge>
+                      )}
+                    </div>
+                    {r.corrigido && r.correcaoMotivo && (
+                      <p className="text-[10px] text-muted-foreground italic">{r.correcaoMotivo}</p>
+                    )}
+                  </td>
                   <td className="px-2 py-2 text-muted-foreground">{r.emp.cargo}</td>
                   <td className="px-2 py-2">{formatCurrency(r.valorDiario)}</td>
                   <td className="px-2 py-2 text-center">{r.diasPrevistos}</td>
@@ -214,6 +226,11 @@ const RelatorioVRPage: React.FC = () => {
                     <button onClick={() => handleReciboIndividual(r.emp.id)} title="Imprimir recibo individual" className="text-primary hover:text-primary/80">
                       <Printer className="w-3.5 h-3.5" />
                     </button>
+                    {isAdmin && (
+                      <button onClick={() => setEditingRow(r)} title="Corrigir recibo" className="text-amber-600 hover:text-amber-700">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button onClick={() => navigate(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${r.emp.id}`)} title="Ficha individual" className="text-muted-foreground hover:text-foreground">
                       <User className="w-3.5 h-3.5" />
                     </button>
