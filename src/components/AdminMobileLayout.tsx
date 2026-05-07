@@ -268,6 +268,7 @@ const AdminMobileLayout: React.FC = () => {
 
       {/* FAB Voz (somente admin — este layout só renderiza para admin) */}
       <VoiceCommandFab />
+      <AssistenteFab />
     </div>
   );
 };
