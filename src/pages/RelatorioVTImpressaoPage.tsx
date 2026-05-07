@@ -5,6 +5,8 @@ import { useApp } from '@/context/AppContext';
 import { getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildVTReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { useFeriados } from '@/hooks/useFeriados';
+import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 
 const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const competenciaLabel = (competencia: string) => {
