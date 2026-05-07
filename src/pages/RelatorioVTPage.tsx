@@ -183,15 +183,17 @@ const RelatorioVTPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handlePrintRelatorio} variant="outline" size="sm">
-              <FileText className="w-4 h-4 mr-2" /> Relatório consolidado
+          <div className="flex flex-wrap gap-2 items-center border-t pt-3">
+            <span className="text-xs font-semibold text-muted-foreground mr-2">RELATÓRIO:</span>
+            <Button onClick={handlePrintRelatorio} variant="default" size="sm">
+              <Printer className="w-4 h-4 mr-2" /> Imprimir / PDF do Relatório
             </Button>
-            <Button onClick={handleRecibosEmpresa} size="sm">
-              <Printer className="w-4 h-4 mr-2" /> Recibos da empresa
+            <span className="text-xs font-semibold text-muted-foreground ml-4 mr-2">RECIBOS:</span>
+            <Button onClick={handleRecibosEmpresa} size="sm" variant="outline">
+              <FileText className="w-4 h-4 mr-2" /> Recibos da empresa
             </Button>
-            <Button onClick={handleRecibosSelecionados} size="sm" variant="secondary" disabled={selectedEmployees.size === 0}>
-              <Printer className="w-4 h-4 mr-2" /> Recibos selecionados ({selectedEmployees.size})
+            <Button onClick={handleRecibosSelecionados} size="sm" variant="outline" disabled={selectedEmployees.size === 0}>
+              <FileText className="w-4 h-4 mr-2" /> Recibos selecionados ({selectedEmployees.size})
             </Button>
           </div>
 
