@@ -43,7 +43,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const empresaIds = empresasParam.split(',').map(s => s.trim()).filter(Boolean);
   const funcionarioIds = funcionariosParam ? funcionariosParam.split(',').map(s => s.trim()).filter(Boolean) : null;
 
-  const diasUteis = getWorkingDays(competencia);
+  const { feriados, datas: feriadosDatas } = useFeriados(competencia, empresaIds[0]);
+  const diasUteis = getWorkingDays(competencia, feriadosDatas);
   const dataEmissao = new Date().toLocaleDateString('pt-BR');
 
   useEffect(() => {
