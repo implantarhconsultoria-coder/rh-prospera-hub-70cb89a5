@@ -126,31 +126,32 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
 
   const formatoLabel = formato === 'vr' ? 'VR' : formato === 'vt' ? 'VT' : 'VR + VT';
 
-  const renderBloco = (label: string, row: BenefitReportRow, sigla: 'VR' | 'VT') => (
-    <table className="w-full text-sm mb-3 border border-black/40">
-      <tbody>
-        <tr className="bg-gray-100">
-          <td colSpan={2} className="px-2 py-1 font-bold text-xs uppercase">{label}</td>
-        </tr>
-        <tr><td className="px-2 py-1 font-semibold w-1/2">Dias previstos</td><td className="px-2 py-1">{row.diasPrevistos}</td></tr>
-        <tr><td className="px-2 py-1 font-semibold">Descontos / faltas</td><td className="px-2 py-1">{row.diasDescontados > 0 ? `${row.diasDescontados} — ${row.motivo}` : '—'}</td></tr>
-        <tr><td className="px-2 py-1 font-semibold">Dias considerados</td><td className="px-2 py-1">{row.diasFinais}</td></tr>
-        <tr><td className="px-2 py-1 font-semibold">Valor diário</td><td className="px-2 py-1">{formatCurrency(row.valorDiario)}</td></tr>
-        <tr className="bg-gray-50"><td className="px-2 py-1 font-bold">TOTAL {sigla}</td><td className="px-2 py-1 font-bold">{formatCurrency(row.valorTotal)}</td></tr>
-      </tbody>
-    </table>
+  const renderBenefitTable = (label: string, row: BenefitReportRow) => (
+    <div className="mb-4">
+      <h3 className="text-[11px] font-bold mb-1 bg-gray-200 px-2 py-1">{label}</h3>
+      <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
+        <tbody>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium w-1/2">Valor Diário</td><td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(row.valorDiario)}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Previstos</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasPrevistos}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Descontados</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasDescontados}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Finais</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasFinais}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Motivo Desconto</td><td className="border border-gray-300 px-2 py-1 text-right">{row.motivo || '—'}</td></tr>
+          <tr className="bg-gray-100 font-bold"><td className="border border-gray-400 px-2 py-1">Valor Total</td><td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(row.valorTotal)}</td></tr>
+        </tbody>
+      </table>
+    </div>
   );
 
   return (
     <>
       <style>{`
-        @page { size: A4; margin: 12mm; }
+        @page { size: A4; margin: 15mm; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
           body * { visibility: hidden !important; }
           #recibos-print, #recibos-print * { visibility: visible !important; }
-          #recibos-print { position: absolute; left: 0; top: 0; width: 100%; }
-          .no-print { display: none !important; }
+          #recibos-print { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+          .no-print, .no-print * { display: none !important; }
           .recibo-page { page-break-after: always; }
           .recibo-page:last-child { page-break-after: auto; }
         }
@@ -162,11 +163,6 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
           <button onClick={() => window.print()} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">🖨 Imprimir / PDF</button>
           <div className="text-sm text-gray-700 ml-2">
             <strong>Pré-visualização:</strong> {recibos.length} recibo(s) — {recibos.length} página(s) ({formatoLabel})
-            {recibos.some((r) => r.vr?.corrigido || r.vt?.corrigido) && (
-              <span className="ml-2 inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-0.5 text-xs">
-                ⚠ Inclui recibo(s) com correção administrativa
-              </span>
-            )}
           </div>
         </div>
 
@@ -174,58 +170,54 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
           {recibos.map(({ company, emp, vr, vt }, idx) => {
             const isAmbos = formato === 'ambos';
             const titulo = isAmbos
-              ? 'RECIBO DE BENEFÍCIOS — VR E VT'
-              : formato === 'vr' ? 'RECIBO DE VALE-REFEIÇÃO' : 'RECIBO DE VALE-TRANSPORTE';
-            const declaracao = isAmbos
-              ? 'Declaro ter recebido da empresa acima identificada os valores referentes aos benefícios de Vale-Refeição e Vale-Transporte da competência informada.'
-              : `Declaro ter recebido da empresa acima identificada o valor referente ao ${formato === 'vr' ? 'Vale-Refeição' : 'Vale-Transporte'} da competência informada.`;
-            const totalGeral = (vr?.valorTotal || 0) + (vt?.valorTotal || 0);
+              ? 'RECIBO INDIVIDUAL DE BENEFÍCIOS (VR + VT)'
+              : formato === 'vr' ? 'RECIBO INDIVIDUAL DE VALE REFEIÇÃO' : 'RECIBO INDIVIDUAL DE VALE TRANSPORTE';
             const corrigido = vr?.corrigido || vt?.corrigido;
             return (
-              <div key={`${company.id}-${emp.id}-${idx}`} className="recibo-page px-8 py-6" style={{ minHeight: '270mm' }}>
-                <div className="border-2 border-black p-5">
-                  <div className="border-b-2 border-black pb-2 mb-3 flex justify-between items-start">
+              <div key={`${company.id}-${emp.id}-${idx}`} className="recibo-page px-8 py-6" style={{ fontSize: '11px' }}>
+                {/* Header */}
+                <div className="border-b-2 border-black pb-3 mb-4">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <h1 className="text-base font-bold uppercase">{company.name}</h1>
-                      <p className="text-xs">CNPJ: {company.cnpj}</p>
+                      <h1 className="text-lg font-bold">{company.name}</h1>
+                      <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
                     </div>
-                    <div className="text-right text-xs">
-                      <p>Competência: <strong>{competenciaLabel}</strong></p>
-                      <p>Pagamento: <strong>{dataPagamento}</strong></p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">{titulo}</p>
+                      <p className="text-xs">Competência: {competenciaLabel}</p>
+                      <p className="text-xs">Emissão: {dataPagamento}</p>
                     </div>
                   </div>
+                </div>
 
-                  <h2 className="text-center text-base font-bold mb-2 tracking-wide">{titulo}</h2>
-                  {corrigido && (
-                    <p className="text-center text-[11px] text-amber-700 border border-amber-400 bg-amber-50 rounded px-2 py-1 mb-3">
-                      Recibo ajustado conforme correção administrativa registrada.
-                    </p>
-                  )}
+                {corrigido && (
+                  <p className="text-center text-[10px] text-amber-700 border border-amber-400 bg-amber-50 rounded px-2 py-1 mb-3">
+                    Recibo ajustado conforme correção administrativa registrada.
+                  </p>
+                )}
 
-                  <table className="w-full text-sm mb-3">
-                    <tbody>
-                      <tr><td className="py-1 pr-4 font-semibold w-1/3">Funcionário:</td><td className="py-1">{emp.name}</td></tr>
-                      <tr><td className="py-1 pr-4 font-semibold">Função:</td><td className="py-1">{emp.cargo}</td></tr>
-                      <tr><td className="py-1 pr-4 font-semibold">Competência:</td><td className="py-1">{competenciaLabel}</td></tr>
-                    </tbody>
-                  </table>
-
-                  {(formato === 'vr' || isAmbos) && vr && renderBloco('Vale-Refeição', vr, 'VR')}
-                  {(formato === 'vt' || isAmbos) && vt && renderBloco('Vale-Transporte', vt, 'VT')}
-
-                  {isAmbos && (
-                    <div className="text-right text-base font-bold border-t-2 border-black pt-2 mb-3">
-                      TOTAL GERAL: {formatCurrency(totalGeral)}
-                    </div>
-                  )}
-
-                  <p className="text-sm text-justify mb-10 leading-relaxed">{declaracao}</p>
-
-                  <div className="mt-12">
-                    <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
-                    <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
-                    <p className="text-center text-xs mt-1">Data: ____/____/________</p>
+                {/* Employee data */}
+                <div className="border border-gray-400 rounded p-3 mb-4" style={{ fontSize: '10px' }}>
+                  <div className="grid grid-cols-2 gap-1">
+                    <p><strong>Nome:</strong> {emp.name}</p>
+                    <p><strong>Cargo:</strong> {emp.cargo}</p>
+                    <p><strong>CPF:</strong> {emp.cpf}</p>
+                    <p><strong>Registro:</strong> {emp.registro || '—'}</p>
+                    <p><strong>Admissão:</strong> {emp.dataAdmissao ? new Date(emp.dataAdmissao).toLocaleDateString('pt-BR') : '—'}</p>
+                    <p><strong>Dias úteis:</strong> {diasUteis}</p>
                   </div>
+                </div>
+
+                {(formato === 'vr' || isAmbos) && vr && renderBenefitTable('VALE REFEIÇÃO (VR)', vr)}
+                {(formato === 'vt' || isAmbos) && vt && renderBenefitTable('VALE TRANSPORTE (VT)', vt)}
+
+                {/* Signature */}
+                <div className="mt-16">
+                  <div className="border-t border-black w-2/3 mx-auto pt-1 text-center text-[10px]">
+                    Assinatura do colaborador
+                  </div>
+                  <p className="text-center text-[10px] mt-1">{emp.name}</p>
+                  <p className="text-center text-[10px] mt-1">Data: ____/____/________</p>
                 </div>
               </div>
             );
