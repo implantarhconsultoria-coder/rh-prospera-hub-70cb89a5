@@ -28,6 +28,7 @@ const RelatorioVTPage: React.FC = () => {
   const [formato, setFormato] = useState<'vt' | 'ambos'>('vt');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState<BenefitReportRow[]>([]);
+  const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
 
   const diasUteis = getWorkingDays(competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
@@ -82,11 +83,18 @@ const RelatorioVTPage: React.FC = () => {
     goRecibos([selectedCompany], Array.from(selectedEmployees));
   };
   const handleRecibosEmpresa = () => goRecibos([selectedCompany]);
-  const handleRecibosTodasEmpresas = () => goRecibos(companies.map(c => c.id));
+  const handleRecibosTodasEmpresas = () => {
+    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
+    companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
+    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: companies.map(c => c.id).join(',') });
+    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+  };
   const handleRecibosEmpresasSelecionadas = () => {
     if (multiCompanies.size === 0) { toast.error('Selecione ao menos uma empresa'); return; }
-    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competencia));
-    goRecibos(Array.from(multiCompanies));
+    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
+    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
+    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: Array.from(multiCompanies).join(',') });
+    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
 
   const toggleEmp = (id: string) => {
@@ -152,7 +160,11 @@ const RelatorioVTPage: React.FC = () => {
           <Building2 className="w-4 h-4 text-primary" />
           <h3 className="font-semibold text-sm">Recibos por empresa</h3>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Competência (mês)</label>
+            <Input type="month" value={competenciaEmpresa} onChange={e => setCompetenciaEmpresa(e.target.value)} className="w-44" />
+          </div>
           <Button onClick={handleRecibosTodasEmpresas} variant="outline" size="sm">
             <Printer className="w-4 h-4 mr-2" /> Recibos de todas as empresas
           </Button>
