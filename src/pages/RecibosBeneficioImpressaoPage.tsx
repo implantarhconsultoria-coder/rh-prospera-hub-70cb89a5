@@ -217,7 +217,6 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
                     Assinatura do colaborador
                   </div>
                   <p className="text-center text-[10px] mt-1">{emp.name}</p>
-                  <p className="text-center text-[10px] mt-1">Data: ____/____/________</p>
                 </div>
               </div>
             );
