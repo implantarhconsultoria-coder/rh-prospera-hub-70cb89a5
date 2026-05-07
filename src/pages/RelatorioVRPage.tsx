@@ -14,7 +14,10 @@ import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 
 const RelatorioVRPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento, userRoles } = useApp();
+  const isAdmin = userRoles?.includes('admin');
+  const correcoes = useRecibosCorrecoes({ tipo: 'vr', competencia: undefined });
+  const [editingRow, setEditingRow] = useState<BenefitReportRow | null>(null);
   const navigate = useNavigate();
   const [selectedCompany, setSelectedCompany] = useState('');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
