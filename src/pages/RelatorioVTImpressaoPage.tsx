@@ -57,14 +57,14 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
       <tbody>
         {block.rows.map(r => (
           <tr key={r.emp.id} className="even:bg-gray-50">
-            <td className="border border-gray-300 px-2 py-1 font-medium">{r.emp.name}</td>
+            <td className="border border-gray-300 px-2 py-1 font-medium">{r.emp.name}{r.corrigido ? ' *' : ''}</td>
             <td className="border border-gray-300 px-2 py-1">{r.emp.cargo}</td>
             <td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(r.valorDiario)}</td>
             <td className="border border-gray-300 px-2 py-1 text-center">{r.diasPrevistos}</td>
             <td className="border border-gray-300 px-2 py-1 text-center">{r.diasDescontados > 0 ? r.diasDescontados : '—'}</td>
             <td className="border border-gray-300 px-2 py-1 text-center">{r.diasFinais}</td>
             <td className="border border-gray-300 px-2 py-1 text-right font-bold">{formatCurrency(r.valorTotal)}</td>
-            <td className="border border-gray-300 px-2 py-1">{r.motivo || '—'}</td>
+            <td className="border border-gray-300 px-2 py-1">{r.correcaoMotivo || r.motivo || '—'}</td>
           </tr>
         ))}
         {block.rows.length === 0 && (
