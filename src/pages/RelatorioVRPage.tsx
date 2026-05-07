@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { UtensilsCrossed, FileText, User, Printer, Building2, Pencil, ShieldCheck } from 'lucide-react';
+import { UtensilsCrossed, FileText, User, Printer, Building2, Pencil, ShieldCheck, Eye } from 'lucide-react';
+import RecibosPreviewModal from '@/components/RecibosPreviewModal';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { buildVRReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
@@ -25,6 +26,8 @@ const RelatorioVRPage: React.FC = () => {
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
   const [multiCompanies, setMultiCompanies] = useState<Set<string>>(new Set());
   const [formato, setFormato] = useState<'vr' | 'ambos'>('vr');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewRows, setPreviewRows] = useState<BenefitReportRow[]>([]);
 
   const diasUteis = getWorkingDays(competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
@@ -196,6 +199,18 @@ const RelatorioVRPage: React.FC = () => {
             <Button onClick={handleRecibosSelecionados} size="sm" variant="outline" disabled={selectedEmployees.size === 0}>
               <FileText className="w-4 h-4 mr-2" /> Recibos selecionados ({selectedEmployees.size})
             </Button>
+            <Button
+              onClick={() => {
+                const base = selectedEmployees.size > 0 ? rows.filter(r => selectedEmployees.has(r.emp.id)) : rows;
+                if (base.length === 0) { toast.error('Sem dados para pré-visualizar'); return; }
+                setPreviewRows(base);
+                setPreviewOpen(true);
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              <Eye className="w-4 h-4 mr-2" /> Pré-visualizar recibos
+            </Button>
           </div>
 
           <table className="w-full text-xs">
@@ -261,6 +276,20 @@ const RelatorioVRPage: React.FC = () => {
           </table>
         </div>
       )}
+
+      <RecibosPreviewModal
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        tipo="vr"
+        company={company}
+        competencia={competencia}
+        rows={previewRows}
+        onPrint={() => {
+          setPreviewOpen(false);
+          const ids = previewRows.length === rows.length ? undefined : previewRows.map(r => r.emp.id);
+          goRecibos([selectedCompany], ids, 'vr');
+        }}
+      />
 
       <ReciboCorrecaoModal
         open={!!editingRow}
