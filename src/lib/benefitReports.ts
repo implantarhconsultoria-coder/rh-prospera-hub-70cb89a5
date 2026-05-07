@@ -9,6 +9,9 @@ export type BenefitReportRow = {
   diasFinais: number;
   valorTotal: number;
   motivo: string;
+  corrigido?: boolean;
+  correcaoObservacao?: string | null;
+  correcaoMotivo?: string | null;
 };
 
 const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
