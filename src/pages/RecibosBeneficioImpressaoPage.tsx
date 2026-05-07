@@ -31,13 +31,16 @@ const applyCorrecao = (r: BenefitReportRow, c: any | undefined): BenefitReportRo
 const RecibosBeneficioImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, dataLoading, loading } = useApp();
   const [searchParams] = useSearchParams();
-  const formato = (searchParams.get('formato') || searchParams.get('tipo') || 'vr') as Formato;
+  // Aceita 'formato' OU 'tipo' (legado). Se vier 'tipo=vr|vt', usa direto; 'ambos' só via formato.
+  const rawTipo = (searchParams.get('tipo') || '').toLowerCase();
+  const rawFormato = (searchParams.get('formato') || '').toLowerCase();
+  const formato = ((rawFormato || rawTipo || 'vr') as Formato);
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const empresasParam = searchParams.get('empresas') || '';
   const funcionariosParam = searchParams.get('funcionarios') || '';
 
-  const empresaIds = empresasParam.split(',').filter(Boolean);
-  const funcionarioIds = funcionariosParam ? funcionariosParam.split(',').filter(Boolean) : null;
+  const empresaIds = empresasParam.split(',').map(s => s.trim()).filter(Boolean);
+  const funcionarioIds = funcionariosParam ? funcionariosParam.split(',').map(s => s.trim()).filter(Boolean) : null;
 
   const diasUteis = getWorkingDays(competencia);
   const dataPagamento = getFirstBusinessDayOfNextMonth(competencia);
