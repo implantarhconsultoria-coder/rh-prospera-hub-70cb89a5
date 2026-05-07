@@ -65,7 +65,10 @@ const RelatorioVRPage: React.FC = () => {
   };
 
   const goRecibos = (empresas: string[], funcionarios?: string[], formatoOverride?: 'vr' | 'vt' | 'ambos') => {
-    const params = new URLSearchParams({ formato: formatoOverride || formato, competencia, empresas: empresas.join(',') });
+    const empresasLimpas = empresas.map(s => (s || '').trim()).filter(Boolean);
+    if (empresasLimpas.length === 0) { toast.error('Selecione uma empresa antes de gerar recibos'); return; }
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    const params = new URLSearchParams({ formato: formatoOverride || formato, competencia, empresas: empresasLimpas.join(',') });
     if (funcionarios && funcionarios.length) params.set('funcionarios', funcionarios.join(','));
     window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
