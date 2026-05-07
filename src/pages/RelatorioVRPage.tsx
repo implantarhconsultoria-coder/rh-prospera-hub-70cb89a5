@@ -15,6 +15,13 @@ import { buildVRReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 
+const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const competenciaPt = (c: string) => {
+  const [y, m] = (c || '').split('-');
+  const idx = Number(m) - 1;
+  return idx >= 0 && idx < 12 ? `${MESES_PT[idx]} / ${y}` : c;
+};
+
 const RelatorioVRPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento, userRoles } = useApp();
   const isAdmin = userRoles?.includes('admin');
@@ -64,7 +71,8 @@ const RelatorioVRPage: React.FC = () => {
     };
   }), [rawRows, correcoes, selectedCompany, competencia]);
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
-  const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
+  const emissaoDate = new Date().toLocaleDateString('pt-BR');
+  const pagamentoDate = getFirstBusinessDayOfNextMonth(competencia);
 
   const handlePrintRelatorio = () => {
     addBenefitReport({ type: 'vr', companyId: selectedCompany, competencia });
@@ -191,9 +199,9 @@ const RelatorioVRPage: React.FC = () => {
           <div className="flex flex-wrap justify-between gap-3">
             <div>
               <h2 className="font-bold text-foreground">{company.name}</h2>
-              <p className="text-xs text-muted-foreground">CNPJ: {company.cnpj} — Competência: {competencia} — Dias úteis: {diasUteis}</p>
+              <p className="text-xs text-muted-foreground">CNPJ: {company.cnpj} — Competência: {competenciaPt(competencia)} — Dias úteis: {diasUteis}</p>
               <p className="text-xs text-muted-foreground">
-                Emissão: {emissaoDate}
+                Emissão: {emissaoDate} — Pagamento previsto: {pagamentoDate}
                 {dataFechamento ? ` — Fechamento: ${new Date(dataFechamento).toLocaleDateString('pt-BR')}` : ''}
               </p>
             </div>
@@ -315,7 +323,7 @@ const RelatorioVRPage: React.FC = () => {
         competencia={competencia}
         row={editingRow}
         existing={editingRow ? correcoes.findFor('vr', selectedCompany, editingRow.emp.id, competencia) : undefined}
-        defaultDataPagamento={emissaoDate}
+        defaultDataPagamento={pagamentoDate}
         onSave={correcoes.upsert}
         onRemove={correcoes.remove}
       />

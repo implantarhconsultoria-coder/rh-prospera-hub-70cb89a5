@@ -15,6 +15,13 @@ import { buildVTReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 
+const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const competenciaPt = (c: string) => {
+  const [y, m] = (c || '').split('-');
+  const idx = Number(m) - 1;
+  return idx >= 0 && idx < 12 ? `${MESES_PT[idx]} / ${y}` : c;
+};
+
 const RelatorioVTPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento, userRoles } = useApp();
   const isAdmin = userRoles?.includes('admin');
@@ -63,7 +70,8 @@ const RelatorioVTPage: React.FC = () => {
     };
   }), [rawRows, correcoes, selectedCompany, competencia]);
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
-  const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
+  const emissaoDate = new Date().toLocaleDateString('pt-BR');
+  const pagamentoDate = getFirstBusinessDayOfNextMonth(competencia);
 
   const handlePrintRelatorio = () => {
     addBenefitReport({ type: 'vt', companyId: selectedCompany, competencia });
@@ -210,9 +218,9 @@ const RelatorioVTPage: React.FC = () => {
           <div className="flex flex-wrap justify-between gap-3">
             <div>
               <h2 className="font-bold text-foreground">{company.name}</h2>
-              <p className="text-xs text-muted-foreground">CNPJ: {company.cnpj} — Competência: {competencia} — Dias úteis: {diasUteis}</p>
+              <p className="text-xs text-muted-foreground">CNPJ: {company.cnpj} — Competência: {competenciaPt(competencia)} — Dias úteis: {diasUteis}</p>
               <p className="text-xs text-muted-foreground">
-                Emissão: {emissaoDate}
+                Emissão: {emissaoDate} — Pagamento previsto: {pagamentoDate}
                 {dataFechamento ? ` — Fechamento: ${new Date(dataFechamento).toLocaleDateString('pt-BR')}` : ''}
               </p>
             </div>
@@ -334,7 +342,7 @@ const RelatorioVTPage: React.FC = () => {
         competencia={competencia}
         row={editingRow}
         existing={editingRow ? correcoes.findFor('vt', selectedCompany, editingRow.emp.id, competencia) : undefined}
-        defaultDataPagamento={emissaoDate}
+        defaultDataPagamento={pagamentoDate}
         onSave={correcoes.upsert}
         onRemove={correcoes.remove}
       />
