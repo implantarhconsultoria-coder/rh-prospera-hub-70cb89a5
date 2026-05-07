@@ -62,28 +62,33 @@ export default function AcessoExternoPage() {
     }
     setLoading(true);
 
-    // Em celular: se houver módulo mecânico liberado para esse PIN, vai direto pro App Mecânico.
+    // Em celular: só redireciona ao App Mecânico se o usuário tiver APENAS módulo mecânico.
+    // Se tiver portais administrativos, segue o fluxo normal (Portal Mobile).
     if (isMobileDevice()) {
       const { data: mecData } = await supabase.rpc("acesso_externo_validar_pin" as any, {
         p_pin: pin, p_modulo: "mecanico",
       });
+      const { data: portData } = await supabase.rpc("acesso_externo_listar_portais" as any, {
+        p_pin: pin,
+      });
       const mecRes = mecData as any;
-      if (mecRes?.ok && Array.isArray(mecRes.usuarios) && mecRes.usuarios.length > 0) {
+      const portRes = portData as any;
+      const temMec = mecRes?.ok && Array.isArray(mecRes.usuarios) && mecRes.usuarios.length > 0;
+      const temPortais = portRes?.ok && Array.isArray(portRes.usuarios) && portRes.usuarios.length > 0;
+
+      // Só mecânico → App Mecânico
+      if (temMec && !temPortais) {
         setLoading(false);
         if (mecRes.count === 1) {
           const u = mecRes.usuarios[0];
           localStorage.setItem("app_mecanico_acesso_id", u.id);
           navigate(`/app-mecanico/${u.id}`);
         } else {
-          // múltiplos — manda para tela de PIN do mecânico para escolher
           navigate("/acesso-mecanico");
         }
         return;
       }
-      // Sem mecânico no celular: bloqueia
-      setLoading(false);
-      setErro("Este acesso está disponível apenas no computador. No celular, use o App Mecânico.");
-      return;
+      // Caso contrário (tem portais administrativos, com ou sem mecânico) cai no fluxo normal abaixo.
     }
 
     const { data, error } = await supabase.rpc("acesso_externo_listar_portais" as any, {
