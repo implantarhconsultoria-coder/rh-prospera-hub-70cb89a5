@@ -34,6 +34,7 @@ const MedicoesPage: React.FC = () => {
   const [editingMed, setEditingMed] = useState<any | null>(null);
   const [itens, setItens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     contrato_id: '', competencia: new Date().toISOString().slice(0, 7),
@@ -42,18 +43,29 @@ const MedicoesPage: React.FC = () => {
 
   const carregar = async () => {
     setLoading(true);
-    const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
-    const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
-    const cQ = safeIds
-      ? supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, status, clientes_fat(razao_social)').in('status', ['ativo', 'suspenso']).in('empresa_id', safeIds)
-      : supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, status, clientes_fat(razao_social)').in('status', ['ativo', 'suspenso']);
-    const mQ = safeIds
-      ? supabase.from('medicoes').select('*, contratos!inner(numero, cliente_id, empresa_id, valor_mensal, clientes_fat(razao_social))').in('contratos.empresa_id', safeIds).order('created_at', { ascending: false })
-      : supabase.from('medicoes').select('*, contratos(numero, cliente_id, empresa_id, valor_mensal, clientes_fat(razao_social))').order('created_at', { ascending: false });
-    const [m, c] = await Promise.all([mQ, cQ]);
-    setMedicoes(m.data || []);
-    setContratos(c.data || []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
+      const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
+      const cQ = safeIds
+        ? supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, status, clientes_fat(razao_social)').in('status', ['ativo', 'suspenso']).in('empresa_id', safeIds)
+        : supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, status, clientes_fat(razao_social)').in('status', ['ativo', 'suspenso']);
+      const mQ = safeIds
+        ? supabase.from('medicoes').select('*, contratos!inner(numero, cliente_id, empresa_id, valor_mensal, clientes_fat(razao_social))').in('contratos.empresa_id', safeIds).order('created_at', { ascending: false })
+        : supabase.from('medicoes').select('*, contratos(numero, cliente_id, empresa_id, valor_mensal, clientes_fat(razao_social))').order('created_at', { ascending: false });
+      const [m, c] = await Promise.all([mQ, cQ]);
+      if (m.error) throw m.error;
+      if (c.error) throw c.error;
+      setMedicoes(m.data || []);
+      setContratos(c.data || []);
+    } catch (err: any) {
+      console.error('[MedicoesPage] carregar falhou:', err);
+      setLoadError(err?.message || 'Falha ao carregar medições');
+      setMedicoes([]);
+      setContratos([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
@@ -170,6 +182,12 @@ const MedicoesPage: React.FC = () => {
         <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> Nova Medição</button>
       </div>
 
+      {loadError && (
+        <div className="card-premium p-4 border border-destructive/40 bg-destructive/5 text-sm text-destructive flex items-center justify-between">
+          <span>Falha ao carregar medições: {loadError}</span>
+          <button onClick={carregar} className="btn-secondary text-xs">Tentar novamente</button>
+        </div>
+      )}
       {loading ? <p className="text-center text-muted-foreground p-8">Carregando...</p> : (
         <div className="card-premium overflow-hidden">
           <table className="w-full text-sm">
