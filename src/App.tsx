@@ -50,6 +50,7 @@ import RelatorioVRPage from "@/pages/RelatorioVRPage";
 import RelatorioVTPage from "@/pages/RelatorioVTPage";
 import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
 import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
+import RecibosBeneficioImpressaoPage from "@/pages/RecibosBeneficioImpressaoPage";
 import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividualPage";
 import HistoricoPage from "@/pages/HistoricoPage";
 import AtestadosImportPage from "@/pages/AtestadosImportPage";
@@ -435,6 +436,7 @@ const App = () => (
               <Route path="/relatorio-vr-impressao" element={<ErrorBoundary><RelatorioVRImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-vt-impressao" element={<ErrorBoundary><RelatorioVTImpressaoPage /></ErrorBoundary>} />
               <Route path="/relatorio-beneficio-individual" element={<ErrorBoundary><RelatorioBeneficioIndividualPage /></ErrorBoundary>} />
+              <Route path="/recibos-beneficio" element={<ErrorBoundary><RecibosBeneficioImpressaoPage /></ErrorBoundary>} />
               <Route path="/*" element={<AuthGate />} />
             </Routes>
           </BrowserRouter>
