@@ -374,7 +374,7 @@ const AlmoxarifadoPage: React.FC = () => {
     { key: 'entrada', label: 'Entrada', icon: ArrowDown },
     { key: 'saida', label: 'Saída', icon: ArrowUp },
     { key: 'carregamento', label: 'Carregamento', icon: Truck },
-    { key: 'carga', label: 'Carga (Carro)', icon: Truck },
+    { key: 'carga', label: 'Carga do Funcionário', icon: Truck },
     { key: 'fechamento', label: 'Fechamento', icon: CheckCircle },
     { key: 'relatorio', label: 'Relatório', icon: FileText },
   ];

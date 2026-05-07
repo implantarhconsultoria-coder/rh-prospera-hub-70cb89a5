@@ -447,51 +447,81 @@ export type Database = {
       }
       almoxarifado_carga: {
         Row: {
+          anexo_nome: string
+          anexo_url: string
           company_id: string | null
+          comprovante_url: string
+          cpf: string
           created_at: string
           data_carga: string
           email_bruto: string
           empresa_nome: string
+          filial: string
+          funcao: string
           funcionario_id: string | null
           funcionario_nome: string
           id: string
           itens_json: Json
+          matricula: string
           observacao: string
+          responsavel_nome: string
+          setor: string
           status: string
+          tipo: string
           updated_at: string
           user_id: string
           usuario_nome: string
           veiculo: string
         }
         Insert: {
+          anexo_nome?: string
+          anexo_url?: string
           company_id?: string | null
+          comprovante_url?: string
+          cpf?: string
           created_at?: string
           data_carga?: string
           email_bruto?: string
           empresa_nome?: string
+          filial?: string
+          funcao?: string
           funcionario_id?: string | null
           funcionario_nome?: string
           id?: string
           itens_json?: Json
+          matricula?: string
           observacao?: string
+          responsavel_nome?: string
+          setor?: string
           status?: string
+          tipo?: string
           updated_at?: string
           user_id: string
           usuario_nome?: string
           veiculo?: string
         }
         Update: {
+          anexo_nome?: string
+          anexo_url?: string
           company_id?: string | null
+          comprovante_url?: string
+          cpf?: string
           created_at?: string
           data_carga?: string
           email_bruto?: string
           empresa_nome?: string
+          filial?: string
+          funcao?: string
           funcionario_id?: string | null
           funcionario_nome?: string
           id?: string
           itens_json?: Json
+          matricula?: string
           observacao?: string
+          responsavel_nome?: string
+          setor?: string
           status?: string
+          tipo?: string
           updated_at?: string
           user_id?: string
           usuario_nome?: string
