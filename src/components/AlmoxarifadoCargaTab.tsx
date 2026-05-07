@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Truck, Plus, Trash2, Wand2, Loader2, Save, RefreshCw, FileText, Printer, Paperclip, Search } from 'lucide-react';
+import { Truck, Plus, Trash2, Wand2, Loader2, Save, RefreshCw, FileText, Printer, Paperclip, Search, Users, AlertTriangle, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 import type { Employee } from '@/types/database';
@@ -65,6 +65,53 @@ const parseEmailItens = (texto: string): CargaItem[] => {
     else if ((m = linha.match(reD)) && Number(m[1]) <= 999) itens.push({ nome: m[2].trim(), quantidade: Number(m[1].replace(',', '.')) });
   }
   return itens;
+};
+
+/** Tenta extrair (nome, qtd, item) de uma única linha tipo "Ednaldo - 1 alicate de corte" */
+const parseLinhaFuncionarioItem = (linha: string): { nome: string; quantidade: number; item: string } | null => {
+  const l = linha.trim();
+  if (!l) return null;
+  // padrão: Nome <sep> qtd <unid?> item
+  const re = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s]{1,60}?)\s*[-—–:]\s*(\d+(?:[.,]\d+)?)\s*(?:un|und|unidade|pç|peças?|x)?\s*[-–—:]?\s*(.+)$/i;
+  const reSemSep = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s]{1,60}?)\s+(\d+(?:[.,]\d+)?)\s+(.+)$/i;
+  let m = l.match(re) || l.match(reSemSep);
+  if (!m) return null;
+  const nome = m[1].trim();
+  const quantidade = Number(m[2].replace(',', '.'));
+  const item = m[3].trim();
+  if (!nome || !item || nome.split(/\s+/).length > 5) return null;
+  // descarta saudações
+  if (/^(boa|bom|prezad|olá|ola|att|obrigad|veio|email|e-mail|solicit)/i.test(nome)) return null;
+  return { nome, quantidade, item };
+};
+
+interface GrupoFunc {
+  nomeOriginal: string;
+  funcionario: Employee | null;
+  candidatos: Employee[];
+  itens: CargaItem[];
+}
+
+const agruparPorFuncionario = (texto: string, employees: Employee[]): GrupoFunc[] => {
+  const linhas = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const mapa = new Map<string, GrupoFunc>();
+  for (const linha of linhas) {
+    const p = parseLinhaFuncionarioItem(linha);
+    if (!p) continue;
+    const chave = p.nome.toLowerCase();
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const alvo = norm(p.nome);
+    const candidatos = employees.filter(e => {
+      const n = norm(e.name);
+      return n === alvo || n.split(/\s+/).includes(alvo) || n.startsWith(alvo + ' ');
+    });
+    const exato = candidatos.length === 1 ? candidatos[0] : null;
+    if (!mapa.has(chave)) {
+      mapa.set(chave, { nomeOriginal: p.nome, funcionario: exato, candidatos, itens: [] });
+    }
+    mapa.get(chave)!.itens.push({ nome: p.item, quantidade: p.quantidade });
+  }
+  return Array.from(mapa.values());
 };
 
 /** Gera HTML imprimível e abre janela de impressão (PDF nativo do navegador). */
@@ -144,6 +191,10 @@ const AlmoxarifadoCargaTab: React.FC = () => {
   const [anexo, setAnexo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
 
+  // múltiplos funcionários (prévia)
+  const [grupos, setGrupos] = useState<GrupoFunc[]>([]);
+  const [gerandoLote, setGerandoLote] = useState(false);
+
   // listagem
   const [cargas, setCargas] = useState<CargaRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -185,9 +236,27 @@ const AlmoxarifadoCargaTab: React.FC = () => {
 
   const preencherAuto = () => {
     if (!emailBruto.trim()) { toast.error('Cole o e-mail antes.'); return; }
+
+    // 1) Tenta agrupar por funcionário (multi)
+    const gs = agruparPorFuncionario(emailBruto, employees);
+    if (gs.length >= 2) {
+      setGrupos(gs);
+      setItens([]);
+      toast.success(`${gs.length} funcionários identificados.`);
+      return;
+    }
+    if (gs.length === 1 && gs[0].funcionario) {
+      setGrupos([]);
+      aplicarFuncionario(gs[0].funcionario);
+      setItens(gs[0].itens);
+      toast.success(`Funcionário e ${gs[0].itens.length} item(ns) detectado(s).`);
+      return;
+    }
+
+    // 2) Fallback: extração simples de itens
+    setGrupos([]);
     const its = parseEmailItens(emailBruto);
     if (its.length) setItens(its);
-    // tenta achar funcionário pelo nome no texto
     if (!funcionarioId) {
       const lc = emailBruto.toLowerCase();
       const emp = employees.find(e => {
@@ -199,10 +268,20 @@ const AlmoxarifadoCargaTab: React.FC = () => {
     toast.success(`${its.length} item(ns) detectado(s).`);
   };
 
+  const atualizarGrupoFuncionario = (idx: number, empId: string) => {
+    const emp = employees.find(e => e.id === empId) || null;
+    setGrupos(prev => prev.map((g, i) => i === idx ? { ...g, funcionario: emp } : g));
+  };
+
+  const removerGrupo = (idx: number) => {
+    setGrupos(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const limparForm = () => {
     setEmailBruto(''); setFuncionarioId(''); setFuncionarioNome(''); setCpf('');
     setMatricula(''); setFuncao(''); setSetor(''); setEmpresaNome(''); setFilial('');
     setVeiculo(''); setItens([]); setObservacao(''); setAnexo(null);
+    setGrupos([]);
     setDataCarga(new Date().toISOString().slice(0, 10));
   };
 
@@ -282,6 +361,74 @@ const AlmoxarifadoCargaTab: React.FC = () => {
     w.document.write(html);
     w.document.close();
     setTimeout(() => { w.focus(); w.print(); }, 300);
+  };
+
+  const gerarCargasSeparadas = async (imprimir: boolean) => {
+    if (!userId) { toast.error('Sessão expirada'); return; }
+    const validos = grupos.filter(g => g.funcionario && g.itens.length > 0);
+    if (validos.length === 0) {
+      toast.error('Nenhum funcionário válido. Selecione manualmente os pendentes.');
+      return;
+    }
+    setGerandoLote(true);
+    const responsavelNome = session?.user?.email || 'Sistema';
+    const criadas: CargaRow[] = [];
+    try {
+      for (const g of validos) {
+        const emp = g.funcionario!;
+        const co = companies.find(c => c.id === emp.companyId);
+        const payload = {
+          user_id: userId,
+          usuario_nome: responsavelNome,
+          funcionario_id: emp.id,
+          funcionario_nome: emp.name,
+          cpf: emp.cpf || '',
+          matricula: emp.matriculaEsocial || emp.registro || '',
+          funcao: emp.cargo || '',
+          setor: '', filial: '',
+          empresa_nome: co?.name || '',
+          company_id: emp.companyId || null,
+          veiculo: '',
+          data_carga: dataCarga,
+          email_bruto: emailBruto,
+          itens_json: g.itens,
+          observacao,
+          status: 'pendente',
+          tipo,
+          responsavel_nome: responsavelNome,
+          anexo_url: '',
+          anexo_nome: '',
+        };
+        const { data, error } = await (supabase.from('almoxarifado_carga') as any).insert(payload).select().single();
+        if (error) { toast.error(`Erro em ${emp.name}: ${error.message}`); continue; }
+        criadas.push(data as CargaRow);
+        await supabase.from('documentos_funcionario').insert({
+          funcionario_id: emp.id,
+          funcionario_nome: emp.name,
+          company_id: co?.id,
+          empresa_nome: co?.name || '',
+          tipo_documento: tipo === 'carga' ? 'Carga Almoxarifado' : 'Retirada Almoxarifado',
+          competencia: dataCarga.slice(0, 7),
+          descricao: `${g.itens.length} item(ns) — ${g.itens.slice(0, 3).map(i => `${i.quantidade}× ${i.nome}`).join(', ')}${g.itens.length > 3 ? '…' : ''}`,
+          arquivo_url: '',
+          gerado_por_user_id: userId,
+          gerado_por_nome: responsavelNome,
+          status_envio: 'arquivado',
+          unidade: co?.name || '',
+        } as any);
+      }
+      toast.success(`${criadas.length} carga(s) gerada(s).`);
+      if (imprimir) {
+        for (const c of criadas) {
+          imprimirComprovante(c);
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      limparForm();
+      await fetchCargas();
+    } finally {
+      setGerandoLote(false);
+    }
   };
 
   const atualizarStatus = async (id: string, status: string) => {
@@ -390,6 +537,72 @@ const AlmoxarifadoCargaTab: React.FC = () => {
           </div>
         </div>
 
+        {/* Prévia agrupada por funcionário (multi) */}
+        {grupos.length > 0 && (
+          <div className="border-2 border-primary/40 rounded-lg p-4 space-y-3 bg-primary/5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                {grupos.length} funcionário(s) identificados
+              </h3>
+              <div className="flex gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setGrupos([])}>Cancelar</Button>
+                <Button size="sm" variant="secondary" disabled={gerandoLote}
+                  onClick={() => gerarCargasSeparadas(false)}>
+                  {gerandoLote ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1" />}
+                  Gerar cargas separadas
+                </Button>
+                <Button size="sm" disabled={gerandoLote}
+                  onClick={() => gerarCargasSeparadas(true)}>
+                  <Printer className="w-3.5 h-3.5 mr-1" /> Gerar e imprimir todas
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              {grupos.map((g, idx) => {
+                const pendente = !g.funcionario;
+                return (
+                  <div key={idx} className={`rounded-lg p-3 border ${pendente ? 'border-warning bg-warning/10' : 'border-border bg-background'}`}>
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs uppercase text-muted-foreground">Detectado:</span>
+                          <span className="text-sm font-semibold">{g.nomeOriginal}</span>
+                          {pendente
+                            ? <Badge variant="outline" className="text-warning border-warning"><AlertTriangle className="w-3 h-3 mr-1" />Pendente</Badge>
+                            : <Badge className="bg-success text-success-foreground"><Check className="w-3 h-3 mr-1" />{g.funcionario!.name}</Badge>}
+                        </div>
+                        {pendente && (
+                          <div className="mt-2">
+                            <label className="text-[10px] uppercase text-muted-foreground">Selecionar funcionário</label>
+                            <select
+                              className="w-full border rounded-lg px-2 py-1.5 text-sm bg-background mt-0.5"
+                              value=""
+                              onChange={e => atualizarGrupoFuncionario(idx, e.target.value)}
+                            >
+                              <option value="">— escolher —</option>
+                              {(g.candidatos.length > 0 ? g.candidatos : employees).slice(0, 50).map(e => (
+                                <option key={e.id} value={e.id}>{e.name}{e.cpf ? ` — ${e.cpf}` : ''}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <ul className="mt-2 text-xs space-y-0.5">
+                          {g.itens.map((it, i) => (
+                            <li key={i}>• {it.quantidade}× {it.nome}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removerGrupo(idx)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {/* Itens */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
