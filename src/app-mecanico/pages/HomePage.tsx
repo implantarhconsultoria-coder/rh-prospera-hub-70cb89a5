@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMecanicoApp } from "../MecanicoAppContext";
-import { LogIn, LogOut, Coffee, Sun, Fuel, History } from "lucide-react";
+import { LogIn, LogOut, Coffee, Sun, History } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 export default function HomePage() {
@@ -12,7 +12,6 @@ export default function HomePage() {
     { to: `${base}/ponto?tipo=almoco_inicio`, label: "Início Almoço", icon: Coffee, color: "text-amber-600" },
     { to: `${base}/ponto?tipo=almoco_fim`, label: "Retorno Almoço", icon: Sun, color: "text-orange-600" },
     { to: `${base}/ponto?tipo=saida`, label: "Saída", icon: LogOut, color: "text-rose-600" },
-    { to: `${base}/abastecimento`, label: "Abastecimento", icon: Fuel, color: "text-blue-600" },
     { to: `${base}/historico`, label: "Histórico", icon: History, color: "text-purple-600" },
   ];
 

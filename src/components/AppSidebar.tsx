@@ -39,7 +39,6 @@ const operationalItems: MenuItem[] = [
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
   { label: 'Relatório VR', icon: UtensilsCrossed, path: '/admin/relatorio-vr' },
   { label: 'Relatório VT', icon: Bus, path: '/admin/relatorio-vt' },
-  { label: 'Combustível (Posto/QR)', icon: Fuel, path: '/admin/combustivel' },
   { label: 'Combustível (Galões)', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Protocolo', icon: FileCheck, path: '/admin/protocolo' },
   { label: 'Doc. Veículos', icon: Car, path: '/admin/documentos-ativos' },

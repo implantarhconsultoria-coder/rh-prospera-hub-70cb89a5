@@ -10,7 +10,6 @@ export const KNOWN_BUCKETS = [
   'atestados',
   'ferias-avisos',
   'ponto-selfies',
-  'abastecimento-fotos',
   'galao-fotos',
   'km-fotos',
   'faturamento-docs',
@@ -27,7 +26,7 @@ const TYPE_BUCKET_MAP: Record<string, string[]> = {
   ativo: ['documentos-ativos'],
   protocolo: ['documentos-ativos'],
   ponto: ['ponto-selfies'],
-  abastecimento: ['abastecimento-fotos', 'galao-fotos'],
+  abastecimento: ['galao-fotos'],
   km: ['km-fotos'],
   faturamento: ['faturamento-docs'],
 };

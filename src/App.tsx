@@ -37,7 +37,6 @@ import LancamentosPage from "@/pages/LancamentosPage";
 import FechamentoPage from "@/pages/FechamentoPage";
 import FechamentoPontoPage from "@/pages/admin/FechamentoPontoPage";
 import CombustivelPage from "@/pages/CombustivelPage";
-import CombustivelAdminPage from "@/pages/admin/CombustivelAdminPage";
 import ProtocoloPage from "@/pages/ProtocoloPage";
 import DocumentosVeiculosPage from "@/pages/DocumentosVeiculosPage";
 import AvisoFeriasPage from "@/pages/AvisoFeriasPage";
@@ -70,7 +69,6 @@ import MecHomePage from "@/app-mecanico/pages/HomePage";
 import MecPontoPage from "@/app-mecanico/pages/PontoPage";
 import MecChamadosPage from "@/app-mecanico/pages/ChamadosPage";
 import MecVeiculoPage from "@/app-mecanico/pages/VeiculoPage";
-import MecAbastecimentoPage from "@/app-mecanico/pages/AbastecimentoPage";
 import MecHistoricoPage from "@/app-mecanico/pages/HistoricoPage";
 import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
 import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
@@ -96,8 +94,6 @@ import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
 import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
-import PublicAbastecimentoPage from "@/pages/PublicAbastecimentoPage";
-import ImprimirQRCombustivelPage from "@/pages/admin/ImprimirQRCombustivelPage";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
 import PortaisPage from "@/pages/PortaisPage";
 import AcessosExternosPage from "@/pages/admin/AcessosExternosPage";
@@ -238,7 +234,6 @@ const AuthGate = () => {
         <Route path="/admin/historico" element={<HistoricoPage />} />
         <Route path="/admin/aso" element={<ASOPage />} />
         <Route path="/admin/prestadores" element={<PrestadoresPage />} />
-        <Route path="/admin/combustivel" element={<CombustivelAdminPage />} />
         <Route path="/admin/galoes-combustivel" element={<CombustivelPage />} />
         <Route path="/admin/protocolo" element={<ProtocoloPage />} />
         <Route path="/admin/documentos-ativos" element={<DocumentosVeiculosPage />} />
@@ -259,7 +254,6 @@ const AuthGate = () => {
         <Route path="/admin/app-operacional/:id" element={<Navigate to="/admin/app-mecanico" replace />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="/admin/acessos-externos" element={<AcessosExternosPage />} />
-        <Route path="/admin/combustivel/imprimir" element={<ImprimirQRCombustivelPage />} />
         {/* Faturamento */}
         <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
         <Route path="/admin/faturamento/clientes" element={<ClientesFatPage />} />
@@ -349,11 +343,6 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <Routes>
-              {/* ========== ROTAS PÚBLICAS: QR de abastecimento (sem login) ========== */}
-              <Route path="/abastecimento/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
-              <Route path="/qr/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
-              <Route path="/voucher/:codigo" element={<ErrorBoundary><PublicAbastecimentoPage /></ErrorBoundary>} />
-
               {/* ========== ACESSO EXTERNO POR PIN — PORTAL ÚNICO ========== */}
               {/* /acesso-filial é a rota canônica única para todos os portais externos (exceto mecânico) */}
               <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
@@ -374,7 +363,6 @@ const App = () => (
                 <Route path="ponto" element={<MecPontoPage />} />
                 <Route path="chamados" element={<MecChamadosPage />} />
                 <Route path="veiculo" element={<MecVeiculoPage />} />
-                <Route path="abastecimento" element={<MecAbastecimentoPage />} />
                 <Route path="historico" element={<MecHistoricoPage />} />
               </Route>
 

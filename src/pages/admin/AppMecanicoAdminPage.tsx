@@ -25,7 +25,7 @@ export default function AppMecanicoAdminPage() {
   const [loading, setLoading] = useState(true);
   const [histAberto, setHistAberto] = useState<Acesso | null>(null);
   const [histLoading, setHistLoading] = useState(false);
-  const [hist, setHist] = useState<{ pontos: any[]; abastecimentos: any[] }>({ pontos: [], abastecimentos: [] });
+  const [hist, setHist] = useState<{ pontos: any[] }>({ pontos: [] });
 
   const carregar = async () => {
     setLoading(true);
@@ -57,10 +57,10 @@ export default function AppMecanicoAdminPage() {
   const abrirHistorico = async (a: Acesso) => {
     setHistAberto(a);
     setHistLoading(true);
-    setHist({ pontos: [], abastecimentos: [] });
+    setHist({ pontos: [] });
     const { data } = await supabase.rpc("admin_app_mecanico_historico" as any, { p_acesso_id: a.id });
     const r = data as any;
-    if (r?.ok) setHist({ pontos: r.pontos || [], abastecimentos: r.abastecimentos || [] });
+    if (r?.ok) setHist({ pontos: r.pontos || [] });
     setHistLoading(false);
   };
 
@@ -145,7 +145,6 @@ export default function AppMecanicoAdminPage() {
             <Tabs defaultValue="pontos">
               <TabsList>
                 <TabsTrigger value="pontos">Pontos ({hist.pontos.length})</TabsTrigger>
-                <TabsTrigger value="abast">Abastecimentos ({hist.abastecimentos.length})</TabsTrigger>
               </TabsList>
               <TabsContent value="pontos">
                 {hist.pontos.length === 0 ? <p className="text-sm text-muted-foreground py-4">Sem registros.</p> : (
@@ -169,33 +168,6 @@ export default function AppMecanicoAdminPage() {
                           </TableCell>
                           <TableCell>
                             {p.selfie_url ? <a href={p.selfie_url} target="_blank" rel="noreferrer"><img src={p.selfie_url} alt="selfie" className="w-12 h-12 object-cover rounded" /></a> : "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </TabsContent>
-              <TabsContent value="abast">
-                {hist.abastecimentos.length === 0 ? <p className="text-sm text-muted-foreground py-4">Sem abastecimentos.</p> : (
-                  <Table>
-                    <TableHeader><TableRow>
-                      <TableHead>Data/Hora</TableHead><TableHead>Placa</TableHead>
-                      <TableHead>Valor</TableHead><TableHead>Litros</TableHead>
-                      <TableHead>KM</TableHead><TableHead>Posto</TableHead><TableHead>Fotos</TableHead>
-                    </TableRow></TableHeader>
-                    <TableBody>
-                      {hist.abastecimentos.map((a) => (
-                        <TableRow key={a.id}>
-                          <TableCell className="text-sm">{a.data} {a.hora?.slice(0,5)}</TableCell>
-                          <TableCell>{a.placa || "-"}</TableCell>
-                          <TableCell>R$ {a.valor}</TableCell>
-                          <TableCell>{a.litros}L</TableCell>
-                          <TableCell>{a.km || "-"}</TableCell>
-                          <TableCell className="text-xs">{a.posto || "-"}</TableCell>
-                          <TableCell className="space-x-1">
-                            {a.foto_bomba_url && <a href={a.foto_bomba_url} target="_blank" rel="noreferrer"><img src={a.foto_bomba_url} alt="bomba" className="inline w-10 h-10 object-cover rounded" /></a>}
-                            {a.foto_painel_url && <a href={a.foto_painel_url} target="_blank" rel="noreferrer"><img src={a.foto_painel_url} alt="painel" className="inline w-10 h-10 object-cover rounded" /></a>}
                           </TableCell>
                         </TableRow>
                       ))}
