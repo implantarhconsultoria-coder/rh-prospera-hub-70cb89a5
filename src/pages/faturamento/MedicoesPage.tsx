@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
-import { ClipboardCheck, Plus, X, CheckCircle2, FileText, Trash2 } from 'lucide-react';
+import { ClipboardCheck, Plus, X, CheckCircle2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 
@@ -19,12 +19,19 @@ const STATUS_COLORS: Record<string, string> = {
   cancelada: 'bg-destructive/20 text-destructive',
 };
 
+const lastDayOfMonth = (yyyymm: string) => {
+  const [y, m] = yyyymm.split('-').map(Number);
+  return new Date(y, m, 0).toISOString().slice(0, 10);
+};
+const firstDayOfMonth = (yyyymm: string) => `${yyyymm}-01`;
+
 const MedicoesPage: React.FC = () => {
   const ext = useAcessoExternoFiltro();
   const [medicoes, setMedicoes] = useState<any[]>([]);
   const [contratos, setContratos] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingMed, setEditingMed] = useState<any | null>(null);
   const [itens, setItens] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,11 +45,11 @@ const MedicoesPage: React.FC = () => {
     const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
     const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
     const cQ = safeIds
-      ? supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, clientes_fat(razao_social)').eq('status', 'ativo').in('empresa_id', safeIds)
-      : supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, clientes_fat(razao_social)').eq('status', 'ativo');
+      ? supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, status, clientes_fat(razao_social)').in('status', ['ativo', 'suspenso']).in('empresa_id', safeIds)
+      : supabase.from('contratos').select('id, numero, valor_mensal, cliente_id, empresa_id, status, clientes_fat(razao_social)').in('status', ['ativo', 'suspenso']);
     const mQ = safeIds
-      ? supabase.from('medicoes').select('*, contratos!inner(numero, cliente_id, empresa_id, clientes_fat(razao_social))').in('contratos.empresa_id', safeIds).order('created_at', { ascending: false })
-      : supabase.from('medicoes').select('*, contratos(numero, cliente_id, clientes_fat(razao_social))').order('created_at', { ascending: false });
+      ? supabase.from('medicoes').select('*, contratos!inner(numero, cliente_id, empresa_id, valor_mensal, clientes_fat(razao_social))').in('contratos.empresa_id', safeIds).order('created_at', { ascending: false })
+      : supabase.from('medicoes').select('*, contratos(numero, cliente_id, empresa_id, valor_mensal, clientes_fat(razao_social))').order('created_at', { ascending: false });
     const [m, c] = await Promise.all([mQ, cQ]);
     setMedicoes(m.data || []);
     setContratos(c.data || []);
@@ -51,8 +58,24 @@ const MedicoesPage: React.FC = () => {
 
   useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
+  // Auto-preenche datas a partir da competência
+  useEffect(() => {
+    if (form.competencia && /^\d{4}-\d{2}$/.test(form.competencia)) {
+      setForm(f => ({
+        ...f,
+        data_inicio: f.data_inicio || firstDayOfMonth(form.competencia),
+        data_fim: f.data_fim || lastDayOfMonth(form.competencia),
+      }));
+    }
+    // eslint-disable-next-line
+  }, [form.competencia]);
+
   const abrirEdicao = async (med: any) => {
+    if (med.status !== 'pendente' && med.status !== 'em_revisao') {
+      return toast.error('Somente medições pendentes ou em revisão podem ser editadas');
+    }
     setEditingId(med.id);
+    setEditingMed(med);
     const { data } = await supabase.from('medicao_itens').select('*').eq('medicao_id', med.id);
     setItens(data || []);
   };
@@ -70,7 +93,6 @@ const MedicoesPage: React.FC = () => {
 
   const salvarItens = async () => {
     if (!editingId) return;
-    // Apaga existentes e reinsere
     await supabase.from('medicao_itens').delete().eq('medicao_id', editingId);
     if (itens.length > 0) {
       await supabase.from('medicao_itens').insert(itens.map(it => ({
@@ -87,47 +109,47 @@ const MedicoesPage: React.FC = () => {
     await supabase.from('medicoes').update({ total }).eq('id', editingId);
     toast.success('Medição salva');
     setEditingId(null);
+    setEditingMed(null);
     carregar();
   };
 
-  const aprovar = async (id: string) => {
+  const aprovar = async (med: any) => {
+    // valida itens / total
+    const { data: its } = await supabase.from('medicao_itens').select('id, total').eq('medicao_id', med.id);
+    const totalCalc = (its || []).reduce((s, it) => s + Number(it.total || 0), 0);
+    if (!its || its.length === 0) return toast.error('Adicione itens antes de aprovar');
+    if (totalCalc <= 0) return toast.error('Total da medição precisa ser maior que zero');
+    if (!confirm(`Aprovar medição no valor de ${fmtBRL(totalCalc)}? A fatura será gerada automaticamente.`)) return;
+
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('medicoes').update({ status: 'aprovada', aprovada_em: new Date().toISOString(), aprovada_por: user?.id }).eq('id', id);
-    toast.success('Medição aprovada — pronta para virar fatura');
-    carregar();
-  };
-
-  const gerarFatura = async (med: any) => {
-    const contrato = contratos.find(c => c.id === med.contrato_id);
-    if (!contrato) return toast.error('Contrato não encontrado');
-    const ano = new Date().getFullYear();
-    const { data: existing } = await supabase.from('faturas').select('id').like('numero', `FAT-${ano}-%`);
-    const numero = `FAT-${ano}-${((existing?.length || 0) + 1).toString().padStart(4, '0')}`;
-    const venc = new Date(); venc.setDate(venc.getDate() + 15);
-
-    const { data: fat, error } = await supabase.from('faturas').insert({
-      numero, cliente_id: contrato.cliente_id, contrato_id: contrato.id, empresa_id: contrato.empresa_id,
-      competencia: med.competencia, data_vencimento: venc.toISOString().slice(0, 10),
-      subtotal: med.total, total: med.total, medicao_id: med.id, status: 'em_aberto',
-    }).select().single();
+    const { error } = await supabase.from('medicoes')
+      .update({ status: 'aprovada', aprovada_em: new Date().toISOString(), aprovada_por: user?.id, total: totalCalc })
+      .eq('id', med.id);
     if (error) return toast.error(error.message);
-
-    await supabase.from('titulos_receber').insert({
-      cliente_id: contrato.cliente_id, contrato_id: contrato.id, fatura_id: fat.id, empresa_id: contrato.empresa_id,
-      numero, competencia: med.competencia, data_vencimento: venc.toISOString().slice(0, 10),
-      valor_original: med.total, saldo: med.total, status: 'aberto',
-    });
-
-    await supabase.from('medicoes').update({ status: 'faturada', fatura_id: fat.id }).eq('id', med.id);
-    toast.success(`Fatura ${numero} gerada`);
+    toast.success('Medição aprovada — fatura gerada automaticamente');
     carregar();
   };
 
   const handleCreate = async () => {
     if (!form.contrato_id || !form.data_inicio || !form.data_fim) return toast.error('Preencha contrato e período');
+    const contrato = contratos.find(c => c.id === form.contrato_id);
+    if (!contrato) return toast.error('Contrato não encontrado');
+
+    // duplicidade
+    const { data: existente } = await supabase.from('medicoes')
+      .select('id, status')
+      .eq('contrato_id', form.contrato_id)
+      .eq('competencia', form.competencia)
+      .neq('status', 'cancelada')
+      .maybeSingle();
+    if (existente) return toast.error(`Já existe medição (${existente.status}) para este contrato nesta competência`);
+
     const { error } = await supabase.from('medicoes').insert({
-      contrato_id: form.contrato_id, competencia: form.competencia,
-      data_inicio: form.data_inicio, data_fim: form.data_fim, observacoes: form.observacoes,
+      contrato_id: form.contrato_id,
+      competencia: form.competencia,
+      data_inicio: form.data_inicio,
+      data_fim: form.data_fim,
+      observacoes: form.observacoes,
     });
     if (error) return toast.error(error.message);
     toast.success('Medição criada — agora adicione os itens');
@@ -135,6 +157,8 @@ const MedicoesPage: React.FC = () => {
     setForm({ contrato_id: '', competencia: new Date().toISOString().slice(0, 7), data_inicio: '', data_fim: '', observacoes: '' });
     carregar();
   };
+
+  const contratoSel = contratos.find(c => c.id === form.contrato_id);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -172,14 +196,14 @@ const MedicoesPage: React.FC = () => {
                     <span className={`text-[10px] px-2 py-1 rounded-full ${STATUS_COLORS[m.status]}`}>{STATUS_LABELS[m.status]}</span>
                   </td>
                   <td className="p-3 text-center space-x-1">
-                    {m.status === 'pendente' && (
+                    {(m.status === 'pendente' || m.status === 'em_revisao') && (
                       <>
                         <button onClick={() => abrirEdicao(m)} className="text-xs btn-secondary px-2 py-1">Editar itens</button>
-                        <button onClick={() => aprovar(m.id)} title="Aprovar" className="p-1 hover:bg-success/20 rounded text-success"><CheckCircle2 className="w-4 h-4" /></button>
+                        <button onClick={() => aprovar(m)} title="Aprovar" className="p-1 hover:bg-success/20 rounded text-success"><CheckCircle2 className="w-4 h-4" /></button>
                       </>
                     )}
-                    {m.status === 'aprovada' && (
-                      <button onClick={() => gerarFatura(m)} className="text-xs btn-primary px-2 py-1 flex items-center gap-1"><FileText className="w-3 h-3" /> Gerar Fatura</button>
+                    {(m.status === 'aprovada' || m.status === 'faturada') && (
+                      <span className="text-[10px] text-muted-foreground">{m.status === 'faturada' ? 'Faturada' : 'Aguardando fatura'}</span>
                     )}
                   </td>
                 </tr>
@@ -203,12 +227,19 @@ const MedicoesPage: React.FC = () => {
                 <select value={form.contrato_id} onChange={e => setForm({ ...form, contrato_id: e.target.value })}
                   className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm">
                   <option value="">Selecione...</option>
-                  {contratos.map(c => <option key={c.id} value={c.id}>{c.numero} — {c.clientes_fat?.razao_social}</option>)}
+                  {contratos.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.numero} — {c.clientes_fat?.razao_social} {c.status === 'suspenso' ? '(suspenso)' : ''} — {fmtBRL(c.valor_mensal || 0)}/mês
+                    </option>
+                  ))}
                 </select>
+                {contratoSel && (
+                  <p className="text-[11px] text-muted-foreground mt-1">Valor mensal de referência: <strong>{fmtBRL(contratoSel.valor_mensal || 0)}</strong></p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">Competência</label>
-                <input type="month" value={form.competencia} onChange={e => setForm({ ...form, competencia: e.target.value })}
+                <input type="month" value={form.competencia} onChange={e => setForm({ ...form, competencia: e.target.value, data_inicio: firstDayOfMonth(e.target.value), data_fim: lastDayOfMonth(e.target.value) })}
                   className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -237,7 +268,7 @@ const MedicoesPage: React.FC = () => {
           <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="bg-card rounded-xl shadow-premium-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-border">
               <h2 className="text-lg font-bold font-display">Itens da Medição</h2>
-              <button onClick={() => setEditingId(null)}><X className="w-5 h-5" /></button>
+              <button onClick={() => { setEditingId(null); setEditingMed(null); }}><X className="w-5 h-5" /></button>
             </div>
             <div className="p-5 space-y-3">
               {itens.map((it, idx) => (
@@ -254,7 +285,7 @@ const MedicoesPage: React.FC = () => {
               <div className="flex justify-between items-center pt-3 border-t border-border">
                 <p className="text-sm text-muted-foreground">Total: <span className="font-bold text-primary">{fmtBRL(itens.reduce((s, it) => s + Number(it.total || 0), 0))}</span></p>
                 <div className="space-x-2">
-                  <button onClick={() => setEditingId(null)} className="btn-secondary">Fechar</button>
+                  <button onClick={() => { setEditingId(null); setEditingMed(null); }} className="btn-secondary">Fechar</button>
                   <button onClick={salvarItens} className="btn-primary">Salvar Itens</button>
                 </div>
               </div>
