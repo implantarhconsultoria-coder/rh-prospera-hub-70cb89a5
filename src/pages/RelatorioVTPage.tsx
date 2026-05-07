@@ -70,6 +70,21 @@ const RelatorioVTPage: React.FC = () => {
     navigate(`/relatorio-vt-impressao?empresa=${selectedCompany}&competencia=${competencia}`);
   };
 
+  const handlePrintConsolidadoTodas = () => {
+    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
+    companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
+    const ids = companies.map(c => c.id).join(',');
+    window.open(`/relatorio-vt-impressao?empresas=${ids}&competencia=${competenciaEmpresa}`, '_blank');
+  };
+
+  const handlePrintConsolidadoSelecionadas = () => {
+    if (multiCompanies.size === 0) { toast.error('Selecione ao menos uma empresa'); return; }
+    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
+    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
+    const ids = Array.from(multiCompanies).join(',');
+    window.open(`/relatorio-vt-impressao?empresas=${ids}&competencia=${competenciaEmpresa}`, '_blank');
+  };
+
   const goRecibos = (empresas: string[], funcionarios?: string[], formatoOverride?: 'vr' | 'vt' | 'ambos') => {
     const empresasLimpas = empresas.map(s => (s || '').trim()).filter(Boolean);
     if (empresasLimpas.length === 0) { toast.error('Selecione uma empresa antes de gerar recibos'); return; }
