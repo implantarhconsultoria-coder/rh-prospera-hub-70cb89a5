@@ -81,6 +81,7 @@ import ContratosPage from "@/pages/faturamento/ContratosPage";
 import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
 import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
 import ConferenciaPage from "@/pages/faturamento/ConferenciaPage";
+import ImportacoesDN4Page from "@/pages/faturamento/ImportacoesDN4Page";
 import FaturamentoDN4Layout from "@/pages/admin/faturamento-dn4/FaturamentoDN4Layout";
 import FaturamentoDN4DashboardPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4DashboardPage";
 import FaturamentoDN4NovoPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4NovoPage";
