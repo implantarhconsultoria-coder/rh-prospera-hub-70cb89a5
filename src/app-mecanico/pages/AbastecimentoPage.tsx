@@ -215,9 +215,43 @@ export default function AbastecimentoPage() {
 
       {step === "scan" && (
         <Card className="p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-semibold"><QrCode className="w-4 h-4" /> Leia o QR Code</div>
-          <div id="qr-reader-box" className="w-full rounded-xl overflow-hidden bg-black aspect-square" />
-          <div className="text-[11px] text-muted-foreground text-center">Aproxime o QR Code da câmera</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><QrCode className="w-4 h-4" /> Ler QR Code do posto</div>
+
+          <div id="qr-reader-box" className={`w-full rounded-xl overflow-hidden bg-black ${scanning ? "aspect-square" : "hidden"}`} />
+          <div id="qr-reader-file" className="hidden" />
+
+          {!scanning ? (
+            <Button className="w-full" onClick={iniciarScanner} disabled={loading}>
+              <Camera className="w-4 h-4 mr-2" /> Abrir câmera para ler QR
+            </Button>
+          ) : (
+            <Button variant="outline" className="w-full" onClick={stopScanner}>
+              Parar câmera
+            </Button>
+          )}
+
+          {scanErro && (
+            <div className="text-xs text-destructive bg-destructive/10 rounded-md p-2">{scanErro}</div>
+          )}
+
+          <div className="border-t pt-3 space-y-2">
+            <Label className="text-xs">Enviar foto do QR (galeria)</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) lerArquivoQr(f);
+                e.target.value = "";
+              }}
+            />
+            <Button variant="secondary" className="w-full" onClick={() => fileInputRef.current?.click()}>
+              Enviar imagem do QR
+            </Button>
+          </div>
+
           <div className="border-t pt-3 space-y-2">
             <Label className="text-xs">Ou digite o código manualmente</Label>
             <div className="flex gap-2">
