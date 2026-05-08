@@ -89,10 +89,12 @@ export default function AbastecimentoPage() {
       try {
         instance.stop();
       } catch {
+        void 0;
       }
       try {
         instance.destroy();
       } catch {
+        void 0;
       }
       scannerRef.current = null;
     }
@@ -366,7 +368,7 @@ export default function AbastecimentoPage() {
       p_codigo: cod.trim(),
     });
     setLoading(false);
-    const r = data as any;
+    const r = (data ?? null) as { ok?: boolean; error?: string; posto?: Posto; mecanico?: MecInfo } | null;
     if (error || !r?.ok) {
       const err = r?.error || error?.message || "qr_invalido";
       const map: Record<string, string> = {
@@ -399,19 +401,20 @@ export default function AbastecimentoPage() {
       try {
         const dataUrl = await blobToDataUrl(blob);
         const { data } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl } });
-        const r: any = data;
+        const r = (data ?? null) as { ok?: boolean; valor?: string | number; litros?: string | number; combustivel?: string } | null;
         if (r?.ok) {
           if (r.valor) setValor(String(r.valor));
           if (r.litros) setLitros(String(r.litros));
           if (r.combustivel) setCombustivel(r.combustivel);
         }
       } catch {
+        void 0;
       }
       setAnalisando(false);
       setStep("painel");
       toast.success("Foto da bomba salva. Agora a foto do painel/KM.");
-    } catch (e: any) {
-      toast.error(e.message || "Erro no upload");
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e) || "Erro no upload");
     } finally {
       setLoading(false);
     }
@@ -423,8 +426,8 @@ export default function AbastecimentoPage() {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", blob);
       setFotoPainelUrl(url);
       setStep("form");
-    } catch (e: any) {
-      toast.error(e.message || "Erro no upload");
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e) || "Erro no upload");
     } finally {
       setLoading(false);
     }
@@ -458,7 +461,7 @@ export default function AbastecimentoPage() {
       p_endereco: null,
     });
     setLoading(false);
-    const r = data as any;
+    const r = (data ?? null) as { ok?: boolean; error?: string } | null;
     if (error || !r?.ok) {
       toast.error(r?.error || error?.message || "Erro ao salvar");
       return;
