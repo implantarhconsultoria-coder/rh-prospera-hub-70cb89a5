@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Upload, FileText, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Trash2, Loader2, Copy, Sparkles } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Loader2, Copy, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (n: any) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -20,7 +19,7 @@ const STATUS_LABEL: Record<string, string> = {
   concluida: 'Concluída',
   pdf_sem_texto: 'PDF sem texto legível',
   tipo_nao_identificado: 'Tipo não identificado',
-  sem_registros: 'Pendente de conferência',
+  sem_registros: 'Sem registros válidos',
   erro: 'Erro técnico',
 };
 
@@ -56,8 +55,36 @@ const ImportacoesDN4Page: React.FC = () => {
       .select('*')
       .order('iniciado_em', { ascending: false })
       .limit(50);
-    if (error) toast.error(error.message);
-    setImports((data as any[]) || []);
+
+    if (error) {
+      toast.error(error.message);
+      setImports([]);
+      setLoading(false);
+      return;
+    }
+
+    const baseImports = ((data as any[]) || []) as Importacao[];
+    const enrichedImports = await Promise.all(
+      baseImports.map(async (item) => {
+        if (!item.tipo || item.tipo === 'desconhecido') return item;
+
+        const { data: resumo } = await supabase.rpc('dn4_resumo_importacao' as any, {
+          p_importacao_id: item.id,
+        } as any);
+
+        if (!resumo || typeof resumo !== 'object') return item;
+
+        return {
+          ...item,
+          total_lidos: Number((resumo as any).total ?? item.total_lidos ?? 0),
+          total_confirmados: Number((resumo as any).confirmados ?? item.total_confirmados ?? 0),
+          total_pendentes: Number((resumo as any).pendentes_conferencia ?? item.total_pendentes ?? 0),
+          total_erros: Number((resumo as any).erros ?? item.total_erros ?? 0),
+        } satisfies Importacao;
+      }),
+    );
+
+    setImports(enrichedImports);
     setLoading(false);
   }, []);
 
@@ -83,14 +110,25 @@ const ImportacoesDN4Page: React.FC = () => {
         } as any).select().single();
         if (insErr || !imp) { toast.error(insErr?.message || 'Erro ao criar importação'); continue; }
 
-        const { error: fnErr } = await supabase.functions.invoke('parse-dn4', {
+        const { data: parseData, error: fnErr } = await supabase.functions.invoke('parse-dn4', {
           body: { importacao_id: (imp as any).id, storage_path: path, tipo_forcado: tipoForcado === 'auto' ? null : tipoForcado },
         });
         if (fnErr) {
-          toast.error(`Parse ${file.name}: ${fnErr.message}`);
-          await supabase.from('importacoes_dn4' as any).update({ status: 'erro' } as any).eq('id', (imp as any).id);
+          toast.error(`Importação ${file.name}: ${fnErr.message}`);
+          await supabase.from('importacoes_dn4' as any).update({ status: 'erro', mensagem: fnErr.message } as any).eq('id', (imp as any).id);
         } else {
-          toast.success(`${file.name} processado`);
+          const detalhes = parseData as { total_lidos?: number; status?: string; total_erros?: number } | null;
+          if (detalhes?.status === 'aguardando_conferencia') {
+            toast.success(`${file.name}: ${detalhes.total_lidos || 0} registro(s) lido(s)`);
+          } else if (detalhes?.status === 'pdf_sem_texto') {
+            toast.warning(`${file.name}: PDF sem texto legível`);
+          } else if (detalhes?.status === 'tipo_nao_identificado') {
+            toast.warning(`${file.name}: tipo não identificado automaticamente`);
+          } else if (detalhes?.status === 'sem_registros') {
+            toast.warning(`${file.name}: nenhum registro encontrado no layout atual`);
+          } else {
+            toast.success(`${file.name} processado`);
+          }
         }
       }
       await carregar();
@@ -344,13 +382,17 @@ const ReprocessarBox: React.FC<{ importacao: Importacao; onDone: () => void }> =
     setBusy(true);
     try {
       await supabase.from('importacoes_dn4' as any).update({
-        status: 'em_andamento', mensagem: null, total_lidos: 0, total_pendentes: 0, total_erros: 0,
+        status: 'em_andamento', mensagem: null, total_lidos: 0, total_confirmados: 0, total_pendentes: 0, total_erros: 0,
       } as any).eq('id', importacao.id);
-      const { error } = await supabase.functions.invoke('parse-dn4', {
+      const { data, error } = await supabase.functions.invoke('parse-dn4', {
         body: { importacao_id: importacao.id, storage_path: importacao.storage_path, tipo_forcado: tipo === 'auto' ? null : tipo },
       });
       if (error) toast.error(error.message);
-      else toast.success('Reprocessado');
+      else {
+        const detalhes = data as { total_lidos?: number; status?: string } | null;
+        if (detalhes?.status === 'aguardando_conferencia') toast.success(`Reprocessado com ${detalhes.total_lidos || 0} registro(s)`);
+        else toast.success('Reprocessado');
+      }
       onDone();
     } finally { setBusy(false); }
   };

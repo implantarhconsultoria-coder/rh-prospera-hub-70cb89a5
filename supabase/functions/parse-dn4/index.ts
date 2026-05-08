@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { Buffer } from 'node:buffer';
-import pdfParse from 'npm:pdf-parse@1.1.1/lib/pdf-parse.js';
+import { getDocument } from 'npm:pdfjs-serverless@0.3.2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,159 +11,368 @@ const num = (s: any) => {
   if (s === null || s === undefined) return null;
   const v = String(s).replace(/\./g, '').replace(',', '.').replace(/[^\d.\-]/g, '');
   const n = parseFloat(v);
-  return isNaN(n) ? null : n;
+  return Number.isNaN(n) ? null : n;
 };
+
 const onlyDigits = (s: any) => (s ? String(s).replace(/[^0-9]/g, '') : '');
+
 const parseDate = (s: any) => {
   if (!s) return null;
   const m = String(s).match(/(\d{2})\/(\d{2})\/(\d{4})/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 };
 
-// ====== DETECÇÃO POR TÍTULO/CONTEÚDO =======================================
+const normalize = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const cleanLine = (value: string) => String(value || '').replace(/\s+/g, ' ').trim();
+
+const isCabecalhoOuRodape = (linha: string) => {
+  const t = normalize(linha);
+  return (
+    !t ||
+    t.length < 3 ||
+    t.startsWith('PAGINA ') ||
+    t.startsWith('PAG. ') ||
+    t.startsWith('EMISSAO') ||
+    t.startsWith('EMISSAO') ||
+    t.startsWith('DATA ') ||
+    t.startsWith('HORA ') ||
+    t.includes('RELATORIO') ||
+    t.includes('SISTEMA ANTERIOR') ||
+    t.includes('TOPAC') ||
+    t.includes('IMPLANTARH') ||
+    t.includes('TOTAL GERAL') ||
+    t.includes('USUARIO:') ||
+    t.includes('FILTRO:')
+  );
+};
+
 function detectarTipo(texto: string): { tipo: string; motivo: string } {
-  const t = texto.toUpperCase().replace(/\s+/g, ' ');
-  if (/RELAT[ÓO]RIO\s+SINT[ÉE]TICO\s+DE\s+CLIENTES/.test(t)) return { tipo: 'cliente', motivo: 'Título "Relatório Sintético de Clientes"' };
-  if (/RELAT[ÓO]RIO\s+SINT[ÉE]TICO\s+DE\s+REPRESENTANTES/.test(t)) return { tipo: 'representante', motivo: 'Título "Relatório Sintético de Representantes"' };
-  if (/HIST[ÓO]RICO\s+DE\s+LOCA[ÇC][ÃA]O/.test(t)) return { tipo: 'historico', motivo: 'Título "Histórico de Locação"' };
-  if (/POR\s+TIPO\s+DE\s+EQUIPAMENTO\s+COM\s+N[ºO]?\s+DE\s+PATRIM[ÔO]NIO/.test(t)) return { tipo: 'equipamento', motivo: 'Título "Por Tipo de Equipamento com Nº de Patrimônio"' };
-  if (/RELAT[ÓO]RIO\s+DE\s+EQUIPAMENTOS/.test(t)) return { tipo: 'equipamento', motivo: 'Título "Relatório de Equipamentos"' };
-  // heurísticas leves
-  if (/N[ºO]\s*PATRIM[ÔO]NIO|PATRIM[ÔO]NIO/.test(t) && /EQUIPAMENTO/.test(t)) return { tipo: 'equipamento', motivo: 'Texto contém "Patrimônio" e "Equipamento"' };
-  if (/CNPJ|RAZ[ÃA]O\s+SOCIAL/.test(t) && /CLIENTE/.test(t)) return { tipo: 'cliente', motivo: 'Texto contém "Cliente" + CNPJ/Razão Social' };
-  if (/REPRESENTANTE/.test(t)) return { tipo: 'representante', motivo: 'Texto contém "Representante"' };
-  return { tipo: 'desconhecido', motivo: 'Nenhum título conhecido encontrado' };
+  const t = normalize(texto);
+
+  if (t.includes('RELATORIO SINTETICO DE CLIENTES')) {
+    return { tipo: 'cliente', motivo: 'Título reconhecido: Relatório Sintético de Clientes' };
+  }
+  if (t.includes('RELATORIO SINTETICO DE REPRESENTANTES')) {
+    return { tipo: 'representante', motivo: 'Título reconhecido: Relatório Sintético de Representantes' };
+  }
+  if (t.includes('RELATORIO HISTORICO DE LOCACAO') || t.includes('HISTORICO DE LOCACAO')) {
+    return { tipo: 'historico', motivo: 'Título reconhecido: Histórico de Locação' };
+  }
+  if (
+    t.includes('RELATORIO DE EQUIPAMENTOS') ||
+    t.includes('POR TIPO DE EQUIPAMENTO COM N O DE PATRIMONIO') ||
+    t.includes('POR TIPO DE EQUIPAMENTO COM NO DE PATRIMONIO') ||
+    t.includes('POR TIPO DE EQUIPAMENTO COM Nº DE PATRIMONIO') ||
+    (t.includes('PATRIMONIO') && t.includes('EQUIPAMENTO'))
+  ) {
+    return { tipo: 'equipamento', motivo: 'Título reconhecido: Relatório de Equipamentos / Patrimônios' };
+  }
+
+  if ((t.includes('CPF') || t.includes('CNPJ')) && (t.includes('CLIENTE') || t.includes('RAZAO SOCIAL'))) {
+    return { tipo: 'cliente', motivo: 'Heurística: documento + cliente/razão social' };
+  }
+  if (t.includes('REPRESENTANTE')) {
+    return { tipo: 'representante', motivo: 'Heurística: texto contém representante' };
+  }
+  if (t.includes('PATRIMONIO') && (t.includes('SERIE') || t.includes('SITUACAO') || t.includes('EQUIPAMENTO'))) {
+    return { tipo: 'equipamento', motivo: 'Heurística: texto contém patrimônio/equipamento' };
+  }
+  if (t.includes('OS') && t.includes('PEDIDO') && t.includes('NF') && t.includes('LOCACAO')) {
+    return { tipo: 'historico', motivo: 'Heurística: OS + pedido + NF + locação' };
+  }
+
+  return { tipo: 'desconhecido', motivo: 'Nenhum padrão conhecido encontrado no texto extraído' };
 }
 
-// ====== PARSERS ============================================================
+function extrairLinhasDePagina(items: any[]) {
+  const buckets = new Map<string, Array<{ x: number; text: string }>>();
+
+  for (const item of items || []) {
+    const text = cleanLine('str' in item ? item.str : '');
+    if (!text) continue;
+
+    const x = Number(item.transform?.[4] ?? 0);
+    const y = Number(item.transform?.[5] ?? 0);
+    const bucket = (Math.round(y * 2) / 2).toFixed(1);
+    const current = buckets.get(bucket) || [];
+    current.push({ x, text });
+    buckets.set(bucket, current);
+  }
+
+  const lines = [...buckets.entries()]
+    .sort((a, b) => Number(b[0]) - Number(a[0]))
+    .map(([, grouped]) =>
+      cleanLine(
+        grouped
+          .sort((a, b) => a.x - b.x)
+          .map((entry) => entry.text)
+          .join(' '),
+      ),
+    )
+    .filter(Boolean);
+
+  return lines;
+}
+
+async function extrairTexto(bytes: Uint8Array): Promise<{ texto: string; paginas: number; qualidade: 'boa' | 'ruim' }> {
+  try {
+    const document = await getDocument({
+      data: bytes,
+      useSystemFonts: true,
+      isEvalSupported: false,
+    }).promise;
+
+    const partes: string[] = [];
+
+    for (let pagina = 1; pagina <= document.numPages; pagina += 1) {
+      const page = await document.getPage(pagina);
+      const textContent = await page.getTextContent();
+      const linhas = extrairLinhasDePagina(textContent.items as any[]);
+      const fallback = cleanLine(
+        (textContent.items as any[])
+          .map((item) => ('str' in item ? item.str : ''))
+          .filter(Boolean)
+          .join(' '),
+      );
+      const pageText = linhas.length ? linhas.join('\n') : fallback;
+      if (pageText) partes.push(pageText);
+    }
+
+    const texto = partes.join('\n\n').trim();
+    const letras = (texto.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
+    const qualidade: 'boa' | 'ruim' = texto.length > 80 && letras > 30 ? 'boa' : 'ruim';
+
+    return { texto, paginas: document.numPages || 0, qualidade };
+  } catch (error) {
+    console.error('extrairTexto erro', error);
+    return { texto: '', paginas: 0, qualidade: 'ruim' };
+  }
+}
+
 function extrairClientes(linhas: string[]) {
   const regs: any[] = [];
-  for (const linha of linhas) {
-    const cnpj = linha.match(/(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/);
-    const cpf = !cnpj && linha.match(/(\d{3}\.?\d{3}\.?\d{3}-?\d{2})/);
-    if (!cnpj && !cpf) continue;
-    const doc = (cnpj?.[1] || cpf?.[1] || '').trim();
-    const cep = linha.match(/(\d{5}-?\d{3})/);
-    const ufMatch = linha.match(/\b([A-Z]{2})\b(?!.*\b[A-Z]{2}\b)/);
-    const partes = linha.split(doc);
-    const antes = (partes[0] || '').trim();
-    const depois = (partes.slice(1).join(doc) || '').trim();
-    const codigoMatch = antes.match(/^(\d{1,8})\s+/);
-    const codigo = codigoMatch?.[1] || '';
-    const nome = antes.replace(/^(\d{1,8})\s+/, '').trim();
-    const uf = ufMatch?.[1] || '';
-    let cidade = depois;
-    if (cep) cidade = cidade.replace(cep[1], '');
-    if (uf) cidade = cidade.replace(new RegExp(`\\b${uf}\\b`), '');
-    cidade = cidade.replace(/\s{2,}/g, ' ').trim();
-    regs.push({
-      codigo_dn4: codigo || null,
-      nome_razao_social: nome || null,
-      cpf_cnpj: onlyDigits(doc),
-      cep: cep?.[1] || null,
-      cidade: cidade || null,
-      uf: uf || null,
-      linha_original_extraida: { raw: linha },
-    });
-  }
-  return regs;
-}
 
-function extrairEquipamentos(linhas: string[]) {
-  const regs: any[] = [];
-  for (const linha of linhas) {
-    // tenta: CODIGO PATRIMONIO DESCRIÇÃO ... [SITUACAO] ... valores
-    const m = linha.match(/^(\d{2,8})\s+(\d{3,10})\s+(.+?)(?:\s+(ATIVO|INATIVO|LOCADO|MANUTEN[ÇC][ÃA]O|VENDIDO|BAIXADO|DISPON[ÍI]VEL))?\s*([\d\.,\s]*)$/i);
-    if (!m) continue;
-    const valores = (m[5] || '').trim().split(/\s+/).map(num).filter((v) => v !== null);
+  for (const original of linhas) {
+    const linha = cleanLine(original);
+    if (!linha || isCabecalhoOuRodape(linha)) continue;
+
+    const cnpj = linha.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/);
+    const cpf = !cnpj ? linha.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/) : null;
+    if (!cnpj && !cpf) continue;
+
+    const documento = cnpj?.[0] || cpf?.[0] || '';
+    const codigoMatch = linha.match(/^(\d{1,8})\s+/);
+    const codigo = codigoMatch?.[1] || null;
+
+    const nomeParte = cleanLine(linha.split(documento)[0].replace(/^(\d{1,8})\s+/, ''));
+    const resto = cleanLine(linha.split(documento).slice(1).join(documento));
+
+    const cepMatch = resto.match(/\d{5}-?\d{3}/);
+    const ieMatch = resto.match(/(?:IE|INSC(?:RICAO)?\s+ESTADUAL)\s*[:\-]?\s*([0-9A-Z.\/-]+)/i);
+    const cidadeUfCep = resto.match(/([A-Za-zÀ-ÿ'´`\-\s]+?)\s+([A-Z]{2})(?:\s+(\d{5}-?\d{3}))?$/);
+
+    const cidade = cidadeUfCep?.[1] ? cleanLine(cidadeUfCep[1]) : null;
+    const uf = cidadeUfCep?.[2] || null;
+    const cep = cidadeUfCep?.[3] || cepMatch?.[0] || null;
+
+    let endereco = resto;
+    if (cidadeUfCep?.[0]) endereco = endereco.replace(cidadeUfCep[0], '');
+    if (ieMatch?.[0]) endereco = endereco.replace(ieMatch[0], '');
+    if (cepMatch?.[0]) endereco = endereco.replace(cepMatch[0], '');
+    endereco = cleanLine(endereco.replace(/\b\d{2}\.\d{3}\.\d{3}\/?\d{4}-?\d{2}\b/, ''));
+
     regs.push({
-      codigo_equipamento: m[1],
-      numero_patrimonio: m[2],
-      descricao: m[3].trim(),
-      situacao: m[4] || null,
-      valor_compra: valores[0] ?? null,
-      valor_venda: valores[1] ?? null,
-      valor_mercado: valores[2] ?? null,
-      valor_indenizacao: valores[3] ?? null,
+      codigo_dn4: codigo,
+      nome_razao_social: nomeParte || null,
+      cpf_cnpj: onlyDigits(documento) || null,
+      inscricao_estadual: ieMatch?.[1] || null,
+      endereco: endereco || null,
+      bairro: null,
+      cidade,
+      uf,
+      cep,
       linha_original_extraida: { raw: linha },
+      status: nomeParte ? 'pendente_conferencia' : 'erro_leitura',
+      mensagem_erro: nomeParte ? null : 'coluna obrigatória ausente: razão social/nome',
     });
   }
+
   return regs;
 }
 
 function extrairRepresentantes(linhas: string[]) {
   const regs: any[] = [];
-  for (const linha of linhas) {
-    const cnpj = linha.match(/(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/);
-    const cpf = !cnpj && linha.match(/(\d{3}\.?\d{3}\.?\d{3}-?\d{2})/);
-    const tel = linha.match(/(\(?\d{2}\)?\s?\d{4,5}-?\d{4})/);
-    const email = linha.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+
+  for (const original of linhas) {
+    const linha = cleanLine(original);
+    if (!linha || isCabecalhoOuRodape(linha)) continue;
+
     const codigoMatch = linha.match(/^(\d{1,8})\s+/);
-    if (!cnpj && !cpf && !tel && !email && !codigoMatch) continue;
-    const doc = (cnpj?.[1] || cpf?.[1] || '').trim();
-    let nome = linha.replace(/^\d{1,8}\s+/, '');
-    if (doc) nome = nome.split(doc)[0];
-    if (tel) nome = nome.split(tel[1])[0];
-    if (email) nome = nome.split(email[0])[0];
-    nome = nome.trim();
-    if (!nome) continue;
+    const documentoMatch = linha.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+    const emailMatch = linha.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+    const telefoneMatch = linha.match(/(?:\(?\d{2}\)?\s?)?\d{4,5}-?\d{4}/);
+    const cidadeUfMatch = linha.match(/([A-Za-zÀ-ÿ'´`\-\s]+?)\s+([A-Z]{2})\b(?!.*\b[A-Z]{2}\b)/);
+
+    if (!codigoMatch && !documentoMatch && !emailMatch && !telefoneMatch) continue;
+
+    let nome = linha.replace(/^(\d{1,8})\s+/, '');
+    if (documentoMatch?.[0]) nome = nome.replace(documentoMatch[0], ' ');
+    if (emailMatch?.[0]) nome = nome.replace(emailMatch[0], ' ');
+    if (telefoneMatch?.[0]) nome = nome.replace(telefoneMatch[0], ' ');
+    if (cidadeUfMatch?.[0]) nome = nome.replace(cidadeUfMatch[0], ' ');
+    nome = cleanLine(nome);
+
+    const doc = documentoMatch?.[0] || '';
+    const tipoPessoa = doc.length === 11 ? 'PF' : doc.length === 14 ? 'PJ' : null;
+
     regs.push({
       codigo_dn4: codigoMatch?.[1] || null,
-      nome,
+      nome: nome || null,
       cpf_cnpj: doc ? onlyDigits(doc) : null,
-      telefone: tel?.[1] || null,
-      email: email?.[0] || null,
-      tipo_pessoa: cnpj ? 'PJ' : (cpf ? 'PF' : null),
+      telefone: telefoneMatch?.[0] || null,
+      email: emailMatch?.[0] || null,
+      cidade: cidadeUfMatch?.[1] ? cleanLine(cidadeUfMatch[1]) : null,
+      uf: cidadeUfMatch?.[2] || null,
+      tipo_pessoa: tipoPessoa,
       linha_original_extraida: { raw: linha },
+      status: nome ? 'pendente_conferencia' : 'erro_leitura',
+      mensagem_erro: nome ? null : 'coluna obrigatória ausente: nome do representante',
     });
   }
+
+  return regs;
+}
+
+function extrairEquipamentos(linhas: string[]) {
+  const regs: any[] = [];
+
+  for (const original of linhas) {
+    const linha = cleanLine(original);
+    if (!linha || isCabecalhoOuRodape(linha)) continue;
+
+    const lead = linha.match(/^(\d{1,8})\s+(\d{3,14})\s+(.+)$/);
+    if (!lead) continue;
+
+    const codigo = lead[1];
+    const patrimonio = lead[2];
+    let corpo = lead[3];
+
+    const valores = [...corpo.matchAll(/\d{1,3}(?:\.\d{3})*,\d{2}/g)];
+    const valorTexts = valores.map((match) => match[0]);
+    if (valores[0]?.index !== undefined) {
+      corpo = corpo.slice(0, valores[0].index).trim();
+    }
+
+    const situacaoMatch = normalize(corpo).match(/\b(ATIVO|INATIVO|LOCADO|MANUTENCAO|VENDIDO|BAIXADO|DISPONIVEL)\b/);
+    const situacao = situacaoMatch?.[1]
+      ? situacaoMatch[1]
+          .replace('MANUTENCAO', 'MANUTENÇÃO')
+          .replace('DISPONIVEL', 'DISPONÍVEL')
+      : null;
+
+    let descricao = corpo;
+    if (situacao) {
+      descricao = cleanLine(descricao.replace(new RegExp(situacao.replace(/[ÍÇÃÕ]/g, '.'), 'i'), ' '));
+    }
+
+    const serieMatch = descricao.match(/(?:SERIE|NR\.?\s*SERIE|N\.?\s*SERIE)\s*[:\-]?\s*([A-Z0-9\-\/]+)/i);
+    const filialMatch = descricao.match(/(?:FILIAL|FIL\.?)\s*[:\-]?\s*([A-Z0-9\-\/ ]+)/i);
+    const tipoGrupoMatch = descricao.match(/(?:GRUPO|TIPO)\s*[:\-]?\s*([A-Z0-9À-ÿ\-\/ ]+)/i);
+
+    regs.push({
+      codigo_equipamento: codigo,
+      numero_patrimonio: patrimonio,
+      descricao: descricao || null,
+      tipo_equipamento: tipoGrupoMatch?.[1] ? cleanLine(tipoGrupoMatch[1]) : null,
+      grupo: tipoGrupoMatch?.[1] ? cleanLine(tipoGrupoMatch[1]) : null,
+      filial_opera: filialMatch?.[1] ? cleanLine(filialMatch[1]) : null,
+      situacao,
+      numero_serie: serieMatch?.[1] || null,
+      valor_venda: valorTexts[0] ? num(valorTexts[0]) : null,
+      valor_compra: valorTexts[1] ? num(valorTexts[1]) : null,
+      valor_mercado: valorTexts[2] ? num(valorTexts[2]) : null,
+      valor_indenizacao: valorTexts[3] ? num(valorTexts[3]) : null,
+      linha_original_extraida: { raw: linha },
+      status: patrimonio ? 'pendente_conferencia' : 'erro_leitura',
+      mensagem_erro: patrimonio ? null : 'coluna obrigatória ausente: número do patrimônio',
+    });
+  }
+
   return regs;
 }
 
 function extrairHistorico(linhas: string[]) {
   const regs: any[] = [];
-  for (const linha of linhas) {
-    const datas = linha.match(/(\d{2}\/\d{2}\/\d{4}).{0,10}(\d{2}\/\d{2}\/\d{4})/);
-    if (!datas) continue;
+
+  for (const original of linhas) {
+    const linha = cleanLine(original);
+    if (!linha || isCabecalhoOuRodape(linha)) continue;
+
+    const datas = [...linha.matchAll(/\d{2}\/\d{2}\/\d{4}/g)];
+    if (datas.length < 2) continue;
+
     const tokens = linha.split(/\s+/);
-    const numeros = tokens.filter((t) => /^[\d.,]+$/.test(t)).map(num).filter((v) => v !== null);
-    const os = tokens[0];
-    const pedido = tokens[1];
-    const patrimonio = tokens.find((t, i) => i > 1 && /^\d{4,8}$/.test(t));
-    const nf = tokens.reverse().find((t) => /^\d{3,9}$/.test(t));
+    const os = tokens[0] || null;
+    const pedido = tokens[1] || null;
+    const patrimonio = tokens.find((token, index) => index > 1 && /^\d{3,14}$/.test(token)) || null;
+
+    const nfMatches = [...linha.matchAll(/\bNF\s*[:\-]?\s*(\d{1,12})\b/gi)];
+    const nfDireta = nfMatches.at(-1)?.[1] || null;
+    const numerosCurtos = tokens.filter((token) => /^\d{3,12}$/.test(token));
+    const numeroNf = nfDireta || numerosCurtos.at(-1) || null;
+
+    const valores = [...linha.matchAll(/\d{1,3}(?:\.\d{3})*,\d{2}/g)].map((match) => num(match[0])).filter((value) => value !== null);
+    const inicio = datas[0]?.[0] || null;
+    const fim = datas[1]?.[0] || null;
+
+    const beforePatrimonio = patrimonio ? linha.split(patrimonio)[0] : linha;
+    const headTokens = beforePatrimonio.split(/\s+/).slice(2);
+    const clienteNome = cleanLine(headTokens.join(' ')) || null;
+
+    const descStart = patrimonio ? linha.indexOf(patrimonio) + patrimonio.length : 0;
+    const descEnd = datas[0]?.index ?? linha.length;
+    const descricao = cleanLine(linha.slice(descStart, descEnd)) || null;
+
     regs.push({
-      numero_os: os || null,
-      pedido: pedido || null,
-      patrimonio: patrimonio || null,
-      periodo_texto: `${datas[1]} a ${datas[2]}`,
-      data_inicio: parseDate(datas[1]),
-      data_fim: parseDate(datas[2]),
-      valor_pedido_periodo: numeros[numeros.length - 3] ?? null,
-      valor_diaria_periodo: numeros[numeros.length - 2] ?? null,
-      valor_faturado_periodo: numeros[numeros.length - 1] ?? null,
-      numero_nf: nf || null,
+      numero_os: os,
+      pedido,
+      cliente_nome: clienteNome,
+      patrimonio,
+      descricao_equipamento: descricao,
+      periodo_texto: inicio && fim ? `${inicio} a ${fim}` : null,
+      data_inicio: parseDate(inicio),
+      data_fim: parseDate(fim),
+      valor_diaria_periodo: valores.length >= 2 ? valores[valores.length - 2] : valores[0] ?? null,
+      valor_faturado_periodo: valores.length >= 1 ? valores[valores.length - 1] : null,
+      numero_nf: numeroNf,
+      filial: null,
       linha_original_extraida: { raw: linha },
+      status: os && patrimonio ? 'pendente_conferencia' : 'erro_leitura',
+      mensagem_erro: os && patrimonio ? null : 'coluna obrigatória ausente: OS ou patrimônio',
     });
   }
+
   return regs;
 }
 
-// ====== EXTRAÇÃO DE TEXTO ==================================================
-async function extrairTexto(bytes: Uint8Array): Promise<{ texto: string; paginas: number; qualidade: 'boa' | 'ruim' }> {
-  try {
-    const data = await pdfParse(Buffer.from(bytes));
-    const texto = data.text || '';
-    const letras = (texto.match(/[a-zA-ZÀ-ÿ]/g) || []).length;
-    const qualidade: 'boa' | 'ruim' = texto.length > 200 && letras > 80 ? 'boa' : 'ruim';
-    return { texto, paginas: data.numpages || 1, qualidade };
-  } catch (e) {
-    console.error('pdf-parse erro', e);
-    return { texto: '', paginas: 0, qualidade: 'ruim' };
-  }
+async function limparStaging(supabase: any, importacaoId: string) {
+  await supabase.from('staging_clientes_dn4').delete().eq('importacao_id', importacaoId);
+  await supabase.from('staging_representantes_dn4').delete().eq('importacao_id', importacaoId);
+  await supabase.from('staging_equipamentos_dn4').delete().eq('importacao_id', importacaoId);
+  await supabase.from('staging_historico_locacao_dn4').delete().eq('importacao_id', importacaoId);
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   try {
     const auth = req.headers.get('Authorization') || '';
@@ -174,120 +382,194 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: auth } } },
     );
 
-    const { importacao_id, storage_path, tipo_forcado } = await req.json();
-    if (!importacao_id || !storage_path) {
-      return new Response(JSON.stringify({ error: 'parametros_invalidos' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const body = await req.json();
+    const importacaoId = body?.importacao_id;
+    const storagePath = body?.storage_path;
+    const tipoForcado = body?.tipo_forcado;
+
+    if (!importacaoId || !storagePath) {
+      return new Response(JSON.stringify({ error: 'parametros_invalidos' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const { data: file, error: dlErr } = await supabase.storage.from('dn4-imports').download(storage_path);
-    if (dlErr || !file) {
-      await supabase.from('importacoes_dn4').update({
-        status: 'erro', tipo: 'desconhecido',
-        mensagem: 'Falha ao baixar PDF do storage: ' + (dlErr?.message || 'desconhecido'),
-        finalizado_em: new Date().toISOString(),
-      }).eq('id', importacao_id);
-      return new Response(JSON.stringify({ ok: false, error: 'download_failed' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const { data: file, error: downloadError } = await supabase.storage.from('dn4-imports').download(storagePath);
+
+    if (downloadError || !file) {
+      await supabase
+        .from('importacoes_dn4')
+        .update({
+          status: 'erro',
+          tipo: 'desconhecido',
+          mensagem: `Erro ao ler PDF: falha ao baixar o arquivo (${downloadError?.message || 'arquivo indisponível'})`,
+          finalizado_em: new Date().toISOString(),
+        })
+        .eq('id', importacaoId);
+
+      return new Response(JSON.stringify({ ok: false, error: 'download_failed' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
     const bytes = new Uint8Array(await file.arrayBuffer());
-
     const { texto, paginas, qualidade } = await extrairTexto(bytes);
-    const previa = texto.slice(0, 2000);
+    const previa = texto.slice(0, 4000);
 
     if (!texto || qualidade === 'ruim') {
-      await supabase.from('importacoes_dn4').update({
-        status: 'pdf_sem_texto', tipo: 'desconhecido',
-        mensagem: `PDF sem texto legível (provavelmente escaneado). ${paginas} página(s). Selecione o tipo manualmente e reprocesse, ou envie um PDF com texto nativo.`,
-        texto_extraido: previa,
-        finalizado_em: new Date().toISOString(),
-      }).eq('id', importacao_id);
-      return new Response(JSON.stringify({ ok: true, status: 'pdf_sem_texto' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      await limparStaging(supabase, importacaoId);
+      await supabase
+        .from('importacoes_dn4')
+        .update({
+          tipo: 'desconhecido',
+          status: 'pdf_sem_texto',
+          total_lidos: 0,
+          total_pendentes: 0,
+          total_erros: 0,
+          mensagem: `Arquivo sem texto legível. ${paginas} página(s) analisada(s). Se o PDF for escaneado, ele precisa de conferência manual ou nova exportação com texto nativo.`,
+          texto_extraido: previa,
+          finalizado_em: new Date().toISOString(),
+        })
+        .eq('id', importacaoId);
+
+      return new Response(JSON.stringify({ ok: true, status: 'pdf_sem_texto' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    let tipo = tipo_forcado && tipo_forcado !== 'auto' ? tipo_forcado : null;
-    let motivoDeteccao = tipo ? 'Tipo informado manualmente' : '';
+    let tipo = tipoForcado && tipoForcado !== 'auto' ? tipoForcado : null;
+    let motivoDeteccao = tipo ? 'Tipo selecionado manualmente' : '';
+
     if (!tipo) {
-      const det = detectarTipo(texto);
-      tipo = det.tipo;
-      motivoDeteccao = det.motivo;
+      const detectado = detectarTipo(texto);
+      tipo = detectado.tipo;
+      motivoDeteccao = detectado.motivo;
     }
 
     if (tipo === 'desconhecido') {
-      await supabase.from('importacoes_dn4').update({
-        status: 'tipo_nao_identificado', tipo: 'desconhecido',
-        mensagem: `Tipo não identificado automaticamente. Selecione manualmente (Clientes, Representantes, Equipamentos ou Histórico) e clique em Reprocessar. Início do texto: "${texto.slice(0, 200).replace(/\s+/g, ' ')}…"`,
-        texto_extraido: previa,
-        finalizado_em: new Date().toISOString(),
-      }).eq('id', importacao_id);
-      return new Response(JSON.stringify({ ok: true, status: 'tipo_nao_identificado' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      await limparStaging(supabase, importacaoId);
+      await supabase
+        .from('importacoes_dn4')
+        .update({
+          tipo: 'desconhecido',
+          status: 'tipo_nao_identificado',
+          total_lidos: 0,
+          total_pendentes: 0,
+          total_erros: 0,
+          mensagem: `Tipo não identificado automaticamente. ${motivoDeteccao}. Use a opção de reprocessar e selecione manualmente Clientes, Representantes, Equipamentos / Patrimônios ou Histórico de Locação.`,
+          texto_extraido: previa,
+          finalizado_em: new Date().toISOString(),
+        })
+        .eq('id', importacaoId);
+
+      return new Response(JSON.stringify({ ok: true, status: 'tipo_nao_identificado' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    // Limpa staging anterior dessa importação (caso seja reprocessamento)
-    await supabase.from('staging_clientes_dn4').delete().eq('importacao_id', importacao_id);
-    await supabase.from('staging_representantes_dn4').delete().eq('importacao_id', importacao_id);
-    await supabase.from('staging_equipamentos_dn4').delete().eq('importacao_id', importacao_id);
-    await supabase.from('staging_historico_locacao_dn4').delete().eq('importacao_id', importacao_id);
+    await limparStaging(supabase, importacaoId);
 
-    const linhas = texto.split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const linhas = texto
+      .split('\n')
+      .map(cleanLine)
+      .filter((linha) => linha.length > 0);
 
-    let regs: any[] = [];
-    if (tipo === 'cliente') regs = extrairClientes(linhas);
-    else if (tipo === 'equipamento') regs = extrairEquipamentos(linhas);
-    else if (tipo === 'representante') regs = extrairRepresentantes(linhas);
-    else if (tipo === 'historico') regs = extrairHistorico(linhas);
+    let registros: any[] = [];
+    if (tipo === 'cliente') registros = extrairClientes(linhas);
+    else if (tipo === 'representante') registros = extrairRepresentantes(linhas);
+    else if (tipo === 'equipamento') registros = extrairEquipamentos(linhas);
+    else if (tipo === 'historico') registros = extrairHistorico(linhas);
 
     const tabela =
-      tipo === 'cliente' ? 'staging_clientes_dn4' :
-      tipo === 'equipamento' ? 'staging_equipamentos_dn4' :
-      tipo === 'representante' ? 'staging_representantes_dn4' :
-      'staging_historico_locacao_dn4';
+      tipo === 'cliente'
+        ? 'staging_clientes_dn4'
+        : tipo === 'representante'
+          ? 'staging_representantes_dn4'
+          : tipo === 'equipamento'
+            ? 'staging_equipamentos_dn4'
+            : 'staging_historico_locacao_dn4';
 
-    let totalErros = 0;
-    if (regs.length > 0) {
-      const rows = regs.map((r) => ({
-        ...r, importacao_id, arquivo_origem: storage_path, status: 'pendente_conferencia',
+    let errosGravacao = 0;
+    const totalLidos = registros.length;
+    const totalErrosLeitura = registros.filter((registro) => registro.status === 'erro_leitura').length;
+
+    if (registros.length > 0) {
+      const rows = registros.map((registro) => ({
+        ...registro,
+        importacao_id: importacaoId,
+        arquivo_origem: storagePath,
+        status: registro.status || 'pendente_conferencia',
+        mensagem_erro: registro.mensagem_erro || null,
       }));
-      // insere em chunks de 200
+
       for (let i = 0; i < rows.length; i += 200) {
         const chunk = rows.slice(i, i + 200);
-        const { error: insErr } = await supabase.from(tabela).insert(chunk);
-        if (insErr) { totalErros += chunk.length; console.error('insert err', insErr); }
+        const { error: insertError } = await supabase.from(tabela).insert(chunk);
+        if (insertError) {
+          errosGravacao += chunk.length;
+          console.error('Erro ao salvar staging', insertError);
+        }
       }
     }
 
-    const totalLidos = regs.length;
-    const status =
-      totalLidos === 0 ? 'sem_registros' :
-      totalErros >= totalLidos ? 'erro' :
-      'aguardando_conferencia';
+    const totalErros = totalErrosLeitura + errosGravacao;
+    const totalPendentes = Math.max(totalLidos - totalErrosLeitura - errosGravacao, 0);
 
-    const mensagem =
-      totalLidos === 0
-        ? `Tipo "${tipo}" identificado (${motivoDeteccao}), mas nenhum registro extraído. O layout pode ser diferente do esperado — verifique a prévia do texto.`
-        : totalErros > 0
-        ? `${motivoDeteccao}. Lidos ${totalLidos}, com ${totalErros} erro(s) de gravação.`
-        : `${motivoDeteccao}. ${totalLidos} registro(s) lido(s) e em conferência.`;
+    let status = 'aguardando_conferencia';
+    let mensagem = `${motivoDeteccao}. ${totalLidos} registro(s) extraído(s).`;
 
-    await supabase.from('importacoes_dn4').update({
-      tipo, total_lidos: totalLidos, total_pendentes: totalLidos - totalErros,
-      total_erros: totalErros, status, mensagem, texto_extraido: previa,
-      finalizado_em: new Date().toISOString(),
-    }).eq('id', importacao_id);
+    if (totalLidos === 0) {
+      status = 'sem_registros';
+      mensagem = `${motivoDeteccao}. O parser não encontrou linhas válidas para este layout. Verifique a prévia do texto extraído.`;
+    } else if (errosGravacao > 0 && totalPendentes === 0) {
+      status = 'erro';
+      mensagem = `${motivoDeteccao}. Os registros foram identificados, mas houve erro ao salvar no banco.`;
+    } else if (totalErros > 0) {
+      mensagem = `${motivoDeteccao}. ${totalLidos} registro(s) extraído(s), ${totalPendentes} pendente(s) para conferência e ${totalErros} com erro detalhado.`;
+    } else {
+      mensagem = `${motivoDeteccao}. ${totalLidos} registro(s) lido(s) e enviados para conferência.`;
+    }
 
-    return new Response(JSON.stringify({ ok: true, tipo, total_lidos: totalLidos, total_erros: totalErros, status }), {
+    await supabase
+      .from('importacoes_dn4')
+      .update({
+        tipo,
+        status,
+        total_lidos: totalLidos,
+        total_confirmados: 0,
+        total_pendentes: totalPendentes,
+        total_erros: totalErros,
+        mensagem,
+        texto_extraido: previa,
+        finalizado_em: new Date().toISOString(),
+      })
+      .eq('id', importacaoId);
+
+    return new Response(
+      JSON.stringify({ ok: true, tipo, total_lidos: totalLidos, total_pendentes: totalPendentes, total_erros: totalErros, status }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  } catch (error) {
+    console.error('parse-dn4 erro', error);
+
+    try {
+      const cloned = await req.clone().json().catch(() => ({}));
+      if (cloned?.importacao_id) {
+        const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+        await supabase
+          .from('importacoes_dn4')
+          .update({
+            status: 'erro',
+            mensagem: `Erro técnico ao processar PDF: ${String(error?.message || error)}`,
+            finalizado_em: new Date().toISOString(),
+          })
+          .eq('id', cloned.importacao_id);
+      }
+    } catch (_internalError) {}
+
+    return new Response(JSON.stringify({ error: String(error?.message || error) }), {
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (e) {
-    console.error('parse-dn4 erro', e);
-    try {
-      const body = await req.clone().json().catch(() => ({}));
-      if (body?.importacao_id) {
-        const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-        await supabase.from('importacoes_dn4').update({
-          status: 'erro', mensagem: 'Erro técnico: ' + String(e?.message || e),
-          finalizado_em: new Date().toISOString(),
-        }).eq('id', body.importacao_id);
-      }
-    } catch {}
-    return new Response(JSON.stringify({ error: String(e?.message || e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
