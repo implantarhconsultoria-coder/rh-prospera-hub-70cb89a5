@@ -1,8 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 
-/** Upload de selfie/foto para bucket privado. Retorna URL assinada de longa duração. */
+/** Upload de selfie/foto. Para buckets públicos retorna URL pública; privados retorna URL assinada. */
 export async function uploadFoto(
-  bucket: "ponto-selfies",
+  bucket: "ponto-selfies" | "abastecimento-fotos",
   acessoId: string,
   prefix: string,
   blob: Blob,
@@ -14,6 +14,11 @@ export async function uploadFoto(
     upsert: false,
   });
   if (error) throw error;
+
+  if (bucket === "abastecimento-fotos") {
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  }
   const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
   return signed?.signedUrl || path;
 }
