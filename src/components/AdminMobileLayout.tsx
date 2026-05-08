@@ -46,6 +46,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras', group: 'Operacional' },
   { label: 'Despachar Chamados', icon: ClipboardList, path: '/admin/chamados', group: 'Operacional' },
   { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico', group: 'Operacional' },
+  { label: 'Abastecimento QRCode', icon: Fuel, path: '/admin/abastecimento-qrcode', group: 'Operacional' },
   { label: 'Histórico', icon: History, path: '/admin/historico', group: 'Operacional' },
 
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Faturamento' },
