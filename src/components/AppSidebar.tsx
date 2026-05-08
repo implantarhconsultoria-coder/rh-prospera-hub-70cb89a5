@@ -52,7 +52,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
   { label: 'Despachar Chamados', icon: ClipboardList, path: '/admin/chamados' },
   { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico' },
-  { label: 'Combustível / QR Posto', icon: Fuel, path: '/admin/combustivel-qr' },
+  { label: 'Abastecimento QRCode', icon: Fuel, path: '/admin/combustivel-qr' },
   { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 
