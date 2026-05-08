@@ -274,6 +274,7 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/admin/faturamento/conferencia" element={<ConferenciaPage />} />
         {/* Base de Faturamento (importação) */}
+        <Route path="/admin/faturamento/importacao-dados" element={<ImportacoesDN4Page />} />
         <Route path="/admin/faturamento/importacao" element={<FaturamentoDN4Layout />}>
           <Route index element={<FaturamentoDN4DashboardPage />} />
           <Route path="novo" element={<FaturamentoDN4NovoPage />} />
@@ -282,8 +283,8 @@ const AuthGate = () => {
           <Route path="relatorio" element={<FaturamentoDN4RelatorioPage />} />
         </Route>
         {/* Redirecionamentos legados (rota interna antiga) */}
-        <Route path="/admin/faturamento/dn4" element={<Navigate to="/admin/faturamento/importacao" replace />} />
-        <Route path="/admin/faturamento/dn4/*" element={<Navigate to="/admin/faturamento/importacao" replace />} />
+        <Route path="/admin/faturamento/dn4" element={<Navigate to="/admin/faturamento/importacao-dados" replace />} />
+        <Route path="/admin/faturamento/dn4/*" element={<Navigate to="/admin/faturamento/importacao-dados" replace />} />
         {/* Financeiro */}
         <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
         <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />
