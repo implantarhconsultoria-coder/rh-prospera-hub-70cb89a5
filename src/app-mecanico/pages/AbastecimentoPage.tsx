@@ -42,61 +42,85 @@ export default function AbastecimentoPage() {
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
 
-  // ----- QR Scanner -----
+  // ----- QR Scanner (manual start, com fallbacks) -----
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [scanErro, setScanErro] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const stopScanner = async () => {
+    const s = scannerRef.current;
+    if (s) {
+      try { await s.stop(); } catch {}
+      try { await s.clear(); } catch {}
+      scannerRef.current = null;
+    }
+    setScanning(false);
+  };
+
+  const iniciarScanner = async () => {
+    setScanErro(null);
+    try {
+      const id = "qr-reader-box";
+      // aguarda render do container
+      await new Promise((r) => setTimeout(r, 50));
+      const el = document.getElementById(id);
+      if (!el) { setScanErro("Não foi possível inicializar a câmera."); return; }
+      const inst = new Html5Qrcode(id);
+      scannerRef.current = inst;
+      setScanning(true);
+      await inst.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (decoded) => {
+          stopScanner();
+          setCodigo(decoded);
+          validarQr(decoded);
+        },
+        () => {},
+      );
+    } catch (e: any) {
+      setScanning(false);
+      scannerRef.current = null;
+      setScanErro("Não foi possível abrir a câmera. Use a opção manual ou enviar imagem do QR.");
+    }
+  };
 
   useEffect(() => {
-    if (step !== "scan") return;
-    let mounted = true;
-    (async () => {
-      try {
-        const id = "qr-reader-box";
-        const el = document.getElementById(id);
-        if (!el) return;
-        const inst = new Html5Qrcode(id);
-        scannerRef.current = inst;
-        setScanning(true);
-        await inst.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 240, height: 240 } },
-          (decoded) => {
-            if (!mounted) return;
-            setCodigo(decoded);
-            inst.stop().then(() => inst.clear()).catch(() => {});
-            scannerRef.current = null;
-            validarQr(decoded);
-          },
-          () => {},
-        );
-      } catch (e: any) {
-        toast.error("Permita acesso à câmera para ler o QR Code.");
-        setScanning(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-      const s = scannerRef.current;
-      if (s) { s.stop().then(() => s.clear()).catch(() => {}); scannerRef.current = null; }
-    };
-  }, [step]);
+    return () => { stopScanner(); };
+  }, []);
+
+  const lerArquivoQr = async (file: File) => {
+    setScanErro(null);
+    try {
+      const inst = new Html5Qrcode("qr-reader-file", /* verbose */ false);
+      const result = await inst.scanFile(file, true);
+      try { await inst.clear(); } catch {}
+      setCodigo(result);
+      validarQr(result);
+    } catch (e: any) {
+      setScanErro("Não foi possível ler o QR da imagem. Tente outra foto.");
+    }
+  };
 
   const validarQr = async (cod: string) => {
     if (!cod) { toast.error("Informe o código do QR"); return; }
     setLoading(true);
     const { data, error } = await supabase.rpc("app_mecanico_validar_qr_posto" as any, {
-      p_acesso_id: mecanico.acesso_id, p_codigo: cod,
+      p_acesso_id: mecanico.acesso_id, p_codigo: cod.trim(),
     });
     setLoading(false);
     const r = data as any;
     if (error || !r?.ok) {
       const err = r?.error || error?.message || "qr_invalido";
       const map: Record<string, string> = {
-        qr_nao_encontrado: "QR Code não encontrado.",
+        qr_nao_encontrado: "QR Code do posto ainda não foi gerado no admin.",
         qr_bloqueado: "QR Code bloqueado pelo administrador.",
         acesso_nao_autorizado: "Acesso não autorizado.",
       };
-      toast.error(map[err] || "Erro ao validar QR Code.");
+      const msg = map[err] || "Erro ao validar QR Code.";
+      toast.error(msg);
+      setScanErro(msg);
       setStep("scan");
       return;
     }
