@@ -55,8 +55,36 @@ const ImportacoesDN4Page: React.FC = () => {
       .select('*')
       .order('iniciado_em', { ascending: false })
       .limit(50);
-    if (error) toast.error(error.message);
-    setImports((data as any[]) || []);
+
+    if (error) {
+      toast.error(error.message);
+      setImports([]);
+      setLoading(false);
+      return;
+    }
+
+    const baseImports = ((data as any[]) || []) as Importacao[];
+    const enrichedImports = await Promise.all(
+      baseImports.map(async (item) => {
+        if (!item.tipo || item.tipo === 'desconhecido') return item;
+
+        const { data: resumo } = await supabase.rpc('dn4_resumo_importacao' as any, {
+          p_importacao_id: item.id,
+        } as any);
+
+        if (!resumo || typeof resumo !== 'object') return item;
+
+        return {
+          ...item,
+          total_lidos: Number((resumo as any).total ?? item.total_lidos ?? 0),
+          total_confirmados: Number((resumo as any).confirmados ?? item.total_confirmados ?? 0),
+          total_pendentes: Number((resumo as any).pendentes_conferencia ?? item.total_pendentes ?? 0),
+          total_erros: Number((resumo as any).erros ?? item.total_erros ?? 0),
+        } satisfies Importacao;
+      }),
+    );
+
+    setImports(enrichedImports);
     setLoading(false);
   }, []);
 
