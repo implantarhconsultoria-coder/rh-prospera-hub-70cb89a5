@@ -1802,6 +1802,60 @@ export type Database = {
         }
         Relationships: []
       }
+      clientes_faturamento: {
+        Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          codigo_dn4: string | null
+          cpf_cnpj: string | null
+          created_at: string
+          empresa_origem: string | null
+          endereco: string | null
+          filial_origem: string | null
+          id: string
+          inscricao_estadual: string | null
+          nome_razao_social: string
+          status: string | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          nome_razao_social: string
+          status?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          nome_razao_social?: string
+          status?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cobrancas_tentativas: {
         Row: {
           canal: string
@@ -2511,6 +2565,95 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      equipamentos_faturamento: {
+        Row: {
+          codigo_equipamento: string | null
+          created_at: string
+          descricao: string | null
+          filial_opera: string | null
+          grupo: string | null
+          id: string
+          numero_patrimonio: string
+          numero_serie: string | null
+          situacao: string | null
+          tipo_equipamento: string | null
+          updated_at: string
+          valor_compra: number | null
+          valor_indenizacao: number | null
+          valor_mercado: number | null
+          valor_venda: number | null
+        }
+        Insert: {
+          codigo_equipamento?: string | null
+          created_at?: string
+          descricao?: string | null
+          filial_opera?: string | null
+          grupo?: string | null
+          id?: string
+          numero_patrimonio: string
+          numero_serie?: string | null
+          situacao?: string | null
+          tipo_equipamento?: string | null
+          updated_at?: string
+          valor_compra?: number | null
+          valor_indenizacao?: number | null
+          valor_mercado?: number | null
+          valor_venda?: number | null
+        }
+        Update: {
+          codigo_equipamento?: string | null
+          created_at?: string
+          descricao?: string | null
+          filial_opera?: string | null
+          grupo?: string | null
+          id?: string
+          numero_patrimonio?: string
+          numero_serie?: string | null
+          situacao?: string | null
+          tipo_equipamento?: string | null
+          updated_at?: string
+          valor_compra?: number | null
+          valor_indenizacao?: number | null
+          valor_mercado?: number | null
+          valor_venda?: number | null
+        }
+        Relationships: []
+      }
+      equipamentos_faturamento_historico: {
+        Row: {
+          alterado_em: string
+          alterado_por: string | null
+          dados_antes: Json | null
+          dados_depois: Json | null
+          equipamento_id: string
+          id: string
+        }
+        Insert: {
+          alterado_em?: string
+          alterado_por?: string | null
+          dados_antes?: Json | null
+          dados_depois?: Json | null
+          equipamento_id: string
+          id?: string
+        }
+        Update: {
+          alterado_em?: string
+          alterado_por?: string | null
+          dados_antes?: Json | null
+          dados_depois?: Json | null
+          equipamento_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipamentos_faturamento_historico_equipamento_id_fkey"
+            columns: ["equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "equipamentos_faturamento"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       estoque_veiculo: {
         Row: {
@@ -3411,6 +3554,141 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      historico_locacao_faturamento: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          data_fim: string | null
+          data_inicio: string | null
+          descricao_equipamento: string | null
+          equipamento_id: string | null
+          filial: string | null
+          id: string
+          item: string | null
+          numero_nf: string | null
+          numero_os: string | null
+          patrimonio: string | null
+          pedido: string | null
+          periodo_texto: string | null
+          quantidade: number | null
+          updated_at: string
+          valor_diaria_periodo: number | null
+          valor_faturado_periodo: number | null
+          valor_pedido_periodo: number | null
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao_equipamento?: string | null
+          equipamento_id?: string | null
+          filial?: string | null
+          id?: string
+          item?: string | null
+          numero_nf?: string | null
+          numero_os?: string | null
+          patrimonio?: string | null
+          pedido?: string | null
+          periodo_texto?: string | null
+          quantidade?: number | null
+          updated_at?: string
+          valor_diaria_periodo?: number | null
+          valor_faturado_periodo?: number | null
+          valor_pedido_periodo?: number | null
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao_equipamento?: string | null
+          equipamento_id?: string | null
+          filial?: string | null
+          id?: string
+          item?: string | null
+          numero_nf?: string | null
+          numero_os?: string | null
+          patrimonio?: string | null
+          pedido?: string | null
+          periodo_texto?: string | null
+          quantidade?: number | null
+          updated_at?: string
+          valor_diaria_periodo?: number | null
+          valor_faturado_periodo?: number | null
+          valor_pedido_periodo?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historico_locacao_faturamento_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes_faturamento"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "historico_locacao_faturamento_equipamento_id_fkey"
+            columns: ["equipamento_id"]
+            isOneToOne: false
+            referencedRelation: "equipamentos_faturamento"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      importacoes_dn4: {
+        Row: {
+          arquivo: string
+          created_at: string
+          finalizado_em: string | null
+          id: string
+          iniciado_em: string
+          status: string
+          storage_path: string | null
+          tipo: string | null
+          total_confirmados: number
+          total_erros: number
+          total_lidos: number
+          total_pendentes: number
+          updated_at: string
+          usuario_id: string | null
+          usuario_nome: string | null
+        }
+        Insert: {
+          arquivo: string
+          created_at?: string
+          finalizado_em?: string | null
+          id?: string
+          iniciado_em?: string
+          status?: string
+          storage_path?: string | null
+          tipo?: string | null
+          total_confirmados?: number
+          total_erros?: number
+          total_lidos?: number
+          total_pendentes?: number
+          updated_at?: string
+          usuario_id?: string | null
+          usuario_nome?: string | null
+        }
+        Update: {
+          arquivo?: string
+          created_at?: string
+          finalizado_em?: string | null
+          id?: string
+          iniciado_em?: string
+          status?: string
+          storage_path?: string | null
+          tipo?: string | null
+          total_confirmados?: number
+          total_erros?: number
+          total_lidos?: number
+          total_pendentes?: number
+          updated_at?: string
+          usuario_id?: string | null
+          usuario_nome?: string | null
+        }
+        Relationships: []
       }
       impostos: {
         Row: {
@@ -4529,6 +4807,57 @@ export type Database = {
           },
         ]
       }
+      representantes_faturamento: {
+        Row: {
+          cidade: string | null
+          codigo_dn4: string | null
+          cpf_cnpj: string | null
+          created_at: string
+          email: string | null
+          empresa_origem: string | null
+          endereco: string | null
+          filial_origem: string | null
+          id: string
+          nome: string
+          telefone: string | null
+          tipo_pessoa: string | null
+          uf: string | null
+          updated_at: string
+        }
+        Insert: {
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          nome: string
+          telefone?: string | null
+          tipo_pessoa?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          email?: string | null
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          nome?: string
+          telefone?: string | null
+          tipo_pessoa?: string | null
+          uf?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rescisao_historico: {
         Row: {
           acao: string
@@ -4899,6 +5228,365 @@ export type Database = {
           verba_71_ferias_sobre_aviso?: number | null
         }
         Relationships: []
+      }
+      staging_clientes_dn4: {
+        Row: {
+          arquivo_origem: string | null
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          codigo_dn4: string | null
+          cpf_cnpj: string | null
+          created_at: string
+          data_importacao: string
+          empresa_origem: string | null
+          endereco: string | null
+          filial_origem: string | null
+          id: string
+          importacao_id: string | null
+          inscricao_estadual: string | null
+          linha_original_extraida: Json | null
+          mensagem_erro: string | null
+          nome_razao_social: string | null
+          pagina_origem: number | null
+          status: Database["public"]["Enums"]["dn4_status"]
+          status_cliente: string | null
+          uf: string | null
+          updated_at: string
+          usuario_importacao: string | null
+        }
+        Insert: {
+          arquivo_origem?: string | null
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_importacao?: string
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          importacao_id?: string | null
+          inscricao_estadual?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          nome_razao_social?: string | null
+          pagina_origem?: number | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          status_cliente?: string | null
+          uf?: string | null
+          updated_at?: string
+          usuario_importacao?: string | null
+        }
+        Update: {
+          arquivo_origem?: string | null
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_importacao?: string
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          importacao_id?: string | null
+          inscricao_estadual?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          nome_razao_social?: string | null
+          pagina_origem?: number | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          status_cliente?: string | null
+          uf?: string | null
+          updated_at?: string
+          usuario_importacao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staging_clientes_dn4_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_dn4"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staging_equipamentos_dn4: {
+        Row: {
+          arquivo_origem: string | null
+          codigo_equipamento: string | null
+          created_at: string
+          data_importacao: string
+          descricao: string | null
+          filial_opera: string | null
+          grupo: string | null
+          id: string
+          importacao_id: string | null
+          linha_original_extraida: Json | null
+          mensagem_erro: string | null
+          numero_patrimonio: string | null
+          numero_serie: string | null
+          pagina_origem: number | null
+          situacao: string | null
+          status: Database["public"]["Enums"]["dn4_status"]
+          tipo_equipamento: string | null
+          updated_at: string
+          usuario_importacao: string | null
+          valor_compra: number | null
+          valor_indenizacao: number | null
+          valor_mercado: number | null
+          valor_venda: number | null
+        }
+        Insert: {
+          arquivo_origem?: string | null
+          codigo_equipamento?: string | null
+          created_at?: string
+          data_importacao?: string
+          descricao?: string | null
+          filial_opera?: string | null
+          grupo?: string | null
+          id?: string
+          importacao_id?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          numero_patrimonio?: string | null
+          numero_serie?: string | null
+          pagina_origem?: number | null
+          situacao?: string | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          tipo_equipamento?: string | null
+          updated_at?: string
+          usuario_importacao?: string | null
+          valor_compra?: number | null
+          valor_indenizacao?: number | null
+          valor_mercado?: number | null
+          valor_venda?: number | null
+        }
+        Update: {
+          arquivo_origem?: string | null
+          codigo_equipamento?: string | null
+          created_at?: string
+          data_importacao?: string
+          descricao?: string | null
+          filial_opera?: string | null
+          grupo?: string | null
+          id?: string
+          importacao_id?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          numero_patrimonio?: string | null
+          numero_serie?: string | null
+          pagina_origem?: number | null
+          situacao?: string | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          tipo_equipamento?: string | null
+          updated_at?: string
+          usuario_importacao?: string | null
+          valor_compra?: number | null
+          valor_indenizacao?: number | null
+          valor_mercado?: number | null
+          valor_venda?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staging_equipamentos_dn4_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_dn4"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staging_historico_locacao_dn4: {
+        Row: {
+          arquivo_origem: string | null
+          cliente_cpf_cnpj: string | null
+          cliente_id_resolvido: string | null
+          cliente_nome: string | null
+          created_at: string
+          data_fim: string | null
+          data_importacao: string
+          data_inicio: string | null
+          descricao_equipamento: string | null
+          equipamento_id_resolvido: string | null
+          filial: string | null
+          id: string
+          importacao_id: string | null
+          item: string | null
+          linha_original_extraida: Json | null
+          mensagem_erro: string | null
+          numero_nf: string | null
+          numero_os: string | null
+          pagina_origem: number | null
+          patrimonio: string | null
+          pedido: string | null
+          periodo_texto: string | null
+          quantidade: number | null
+          status: Database["public"]["Enums"]["dn4_status"]
+          updated_at: string
+          usuario_importacao: string | null
+          valor_diaria_periodo: number | null
+          valor_faturado_periodo: number | null
+          valor_pedido_periodo: number | null
+        }
+        Insert: {
+          arquivo_origem?: string | null
+          cliente_cpf_cnpj?: string | null
+          cliente_id_resolvido?: string | null
+          cliente_nome?: string | null
+          created_at?: string
+          data_fim?: string | null
+          data_importacao?: string
+          data_inicio?: string | null
+          descricao_equipamento?: string | null
+          equipamento_id_resolvido?: string | null
+          filial?: string | null
+          id?: string
+          importacao_id?: string | null
+          item?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          numero_nf?: string | null
+          numero_os?: string | null
+          pagina_origem?: number | null
+          patrimonio?: string | null
+          pedido?: string | null
+          periodo_texto?: string | null
+          quantidade?: number | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          updated_at?: string
+          usuario_importacao?: string | null
+          valor_diaria_periodo?: number | null
+          valor_faturado_periodo?: number | null
+          valor_pedido_periodo?: number | null
+        }
+        Update: {
+          arquivo_origem?: string | null
+          cliente_cpf_cnpj?: string | null
+          cliente_id_resolvido?: string | null
+          cliente_nome?: string | null
+          created_at?: string
+          data_fim?: string | null
+          data_importacao?: string
+          data_inicio?: string | null
+          descricao_equipamento?: string | null
+          equipamento_id_resolvido?: string | null
+          filial?: string | null
+          id?: string
+          importacao_id?: string | null
+          item?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          numero_nf?: string | null
+          numero_os?: string | null
+          pagina_origem?: number | null
+          patrimonio?: string | null
+          pedido?: string | null
+          periodo_texto?: string | null
+          quantidade?: number | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          updated_at?: string
+          usuario_importacao?: string | null
+          valor_diaria_periodo?: number | null
+          valor_faturado_periodo?: number | null
+          valor_pedido_periodo?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staging_historico_locacao_dn4_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_dn4"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staging_representantes_dn4: {
+        Row: {
+          arquivo_origem: string | null
+          cidade: string | null
+          codigo_dn4: string | null
+          cpf_cnpj: string | null
+          created_at: string
+          data_importacao: string
+          email: string | null
+          empresa_origem: string | null
+          endereco: string | null
+          filial_origem: string | null
+          id: string
+          importacao_id: string | null
+          linha_original_extraida: Json | null
+          mensagem_erro: string | null
+          nome: string | null
+          pagina_origem: number | null
+          status: Database["public"]["Enums"]["dn4_status"]
+          telefone: string | null
+          tipo_pessoa: string | null
+          uf: string | null
+          updated_at: string
+          usuario_importacao: string | null
+        }
+        Insert: {
+          arquivo_origem?: string | null
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_importacao?: string
+          email?: string | null
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          importacao_id?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          nome?: string | null
+          pagina_origem?: number | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          telefone?: string | null
+          tipo_pessoa?: string | null
+          uf?: string | null
+          updated_at?: string
+          usuario_importacao?: string | null
+        }
+        Update: {
+          arquivo_origem?: string | null
+          cidade?: string | null
+          codigo_dn4?: string | null
+          cpf_cnpj?: string | null
+          created_at?: string
+          data_importacao?: string
+          email?: string | null
+          empresa_origem?: string | null
+          endereco?: string | null
+          filial_origem?: string | null
+          id?: string
+          importacao_id?: string | null
+          linha_original_extraida?: Json | null
+          mensagem_erro?: string | null
+          nome?: string | null
+          pagina_origem?: number | null
+          status?: Database["public"]["Enums"]["dn4_status"]
+          telefone?: string | null
+          tipo_pessoa?: string | null
+          uf?: string | null
+          updated_at?: string
+          usuario_importacao?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staging_representantes_dn4_importacao_id_fkey"
+            columns: ["importacao_id"]
+            isOneToOne: false
+            referencedRelation: "importacoes_dn4"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tecnicos_campo: {
         Row: {
@@ -5784,6 +6472,14 @@ export type Database = {
       calc_inss: { Args: { p_base: number }; Returns: number }
       calc_irrf: { Args: { p_base: number }; Returns: number }
       dashboard_faturamento_kpis: { Args: never; Returns: Json }
+      dn4_confirmar_registros: {
+        Args: { p_ids: string[]; p_tipo: string }
+        Returns: Json
+      }
+      dn4_ignorar_registros: {
+        Args: { p_ids: string[]; p_tipo: string }
+        Returns: Json
+      }
       faturamento_gerar_medicoes_mes: {
         Args: { p_competencia?: string }
         Returns: number
@@ -5840,6 +6536,12 @@ export type Database = {
         | "operacional"
         | "faturamento"
         | "financeiro"
+      dn4_status:
+        | "importado"
+        | "pendente_conferencia"
+        | "erro_leitura"
+        | "confirmado"
+        | "ignorado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -5977,6 +6679,13 @@ export const Constants = {
         "operacional",
         "faturamento",
         "financeiro",
+      ],
+      dn4_status: [
+        "importado",
+        "pendente_conferencia",
+        "erro_leitura",
+        "confirmado",
+        "ignorado",
       ],
     },
   },
