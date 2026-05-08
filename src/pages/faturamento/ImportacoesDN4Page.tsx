@@ -161,7 +161,7 @@ const ImportacoesDN4Page: React.FC = () => {
                 <td className="p-3 text-center text-success">{i.total_confirmados}</td>
                 <td className="p-3 text-center text-warning">{i.total_pendentes}</td>
                 <td className="p-3 text-center text-destructive">{i.total_erros}</td>
-                <td className="p-3 text-xs">{STATUS_LABEL[i.status] || i.status}</td>
+                <td className={`p-3 text-xs ${STATUS_COLOR[i.status] || ''}`} title={i.mensagem || ''}>{STATUS_LABEL[i.status] || i.status}</td>
                 <td className="p-3 text-right"><Button size="sm" variant="outline" onClick={() => setAberta(i)}>Conferir</Button></td>
               </tr>
             ))}
