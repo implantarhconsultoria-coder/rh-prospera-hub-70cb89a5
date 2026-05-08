@@ -8,22 +8,36 @@ import { toast } from 'sonner';
 const fmt = (n: any) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 type Importacao = {
-  id: string; arquivo: string; tipo: string | null; status: string;
+  id: string; arquivo: string; storage_path: string; tipo: string | null; status: string;
   total_lidos: number; total_confirmados: number; total_pendentes: number; total_erros: number;
   iniciado_em: string; finalizado_em: string | null;
+  mensagem?: string | null; texto_extraido?: string | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
   em_andamento: 'Processando…',
-  aguardando_conferencia: 'Aguardando conferência',
+  aguardando_conferencia: 'Lido com sucesso',
   concluida: 'Concluída',
-  erro: 'Erro',
+  pdf_sem_texto: 'PDF sem texto legível',
+  tipo_nao_identificado: 'Tipo não identificado',
+  sem_registros: 'Pendente de conferência',
+  erro: 'Erro técnico',
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  em_andamento: 'text-muted-foreground',
+  aguardando_conferencia: 'text-success',
+  concluida: 'text-success',
+  pdf_sem_texto: 'text-warning',
+  tipo_nao_identificado: 'text-warning',
+  sem_registros: 'text-warning',
+  erro: 'text-destructive',
 };
 
 const TIPO_LABEL: Record<string, string> = {
   cliente: 'Clientes',
   representante: 'Representantes',
-  equipamento: 'Equipamentos',
+  equipamento: 'Equipamentos / Patrimônios',
   historico: 'Histórico de Locação',
   desconhecido: 'Não identificado',
 };
