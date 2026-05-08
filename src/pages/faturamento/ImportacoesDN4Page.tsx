@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Upload, FileText, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Trash2, Loader2 } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Trash2, Loader2, Copy, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (n: any) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -108,6 +108,13 @@ const ImportacoesDN4Page: React.FC = () => {
             </Button>
           </label>
           <Button variant="outline" size="icon" onClick={carregar}><RefreshCw className={loading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'} /></Button>
+          <Button variant="outline" onClick={async () => {
+            const ok = window.confirm('Mesclar registros duplicados nas tabelas oficiais? Clientes sem CPF/CNPJ com mesmo nome+cidade+UF e representantes com mesmo nome+CPF serão unificados, mantendo o registro mais completo.');
+            if (!ok) return;
+            const { data, error } = await supabase.rpc('dn4_limpar_duplicados_oficial' as any);
+            if (error) toast.error(error.message);
+            else toast.success(`Duplicados mesclados: ${(data as any)?.clientes_mesclados || 0} clientes, ${(data as any)?.representantes_mesclados || 0} representantes`);
+          }}><Sparkles className="w-4 h-4 mr-1" /> Limpar duplicados</Button>
         </div>
       </div>
 
@@ -164,6 +171,12 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<string>('pendente_conferencia');
+  const [resumo, setResumo] = useState<any>(null);
+
+  const carregarResumo = useCallback(async () => {
+    const { data } = await supabase.rpc('dn4_resumo_importacao' as any, { p_importacao_id: importacao.id } as any);
+    setResumo(data);
+  }, [importacao.id]);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -172,9 +185,18 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
     const { data } = await q;
     setRows((data as any[]) || []);
     setLoading(false);
-  }, [tabela, importacao.id, filtro]);
+    carregarResumo();
+  }, [tabela, importacao.id, filtro, carregarResumo]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const marcarDuplicados = async () => {
+    const { data, error } = await supabase.rpc('dn4_marcar_duplicados' as any, { p_importacao_id: importacao.id } as any);
+    if (error) { toast.error(error.message); return; }
+    const d = data as any;
+    toast.success(`Duplicados marcados: ${(d?.clientes_ignorados||0)+(d?.representantes_ignorados||0)+(d?.equipamentos_ignorados||0)+(d?.historico_ignorados||0)} registros`);
+    carregar();
+  };
 
   const acao = async (acao: 'confirmar' | 'ignorar', ids: string[]) => {
     if (ids.length === 0) return;
@@ -203,20 +225,35 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
             <div className="font-semibold">{importacao.arquivo}</div>
             <div className="text-xs text-muted-foreground">{TIPO_LABEL[tipo]} • {STATUS_LABEL[importacao.status]}</div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <select value={filtro} onChange={(e) => setFiltro(e.target.value)} className="bg-background border border-border rounded px-2 py-1 text-sm">
               <option value="todos">Todos</option>
               <option value="pendente_conferencia">Pendentes</option>
               <option value="confirmado">Confirmados</option>
+              <option value="duplicado_ignorado">Duplicados ignorados</option>
               <option value="erro_leitura">Erros</option>
               <option value="ignorado">Ignorados</option>
             </select>
+            <Button variant="outline" onClick={marcarDuplicados}>
+              <Copy className="w-4 h-4 mr-1" /> Marcar duplicados
+            </Button>
             <Button onClick={() => acao('confirmar', rows.filter(r => r.status === 'pendente_conferencia').map(r => r.id))}>
               <CheckCircle2 className="w-4 h-4 mr-1" /> Confirmar todos válidos
             </Button>
             <Button variant="ghost" onClick={onClose}>Fechar</Button>
           </div>
         </header>
+
+        {resumo && (
+          <div className="px-4 py-2 border-b border-border bg-muted/20 text-xs flex flex-wrap gap-3">
+            <span><strong>Total:</strong> {resumo.total ?? 0}</span>
+            <span className="text-success"><strong>Confirmados:</strong> {resumo.confirmados ?? 0}</span>
+            <span className="text-warning"><strong>Pendentes:</strong> {resumo.pendentes_conferencia ?? 0}</span>
+            <span className="text-muted-foreground"><strong>Duplicados ignorados:</strong> {resumo.duplicados_ignorados ?? 0}</span>
+            <span className="text-destructive"><strong>Erros:</strong> {resumo.erros ?? 0}</span>
+            <span><strong>Ignorados manualmente:</strong> {resumo.ignorados ?? 0}</span>
+          </div>
+        )}
 
         <div className="flex-1 overflow-auto">
           {loading ? (
@@ -242,7 +279,8 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
                     ))}
                     <td className="p-2 text-xs">
                       {r.status === 'confirmado' && <span className="text-success">✓ confirmado</span>}
-                      {r.status === 'pendente_conferencia' && <span className="text-warning">pendente</span>}
+                      {r.status === 'pendente_conferencia' && <span className="text-warning" title={r.mensagem_erro || ''}>pendente {r.mensagem_erro ? `· ${r.mensagem_erro}` : ''}</span>}
+                      {r.status === 'duplicado_ignorado' && <span className="text-muted-foreground" title={r.mensagem_erro || ''}>duplicado</span>}
                       {r.status === 'erro_leitura' && <span className="text-destructive flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{r.mensagem_erro || 'erro'}</span>}
                       {r.status === 'ignorado' && <span className="text-muted-foreground">ignorado</span>}
                     </td>

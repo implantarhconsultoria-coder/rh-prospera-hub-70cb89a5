@@ -6480,6 +6480,16 @@ export type Database = {
         Args: { p_ids: string[]; p_tipo: string }
         Returns: Json
       }
+      dn4_limpar_duplicados_oficial: { Args: never; Returns: Json }
+      dn4_marcar_duplicados: {
+        Args: { p_importacao_id: string }
+        Returns: Json
+      }
+      dn4_norm: { Args: { t: string }; Returns: string }
+      dn4_resumo_importacao: {
+        Args: { p_importacao_id: string }
+        Returns: Json
+      }
       faturamento_gerar_medicoes_mes: {
         Args: { p_competencia?: string }
         Returns: number
