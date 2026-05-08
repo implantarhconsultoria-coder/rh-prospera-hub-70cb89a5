@@ -25,7 +25,7 @@ export default function HomePage() {
     { label: "Saída", sub: "Encerrar dia", icon: LogOut, to: `${base}/ponto?tipo=saida`, tint: "from-rose-500/15 to-rose-500/5 text-rose-600 dark:text-rose-400" },
     { label: "Chamados", sub: "Atendimentos", icon: ClipboardList, to: `${base}/chamados`, tint: "from-purple-500/15 to-purple-500/5 text-purple-600 dark:text-purple-400" },
     { label: "Veículo / KM", sub: "Registrar KM", icon: Car, to: `${base}/veiculo`, tint: "from-indigo-500/15 to-indigo-500/5 text-indigo-600 dark:text-indigo-400" },
-    { label: "Abastecimento", sub: "Combustível", icon: Fuel, to: `${base}/veiculo`, tint: "from-amber-500/15 to-amber-500/5 text-amber-600 dark:text-amber-400" },
+    { label: "Abastecimento", sub: "QR + Bomba", icon: Fuel, to: `${base}/abastecimento`, tint: "from-amber-500/15 to-amber-500/5 text-amber-600 dark:text-amber-400" },
     { label: "Histórico", sub: "Meus registros", icon: History, to: `${base}/historico`, tint: "from-sky-500/15 to-sky-500/5 text-sky-600 dark:text-sky-400" },
   ];
 
