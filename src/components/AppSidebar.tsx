@@ -71,7 +71,7 @@ const faturamentoItems: MenuItem[] = [
   { label: 'Medições', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
   { label: 'Pendências', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
-  { label: 'DN4 Automatizado', icon: Sparkles, path: '/admin/faturamento/dn4' },
+  { label: 'Base de Faturamento', icon: Sparkles, path: '/admin/faturamento/importacao' },
 ];
 
 const financeiroItems: MenuItem[] = [

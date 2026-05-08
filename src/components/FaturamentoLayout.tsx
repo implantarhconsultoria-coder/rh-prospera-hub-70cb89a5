@@ -15,7 +15,7 @@ const ITEMS = [
   { to: '/faturamento/medicoes', label: 'Medições', icon: FileText },
   { to: '/faturamento/conferencia', label: 'Conferência', icon: ClipboardCheck },
   { to: '/faturamento/faturas', label: 'Faturas', icon: Receipt },
-  { to: '/faturamento/importacoes-dn4', label: 'Importações DN4', icon: FileUp },
+  { to: '/faturamento/importacao-dados', label: 'Importação de Dados', icon: FileUp },
   { to: '/faturamento/reajustes', label: 'Reajustes', icon: TrendingUp },
   { to: '/faturamento/pendencias', label: 'Pendências', icon: AlertTriangle },
 ];

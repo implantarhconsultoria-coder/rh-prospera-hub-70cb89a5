@@ -56,7 +56,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Medições', icon: ClipboardCheck, path: '/admin/faturamento/medicoes', group: 'Faturamento' },
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes', group: 'Faturamento' },
   { label: 'Pendências', icon: AlertTriangle, path: '/admin/faturamento/pendencias', group: 'Faturamento' },
-  { label: 'DN4 Automatizado', icon: Sparkles, path: '/admin/faturamento/dn4', group: 'Faturamento' },
+  { label: 'Base de Faturamento', icon: Sparkles, path: '/admin/faturamento/importacao', group: 'Faturamento' },
 
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: 'Financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Financeiro' },
