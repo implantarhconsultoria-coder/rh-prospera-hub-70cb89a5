@@ -74,14 +74,9 @@ export default function AppMecanicoAdminPage() {
             <p className="text-sm text-muted-foreground">Lista de mecânicos com acesso ao app via link + PIN.</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => window.location.href = '/admin/combustivel-qr'} variant="outline">
-            <Wrench className="w-4 h-4 mr-2" /> Combustível QR
-          </Button>
-          <Button onClick={copiarPin} variant="outline">
-            <Copy className="w-4 h-4 mr-2" /> Copiar link de acesso
-          </Button>
-        </div>
+        <Button onClick={copiarPin} variant="outline">
+          <Copy className="w-4 h-4 mr-2" /> Copiar link de acesso
+        </Button>
       </div>
 
       <Card>
