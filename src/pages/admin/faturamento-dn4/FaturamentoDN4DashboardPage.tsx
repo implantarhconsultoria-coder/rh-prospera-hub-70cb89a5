@@ -36,22 +36,22 @@ const FaturamentoDN4DashboardPage: React.FC = () => {
 
   const cards = [
     { label: `Faturado em ${competencia}`, value: fmtBRL(stats.total), icon: Wallet, color: 'text-primary' },
-    { label: 'Pendentes', value: String(stats.pendentes), icon: Clock, color: 'text-muted-foreground', onClick: () => nav('/admin/faturamento/dn4/historico?status=pendente') },
-    { label: 'Em conferência', value: String(stats.conferencia), icon: AlertTriangle, color: 'text-warning', onClick: () => nav('/admin/faturamento/dn4/conferencia') },
-    { label: 'Emitidos', value: String(stats.emitidos), icon: CheckCircle2, color: 'text-success', onClick: () => nav('/admin/faturamento/dn4/historico?status=emitido') },
-    { label: 'Com erro', value: String(stats.erros), icon: AlertTriangle, color: stats.erros ? 'text-destructive' : 'text-muted-foreground', onClick: () => nav('/admin/faturamento/dn4/historico?status=com_erro') },
+    { label: 'Pendentes', value: String(stats.pendentes), icon: Clock, color: 'text-muted-foreground', onClick: () => nav('/admin/faturamento/importacao/historico?status=pendente') },
+    { label: 'Em conferência', value: String(stats.conferencia), icon: AlertTriangle, color: 'text-warning', onClick: () => nav('/admin/faturamento/importacao/conferencia') },
+    { label: 'Emitidos', value: String(stats.emitidos), icon: CheckCircle2, color: 'text-success', onClick: () => nav('/admin/faturamento/importacao/historico?status=emitido') },
+    { label: 'Com erro', value: String(stats.erros), icon: AlertTriangle, color: stats.erros ? 'text-destructive' : 'text-muted-foreground', onClick: () => nav('/admin/faturamento/importacao/historico?status=com_erro') },
     { label: 'Vencem em 7d', value: String(stats.proxVenc.length), icon: Calendar, color: 'text-warning' },
   ];
 
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Visão consolidada do faturamento DN4</p>
+        <p className="text-sm text-muted-foreground">Visão consolidada do faturamento</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={carregar} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
-          <Button size="sm" onClick={() => nav('/admin/faturamento/dn4/novo')}>
+          <Button size="sm" onClick={() => nav('/admin/faturamento/importacao/novo')}>
             <FilePlus2 className="w-4 h-4 mr-1" /> Novo Faturamento
           </Button>
         </div>

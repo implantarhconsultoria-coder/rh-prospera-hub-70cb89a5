@@ -45,17 +45,20 @@ const FaturamentoDN4RelatorioPage: React.FC = () => {
           <td style="padding:4px 8px">${statusMeta(r.status).label}</td>
         </tr>`).join('')}
     `).join('');
-    const html = `<!DOCTYPE html><html><head><title>Relatório DN4</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px}h1{font-size:16px}table{border-collapse:collapse;width:100%;font-size:12px}td,th{border:1px solid #d1d5db;text-align:left}</style>
+    const corpo = grupos.length === 0
+      ? `<tr><td colspan="5" style="padding:16px;text-align:center;color:#666">Nenhum dado de faturamento importado para este filtro.</td></tr>`
+      : linhas;
+    const html = `<!DOCTYPE html><html><head><title>Relatório de Faturamento</title>
+      <style>body{font-family:Arial,sans-serif;padding:20px}h1{font-size:16px;margin:0 0 4px}h2{font-size:11px;color:#666;font-weight:normal;margin:0 0 12px}table{border-collapse:collapse;width:100%;font-size:12px}td,th{border:1px solid #d1d5db;text-align:left}</style>
       </head><body>
-      <h1>Relatório de Faturamento DN4 ${mes !== 'todos' ? '— ' + mes : ''}</h1>
-      <p style="font-size:11px;color:#666">Agrupado por ${agrupar} • Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+      <h1>RELATÓRIO DE FATURAMENTO ${mes !== 'todos' ? '— ' + mes : ''}</h1>
+      <h2>Base importada do sistema anterior • Agrupado por ${agrupar} • Gerado em ${new Date().toLocaleString('pt-BR')}</h2>
       <table><thead><tr>
         <th style="padding:6px 8px">Comp.</th><th style="padding:6px 8px">Cliente</th><th style="padding:6px 8px">Descrição</th>
         <th style="padding:6px 8px;text-align:right">Total</th><th style="padding:6px 8px">Status</th>
-      </tr></thead><tbody>${linhas}</tbody>
-      <tfoot><tr><td colspan="3" style="padding:8px;text-align:right;font-weight:bold">TOTAL GERAL</td>
-      <td colspan="2" style="padding:8px;font-weight:bold;color:#1e40af">${fmtBRL(totalGeral)}</td></tr></tfoot>
+      </tr></thead><tbody>${corpo}</tbody>
+      ${grupos.length === 0 ? '' : `<tfoot><tr><td colspan="3" style="padding:8px;text-align:right;font-weight:bold">TOTAL GERAL</td>
+      <td colspan="2" style="padding:8px;font-weight:bold;color:#1e40af">${fmtBRL(totalGeral)}</td></tr></tfoot>`}
       </table></body></html>`;
     printDocumentInPage(html);
   };
@@ -64,7 +67,7 @@ const FaturamentoDN4RelatorioPage: React.FC = () => {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <FileBarChart2 className="w-5 h-5 text-primary" />
-        <h2 className="text-base font-semibold">Relatório</h2>
+        <h2 className="text-base font-semibold">Relatório de Faturamento</h2>
       </div>
 
       <div className="flex flex-wrap gap-2 items-end">
@@ -94,7 +97,7 @@ const FaturamentoDN4RelatorioPage: React.FC = () => {
 
       <div className="rounded-lg border border-border bg-card divide-y divide-border">
         {grupos.length === 0 ? (
-          <p className="text-sm text-muted-foreground p-6 text-center">Sem dados para o filtro escolhido.</p>
+          <p className="text-sm text-muted-foreground p-6 text-center">Nenhum dado de faturamento importado para este filtro.</p>
         ) : grupos.map(([k, g]) => (
           <div key={k} className="p-3">
             <div className="flex justify-between items-center mb-2">

@@ -90,8 +90,8 @@ const ImportacoesDN4Page: React.FC = () => {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="w-6 h-6 text-primary" /> Importações DN4</h1>
-          <p className="text-sm text-muted-foreground">Suba PDFs do DN4. Os dados ficam em conferência antes de gravar nas tabelas oficiais.</p>
+          <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="w-6 h-6 text-primary" /> Importação de Dados</h1>
+          <p className="text-sm text-muted-foreground">Suba os PDFs do sistema anterior. Os dados ficam em conferência antes de gravar na base oficial.</p>
         </div>
         <div className="flex items-center gap-2">
           <select value={tipoForcado} onChange={(e) => setTipoForcado(e.target.value)} className="bg-background border border-border rounded px-2 py-1 text-sm">

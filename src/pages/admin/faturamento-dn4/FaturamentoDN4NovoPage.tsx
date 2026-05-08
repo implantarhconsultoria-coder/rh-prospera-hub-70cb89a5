@@ -117,7 +117,7 @@ const FaturamentoDN4NovoPage: React.FC = () => {
     setSalvando(false);
     if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
     toast.success('Faturamento salvo');
-    nav('/admin/faturamento/dn4/conferencia');
+    nav('/admin/faturamento/importacao/conferencia');
   };
 
   return (

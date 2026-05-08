@@ -273,14 +273,17 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/admin/faturamento/conferencia" element={<ConferenciaPage />} />
-        {/* Faturamento DN4 Automatizado */}
-        <Route path="/admin/faturamento/dn4" element={<FaturamentoDN4Layout />}>
+        {/* Base de Faturamento (importação) */}
+        <Route path="/admin/faturamento/importacao" element={<FaturamentoDN4Layout />}>
           <Route index element={<FaturamentoDN4DashboardPage />} />
           <Route path="novo" element={<FaturamentoDN4NovoPage />} />
           <Route path="conferencia" element={<FaturamentoDN4ConferenciaPage />} />
           <Route path="historico" element={<FaturamentoDN4HistoricoPage />} />
           <Route path="relatorio" element={<FaturamentoDN4RelatorioPage />} />
         </Route>
+        {/* Redirecionamentos legados (rota interna antiga) */}
+        <Route path="/admin/faturamento/dn4" element={<Navigate to="/admin/faturamento/importacao" replace />} />
+        <Route path="/admin/faturamento/dn4/*" element={<Navigate to="/admin/faturamento/importacao" replace />} />
         {/* Financeiro */}
         <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
         <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />
@@ -321,7 +324,8 @@ const AuthGate = () => {
         <Route path="/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/faturamento/conferencia" element={<ConferenciaPage />} />
-        <Route path="/faturamento/importacoes-dn4" element={<ImportacoesDN4Page />} />
+        <Route path="/faturamento/importacao-dados" element={<ImportacoesDN4Page />} />
+        <Route path="/faturamento/importacoes-dn4" element={<Navigate to="/faturamento/importacao-dados" replace />} />
       </Route>
 
       {/* ========== FINANCEIRO PORTAL (acesso teste FIN) ========== */}
