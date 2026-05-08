@@ -37,8 +37,11 @@ export type Database = {
           observacao: string | null
           placa: string | null
           posto_cnpj: string | null
+          posto_codigo: string | null
           posto_endereco: string | null
+          posto_id: string | null
           posto_nome: string | null
+          posto_telefone: string | null
           preenchimento: string | null
           qr_codigo: string | null
           status: string
@@ -70,8 +73,11 @@ export type Database = {
           observacao?: string | null
           placa?: string | null
           posto_cnpj?: string | null
+          posto_codigo?: string | null
           posto_endereco?: string | null
+          posto_id?: string | null
           posto_nome?: string | null
+          posto_telefone?: string | null
           preenchimento?: string | null
           qr_codigo?: string | null
           status?: string
@@ -103,8 +109,11 @@ export type Database = {
           observacao?: string | null
           placa?: string | null
           posto_cnpj?: string | null
+          posto_codigo?: string | null
           posto_endereco?: string | null
+          posto_id?: string | null
           posto_nome?: string | null
+          posto_telefone?: string | null
           preenchimento?: string | null
           qr_codigo?: string | null
           status?: string
@@ -120,6 +129,13 @@ export type Database = {
             columns: ["acesso_externo_id"]
             isOneToOne: false
             referencedRelation: "acessos_externos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "abastecimentos_posto_id_fkey"
+            columns: ["posto_id"]
+            isOneToOne: false
+            referencedRelation: "postos_combustivel"
             referencedColumns: ["id"]
           },
           {
@@ -3973,6 +3989,48 @@ export type Database = {
         }
         Relationships: []
       }
+      postos_combustivel: {
+        Row: {
+          cnpj: string | null
+          codigo: string
+          created_at: string
+          deleted_at: string | null
+          endereco: string | null
+          id: string
+          nome: string
+          observacao: string | null
+          status: string
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          cnpj?: string | null
+          codigo: string
+          created_at?: string
+          deleted_at?: string | null
+          endereco?: string | null
+          id?: string
+          nome: string
+          observacao?: string | null
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cnpj?: string | null
+          codigo?: string
+          created_at?: string
+          deleted_at?: string | null
+          endereco?: string | null
+          id?: string
+          nome?: string
+          observacao?: string | null
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       prestadores: {
         Row: {
           banco: string | null
@@ -5592,6 +5650,24 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_posto_combustivel_historico: {
+        Args: { p_posto_id: string }
+        Returns: Json
+      }
+      admin_posto_combustivel_toggle: {
+        Args: { p_bloquear: boolean; p_id: string }
+        Returns: Json
+      }
+      admin_posto_combustivel_upsert: {
+        Args: {
+          p_cnpj: string
+          p_endereco: string
+          p_id: string
+          p_nome: string
+          p_telefone: string
+        }
+        Returns: Json
+      }
       app_mecanico_atualizar_chamado: {
         Args: {
           p_acao: string
@@ -5628,6 +5704,24 @@ export type Database = {
           p_placa?: string
           p_posto_nome?: string
           p_qr_codigo: string
+          p_valor: number
+        }
+        Returns: Json
+      }
+      app_mecanico_registrar_abastecimento_posto: {
+        Args: {
+          p_acesso_id: string
+          p_combustivel: string
+          p_endereco?: string
+          p_foto_bomba_url?: string
+          p_foto_painel_url?: string
+          p_km: number
+          p_latitude?: number
+          p_litros: number
+          p_longitude?: number
+          p_observacao?: string
+          p_placa?: string
+          p_posto_codigo: string
           p_valor: number
         }
         Returns: Json
@@ -5680,6 +5774,10 @@ export type Database = {
         Returns: Json
       }
       app_mecanico_validar_qr: {
+        Args: { p_acesso_id: string; p_codigo: string }
+        Returns: Json
+      }
+      app_mecanico_validar_qr_posto: {
         Args: { p_acesso_id: string; p_codigo: string }
         Returns: Json
       }
