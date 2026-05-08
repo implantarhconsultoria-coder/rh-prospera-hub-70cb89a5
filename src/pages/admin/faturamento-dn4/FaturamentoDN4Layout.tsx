@@ -4,11 +4,11 @@ import { LayoutDashboard, FilePlus2, ListChecks, History, FileBarChart2, Wallet 
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { to: '/admin/faturamento/dn4', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/admin/faturamento/dn4/novo', label: 'Novo Faturamento', icon: FilePlus2 },
-  { to: '/admin/faturamento/dn4/conferencia', label: 'Conferência', icon: ListChecks },
-  { to: '/admin/faturamento/dn4/historico', label: 'Histórico', icon: History },
-  { to: '/admin/faturamento/dn4/relatorio', label: 'Relatório', icon: FileBarChart2 },
+  { to: '/admin/faturamento/importacao', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/admin/faturamento/importacao/novo', label: 'Novo Faturamento', icon: FilePlus2 },
+  { to: '/admin/faturamento/importacao/conferencia', label: 'Conferência', icon: ListChecks },
+  { to: '/admin/faturamento/importacao/historico', label: 'Histórico', icon: History },
+  { to: '/admin/faturamento/importacao/relatorio', label: 'Relatório', icon: FileBarChart2 },
 ];
 
 const FaturamentoDN4Layout: React.FC = () => (
@@ -18,8 +18,8 @@ const FaturamentoDN4Layout: React.FC = () => (
         <Wallet className="w-5 h-5 text-primary" />
       </div>
       <div>
-        <h1 className="text-xl font-bold font-display leading-tight">Faturamento DN4 Automatizado</h1>
-        <p className="text-xs text-muted-foreground">Cadastre uma vez. Reaproveite em todo o fluxo.</p>
+        <h1 className="text-xl font-bold font-display leading-tight">Base de Faturamento</h1>
+        <p className="text-xs text-muted-foreground">Importação de dados, conferência e relatórios.</p>
       </div>
     </div>
 
