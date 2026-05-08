@@ -8,22 +8,36 @@ import { toast } from 'sonner';
 const fmt = (n: any) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 type Importacao = {
-  id: string; arquivo: string; tipo: string | null; status: string;
+  id: string; arquivo: string; storage_path: string; tipo: string | null; status: string;
   total_lidos: number; total_confirmados: number; total_pendentes: number; total_erros: number;
   iniciado_em: string; finalizado_em: string | null;
+  mensagem?: string | null; texto_extraido?: string | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
   em_andamento: 'Processando…',
-  aguardando_conferencia: 'Aguardando conferência',
+  aguardando_conferencia: 'Lido com sucesso',
   concluida: 'Concluída',
-  erro: 'Erro',
+  pdf_sem_texto: 'PDF sem texto legível',
+  tipo_nao_identificado: 'Tipo não identificado',
+  sem_registros: 'Pendente de conferência',
+  erro: 'Erro técnico',
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  em_andamento: 'text-muted-foreground',
+  aguardando_conferencia: 'text-success',
+  concluida: 'text-success',
+  pdf_sem_texto: 'text-warning',
+  tipo_nao_identificado: 'text-warning',
+  sem_registros: 'text-warning',
+  erro: 'text-destructive',
 };
 
 const TIPO_LABEL: Record<string, string> = {
   cliente: 'Clientes',
   representante: 'Representantes',
-  equipamento: 'Equipamentos',
+  equipamento: 'Equipamentos / Patrimônios',
   historico: 'Histórico de Locação',
   desconhecido: 'Não identificado',
 };
@@ -147,7 +161,7 @@ const ImportacoesDN4Page: React.FC = () => {
                 <td className="p-3 text-center text-success">{i.total_confirmados}</td>
                 <td className="p-3 text-center text-warning">{i.total_pendentes}</td>
                 <td className="p-3 text-center text-destructive">{i.total_erros}</td>
-                <td className="p-3 text-xs">{STATUS_LABEL[i.status] || i.status}</td>
+                <td className={`p-3 text-xs ${STATUS_COLOR[i.status] || ''}`} title={i.mensagem || ''}>{STATUS_LABEL[i.status] || i.status}</td>
                 <td className="p-3 text-right"><Button size="sm" variant="outline" onClick={() => setAberta(i)}>Conferir</Button></td>
               </tr>
             ))}
@@ -244,6 +258,26 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
           </div>
         </header>
 
+        {/* Painel de detalhes / reprocessar */}
+        <div className="px-4 py-3 border-b border-border bg-muted/10 space-y-2">
+          {importacao.mensagem && (
+            <div className={`text-sm ${STATUS_COLOR[importacao.status] || ''}`}>
+              <strong>Detalhe:</strong> {importacao.mensagem}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Reprocessar como:</span>
+            <ReprocessarBox importacao={importacao} onDone={onClose} />
+          </div>
+          {importacao.texto_extraido && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-muted-foreground">Ver prévia do texto extraído ({importacao.texto_extraido.length} chars)</summary>
+              <pre className="mt-2 p-2 bg-muted/30 rounded max-h-48 overflow-auto whitespace-pre-wrap">{importacao.texto_extraido}</pre>
+            </details>
+          )}
+        </div>
+
+
         {resumo && (
           <div className="px-4 py-2 border-b border-border bg-muted/20 text-xs flex flex-wrap gap-3">
             <span><strong>Total:</strong> {resumo.total ?? 0}</span>
@@ -300,6 +334,39 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
         </div>
       </aside>
     </div>
+  );
+};
+
+const ReprocessarBox: React.FC<{ importacao: Importacao; onDone: () => void }> = ({ importacao, onDone }) => {
+  const [tipo, setTipo] = useState<string>(importacao.tipo && importacao.tipo !== 'desconhecido' ? importacao.tipo : 'auto');
+  const [busy, setBusy] = useState(false);
+  const reprocessar = async () => {
+    setBusy(true);
+    try {
+      await supabase.from('importacoes_dn4' as any).update({
+        status: 'em_andamento', mensagem: null, total_lidos: 0, total_pendentes: 0, total_erros: 0,
+      } as any).eq('id', importacao.id);
+      const { error } = await supabase.functions.invoke('parse-dn4', {
+        body: { importacao_id: importacao.id, storage_path: importacao.storage_path, tipo_forcado: tipo === 'auto' ? null : tipo },
+      });
+      if (error) toast.error(error.message);
+      else toast.success('Reprocessado');
+      onDone();
+    } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="bg-background border border-border rounded px-2 py-1 text-sm">
+        <option value="auto">Detectar automaticamente</option>
+        <option value="cliente">Clientes</option>
+        <option value="representante">Representantes</option>
+        <option value="equipamento">Equipamentos / Patrimônios</option>
+        <option value="historico">Histórico de Locação</option>
+      </select>
+      <Button size="sm" variant="outline" onClick={reprocessar} disabled={busy}>
+        {busy ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} Reprocessar
+      </Button>
+    </>
   );
 };
 

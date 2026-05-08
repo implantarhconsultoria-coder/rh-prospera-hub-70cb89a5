@@ -3643,8 +3643,10 @@ export type Database = {
           finalizado_em: string | null
           id: string
           iniciado_em: string
+          mensagem: string | null
           status: string
           storage_path: string | null
+          texto_extraido: string | null
           tipo: string | null
           total_confirmados: number
           total_erros: number
@@ -3660,8 +3662,10 @@ export type Database = {
           finalizado_em?: string | null
           id?: string
           iniciado_em?: string
+          mensagem?: string | null
           status?: string
           storage_path?: string | null
+          texto_extraido?: string | null
           tipo?: string | null
           total_confirmados?: number
           total_erros?: number
@@ -3677,8 +3681,10 @@ export type Database = {
           finalizado_em?: string | null
           id?: string
           iniciado_em?: string
+          mensagem?: string | null
           status?: string
           storage_path?: string | null
+          texto_extraido?: string | null
           tipo?: string | null
           total_confirmados?: number
           total_erros?: number
