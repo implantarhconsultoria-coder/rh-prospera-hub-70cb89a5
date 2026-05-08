@@ -3,7 +3,7 @@ import { Outlet, Navigate, NavLink, useNavigate, useLocation } from 'react-route
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Loader2, FileText, Users, FileSignature, Receipt, TrendingUp, AlertTriangle, LogOut, Building2, ClipboardCheck, Menu, ArrowLeft, X } from 'lucide-react';
+import { Loader2, FileText, Users, FileSignature, Receipt, TrendingUp, AlertTriangle, LogOut, Building2, ClipboardCheck, Menu, ArrowLeft, X, FileUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
@@ -15,6 +15,7 @@ const ITEMS = [
   { to: '/faturamento/medicoes', label: 'Medições', icon: FileText },
   { to: '/faturamento/conferencia', label: 'Conferência', icon: ClipboardCheck },
   { to: '/faturamento/faturas', label: 'Faturas', icon: Receipt },
+  { to: '/faturamento/importacoes-dn4', label: 'Importações DN4', icon: FileUp },
   { to: '/faturamento/reajustes', label: 'Reajustes', icon: TrendingUp },
   { to: '/faturamento/pendencias', label: 'Pendências', icon: AlertTriangle },
 ];
