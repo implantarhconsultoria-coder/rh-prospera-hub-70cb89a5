@@ -1,52 +1,110 @@
-# Remoção do App Mecânico antigo
+# Importação DN4 → Faturamento (com conferência)
 
-Objetivo: eliminar TODO o App Mecânico antigo (rotas, telas, layout, provider, redirects, botões de menu) sem mexer em login admin, filial, financeiro, faturamento, RH, almoxarifado, operacional ou nos demais acessos externos por PIN. Dados no banco permanecem intactos.
+Escopo: somente banco + módulo Faturamento. Não toca em RH, VR, VT, EPI, Uniformes, App Mecânico, Login.
 
-## O que será removido
+## Visão geral do fluxo
 
-### Rotas (em `src/App.tsx`)
-- `/mecanico` (link único + `MecanicoRedirectPage`)
-- `/m/:token` e todas as sub-rotas (`ponto`, `chamados`, `estoque`, `km`, `abastecimento`, `galoes`, `historico`)
-- `/mecanico-ext/:acessoId` (`MecanicoExtRedirect`)
-- `/acesso-mecanico` (tela de PIN do mecânico)
-- Imports relacionados: `MecanicoLayout`, `MecanicoRedirectPage`, `MecanicoExtRedirect`, `MecanicoHomePage`, `MecanicoPontoPage`, `MecanicoChamadosPage`, `MecanicoEstoquePage`, `MecanicoKmPage`, `MecanicoAbastecimentoPage`, `MecanicoGaloesPage`, `MecanicoHistoricoPage`
-- Redirecionamentos `/campo`, `/campo/*`, `/operacional`, `/operacional/*` que apontam para `/mecanico` → passam a ir para `/admin` (NotFound só aparece se usuário não tiver outro portal; não afeta os portais existentes pois `RoleRedirect` continua direcionando)
-- Em `RoleRedirect`: tirar `tecnico_campo` e `operacional` apontando para `/mecanico` → mandar para `/admin` (admin só) ou manter, mas sem destino mecânico
+```
+PDF DN4  →  Upload (Faturamento/Importações DN4)
+         →  Edge Function: parse-dn4 (extrai texto + classifica)
+         →  Grava em tabelas STAGING (status=pendente_conferencia)
+         →  Tela de Conferência (abas + edição + confirmar/ignorar)
+         →  Promove para tabelas OFICIAIS do Faturamento
+         →  Log de importação consolidado
+```
 
-### Arquivos deletados
-- `src/components/MecanicoLayout.tsx`
-- `src/context/TecnicoAppContext.tsx` (provider/hook antigo)
-- `src/pages/MecanicoRedirectPage.tsx`
-- `src/pages/MecanicoExtRedirect.tsx`
-- `src/pages/mecanico/` (pasta inteira: Home, Ponto, Chamados, Estoque, Km, Abastecimento, Galoes, Historico)
-- Edge function `supabase/functions/tecnico-app/` (lógica antiga de token), via `delete_edge_functions`
+Nada vai direto pra base oficial. Sempre passa por staging.
 
-### Limpezas pontuais (manter o resto do arquivo intacto)
-- `src/components/ModuleSwitcher.tsx`: remover entrada `App Mecânico` e bloco `effectiveRoles`/`operacional → tecnico_campo`
-- `src/components/AppLayout.tsx` e `src/components/FilialLayout.tsx`: remover ramos `tecnico_campo`/`operacional` que redirecionam para `/mecanico`
-- `src/pages/ConfiguracoesPage.tsx`: remover item "App Mecânico (link único…)"
-- `src/pages/admin/AppOperacionalPage.tsx`: remover botão "👁 Visualizar App" que abre `/mecanico`
-- `src/pages/admin/AcessosExternosPage.tsx`:
-  - Remover opção `mecanico_externo` da lista de perfis e default do form
-  - Remover branch `if (a.modulo === 'mecanico')` que abre `/acesso-mecanico`
-- `src/pages/AcessoExternoPage.tsx`: remover entrada `mecanico` em `MODULOS`, default fallback e branch que carrega `funcionario_id` para mecânico/campo/operacional
-- `src/hooks/useAcessoExternoFiltro.ts`: tirar `mecanico` da regex `EXT_ROUTE_RE`
-- `src/components/ExternoLayout.tsx`: remover `mecanico` do comentário de módulos suportados (cosmético)
-- `src/App.tsx`: remover constantes `EXT_ITEMS_MEC` e ícones usados só por ela (`Home, Clock, ClipboardList, Boxes, Gauge, Fuel, Container, History`) se não usados em outro lugar
+## 1. Banco de dados (migrations)
 
-### Mantido sem alteração
-- Login admin, autenticação e roles
-- Portais Admin, Filial, Financeiro, Faturamento, Operacional, Campo, Almoxarifado
-- Demais acessos externos por PIN (`/acesso-financeiro`, `/acesso-filial`, `/acesso-almoxarifado`, `/acesso-operacional`, `/acesso-campo`, `/acesso-faturamento`)
-- Tabelas e dados no banco (`tecnicos_campo`, registros de ponto/km/abastecimento etc.) — apenas deixam de ser usados pelo app removido
-- Identidade visual
+### Staging (todas com colunas comuns)
+Colunas comuns em cada staging:
+`id, importacao_id, arquivo_origem, pagina_origem, linha_original_extraida (jsonb), status (importado|pendente_conferencia|erro_leitura|confirmado|ignorado), mensagem_erro, data_importacao, usuario_importacao, created_at, updated_at`.
 
-## Resultado esperado
+- `staging_clientes_dn4` — codigo_dn4, nome_razao_social, cpf_cnpj, inscricao_estadual, endereco, bairro, cidade, uf, cep, empresa_origem, filial_origem, status_cliente
+- `staging_representantes_dn4` — codigo_dn4, nome, cpf_cnpj, endereco, cidade, uf, email, telefone, tipo_pessoa, empresa_origem, filial_origem
+- `staging_equipamentos_dn4` — codigo_equipamento, numero_patrimonio, descricao, tipo_equipamento, grupo, filial_opera, situacao, numero_serie, valor_venda, valor_compra, valor_mercado, valor_indenizacao
+- `staging_historico_locacao_dn4` — numero_os, pedido, cliente_nome, cliente_cpf_cnpj, quantidade, item, patrimonio, descricao_equipamento, periodo_texto, data_inicio, data_fim, valor_pedido_periodo, valor_diaria_periodo, valor_faturado_periodo, numero_nf, filial, cliente_id_resolvido, equipamento_id_resolvido
 
-- Nenhuma rota `/mecanico*`, `/m/:token`, `/mecanico-ext/*` ou `/acesso-mecanico` ativa
-- Menu/seletor de módulos sem "App Mecânico"
-- Página de Configurações sem o item App Mecânico
-- Painel "App Operacional" sem botão "Visualizar App"
-- Cadastro de acesso externo sem perfil "Mecânico Externo"
-- Build limpo, demais portais funcionam normalmente
-- Pronto para reconstruir o App Mecânico do zero em etapa futura
+### Oficiais (criadas se não existirem; senão mescladas)
+- `clientes_faturamento` — codigo_dn4, nome_razao_social, cpf_cnpj (único quando informado), inscricao_estadual, endereco, bairro, cidade, uf, cep, empresa_origem, filial_origem, status, created_at, updated_at
+- `representantes_faturamento` — codigo_dn4, nome, cpf_cnpj, endereco, cidade, uf, email, telefone, tipo_pessoa, empresa_origem, filial_origem (única por codigo_dn4+nome)
+- `equipamentos_faturamento` — codigo_equipamento, numero_patrimonio (único), descricao, tipo_equipamento, grupo, filial_opera, situacao, numero_serie, valor_venda, valor_compra, valor_mercado, valor_indenizacao
+- `equipamentos_faturamento_historico` — equipamento_id, alterado_por, alterado_em, dados_antes (jsonb), dados_depois (jsonb)
+- `historico_locacao_faturamento` — numero_os, pedido, cliente_id, equipamento_id, patrimonio, quantidade, item, descricao_equipamento, periodo_texto, data_inicio, data_fim, valor_pedido_periodo, valor_diaria_periodo, valor_faturado_periodo, numero_nf, filial. Único por (numero_os, pedido, patrimonio, data_inicio, data_fim).
+
+### Log
+- `importacoes_dn4` — id, arquivo, usuario_id, iniciado_em, finalizado_em, total_lidos, total_confirmados, total_pendentes, total_erros, status
+
+### Segurança / RLS
+- RLS ativo em todas. Acesso restrito a roles `admin` e `faturamento` via `has_role()`.
+- Trigger `updated_at` padrão.
+- Trigger no UPDATE de `equipamentos_faturamento` grava em `equipamentos_faturamento_historico`.
+- Nenhum DELETE automático em base oficial.
+
+### Storage
+- Bucket privado `dn4-imports` para guardar os PDFs originais. Policies para admin/faturamento.
+
+## 2. Edge function `parse-dn4`
+
+- Recebe `{ importacao_id, storage_path }`.
+- Baixa o PDF, extrai texto (pdfjs no edge ou via OCR já existente se necessário).
+- Heurística por tipo de relatório DN4 (clientes / representantes / equipamentos / histórico de locação) detectando cabeçalhos.
+- Para cada linha: monta registro, aplica validações básicas, define status:
+  - `pendente_conferencia` por padrão
+  - `erro_leitura` se faltar campo obrigatório
+- Resolve vínculos quando possível (cliente por CPF/CNPJ, equipamento por patrimônio).
+- Insere em staging em batches.
+- Atualiza contadores em `importacoes_dn4`.
+
+## 3. Promoção staging → oficial (RPC `dn4_confirmar_registros`)
+
+Recebe lista de IDs por tipo. Para cada:
+
+- Cliente: UPSERT por cpf_cnpj; se vazio, match por nome+cidade; conflito → mantém `pendente_conferencia`. Preserva `codigo_dn4`.
+- Representante: UPSERT por (codigo_dn4, nome).
+- Equipamento: UPSERT por numero_patrimonio. Trigger grava histórico de alteração.
+- Histórico de locação: INSERT se não existir chave única; tenta resolver cliente_id e equipamento_id; se faltar vínculo → `pendente_conferencia` (não promove).
+
+Marca staging como `confirmado` (ou `ignorado`).
+
+## 4. UI — módulo Faturamento
+
+Nova rota: `/faturamento/importacoes-dn4`
+Adicionar item “Importações DN4” no `FaturamentoLayout` (mobile + desktop).
+
+### Tela `ImportacoesDN4Page`
+- Header com botão **Nova Importação** (upload de 1+ PDFs).
+- Lista das importações (data, arquivo, totais, status).
+- Clicar abre detalhes com abas:
+  - **Clientes** | **Representantes** | **Equipamentos** | **Histórico de Locação** | **Pendências** | **Erros**
+- Em cada aba (tabela editável):
+  - Visualizar campos extraídos
+  - Editar inline antes de confirmar
+  - Ações: Confirmar, Ignorar, Confirmar todos válidos, Exportar erros (CSV)
+- Mantém visual próximo do padrão DN4 (colunas: código, razão social, CPF/CNPJ, cidade/UF / código, patrimônio, descrição, situação, filial, valores / OS, pedido, cliente, patrimônio, período, valor diário, valor faturado, NF).
+
+### Tela `ClientesFaturamento`, `EquipamentosFaturamento` (consulta pós-import)
+Páginas de consulta simples reutilizando `clientes_faturamento` e `equipamentos_faturamento` para a equipe ver o resultado consolidado, com busca por código/patrimônio/CPF/descrição. (Histórico de locação consultável por OS e patrimônio.)
+
+## 5. Reuso pós-importação
+
+Os módulos existentes de Contratos, Medições, Faturas e Pendências passam a poder usar `clientes_faturamento`, `equipamentos_faturamento` e `historico_locacao_faturamento` como fonte. Sem alterar fluxos atuais — apenas expor seletores/consultas.
+
+## 6. Segurança e logs
+- Toda importação cria 1 linha em `importacoes_dn4` com contadores atualizados ao fim.
+- Nenhum dado existente apagado automaticamente.
+- Conflitos viram `pendente_conferencia` com `mensagem_erro` explicando.
+- RLS por role; PDFs em bucket privado.
+
+## Ordem de execução
+1. Migration: tabelas staging + oficiais + log + RLS + triggers + bucket.
+2. Edge function `parse-dn4` + deploy.
+3. RPC `dn4_confirmar_registros`.
+4. UI Faturamento: rota, item de menu, tela de importações com abas.
+5. Telas de consulta (clientes/equipamentos/histórico) — leves, padrão DN4.
+6. QA: subir 1 PDF de cada tipo, conferir, confirmar, validar gravação oficial.
+
+## Pontos a confirmar com você
+- Posso te pedir 1 PDF de cada tipo (clientes, representantes, equipamentos, histórico) para calibrar o parser? Os PDFs DN4 que você já enviou ainda estão acessíveis nesta conversa ou precisa reenviar?
+- Os relatórios DN4 vêm em layout fixo (colunas) ou variam por filial? Isso muda a estratégia do parser (regex de colunas vs. OCR).
