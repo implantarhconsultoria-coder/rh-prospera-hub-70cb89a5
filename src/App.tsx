@@ -64,6 +64,7 @@ import MonitoramentoPage from "@/pages/MonitoramentoPage";
 import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
 import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
 import AppMecanicoAdminPage from "@/pages/admin/AppMecanicoAdminPage";
+import CombustivelQRAdminPage from "@/pages/admin/CombustivelQRAdminPage";
 import AcessoMecanicoPage from "@/app-mecanico/AcessoMecanicoPage";
 import MecanicoAppLayout from "@/app-mecanico/MecanicoAppLayout";
 import MecHomePage from "@/app-mecanico/pages/HomePage";
@@ -255,6 +256,7 @@ const AuthGate = () => {
         <Route path="/admin/app-mecanico" element={<AppMecanicoAdminPage />} />
         <Route path="/admin/app-operacional" element={<Navigate to="/admin/app-mecanico" replace />} />
         <Route path="/admin/app-operacional/:id" element={<Navigate to="/admin/app-mecanico" replace />} />
+        <Route path="/admin/combustivel-qr" element={<CombustivelQRAdminPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="/admin/acessos-externos" element={<AcessosExternosPage />} />
         <Route path="/admin/assistente" element={<AssistentePage />} />
