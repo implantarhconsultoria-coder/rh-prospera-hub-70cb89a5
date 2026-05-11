@@ -227,7 +227,7 @@ const ImportacoesDN4Page: React.FC = () => {
   const reprocessarImportacao = async (i: any) => {
     toast.message("Reprocessamento iniciado...");
 
-    const { error } = await supabase.functions.invoke("processar-importacao-faturamento", {
+    const { error } = await supabase.functions.invoke("parse-dn4", {
       body: {
         importacao_id: i.id,
         arquivo_nome: i.arquivo,
