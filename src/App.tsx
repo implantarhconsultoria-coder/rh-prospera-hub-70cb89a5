@@ -142,10 +142,10 @@ const EXT_ITEMS_RH = [
   { to: 'aviso-ferias', label: 'Aviso de Férias', icon: CalendarDays },
   { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
 ];
+// EPI e Uniformes NÃO são liberados para acesso externo/almoxarifado/filial.
+// Ficam restritos ao admin central (rota /admin/epi e /admin/uniformes).
 const EXT_ITEMS_ALMOX = [
   { to: '', label: 'Almoxarifado', icon: Package, end: true },
-  { to: 'epi', label: 'EPI', icon: Shield },
-  { to: 'uniformes', label: 'Uniformes', icon: Shirt },
 ];
 const EXT_ITEMS_OP = [
   { to: '', label: 'Chamados', icon: Headphones, end: true },
@@ -412,8 +412,9 @@ const App = () => (
               <Route path="/almoxarifado-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="almoxarifado" titulo="Almoxarifado" cor="bg-orange-600" items={EXT_ITEMS_ALMOX} /></ErrorBoundary>}>
                 <Route index element={<AlmoxarifadoPage />} />
                 <Route path="entregas" element={<AlmoxarifadoPage />} />
-                <Route path="epi" element={<EPIPage />} />
-                <Route path="uniformes" element={<UniformePage />} />
+                {/* EPI/Uniformes restritos ao admin central — redireciona se tentar acessar por URL */}
+                <Route path="epi" element={<Navigate to="" replace />} />
+                <Route path="uniformes" element={<Navigate to="" replace />} />
               </Route>
 
               <Route path="/operacional-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="operacional" titulo="Operacional" cor="bg-blue-600" items={EXT_ITEMS_OP} /></ErrorBoundary>}>
