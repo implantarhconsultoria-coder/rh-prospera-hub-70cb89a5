@@ -136,7 +136,7 @@ async function extrairTexto(bytes: Uint8Array): Promise<{ texto: string; paginas
     }).promise;
 
     const partes: string[] = [];
-    const limitePaginas = Math.min(document.numPages, 10);
+    const limitePaginas = Math.min(document.numPages, 2);
     for (let pagina = 1; pagina <= limitePaginas; pagina += 1) {
       const page = await document.getPage(pagina);
       const textContent = await page.getTextContent();
