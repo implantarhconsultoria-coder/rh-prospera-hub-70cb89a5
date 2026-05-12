@@ -63,7 +63,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
               onClick={this.reset}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90"
             >
-              <RefreshCw className="w-4 h-4" /> Tentar de novo
+              <RefreshCw className="w-4 h-4" /> Tentar novamente
             </button>
             <button
               onClick={this.goHome}
