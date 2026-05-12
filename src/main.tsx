@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Envia erros não tratados ao Doctor PRO
 window.addEventListener('error', (e) => {
@@ -11,5 +12,9 @@ window.addEventListener('error', (e) => {
   });
 });
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
 

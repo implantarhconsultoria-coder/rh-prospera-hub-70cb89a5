@@ -47,7 +47,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
             <AlertTriangle className="w-7 h-7 text-destructive" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-foreground">Algo deu errado nesta tela</h2>
+            <h2 className="text-lg font-bold text-foreground">Ocorreu um erro ao carregar esta tela.</h2>
             <p className="text-sm text-muted-foreground mt-1">
               A operação foi concluída no servidor, mas a tela não conseguiu renderizar.
               Seus dados estão seguros.
@@ -63,7 +63,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
               onClick={this.reset}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90"
             >
-              <RefreshCw className="w-4 h-4" /> Tentar de novo
+              <RefreshCw className="w-4 h-4" /> Tentar novamente
             </button>
             <button
               onClick={this.goHome}
