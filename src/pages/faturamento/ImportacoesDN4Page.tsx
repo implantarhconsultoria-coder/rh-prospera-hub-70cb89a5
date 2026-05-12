@@ -60,6 +60,13 @@ const TIPO_LABEL: Record<string, string> = {
   desconhecido: "Não identificado",
 };
 
+const detectarTipoArquivo = (nome: string): string => {
+  const ext = nome.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'pdf') return 'pdf';
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return ext === 'csv' ? 'csv' : 'excel';
+  return 'pdf';
+};
+
 const ImportacoesDN4Page: React.FC = () => {
   const [imports, setImports] = useState<Importacao[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,49 +127,51 @@ const ImportacoesDN4Page: React.FC = () => {
     if (files.length === 0) return;
     setUploading(true);
     try {
-     for (const file of files) {
-  const path = `${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
-  const tipoArquivo = detectarTipoArquivo(file.name);
+      for (const file of files) {
+        const path = `${Date.now()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
+        const tipoArquivo = detectarTipoArquivo(file.name);
 
-  const { error: upErr } = await supabase.storage
-    .from("dn4-imports")
-    .upload(path, file);
+        const { error: upErr } = await supabase.storage
+          .from("dn4-imports")
+          .upload(path, file);
 
-  if (upErr) {
-    toast.error(`Upload ${file.name}: ${upErr.message}`);
-    continue;
-  }
+        if (upErr) {
+          toast.error(`Upload ${file.name}: ${upErr.message}`);
+          continue;
+        }
 
-  const { data: ses } = await supabase.auth.getUser();
+        const { data: ses } = await supabase.auth.getUser();
 
-  const { data: imp, error: insErr } = await supabase
-    .from("importacoes_dn4" as any)
-    .insert({
-      arquivo: file.name,
-      storage_path: path,
-      arquivo_path: path,
-      tipo_arquivo: tipoArquivo,
-      usuario_id: ses?.user?.id,
-      usuario_nome: ses?.user?.email,
-      status: "em_andamento",
-    } as any)
-    .select()
-    .single();
-  }
- if (insErr || !imp) {
-  toast.error(insErr?.message || "Erro ao criar importação");
-  continue;
-}
- const funcaoImportacao =
-  tipoArquivo === "excel" || tipoArquivo === "csv" ? "parse-planilha-faturamento" : "parse-dn4";
+        const { data: imp, error: insErr } = await supabase
+          .from("importacoes_dn4" as any)
+          .insert({
+            arquivo: file.name,
+            storage_path: path,
+            arquivo_path: path,
+            tipo_arquivo: tipoArquivo,
+            usuario_id: ses?.user?.id,
+            usuario_nome: ses?.user?.email,
+            status: "em_andamento",
+          } as any)
+          .select()
+          .single();
 
-const { data: parseData, error: fnErr } = await supabase.functions.invoke(funcaoImportacao, {
+        if (insErr || !imp) {
+          toast.error(insErr?.message || "Erro ao criar importação");
+          continue;
+        }
+
+        const funcaoImportacao =
+          tipoArquivo === "excel" || tipoArquivo === "csv" ? "parse-planilha-faturamento" : "parse-dn4";
+
+        const { data: parseData, error: fnErr } = await supabase.functions.invoke(funcaoImportacao, {
           body: {
             importacao_id: (imp as any).id,
             storage_path: path,
             tipo_forcado: tipoForcado === "auto" ? null : tipoForcado,
           },
         });
+
         if (fnErr) {
           toast.error(`Importação ${file.name}: ${fnErr.message}`);
           await supabase
@@ -185,6 +194,8 @@ const { data: parseData, error: fnErr } = await supabase.functions.invoke(funcao
         }
       }
       await carregar();
+    } catch (err: any) {
+      toast.error("Erro no upload: " + (err?.message || err));
     } finally {
       setUploading(false);
       e.target.value = "";
