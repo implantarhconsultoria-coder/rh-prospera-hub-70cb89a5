@@ -185,6 +185,8 @@ const { data: parseData, error: fnErr } = await supabase.functions.invoke(funcao
         }
       }
       await carregar();
+    } catch (err: any) {
+      toast.error("Erro no upload: " + (err?.message || err));
     } finally {
       setUploading(false);
       e.target.value = "";
