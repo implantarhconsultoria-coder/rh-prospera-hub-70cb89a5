@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Users, Edit, Eye } from 'lucide-react';
+import { Plus, Search, Users, Edit, Eye, Sparkles, UploadCloud } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +21,8 @@ const ClientesFatPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   const [open, setOpen] = useState(false);
+  const [smartMode, setSmartMode] = useState(false);
+  const [arquivoNome, setArquivoNome] = useState('');
   const [form, setForm] = useState<Partial<Cliente> & { observacoes?: string; endereco?: string; cep?: string; contato_responsavel?: string; inscricao_estadual?: string }>(empty);
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -38,8 +40,28 @@ const ClientesFatPage: React.FC = () => {
     c.cnpj_cpf?.includes(busca)
   );
 
-  const abrirNovo = () => { setForm(empty); setEditId(null); setOpen(true); };
-  const abrirEdicao = (c: Cliente) => { setForm(c); setEditId(c.id); setOpen(true); };
+  const abrirNovo = () => { setSmartMode(false); setArquivoNome(''); setForm(empty); setEditId(null); setOpen(true); };
+  const abrirNovoInteligente = () => {
+    setSmartMode(true);
+    setArquivoNome('');
+    setEditId(null);
+    setForm({
+      ...empty,
+      observacoes: 'Cliente iniciado pelo Cadastro Inteligente. Envie o documento, confira os dados e salve somente após validação.',
+    });
+    setOpen(true);
+  };
+  const abrirEdicao = (c: Cliente) => { setSmartMode(false); setArquivoNome(''); setForm(c); setEditId(c.id); setOpen(true); };
+
+  const carregarDocumento = (file?: File) => {
+    if (!file) return;
+    setArquivoNome(file.name);
+    setForm({
+      ...form,
+      observacoes: `${form.observacoes || ''}\nDocumento recebido para conferência inteligente: ${file.name}`.trim(),
+    });
+    toast.success('Documento anexado. Confira/preencha os dados antes de salvar.');
+  };
 
   const salvar = async () => {
     if (!form.razao_social) { toast.error('Razão social é obrigatória'); return; }
@@ -50,7 +72,7 @@ const ClientesFatPage: React.FC = () => {
     } else {
       const { error } = await supabase.from('clientes_fat').insert(form as any);
       if (error) return toast.error(error.message);
-      toast.success('Cliente cadastrado');
+      toast.success(smartMode ? 'Cliente inteligente salvo após conferência' : 'Cliente cadastrado');
     }
     setOpen(false);
     carregar();
@@ -58,12 +80,15 @@ const ClientesFatPage: React.FC = () => {
 
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold font-display flex items-center gap-2"><Users className="w-6 h-6 text-primary" /> Clientes</h1>
           <p className="text-sm text-muted-foreground">{clientes.length} clientes cadastrados</p>
         </div>
-        <button onClick={abrirNovo} className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> Novo Cliente</button>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={abrirNovoInteligente} className="btn-secondary flex items-center gap-2 border-primary/40 text-primary"><Sparkles className="w-4 h-4" /> Novo Cliente Inteligente</button>
+          <button onClick={abrirNovo} className="btn-primary flex items-center gap-2"><Plus className="w-4 h-4" /> Novo Cliente</button>
+        </div>
       </div>
 
       <div className="card-premium p-3 flex items-center gap-2">
@@ -107,7 +132,16 @@ const ClientesFatPage: React.FC = () => {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>{editId ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editId ? 'Editar Cliente' : smartMode ? 'Novo Cliente Inteligente' : 'Novo Cliente'}</DialogTitle></DialogHeader>
+          {smartMode && (
+            <label className="mb-3 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-primary/40 bg-primary/5 p-5 text-center hover:bg-primary/10">
+              <UploadCloud className="mb-2 h-8 w-8 text-primary" />
+              <span className="font-semibold">Enviar PDF, foto ou print do cliente</span>
+              <span className="text-xs text-muted-foreground">O arquivo fica registrado na observação. Confira os campos antes de salvar.</span>
+              {arquivoNome && <span className="mt-2 text-xs text-primary">Arquivo: {arquivoNome}</span>}
+              <input type="file" accept="application/pdf,image/*" className="hidden" onChange={e => carregarDocumento(e.target.files?.[0])} />
+            </label>
+          )}
           <div className="grid grid-cols-2 gap-3 py-2">
             <div className="col-span-2"><Label>Razão Social *</Label><Input value={form.razao_social || ''} onChange={e => setForm({ ...form, razao_social: e.target.value })} /></div>
             <div><Label>Nome Fantasia</Label><Input value={form.nome_fantasia || ''} onChange={e => setForm({ ...form, nome_fantasia: e.target.value })} /></div>
@@ -131,7 +165,7 @@ const ClientesFatPage: React.FC = () => {
           </div>
           <DialogFooter>
             <button onClick={() => setOpen(false)} className="btn-secondary">Cancelar</button>
-            <button onClick={salvar} className="btn-primary">Salvar</button>
+            <button onClick={salvar} className="btn-primary">{smartMode ? 'Salvar cliente conferido' : 'Salvar'}</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
