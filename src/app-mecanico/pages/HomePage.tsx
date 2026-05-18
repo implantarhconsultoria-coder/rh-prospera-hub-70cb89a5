@@ -21,8 +21,10 @@ export default function HomePage() {
   const firstName = mecanico.nome.split(" ")[0];
 
   const cards: Card[] = [
-    { label: "Entrada", sub: "Bater ponto", icon: LogIn, to: `${base}/ponto?tipo=entrada`, tint: "from-emerald-500/15 to-emerald-500/5 text-emerald-600 dark:text-emerald-400" },
-    { label: "Saída", sub: "Encerrar dia", icon: LogOut, to: `${base}/ponto?tipo=saida`, tint: "from-rose-500/15 to-rose-500/5 text-rose-600 dark:text-rose-400" },
+    { tipo: "entrada", label: "Entrada", sub: "Bater ponto", icon: LogIn, to: `${base}/ponto?tipo=entrada`, tint: "from-emerald-500/15 to-emerald-500/5 text-emerald-600 dark:text-emerald-400" },
+    { tipo: "almoco_inicio", label: "Início Almoço", sub: "Pausa", icon: UtensilsCrossed, to: `${base}/ponto?tipo=almoco_inicio`, tint: "from-orange-500/15 to-orange-500/5 text-orange-600 dark:text-orange-400" },
+    { tipo: "almoco_fim", label: "Retorno Almoço", sub: "Voltar ao trabalho", icon: Coffee, to: `${base}/ponto?tipo=almoco_fim`, tint: "from-amber-500/15 to-amber-500/5 text-amber-600 dark:text-amber-400" },
+    { tipo: "saida", label: "Saída", sub: "Encerrar dia", icon: LogOut, to: `${base}/ponto?tipo=saida`, tint: "from-rose-500/15 to-rose-500/5 text-rose-600 dark:text-rose-400" },
     { label: "Chamados", sub: "Atendimentos", icon: ClipboardList, to: `${base}/chamados`, tint: "from-purple-500/15 to-purple-500/5 text-purple-600 dark:text-purple-400" },
     { label: "Veículo / KM", sub: "Registrar KM", icon: Car, to: `${base}/veiculo`, tint: "from-indigo-500/15 to-indigo-500/5 text-indigo-600 dark:text-indigo-400" },
     { label: "Abastecimento", sub: "QR + Bomba", icon: Fuel, to: `${base}/abastecimento`, tint: "from-amber-500/15 to-amber-500/5 text-amber-600 dark:text-amber-400" },
