@@ -147,7 +147,7 @@ const EmployeeDetailPage: React.FC = () => {
                 <p className="text-sm"><span className="text-muted-foreground">Último Exame:</span> {formatDate(emp.dataExameMedico)}</p>
                 <p className="text-sm"><span className="text-muted-foreground">Próximo ASO:</span> {formatDate(aso.proximoASO.toISOString())}</p>
                 <p className="text-sm"><span className="text-muted-foreground">Dias Restantes:</span> {aso.diasRestantes}</p>
-                <Field label="Data Exame Médico" value={emp.dataExameMedico} field="dataExameMedico" type="date" />
+                <Field label="Data Exame Médico" {...fieldFor('dataExameMedico', 'date')} />
               </div>
             </div>
           </div>
