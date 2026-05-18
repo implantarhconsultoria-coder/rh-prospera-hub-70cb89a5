@@ -53,30 +53,15 @@ const EmployeeDetailPage: React.FC = () => {
   const fer = feriasStatus(emp.dataAdmissao);
   const aso = asoStatus(emp.dataExameMedico);
 
-  const Field = React.useCallback(({ label, value, field, type = 'text' }: { label: string; value: string | number; field?: keyof typeof emp; type?: string }) => (
-    <div>
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      {field ? (
-        <Input value={value} type={type} onChange={e => updateEmployee(emp.id, { [field]: type === 'number' ? Number(e.target.value) : e.target.value } as any)}
-          className="text-sm" />
-      ) : (
-        <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md">{value}</p>
-      )}
-    </div>
-  ), [emp.id, updateEmployee]);
-
-  const Toggle = React.useCallback(({ label, active, field, valueField, valueLabel, value }: { label: string; active: boolean; field: string; valueField?: string; valueLabel?: string; value?: number }) => (
-    <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
-      <div>
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        {valueLabel && <span className="text-xs text-muted-foreground ml-2">({valueLabel}: {formatCurrency(value || 0)})</span>}
-      </div>
-      <button onClick={() => updateEmployee(emp.id, { [field]: !active } as any)}
-        className={`w-12 h-6 rounded-full transition-colors ${active ? 'bg-success' : 'bg-muted'} relative`}>
-        <div className={`w-5 h-5 bg-card rounded-full absolute top-0.5 transition-transform ${active ? 'translate-x-6' : 'translate-x-0.5'}`} />
-      </button>
-    </div>
-  ), [emp.id, updateEmployee]);
+  const fieldFor = (field: keyof typeof emp, type: string = 'text') => ({
+    value: (emp as any)[field] ?? '',
+    type,
+    onChange: (v: string) => updateEmployee(emp.id, { [field]: type === 'number' ? Number(v) : v } as any),
+  });
+  const toggleFor = (field: keyof typeof emp) => ({
+    active: !!(emp as any)[field],
+    onToggle: () => updateEmployee(emp.id, { [field]: !(emp as any)[field] } as any),
+  });
 
   return (
     <div className="space-y-5 animate-fade-in">
