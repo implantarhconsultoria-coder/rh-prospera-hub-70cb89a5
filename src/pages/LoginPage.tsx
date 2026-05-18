@@ -22,25 +22,61 @@ const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
     const raw = email.trim().toLowerCase();
     const finalEmail = LOGIN_ALIASES[raw] || raw;
-    const { error } = await supabase.auth.signInWithPassword({ email: finalEmail, password });
-    setLoading(false);
-    if (error) toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha inválidos' : error.message);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: finalEmail, password });
+
+      if (error) {
+        toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha inválidos' : error.message);
+      }
+    } catch (error) {
+      toast.error('Falha ao conectar no login. Verifique as variáveis da Vercel/Supabase.');
+      console.error('Login failure:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const result = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast.error('Erro ao entrar com Google');
+
+    const redirectTo = `${window.location.origin}/`;
+    const isLovablePreview = window.location.hostname.includes('lovable.app') || window.location.hostname.includes('lovable.dev');
+
+    try {
+      if (isLovablePreview) {
+        const result = await lovable.auth.signInWithOAuth('google', {
+          redirect_uri: redirectTo,
+        });
+
+        if (result.error) {
+          toast.error('Erro ao entrar com Google');
+          setLoading(false);
+          return;
+        }
+
+        if (result.redirected) return;
+        setLoading(false);
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo },
+      });
+
+      if (error) {
+        toast.error(error.message || 'Erro ao entrar com Google');
+        setLoading(false);
+      }
+    } catch (error) {
+      toast.error('Falha ao iniciar login com Google. Verifique URLs permitidas no Supabase.');
+      console.error('Google login failure:', error);
       setLoading(false);
-      return;
     }
-    if (result.redirected) return;
-    setLoading(false);
   };
 
   return (
