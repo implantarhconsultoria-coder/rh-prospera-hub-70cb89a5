@@ -1463,6 +1463,127 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_import_rows: {
+        Row: {
+          error: string | null
+          id: string
+          import_id: string | null
+          normalized: Json | null
+          raw: Json | null
+          row_index: number
+          status: string
+        }
+        Insert: {
+          error?: string | null
+          id?: string
+          import_id?: string | null
+          normalized?: Json | null
+          raw?: Json | null
+          row_index: number
+          status?: string
+        }
+        Update: {
+          error?: string | null
+          id?: string
+          import_id?: string | null
+          normalized?: Json | null
+          raw?: Json | null
+          row_index?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_import_rows_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "billing_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_imports: {
+        Row: {
+          created_at: string | null
+          error_rows: number | null
+          file_name: string
+          file_size: number | null
+          file_type: string
+          id: string
+          ok_rows: number | null
+          project_id: string
+          status: string
+          total_rows: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_rows?: number | null
+          file_name: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          ok_rows?: number | null
+          project_id: string
+          status?: string
+          total_rows?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          error_rows?: number | null
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          ok_rows?: number | null
+          project_id?: string
+          status?: string
+          total_rows?: number | null
+        }
+        Relationships: []
+      }
+      billing_records: {
+        Row: {
+          competencia: string | null
+          created_at: string | null
+          descricao: string | null
+          documento: string | null
+          id: string
+          origem_import: string | null
+          project_id: string
+          valor: number | null
+          vencimento: string | null
+        }
+        Insert: {
+          competencia?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          documento?: string | null
+          id?: string
+          origem_import?: string | null
+          project_id: string
+          valor?: number | null
+          vencimento?: string | null
+        }
+        Update: {
+          competencia?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          documento?: string | null
+          id?: string
+          origem_import?: string | null
+          project_id?: string
+          valor?: number | null
+          vencimento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_records_origem_import_fkey"
+            columns: ["origem_import"]
+            isOneToOne: false
+            referencedRelation: "billing_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cartoes_ponto: {
         Row: {
           arquivo_nome: string
