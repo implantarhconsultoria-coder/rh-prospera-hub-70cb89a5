@@ -27,7 +27,7 @@ const EmployeeDetailPage: React.FC = () => {
   const fer = feriasStatus(emp.dataAdmissao);
   const aso = asoStatus(emp.dataExameMedico);
 
-  const Field = ({ label, value, field, type = 'text' }: { label: string; value: string | number; field?: keyof typeof emp; type?: string }) => (
+  const Field = React.useCallback(({ label, value, field, type = 'text' }: { label: string; value: string | number; field?: keyof typeof emp; type?: string }) => (
     <div>
       <label className="text-xs text-muted-foreground block mb-1">{label}</label>
       {field ? (
@@ -37,9 +37,9 @@ const EmployeeDetailPage: React.FC = () => {
         <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md">{value}</p>
       )}
     </div>
-  );
+  ), [emp.id, updateEmployee]);
 
-  const Toggle = ({ label, active, field, valueField, valueLabel, value }: { label: string; active: boolean; field: string; valueField?: string; valueLabel?: string; value?: number }) => (
+  const Toggle = React.useCallback(({ label, active, field, valueField, valueLabel, value }: { label: string; active: boolean; field: string; valueField?: string; valueLabel?: string; value?: number }) => (
     <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
       <div>
         <span className="text-sm font-medium text-foreground">{label}</span>
@@ -50,7 +50,7 @@ const EmployeeDetailPage: React.FC = () => {
         <div className={`w-5 h-5 bg-card rounded-full absolute top-0.5 transition-transform ${active ? 'translate-x-6' : 'translate-x-0.5'}`} />
       </button>
     </div>
-  );
+  ), [emp.id, updateEmployee]);
 
   return (
     <div className="space-y-5 animate-fade-in">
