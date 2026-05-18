@@ -4,6 +4,7 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AIAnalysisModal from "@/components/ai-analysis/AIAnalysisModal";
+import AIAnalysisFloatingLauncher from "@/components/ai-analysis/AIAnalysisFloatingLauncher";
 import { AIAnalysisModalPayload } from "@/components/ai-analysis/analysis-modal-types";
 
 window.addEventListener('error', (e) => {
@@ -37,6 +38,7 @@ createRoot(document.getElementById("root")!).render(
     <>
       <App />
       <GlobalAIAnalysisBridge />
+      <AIAnalysisFloatingLauncher />
     </>
   </ErrorBoundary>
 );
