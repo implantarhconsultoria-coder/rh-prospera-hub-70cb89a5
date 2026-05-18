@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useMecanicoApp } from "../MecanicoAppContext";
-import { LogIn, LogOut, ClipboardList, Car, Fuel, History, Sparkles, Wrench } from "lucide-react";
+import { LogIn, LogOut, ClipboardList, Car, Fuel, History, Sparkles, Wrench, UtensilsCrossed, Coffee } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Card = {
