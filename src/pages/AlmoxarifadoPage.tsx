@@ -38,6 +38,8 @@ const AlmoxarifadoPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showNewItem, setShowNewItem] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [selectedItens, setSelectedItens] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Daily closing state
@@ -236,6 +238,42 @@ const AlmoxarifadoPage: React.FC = () => {
     setEntItemId(''); setEntQtd(0); setEntFornecedor(''); setEntValorUnit(0); setEntObs(''); setEntNfFile(null);
     setLoading(false);
     fetchAll();
+  };
+
+  const toggleSelectItem = (id: string) => {
+    setSelectedItens(prev =>
+      prev.includes(id) ? prev.filter(itemId => itemId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllItems = () => {
+    setSelectedItens(prev =>
+      prev.length === filteredItens.length ? [] : filteredItens.map(item => item.id)
+    );
+  };
+
+  const handleBulkDeleteItens = async () => {
+    if (!isAdmin || selectedItens.length === 0) return;
+
+    const confirmar = window.confirm(`Deseja excluir ${selectedItens.length} item(ns) do almoxarifado?`);
+    if (!confirmar) return;
+
+    setBulkDeleting(true);
+
+    const { error } = await supabase
+      .from('almoxarifado_itens')
+      .delete()
+      .in('id', selectedItens);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('Itens excluídos com sucesso!');
+      setSelectedItens([]);
+      fetchAll();
+    }
+
+    setBulkDeleting(false);
   };
 
   const handleSaida = async () => {
@@ -511,9 +549,17 @@ const AlmoxarifadoPage: React.FC = () => {
                 <Plus className="w-4 h-4 mr-1" />{showNewItem ? 'Cancelar' : 'Novo Item'}
               </Button>
               {isAdmin && (
-                <Button size="sm" variant="outline" onClick={() => setShowImport(!showImport)}>
-                  <Upload className="w-4 h-4 mr-1" />Importar Planilha
-                </Button>
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setShowImport(!showImport)}>
+                    <Upload className="w-4 h-4 mr-1" />Importar Planilha
+                  </Button>
+                  {selectedItens.length > 0 && (
+                    <Button size="sm" variant="destructive" onClick={handleBulkDeleteItens} disabled={bulkDeleting}>
+                      {bulkDeleting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                      Excluir selecionados ({selectedItens.length})
+                    </Button>
+                  )}
+                </>
               )}
             </div>
 
@@ -541,6 +587,16 @@ const AlmoxarifadoPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-background"><tr className="border-b bg-muted/50">
+                  {isAdmin && (
+                    <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredItens.length > 0 && selectedItens.length === filteredItens.length}
+                        onChange={toggleSelectAllItems}
+                        className="h-4 w-4 accent-primary"
+                      />
+                    </th>
+                  )}
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Nome</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Categoria</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Unid.</th>
@@ -552,6 +608,16 @@ const AlmoxarifadoPage: React.FC = () => {
                 <tbody>
                   {filteredItens.map(item => (
                     <tr key={item.id} className="border-b hover:bg-muted/20">
+                      {isAdmin && (
+                        <td className="px-3 py-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={selectedItens.includes(item.id)}
+                            onChange={() => toggleSelectItem(item.id)}
+                            className="h-4 w-4 accent-primary"
+                          />
+                        </td>
+                      )}
                       <td className="px-3 py-2 text-xs font-medium">{item.nome}</td>
                       <td className="px-3 py-2 text-xs">{item.categoria || '—'}</td>
                       <td className="px-3 py-2 text-xs">{item.unidade}</td>
@@ -592,7 +658,7 @@ const AlmoxarifadoPage: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                  {filteredItens.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
+                  {filteredItens.length === 0 && <tr><td colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -932,7 +998,17 @@ const AlmoxarifadoPage: React.FC = () => {
                     const tSaidas = saidas.filter(s => s.item_id === item.id).reduce((s, e) => s + e.quantidade, 0);
                     return (
                       <tr key={item.id} className="border-b hover:bg-muted/20">
-                        <td className="px-3 py-2 text-xs font-medium">{item.nome}</td>
+                        {isAdmin && (
+                        <td className="px-3 py-2 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={selectedItens.includes(item.id)}
+                            onChange={() => toggleSelectItem(item.id)}
+                            className="h-4 w-4 accent-primary"
+                          />
+                        </td>
+                      )}
+                      <td className="px-3 py-2 text-xs font-medium">{item.nome}</td>
                         <td className="px-3 py-2 text-xs">
                           <Badge variant={item.quantidade <= 0 ? 'destructive' : 'default'}>{item.quantidade} {item.unidade}</Badge>
                         </td>
