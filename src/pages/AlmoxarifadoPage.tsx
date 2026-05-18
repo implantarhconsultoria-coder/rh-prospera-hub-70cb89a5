@@ -260,20 +260,29 @@ const AlmoxarifadoPage: React.FC = () => {
 
     setBulkDeleting(true);
 
-    const { error } = await supabase
-      .from('almoxarifado_itens')
-      .delete()
-      .in('id', selectedItens);
+    try {
+      const lotes = [];
+      for (let i = 0; i < selectedItens.length; i += 100) {
+        lotes.push(selectedItens.slice(i, i + 100));
+      }
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Itens excluídos com sucesso!');
+      for (const lote of lotes) {
+        const { error } = await supabase
+          .from('almoxarifado_itens')
+          .delete()
+          .in('id', lote);
+
+        if (error) throw error;
+      }
+
+      toast.success(`${selectedItens.length} item(ns) excluído(s) com sucesso!`);
       setSelectedItens([]);
-      fetchAll();
+      await fetchAll();
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao excluir itens selecionados');
+    } finally {
+      setBulkDeleting(false);
     }
-
-    setBulkDeleting(false);
   };
 
   const handleSaida = async () => {
