@@ -10,6 +10,32 @@ import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFunc
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
+type FieldProps = { label: string; value: string | number; onChange?: (v: string) => void; type?: string };
+const Field: React.FC<FieldProps> = React.memo(({ label, value, onChange, type = 'text' }) => (
+  <div>
+    <label className="text-xs text-muted-foreground block mb-1">{label}</label>
+    {onChange ? (
+      <Input value={value} type={type} onChange={e => onChange(e.target.value)} className="text-sm" />
+    ) : (
+      <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md">{value}</p>
+    )}
+  </div>
+));
+
+type ToggleProps = { label: string; active: boolean; onToggle: () => void; valueLabel?: string; value?: number };
+const ToggleRow: React.FC<ToggleProps> = React.memo(({ label, active, onToggle, valueLabel, value }) => (
+  <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+    <div>
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      {valueLabel && <span className="text-xs text-muted-foreground ml-2">({valueLabel}: {formatCurrency(value || 0)})</span>}
+    </div>
+    <button onClick={onToggle}
+      className={`w-12 h-6 rounded-full transition-colors ${active ? 'bg-success' : 'bg-muted'} relative`}>
+      <div className={`w-5 h-5 bg-card rounded-full absolute top-0.5 transition-transform ${active ? 'translate-x-6' : 'translate-x-0.5'}`} />
+    </button>
+  </div>
+));
+
 const EmployeeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { employees, companies, updateEmployee } = useApp();
@@ -27,30 +53,15 @@ const EmployeeDetailPage: React.FC = () => {
   const fer = feriasStatus(emp.dataAdmissao);
   const aso = asoStatus(emp.dataExameMedico);
 
-  const Field = ({ label, value, field, type = 'text' }: { label: string; value: string | number; field?: keyof typeof emp; type?: string }) => (
-    <div>
-      <label className="text-xs text-muted-foreground block mb-1">{label}</label>
-      {field ? (
-        <Input value={value} type={type} onChange={e => updateEmployee(emp.id, { [field]: type === 'number' ? Number(e.target.value) : e.target.value } as any)}
-          className="text-sm" />
-      ) : (
-        <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md">{value}</p>
-      )}
-    </div>
-  );
-
-  const Toggle = ({ label, active, field, valueField, valueLabel, value }: { label: string; active: boolean; field: string; valueField?: string; valueLabel?: string; value?: number }) => (
-    <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
-      <div>
-        <span className="text-sm font-medium text-foreground">{label}</span>
-        {valueLabel && <span className="text-xs text-muted-foreground ml-2">({valueLabel}: {formatCurrency(value || 0)})</span>}
-      </div>
-      <button onClick={() => updateEmployee(emp.id, { [field]: !active } as any)}
-        className={`w-12 h-6 rounded-full transition-colors ${active ? 'bg-success' : 'bg-muted'} relative`}>
-        <div className={`w-5 h-5 bg-card rounded-full absolute top-0.5 transition-transform ${active ? 'translate-x-6' : 'translate-x-0.5'}`} />
-      </button>
-    </div>
-  );
+  const fieldFor = (field: keyof typeof emp, type: string = 'text') => ({
+    value: (emp as any)[field] ?? '',
+    type,
+    onChange: (v: string) => updateEmployee(emp.id, { [field]: type === 'number' ? Number(v) : v } as any),
+  });
+  const toggleFor = (field: keyof typeof emp) => ({
+    active: !!(emp as any)[field],
+    onToggle: () => updateEmployee(emp.id, { [field]: !(emp as any)[field] } as any),
+  });
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -75,15 +86,15 @@ const EmployeeDetailPage: React.FC = () => {
       <div className="card-premium p-6">
         {activeTab === 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Field label="Nome Completo" value={emp.name} field="name" />
+            <Field label="Nome Completo" {...fieldFor('name')} />
             <Field label="CPF" value={emp.cpf} />
-            <Field label="Telefone" value={emp.telefone} field="telefone" />
-            <Field label="E-mail" value={emp.email} field="email" />
-            <Field label="Endereço" value={emp.endereco} field="endereco" />
-            <Field label="PIX" value={emp.pix} field="pix" />
-            <Field label="Banco" value={emp.banco} field="banco" />
-            <Field label="Agência" value={emp.agencia} field="agencia" />
-            <Field label="Conta" value={emp.conta} field="conta" />
+            <Field label="Telefone" {...fieldFor('telefone')} />
+            <Field label="E-mail" {...fieldFor('email')} />
+            <Field label="Endereço" {...fieldFor('endereco')} />
+            <Field label="PIX" {...fieldFor('pix')} />
+            <Field label="Banco" {...fieldFor('banco')} />
+            <Field label="Agência" {...fieldFor('agencia')} />
+            <Field label="Conta" {...fieldFor('conta')} />
           </div>
         )}
         {activeTab === 1 && (
@@ -92,9 +103,9 @@ const EmployeeDetailPage: React.FC = () => {
             <Field label="CNPJ" value={company?.cnpj || ''} />
             <Field label="Nº Registro" value={emp.registro} />
             <Field label="Matrícula eSocial" value={emp.matriculaEsocial} />
-            <Field label="Cargo / Função" value={emp.cargo} field="cargo" />
-            <Field label="Salário Base" value={emp.salarioBase} field="salarioBase" type="number" />
-            <Field label="Data Admissão" value={emp.dataAdmissao} field="dataAdmissao" type="date" />
+            <Field label="Cargo / Função" {...fieldFor('cargo')} />
+            <Field label="Salário Base" {...fieldFor('salarioBase', 'number')} />
+            <Field label="Data Admissão" {...fieldFor('dataAdmissao', 'date')} />
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Status</label>
               <select value={emp.status} onChange={e => updateEmployee(emp.id, { status: e.target.value as any })}
@@ -109,14 +120,14 @@ const EmployeeDetailPage: React.FC = () => {
         )}
         {activeTab === 2 && (
           <div className="space-y-3">
-            <Toggle label="Vale Refeição (VR)" active={emp.vrAtivo} field="vrAtivo" valueField="vrDiario" valueLabel="Diário" value={emp.vrDiario} />
-            {emp.vrAtivo && <Field label="Valor Diário VR" value={emp.vrDiario} field="vrDiario" type="number" />}
-            <Toggle label="Vale Alimentação (VA)" active={emp.vaAtivo} field="vaAtivo" valueField="vaMensal" valueLabel="Mensal" value={emp.vaMensal} />
-            {emp.vaAtivo && <Field label="Valor Mensal VA" value={emp.vaMensal} field="vaMensal" type="number" />}
-            <Toggle label="Vale Transporte (VT)" active={emp.vtAtivo} field="vtAtivo" valueField="vtDiario" valueLabel="Diário" value={emp.vtDiario} />
-            {emp.vtAtivo && <Field label="Valor Diário VT" value={emp.vtDiario} field="vtDiario" type="number" />}
-            <Toggle label="Insalubridade" active={emp.insalubridadeAtiva} field="insalubridadeAtiva" valueField="insalubridadeValor" valueLabel="Valor" value={emp.insalubridadeValor} />
-            {emp.insalubridadeAtiva && <Field label="Valor Insalubridade" value={emp.insalubridadeValor} field="insalubridadeValor" type="number" />}
+            <ToggleRow label="Vale Refeição (VR)" {...toggleFor('vrAtivo')} valueLabel="Diário" value={emp.vrDiario} />
+            {emp.vrAtivo && <Field label="Valor Diário VR" {...fieldFor('vrDiario', 'number')} />}
+            <ToggleRow label="Vale Alimentação (VA)" {...toggleFor('vaAtivo')} valueLabel="Mensal" value={emp.vaMensal} />
+            {emp.vaAtivo && <Field label="Valor Mensal VA" {...fieldFor('vaMensal', 'number')} />}
+            <ToggleRow label="Vale Transporte (VT)" {...toggleFor('vtAtivo')} valueLabel="Diário" value={emp.vtDiario} />
+            {emp.vtAtivo && <Field label="Valor Diário VT" {...fieldFor('vtDiario', 'number')} />}
+            <ToggleRow label="Insalubridade" {...toggleFor('insalubridadeAtiva')} valueLabel="Valor" value={emp.insalubridadeValor} />
+            {emp.insalubridadeAtiva && <Field label="Valor Insalubridade" {...fieldFor('insalubridadeValor', 'number')} />}
           </div>
         )}
         {activeTab === 3 && (
@@ -136,7 +147,7 @@ const EmployeeDetailPage: React.FC = () => {
                 <p className="text-sm"><span className="text-muted-foreground">Último Exame:</span> {formatDate(emp.dataExameMedico)}</p>
                 <p className="text-sm"><span className="text-muted-foreground">Próximo ASO:</span> {formatDate(aso.proximoASO.toISOString())}</p>
                 <p className="text-sm"><span className="text-muted-foreground">Dias Restantes:</span> {aso.diasRestantes}</p>
-                <Field label="Data Exame Médico" value={emp.dataExameMedico} field="dataExameMedico" type="date" />
+                <Field label="Data Exame Médico" {...fieldFor('dataExameMedico', 'date')} />
               </div>
             </div>
           </div>
