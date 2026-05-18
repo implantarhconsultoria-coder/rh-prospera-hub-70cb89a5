@@ -10,6 +10,32 @@ import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFunc
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
+type FieldProps = { label: string; value: string | number; onChange?: (v: string) => void; type?: string };
+const Field: React.FC<FieldProps> = React.memo(({ label, value, onChange, type = 'text' }) => (
+  <div>
+    <label className="text-xs text-muted-foreground block mb-1">{label}</label>
+    {onChange ? (
+      <Input value={value} type={type} onChange={e => onChange(e.target.value)} className="text-sm" />
+    ) : (
+      <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md">{value}</p>
+    )}
+  </div>
+));
+
+type ToggleProps = { label: string; active: boolean; onToggle: () => void; valueLabel?: string; value?: number };
+const ToggleRow: React.FC<ToggleProps> = React.memo(({ label, active, onToggle, valueLabel, value }) => (
+  <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+    <div>
+      <span className="text-sm font-medium text-foreground">{label}</span>
+      {valueLabel && <span className="text-xs text-muted-foreground ml-2">({valueLabel}: {formatCurrency(value || 0)})</span>}
+    </div>
+    <button onClick={onToggle}
+      className={`w-12 h-6 rounded-full transition-colors ${active ? 'bg-success' : 'bg-muted'} relative`}>
+      <div className={`w-5 h-5 bg-card rounded-full absolute top-0.5 transition-transform ${active ? 'translate-x-6' : 'translate-x-0.5'}`} />
+    </button>
+  </div>
+));
+
 const EmployeeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { employees, companies, updateEmployee } = useApp();
