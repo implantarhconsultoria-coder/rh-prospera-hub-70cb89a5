@@ -2,17 +2,18 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, CalendarCheck, Stethoscope,
-  FileCheck, Bell, Building2, ChevronLeft, Menu, LogOut, CalendarDays, Lock,
+  FileCheck, Bell, Building2, ChevronLeft, Menu, LogOut, CalendarDays, Lock, UploadCloud,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 
 const menuItems = [
   { label: 'Painel da Filial', icon: LayoutDashboard, path: '/filial' },
-  { label: 'Funcionários', icon: Users, path: '/filial/funcionarios' },
-  { label: 'Movimento Diário', icon: CalendarDays, path: '/filial/movimento-diario' },
+  { label: 'Funcionarios', icon: Users, path: '/filial/funcionarios' },
+  { label: 'Movimento Diario', icon: CalendarDays, path: '/filial/movimento-diario' },
   { label: 'Fechamento', icon: Lock, path: '/filial/fechamento' },
-  { label: 'Aviso de Férias', icon: CalendarCheck, path: '/filial/aviso-ferias' },
+  { label: 'Documentos', icon: UploadCloud, path: '/filial/atestados' },
+  { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/filial/aviso-ferias' },
   { label: 'ASO / Agendamento', icon: Stethoscope, path: '/filial/aso' },
   { label: 'Protocolos', icon: FileCheck, path: '/filial/protocolo' },
   { label: 'Alertas', icon: Bell, path: '/filial/alertas' },
@@ -24,7 +25,7 @@ const FilialSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout, userRole, session } = useApp();
   const location = useLocation();
 
-  const portalTitle = userRole === 'filial_praia' ? 'RH Praia Grande' : 'RH Goiânia';
+  const portalTitle = userRole === 'filial_praia' ? 'RH Praia Grande' : 'RH Goiania';
   const portalColor = userRole === 'filial_praia' ? 'bg-blue-500' : 'bg-emerald-500';
   const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || '';
 
@@ -63,7 +64,6 @@ const FilialSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
         </button>
       </div>
 
-      {/* Logged-in user info */}
       {!collapsed && (
         <div className="px-4 py-2 border-b border-sidebar-border">
           <p className="text-[10px] text-sidebar-foreground/50 uppercase tracking-wider">Logado como</p>
