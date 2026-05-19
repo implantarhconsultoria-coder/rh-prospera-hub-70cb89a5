@@ -31,14 +31,21 @@ export default async function handler(req: any, res?: any) {
     return send({ ok: false, error: 'method_not_allowed' }, 405);
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let body: { supabase_url?: string; service_role_key?: string } = {};
+  try {
+    body = typeof req.body === 'object' ? req.body : JSON.parse(req.body || '{}');
+  } catch {
+    body = {};
+  }
+
+  const supabaseUrl = body.supabase_url || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const serviceRoleKey = body.service_role_key || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
     return send({
       ok: false,
       error: 'missing_service_role_env',
-      required: ['SUPABASE_URL or VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'],
+      required: ['SUPABASE_URL or VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY or POST service_role_key'],
     }, 500);
   }
 
