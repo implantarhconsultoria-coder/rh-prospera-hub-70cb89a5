@@ -1,147 +1,109 @@
-import React, { useState, useEffect } from 'react';
-import { Building2, Award, Link2, Copy, Check, Clock, Save } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
+import React from 'react';
+import { Building2, Award, ShieldCheck, UserCog, Globe2, KeyRound, Database, SlidersHorizontal } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { useApp } from '@/context/AppContext';
 
 const ConfiguracoesPage: React.FC = () => {
-  const [origin, setOrigin] = useState('');
-  const [copied, setCopied] = useState<string | null>(null);
-  const [horario, setHorario] = useState<any>(null);
-  const [savingH, setSavingH] = useState(false);
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-    supabase.from('config_acesso_horario').select('*').limit(1).maybeSingle().then(({ data }) => setHorario(data));
-  }, []);
-
-  const links = [
-    { name: 'Plataforma Administrativa', path: '/admin', tag: 'Admin', color: 'bg-red-500' },
-    { name: 'Portal das Filiais (Praia Grande / Goiânia)', path: '/filial', tag: 'Filial', color: 'bg-blue-500' },
-    { name: 'Portal de Faturamento (login: FAT • senha: TOPAC2026)', path: '/faturamento', tag: 'Faturamento', color: 'bg-indigo-500' },
-    { name: 'Portal Financeiro (login: FIN • senha: TOPAC2026)', path: '/financeiro', tag: 'Financeiro', color: 'bg-cyan-600' },
-  ];
-
-  const copy = async (txt: string, key: string) => {
-    await navigator.clipboard.writeText(txt);
-    setCopied(key);
-    toast.success('Link copiado');
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const salvarHorario = async () => {
-    if (!horario) return;
-    setSavingH(true);
-    const { error } = await supabase.from('config_acesso_horario')
-      .update({
-        enabled: horario.enabled,
-        hora_inicio: horario.hora_inicio,
-        hora_fim: horario.hora_fim,
-        dias_semana: horario.dias_semana,
-        observacao: horario.observacao || '',
-      })
-      .eq('id', horario.id);
-    setSavingH(false);
-    if (error) toast.error(error.message);
-    else toast.success('Configuração salva');
-  };
+  const navigate = useNavigate();
+  const { session } = useApp();
+  const adminEmail = session?.user?.email || 'admin';
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl">
+    <div className="space-y-6 animate-fade-in max-w-5xl">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 gradient-primary rounded-lg flex items-center justify-center">
-          <Building2 className="w-5 h-5 text-primary-foreground" />
+          <SlidersHorizontal className="w-5 h-5 text-primary-foreground" />
         </div>
-        <h1 className="text-2xl font-bold font-display text-foreground">Configurações da Plataforma</h1>
+        <div>
+          <h1 className="text-2xl font-bold font-display text-foreground">Configuracao do Software</h1>
+          <p className="text-sm text-muted-foreground">Painel responsavel pela plataforma, acessos e governanca operacional.</p>
+        </div>
       </div>
 
-      {/* Links dos portais */}
-      <Card className="p-6 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="p-5 space-y-3">
+          <UserCog className="w-6 h-6 text-primary" />
+          <div>
+            <h2 className="font-bold">Usuario responsavel</h2>
+            <p className="text-sm text-muted-foreground">{adminEmail}</p>
+          </div>
+          <Badge className="w-fit">ADM master</Badge>
+        </Card>
+        <Card className="p-5 space-y-3">
+          <Globe2 className="w-6 h-6 text-primary" />
+          <div>
+            <h2 className="font-bold">Dominios de acesso</h2>
+            <p className="text-sm text-muted-foreground">topacrh.pro para acesso por CPF. www.topacrh.pro para ADM.</p>
+          </div>
+          <Badge variant="secondary" className="w-fit">Preparado</Badge>
+        </Card>
+        <Card className="p-5 space-y-3">
+          <ShieldCheck className="w-6 h-6 text-primary" />
+          <div>
+            <h2 className="font-bold">Permissao</h2>
+            <p className="text-sm text-muted-foreground">ADM e o unico acesso completo. Demais usuarios entram por CPF/PIN e modulo liberado.</p>
+          </div>
+          <Badge variant="secondary" className="w-fit">Controle total</Badge>
+        </Card>
+      </div>
+
+      <Card className="p-6 space-y-5">
         <div className="flex items-center gap-2">
-          <Link2 className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-bold font-display">Links de acesso aos portais</h2>
+          <KeyRound className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-bold font-display">Regras de acesso</h2>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Use estes links para distribuir aos times. O domínio base é detectado automaticamente: <span className="font-mono">{origin}</span>
-        </p>
-        <div className="space-y-2">
-          {links.map(l => {
-            const fullUrl = origin + l.path;
-            return (
-              <div key={l.path} className="flex items-center gap-2 p-3 border border-border rounded-lg hover:bg-muted/30">
-                <Badge className={`${l.color} text-white`}>{l.tag}</Badge>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{l.name}</div>
-                  <div className="text-xs text-muted-foreground font-mono truncate">{fullUrl}</div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => copy(fullUrl, l.path)}>
-                  {copied === l.path ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                </Button>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <h3 className="font-semibold">ADM central</h3>
+            <p className="text-muted-foreground mt-1">Entra pelo dominio administrativo e gerencia todos os modulos, usuarios, dados e permissoes.</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <h3 className="font-semibold">Usuarios operacionais</h3>
+            <p className="text-muted-foreground mt-1">Entram pelo acesso unico com os 4 ultimos digitos do CPF. A plataforma reconhece a pessoa pela base e libera somente o modulo autorizado.</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <h3 className="font-semibold">Filiais</h3>
+            <p className="text-muted-foreground mt-1">Praia Grande e Goiania continuam com acesso limitado de RH, incluindo envio de documentos para historico do funcionario.</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/20 p-4">
+            <h3 className="font-semibold">Financeiro, faturamento e operacional</h3>
+            <p className="text-muted-foreground mt-1">Cada area recebe permissao de menu, rota e dados. Operacional consulta clientes/equipamentos sem exibir valores de contrato.</p>
+          </div>
         </div>
-        <div className="bg-muted/40 border border-border rounded-lg p-3 text-xs space-y-1">
-          <p><strong>Acessos de teste criados:</strong></p>
-          <p>• <span className="font-mono bg-background px-1.5 py-0.5 rounded">FAT</span> + senha <span className="font-mono bg-background px-1.5 py-0.5 rounded">TOPAC2026</span> → vai direto para <span className="font-mono">/faturamento</span></p>
-          <p>• <span className="font-mono bg-background px-1.5 py-0.5 rounded">FIN</span> + senha <span className="font-mono bg-background px-1.5 py-0.5 rounded">TOPAC2026</span> → vai direto para <span className="font-mono">/financeiro</span></p>
-          <p className="text-muted-foreground pt-1">Estes acessos têm permissão somente de leitura nos respectivos módulos.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => navigate('/admin/gerenciar-usuarios')}>Cadastro de usuarios</Button>
+          <Button variant="outline" onClick={() => navigate('/admin/acessos-externos')}>Liberar modulos por CPF/PIN</Button>
         </div>
       </Card>
 
-      {/* Bloqueio de horário */}
-      {horario && (
-        <Card className="p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-bold font-display">Bloqueio de acesso por horário</h2>
-            <Badge variant={horario.enabled ? 'default' : 'secondary'}>{horario.enabled ? 'Ativo' : 'Desligado'}</Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Quando ativo, restringe o login dos usuários (exceto administradores) ao intervalo definido. Recomendado deixar desligado até validar.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="md:col-span-1 flex items-center gap-2">
-              <Switch checked={horario.enabled} onCheckedChange={v => setHorario({ ...horario, enabled: v })} />
-              <Label className="text-sm">Ativar bloqueio</Label>
-            </div>
-            <div>
-              <Label className="text-xs">Hora início</Label>
-              <Input type="time" value={horario.hora_inicio?.slice(0,5) || '07:00'} onChange={e => setHorario({ ...horario, hora_inicio: e.target.value })} />
-            </div>
-            <div>
-              <Label className="text-xs">Hora fim</Label>
-              <Input type="time" value={horario.hora_fim?.slice(0,5) || '19:00'} onChange={e => setHorario({ ...horario, hora_fim: e.target.value })} />
-            </div>
-            <div>
-              <Label className="text-xs">Dias da semana</Label>
-              <Input value={horario.dias_semana || ''} onChange={e => setHorario({ ...horario, dias_semana: e.target.value })} placeholder="seg,ter,qua,qui,sex" />
-            </div>
-          </div>
-          <div>
-            <Label className="text-xs">Observação</Label>
-            <Input value={horario.observacao || ''} onChange={e => setHorario({ ...horario, observacao: e.target.value })} />
-          </div>
-          <Button onClick={salvarHorario} disabled={savingH}>
-            <Save className="w-4 h-4 mr-2" /> Salvar configuração
-          </Button>
-        </Card>
-      )}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2">
+          <Database className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-bold font-display">Base operacional preparada</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div className="admin-metric-cell"><p>Faturamento</p><strong>clientes e contratos</strong></div>
+          <div className="admin-metric-cell"><p>Operacional</p><strong>chamados sem valor</strong></div>
+          <div className="admin-metric-cell"><p>RH filiais</p><strong>upload documental</strong></div>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Quando um contrato e cadastrado no faturamento, o modulo operacional passa a enxergar o cliente, contratos ativos e equipamentos vinculados para abertura de chamados.
+        </p>
+      </Card>
 
-      {/* Sobre */}
       <Card className="p-6 space-y-4">
         <div className="flex items-center gap-2">
           <Award className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-bold font-display">Sobre</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div><strong>Versão:</strong> 1.0.0 — Multiempresa PRO</div>
-          <div><strong>Finalidade:</strong> Gestão completa de RH, faturamento e financeiro.</div>
+          <div><strong>Produto:</strong> TOPAC RH PRO / Multiempresas</div>
+          <div><strong>Responsavel:</strong> Administracao central</div>
+          <div><strong>Finalidade:</strong> RH, operacional, faturamento, financeiro e app dos mecanicos.</div>
+          <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /><span>Preparado para importacao de dados reais.</span></div>
         </div>
       </Card>
     </div>
