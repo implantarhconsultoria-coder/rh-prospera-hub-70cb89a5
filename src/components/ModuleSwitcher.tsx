@@ -18,26 +18,31 @@ interface ModuleDef {
   path: string;
 }
 
-const ALL_MODULES: ModuleDef[] = [
-  { role: 'admin', label: 'Administração', path: '/admin' },
+const PORTAL_MODULES: ModuleDef[] = [
+  { role: 'admin', label: 'Administracao', path: '/admin' },
   { role: 'filial_praia', label: 'RH Praia Grande', path: '/filial' },
-  { role: 'filial_goiania', label: 'RH Goiânia', path: '/filial' },
+  { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
   { role: 'faturamento', label: 'Faturamento', path: '/faturamento' },
   { role: 'financeiro', label: 'Financeiro', path: '/financeiro' },
 ];
 
-/**
- * Botão "Trocar módulo" — só aparece se o usuário tiver mais de 1 módulo
- * disponível. Admin sempre vê todos.
- */
+const ADMIN_MODULES: ModuleDef[] = [
+  { role: 'admin', label: 'Central TOPAC', path: '/admin' },
+  { role: 'empresas', label: 'Empresas', path: '/admin/empresas' },
+  { role: 'fechamento', label: 'Fechamento', path: '/admin/fechamento' },
+  { role: 'operacional', label: 'Operacional', path: '/admin/app-mecanico' },
+  { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
+  { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
+];
+
 const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const { userRoles } = useApp();
   const navigate = useNavigate();
 
   const isAdmin = userRoles.includes('admin');
   const available = isAdmin
-    ? ALL_MODULES
-    : ALL_MODULES.filter((m) => userRoles.includes(m.role as any));
+    ? ADMIN_MODULES
+    : PORTAL_MODULES.filter((m) => userRoles.includes(m.role as any));
 
   if (available.length < 2) return null;
 
@@ -46,11 +51,11 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size={compact ? 'sm' : 'default'} className="gap-2">
           <Layers className="w-4 h-4" />
-          {!compact && <span>Trocar módulo</span>}
+          {!compact && <span>Trocar modulo</span>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56 bg-popover z-50">
-        <DropdownMenuLabel>Módulos disponíveis</DropdownMenuLabel>
+        <DropdownMenuLabel>Modulos disponiveis</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {available.map((m) => (
           <DropdownMenuItem key={m.role + m.path} onClick={() => navigate(m.path)}>
