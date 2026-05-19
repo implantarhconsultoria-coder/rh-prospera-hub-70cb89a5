@@ -4,8 +4,9 @@ import type { Session } from '@supabase/supabase-js';
 
 export type AppRole = 'admin' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario' | 'tecnico_campo' | 'operacional' | 'faturamento' | 'financeiro';
 
-// Prioridade: admin sempre vence (usuário pode ter múltiplas roles, ex: admin + tecnico_campo de teste)
+// Prioridade: admin sempre vence (usuÃ¡rio pode ter mÃºltiplas roles, ex: admin + tecnico_campo de teste)
 const ROLE_PRIORITY: AppRole[] = ['admin', 'operacional', 'filial_praia', 'filial_goiania', 'almoxarifado', 'faturamento', 'financeiro', 'tecnico_campo', 'usuario'];
+const BOOTSTRAP_ADMIN_EMAILS = new Set(['adm.matriz@topac.com.br']);
 
 export const useUserRole = (session: Session | null) => {
   const [role, setRole] = useState<AppRole | null>(null);
@@ -31,6 +32,13 @@ export const useUserRole = (session: Session | null) => {
         .eq('user_id', session.user.id);
 
       const all = (data || []).map((r) => r.role as AppRole);
+      if (all.length === 0 && BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '')) {
+        setRoles(['admin']);
+        setRole('admin');
+        setLoading(false);
+        return;
+      }
+
       setRoles(all);
 
       // Pick highest-priority role
