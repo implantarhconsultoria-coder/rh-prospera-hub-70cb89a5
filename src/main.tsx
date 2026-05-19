@@ -3,6 +3,37 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
+const MOBILE_CACHE_RESET_KEY = "topac-mobile-cache-reset-20260519-4";
+
+async function clearLegacyMobileCache() {
+  if (typeof window === "undefined") return;
+  if (window.sessionStorage.getItem(MOBILE_CACHE_RESET_KEY) === "done") return;
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+
+    if ("caches" in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+    }
+
+    window.sessionStorage.setItem(MOBILE_CACHE_RESET_KEY, "done");
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("build") !== "20260519-4") {
+      url.searchParams.set("build", "20260519-4");
+      window.location.replace(url.toString());
+    }
+  } catch (error) {
+    console.warn("Falha ao limpar cache antigo do mobile:", error);
+  }
+}
+
+void clearLegacyMobileCache();
+
 window.addEventListener('error', (e) => {
   fetch('https://hook.implantarh.dev/erros', {
     method: 'POST',
