@@ -62,7 +62,7 @@ const statusBadge = (s: string) => {
   if (s === 'em_dia') return <Badge className="text-[10px] bg-success text-success-foreground">Em dia</Badge>;
   if (s === 'a_vencer') return <Badge className="text-[10px] bg-warning text-warning-foreground">A vencer</Badge>;
   if (s === 'vencido') return <Badge className="text-[10px] bg-destructive text-destructive-foreground">Vencido</Badge>;
-  return <Badge variant="outline" className="text-[10px]">—</Badge>;
+  return <Badge variant="outline" className="text-[10px]">-</Badge>;
 };
 
 const fileToDataUrl = (file: File): Promise<string> =>
@@ -72,6 +72,31 @@ const fileToDataUrl = (file: File): Promise<string> =>
     reader.onerror = () => reject(reader.error || new Error('Falha ao ler arquivo'));
     reader.readAsDataURL(file);
   });
+
+const VEICULOS_LOCAL_KEY = 'topac:frota:documentos-veiculos';
+const MANUTENCOES_LOCAL_KEY = 'topac:frota:manutencoes';
+
+const isMissingSchema = (error: any) => {
+  const msg = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return error?.code === 'PGRST205' || msg.includes('schema cache') || msg.includes('could not find the table');
+};
+
+const newLocalId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const readLocalList = <T,>(key: string): T[] => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || '[]') as T[];
+  } catch {
+    return [];
+  }
+};
+
+const writeLocalList = <T,>(key: string, list: T[]) => {
+  localStorage.setItem(key, JSON.stringify(list));
+};
 
 const DocumentosVeiculosPage: React.FC = () => {
   const { session } = useApp();
@@ -84,6 +109,7 @@ const DocumentosVeiculosPage: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Ativo>>({});
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([]);
   const [manutencaoErro, setManutencaoErro] = useState('');
+  const [ativosErro, setAtivosErro] = useState('');
   const [manutFile, setManutFile] = useState<File | null>(null);
   const [manutForm, setManutForm] = useState({
     ativo_id: '',
@@ -98,7 +124,18 @@ const DocumentosVeiculosPage: React.FC = () => {
 
   const fetchAtivos = async () => {
     const { data, error } = await supabase.from('ativos').select('*').eq('tipo', 'veiculo').order('created_at', { ascending: false });
-    if (!error && data) setAtivos(data as unknown as Ativo[]);
+    if (error) {
+      if (isMissingSchema(error)) {
+        setAtivosErro('Tabela de veiculos ainda nao existe no Supabase. Os PDFs serao guardados localmente ate a base ser aplicada.');
+        setAtivos(readLocalList<Ativo>(VEICULOS_LOCAL_KEY));
+      } else {
+        setAtivosErro(error.message || 'Erro ao carregar documentos de veiculos.');
+      }
+      return;
+    }
+    setAtivosErro('');
+    const local = readLocalList<Ativo>(VEICULOS_LOCAL_KEY);
+    setAtivos([...(data as unknown as Ativo[]), ...local]);
   };
 
   const fetchManutencoes = async () => {
@@ -108,11 +145,17 @@ const DocumentosVeiculosPage: React.FC = () => {
       .order('data', { ascending: false })
       .limit(500);
     if (error) {
-      setManutencaoErro('Tabela de manutencao ainda nao aplicada no Supabase. A migracao ja ficou pronta no projeto.');
+      if (isMissingSchema(error)) {
+        setManutencaoErro('Tabela de manutencao ainda nao aplicada no Supabase. Enquanto isso, o historico sera guardado localmente.');
+        setManutencoes(readLocalList<Manutencao>(MANUTENCOES_LOCAL_KEY));
+      } else {
+        setManutencaoErro(error.message || 'Erro ao carregar manutencoes.');
+      }
       return;
     }
     setManutencaoErro('');
-    setManutencoes(((data as any) || []) as Manutencao[]);
+    const local = readLocalList<Manutencao>(MANUTENCOES_LOCAL_KEY);
+    setManutencoes([...(((data as any) || []) as Manutencao[]), ...local]);
   };
 
   useEffect(() => { fetchAtivos(); fetchManutencoes(); }, []);
@@ -158,7 +201,7 @@ const DocumentosVeiculosPage: React.FC = () => {
   };
 
   const handleMultiUpload = async (files: FileList) => {
-    if (!session?.user?.id) { toast.error('Faça login primeiro'); return; }
+    if (!session?.user?.id) { toast.error('Faca login primeiro'); return; }
     setUploading(true);
     let success = 0;
     let fallbackCount = 0;
@@ -196,7 +239,29 @@ const DocumentosVeiculosPage: React.FC = () => {
         status: 'ativo',
       } as any);
       if (!error) success++;
-      else toast.error(`Erro ao cadastrar ${file.name}: ${error.message}`);
+      else if (isMissingSchema(error)) {
+        const localAtivo: Ativo = {
+          id: newLocalId(),
+          tipo: 'veiculo',
+          descricao: extracted.descricao || file.name.replace(/\.[^/.]+$/, ''),
+          placa: extracted.placa || '',
+          patrimonio: extracted.patrimonio || '',
+          empresa: extracted.empresa || 'TOPAC MATRIZ',
+          arquivo_url,
+          observacao: extracted.observacao || 'Salvo localmente. Aplicar base Frota no Supabase para persistir oficialmente.',
+          status: 'ativo',
+          renavam: extracted.renavam || '',
+          chassi: extracted.chassi || '',
+          ano_fabricacao: extracted.ano_fabricacao || '',
+          ano_modelo: extracted.ano_modelo || '',
+          vencimento_ipva: null,
+          vencimento_licenciamento: null,
+        };
+        const local = [localAtivo, ...readLocalList<Ativo>(VEICULOS_LOCAL_KEY)];
+        writeLocalList(VEICULOS_LOCAL_KEY, local);
+        success++;
+        setAtivosErro('Tabela de veiculos ainda nao existe no Supabase. Documento salvo localmente por enquanto.');
+      } else toast.error(`Erro ao cadastrar ${file.name}: ${error.message}`);
     }
     if (success > 0) {
       toast.success(`${success} documento(s) cadastrado(s)!`);
@@ -209,6 +274,12 @@ const DocumentosVeiculosPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
+    if (id.startsWith('local-') || readLocalList<Ativo>(VEICULOS_LOCAL_KEY).some(a => a.id === id)) {
+      writeLocalList(VEICULOS_LOCAL_KEY, readLocalList<Ativo>(VEICULOS_LOCAL_KEY).filter(a => a.id !== id));
+      toast.success('Removido do historico local');
+      fetchAtivos();
+      return;
+    }
     const { error } = await supabase.from('ativos').delete().eq('id', id);
     if (!error) { toast.success('Removido'); fetchAtivos(); }
   };
@@ -225,6 +296,14 @@ const DocumentosVeiculosPage: React.FC = () => {
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
+    if (editingId.startsWith('local-') || readLocalList<Ativo>(VEICULOS_LOCAL_KEY).some(a => a.id === editingId)) {
+      const updated = readLocalList<Ativo>(VEICULOS_LOCAL_KEY).map(a => a.id === editingId ? { ...a, ...editForm } : a);
+      writeLocalList(VEICULOS_LOCAL_KEY, updated);
+      toast.success('Atualizado no historico local');
+      setEditingId(null);
+      fetchAtivos();
+      return;
+    }
     const { error } = await supabase.from('ativos').update(editForm as any).eq('id', editingId);
     if (!error) {
       toast.success('Atualizado!');
@@ -266,7 +345,30 @@ const DocumentosVeiculosPage: React.FC = () => {
         created_by: session.user.id,
       };
       const { error } = await supabase.from('veiculo_manutencoes' as any).insert(payload);
-      if (error) throw error;
+      if (error) {
+        if (isMissingSchema(error)) {
+          const localManutencao: Manutencao = {
+            id: newLocalId(),
+            ativo_id: payload.ativo_id,
+            veiculo_descricao: payload.veiculo_descricao,
+            placa: payload.placa,
+            data: payload.data,
+            km: payload.km,
+            descricao: payload.descricao,
+            fornecedor: payload.fornecedor,
+            nota_numero: payload.nota_numero,
+            valor: payload.valor,
+            arquivo_url: payload.arquivo_url,
+            arquivo_nome: payload.arquivo_nome,
+            origem: 'local',
+            observacao: payload.observacao,
+          };
+          writeLocalList(MANUTENCOES_LOCAL_KEY, [localManutencao, ...readLocalList<Manutencao>(MANUTENCOES_LOCAL_KEY)]);
+          setManutencaoErro('Tabela de manutencao ainda nao existe no Supabase. Historico salvo localmente por enquanto.');
+        } else {
+          throw error;
+        }
+      }
       toast.success('Manutencao salva no historico do carro');
       setManutForm({ ativo_id: '', data: new Date().toISOString().slice(0, 10), km: '', descricao: '', fornecedor: '', nota_numero: '', valor: '', observacao: '' });
       setManutFile(null);
@@ -311,30 +413,30 @@ const DocumentosVeiculosPage: React.FC = () => {
   }), [ativos]);
 
   const handlePrintBatch = () => {
-    if (filtered.length === 0) { toast.error('Nenhum veículo para imprimir'); return; }
+    if (filtered.length === 0) { toast.error('Nenhum veiculo para imprimir'); return; }
     const rows = filtered.map(a => `<tr>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.descricao}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.patrimonio || '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.renavam || '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_ipva ? new Date(a.vencimento_ipva).toLocaleDateString('pt-BR') : '—'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_licenciamento ? new Date(a.vencimento_licenciamento).toLocaleDateString('pt-BR') : '—'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '-'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.patrimonio || '-'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.renavam || '-'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_ipva ? new Date(a.vencimento_ipva).toLocaleDateString('pt-BR') : '-'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_licenciamento ? new Date(a.vencimento_licenciamento).toLocaleDateString('pt-BR') : '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.empresa}</td>
     </tr>`).join('');
 
-    const filterLabel = filterType === 'todos' ? 'Todos os Veículos' :
+    const filterLabel = filterType === 'todos' ? 'Todos os Veiculos' :
       filterType === 'ipva_vencer' ? 'IPVA a Vencer' :
       filterType === 'ipva_vencido' ? 'IPVA Vencido' :
       filterType === 'lic_vencer' ? 'Licenciamento a Vencer' : 'Licenciamento Vencido';
 
-    const html = `<!DOCTYPE html><html><head><title>Documentos de Veículos</title>
+    const html = `<!DOCTYPE html><html><head><title>Documentos de Veiculos</title>
     <style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;font-size:12px;color:#000}
     h1{font-size:16px;margin-bottom:4px}h2{font-size:12px;color:#666;margin-bottom:12px}
     table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:6px 8px;border:1px solid #ccc;font-size:10px;text-transform:uppercase;text-align:left}
     </style></head><body>
-    <h1>Documentos de Veículos — ${filterLabel}</h1>
-    <h2>${filtered.length} veículo(s) • Gerado em ${new Date().toLocaleDateString('pt-BR')}</h2>
-    <table><thead><tr><th>Descrição</th><th>Placa</th><th>Patrimônio</th><th>Renavam</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th></tr></thead>
+    <h1>Documentos de Veiculos - ${filterLabel}</h1>
+    <h2>${filtered.length} veiculo(s) - Gerado em ${new Date().toLocaleDateString('pt-BR')}</h2>
+    <table><thead><tr><th>Descricao</th><th>Placa</th><th>Patrimonio</th><th>Renavam</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th></tr></thead>
     <tbody>${rows}</tbody></table>
     </body></html>`;
     printDocumentInPage(html);
@@ -348,8 +450,8 @@ const DocumentosVeiculosPage: React.FC = () => {
             <Car className="w-7 h-7" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display">Documentos de Veículos</h1>
-            <p className="text-primary-foreground/70 text-sm">Upload múltiplo de PDFs com leitura automática por IA • Alertas de IPVA e Licenciamento</p>
+            <h1 className="text-2xl font-bold font-display">Documentos de Veiculos</h1>
+            <p className="text-primary-foreground/70 text-sm">Upload multiplo de PDFs com leitura automatica por IA - Alertas de IPVA e Licenciamento</p>
           </div>
         </div>
       </div>
@@ -359,7 +461,7 @@ const DocumentosVeiculosPage: React.FC = () => {
         <div className="card-premium p-4 border-l-4 border-warning bg-warning/5 space-y-2">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-warning" />
-            <span className="text-sm font-bold text-foreground">Alertas de Documentação</span>
+            <span className="text-sm font-bold text-foreground">Alertas de Documentacao</span>
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
             {alertCounts.ipvaVencido > 0 && (
@@ -393,7 +495,7 @@ const DocumentosVeiculosPage: React.FC = () => {
       <div className="card-premium p-5 space-y-4">
         <div className="flex items-center gap-3 flex-wrap">
           <Search className="w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar por descrição, placa ou patrimônio..." value={search}
+          <Input placeholder="Buscar por descricao, placa ou patrimonio..." value={search}
             onChange={e => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
           <select value={filterType} onChange={e => setFilterType(e.target.value as FilterType)}
             className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
@@ -420,6 +522,11 @@ const DocumentosVeiculosPage: React.FC = () => {
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           <Sparkles className="w-3 h-3" /> Ao subir PDFs, a IA tenta extrair placa, renavam, chassi e outros dados. Dados reaproveitados no Protocolo.
         </p>
+        {ativosErro && (
+          <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
+            {ativosErro}
+          </div>
+        )}
       </div>
 
       <div className="card-premium p-5 space-y-4">
@@ -463,7 +570,7 @@ const DocumentosVeiculosPage: React.FC = () => {
               <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setManutFile(e.target.files?.[0] || null)} />
             </label>
           </div>
-          <div className="flex items-end"><Button onClick={salvarManutencao} disabled={uploading || !!manutencaoErro} className="w-full"><Save className="w-4 h-4 mr-1" /> Salvar historico</Button></div>
+          <div className="flex items-end"><Button onClick={salvarManutencao} disabled={uploading} className="w-full"><Save className="w-4 h-4 mr-1" /> Salvar historico</Button></div>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-border">
@@ -501,11 +608,11 @@ const DocumentosVeiculosPage: React.FC = () => {
             <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}><X className="w-4 h-4" /></Button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div><label className="text-xs text-muted-foreground block mb-1">Descrição</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Descricao</label>
               <Input value={editForm.descricao || ''} onChange={e => setEditForm({ ...editForm, descricao: e.target.value })} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Placa</label>
               <Input value={editForm.placa || ''} onChange={e => setEditForm({ ...editForm, placa: e.target.value })} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Patrimônio</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Patrimonio</label>
               <Input value={editForm.patrimonio || ''} onChange={e => setEditForm({ ...editForm, patrimonio: e.target.value })} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Renavam</label>
               <Input value={editForm.renavam || ''} onChange={e => setEditForm({ ...editForm, renavam: e.target.value })} /></div>
@@ -525,28 +632,28 @@ const DocumentosVeiculosPage: React.FC = () => {
       <div className="card-premium overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b bg-muted/50 sticky top-0 z-10">
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Descrição</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Descricao</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Placa</th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Patrimônio</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Patrimonio</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Renavam</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">IPVA</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Licenciamento</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">PDF</th>
-            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Ações</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Acoes</th>
           </tr></thead>
           <tbody>
             {filtered.map(a => (
               <tr key={a.id} className="border-b hover:bg-muted/20">
                 <td className="px-3 py-2 text-xs font-medium">{a.descricao}</td>
-                <td className="px-3 py-2 text-xs">{a.placa || '—'}</td>
-                <td className="px-3 py-2 text-xs">{a.patrimonio || '—'}</td>
-                <td className="px-3 py-2 text-xs">{a.renavam || '—'}</td>
+                <td className="px-3 py-2 text-xs">{a.placa || '-'}</td>
+                <td className="px-3 py-2 text-xs">{a.patrimonio || '-'}</td>
+                <td className="px-3 py-2 text-xs">{a.renavam || '-'}</td>
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_ipva))}</td>
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_licenciamento))}</td>
                 <td className="px-3 py-2 text-xs">{a.empresa}</td>
                 <td className="px-3 py-2 text-xs">
-                  {a.arquivo_url ? <button onClick={() => setViewingPdf({ url: a.arquivo_url, descricao: a.descricao })} className="text-primary hover:underline flex items-center gap-1 text-xs"><Eye className="w-3 h-3" />Ver</button> : '—'}
+                  {a.arquivo_url ? <button onClick={() => setViewingPdf({ url: a.arquivo_url, descricao: a.descricao })} className="text-primary hover:underline flex items-center gap-1 text-xs"><Eye className="w-3 h-3" />Ver</button> : '-'}
                 </td>
                 <td className="px-3 py-2 flex gap-1">
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(a)}>
@@ -568,12 +675,12 @@ const DocumentosVeiculosPage: React.FC = () => {
       <Dialog open={!!viewingPdf} onOpenChange={(open) => !open && setViewingPdf(null)}>
         <DialogContent className="max-w-6xl overflow-hidden p-0 sm:max-w-6xl">
           <DialogHeader className="border-b px-6 py-4">
-            <DialogTitle className="text-base">{viewingPdf?.descricao || 'Documento do veículo'}</DialogTitle>
+            <DialogTitle className="text-base">{viewingPdf?.descricao || 'Documento do veiculo'}</DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6">
             <PdfDocumentViewer
               source={viewingPdf ? { url: viewingPdf.url, tipo: 'veiculo' } : undefined}
-              title={viewingPdf?.descricao || 'Documento do veículo'}
+              title={viewingPdf?.descricao || 'Documento do veiculo'}
             />
           </div>
         </DialogContent>
