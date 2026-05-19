@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import AppSidebar from '@/components/AppSidebar';
 import AdminMobileLayout from '@/components/AdminMobileLayout';
@@ -14,10 +14,21 @@ import ModuleSwitcher from '@/components/ModuleSwitcher';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const [layoutMode, setLayoutMode] = useState(() => localStorage.getItem('topac_layout_mode') || 'premium');
   const { session, userRole, roleLoading } = useApp();
   const isMobile = useIsMobile();
 
   useActivityTracker(session);
+
+  useEffect(() => {
+    const syncLayout = () => setLayoutMode(localStorage.getItem('topac_layout_mode') || 'premium');
+    window.addEventListener('storage', syncLayout);
+    window.addEventListener('topac-layout-change', syncLayout);
+    return () => {
+      window.removeEventListener('storage', syncLayout);
+      window.removeEventListener('topac-layout-change', syncLayout);
+    };
+  }, []);
 
   if (roleLoading) {
     return (
@@ -44,7 +55,7 @@ const AppLayout: React.FC = () => {
   }
 
   return (
-    <div className="admin-command min-h-screen bg-background text-foreground">
+    <div className={cn(layoutMode === 'premium' && 'admin-command', 'min-h-screen bg-background text-foreground')}>
       <AppSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <main className={cn(
         "transition-all duration-300 min-h-screen",
