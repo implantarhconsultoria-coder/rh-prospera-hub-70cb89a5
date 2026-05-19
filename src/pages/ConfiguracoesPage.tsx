@@ -105,6 +105,12 @@ const ConfiguracoesPage: React.FC = () => {
           <div><strong>Finalidade:</strong> RH, operacional, faturamento, financeiro e app dos mecanicos.</div>
           <div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /><span>Preparado para importacao de dados reais.</span></div>
         </div>
+        <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm">
+          <p className="font-semibold">Software projetado e desenvolvido pela ImplantaRH ConsultoriaPRO Ltda.</p>
+          <p className="mt-1 text-muted-foreground">
+            Todos os direitos reservados. Uso exclusivo e autorizado da plataforma TOPAC RH PRO / Multiempresas.
+          </p>
+        </div>
       </Card>
     </div>
   );
