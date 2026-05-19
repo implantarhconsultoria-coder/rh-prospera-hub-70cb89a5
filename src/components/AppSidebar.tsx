@@ -24,7 +24,7 @@ const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
-  { label: 'RescisÃµes', icon: FileX, path: '/admin/rescisoes' },
+  { label: 'Rescisoes', icon: FileX, path: '/admin/rescisoes' },
 ];
 
 const operationalItems: MenuItem[] = [
@@ -38,19 +38,19 @@ const operationalItems: MenuItem[] = [
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
   { label: 'Protocolo', icon: FileCheck, path: '/admin/protocolo' },
-  { label: 'Aviso de FÃ©rias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
+  { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
   { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
-  { label: 'HistÃ³rico', icon: History, path: '/admin/historico' },
+  { label: 'Historico', icon: History, path: '/admin/historico' },
 ];
 
 const adminItems: MenuItem[] = [
-  { label: 'Gerenciar UsuÃ¡rios', icon: Shield, path: '/admin/gerenciar-usuarios' },
+  { label: 'Gerenciar Usuarios', icon: Shield, path: '/admin/gerenciar-usuarios' },
   { label: 'Acessos Externos (PIN)', icon: Shield, path: '/admin/acessos-externos' },
   { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
-  { label: 'ConfiguraÃ§Ãµes', icon: Settings, path: '/admin/configuracoes' },
+  { label: 'Configuracoes', icon: Settings, path: '/admin/configuracoes' },
 ];
 
 const faturamentoItems: MenuItem[] = [
@@ -58,10 +58,10 @@ const faturamentoItems: MenuItem[] = [
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
   { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas' },
-  { label: 'MediÃ§Ãµes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
+  { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
-  { label: 'PendÃªncias', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
-  { label: 'ImportaÃ§Ã£o de Dados', icon: Sparkles, path: '/admin/faturamento/importacao-dados' },
+  { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
+  { label: 'Importacao de Dados', icon: Sparkles, path: '/admin/faturamento/importacao-dados' },
   { label: 'Base de Faturamento', icon: FileText, path: '/admin/faturamento/importacao' },
 ];
 
@@ -72,8 +72,8 @@ const financeiroItems: MenuItem[] = [
   { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores' },
   { label: 'Caixa e Bancos', icon: Landmark, path: '/admin/financeiro/bancos' },
   { label: 'Fluxo de Caixa', icon: Activity, path: '/admin/financeiro/fluxo-caixa' },
-  { label: 'ConciliaÃ§Ã£o', icon: CheckSquare, path: '/admin/financeiro/conciliacao' },
-  { label: 'InadimplÃªncia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia' },
+  { label: 'Conciliacao', icon: CheckSquare, path: '/admin/financeiro/conciliacao' },
+  { label: 'Inadimplencia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia' },
   { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo' },
 ];
 
@@ -107,13 +107,13 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
     )}>
       <div className="p-4 flex items-center justify-between border-b border-sidebar-border">
         {!collapsed && (
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 gradient-accent rounded-lg flex items-center justify-center flex-shrink-0">
-              <Building2 className="w-5 h-5 text-accent-foreground" />
+          <div className="admin-sidebar-brand">
+            <div className="admin-sidebar-logo">
+              <Building2 className="w-8 h-8" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-sidebar-primary-foreground font-display leading-tight">Topac RH</h2>
-              <p className="text-[10px] text-sidebar-foreground/60">Central Administrativa</p>
+              <h2>TOPAC RH PRO</h2>
+              <p>Inteligencia Operacional</p>
             </div>
           </div>
         )}
@@ -197,7 +197,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
-            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">AdministraÃ§Ã£o</p>
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Administracao</p>
           </div>
         )}
         {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
@@ -205,7 +205,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
-            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">PrÃ³ximos MÃ³dulos</p>
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Proximos Modulos</p>
           </div>
         )}
         {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
@@ -220,6 +220,15 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
       </nav>
 
       <div className="p-2 border-t border-sidebar-border">
+        {!collapsed && (
+          <div className="px-3 py-3 mb-2 text-[11px] text-emerald-300/90">
+            <div className="flex items-center gap-2 font-semibold">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.9)]" />
+              Sistema operacional
+            </div>
+            <p className="mt-1 text-sky-100/45">Latencia 12ms . Uptime 99.98%</p>
+          </div>
+        )}
         <button onClick={logout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive w-full transition-colors">
           <LogOut className="w-5 h-5 flex-shrink-0" />
