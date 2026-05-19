@@ -30,7 +30,8 @@ const ADMIN_MODULES: ModuleDef[] = [
   { role: 'admin', label: 'Central TOPAC', path: '/admin' },
   { role: 'empresas', label: 'Empresas', path: '/admin/empresas' },
   { role: 'fechamento', label: 'Fechamento', path: '/admin/fechamento' },
-  { role: 'operacional', label: 'Operacional', path: '/admin/app-mecanico' },
+  { role: 'operacional', label: 'Operacional', path: '/admin/chamados' },
+  { role: 'app_mecanico', label: 'App Mecanico', path: '/admin/app-mecanico' },
   { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
   { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
 ];
