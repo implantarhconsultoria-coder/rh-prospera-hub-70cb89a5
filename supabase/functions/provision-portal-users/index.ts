@@ -1,6 +1,6 @@
-// Provisiona usuários por e-mail/senha (idempotente).
-// Inclui: contas de teste FAT/FIN + 15 funcionários com seus respectivos módulos.
-// Para mecânicos, garante também o registro em tecnicos_campo com access_token.
+// Provisiona usuÃ¡rios por e-mail/senha (idempotente).
+// Inclui: contas de teste FAT/FIN + 15 funcionÃ¡rios com seus respectivos mÃ³dulos.
+// Para mecÃ¢nicos, garante tambÃ©m o registro em tecnicos_campo com access_token.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -21,18 +21,21 @@ interface UserSpec {
   senha: string;
   nome: string;
   roles: Role[];
-  // se informado, vincula este auth.user ao funcionário e (para tecnico_campo) cria tecnicos_campo
+  // se informado, vincula este auth.user ao funcionÃ¡rio e (para tecnico_campo) cria tecnicos_campo
   funcionario_nome_match?: string[];
 }
 
 const SENHA = "TOPAC2026";
 
 const USERS: UserSpec[] = [
-  // Acessos de teste rápido (mantidos)
+  // Admin principal da plataforma
+  { email: "adm.matriz@topac.com.br", senha: SENHA, nome: "Administrador Matriz", roles: ["admin"] },
+
+  // Acessos de teste rÃ¡pido (mantidos)
   { email: "fat@topac.local", senha: SENHA, nome: "Faturamento (Teste)", roles: ["faturamento"] },
   { email: "fin@topac.local", senha: SENHA, nome: "Financeiro (Teste)", roles: ["financeiro"] },
 
-  // 15 usuários reais
+  // 15 usuÃ¡rios reais
   { email: "antonio.carlos@topac.app", senha: SENHA, nome: "Antonio Carlos Servilio",
     roles: ["filial_praia", "faturamento"], funcionario_nome_match: ["ANTONIO CARLOS"] },
   { email: "ilma@topac.app", senha: SENHA, nome: "Ilma Mendes de Mello",
@@ -48,7 +51,7 @@ const USERS: UserSpec[] = [
   { email: "douglas@topac.app", senha: SENHA, nome: "Douglas Cesar Chiappetta",
     roles: ["faturamento"], funcionario_nome_match: ["DOUGLAS"] },
 
-  // Mecânicos — App Mecânico (tecnico_campo)
+  // MecÃ¢nicos â€” App MecÃ¢nico (tecnico_campo)
   { email: "diego@topac.app", senha: SENHA, nome: "Diego Martins Silva Santos",
     roles: ["tecnico_campo"], funcionario_nome_match: ["DIEGO MARTINS"] },
   { email: "tiago.moreira@topac.app", senha: SENHA, nome: "Tiago Moreira da Silva Ferreira",
@@ -124,7 +127,7 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Vincula a funcionário (se houver match)
+        // Vincula a funcionÃ¡rio (se houver match)
         let funcionarioId: string | null = null;
         if (u.funcionario_nome_match?.length) {
           for (const m of u.funcionario_nome_match) {
@@ -137,12 +140,12 @@ Deno.serve(async (req) => {
             if (f?.id) { funcionarioId = f.id; break; }
           }
           if (funcionarioId) {
-            // Atualiza email do funcionário (corrige caso esteja com e-mail errado, ex: Diego)
+            // Atualiza email do funcionÃ¡rio (corrige caso esteja com e-mail errado, ex: Diego)
             await supabase.from("funcionarios").update({ email: u.email }).eq("id", funcionarioId);
           }
         }
 
-        // Para mecânicos: garantir tecnicos_campo (com access_token)
+        // Para mecÃ¢nicos: garantir tecnicos_campo (com access_token)
         if (u.roles.includes("tecnico_campo") && funcionarioId) {
           const { data: tc } = await supabase
             .from("tecnicos_campo")
