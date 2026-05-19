@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
-import { Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle } from 'lucide-react';
+import { Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle, Wrench, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
 
@@ -29,6 +29,23 @@ interface Ativo {
   vencimento_licenciamento: string | null;
 }
 
+interface Manutencao {
+  id: string;
+  ativo_id: string | null;
+  veiculo_descricao: string | null;
+  placa: string | null;
+  data: string;
+  km: number | null;
+  descricao: string;
+  fornecedor: string | null;
+  nota_numero: string | null;
+  valor: number;
+  arquivo_url: string | null;
+  arquivo_nome: string | null;
+  origem: string | null;
+  observacao: string | null;
+}
+
 type FilterType = 'todos' | 'ipva_vencer' | 'ipva_vencido' | 'lic_vencer' | 'lic_vencido';
 
 const getAlertStatus = (dateStr: string | null): 'em_dia' | 'a_vencer' | 'vencido' | 'sem_data' => {
@@ -48,6 +65,14 @@ const statusBadge = (s: string) => {
   return <Badge variant="outline" className="text-[10px]">—</Badge>;
 };
 
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Falha ao ler arquivo'));
+    reader.readAsDataURL(file);
+  });
+
 const DocumentosVeiculosPage: React.FC = () => {
   const { session } = useApp();
   const [ativos, setAtivos] = useState<Ativo[]>([]);
@@ -57,13 +82,47 @@ const DocumentosVeiculosPage: React.FC = () => {
   const [filterType, setFilterType] = useState<FilterType>('todos');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Ativo>>({});
+  const [manutencoes, setManutencoes] = useState<Manutencao[]>([]);
+  const [manutencaoErro, setManutencaoErro] = useState('');
+  const [manutFile, setManutFile] = useState<File | null>(null);
+  const [manutForm, setManutForm] = useState({
+    ativo_id: '',
+    data: new Date().toISOString().slice(0, 10),
+    km: '',
+    descricao: '',
+    fornecedor: '',
+    nota_numero: '',
+    valor: '',
+    observacao: '',
+  });
 
   const fetchAtivos = async () => {
     const { data, error } = await supabase.from('ativos').select('*').eq('tipo', 'veiculo').order('created_at', { ascending: false });
     if (!error && data) setAtivos(data as unknown as Ativo[]);
   };
 
-  useEffect(() => { fetchAtivos(); }, []);
+  const fetchManutencoes = async () => {
+    const { data, error } = await supabase
+      .from('veiculo_manutencoes' as any)
+      .select('*')
+      .order('data', { ascending: false })
+      .limit(500);
+    if (error) {
+      setManutencaoErro('Tabela de manutencao ainda nao aplicada no Supabase. A migracao ja ficou pronta no projeto.');
+      return;
+    }
+    setManutencaoErro('');
+    setManutencoes(((data as any) || []) as Manutencao[]);
+  };
+
+  useEffect(() => { fetchAtivos(); fetchManutencoes(); }, []);
+
+  const moeda = (v: number | string | null | undefined) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const parseNumero = (value: string) => {
+    const clean = String(value || '').replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+    const n = Number(clean);
+    return Number.isFinite(n) ? n : 0;
+  };
 
   const analyzeVehiclePdf = async (source: File | Uint8Array, fileName: string) => {
     const bytes = source instanceof File ? new Uint8Array(await source.arrayBuffer()) : source;
@@ -84,17 +143,37 @@ const DocumentosVeiculosPage: React.FC = () => {
     return data?.data ?? {};
   };
 
+  const uploadDocumentoVeiculo = async (file: File, basePath: string) => {
+    const { error: uploadError } = await supabase.storage
+      .from('documentos-ativos')
+      .upload(basePath, file, { contentType: file.type || 'application/pdf', upsert: false });
+
+    if (!uploadError) {
+      const { data: urlData } = supabase.storage.from('documentos-ativos').getPublicUrl(basePath);
+      return { url: urlData.publicUrl, fallback: false };
+    }
+
+    console.warn('Falha no storage documentos-ativos, salvando PDF embutido no registro:', uploadError);
+    return { url: await fileToDataUrl(file), fallback: true };
+  };
+
   const handleMultiUpload = async (files: FileList) => {
     if (!session?.user?.id) { toast.error('Faça login primeiro'); return; }
     setUploading(true);
     let success = 0;
+    let fallbackCount = 0;
     for (const file of Array.from(files)) {
       const ext = file.name.split('.').pop();
       const path = `${session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('documentos-ativos').upload(path, file);
-      if (uploadError) { toast.error(`Erro no upload de ${file.name}`); continue; }
-      const { data: urlData } = supabase.storage.from('documentos-ativos').getPublicUrl(path);
-      const arquivo_url = urlData.publicUrl;
+      let arquivo_url = '';
+      try {
+        const upload = await uploadDocumentoVeiculo(file, path);
+        arquivo_url = upload.url;
+        if (upload.fallback) fallbackCount++;
+      } catch (uploadError: any) {
+        toast.error(`Erro no upload de ${file.name}: ${uploadError?.message || uploadError}`);
+        continue;
+      }
 
       let extracted: any = {};
       try {
@@ -117,9 +196,13 @@ const DocumentosVeiculosPage: React.FC = () => {
         status: 'ativo',
       } as any);
       if (!error) success++;
+      else toast.error(`Erro ao cadastrar ${file.name}: ${error.message}`);
     }
     if (success > 0) {
       toast.success(`${success} documento(s) cadastrado(s)!`);
+      if (fallbackCount > 0) {
+        toast.warning(`${fallbackCount} PDF(s) foram salvos direto no historico porque o storage nao aceitou o upload.`);
+      }
       fetchAtivos();
     }
     setUploading(false);
@@ -149,6 +232,58 @@ const DocumentosVeiculosPage: React.FC = () => {
       fetchAtivos();
     } else toast.error('Erro ao salvar');
   };
+
+  const selectedAtivo = ativos.find(a => a.id === manutForm.ativo_id);
+
+  const uploadManutencaoPdf = async () => {
+    if (!manutFile || !session?.user?.id) return { url: null as string | null, nome: null as string | null };
+    const ext = manutFile.name.split('.').pop() || 'pdf';
+    const path = `${session.user.id}/manutencao/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const upload = await uploadDocumentoVeiculo(manutFile, path);
+    return { url: upload.url, nome: manutFile.name };
+  };
+
+  const salvarManutencao = async () => {
+    if (!session?.user?.id) { toast.error('Faca login primeiro'); return; }
+    if (!manutForm.descricao.trim()) { toast.error('Informe a manutencao/mecanica'); return; }
+    setUploading(true);
+    try {
+      const arquivo = await uploadManutencaoPdf();
+      const payload = {
+        ativo_id: selectedAtivo?.id || null,
+        veiculo_descricao: selectedAtivo?.descricao || '',
+        placa: selectedAtivo?.placa || '',
+        data: manutForm.data,
+        km: manutForm.km ? parseNumero(manutForm.km) : null,
+        descricao: manutForm.descricao,
+        fornecedor: manutForm.fornecedor || null,
+        nota_numero: manutForm.nota_numero || null,
+        valor: parseNumero(manutForm.valor),
+        arquivo_url: arquivo.url,
+        arquivo_nome: arquivo.nome,
+        origem: 'manual',
+        observacao: manutForm.observacao || null,
+        created_by: session.user.id,
+      };
+      const { error } = await supabase.from('veiculo_manutencoes' as any).insert(payload);
+      if (error) throw error;
+      toast.success('Manutencao salva no historico do carro');
+      setManutForm({ ativo_id: '', data: new Date().toISOString().slice(0, 10), km: '', descricao: '', fornecedor: '', nota_numero: '', valor: '', observacao: '' });
+      setManutFile(null);
+      fetchManutencoes();
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao salvar manutencao');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const manutencoesFiltradas = useMemo(() => {
+    const q = search.toLowerCase();
+    return manutencoes.filter(m => !q ||
+      `${m.veiculo_descricao || ''} ${m.placa || ''} ${m.descricao || ''} ${m.fornecedor || ''}`.toLowerCase().includes(q)
+    );
+  }, [manutencoes, search]);
 
   const filtered = useMemo(() => {
     let list = ativos;
@@ -285,6 +420,77 @@ const DocumentosVeiculosPage: React.FC = () => {
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           <Sparkles className="w-3 h-3" /> Ao subir PDFs, a IA tenta extrair placa, renavam, chassi e outros dados. Dados reaproveitados no Protocolo.
         </p>
+      </div>
+
+      <div className="card-premium p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Wrench className="w-5 h-5 text-primary" />
+            <div>
+              <h2 className="text-lg font-bold">Manutencao / mecanica do veiculo</h2>
+              <p className="text-xs text-muted-foreground">Suba PDF, informe KM e custo. O registro fica no historico do carro.</p>
+            </div>
+          </div>
+          <Badge variant="outline">{manutencoesFiltradas.length} historico(s)</Badge>
+        </div>
+
+        {manutencaoErro && (
+          <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
+            {manutencaoErro}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Carro</label>
+            <select value={manutForm.ativo_id} onChange={e => setManutForm({ ...manutForm, ativo_id: e.target.value })}
+              className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm">
+              <option value="">Selecionar veiculo</option>
+              {ativos.map(a => <option key={a.id} value={a.id}>{[a.descricao, a.placa || a.patrimonio].filter(Boolean).join(' - ')}</option>)}
+            </select>
+          </div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Data</label><Input type="date" value={manutForm.data} onChange={e => setManutForm({ ...manutForm, data: e.target.value })} /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">KM</label><Input value={manutForm.km} onChange={e => setManutForm({ ...manutForm, km: e.target.value })} placeholder="Ex.: 99439" /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Total</label><Input value={manutForm.valor} onChange={e => setManutForm({ ...manutForm, valor: e.target.value })} placeholder="R$ 300,00" /></div>
+          <div className="md:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Manutencao / mecanica</label><Input value={manutForm.descricao} onChange={e => setManutForm({ ...manutForm, descricao: e.target.value })} placeholder="Ex.: 4 litros de oleo, filtro, rolamento..." /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Fornecedor</label><Input value={manutForm.fornecedor} onChange={e => setManutForm({ ...manutForm, fornecedor: e.target.value })} /></div>
+          <div><label className="text-xs text-muted-foreground block mb-1">Nota</label><Input value={manutForm.nota_numero} onChange={e => setManutForm({ ...manutForm, nota_numero: e.target.value })} /></div>
+          <div className="md:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Observacao</label><Input value={manutForm.observacao} onChange={e => setManutForm({ ...manutForm, observacao: e.target.value })} /></div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">PDF da nota/manutencao</label>
+            <label className="flex h-10 items-center gap-2 rounded-md border border-input px-3 text-sm cursor-pointer hover:bg-muted/50">
+              <Paperclip className="w-4 h-4" /> {manutFile ? manutFile.name : 'Selecionar PDF'}
+              <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setManutFile(e.target.files?.[0] || null)} />
+            </label>
+          </div>
+          <div className="flex items-end"><Button onClick={salvarManutencao} disabled={uploading || !!manutencaoErro} className="w-full"><Save className="w-4 h-4 mr-1" /> Salvar historico</Button></div>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b bg-muted/50">
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Data</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Veiculo</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Manutencao</th>
+              <th className="px-3 py-2 text-right text-xs uppercase text-muted-foreground">KM</th>
+              <th className="px-3 py-2 text-right text-xs uppercase text-muted-foreground">Total</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">PDF</th>
+            </tr></thead>
+            <tbody>
+              {manutencoesFiltradas.map(m => (
+                <tr key={m.id} className="border-b hover:bg-muted/20">
+                  <td className="px-3 py-2 text-xs">{m.data ? new Date(`${m.data}T00:00:00`).toLocaleDateString('pt-BR') : '-'}</td>
+                  <td className="px-3 py-2 text-xs">{[m.veiculo_descricao, m.placa].filter(Boolean).join(' - ') || '-'}</td>
+                  <td className="px-3 py-2 text-xs max-w-[420px]">{m.descricao}</td>
+                  <td className="px-3 py-2 text-right text-xs">{m.km ?? '-'}</td>
+                  <td className="px-3 py-2 text-right text-xs font-semibold">{moeda(m.valor)}</td>
+                  <td className="px-3 py-2 text-xs">{m.arquivo_url ? <button onClick={() => setViewingPdf({ url: m.arquivo_url!, descricao: m.arquivo_nome || m.descricao })} className="text-primary hover:underline">Ver PDF</button> : '-'}</td>
+                </tr>
+              ))}
+              {manutencoesFiltradas.length === 0 && <tr><td colSpan={6} className="text-center py-6 text-sm text-muted-foreground">Nenhuma manutencao registrada</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Inline edit form */}
