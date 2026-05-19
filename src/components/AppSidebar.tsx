@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Users, CalendarDays,
+  LayoutDashboard, Building2, Users,
   FileCheck, FileText, Settings, LogOut, ChevronLeft, Menu,
-  Database, HardHat, Shirt, UtensilsCrossed, Bus, History,
+  HardHat, Shirt, History,
   Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
   ChevronDown, ChevronRight, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
-  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch, Wand2,
+  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch,
   ShoppingCart, Sparkles,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
@@ -23,44 +23,34 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
-  { label: 'Base Mestra', icon: Database, path: '/admin/base-mestra' },
-  { label: 'Funcionários', icon: Users, path: '/admin/funcionarios' },
-  { label: 'Lançamentos Mensais', icon: CalendarDays, path: '/admin/lancamentos' },
-  { label: 'Fechamentos Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
-  { label: 'Fechamento por Ponto', icon: Clock, path: '/admin/fechamento-ponto' },
-  { label: 'Folha de Pagamento', icon: Wallet, path: '/admin/folha-pagamento' },
-  { label: 'Rescisões', icon: FileX, path: '/admin/rescisoes' },
-  { label: 'Relatório', icon: FileText, path: '/admin/relatorio' },
+  { label: 'RescisÃµes', icon: FileX, path: '/admin/rescisoes' },
 ];
 
 const operationalItems: MenuItem[] = [
+  { label: 'App Mecanico', icon: Wrench, path: '/admin/app-mecanico' },
+  { label: 'Ponto dos Mecanicos', icon: Clock, path: '/admin/fechamento-ponto' },
+  { label: 'Abastecimento QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode' },
+  { label: 'Chamados Operacionais', icon: ClipboardList, path: '/admin/chamados' },
+  { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
+  { label: 'Combustivel (Galoes)', icon: Fuel, path: '/admin/galoes-combustivel' },
+  { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
-  { label: 'Relatório VR', icon: UtensilsCrossed, path: '/admin/relatorio-vr' },
-  { label: 'Relatório VT', icon: Bus, path: '/admin/relatorio-vt' },
-  { label: 'Combustível (Galões)', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Protocolo', icon: FileCheck, path: '/admin/protocolo' },
-  { label: 'Doc. Veículos', icon: Car, path: '/admin/documentos-ativos' },
-  { label: 'Aviso de Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
+  { label: 'Aviso de FÃ©rias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
   { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados' },
-  { label: 'Importar p/ Fechamento', icon: Wand2, path: '/admin/importar-fechamento' },
-  { label: 'Conferência de Ponto', icon: ClipboardCheck, path: '/admin/conferencia-ponto' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
-  { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
-  { label: 'Despachar Chamados', icon: ClipboardList, path: '/admin/chamados' },
-  { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico' },
-  { label: 'Abastecimento QRCode', icon: Fuel, path: '/admin/abastecimento-qrcode' },
-  { label: 'Histórico', icon: History, path: '/admin/historico' },
+  { label: 'HistÃ³rico', icon: History, path: '/admin/historico' },
 ];
 
 const adminItems: MenuItem[] = [
-  { label: 'Gerenciar Usuários', icon: Shield, path: '/admin/gerenciar-usuarios' },
+  { label: 'Gerenciar UsuÃ¡rios', icon: Shield, path: '/admin/gerenciar-usuarios' },
   { label: 'Acessos Externos (PIN)', icon: Shield, path: '/admin/acessos-externos' },
   { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
-  { label: 'Configurações', icon: Settings, path: '/admin/configuracoes' },
+  { label: 'ConfiguraÃ§Ãµes', icon: Settings, path: '/admin/configuracoes' },
 ];
 
 const faturamentoItems: MenuItem[] = [
@@ -68,10 +58,10 @@ const faturamentoItems: MenuItem[] = [
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
   { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas' },
-  { label: 'Medições', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
+  { label: 'MediÃ§Ãµes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
-  { label: 'Pendências', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
-  { label: 'Importação de Dados', icon: Sparkles, path: '/admin/faturamento/importacao-dados' },
+  { label: 'PendÃªncias', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
+  { label: 'ImportaÃ§Ã£o de Dados', icon: Sparkles, path: '/admin/faturamento/importacao-dados' },
   { label: 'Base de Faturamento', icon: FileText, path: '/admin/faturamento/importacao' },
 ];
 
@@ -82,8 +72,8 @@ const financeiroItems: MenuItem[] = [
   { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores' },
   { label: 'Caixa e Bancos', icon: Landmark, path: '/admin/financeiro/bancos' },
   { label: 'Fluxo de Caixa', icon: Activity, path: '/admin/financeiro/fluxo-caixa' },
-  { label: 'Conciliação', icon: CheckSquare, path: '/admin/financeiro/conciliacao' },
-  { label: 'Inadimplência', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia' },
+  { label: 'ConciliaÃ§Ã£o', icon: CheckSquare, path: '/admin/financeiro/conciliacao' },
+  { label: 'InadimplÃªncia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia' },
   { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo' },
 ];
 
@@ -207,7 +197,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
-            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Administração</p>
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">AdministraÃ§Ã£o</p>
           </div>
         )}
         {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
@@ -215,7 +205,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
-            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Próximos Módulos</p>
+            <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">PrÃ³ximos MÃ³dulos</p>
           </div>
         )}
         {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
