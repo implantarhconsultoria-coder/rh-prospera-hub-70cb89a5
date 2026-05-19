@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useApp } from '@/context/AppContext';
-import { calcTotalFuncionario, asoStatus, feriasStatus, formatCurrency } from '@/lib/calculations';
-import { Building2, Users, TrendingUp, TrendingDown, DollarSign, AlertTriangle, ShieldCheck, Flame, FileCheck, Lock, Unlock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import {
+  AlertTriangle, Building2, Bus, Cpu, DollarSign, FileCheck, Flame, Fuel,
+  ListChecks, Lock, Package, Rocket, ShieldCheck, TrendingDown, TrendingUp,
+  Unlock, Users, Wrench,
+} from 'lucide-react';
+import { useApp } from '@/context/AppContext';
+import { asoStatus, calcTotalFuncionario, feriasStatus, formatCurrency } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 
 const DashboardPage: React.FC = () => {
@@ -17,8 +21,7 @@ const DashboardPage: React.FC = () => {
       const arr = (data || []) as any[];
       const fechadas = arr.filter(f => f.status === 'fechado').length;
       const abertas = arr.filter(f => f.status === 'aberto' || f.status === 'reaberto').length;
-      const pendentes = Math.max(0, companies.length - fechadas - abertas);
-      setFechStats({ fechadas, abertas, pendentes });
+      setFechStats({ fechadas, abertas, pendentes: Math.max(0, companies.length - fechadas - abertas) });
     });
   }, [comp, companies.length]);
 
@@ -30,72 +33,95 @@ const DashboardPage: React.FC = () => {
   const companyStats = companies.map(c => {
     const emps = employees.filter(e => e.companyId === c.id && e.status === 'ativo' && e.categoria === 'operacional');
     const ents = entries.filter(e => e.companyId === c.id && e.competencia === comp);
-
     let totalProventos = 0, totalDescontos = 0, totalLiquido = 0;
+
     emps.forEach(emp => {
       const entry = ents.find(e => e.employeeId === emp.id);
       if (entry) {
         const calc = calcTotalFuncionario(emp, entry);
-        totalProventos += calc.proventos; totalDescontos += calc.descontos; totalLiquido += calc.liquido;
+        totalProventos += calc.proventos;
+        totalDescontos += calc.descontos;
+        totalLiquido += calc.liquido;
       } else {
         totalProventos += emp.salarioBase;
         totalLiquido += emp.salarioBase;
       }
     });
 
-    const feriasProximas = emps.filter(e => feriasStatus(e.dataAdmissao).status !== 'em dia').length;
-    const asoAlerta = emps.filter(e => asoStatus(e.dataExameMedico).status !== 'ok').length;
-    const beneficiosAtivos = emps.filter(e => e.vrAtivo || e.vaAtivo || e.vtAtivo).length;
-    const totalInsalubridade = emps.filter(e => e.insalubridadeAtiva).reduce((s, e) => s + e.insalubridadeValor, 0);
-
-    return { company: c, total: emps.length, totalProventos, totalDescontos, totalLiquido, feriasProximas, asoAlerta, beneficiosAtivos, totalInsalubridade };
+    return {
+      company: c,
+      total: emps.length,
+      totalProventos,
+      totalDescontos,
+      totalLiquido,
+      feriasProximas: emps.filter(e => feriasStatus(e.dataAdmissao).status !== 'em dia').length,
+      asoAlerta: emps.filter(e => asoStatus(e.dataExameMedico).status !== 'ok').length,
+      beneficiosAtivos: emps.filter(e => e.vrAtivo || e.vaAtivo || e.vtAtivo).length,
+      totalInsalubridade: emps.filter(e => e.insalubridadeAtiva).reduce((s, e) => s + e.insalubridadeValor, 0),
+    };
   });
 
+  const totalFuncionarios = employees.filter(e => e.status === 'ativo' && e.categoria === 'operacional').length;
   const cardAnim = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold font-display text-foreground">{greetingText}</h1>
-        <p className="text-muted-foreground text-sm">Visão consolidada da operação — Competência {comp}</p>
+      <div className="admin-hero">
+        <div className="admin-status-pill"><Cpu className="h-4 w-4" /> NUCLEO RH ONLINE</div>
+        <div className="admin-hero-mark"><Building2 className="h-14 w-14" /></div>
+        <p className="admin-hero-kicker">TOPAC RH PRO</p>
+        <h1>TOPAC CENTRAL</h1>
+        <p className="admin-hero-subtitle">
+          {greetingText}. Centro de comando operacional para RH, mecanicos, fechamento, estoque, frota e alertas em tempo real.
+        </p>
+        <div className="admin-hero-actions">
+          <button onClick={() => navigate('/admin/app-mecanico')} className="admin-primary-action"><Rocket className="h-4 w-4" />App dos mecanicos</button>
+          <button onClick={() => navigate('/admin/fechamento')} className="admin-secondary-action"><ListChecks className="h-4 w-4" />Ver fechamento</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Funcionários', value: employees.filter(e => e.status === 'ativo' && e.categoria === 'operacional').length, icon: Users, color: 'text-primary' },
-          { label: 'Proventos Estimados', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalProventos, 0)), icon: TrendingUp, color: 'text-success' },
-          { label: 'Descontos Estimados', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalDescontos, 0)), icon: TrendingDown, color: 'text-destructive' },
-          { label: 'Líquido Estimado', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalLiquido, 0)), icon: DollarSign, color: 'text-accent' },
+          { label: 'Funcionarios ativos', value: totalFuncionarios, icon: Users, color: 'text-sky-300' },
+          { label: 'Proventos estimados', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalProventos, 0)), icon: TrendingUp, color: 'text-emerald-300' },
+          { label: 'Descontos estimados', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalDescontos, 0)), icon: TrendingDown, color: 'text-fuchsia-300' },
+          { label: 'Liquido estimado', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalLiquido, 0)), icon: DollarSign, color: 'text-lime-300' },
         ].map((card, i) => (
-          <motion.div key={i} {...cardAnim} transition={{ delay: i * 0.05 }} className="card-premium p-5">
+          <motion.div key={card.label} {...cardAnim} transition={{ delay: i * 0.05 }} className="card-premium p-5">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">{card.label}</p>
-                <p className={`text-xl font-bold font-display mt-1 ${card.color}`}>{card.value}</p>
-              </div>
-              <card.icon className={`w-8 h-8 ${card.color} opacity-30`} />
+              <div><p className="text-xs text-muted-foreground uppercase tracking-wide">{card.label}</p><p className={`text-xl font-bold font-display mt-1 ${card.color}`}>{card.value}</p></div>
+              <card.icon className={`w-8 h-8 ${card.color} opacity-40`} />
             </div>
           </motion.div>
         ))}
       </div>
 
-      {/* Fechamentos por filial */}
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        {[
+          { label: 'App mecanicos', icon: Wrench, path: '/admin/app-mecanico' },
+          { label: 'Ponto', icon: ListChecks, path: '/admin/fechamento-ponto' },
+          { label: 'QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode' },
+          { label: 'Chamados', icon: FileCheck, path: '/admin/chamados' },
+          { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
+          { label: 'VR / VT', icon: Bus, path: '/admin/fechamento' },
+        ].map(item => (
+          <button key={item.label} onClick={() => navigate(item.path)} className="card-premium p-4 text-left hover:border-emerald-400/50">
+            <item.icon className="h-5 w-5 text-emerald-300 mb-3" />
+            <span className="text-sm font-semibold">{item.label}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { label: 'Filiais Fechadas', value: fechStats.fechadas, icon: Lock, color: 'text-success' },
-          { label: 'Em Andamento', value: fechStats.abertas, icon: Unlock, color: 'text-warning' },
-          { label: 'Pendentes', value: fechStats.pendentes, icon: AlertTriangle, color: 'text-destructive' },
+          { label: 'Filiais fechadas', value: fechStats.fechadas, icon: Lock, color: 'text-emerald-300' },
+          { label: 'Em andamento', value: fechStats.abertas, icon: Unlock, color: 'text-yellow-300' },
+          { label: 'Pendentes', value: fechStats.pendentes, icon: AlertTriangle, color: 'text-fuchsia-300' },
         ].map((card, i) => (
-          <motion.div key={i} {...cardAnim} transition={{ delay: 0.05 + i * 0.05 }}
-            onClick={() => navigate('/admin/fechamentos-filiais')}
-            className="card-premium p-5 cursor-pointer hover:bg-sidebar-accent/10">
+          <motion.div key={card.label} {...cardAnim} transition={{ delay: 0.05 + i * 0.05 }} onClick={() => navigate('/admin/fechamento')} className="card-premium p-5 cursor-pointer">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">{card.label}</p>
-                <p className={`text-2xl font-bold font-display mt-1 ${card.color}`}>{card.value}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Competência {comp}</p>
-              </div>
-              <card.icon className={`w-8 h-8 ${card.color} opacity-30`} />
+              <div><p className="text-xs text-muted-foreground uppercase tracking-wide">{card.label}</p><p className={`text-2xl font-bold font-display mt-1 ${card.color}`}>{card.value}</p><p className="text-[10px] text-muted-foreground mt-1">Competencia {comp}</p></div>
+              <card.icon className={`w-8 h-8 ${card.color} opacity-40`} />
             </div>
           </motion.div>
         ))}
@@ -103,41 +129,26 @@ const DashboardPage: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {companyStats.map((cs, i) => (
-          <motion.div key={cs.company.id} {...cardAnim} transition={{ delay: 0.1 + i * 0.05 }}
-            className="card-premium p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 gradient-primary rounded-lg flex items-center justify-center">
-                  <Building2 className="w-5 h-5 text-primary-foreground" />
-                </div>
-                <div>
-                  <h3 className="font-bold font-display text-foreground text-sm">{cs.company.name}</h3>
-                  <p className="text-[11px] text-muted-foreground">{cs.company.cnpj}</p>
-                </div>
+          <motion.div key={cs.company.id} {...cardAnim} transition={{ delay: 0.1 + i * 0.05 }} className="card-premium p-6 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 gradient-primary rounded-lg flex items-center justify-center"><Building2 className="w-5 h-5 text-primary-foreground" /></div>
+                <div className="min-w-0"><h3 className="font-bold font-display text-sm truncate">{cs.company.name}</h3><p className="text-[11px] text-muted-foreground">{cs.company.cnpj}</p></div>
               </div>
-              <button onClick={() => navigate('/admin/fechamento')}
-                className="text-xs gradient-accent text-accent-foreground px-3 py-1.5 rounded-md font-medium hover:opacity-90 transition-opacity">
-                Abrir Fechamento
-              </button>
+              <button onClick={() => navigate('/admin/fechamento')} className="admin-mini-action">Abrir</button>
             </div>
-
             <div className="grid grid-cols-3 gap-3">
               {[
-                { l: 'Funcionários', v: cs.total, icon: Users },
-                { l: 'Proventos', v: formatCurrency(cs.totalProventos), icon: TrendingUp },
-                { l: 'Descontos', v: formatCurrency(cs.totalDescontos), icon: TrendingDown },
-                { l: 'Líquido', v: formatCurrency(cs.totalLiquido), icon: DollarSign },
-                { l: 'Férias Alerta', v: cs.feriasProximas, icon: AlertTriangle },
-                { l: 'ASO Alerta', v: cs.asoAlerta, icon: ShieldCheck },
-                { l: 'Benefícios', v: cs.beneficiosAtivos, icon: FileCheck },
-                { l: 'Insalubridade', v: formatCurrency(cs.totalInsalubridade), icon: Flame },
-                { l: 'Status', v: 'Aberto', icon: FileCheck },
-              ].map((item, j) => (
-                <div key={j} className="bg-muted/50 rounded-lg p-2.5 text-center">
-                  <p className="text-[10px] text-muted-foreground uppercase">{item.l}</p>
-                  <p className="text-sm font-semibold text-foreground mt-0.5">{item.v}</p>
-                </div>
-              ))}
+                { l: 'Funcionarios', v: cs.total },
+                { l: 'Proventos', v: formatCurrency(cs.totalProventos) },
+                { l: 'Descontos', v: formatCurrency(cs.totalDescontos) },
+                { l: 'Liquido', v: formatCurrency(cs.totalLiquido) },
+                { l: 'Ferias alerta', v: cs.feriasProximas },
+                { l: 'ASO alerta', v: cs.asoAlerta },
+                { l: 'Beneficios', v: cs.beneficiosAtivos },
+                { l: 'Insalubridade', v: formatCurrency(cs.totalInsalubridade) },
+                { l: 'Status', v: 'Aberto' },
+              ].map(item => <div key={item.l} className="admin-metric-cell"><p>{item.l}</p><strong>{item.v}</strong></div>)}
             </div>
           </motion.div>
         ))}
