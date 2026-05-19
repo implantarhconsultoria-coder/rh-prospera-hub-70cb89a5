@@ -73,9 +73,16 @@ const ImportacoesDN4Page: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [tipoForcado, setTipoForcado] = useState<string>("auto");
   const [aberta, setAberta] = useState<Importacao | null>(null);
+  const [baseDn4Pendente, setBaseDn4Pendente] = useState(false);
+
+  const isTabelaAusente = (error: any) => {
+    const msg = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`;
+    return error?.code === "PGRST205" || msg.includes("importacoes_dn4") || msg.includes("schema cache");
+  };
 
   const carregar = useCallback(async () => {
     setLoading(true);
+    setBaseDn4Pendente(false);
     const { data, error } = await supabase
       .from("importacoes_dn4" as any)
       .select("*")
@@ -84,7 +91,11 @@ const ImportacoesDN4Page: React.FC = () => {
       .limit(50);
 
     if (error) {
-      toast.error(error.message);
+      if (isTabelaAusente(error)) {
+        setBaseDn4Pendente(true);
+      } else {
+        toast.error(error.message);
+      }
       setImports([]);
       setLoading(false);
       return;
@@ -125,6 +136,11 @@ const ImportacoesDN4Page: React.FC = () => {
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+    if (baseDn4Pendente) {
+      toast.error("A base de importacao DN4 ainda precisa ser preparada no Supabase.");
+      e.target.value = "";
+      return;
+    }
     setUploading(true);
     try {
       for (const file of files) {
@@ -296,11 +312,11 @@ accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-offi
               multiple
               className="hidden"
               onChange={onUpload}
-              disabled={uploading}
+              disabled={uploading || baseDn4Pendente}
             />
-            <Button asChild disabled={uploading}>
+            <Button asChild disabled={uploading || baseDn4Pendente}>
               <span className="cursor-pointer">
-                {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}{" "}
+                {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />} {" "}
                 Nova importação
               </span>
             </Button>
@@ -327,6 +343,18 @@ accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-offi
           </Button>
         </div>
       </div>
+
+      {baseDn4Pendente && (
+        <div className="rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm text-warning">
+          <div className="font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" /> Base de importacao ainda nao preparada
+          </div>
+          <p className="mt-1 text-muted-foreground">
+            O Supabase atual ainda nao tem a tabela <strong>importacoes_dn4</strong>. A tela foi protegida para nao quebrar;
+            falta aplicar a migracao DN4 no banco antes de iniciar os uploads.
+          </p>
+        </div>
+      )}
 
       <div className="rounded-lg border border-border bg-card overflow-x-auto">
         <table className="w-full text-sm">
