@@ -9,7 +9,7 @@ import { uploadFoto } from "../lib/upload";
 import { getBrowserLocation } from "@/lib/browserGeo";
 import CameraCapture from "../components/CameraCapture";
 import { toast } from "sonner";
-import { AlertTriangle, Camera, Check, Fuel, Gauge, Loader2, QrCode, RotateCcw } from "lucide-react";
+import { AlertTriangle, Camera, Check, Copy, Fuel, Gauge, Loader2, MessageCircle, QrCode, RotateCcw, Share2 } from "lucide-react";
 import QrScanner from "qr-scanner";
 
 type Step = "scan" | "vale" | "bomba" | "painel" | "form" | "ok";
@@ -44,6 +44,27 @@ interface MecInfo {
   filial: string;
 }
 
+interface ReceiptInfo {
+  id: string;
+  codigo: string;
+  postoNome: string;
+  postoCnpj: string;
+  postoEndereco: string;
+  postoTelefone: string;
+  mecanicoNome: string;
+  empresa: string;
+  filial: string;
+  placa: string;
+  combustivel: string;
+  valor: string;
+  litros: string;
+  km: string;
+  observacao: string;
+  fotoBombaUrl: string;
+  fotoPainelUrl: string;
+  createdAt: Date;
+}
+
 const CANONICAL_BASE_URL = "https://implantarhprpro.com";
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
@@ -70,6 +91,7 @@ export default function AbastecimentoPage() {
   const [placa, setPlaca] = useState("");
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
+  const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
 
   const scannerRef = useRef<QrScanner | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -118,20 +140,20 @@ export default function AbastecimentoPage() {
   const getPermissionHint = (reason: ScanFeedback["reason"]) => {
     switch (reason) {
       case "https":
-        return "Abra o App Mecânico pelo endereço seguro https://implantarhprpro.com para usar a câmera.";
+        return "Abra o App MecÃ¢nico pelo endereÃ§o seguro https://implantarhprpro.com para usar a cÃ¢mera.";
       case "blocked":
       case "permission":
-        return "Toque no cadeado/ícone do site no navegador > Permissões > Câmera > Permitir. Depois toque em Tentar novamente.";
+        return "Toque no cadeado/Ã­cone do site no navegador > PermissÃµes > CÃ¢mera > Permitir. Depois toque em Tentar novamente.";
       case "no-camera":
-        return "Use outro aparelho com câmera ou continue pelo envio da foto do QR / digitação manual.";
+        return "Use outro aparelho com cÃ¢mera ou continue pelo envio da foto do QR / digitaÃ§Ã£o manual.";
       case "unsupported":
-        return "Atualize o navegador do celular. Chrome Android e Safari iPhone são compatíveis.";
+        return "Atualize o navegador do celular. Chrome Android e Safari iPhone sÃ£o compatÃ­veis.";
       case "busy":
-        return "Feche outros apps que estejam usando a câmera e tente novamente.";
+        return "Feche outros apps que estejam usando a cÃ¢mera e tente novamente.";
       case "technical":
       case "qr":
       default:
-        return "Se a câmera não abrir, continue pela galeria ou digite o código manualmente.";
+        return "Se a cÃ¢mera nÃ£o abrir, continue pela galeria ou digite o cÃ³digo manualmente.";
     }
   };
 
@@ -148,15 +170,15 @@ export default function AbastecimentoPage() {
   const resolveCameraError = async (error?: unknown): Promise<ScanFeedback> => {
     if (!secureContext) {
       return {
-        title: "A câmera exige conexão segura HTTPS.",
-        detail: `Abra pelo endereço seguro ${CANONICAL_BASE_URL}.`,
+        title: "A cÃ¢mera exige conexÃ£o segura HTTPS.",
+        detail: `Abra pelo endereÃ§o seguro ${CANONICAL_BASE_URL}.`,
         reason: "https",
       };
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
       return {
-        title: "Este navegador não suporta acesso à câmera.",
+        title: "Este navegador nÃ£o suporta acesso Ã  cÃ¢mera.",
         detail: "Use Chrome no Android ou Safari no iPhone atualizado.",
         reason: "unsupported",
       };
@@ -168,39 +190,39 @@ export default function AbastecimentoPage() {
 
     if (permissionState === "denied" || name === "NotAllowedError" || name === "PermissionDeniedError") {
       return {
-        title: "A câmera foi bloqueada no navegador.",
-        detail: "Permita o uso da câmera para continuar a leitura do QR Code.",
+        title: "A cÃ¢mera foi bloqueada no navegador.",
+        detail: "Permita o uso da cÃ¢mera para continuar a leitura do QR Code.",
         reason: permissionState === "denied" ? "blocked" : "permission",
       };
     }
 
     if (name === "NotFoundError" || name === "DevicesNotFoundError") {
       return {
-        title: "Nenhuma câmera foi encontrada neste aparelho.",
-        detail: "Use a galeria ou digite o código do QR manualmente.",
+        title: "Nenhuma cÃ¢mera foi encontrada neste aparelho.",
+        detail: "Use a galeria ou digite o cÃ³digo do QR manualmente.",
         reason: "no-camera",
       };
     }
 
     if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError") {
       return {
-        title: "A câmera está ocupada ou indisponível no momento.",
-        detail: "Feche outros aplicativos que estejam usando a câmera e tente novamente.",
+        title: "A cÃ¢mera estÃ¡ ocupada ou indisponÃ­vel no momento.",
+        detail: "Feche outros aplicativos que estejam usando a cÃ¢mera e tente novamente.",
         reason: "busy",
       };
     }
 
     if (name === "SecurityError") {
       return {
-        title: "O navegador bloqueou o acesso à câmera.",
-        detail: `Abra o App Mecânico em ${CANONICAL_BASE_URL}.`,
+        title: "O navegador bloqueou o acesso Ã  cÃ¢mera.",
+        detail: `Abra o App MecÃ¢nico em ${CANONICAL_BASE_URL}.`,
         reason: "https",
       };
     }
 
     return {
-      title: "Não foi possível abrir a câmera.",
-      detail: message && message !== "undefined" ? message : "Erro técnico ao iniciar o leitor de QR Code.",
+      title: "NÃ£o foi possÃ­vel abrir a cÃ¢mera.",
+      detail: message && message !== "undefined" ? message : "Erro tÃ©cnico ao iniciar o leitor de QR Code.",
       reason: "technical",
     };
   };
@@ -287,8 +309,8 @@ export default function AbastecimentoPage() {
 
     setScanLoading(true);
 
-    // Dispara getUserMedia IMEDIATAMENTE dentro do gesto do usuário
-    // para garantir que o popup nativo de permissão apareça no Android/iOS.
+    // Dispara getUserMedia IMEDIATAMENTE dentro do gesto do usuÃ¡rio
+    // para garantir que o popup nativo de permissÃ£o apareÃ§a no Android/iOS.
     let stream: MediaStream | null = null;
     let mode: CameraMode = "environment";
     try {
@@ -307,14 +329,14 @@ export default function AbastecimentoPage() {
       if (!video) {
         stream.getTracks().forEach((t) => t.stop());
         setScanFeedback({
-          title: "Não foi possível preparar a câmera.",
-          detail: "Atualize a página e tente novamente.",
+          title: "NÃ£o foi possÃ­vel preparar a cÃ¢mera.",
+          detail: "Atualize a pÃ¡gina e tente novamente.",
           reason: "technical",
         });
         setScanLoading(false);
         return;
       }
-      // Libera o stream temporário; QrScanner reabre com o modo correto
+      // Libera o stream temporÃ¡rio; QrScanner reabre com o modo correto
       stream.getTracks().forEach((t) => t.stop());
 
       const scanner = new QrScanner(
@@ -360,8 +382,8 @@ export default function AbastecimentoPage() {
     } catch (error) {
       const message = typeof error === "object" && error && "message" in error ? String((error as { message?: string }).message) : "";
       setScanFeedback({
-        title: "Não foi possível ler o QR da imagem.",
-        detail: message && message !== "undefined" ? message : "Tente outra foto com foco melhor e boa iluminação.",
+        title: "NÃ£o foi possÃ­vel ler o QR da imagem.",
+        detail: message && message !== "undefined" ? message : "Tente outra foto com foco melhor e boa iluminaÃ§Ã£o.",
         reason: "qr",
       });
     }
@@ -369,7 +391,7 @@ export default function AbastecimentoPage() {
 
   const validarQr = async (cod: string) => {
     if (!cod) {
-      toast.error("Informe o código do QR");
+      toast.error("Informe o cÃ³digo do QR");
       return;
     }
     setLoading(true);
@@ -382,15 +404,15 @@ export default function AbastecimentoPage() {
     if (error || !r?.ok) {
       const err = r?.error || error?.message || "qr_invalido";
       const map: Record<string, string> = {
-        qr_nao_encontrado: "QR Code do posto ainda não foi gerado no admin.",
+        qr_nao_encontrado: "QR Code do posto ainda nÃ£o foi gerado no admin.",
         qr_bloqueado: "QR Code bloqueado pelo administrador.",
-        acesso_nao_autorizado: "Acesso não autorizado.",
+        acesso_nao_autorizado: "Acesso nÃ£o autorizado.",
       };
       const msg = map[err] || "Erro ao validar QR Code.";
       toast.error(msg);
       setScanFeedback({
         title: msg,
-        detail: "Confira o código lido, envie uma foto mais nítida ou digite manualmente.",
+        detail: "Confira o cÃ³digo lido, envie uma foto mais nÃ­tida ou digite manualmente.",
         reason: "qr",
       });
       setStep("scan");
@@ -446,7 +468,7 @@ export default function AbastecimentoPage() {
   const finalizar = async () => {
     if (!posto) return;
     if (!fotoBombaUrl || !fotoPainelUrl) {
-      toast.error("Fotos obrigatórias");
+      toast.error("Fotos obrigatÃ³rias");
       return;
     }
     if (!valor || !litros) {
@@ -471,13 +493,105 @@ export default function AbastecimentoPage() {
       p_endereco: null,
     });
     setLoading(false);
-    const r = (data ?? null) as { ok?: boolean; error?: string } | null;
+    const r = (data ?? null) as { ok?: boolean; error?: string; id?: string } | null;
     if (error || !r?.ok) {
       toast.error(r?.error || error?.message || "Erro ao salvar");
       return;
     }
+    setReceipt({
+      id: r.id || "",
+      codigo: posto.codigo,
+      postoNome: posto.nome || postoNome,
+      postoCnpj: posto.cnpj || "",
+      postoEndereco: posto.endereco || "",
+      postoTelefone: posto.telefone || "",
+      mecanicoNome: mecInfo?.nome || mecanico.nome || "",
+      empresa: mecInfo?.empresa || mecanico.empresa || "",
+      filial: mecInfo?.filial || mecanico.filial || "",
+      placa,
+      combustivel,
+      valor,
+      litros,
+      km,
+      observacao: obs,
+      fotoBombaUrl,
+      fotoPainelUrl,
+      createdAt: new Date(),
+    });
     toast.success("Abastecimento registrado!");
     setStep("ok");
+  };
+
+  const formatCurrency = (value: string) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return value || "0";
+    return number.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  };
+
+  const formatDecimal = (value: string, digits = 3) => {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return value || "0";
+    return number.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  };
+
+  const buildReceiptText = (info: ReceiptInfo) => {
+    const lines = [
+      "*TOPAC RH PRO - Abastecimento*",
+      `Registro: ${info.id || "salvo"}`,
+      `Data/Hora: ${info.createdAt.toLocaleString("pt-BR")}`,
+      "",
+      `Mecanico: ${info.mecanicoNome}`,
+      `Empresa: ${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`,
+      `Carro/placa: ${info.placa || "nao informado"}`,
+      "",
+      `Posto: ${info.postoNome}`,
+      info.postoCnpj ? `CNPJ: ${info.postoCnpj}` : "",
+      info.postoEndereco ? `Endereco: ${info.postoEndereco}` : "",
+      `QR: ${info.codigo}`,
+      "",
+      `Combustivel: ${info.combustivel || "nao informado"}`,
+      `Litros: ${formatDecimal(info.litros)} L`,
+      `Valor: ${formatCurrency(info.valor)}`,
+      `KM: ${info.km || "nao informado"}`,
+      info.observacao ? `Obs.: ${info.observacao}` : "",
+      "",
+      `Foto da bomba: ${info.fotoBombaUrl}`,
+      `Foto do KM/painel: ${info.fotoPainelUrl}`,
+    ];
+    return lines.filter(Boolean).join("\n");
+  };
+
+  const shareReceipt = async () => {
+    if (!receipt) return;
+    const text = buildReceiptText(receipt);
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Abastecimento TOPAC", text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      toast.success("Notinha copiada para enviar no WhatsApp");
+    } catch (error) {
+      if ((error as { name?: string })?.name !== "AbortError") {
+        toast.error("Nao foi possivel compartilhar. Copie a notinha.");
+      }
+    }
+  };
+
+  const copyReceipt = async () => {
+    if (!receipt) return;
+    await navigator.clipboard.writeText(buildReceiptText(receipt));
+    toast.success("Notinha copiada");
+  };
+
+  const openWhatsapp = (phone?: string) => {
+    if (!receipt) return;
+    const cleanPhone = (phone || "").replace(/\D/g, "");
+    const destination = cleanPhone ? `55${cleanPhone.replace(/^55/, "")}` : "";
+    const url = destination
+      ? `https://wa.me/${destination}?text=${encodeURIComponent(buildReceiptText(receipt))}`
+      : `https://wa.me/?text=${encodeURIComponent(buildReceiptText(receipt))}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const reset = () => {
@@ -491,6 +605,7 @@ export default function AbastecimentoPage() {
     setLitros("");
     setKm("");
     setObs("");
+    setReceipt(null);
     setScanFeedback(null);
     setStep("scan");
   };
@@ -517,11 +632,11 @@ export default function AbastecimentoPage() {
 
           {!secureContext && (
             <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-              <div className="font-semibold text-foreground">A câmera precisa de HTTPS.</div>
-              <p className="mt-1">Use o App Mecânico em {CANONICAL_BASE_URL} para liberar a câmera no celular.</p>
+              <div className="font-semibold text-foreground">A cÃ¢mera precisa de HTTPS.</div>
+              <p className="mt-1">Use o App MecÃ¢nico em {CANONICAL_BASE_URL} para liberar a cÃ¢mera no celular.</p>
               {!isCanonicalHost && (
                 <Button type="button" variant="secondary" className="mt-3 w-full" onClick={() => window.location.assign(canonicalUrl)}>
-                  Abrir versão segura
+                  Abrir versÃ£o segura
                 </Button>
               )}
             </div>
@@ -534,15 +649,15 @@ export default function AbastecimentoPage() {
           {!scanning ? (
             <Button className="w-full" onClick={iniciarScanner} disabled={loading || scanLoading}>
               {scanLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-              Abrir câmera para ler QR
+              Abrir cÃ¢mera para ler QR
             </Button>
           ) : (
             <div className="space-y-2">
               <div className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                Câmera {cameraMode === "environment" ? "traseira" : "frontal"} ativa. Aponte para o QR Code do posto.
+                CÃ¢mera {cameraMode === "environment" ? "traseira" : "frontal"} ativa. Aponte para o QR Code do posto.
               </div>
               <Button variant="outline" className="w-full" onClick={stopScanner}>
-                Parar câmera
+                Parar cÃ¢mera
               </Button>
             </div>
           )}
@@ -561,7 +676,7 @@ export default function AbastecimentoPage() {
                 {(scanFeedback.reason === "blocked" || scanFeedback.reason === "permission") && (
                   <Button type="button" className="w-full" onClick={iniciarScanner} disabled={scanLoading}>
                     {scanLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-                    Liberar câmera
+                    Liberar cÃ¢mera
                   </Button>
                 )}
                 <Button type="button" variant="outline" className="w-full" onClick={iniciarScanner} disabled={scanLoading}>
@@ -597,7 +712,7 @@ export default function AbastecimentoPage() {
           </div>
 
           <div className="border-t pt-3 space-y-2">
-            <Label className="text-xs">Ou digite o código manualmente</Label>
+            <Label className="text-xs">Ou digite o cÃ³digo manualmente</Label>
             <div className="flex gap-2">
               <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="COMB-XXXXXXX" />
               <Button onClick={() => validarQr(codigo)} disabled={loading || !codigo}>
@@ -612,12 +727,12 @@ export default function AbastecimentoPage() {
         <Card className="space-y-3 p-4">
           <div className="text-xs font-semibold uppercase text-muted-foreground">QR validado</div>
           <div className="space-y-1 text-sm">
-            <div><b>Mecânico:</b> {mecInfo?.nome}</div>
-            <div><b>Empresa:</b> {mecInfo?.empresa || "—"} {mecInfo?.filial ? `· ${mecInfo.filial}` : ""}</div>
+            <div><b>MecÃ¢nico:</b> {mecInfo?.nome}</div>
+            <div><b>Empresa:</b> {mecInfo?.empresa || "â€”"} {mecInfo?.filial ? `Â· ${mecInfo.filial}` : ""}</div>
             <div><b>Posto:</b> {posto.nome}</div>
             {posto.cnpj && <div className="text-xs text-muted-foreground">CNPJ: {posto.cnpj}</div>}
             {posto.endereco && <div className="text-xs text-muted-foreground">{posto.endereco}</div>}
-            <div className="text-xs text-muted-foreground">Código: {posto.codigo}</div>
+            <div className="text-xs text-muted-foreground">CÃ³digo: {posto.codigo}</div>
             <div className="text-xs text-muted-foreground">{new Date().toLocaleString("pt-BR")}</div>
           </div>
           <Button className="w-full" onClick={() => setCamBomba(true)}>
@@ -665,7 +780,7 @@ export default function AbastecimentoPage() {
               <Input type="number" inputMode="decimal" step="0.001" value={litros} onChange={(e) => setLitros(e.target.value)} />
             </div>
             <div>
-              <Label className="text-xs">Combustível</Label>
+              <Label className="text-xs">CombustÃ­vel</Label>
               <select
                 className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
                 value={combustivel}
@@ -691,7 +806,7 @@ export default function AbastecimentoPage() {
               <Input value={postoNome} onChange={(e) => setPostoNome(e.target.value)} disabled />
             </div>
             <div className="col-span-2">
-              <Label className="text-xs">Observação</Label>
+              <Label className="text-xs">ObservaÃ§Ã£o</Label>
               <Input value={obs} onChange={(e) => setObs(e.target.value)} />
             </div>
           </div>
@@ -703,13 +818,64 @@ export default function AbastecimentoPage() {
       )}
 
       {step === "ok" && (
-        <Card className="space-y-3 p-6 text-center">
+        <Card className="space-y-4 p-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15">
             <Check className="h-7 w-7 text-emerald-600" />
           </div>
-          <div className="text-lg font-bold">Abastecimento registrado</div>
-          <p className="text-sm text-muted-foreground">As fotos e dados foram salvos.</p>
-          <Button onClick={reset} className="w-full">Novo abastecimento</Button>
+          <div className="text-center">
+            <div className="text-lg font-bold">Abastecimento registrado</div>
+            <p className="text-sm text-muted-foreground">As fotos e dados foram salvos. Compartilhe a notinha no grupo e no WhatsApp do posto.</p>
+          </div>
+
+          {receipt && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3 text-left text-sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-semibold uppercase text-muted-foreground">Notinha fiscal operacional</div>
+                  <div className="font-bold">{receipt.postoNome}</div>
+                </div>
+                <div className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600">Salvo</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div><span className="text-muted-foreground">Data</span><br />{receipt.createdAt.toLocaleDateString("pt-BR")}</div>
+                <div><span className="text-muted-foreground">Hora</span><br />{receipt.createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>
+                <div className="col-span-2"><span className="text-muted-foreground">Mecanico</span><br />{receipt.mecanicoNome}</div>
+                <div><span className="text-muted-foreground">Carro</span><br />{receipt.placa || "Nao informado"}</div>
+                <div><span className="text-muted-foreground">KM</span><br />{receipt.km || "Nao informado"}</div>
+                <div><span className="text-muted-foreground">Litros</span><br />{formatDecimal(receipt.litros)} L</div>
+                <div><span className="text-muted-foreground">Valor</span><br />{formatCurrency(receipt.valor)}</div>
+                <div className="col-span-2"><span className="text-muted-foreground">Combustivel</span><br />{receipt.combustivel}</div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <a href={receipt.fotoBombaUrl} target="_blank" rel="noreferrer">
+                  <img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Foto da bomba" />
+                </a>
+                <a href={receipt.fotoPainelUrl} target="_blank" rel="noreferrer">
+                  <img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Foto do painel" />
+                </a>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2">
+            <Button onClick={shareReceipt} className="w-full">
+              <Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha
+            </Button>
+            <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full">
+              <MessageCircle className="mr-2 h-4 w-4" /> Enviar no WhatsApp
+            </Button>
+            {receipt?.postoTelefone && (
+              <Button onClick={() => openWhatsapp(receipt.postoTelefone)} variant="outline" className="w-full">
+                <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp do posto
+              </Button>
+            )}
+            <Button onClick={copyReceipt} variant="outline" className="w-full">
+              <Copy className="mr-2 h-4 w-4" /> Copiar texto da notinha
+            </Button>
+            <Button onClick={reset} variant="ghost" className="w-full">Novo abastecimento</Button>
+          </div>
         </Card>
       )}
 
@@ -727,7 +893,7 @@ export default function AbastecimentoPage() {
         onCapture={onCapturePainel}
         facing="environment"
         title="Foto do painel/KM"
-        hint="Mostre o hodômetro/KM atual"
+        hint="Mostre o hodÃ´metro/KM atual"
       />
     </div>
   );
