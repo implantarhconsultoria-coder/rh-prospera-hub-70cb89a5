@@ -200,15 +200,15 @@ export const entryToRow = (entry: Partial<MonthlyEntry>) => {
 // Reverse mapper: App employee -> Supabase row for update
 export const employeeToRow = (data: Partial<Employee>) => {
   const row: any = {};
-  if (data.companyId !== undefined) row.company_id = data.companyId;
+  if (data.companyId !== undefined) row.empresa_id = data.companyId;
   if (data.registro !== undefined) row.registro = data.registro;
   if (data.matriculaEsocial !== undefined) row.matricula_esocial = data.matriculaEsocial;
   if (data.name !== undefined) row.nome = data.name;
   if (data.cpf !== undefined) row.cpf = data.cpf;
   if (data.rg !== undefined) row.rg = data.rg;
   if (data.cargo !== undefined) row.cargo = data.cargo;
-  if (data.categoria !== undefined) row.categoria = data.categoria;
-  if (data.salarioBase !== undefined) row.salario_base = data.salarioBase;
+  if (data.categoria !== undefined) row.setor = data.categoria;
+  if (data.salarioBase !== undefined) row.salario = data.salarioBase;
   if (data.dataAdmissao !== undefined) row.data_admissao = data.dataAdmissao || null;
   if (data.dataExameMedico !== undefined) row.data_exame_medico = data.dataExameMedico || null;
   if (data.vrAtivo !== undefined) row.vr_ativo = data.vrAtivo;
@@ -219,7 +219,7 @@ export const employeeToRow = (data: Partial<Employee>) => {
   if (data.vtDiario !== undefined) row.vt_diario = data.vtDiario;
   if (data.insalubridadeAtiva !== undefined) row.insalubridade_ativa = data.insalubridadeAtiva;
   if (data.insalubridadeValor !== undefined) row.insalubridade_valor = data.insalubridadeValor;
-  if (data.status !== undefined) row.status = data.status;
+  if (data.status !== undefined) row.ativo = data.status !== 'desligado';
   if (data.telefone !== undefined) row.telefone = data.telefone;
   if (data.celular !== undefined) row.celular = data.celular;
   if (data.email !== undefined) row.email = data.email;
