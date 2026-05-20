@@ -40,7 +40,7 @@ const FuncionariosPage: React.FC = () => {
   const socios = filtered.filter(e => e.categoria === 'socio');
 
   const handleSaveNew = async () => {
-    if (!newEmp.nome.trim()) { toast.error('Nome é obrigatório'); return; }
+    if (!newEmp.nome.trim()) { toast.error('Nome Ã© obrigatÃ³rio'); return; }
     
     // Determine company_id: filial uses its own, admin must have a company selected
     const companyId = isFilial ? filialCompanyId : filterCompany;
@@ -48,19 +48,18 @@ const FuncionariosPage: React.FC = () => {
 
     setSaving(true);
     const { error } = await supabase.from('funcionarios').insert({
-      company_id: companyId,
+      empresa_id: companyId,
       nome: newEmp.nome.trim(),
       cpf: newEmp.cpf,
       cargo: newEmp.cargo,
-      salario_base: Number(newEmp.salario_base) || 0,
-      data_admissao: newEmp.data_admissao || null,
+      salario: Number(newEmp.salario_base) || 0,
       telefone: newEmp.telefone,
       celular: newEmp.celular,
       email: newEmp.email,
       endereco: newEmp.endereco,
       rg: newEmp.rg,
-      status: 'ativo',
-      categoria: 'operacional',
+      ativo: true,
+      setor: 'operacional',
     });
     setSaving(false);
 
@@ -68,7 +67,7 @@ const FuncionariosPage: React.FC = () => {
       toast.error('Erro ao cadastrar: ' + error.message);
       return;
     }
-    toast.success('Funcionário cadastrado com sucesso!');
+    toast.success('FuncionÃ¡rio cadastrado com sucesso!');
     setShowNew(false);
     setNewEmp({ nome: '', cpf: '', cargo: '', salario_base: '', data_admissao: '', telefone: '', celular: '', email: '', endereco: '', rg: '' });
     // Refresh data
@@ -96,7 +95,7 @@ const FuncionariosPage: React.FC = () => {
           {e.status}
         </Badge>
         {e.categoria === 'socio' && (
-          <Badge variant="outline" className="text-[10px] border-accent text-accent">Sócio</Badge>
+          <Badge variant="outline" className="text-[10px] border-accent text-accent">SÃ³cio</Badge>
         )}
       </div>
     </div>
@@ -105,9 +104,9 @@ const FuncionariosPage: React.FC = () => {
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1>
+        <h1 className="text-2xl font-bold font-display text-foreground">FuncionÃ¡rios</h1>
         <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground">
-          <UserPlus className="w-4 h-4 mr-2" /> Novo Funcionário
+          <UserPlus className="w-4 h-4 mr-2" /> Novo FuncionÃ¡rio
         </Button>
       </div>
 
@@ -115,7 +114,7 @@ const FuncionariosPage: React.FC = () => {
       {showNew && (
         <div className="card-premium p-5 space-y-4 border-l-4 border-primary">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-foreground">Cadastrar Novo Funcionário</h2>
+            <h2 className="text-sm font-bold text-foreground">Cadastrar Novo FuncionÃ¡rio</h2>
             <Button variant="ghost" size="icon" onClick={() => setShowNew(false)}><X className="w-4 h-4" /></Button>
           </div>
           {isFilial && (
@@ -124,7 +123,7 @@ const FuncionariosPage: React.FC = () => {
             </p>
           )}
           {!isFilial && !filterCompany && (
-            <p className="text-xs text-warning">⚠ Selecione uma empresa no filtro antes de cadastrar.</p>
+            <p className="text-xs text-warning">âš  Selecione uma empresa no filtro antes de cadastrar.</p>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div><label className="text-xs text-muted-foreground block mb-1">Nome Completo *</label>
@@ -133,11 +132,11 @@ const FuncionariosPage: React.FC = () => {
               <Input value={newEmp.cpf} onChange={e => setNewEmp(p => ({ ...p, cpf: e.target.value }))} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">RG</label>
               <Input value={newEmp.rg} onChange={e => setNewEmp(p => ({ ...p, rg: e.target.value }))} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Cargo / Função</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Cargo / FunÃ§Ã£o</label>
               <Input value={newEmp.cargo} onChange={e => setNewEmp(p => ({ ...p, cargo: e.target.value }))} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Salário Base</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">SalÃ¡rio Base</label>
               <Input type="number" value={newEmp.salario_base} onChange={e => setNewEmp(p => ({ ...p, salario_base: e.target.value }))} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Data Admissão</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Data AdmissÃ£o</label>
               <Input type="date" value={newEmp.data_admissao} onChange={e => setNewEmp(p => ({ ...p, data_admissao: e.target.value }))} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Telefone</label>
               <Input value={newEmp.telefone} onChange={e => setNewEmp(p => ({ ...p, telefone: e.target.value }))} /></div>
@@ -148,7 +147,7 @@ const FuncionariosPage: React.FC = () => {
           </div>
           <div className="flex gap-3">
             <Button onClick={handleSaveNew} disabled={saving} className="gradient-primary text-primary-foreground">
-              <Save className="w-4 h-4 mr-2" /> {saving ? 'Salvando...' : 'Salvar Funcionário'}
+              <Save className="w-4 h-4 mr-2" /> {saving ? 'Salvando...' : 'Salvar FuncionÃ¡rio'}
             </Button>
             <Button variant="outline" onClick={() => setShowNew(false)}>Cancelar</Button>
           </div>
@@ -158,7 +157,7 @@ const FuncionariosPage: React.FC = () => {
       <div className="card-premium p-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar funcionário..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar funcionÃ¡rio..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         {!isFilial && (
           <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)}
@@ -180,7 +179,7 @@ const FuncionariosPage: React.FC = () => {
 
       {socios.length > 0 && (
         <>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mt-6">Sócios / Pró-labore ({socios.length})</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mt-6">SÃ³cios / PrÃ³-labore ({socios.length})</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {socios.map(renderCard)}
           </div>
@@ -189,7 +188,7 @@ const FuncionariosPage: React.FC = () => {
 
       {filtered.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
-          <p>Nenhum funcionário cadastrado ainda.</p>
+          <p>Nenhum funcionÃ¡rio cadastrado ainda.</p>
         </div>
       )}
     </div>
