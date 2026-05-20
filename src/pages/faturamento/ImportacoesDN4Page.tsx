@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { extractPdfText } from "@/lib/pdf";
 
 const fmt = (n: any) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -33,13 +34,13 @@ type Importacao = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  em_andamento: "Processando…",
+  em_andamento: "Processando...",
   aguardando_conferencia: "Lido com sucesso",
-  concluida: "Concluída",
-  pdf_sem_texto: "PDF sem texto legível",
-  tipo_nao_identificado: "Tipo não identificado",
-  sem_registros: "Sem registros válidos",
-  erro: "Erro técnico",
+  concluida: "Concluida",
+  pdf_sem_texto: "PDF sem texto legivel",
+  tipo_nao_identificado: "Tipo nao identificado",
+  sem_registros: "Sem registros validos",
+  erro: "Erro tecnico",
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -55,9 +56,9 @@ const STATUS_COLOR: Record<string, string> = {
 const TIPO_LABEL: Record<string, string> = {
   cliente: "Clientes",
   representante: "Representantes",
-  equipamento: "Equipamentos / Patrimônios",
-  historico: "Histórico de Locação",
-  desconhecido: "Não identificado",
+  equipamento: "Equipamentos / Patrimonios",
+  historico: "Historico de Locacao",
+  desconhecido: "Nao identificado",
 };
 
 const detectarTipoArquivo = (nome: string): string => {
@@ -65,6 +66,62 @@ const detectarTipoArquivo = (nome: string): string => {
   if (ext === 'pdf') return 'pdf';
   if (['xls', 'xlsx', 'csv'].includes(ext)) return ext === 'csv' ? 'csv' : 'excel';
   return 'pdf';
+};
+
+const parseBrNumber = (value: string | null | undefined) => {
+  if (!value) return null;
+  const normalized = value.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseBrDate = (value: string | null | undefined) => {
+  if (!value) return null;
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{2}|\d{4})$/);
+  if (!match) return null;
+  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+  return `${year}-${match[2]}-${match[1]}`;
+};
+
+const cleanText = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const parseHistoricoLocacaoLocal = (text: string) => {
+  const normalized = cleanText(text);
+  const blocks = normalized.split(/Patrim[oô]nio:/i).slice(1);
+  const rows: any[] = [];
+
+  for (const block of blocks) {
+    const patrimonioMatch = block.match(/\b(\d{5,8})\b/);
+    const patrimonio = patrimonioMatch?.[1] || null;
+    const equipamentoDescricao = cleanText(block.slice(0, Math.min(block.length, 500))).replace(/^Tipo do Equipamento:/i, "");
+
+    const rowRegex = /(\d{3,8})\s+(\d{1,8})\s+(\d{1,4})\s+(.+?)\s+(LMT|TOPAC|MATRIZ|PRAIA\s+GRANDE|GOI[ÂA]NIA|GOIANIA)\s+(\d{2}\/\d{2}\/\d{2,4})\s*[àa]\s*(\d{2}\/\d{2}\/\d{2,4})\s+[\d.,]+\s+[\d.,]+\s*\/\s*([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+(\d{1,6})\s+(\d{1,12})/gi;
+    let match: RegExpExecArray | null;
+
+    while ((match = rowRegex.exec(block))) {
+      rows.push({
+        numero_os: match[1],
+        pedido: match[2],
+        item: match[3],
+        cliente_nome: cleanText(match[4]),
+        filial: cleanText(match[5]),
+        data_inicio: parseBrDate(match[6]),
+        data_fim: parseBrDate(match[7]),
+        periodo_texto: `${match[6]} a ${match[7]}`,
+        valor_pedido_periodo: parseBrNumber(match[8]),
+        valor_diaria_periodo: parseBrNumber(match[9]),
+        valor_faturado_periodo: parseBrNumber(match[10]),
+        quantidade: parseBrNumber(match[11]),
+        numero_nf: match[12],
+        patrimonio,
+        descricao_equipamento: equipamentoDescricao || null,
+        status: match[1] && patrimonio ? "pendente_conferencia" : "erro_leitura",
+        mensagem_erro: match[1] && patrimonio ? null : "OS ou patrimonio nao identificado",
+      });
+    }
+  }
+
+  return rows;
 };
 
 const ImportacoesDN4Page: React.FC = () => {
@@ -78,6 +135,73 @@ const ImportacoesDN4Page: React.FC = () => {
   const isTabelaAusente = (error: any) => {
     const msg = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`;
     return error?.code === "PGRST205" || msg.includes("importacoes_dn4") || msg.includes("schema cache");
+  };
+
+  const processarPdfLocal = async (file: File, importacaoId: string, tipoArquivo: string, tipoPreferido?: string | null) => {
+    if (tipoArquivo !== "pdf") throw new Error("Fallback local disponivel apenas para PDF");
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const texto = await extractPdfText(bytes);
+    const textoNormalizado = texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const tipo =
+      tipoPreferido && tipoPreferido !== "auto"
+        ? tipoPreferido
+        : textoNormalizado.includes("HISTORICO DE LOCACAO")
+          ? "historico"
+          : "desconhecido";
+
+    if (tipo !== "historico") {
+      await supabase
+        .from("importacoes_dn4" as any)
+        .update({
+          tipo,
+          status: "tipo_nao_identificado",
+          total_lidos: 0,
+          total_pendentes: 0,
+          total_erros: 0,
+          mensagem: "Edge Function indisponivel e fallback local nao reconheceu este layout.",
+          texto_extraido: texto.slice(0, 4000),
+          finalizado_em: new Date().toISOString(),
+        } as any)
+        .eq("id", importacaoId);
+      return { status: "tipo_nao_identificado", total_lidos: 0, total_pendentes: 0, total_erros: 0 };
+    }
+
+    const registros = parseHistoricoLocacaoLocal(texto);
+    await supabase.from("staging_historico_locacao_dn4" as any).delete().eq("importacao_id", importacaoId);
+
+    let errosGravacao = 0;
+    for (let i = 0; i < registros.length; i += 200) {
+      const chunk = registros.slice(i, i + 200).map((registro) => ({
+        ...registro,
+        importacao_id: importacaoId,
+      }));
+      const { error } = await supabase.from("staging_historico_locacao_dn4" as any).insert(chunk as any);
+      if (error) {
+        console.error("fallback DN4 historico insert", error);
+        errosGravacao += chunk.length;
+      }
+    }
+
+    const totalErros = registros.filter((registro) => registro.status === "erro_leitura").length + errosGravacao;
+    const totalPendentes = Math.max(registros.length - totalErros, 0);
+    const status = registros.length > 0 && totalPendentes > 0 ? "aguardando_conferencia" : "sem_registros";
+
+    await supabase
+      .from("importacoes_dn4" as any)
+      .update({
+        tipo: "historico",
+        status,
+        total_lidos: registros.length,
+        total_pendentes: totalPendentes,
+        total_erros: totalErros,
+        mensagem: `Processado localmente porque a Edge Function nao respondeu. ${registros.length} registro(s) extraido(s) do historico DN4.`,
+        texto_extraido: texto.slice(0, 4000),
+        finalizado_em: new Date().toISOString(),
+      } as any)
+      .eq("id", importacaoId);
+
+    return { status, total_lidos: registros.length, total_pendentes: totalPendentes, total_erros: totalErros };
   };
 
   const carregar = useCallback(async () => {
@@ -173,7 +297,7 @@ const ImportacoesDN4Page: React.FC = () => {
           .single();
 
         if (insErr || !imp) {
-          toast.error(insErr?.message || "Erro ao criar importação");
+          toast.error(insErr?.message || "Erro ao criar importacao");
           continue;
         }
 
@@ -189,19 +313,44 @@ const ImportacoesDN4Page: React.FC = () => {
         });
 
         if (fnErr) {
-          toast.error(`Importação ${file.name}: ${fnErr.message}`);
-          await supabase
-            .from("importacoes_dn4" as any)
-            .update({ status: "erro", mensagem: fnErr.message } as any)
-            .eq("id", (imp as any).id);
+          if (tipoArquivo === "pdf") {
+            try {
+              const fallback = await processarPdfLocal(
+                file,
+                (imp as any).id,
+                tipoArquivo,
+                tipoForcado === "auto" ? null : tipoForcado,
+              );
+
+              if (fallback.status === "aguardando_conferencia") {
+                toast.success(
+                  `${file.name}: ${fallback.total_lidos || 0} registro(s) lido(s) pelo processamento local`,
+                );
+              } else {
+                toast.warning(`${file.name}: funcao indisponivel; processamento local nao encontrou registros`);
+              }
+            } catch (fallbackError: any) {
+              const msg = fallbackError?.message || fnErr.message || "Falha no processamento da importacao";
+              toast.error(`Importacao ${file.name}: ${msg}`);
+              await supabase
+                .from("importacoes_dn4" as any)
+                .update({ status: "erro", mensagem: msg } as any)
+                .eq("id", (imp as any).id);
+            }
+          } else {
+            await supabase
+              .from("importacoes_dn4" as any)
+              .update({ status: "erro", mensagem: fnErr.message } as any)
+              .eq("id", (imp as any).id);
+          }
         } else {
           const detalhes = parseData as { total_lidos?: number; status?: string; total_erros?: number } | null;
           if (detalhes?.status === "aguardando_conferencia") {
             toast.success(`${file.name}: ${detalhes.total_lidos || 0} registro(s) lido(s)`);
           } else if (detalhes?.status === "pdf_sem_texto") {
-            toast.warning(`${file.name}: PDF sem texto legível`);
+            toast.warning(`${file.name}: PDF sem texto legivel`);
           } else if (detalhes?.status === "tipo_nao_identificado") {
-            toast.warning(`${file.name}: tipo não identificado automaticamente`);
+            toast.warning(`${file.name}: tipo nao identificado automaticamente`);
           } else if (detalhes?.status === "sem_registros") {
             toast.warning(`${file.name}: nenhum registro encontrado no layout atual`);
           } else {
@@ -223,16 +372,16 @@ const ImportacoesDN4Page: React.FC = () => {
 
   const verErroImportacao = (i: any) => {
     const msg =
-      i.mensagem || i.mensagem_erro || i.erro || i.status || "Nenhum erro detalhado foi salvo para esta importação.";
+      i.mensagem || i.mensagem_erro || i.erro || i.status || "Nenhum erro detalhado foi salvo para esta importacao.";
 
-    alert(`Erro da importação:\n\n${msg}`);
+    alert(`Erro da importacao:\n\n${msg}`);
   };
 
   const baixarArquivo = (i: any) => {
     const url = i.arquivo_url || i.url || i.file_url || i.arquivo_path;
 
     if (!url) {
-      toast.error("Arquivo original não encontrado.");
+      toast.error("Arquivo original nao encontrado.");
       return;
     }
 
@@ -240,7 +389,7 @@ const ImportacoesDN4Page: React.FC = () => {
   };
 
   const excluirImportacao = async (i: any) => {
-    const confirmar = window.confirm(`Tem certeza que deseja excluir a importação "${i.arquivo}"?`);
+    const confirmar = window.confirm(`Tem certeza que deseja excluir a importacao "${i.arquivo}"?`);
 
     if (!confirmar) return;
 
@@ -249,16 +398,16 @@ const ImportacoesDN4Page: React.FC = () => {
       .update({
         excluido: true,
         excluido_em: new Date().toISOString(),
-        motivo_exclusao: "Excluído manualmente pela tela de importação",
+        motivo_exclusao: "Excluido manualmente pela tela de importacao",
       })
       .eq("id", i.id);
 
     if (error) {
-      toast.error(error.message || "Erro ao excluir importação.");
+      toast.error(error.message || "Erro ao excluir importacao.");
       return;
     }
 
-    toast.success("Importação excluída.");
+    toast.success("Importacao excluida.");
     await carregar();
   };
 
@@ -274,11 +423,21 @@ const ImportacoesDN4Page: React.FC = () => {
     });
 
     if (error) {
-      toast.error(error.message || "Erro ao reprocessar importação.");
+      toast.error(
+        "A funcao de processamento ainda nao respondeu. Para PDF DN4, envie o arquivo novamente para usar o processamento local.",
+      );
+      await supabase
+        .from("importacoes_dn4" as any)
+        .update({
+          status: "erro",
+          mensagem: error.message || "Falha ao chamar a Edge Function no reprocessamento.",
+        } as any)
+        .eq("id", i.id);
+      await carregar();
       return;
     }
 
-    toast.success("Importação enviada para reprocessamento.");
+    toast.success("Importacao enviada para reprocessamento.");
     await carregar();
   };
   return (
@@ -286,10 +445,10 @@ const ImportacoesDN4Page: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileText className="w-6 h-6 text-primary" /> Importação de Dados
+            <FileText className="w-6 h-6 text-primary" /> Importacao de Dados
           </h1>
           <p className="text-sm text-muted-foreground">
-            Suba os PDFs do sistema anterior. Os dados ficam em conferência antes de gravar na base oficial.
+            Suba os PDFs do sistema anterior. Os dados ficam em conferencia antes de gravar na base oficial.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -302,7 +461,7 @@ const ImportacoesDN4Page: React.FC = () => {
             <option value="cliente">Clientes</option>
             <option value="representante">Representantes</option>
             <option value="equipamento">Equipamentos</option>
-            <option value="historico">Histórico de Locação</option>
+            <option value="historico">Historico de Locacao</option>
           </select>
           <label className="inline-flex">
             <input
@@ -316,8 +475,8 @@ accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-offi
             />
             <Button asChild disabled={uploading || baseDn4Pendente}>
               <span className="cursor-pointer">
-                {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />} {" "}
-                Nova importação
+                {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}{" "}
+                Nova importacao
               </span>
             </Button>
           </label>
@@ -328,7 +487,7 @@ accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-offi
             variant="outline"
             onClick={async () => {
               const ok = window.confirm(
-                "Mesclar registros duplicados nas tabelas oficiais? Clientes sem CPF/CNPJ com mesmo nome+cidade+UF e representantes com mesmo nome+CPF serão unificados, mantendo o registro mais completo.",
+                "Mesclar registros duplicados nas tabelas oficiais? Clientes sem CPF/CNPJ com mesmo nome+cidade+UF e representantes com mesmo nome+CPF serao unificados, mantendo o registro mais completo.",
               );
               if (!ok) return;
               const { data, error } = await supabase.rpc("dn4_limpar_duplicados_oficial" as any);
@@ -375,13 +534,13 @@ accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-offi
             {loading ? (
               <tr>
                 <td colSpan={9} className="p-6 text-center text-muted-foreground">
-                  Carregando…
+                  Carregando...
                 </td>
               </tr>
             ) : imports.length === 0 ? (
               <tr>
                 <td colSpan={9} className="p-6 text-center text-muted-foreground">
-                  Nenhuma importação ainda. Clique em <strong>Nova importação</strong>.
+                  Nenhuma importacao ainda. Clique em <strong>Nova importacao</strong>.
                 </td>
               </tr>
             ) : (
@@ -515,23 +674,23 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
     switch (tipo) {
       case "cliente":
         return [
-          ["codigo_dn4", "Código"],
-          ["nome_razao_social", "Razão Social"],
+          ["codigo_dn4", "Codigo"],
+          ["nome_razao_social", "Razao Social"],
           ["cpf_cnpj", "CPF/CNPJ"],
           ["cidade", "Cidade"],
           ["uf", "UF"],
         ];
       case "equipamento":
         return [
-          ["codigo_equipamento", "Código"],
-          ["numero_patrimonio", "Patrimônio"],
-          ["descricao", "Descrição"],
-          ["situacao", "Situação"],
+          ["codigo_equipamento", "Codigo"],
+          ["numero_patrimonio", "Patrimonio"],
+          ["descricao", "Descricao"],
+          ["situacao", "Situacao"],
           ["valor_compra", "V. Compra"],
         ];
       case "representante":
         return [
-          ["codigo_dn4", "Código"],
+          ["codigo_dn4", "Codigo"],
           ["nome", "Nome"],
           ["cpf_cnpj", "CPF/CNPJ"],
           ["email", "E-mail"],
@@ -541,9 +700,9 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
         return [
           ["numero_os", "OS"],
           ["pedido", "Pedido"],
-          ["patrimonio", "Patrimônio"],
-          ["periodo_texto", "Período"],
-          ["valor_diaria_periodo", "V. Diária"],
+          ["patrimonio", "Patrimonio"],
+          ["periodo_texto", "Periodo"],
+          ["valor_diaria_periodo", "V. Diaria"],
           ["valor_faturado_periodo", "V. Faturado"],
         ];
       default:
@@ -561,7 +720,7 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
           <div>
             <div className="font-semibold">{importacao.arquivo}</div>
             <div className="text-xs text-muted-foreground">
-              {TIPO_LABEL[tipo]} • {STATUS_LABEL[importacao.status]}
+              {TIPO_LABEL[tipo]} - {STATUS_LABEL[importacao.status]}
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -588,7 +747,7 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
                 )
               }
             >
-              <CheckCircle2 className="w-4 h-4 mr-1" /> Confirmar todos válidos
+              <CheckCircle2 className="w-4 h-4 mr-1" /> Confirmar todos validos
             </Button>
             <Button variant="ghost" onClick={onClose}>
               Fechar
@@ -596,7 +755,6 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
           </div>
         </header>
 
-        {/* Painel de detalhes / reprocessar */}
         <div className="px-4 py-3 border-b border-border bg-muted/10 space-y-2">
           {importacao.mensagem && (
             <div className={`text-sm ${STATUS_COLOR[importacao.status] || ""}`}>
@@ -610,7 +768,7 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
           {importacao.texto_extraido && (
             <details className="text-xs">
               <summary className="cursor-pointer text-muted-foreground">
-                Ver prévia do texto extraído ({importacao.texto_extraido.length} chars)
+                Ver previa do texto extraido ({importacao.texto_extraido.length} chars)
               </summary>
               <pre className="mt-2 p-2 bg-muted/30 rounded max-h-48 overflow-auto whitespace-pre-wrap">
                 {importacao.texto_extraido}
@@ -667,14 +825,14 @@ const ConferenciaDrawer: React.FC<{ importacao: Importacao; onClose: () => void 
                   <tr key={r.id} className="border-t border-border">
                     {colunas.map(([k]) => (
                       <td key={k} className="p-2 text-xs">
-                        {typeof r[k] === "number" && k.startsWith("valor") ? fmt(r[k]) : (r[k] ?? "—")}
+                        {typeof r[k] === "number" && k.startsWith("valor") ? fmt(r[k]) : (r[k] ?? "-")}
                       </td>
                     ))}
                     <td className="p-2 text-xs">
-                      {r.status === "confirmado" && <span className="text-success">✓ confirmado</span>}
+                      {r.status === "confirmado" && <span className="text-success">confirmado</span>}
                       {r.status === "pendente_conferencia" && (
                         <span className="text-warning" title={r.mensagem_erro || ""}>
-                          pendente {r.mensagem_erro ? `· ${r.mensagem_erro}` : ""}
+                          pendente {r.mensagem_erro ? `- ${r.mensagem_erro}` : ""}
                         </span>
                       )}
                       {r.status === "duplicado_ignorado" && (
@@ -739,7 +897,7 @@ const ReprocessarBox: React.FC<{ importacao: Importacao; onDone: () => void }> =
           tipo_forcado: tipo === "auto" ? null : tipo,
         },
       });
-      if (error) toast.error(error.message);
+      if (error) toast.error("A funcao de processamento ainda nao respondeu. Envie o PDF novamente para usar o processamento local.");
       else {
         const detalhes = data as { total_lidos?: number; status?: string } | null;
         if (detalhes?.status === "aguardando_conferencia")
@@ -761,8 +919,8 @@ const ReprocessarBox: React.FC<{ importacao: Importacao; onDone: () => void }> =
         <option value="auto">Detectar automaticamente</option>
         <option value="cliente">Clientes</option>
         <option value="representante">Representantes</option>
-        <option value="equipamento">Equipamentos / Patrimônios</option>
-        <option value="historico">Histórico de Locação</option>
+        <option value="equipamento">Equipamentos / Patrimonios</option>
+        <option value="historico">Historico de Locacao</option>
       </select>
       <Button size="sm" variant="outline" onClick={reprocessar} disabled={busy}>
         {busy ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />} Reprocessar
