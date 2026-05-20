@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { Building2, MapPin, Users, ChevronRight, ArrowLeft, Search } from 'lucide-react';
+import { Building2, MapPin, Users, ChevronRight, ArrowLeft, Search, Plus, X, Save } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { formatCurrency } from '@/lib/calculations';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const companyOrder = ['topac-matriz', 'topac-pg', 'topac-gyn', 'lmt', 'alqui'];
 
@@ -14,6 +16,36 @@ const EmpresasPage: React.FC = () => {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState('');
   const [search, setSearch] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [savingCompany, setSavingCompany] = useState(false);
+  const [newCompany, setNewCompany] = useState({
+    nome: '',
+    cnpj: '',
+    cidade: '',
+    estado: '',
+    tipo: 'Matriz',
+  });
+
+  const saveCompany = async () => {
+    if (!newCompany.nome.trim()) { toast.error('Informe a razao social/nome da empresa'); return; }
+    setSavingCompany(true);
+    const { error } = await supabase.from('empresas').insert({
+      nome: newCompany.nome.trim(),
+      cnpj: newCompany.cnpj.trim(),
+      cidade: newCompany.cidade.trim(),
+      estado: newCompany.estado.trim(),
+      tipo: newCompany.tipo.trim(),
+      ativa: true,
+      status: 'ativa',
+      observacoes: newCompany.tipo.trim(),
+    } as any);
+    setSavingCompany(false);
+    if (error) { toast.error('Erro ao cadastrar empresa: ' + error.message); return; }
+    toast.success('Empresa cadastrada');
+    setShowNew(false);
+    setNewCompany({ nome: '', cnpj: '', cidade: '', estado: '', tipo: 'Matriz' });
+    window.location.reload();
+  };
 
   const orderedCompanies = [...companies].sort((a, b) => {
     const ai = companyOrder.indexOf(a.codigo || a.id);
@@ -26,7 +58,7 @@ const EmpresasPage: React.FC = () => {
     const emps = employees.filter(e => e.companyId === selected.id);
     const ativos = emps.filter(e => e.status === 'ativo');
     const afastados = emps.filter(e => e.status === 'afastado');
-    const ferias = emps.filter(e => e.status === 'fÃƒÂ©rias' || e.status === 'fÃ©rias');
+    const ferias = emps.filter(e => e.status === 'fÃƒÂ©rias' || e.status === 'férias');
     const desligados = emps.filter(e => e.status === 'desligado');
     const totalFolha = ativos.reduce((s, e) => s + e.salarioBase, 0);
     const q = search.trim().toLowerCase();
@@ -135,7 +167,48 @@ const EmpresasPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <h1 className="text-2xl font-bold font-display text-foreground">Empresas</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold font-display text-foreground">Empresas</h1>
+        <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground">
+          <Plus className="w-4 h-4 mr-2" /> Nova Empresa
+        </Button>
+      </div>
+      {showNew && (
+        <div className="card-premium p-5 space-y-4 border-l-4 border-primary">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-foreground">Cadastrar Empresa</h2>
+            <Button variant="ghost" size="icon" onClick={() => setShowNew(false)}><X className="w-4 h-4" /></Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div className="md:col-span-2">
+              <label className="text-xs text-muted-foreground block mb-1">Razao Social / Nome *</label>
+              <Input value={newCompany.nome} onChange={e => setNewCompany(p => ({ ...p, nome: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">CNPJ</label>
+              <Input value={newCompany.cnpj} onChange={e => setNewCompany(p => ({ ...p, cnpj: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Cidade</label>
+              <Input value={newCompany.cidade} onChange={e => setNewCompany(p => ({ ...p, cidade: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">UF</label>
+              <Input value={newCompany.estado} onChange={e => setNewCompany(p => ({ ...p, estado: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Tipo</label>
+              <Input value={newCompany.tipo} onChange={e => setNewCompany(p => ({ ...p, tipo: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <Button onClick={saveCompany} disabled={savingCompany} className="gradient-primary text-primary-foreground">
+              <Save className="w-4 h-4 mr-2" /> {savingCompany ? 'Salvando...' : 'Salvar Empresa'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowNew(false)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {orderedCompanies.map(c => {
           const activeCount = employees.filter(e => e.companyId === c.id && e.status === 'ativo').length;
