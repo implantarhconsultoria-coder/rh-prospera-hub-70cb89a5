@@ -13,6 +13,14 @@ export { useApp };
 let deliveryCounter = 0;
 let reportCounter = 0;
 
+const isMissingSchema = (error: any) => {
+  const msg = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return error?.code === 'PGRST205' ||
+    msg.includes('schema cache') ||
+    msg.includes('could not find the table') ||
+    msg.includes('does not exist');
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,7 +34,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [benefitReports, setBenefitReports] = useState<BenefitReport[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  // ref sempre com a versão mais nova das entries (evita closure stale em updateEntry)
+  // ref sempre com a versÃ£o mais nova das entries (evita closure stale em updateEntry)
   const entriesRef = useRef<MonthlyEntry[]>([]);
   useEffect(() => { entriesRef.current = entries; }, [entries]);
 
@@ -56,16 +64,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setDataLoading(true);
     try {
-      const [companiesRes, employeesRes, entriesRes] = await Promise.all([
+      const [companiesRes, employeesRes] = await Promise.all([
         supabase.from('empresas').select('*').order('nome'),
         supabase.from('funcionarios').select('*').order('nome'),
-        // Filtra entries marcados como apagados
-        supabase.from('lancamentos_mensais').select('*').is('apagado_em', null),
       ]);
 
-      if (companiesRes.data) setCompanies(companiesRes.data.map(mapCompany));
-      if (employeesRes.data) setEmployees(employeesRes.data.map(mapEmployee));
-      if (entriesRes.data) setEntries(entriesRes.data.map(mapEntry));
+      if (companiesRes.error) console.error('Erro ao carregar empresas:', companiesRes.error);
+      if (employeesRes.error) console.error('Erro ao carregar funcionarios:', employeesRes.error);
+
+      setCompanies((companiesRes.data || []).map(mapCompany));
+      setEmployees((employeesRes.data || []).map(mapEmployee));
+
+      const entriesRes = await supabase
+        .from('lancamentos_mensais')
+        .select('*')
+        .is('apagado_em', null);
+
+      if (entriesRes.error) {
+        if (isMissingSchema(entriesRes.error)) {
+          setEntries([]);
+        } else {
+          console.error('Erro ao carregar lancamentos mensais:', entriesRes.error);
+        }
+      } else {
+        setEntries((entriesRes.data || []).map(mapEntry));
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -91,8 +114,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   /**
-   * Garante que existem lançamentos para todos os funcionários ativos da empresa/competência.
-   * Usa lock para impedir corrida quando a página chama duas vezes em sequência.
+   * Garante que existem lanÃ§amentos para todos os funcionÃ¡rios ativos da empresa/competÃªncia.
+   * Usa lock para impedir corrida quando a pÃ¡gina chama duas vezes em sequÃªncia.
    */
   const getOrCreateEntries = useCallback((companyId: string, competencia: string): MonthlyEntry[] => {
     const lockKey = `${companyId}|${competencia}`;
@@ -139,15 +162,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(({ data, error }) => {
         creatingRef.current.delete(lockKey);
         if (error) {
-          console.error('Erro ao criar lançamentos:', error);
+          console.error('Erro ao criar lanÃ§amentos:', error);
           return;
         }
         if (data) {
           setEntries(prev => {
-            // Remove apenas os otimistas SEM id desta empresa/competência
+            // Remove apenas os otimistas SEM id desta empresa/competÃªncia
             const limpa = prev.filter(e => !(e.companyId === companyId && e.competencia === competencia && !e.id));
             const novos = data.map(mapEntry);
-            // Mantém quem já existia (com id) e adiciona os novos
+            // MantÃ©m quem jÃ¡ existia (com id) e adiciona os novos
             return [...limpa.filter(e => !novos.some(n => n.id === e.id)), ...novos];
           });
         }
@@ -159,9 +182,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [employees]);
 
   /**
-   * updateEntry — corrigido para:
-   * - sempre ler entry atual da REF (não da closure)
-   * - persistir SEMPRE que houver id; sem id, agendar persistência depois que o insert criar
+   * updateEntry â€” corrigido para:
+   * - sempre ler entry atual da REF (nÃ£o da closure)
+   * - persistir SEMPRE que houver id; sem id, agendar persistÃªncia depois que o insert criar
    */
   const updateEntry = useCallback((employeeId: string, competencia: string, data: Partial<MonthlyEntry>) => {
     setEntries(prev => prev.map(e =>
@@ -180,7 +203,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (error) console.error('updateEntry falhou:', error);
       });
     } else {
-      // Não tem id ainda — faz upsert por chave (funcionario_id, competencia)
+      // NÃ£o tem id ainda â€” faz upsert por chave (funcionario_id, competencia)
       const fullRow = {
         ...entryToRow({ employeeId, competencia, ...data }),
       };
@@ -189,7 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .select()
         .single()
         .then(({ data: saved, error }) => {
-          if (error) { console.error('upsert lançamento falhou:', error); return; }
+          if (error) { console.error('upsert lanÃ§amento falhou:', error); return; }
           if (saved) {
             setEntries(prev => prev.map(e =>
               e.employeeId === employeeId && e.competencia === competencia
@@ -202,8 +225,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   /**
-   * deleteEntry — soft-delete: marca apagado_em + zera variáveis para sair do cálculo,
-   * mantendo histórico no banco para auditoria.
+   * deleteEntry â€” soft-delete: marca apagado_em + zera variÃ¡veis para sair do cÃ¡lculo,
+   * mantendo histÃ³rico no banco para auditoria.
    */
   const deleteEntry = useCallback(async (employeeId: string, competencia: string): Promise<void> => {
     const entry = entriesRef.current.find(
