@@ -3,6 +3,7 @@ import { type Company, type Employee, type MonthlyEntry, type Fechamento, mapCom
 import type { Delivery, BenefitReport } from '@/data/deliveries';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import { AppContext, defaultConfig, type AppConfig } from '@/context/AppContextValue';
 import { useApp } from '@/hooks/useApp';
@@ -109,9 +110,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
     const row = employeeToRow(data);
     if (Object.keys(row).length > 0) {
-      await supabase.from('funcionarios').update(row).eq('id', id);
+      const { data: saved, error } = await supabase
+        .from('funcionarios')
+        .update(row)
+        .eq('id', id)
+        .select('*')
+        .single();
+      if (error) {
+        console.error('Erro ao salvar funcionario:', error);
+        toast.error('Erro ao salvar funcionario: ' + error.message);
+        await fetchData();
+        return { ok: false, error };
+      }
+      if (saved) {
+        setEmployees(prev => prev.map(e => e.id === id ? mapEmployee(saved) : e));
+      }
     }
-  }, []);
+    return { ok: true };
+  }, [fetchData]);
 
   /**
    * Garante que existem lanÃ§amentos para todos os funcionÃ¡rios ativos da empresa/competÃªncia.
