@@ -32,7 +32,7 @@ export interface Employee {
   vtDiario: number;
   insalubridadeAtiva: boolean;
   insalubridadeValor: number;
-  status: 'ativo' | 'afastado' | 'férias' | 'desligado';
+  status: 'ativo' | 'afastado' | 'fÃ©rias' | 'desligado';
   telefone: string;
   celular: string;
   email: string;
@@ -82,27 +82,45 @@ export interface Fechamento {
 }
 
 // Mappers: Supabase row -> App types
+const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
+
+const inferCompanyCode = (row: any): string => {
+  if (row.codigo) return row.codigo;
+  const cnpj = onlyDigits(row.cnpj);
+  const nome = String(row.nome || '').toLowerCase();
+  const cidade = String(row.cidade || '').toLowerCase();
+
+  if (cnpj === '07291648000103') return 'topac-matriz';
+  if (cnpj === '07291648000294') return 'topac-pg';
+  if (cnpj === '07291648000375') return 'topac-gyn';
+  if (cnpj === '214967711000100' || cnpj === '21967711000100' || nome.includes('lmt')) return 'lmt';
+  if (cnpj === '14464586000150' || nome.includes('alqui')) return 'alqui';
+  if (nome.includes('praia') || cidade.includes('praia')) return 'topac-pg';
+  if (nome.includes('goian') || cidade.includes('goian')) return 'topac-gyn';
+  return row.id;
+};
+
 export const mapCompany = (row: any): Company => ({
   id: row.id,
-  codigo: row.codigo,
+  codigo: inferCompanyCode(row),
   name: row.nome,
   cnpj: row.cnpj,
   city: row.cidade,
-  status: row.status,
-  notes: row.observacoes,
+  status: row.status || (row.ativa === false ? 'inativa' : 'ativa'),
+  notes: row.observacoes || row.tipo || '',
 });
 
 export const mapEmployee = (row: any): Employee => ({
   id: row.id,
-  companyId: row.company_id,
+  companyId: row.company_id || row.empresa_id,
   registro: row.registro || '',
   matriculaEsocial: row.matricula_esocial || '',
   name: row.nome,
   cpf: row.cpf || '',
   rg: row.rg || '',
   cargo: row.cargo || '',
-  categoria: row.categoria || 'operacional',
-  salarioBase: Number(row.salario_base) || 0,
+  categoria: row.categoria || row.setor || 'operacional',
+  salarioBase: Number(row.salario_base ?? row.salario) || 0,
   dataAdmissao: row.data_admissao || '',
   dataExameMedico: row.data_exame_medico || '',
   vrAtivo: row.vr_ativo ?? false,
@@ -113,7 +131,7 @@ export const mapEmployee = (row: any): Employee => ({
   vtDiario: Number(row.vt_diario) || 0,
   insalubridadeAtiva: row.insalubridade_ativa ?? false,
   insalubridadeValor: Number(row.insalubridade_valor) || 0,
-  status: row.status || 'ativo',
+  status: row.status || (row.ativo === false ? 'desligado' : 'ativo'),
   telefone: row.telefone || '',
   celular: row.celular || '',
   email: row.email || '',
