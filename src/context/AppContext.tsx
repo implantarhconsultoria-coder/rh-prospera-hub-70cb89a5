@@ -35,7 +35,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [benefitReports, setBenefitReports] = useState<BenefitReport[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  // ref sempre com a versÃ£o mais nova das entries (evita closure stale em updateEntry)
+  // ref sempre com a versao mais nova das entries (evita closure stale em updateEntry)
   const entriesRef = useRef<MonthlyEntry[]>([]);
   useEffect(() => { entriesRef.current = entries; }, [entries]);
 
@@ -130,8 +130,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [fetchData]);
 
   /**
-   * Garante que existem lanÃ§amentos para todos os funcionÃ¡rios ativos da empresa/competÃªncia.
-   * Usa lock para impedir corrida quando a pÃ¡gina chama duas vezes em sequÃªncia.
+   * Garante que existem lancamentos para todos os funcionarios ativos da empresa/competencia.
+   * Usa lock para impedir corrida quando a pagina chama duas vezes em sequencia.
    */
   const getOrCreateEntries = useCallback((companyId: string, competencia: string): MonthlyEntry[] => {
     const lockKey = `${companyId}|${competencia}`;
@@ -178,15 +178,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(({ data, error }) => {
         creatingRef.current.delete(lockKey);
         if (error) {
-          console.error('Erro ao criar lanÃ§amentos:', error);
+          console.error('Erro ao criar lancamentos:', error);
           return;
         }
         if (data) {
           setEntries(prev => {
-            // Remove apenas os otimistas SEM id desta empresa/competÃªncia
+            // Remove apenas os otimistas SEM id desta empresa/competencia
             const limpa = prev.filter(e => !(e.companyId === companyId && e.competencia === competencia && !e.id));
             const novos = data.map(mapEntry);
-            // MantÃ©m quem jÃ¡ existia (com id) e adiciona os novos
+            // Mantem quem ja existia (com id) e adiciona os novos
             return [...limpa.filter(e => !novos.some(n => n.id === e.id)), ...novos];
           });
         }
@@ -198,9 +198,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [employees]);
 
   /**
-   * updateEntry â€” corrigido para:
-   * - sempre ler entry atual da REF (nÃ£o da closure)
-   * - persistir SEMPRE que houver id; sem id, agendar persistÃªncia depois que o insert criar
+   * updateEntry - corrigido para:
+   * - sempre ler entry atual da REF (nao da closure)
+   * - persistir SEMPRE que houver id; sem id, agendar persistencia depois que o insert criar
    */
   const updateEntry = useCallback((employeeId: string, competencia: string, data: Partial<MonthlyEntry>) => {
     setEntries(prev => prev.map(e =>
@@ -219,7 +219,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (error) console.error('updateEntry falhou:', error);
       });
     } else {
-      // NÃ£o tem id ainda â€” faz upsert por chave (funcionario_id, competencia)
+      // Nao tem id ainda - faz upsert por chave (funcionario_id, competencia)
       const fullRow = {
         ...entryToRow({ employeeId, competencia, ...data }),
       };
@@ -228,7 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .select()
         .single()
         .then(({ data: saved, error }) => {
-          if (error) { console.error('upsert lanÃ§amento falhou:', error); return; }
+          if (error) { console.error('upsert lancamento falhou:', error); return; }
           if (saved) {
             setEntries(prev => prev.map(e =>
               e.employeeId === employeeId && e.competencia === competencia
@@ -241,8 +241,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   /**
-   * deleteEntry â€” soft-delete: marca apagado_em + zera variÃ¡veis para sair do cÃ¡lculo,
-   * mantendo histÃ³rico no banco para auditoria.
+   * deleteEntry - soft-delete: marca apagado_em + zera variaveis para sair do calculo,
+   * mantendo historico no banco para auditoria.
    */
   const deleteEntry = useCallback(async (employeeId: string, competencia: string): Promise<void> => {
     const entry = entriesRef.current.find(
@@ -315,6 +315,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       isAuthenticated: !!session, session, loading, userRole, userRoles, roleLoading, logout,
+      refreshData: fetchData,
       companies, employees, updateEmployee,
       entries, setEntries, getOrCreateEntries, updateEntry,
       deleteEntry, refreshEntries,
