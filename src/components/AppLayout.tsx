@@ -11,12 +11,16 @@ import { Loader2, Search, RefreshCw, Circle } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
+import DirectorBlocked from '@/components/DirectorBlocked';
+import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
+import { useLocation } from 'react-router-dom';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [layoutMode, setLayoutMode] = useState(() => localStorage.getItem('topac_layout_mode') || 'premium');
-  const { session, userRole, roleLoading } = useApp();
+  const { session, userRole, userRoles, roleLoading } = useApp();
   const isMobile = useIsMobile();
+  const location = useLocation();
 
   useActivityTracker(session);
 
@@ -40,8 +44,10 @@ const AppLayout: React.FC = () => {
 
   if (!userRole) return <AguardandoAcesso />;
 
-  // Only admin can access central panel
-  if (userRole !== 'admin') {
+  const isDirector = isDirectorRole(userRoles);
+
+  // Only admin and diretor_geral can access central panel
+  if (userRole !== 'admin' && !isDirector) {
     const redirect = userRole?.startsWith('filial_') ? '/filial'
       : userRole === 'almoxarifado' ? '/filial'
       : userRole === 'faturamento' ? '/faturamento'
@@ -83,7 +89,9 @@ const AppLayout: React.FC = () => {
           </div>
         </header>
         <div className="p-7 max-w-[1600px] mx-auto">
-          <ErrorBoundary><Outlet /></ErrorBoundary>
+          <ErrorBoundary>
+            {isDirector && !isDirectorRouteAllowed(location.pathname) ? <DirectorBlocked /> : <Outlet />}
+          </ErrorBoundary>
         </div>
       </main>
       <AssistenteFab />
