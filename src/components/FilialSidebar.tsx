@@ -25,8 +25,10 @@ const FilialSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout, userRole, session } = useApp();
   const location = useLocation();
 
-  const portalTitle = userRole === 'filial_praia' ? 'RH Praia Grande' : 'RH Goiania';
-  const portalColor = userRole === 'filial_praia' ? 'bg-blue-500' : 'bg-emerald-500';
+  const portalTitle = userRole === 'filial_matriz' ? 'RH Matriz'
+    : userRole === 'filial_praia' ? 'RH Praia Grande' : 'RH Goiania';
+  const portalColor = userRole === 'filial_matriz' ? 'bg-cyan-500'
+    : userRole === 'filial_praia' ? 'bg-blue-500' : 'bg-emerald-500';
   const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || '';
 
   const renderLink = (item: { label: string; icon: React.ElementType; path: string }) => (
