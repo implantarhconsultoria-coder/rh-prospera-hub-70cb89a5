@@ -71,20 +71,37 @@ export default function HomePage() {
         <div className="mec-pulse"><Sparkles className="w-4 h-4" /> sistema online</div>
         <h1>{greet}, {firstName}</h1>
         <p>{[mecanico.empresa, mecanico.funcao].filter(Boolean).join(" - ") || "Tudo pronto para o dia"}</p>
+        {mecanico.registro_teste && <p className="mt-2 text-amber-300">Modo teste ativo - registros isolados dos relatÃ³rios oficiais</p>}
       </section>
 
       <section className="mec-mission-card">
         <div className="mec-card-title"><CheckSquare className="w-5 h-5 text-cyan-300" /> Ciclo do dia</div>
-        <button onClick={() => navigate(`${base}/ponto?tipo=entrada`)} className="mec-main-action"><LogIn className="w-5 h-5" /> Registrar entrada</button>
-        <button onClick={() => navigate(`${base}/chamados`)} className="mec-outline-action"><ClipboardList className="w-5 h-5" /> Ver chamados</button>
-        <button onClick={() => navigate(`${base}/abastecimento`)} className="mec-outline-action"><Fuel className="w-5 h-5" /> Abastecimento QR Code</button>
+        <button onClick={() => navigate(`${base}/ponto?tipo=entrada`)} className="mec-main-action">
+          <LogIn className="w-5 h-5" /> Registrar entrada
+        </button>
+        <button onClick={() => navigate(`${base}/chamados`)} className="mec-outline-action">
+          <ClipboardList className="w-5 h-5" /> Ver chamados
+        </button>
+        <button onClick={() => navigate(`${base}/abastecimento`)} className="mec-outline-action">
+          <Fuel className="w-5 h-5" /> Abastecimento QR Code
+        </button>
       </section>
 
       <section className="grid grid-cols-2 gap-3">
         {cards.map((c, index) => (
-          <button key={c.label} onClick={() => c.action ? c.action() : navigate(c.to!)} className={cn("mec-tile", index === 0 && "mec-tile-primary")}>
-            <div className="flex items-start justify-between"><c.icon className="w-7 h-7" /><ArrowUpRight className="w-4 h-4 opacity-70" /></div>
-            <div className="mt-auto text-left"><div className="font-bold text-base">{c.label}</div><div className="text-xs opacity-70">{c.sub}</div></div>
+          <button
+            key={c.label}
+            onClick={() => c.action ? c.action() : navigate(c.to!)}
+            className={cn("mec-tile", index === 0 && "mec-tile-primary")}
+          >
+            <div className="flex items-start justify-between">
+              <c.icon className="w-7 h-7" />
+              <ArrowUpRight className="w-4 h-4 opacity-70" />
+            </div>
+            <div className="mt-auto text-left">
+              <div className="font-bold text-base">{c.label}</div>
+              <div className="text-xs opacity-70">{c.sub}</div>
+            </div>
           </button>
         ))}
       </section>
@@ -96,7 +113,9 @@ export default function HomePage() {
         </div>
         {["Acesso liberado", "GPS e camera prontos", "Chamados sincronizados"].map((line, idx) => (
           <div key={line} className="grid grid-cols-[54px_46px_1fr] gap-2 px-4 py-3 text-xs border-b border-cyan-300/10 last:border-0">
-            <span className="text-slate-400">{idx === 0 ? "agora" : "ok"}</span><span className="text-emerald-300">OK</span><span>{line}</span>
+            <span className="text-slate-400">{idx === 0 ? "agora" : "ok"}</span>
+            <span className="text-emerald-300">OK</span>
+            <span>{line}</span>
           </div>
         ))}
       </section>
