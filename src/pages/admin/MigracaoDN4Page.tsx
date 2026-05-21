@@ -72,7 +72,7 @@ const MigracaoDN4Page: React.FC = () => {
     const { data, error } = await supabase.from('dn4_migracao_lotes' as any).insert({ nome: `Migracao DN4 -> TOPAC RH PRO ${new Date().toLocaleDateString('pt-BR')}`, status: 'pre_migracao', criado_por: session?.user?.id } as any).select().single();
     if (error) throw error;
     setBatch(data as any);
-    return data as MigrationBatch;
+    return data as unknown as MigrationBatch;
   };
   const insertLog = async (loteId: string, acao: string, detalhe: string, payload?: Record<string, unknown>) => supabase.from('dn4_migracao_logs' as any).insert({ lote_id: loteId, acao, detalhe, payload: payload || {}, criado_por: session?.user?.id } as any);
 
