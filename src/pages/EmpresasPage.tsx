@@ -58,7 +58,7 @@ const EmpresasPage: React.FC = () => {
     const emps = employees.filter(e => e.companyId === selected.id);
     const ativos = emps.filter(e => e.status === 'ativo');
     const afastados = emps.filter(e => e.status === 'afastado');
-    const ferias = emps.filter(e => e.status === 'fÃƒÂ©rias' || e.status === 'férias');
+    const ferias = emps.filter(e => e.status === 'férias');
     const desligados = emps.filter(e => e.status === 'desligado');
     const totalFolha = ativos.reduce((s, e) => s + e.salarioBase, 0);
     const q = search.trim().toLowerCase();
