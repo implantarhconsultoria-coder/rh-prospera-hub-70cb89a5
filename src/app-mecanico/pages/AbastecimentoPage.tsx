@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { AlertTriangle, Camera, Check, Copy, Download, Fuel, Gauge, Loader2, MessageCircle, Printer, QrCode, RotateCcw, Share2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import QrScanner from "qr-scanner";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,8 @@ interface MecInfo {
   carros?: string[];
   exige_selecao_carro?: boolean;
   ultimo_km?: number | null;
+  registro_teste?: boolean;
+  veiculo_teste?: string;
 }
 
 interface ReceiptInfo {
@@ -57,6 +59,7 @@ interface ReceiptInfo {
   fotoBombaUrl: string;
   fotoPainelUrl: string;
   createdAt: Date;
+  registroTeste?: boolean;
 }
 
 const CANONICAL_BASE_URL = "https://implantarhprpro.com";
@@ -107,8 +110,39 @@ export default function AbastecimentoPage() {
     return diff >= 0 ? diff : null;
   }, [km, mecInfo?.ultimo_km]);
 
+  const updateValor = (value: string) => {
+    setValor(value);
+    const nValor = parseDecimal(value);
+    const nLitros = parseDecimal(litros);
+    if (Number.isFinite(nValor) && Number.isFinite(nLitros) && nLitros > 0) {
+      setPrecoLitro(formatDecimal(nValor / nLitros, 3));
+    }
+  };
+
+  const updateLitros = (value: string) => {
+    setLitros(value);
+    const nLitros = parseDecimal(value);
+    const nPreco = parseDecimal(precoLitro);
+    const nValor = parseDecimal(valor);
+    if (Number.isFinite(nLitros) && nLitros > 0 && Number.isFinite(nPreco) && nPreco > 0) {
+      setValor(formatDecimal(nLitros * nPreco, 2));
+    } else if (Number.isFinite(nLitros) && nLitros > 0 && Number.isFinite(nValor) && nValor > 0) {
+      setPrecoLitro(formatDecimal(nValor / nLitros, 3));
+    }
+  };
+
+  const updatePrecoLitro = (value: string) => {
+    setPrecoLitro(value);
+    const nLitros = parseDecimal(litros);
+    const nPreco = parseDecimal(value);
+    if (Number.isFinite(nLitros) && nLitros > 0 && Number.isFinite(nPreco) && nPreco > 0) {
+      setValor(formatDecimal(nLitros * nPreco, 2));
+    }
+  };
+
   useEffect(() => {
-    const normalized = extractQrCode(searchParams.get("qr") || searchParams.get("codigo") || "");
+    const qr = searchParams.get("qr") || searchParams.get("codigo") || "";
+    const normalized = extractQrCode(qr);
     if (normalized && autoQrRef.current !== normalized) {
       autoQrRef.current = normalized;
       setCodigo(normalized);
@@ -136,13 +170,17 @@ export default function AbastecimentoPage() {
     }
     try {
       stopScanner();
-      const scanner = new QrScanner(videoRef.current!, (result) => {
-        const decoded = typeof result === "string" ? result : result.data;
-        stopScanner();
-        const normalized = extractQrCode(decoded);
-        setCodigo(normalized);
-        validarQr(normalized);
-      }, { preferredCamera: "environment", returnDetailedScanResult: true, maxScansPerSecond: 8 });
+      const scanner = new QrScanner(
+        videoRef.current!,
+        (result) => {
+          const decoded = typeof result === "string" ? result : result.data;
+          stopScanner();
+          const normalized = extractQrCode(decoded);
+          setCodigo(normalized);
+          validarQr(normalized);
+        },
+        { preferredCamera: "environment", returnDetailedScanResult: true, maxScansPerSecond: 8 },
+      );
       scannerRef.current = scanner;
       await scanner.start();
       setScanning(true);
@@ -154,7 +192,8 @@ export default function AbastecimentoPage() {
   const lerArquivoQr = async (file: File) => {
     try {
       const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true, alsoTryWithoutScanRegion: true });
-      const normalized = extractQrCode(typeof result === "string" ? result : result.data);
+      const decoded = typeof result === "string" ? result : result.data;
+      const normalized = extractQrCode(decoded);
       setCodigo(normalized);
       validarQr(normalized);
     } catch {
@@ -259,7 +298,7 @@ export default function AbastecimentoPage() {
       p_endereco: null,
     });
     setLoading(false);
-    const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null } | null;
+    const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null; registro_teste?: boolean } | null;
     if (error || !r?.ok) return toast.error(r?.error || error?.message || "Erro ao salvar");
     setReceipt({
       id: r.id || "",
@@ -282,66 +321,49 @@ export default function AbastecimentoPage() {
       fotoBombaUrl,
       fotoPainelUrl,
       createdAt: new Date(),
+      registroTeste: Boolean(r.registro_teste || mecInfo?.registro_teste || mecanico.registro_teste),
     });
     setStep("ok");
     toast.success("Abastecimento registrado!");
   };
 
-  const updateValor = (value: string) => {
-    setValor(value);
-    const nValor = parseDecimal(value);
-    const nLitros = parseDecimal(litros);
-    if (Number.isFinite(nValor) && Number.isFinite(nLitros) && nLitros > 0) setPrecoLitro(formatDecimal(nValor / nLitros, 3));
-  };
-
-  const updateLitros = (value: string) => {
-    setLitros(value);
-    const nLitros = parseDecimal(value);
-    const nPreco = parseDecimal(precoLitro);
-    const nValor = parseDecimal(valor);
-    if (Number.isFinite(nLitros) && nLitros > 0 && Number.isFinite(nPreco) && nPreco > 0) setValor(formatDecimal(nLitros * nPreco, 2));
-    else if (Number.isFinite(nLitros) && nLitros > 0 && Number.isFinite(nValor) && nValor > 0) setPrecoLitro(formatDecimal(nValor / nLitros, 3));
-  };
-
-  const updatePrecoLitro = (value: string) => {
-    setPrecoLitro(value);
-    const nLitros = parseDecimal(litros);
-    const nPreco = parseDecimal(value);
-    if (Number.isFinite(nLitros) && nLitros > 0 && Number.isFinite(nPreco) && nPreco > 0) setValor(formatDecimal(nLitros * nPreco, 2));
-  };
-
-  const buildReceiptText = (info: ReceiptInfo) => [
-    "*TOPAC RH PRO - Abastecimento*",
-    `Registro: ${info.id || "salvo"}`,
-    `Data/Hora: ${info.createdAt.toLocaleString("pt-BR")}`,
-    "",
-    `Funcionario: ${info.mecanicoNome}`,
-    `Empresa: ${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`,
-    `Carro/placa: ${info.placa || "nao informado"}`,
-    `Validado por: ${info.mecanicoNome}`,
-    "",
-    `Posto: ${info.postoNome}`,
-    info.postoCnpj ? `CNPJ: ${info.postoCnpj}` : "",
-    info.postoEndereco ? `Endereco: ${info.postoEndereco}` : "",
-    info.postoTelefone ? `Telefone: ${info.postoTelefone}` : "",
-    `QR: ${info.codigo}`,
-    "",
-    `Combustivel: ${info.combustivel}`,
-    `Litros: ${fmtNumber(info.litros)} L`,
-    `Preco/L: ${fmtMoney(info.precoLitro)}`,
-    `Valor: ${fmtMoney(info.valor)}`,
-    `KM: ${info.km || "nao informado"}`,
-    info.kmRodado !== null ? `KM rodado desde o ultimo registro: ${fmtNumber(String(info.kmRodado), 0)} km` : "",
-    info.observacao ? `Obs.: ${info.observacao}` : "",
-    "",
-    `Foto da bomba: ${info.fotoBombaUrl}`,
-    `Foto do KM/painel: ${info.fotoPainelUrl}`,
-  ].filter(Boolean).join("\n");
+  const buildReceiptText = (info: ReceiptInfo) =>
+    [
+      "*TOPAC RH PRO - Abastecimento*",
+      info.registroTeste ? "*REGISTRO DE TESTE - nao entra em relatorios oficiais*" : "",
+      `Registro: ${info.id || "salvo"}`,
+      `Data/Hora: ${info.createdAt.toLocaleString("pt-BR")}`,
+      "",
+      `Mecanico: ${info.mecanicoNome}`,
+      `Empresa: ${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`,
+      `Carro/placa: ${info.placa || "nao informado"}`,
+      `Validado por: ${info.mecanicoNome}`,
+      "",
+      `Posto: ${info.postoNome}`,
+      info.postoCnpj ? `CNPJ: ${info.postoCnpj}` : "",
+      info.postoEndereco ? `Endereco: ${info.postoEndereco}` : "",
+      info.postoTelefone ? `Telefone: ${info.postoTelefone}` : "",
+      `QR: ${info.codigo}`,
+      "",
+      `Combustivel: ${info.combustivel}`,
+      `Litros: ${fmtNumber(info.litros)} L`,
+      `Preco/L: ${fmtMoney(info.precoLitro)}`,
+      `Valor: ${fmtMoney(info.valor)}`,
+      `KM: ${info.km || "nao informado"}`,
+      info.kmRodado !== null ? `KM rodado desde o ultimo registro: ${fmtNumber(String(info.kmRodado), 0)} km` : "",
+      info.observacao ? `Obs.: ${info.observacao}` : "",
+      "",
+      `Foto da bomba: ${info.fotoBombaUrl}`,
+      `Foto do KM/painel: ${info.fotoPainelUrl}`,
+    ].filter(Boolean).join("\n");
 
   const shareReceipt = async () => {
     if (!receipt) return;
     const text = buildReceiptText(receipt);
-    if (navigator.share) return navigator.share({ title: "Abastecimento TOPAC", text });
+    if (navigator.share) {
+      await navigator.share({ title: "Abastecimento TOPAC", text });
+      return;
+    }
     await navigator.clipboard.writeText(text);
     toast.success("Notinha copiada");
   };
@@ -428,13 +450,18 @@ export default function AbastecimentoPage() {
           <div className="space-y-1 text-sm">
             <div><b>Mecanico:</b> {mecInfo?.nome}</div>
             <div><b>Empresa:</b> {mecInfo?.empresa || "-"} {mecInfo?.filial ? `- ${mecInfo.filial}` : ""}</div>
+            {mecInfo?.registro_teste && <AlertBox text={`Modo teste ativo${mecInfo.veiculo_teste ? ` - ${mecInfo.veiculo_teste}` : ""}. Este abastecimento nao entra em custo oficial.`} />}
             {postosOpcao.length > 1 ? (
               <div className="space-y-1">
                 <Label className="text-xs">Posto de Goiania</Label>
-                <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={posto.tipo_qr === "unidade" ? "" : posto.codigo} onChange={(e) => {
-                  const selected = postosOpcao.find((p) => p.codigo === e.target.value);
-                  if (selected) setPosto(selected);
-                }}>
+                <select
+                  className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  value={posto.tipo_qr === "unidade" ? "" : posto.codigo}
+                  onChange={(e) => {
+                    const selected = postosOpcao.find((p) => p.codigo === e.target.value);
+                    if (selected) setPosto(selected);
+                  }}
+                >
                   <option value="">Selecionar posto</option>
                   {postosOpcao.map((p) => <option key={p.codigo} value={p.codigo}>{p.nome}</option>)}
                 </select>
@@ -539,7 +566,9 @@ function fmtNumber(value: string, digits = 3) {
 
 function parseDecimal(value: string | number | null | undefined) {
   if (typeof value === "number") return value;
-  const raw = String(value ?? "").trim().replace(/[^\d,.-]/g, "");
+  const raw = String(value ?? "")
+    .trim()
+    .replace(/[^\d,.-]/g, "");
   const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
   const n = Number(normalized);
   return Number.isFinite(n) ? n : NaN;
@@ -562,22 +591,61 @@ function extractQrCode(value: string) {
 }
 
 function sanitizeFile(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
 }
 
 function buildReceiptHtml(info: ReceiptInfo) {
-  const rows = [
-    ["Registro", info.id || "salvo"], ["Data/Hora", info.createdAt.toLocaleString("pt-BR")], ["Funcionario", info.mecanicoNome],
-    ["Unidade", `${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`], ["Veiculo", info.placa || "-"], ["Posto", info.postoNome],
-    ["CNPJ", info.postoCnpj || "-"], ["Endereco", info.postoEndereco || "-"], ["Telefone", info.postoTelefone || "-"],
-    ["Combustivel", info.combustivel], ["Litros", `${fmtNumber(info.litros)} L`], ["Preco/L", fmtMoney(info.precoLitro)],
-    ["Valor total", fmtMoney(info.valor)], ["KM", info.km || "-"], ["KM rodado", info.kmRodado !== null ? `${fmtNumber(String(info.kmRodado), 0)} km` : "-"], ["Validado por", info.mecanicoNome],
+  const text = [
+    ["Registro", info.id || "salvo"],
+    ["Data/Hora", info.createdAt.toLocaleString("pt-BR")],
+    ["Funcionario", info.mecanicoNome],
+    ["Unidade", `${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`],
+    ["Veiculo", info.placa || "-"],
+    ["Posto", info.postoNome],
+    ["CNPJ", info.postoCnpj || "-"],
+    ["Endereco", info.postoEndereco || "-"],
+    ["Telefone", info.postoTelefone || "-"],
+    ["Combustivel", info.combustivel],
+    ["Litros", `${fmtNumber(info.litros)} L`],
+    ["Preco/L", fmtMoney(info.precoLitro)],
+    ["Valor total", fmtMoney(info.valor)],
+    ["KM", info.km || "-"],
+    ["KM rodado", info.kmRodado !== null ? `${fmtNumber(String(info.kmRodado), 0)} km` : "-"],
+    ["Validado por", info.mecanicoNome],
   ];
-  return `<html><head><title>Recibo abastecimento</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111}h1{font-size:18px;margin:0 0 4px}.muted{color:#555;font-size:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}td{border:1px solid #ddd;padding:7px;vertical-align:top}td:first-child{font-weight:bold;width:160px;background:#f7f7f7}.photos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}img{width:100%;max-height:300px;object-fit:contain;border:1px solid #ddd}</style></head><body><h1>TOPAC RH PRO - Recibo de Abastecimento</h1><div class="muted">Comprovante interno gerado pelo app do mecanico.</div><table>${rows.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table><div class="photos"><div><strong>Foto da bomba</strong><br><img src="${escapeHtml(info.fotoBombaUrl)}"></div><div><strong>Foto do painel/KM</strong><br><img src="${escapeHtml(info.fotoPainelUrl)}"></div></div></body></html>`;
+
+  return `<html><head><title>Recibo abastecimento</title><style>
+    body{font-family:Arial,sans-serif;margin:24px;color:#111}
+    h1{font-size:18px;margin:0 0 4px}
+    .muted{color:#555;font-size:12px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    td{border:1px solid #ddd;padding:7px;vertical-align:top}
+    td:first-child{font-weight:bold;width:160px;background:#f7f7f7}
+    .photos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+    img{width:100%;max-height:300px;object-fit:contain;border:1px solid #ddd}
+  </style></head><body>
+    <h1>TOPAC RH PRO - Recibo de Abastecimento</h1>
+    ${info.registroTeste ? '<div class="muted"><strong>REGISTRO DE TESTE</strong> - nao impacta relatorios oficiais.</div>' : ''}
+    <div class="muted">Comprovante interno gerado pelo app do mecanico.</div>
+    <table>${text.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
+    <div class="photos">
+      <div><strong>Foto da bomba</strong><br><img src="${escapeHtml(info.fotoBombaUrl)}"></div>
+      <div><strong>Foto do painel/KM</strong><br><img src="${escapeHtml(info.fotoPainelUrl)}"></div>
+    </div>
+  </body></html>`;
 }
 
 function escapeHtml(value: string) {
-  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
