@@ -3,6 +3,7 @@ export const DIRECTOR_BLOCKED_MESSAGE = 'Edicao bloqueada para este perfil. Soli
 const DIRECTOR_ALLOWED_ADMIN_PREFIXES = [
   '/admin',
   '/admin/faturamento',
+  '/admin/faturamento/migracao-dn4',
   '/admin/financeiro',
   '/admin/relatorio',
   '/admin/relatorio-vr',
