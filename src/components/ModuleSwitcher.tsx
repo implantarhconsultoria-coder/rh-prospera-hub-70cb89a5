@@ -35,6 +35,7 @@ const ADMIN_MODULES: ModuleDef[] = [
   { role: 'operacional', label: 'Operacional', path: '/admin/chamados' },
   { role: 'app_mecanico', label: 'App Mecanico', path: '/admin/app-mecanico' },
   { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
+  { role: 'migracao_dn4', label: 'Migracao DN4', path: '/admin/faturamento/migracao-dn4' },
   { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
 ];
 
@@ -50,6 +51,7 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
       ? [
           { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin' },
           { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
+          { role: 'migracao_dn4', label: 'Relatorio Migracao DN4', path: '/admin/faturamento/migracao-dn4' },
           { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
           { role: 'relatorios', label: 'Relatorios', path: '/admin/relatorio' },
         ]
