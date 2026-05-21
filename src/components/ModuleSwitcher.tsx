@@ -20,6 +20,7 @@ interface ModuleDef {
 
 const PORTAL_MODULES: ModuleDef[] = [
   { role: 'admin', label: 'Administracao', path: '/admin' },
+  { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin' },
   { role: 'filial_matriz', label: 'RH Matriz', path: '/filial' },
   { role: 'filial_praia', label: 'RH Praia Grande', path: '/filial' },
   { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
@@ -42,8 +43,16 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const navigate = useNavigate();
 
   const isAdmin = userRoles.includes('admin');
+  const isDirector = userRoles.includes('diretor_geral');
   const available = isAdmin
     ? ADMIN_MODULES
+    : isDirector
+      ? [
+          { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin' },
+          { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
+          { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
+          { role: 'relatorios', label: 'Relatorios', path: '/admin/relatorio' },
+        ]
     : PORTAL_MODULES.filter((m) => userRoles.includes(m.role as any));
 
   if (available.length < 2) return null;
