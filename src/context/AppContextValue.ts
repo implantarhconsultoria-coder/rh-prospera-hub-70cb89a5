@@ -19,6 +19,7 @@ export interface AppState {
   userRoles: AppRole[];
   roleLoading: boolean;
   logout: () => void;
+  refreshData: () => Promise<void>;
   companies: Company[];
   employees: Employee[];
   updateEmployee: (id: string, data: Partial<Employee>) => void;
