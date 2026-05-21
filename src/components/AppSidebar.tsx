@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
+import { isDirectorRole } from '@/lib/directorPermissions';
 
 interface MenuItem {
   label: string;
@@ -53,6 +54,15 @@ const adminItems: MenuItem[] = [
   { label: 'Configuracoes', icon: Settings, path: '/admin/configuracoes' },
 ];
 
+const directorReportItems: MenuItem[] = [
+  { label: 'Dashboard Executivo', icon: LayoutDashboard, path: '/admin' },
+  { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio' },
+  { label: 'Relatorio VR', icon: Receipt, path: '/admin/relatorio-vr' },
+  { label: 'Relatorio VT', icon: Receipt, path: '/admin/relatorio-vt' },
+  { label: 'Frota / Relatorios', icon: Car, path: '/admin/documentos-ativos' },
+  { label: 'Almoxarifado / Relatorios', icon: Package, path: '/admin/almoxarifado' },
+];
+
 const faturamentoItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/faturamento' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
@@ -82,10 +92,11 @@ const upcomingItems: MenuItem[] = [];
 interface Props { collapsed: boolean; onToggle: () => void; }
 
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
-  const { logout } = useApp();
+  const { logout, userRoles } = useApp();
   const location = useLocation();
   const [fatOpen, setFatOpen] = useState(location.pathname.startsWith('/admin/faturamento'));
   const [finOpen, setFinOpen] = useState(location.pathname.startsWith('/admin/financeiro'));
+  const isDirector = isDirectorRole(userRoles);
 
   const renderLink = (item: MenuItem) => (
     <NavLink key={item.path} to={item.path}
@@ -123,15 +134,15 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
       </div>
 
       <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
-        {menuItems.map(renderLink)}
+        {isDirector ? directorReportItems.map(renderLink) : menuItems.map(renderLink)}
 
-        {!collapsed && (
+        {!isDirector && !collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
             <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Operacional</p>
           </div>
         )}
-        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
-        {operationalItems.map(renderLink)}
+        {!isDirector && collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {!isDirector && operationalItems.map(renderLink)}
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
@@ -195,13 +206,13 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
           financeiroItems.map(renderLink)
         )}
 
-        {!collapsed && (
+        {!isDirector && !collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
             <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Administracao</p>
           </div>
         )}
-        {collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
-        {adminItems.map(renderLink)}
+        {!isDirector && collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {!isDirector && adminItems.map(renderLink)}
 
         {!collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
