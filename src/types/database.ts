@@ -32,7 +32,7 @@ export interface Employee {
   vtDiario: number;
   insalubridadeAtiva: boolean;
   insalubridadeValor: number;
-  status: 'ativo' | 'afastado' | 'férias' | 'desligado';
+  status: 'ativo' | 'afastado' | 'ferias' | 'desligado';
   telefone: string;
   celular: string;
   email: string;
@@ -81,7 +81,6 @@ export interface Fechamento {
   dataFechamento?: string;
 }
 
-// Mappers: Supabase row -> App types
 const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
 
 const inferCompanyCode = (row: any): string => {
@@ -131,7 +130,7 @@ export const mapEmployee = (row: any): Employee => ({
   vtDiario: Number(row.vt_diario) || 0,
   insalubridadeAtiva: row.insalubridade_ativa ?? false,
   insalubridadeValor: Number(row.insalubridade_valor) || 0,
-  status: row.status || (row.ativo === false ? 'desligado' : 'ativo'),
+  status: row.ativo === false ? 'desligado' : (row.status || 'ativo'),
   telefone: row.telefone || '',
   celular: row.celular || '',
   email: row.email || '',
@@ -172,7 +171,6 @@ export const mapEntry = (row: any): MonthlyEntry => ({
   fechamentoId: row.fechamento_id || null,
 });
 
-// Reverse mapper: App entry -> Supabase row for insert/update
 export const entryToRow = (entry: Partial<MonthlyEntry>) => {
   const row: any = {};
   if (entry.employeeId !== undefined) row.funcionario_id = entry.employeeId;
@@ -197,18 +195,26 @@ export const entryToRow = (entry: Partial<MonthlyEntry>) => {
   return row;
 };
 
-// Reverse mapper: App employee -> Supabase row for update
 export const employeeToRow = (data: Partial<Employee>) => {
   const row: any = {};
-  if (data.companyId !== undefined) row.empresa_id = data.companyId;
+  if (data.companyId !== undefined) {
+    row.empresa_id = data.companyId;
+    row.company_id = data.companyId;
+  }
   if (data.registro !== undefined) row.registro = data.registro;
   if (data.matriculaEsocial !== undefined) row.matricula_esocial = data.matriculaEsocial;
   if (data.name !== undefined) row.nome = data.name;
   if (data.cpf !== undefined) row.cpf = data.cpf;
   if (data.rg !== undefined) row.rg = data.rg;
   if (data.cargo !== undefined) row.cargo = data.cargo;
-  if (data.categoria !== undefined) row.setor = data.categoria;
-  if (data.salarioBase !== undefined) row.salario = data.salarioBase;
+  if (data.categoria !== undefined) {
+    row.setor = data.categoria;
+    row.categoria = data.categoria;
+  }
+  if (data.salarioBase !== undefined) {
+    row.salario = data.salarioBase;
+    row.salario_base = data.salarioBase;
+  }
   if (data.dataAdmissao !== undefined) row.data_admissao = data.dataAdmissao || null;
   if (data.dataExameMedico !== undefined) row.data_exame_medico = data.dataExameMedico || null;
   if (data.vrAtivo !== undefined) row.vr_ativo = data.vrAtivo;
@@ -219,7 +225,10 @@ export const employeeToRow = (data: Partial<Employee>) => {
   if (data.vtDiario !== undefined) row.vt_diario = data.vtDiario;
   if (data.insalubridadeAtiva !== undefined) row.insalubridade_ativa = data.insalubridadeAtiva;
   if (data.insalubridadeValor !== undefined) row.insalubridade_valor = data.insalubridadeValor;
-  if (data.status !== undefined) row.ativo = data.status !== 'desligado';
+  if (data.status !== undefined) {
+    row.ativo = data.status !== 'desligado';
+    row.status = data.status;
+  }
   if (data.telefone !== undefined) row.telefone = data.telefone;
   if (data.celular !== undefined) row.celular = data.celular;
   if (data.email !== undefined) row.email = data.email;
