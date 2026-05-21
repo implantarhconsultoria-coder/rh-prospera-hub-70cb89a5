@@ -3,8 +3,9 @@ import { Building2, User } from 'lucide-react';
 import type { AppRole } from '@/hooks/useUserRole';
 
 const branchLabels: Record<string, { name: string; color: string }> = {
+  filial_matriz: { name: 'RH Matriz Sao Paulo', color: 'bg-cyan-500' },
   filial_praia: { name: 'RH Filial Praia Grande', color: 'bg-blue-500' },
-  filial_goiania: { name: 'RH Filial Goiânia', color: 'bg-emerald-500' },
+  filial_goiania: { name: 'RH Filial Goiania', color: 'bg-emerald-500' },
   almoxarifado: { name: 'Almoxarifado', color: 'bg-amber-500' },
 };
 
