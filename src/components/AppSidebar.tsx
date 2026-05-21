@@ -42,6 +42,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
   { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
+  { label: 'Pre-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
   { label: 'Historico', icon: History, path: '/admin/historico' },
