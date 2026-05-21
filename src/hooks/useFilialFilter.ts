@@ -8,10 +8,11 @@ import { useApp } from '@/context/AppContext';
 export const useFilialFilter = () => {
   const { userRole, companies } = useApp();
 
-  const isFilial = userRole === 'filial_praia' || userRole === 'filial_goiania';
+  const isFilial = userRole === 'filial_matriz' || userRole === 'filial_praia' || userRole === 'filial_goiania';
 
   // Map role to company codigo
   const ROLE_CODIGO_MAP: Record<string, string> = {
+    filial_matriz: 'topac-matriz',
     filial_praia: 'topac-pg',
     filial_goiania: 'topac-gyn',
   };
