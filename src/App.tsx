@@ -26,10 +26,12 @@ import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
 import FilialFechamentoPage from "@/pages/filial/FilialFechamentoPage";
+import FilialDocumentosPage from "@/pages/filial/FilialDocumentosPage";
 import FechamentosFiliaisPage from "@/pages/admin/FechamentosFiliaisPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
 import ASOPage from "@/pages/ASOPage";
+import PreCadastroAdmissionalPage from "@/pages/PreCadastroAdmissionalPage";
 import PrestadoresPage from "@/pages/PrestadoresPage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
 import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
@@ -58,9 +60,6 @@ import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
 import ConferenciaPontoPage from "@/pages/ConferenciaPontoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
-import MobileAdminLayout from "@/pages/mobile-admin/MobileAdminLayout";
-import MobileAdminHome from "@/pages/mobile-admin/MobileAdminHome";
-import MobileAdminModulo from "@/pages/mobile-admin/MobileAdminModulo";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
@@ -85,6 +84,7 @@ import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
 import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
 import ConferenciaPage from "@/pages/faturamento/ConferenciaPage";
 import ImportacoesDN4Page from "@/pages/faturamento/ImportacoesDN4Page";
+import MigracaoDN4Page from "@/pages/admin/MigracaoDN4Page";
 import FaturamentoDN4Layout from "@/pages/admin/faturamento-dn4/FaturamentoDN4Layout";
 import FaturamentoDN4DashboardPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4DashboardPage";
 import FaturamentoDN4NovoPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4NovoPage";
@@ -124,45 +124,45 @@ const EXT_ITEMS_FINANCEIRO = [
   { to: 'fornecedores', label: 'Fornecedores', icon: Building },
   { to: 'bancos', label: 'Bancos', icon: Landmark },
   { to: 'fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingDown },
-  { to: 'inadimplencia', label: 'Inadimplência', icon: AlertTriangle },
+  { to: 'inadimplencia', label: 'Inadimplencia', icon: AlertTriangle },
   { to: 'centros-custo', label: 'Centros de Custo', icon: Layers },
-  { to: 'conciliacao', label: 'Conciliação', icon: GitMerge },
+  { to: 'conciliacao', label: 'Conciliacao', icon: GitMerge },
 ];
 const EXT_ITEMS_FATURAMENTO = [
   { to: '', label: 'Dashboard', icon: TrendingUp, end: true },
   { to: 'clientes', label: 'Clientes', icon: Users },
   { to: 'contratos', label: 'Contratos', icon: FileSignature },
-  { to: 'medicoes', label: 'Medições', icon: FileText },
-  { to: 'conferencia', label: 'Conferência', icon: ClipboardCheck },
+  { to: 'medicoes', label: 'Medicoes', icon: FileText },
+  { to: 'conferencia', label: 'Conferencia', icon: ClipboardCheck },
   { to: 'faturas', label: 'Faturas', icon: Receipt },
   { to: 'reajustes', label: 'Reajustes', icon: TrendingUp },
-  { to: 'pendencias', label: 'Pendências', icon: AlertTriangle },
+  { to: 'pendencias', label: 'Pendencias', icon: AlertTriangle },
 ];
 const EXT_ITEMS_RH = [
-  { to: '', label: 'Funcionários', icon: UserCircle, end: true },
+  { to: '', label: 'Funcionarios', icon: UserCircle, end: true },
   { to: 'aso', label: 'ASO', icon: Stethoscope },
   { to: 'atestados', label: 'Atestados', icon: FileWarning },
-  { to: 'aviso-ferias', label: 'Aviso de Férias', icon: CalendarDays },
+  { to: 'aviso-ferias', label: 'Aviso de Ferias', icon: CalendarDays },
   { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
 ];
-// EPI e Uniformes NÃO são liberados para acesso externo/almoxarifado/filial.
+// EPI e Uniformes NAO sao liberados para acesso externo/almoxarifado/filial.
 // Ficam restritos ao admin central (rota /admin/epi e /admin/uniformes).
 const EXT_ITEMS_ALMOX = [
   { to: '', label: 'Almoxarifado', icon: Package, end: true },
 ];
 const EXT_ITEMS_OP = [
   { to: '', label: 'Chamados', icon: Headphones, end: true },
-  { to: 'tecnicos', label: 'Técnicos', icon: Wrench },
+  { to: 'tecnicos', label: 'Tecnicos', icon: Wrench },
 ];
 const EXT_ITEMS_FILIAL = [
   { to: '', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: 'funcionarios', label: 'Funcionários', icon: UserCircle },
-  { to: 'aviso-ferias', label: 'Aviso de Férias', icon: CalendarDays },
+  { to: 'funcionarios', label: 'Funcionarios', icon: UserCircle },
+  { to: 'aviso-ferias', label: 'Aviso de Ferias', icon: CalendarDays },
   { to: 'aso', label: 'ASO', icon: Stethoscope },
   { to: 'atestados', label: 'Atestados', icon: FileWarning },
   { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
   { to: 'alertas', label: 'Alertas', icon: Bell },
-  { to: 'movimento-diario', label: 'Movimento Diário', icon: Activity },
+  { to: 'movimento-diario', label: 'Movimento Diario', icon: Activity },
   { to: 'fechamento', label: 'Fechamento', icon: ClipboardCheck },
 ];
 const EXT_ITEMS_CAMPO = [
@@ -172,8 +172,8 @@ const EXT_ITEMS_CAMPO = [
 const queryClient = new QueryClient();
 
 /**
- * RoleRedirect — after login, sends user to the correct portal based on role.
- * App Mecânico antigo removido; tecnico_campo/operacional caem no admin como fallback.
+ * RoleRedirect - after login, sends user to the correct portal based on role.
+ * App Mecanico antigo removido; tecnico_campo/operacional caem no admin como fallback.
  */
 const RoleRedirect = () => {
   const { userRoles, roleLoading } = useApp();
@@ -183,9 +183,10 @@ const RoleRedirect = () => {
   }
 
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
+  if (userRoles.includes('diretor_geral')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
-  if (userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
+  if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
 
   return <Navigate to="/admin" replace />;
@@ -218,7 +219,7 @@ const AuthGate = () => {
 
   return (
     <Routes>
-      {/* Root → redirect to correct portal */}
+      {/* Root -> redirect to correct portal */}
       <Route path="/" element={<RoleRedirect />} />
       <Route path="/index" element={<Navigate to="/" replace />} />
       <Route path="/login" element={<Navigate to="/" replace />} />
@@ -241,6 +242,7 @@ const AuthGate = () => {
         <Route path="/admin/relatorio-vt" element={<RelatorioVTPage />} />
         <Route path="/admin/historico" element={<HistoricoPage />} />
         <Route path="/admin/aso" element={<ASOPage />} />
+        <Route path="/admin/pre-cadastro-admissional" element={<PreCadastroAdmissionalPage />} />
         <Route path="/admin/prestadores" element={<PrestadoresPage />} />
         <Route path="/admin/galoes-combustivel" element={<CombustivelPage />} />
         <Route path="/admin/protocolo" element={<ProtocoloPage />} />
@@ -255,8 +257,9 @@ const AuthGate = () => {
         <Route path="/admin/compras" element={<ComprasPage />} />
         <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
         <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
-        <Route path="/admin/chamados" element={<DespacharChamadoPage />} />
-        {/* App Mecânico (novo) */}
+        <Route path="/admin/operacional" element={<DespacharChamadoPage />} />
+        <Route path="/admin/chamados" element={<Navigate to="/admin/operacional" replace />} />
+        {/* App Mecanico (novo) */}
         <Route path="/admin/app-mecanico" element={<AppMecanicoAdminPage />} />
         <Route path="/admin/app-operacional" element={<Navigate to="/admin/app-mecanico" replace />} />
         <Route path="/admin/app-operacional/:id" element={<Navigate to="/admin/app-mecanico" replace />} />
@@ -276,8 +279,9 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/admin/faturamento/conferencia" element={<ConferenciaPage />} />
-        {/* Base de Faturamento (importação) */}
+        {/* Base de Faturamento (importacao) */}
         <Route path="/admin/faturamento/importacao-dados" element={<ImportacoesDN4Page />} />
+        <Route path="/admin/faturamento/migracao-dn4" element={<MigracaoDN4Page />} />
         <Route path="/admin/faturamento/importacao" element={<FaturamentoDN4Layout />}>
           <Route index element={<FaturamentoDN4DashboardPage />} />
           <Route path="novo" element={<FaturamentoDN4NovoPage />} />
@@ -312,9 +316,10 @@ const AuthGate = () => {
         <Route path="/filial/alertas" element={<FilialAlertasPage />} />
         <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
         <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
+        <Route path="/filial/documentos" element={<FilialDocumentosPage />} />
       </Route>
 
-      {/* App Mecânico antigo removido — campo/operacional não têm portal próprio por enquanto */}
+      {/* App Mecanico antigo removido - campo/operacional nao tem portal proprio por enquanto */}
 
       {/* ========== FATURAMENTO PORTAL (acesso teste FAT) ========== */}
       <Route element={<FaturamentoLayout />}>
@@ -345,17 +350,6 @@ const AuthGate = () => {
         <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
       </Route>
 
-      {/* ========== MOBILE / ADMIN ========== */}
-      <Route path="/mobile/admin" element={<MobileAdminLayout />}>
-        <Route index element={<MobileAdminHome />} />
-        <Route path="rh" element={<MobileAdminModulo moduloKey="rh" titulo="Recursos Humanos" />} />
-        <Route path="faturamento" element={<MobileAdminModulo moduloKey="faturamento" titulo="Faturamento" />} />
-        <Route path="financeiro" element={<MobileAdminModulo moduloKey="financeiro" titulo="Financeiro" />} />
-        <Route path="abastecimento" element={<MobileAdminModulo moduloKey="abastecimento" titulo="Abastecimento" />} />
-        <Route path="documentos-rh" element={<MobileAdminModulo moduloKey="documentos-rh" titulo="Documentos RH" />} />
-        <Route path="config" element={<MobileAdminModulo moduloKey="config" titulo="Configurações" />} />
-      </Route>
-
       {/* Catch-all */}
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -371,21 +365,21 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <Routes>
-              {/* ========== ACESSO EXTERNO POR PIN — PORTAL ÚNICO ========== */}
-              {/* /acesso-filial é a rota canônica única para todos os portais externos (exceto mecânico) */}
+              {/* ========== ACESSO EXTERNO POR PIN - PORTAL UNICO ========== */}
+              {/* /acesso-filial e a rota canonica unica para todos os portais externos (exceto mecanico) */}
               <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/portais" element={<ErrorBoundary><PortaisPage /></ErrorBoundary>} />
-              {/* Aliases legados redirecionam para o portal único */}
+              {/* Aliases legados redirecionam para o portal unico */}
               <Route path="/acesso-financeiro" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-almoxarifado" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-operacional" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-campo" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-faturamento" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-rh" element={<Navigate to="/acesso-filial" replace />} />
-              {/* App Mecânico (novo) — login por PIN */}
+              {/* App Mecanico (novo) - login por PIN */}
               <Route path="/acesso-mecanico" element={<ErrorBoundary><AcessoMecanicoPage /></ErrorBoundary>} />
 
-              {/* App Mecânico (novo) — portal isolado */}
+              {/* App Mecanico (novo) - portal isolado */}
               <Route path="/app-mecanico/:acessoId" element={<ErrorBoundary><MecanicoAppLayout /></ErrorBoundary>}>
                 <Route index element={<MecHomePage />} />
                 <Route path="ponto" element={<MecPontoPage />} />
@@ -395,7 +389,7 @@ const App = () => (
                 <Route path="abastecimento" element={<MecAbastecimentoPage />} />
               </Route>
 
-              {/* ========== ACESSO EXTERNO POR PIN — MÓDULOS (sem login) ========== */}
+              {/* ========== ACESSO EXTERNO POR PIN - MODULOS (sem login) ========== */}
               <Route path="/financeiro-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="financeiro" titulo="Portal Financeiro" cor="bg-cyan-600" items={EXT_ITEMS_FINANCEIRO} /></ErrorBoundary>}>
                 <Route index element={<FinanceiroDashboardPage />} />
                 <Route path="contas-receber" element={<ContasReceberPage />} />
@@ -421,12 +415,12 @@ const App = () => (
                 <Route path="pendencias" element={<PendenciasPage />} />
               </Route>
 
-              {/* RH externo removido — usar /acesso-filial */}
+              {/* RH externo removido - usar /acesso-filial */}
 
               <Route path="/almoxarifado-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="almoxarifado" titulo="Almoxarifado" cor="bg-orange-600" items={EXT_ITEMS_ALMOX} /></ErrorBoundary>}>
                 <Route index element={<AlmoxarifadoPage />} />
                 <Route path="entregas" element={<AlmoxarifadoPage />} />
-                {/* EPI/Uniformes restritos ao admin central — redireciona se tentar acessar por URL */}
+                {/* EPI/Uniformes restritos ao admin central - redireciona se tentar acessar por URL */}
                 <Route path="epi" element={<Navigate to="" replace />} />
                 <Route path="uniformes" element={<Navigate to="" replace />} />
               </Route>
@@ -456,7 +450,7 @@ const App = () => (
                 <Route path="chamados" element={<DespacharChamadoPage />} />
               </Route>
 
-              {/* Alias legado: /mecanico-ext/:acessoId → /app-mecanico/:acessoId */}
+              {/* Alias legado: /mecanico-ext/:acessoId -> /app-mecanico/:acessoId */}
               <Route path="/mecanico-ext/:acessoId" element={<MecanicoExtAlias />} />
               <Route path="/mecanico-ext/:acessoId/*" element={<MecanicoExtAlias />} />
 
