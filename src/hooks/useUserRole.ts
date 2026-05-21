@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 
-export type AppRole = 'admin' | 'filial_matriz' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario' | 'tecnico_campo' | 'operacional' | 'faturamento' | 'financeiro';
+export type AppRole = 'admin' | 'diretor_geral' | 'filial_matriz' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario' | 'tecnico_campo' | 'operacional' | 'faturamento' | 'financeiro';
 
-// Prioridade: admin sempre vence (usuario pode ter multiplas roles, ex: admin + tecnico_campo de teste)
-const ROLE_PRIORITY: AppRole[] = ['admin', 'operacional', 'filial_matriz', 'filial_praia', 'filial_goiania', 'almoxarifado', 'faturamento', 'financeiro', 'tecnico_campo', 'usuario'];
+// Prioridade: admin sempre vence (usuÃ¡rio pode ter mÃºltiplas roles, ex: admin + tecnico_campo de teste)
+const ROLE_PRIORITY: AppRole[] = ['admin', 'diretor_geral', 'operacional', 'filial_matriz', 'filial_praia', 'filial_goiania', 'almoxarifado', 'faturamento', 'financeiro', 'tecnico_campo', 'usuario'];
 const BOOTSTRAP_ADMIN_EMAILS = new Set(['adm.matriz@topac.com.br']);
 
 export const useUserRole = (session: Session | null) => {
