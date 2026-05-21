@@ -20,6 +20,7 @@ interface ModuleDef {
 
 const PORTAL_MODULES: ModuleDef[] = [
   { role: 'admin', label: 'Administracao', path: '/admin' },
+  { role: 'filial_matriz', label: 'RH Matriz', path: '/filial' },
   { role: 'filial_praia', label: 'RH Praia Grande', path: '/filial' },
   { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
   { role: 'faturamento', label: 'Faturamento', path: '/faturamento' },
