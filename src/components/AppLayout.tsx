@@ -29,26 +29,6 @@ const AppLayout: React.FC = () => {
 
   useActivityTracker(session);
 
-  useEffect(() => {
-    const syncLayout = () => setLayoutMode(localStorage.getItem('topac_layout_mode') || 'premium');
-    window.addEventListener('storage', syncLayout);
-    window.addEventListener('topac-layout-change', syncLayout);
-    return () => {
-      window.removeEventListener('storage', syncLayout);
-      window.removeEventListener('topac-layout-change', syncLayout);
-    };
-  }, []);
-
-  if (roleLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!userRole) return <AguardandoAcesso />;
-
   const isDirector = isDirectorRole(userRoles);
 
   const globalResults = useMemo(() => {
@@ -77,6 +57,26 @@ const AppLayout: React.FC = () => {
 
     return [...moduleResults, ...companyResults, ...employeeResults].slice(0, 20);
   }, [searchQuery, companies, employees]);
+
+  useEffect(() => {
+    const syncLayout = () => setLayoutMode(localStorage.getItem('topac_layout_mode') || 'premium');
+    window.addEventListener('storage', syncLayout);
+    window.addEventListener('topac-layout-change', syncLayout);
+    return () => {
+      window.removeEventListener('storage', syncLayout);
+      window.removeEventListener('topac-layout-change', syncLayout);
+    };
+  }, []);
+
+  if (roleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!userRole) return <AguardandoAcesso />;
 
   const handleRefresh = async () => {
     setRefreshing(true);
