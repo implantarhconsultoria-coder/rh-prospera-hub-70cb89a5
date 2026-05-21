@@ -8,11 +8,14 @@ export interface FichaASOData {
   rg?: string;
   funcao: string;
   dataAdmissao?: string;
+  dataNascimento?: string;
+  setorGhe?: string;
   dataExame?: string;
   tipoExame: string;
   obraLocal?: string;
   trabalhoAltura: boolean;
   espacoConfinado: boolean;
+  toxicologico?: boolean;
   responsavelContato?: string;
   clinica?: string;
 }
@@ -31,7 +34,21 @@ export interface AvisoFeriasData {
   diasFerias: number;
 }
 
-const fmtBR = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '—');
+const fmtBR = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '---');
+
+const cleanFilePart = (value?: string) => String(value || 'SEM_INFORMACAO')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-zA-Z0-9]+/g, '_')
+  .replace(/^_+|_+$/g, '')
+  .toUpperCase() || 'SEM_INFORMACAO';
+
+export const makeDocumentFileName = (
+  tipo: string,
+  empresa?: string,
+  funcionario?: string,
+  data?: string,
+) => `${cleanFilePart(tipo)}_${cleanFilePart(empresa)}_${cleanFilePart(funcionario)}_${data || new Date().toISOString().slice(0, 10)}.pdf`;
 
 const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) => {
   doc.setFont('helvetica', 'bold');
@@ -39,7 +56,7 @@ const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) =
   doc.text(empresa, 15, 18);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`CNPJ: ${cnpj || '—'}`, 15, 24);
+  doc.text(`CNPJ: ${cnpj || '---'}`, 15, 24);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.text(titulo, 195, 22, { align: 'right' });
@@ -67,7 +84,7 @@ const drawBlock = (doc: jsPDF, y: number, titulo: string, linhas: [string, strin
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
     const labelWidth = doc.getTextWidth(`${label}: `);
-    doc.text(String(value || '—'), x + labelWidth, curY);
+    doc.text(String(value || '---'), x + labelWidth, curY);
     if (col === 1) curY += 7;
   });
   return y + altura + 5;
@@ -80,7 +97,7 @@ const drawSignatures = (doc: jsPDF, y: number) => {
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.text('Assinatura do Colaborador', 57, y + 5, { align: 'center' });
-  doc.text('Assinatura do Responsável', 152, y + 5, { align: 'center' });
+  doc.text('Assinatura do Responsavel', 152, y + 5, { align: 'center' });
 };
 
 export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
@@ -88,15 +105,17 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
   drawHeader(doc, d.empresa, d.cnpj || '', 'FICHA DE AGENDAMENTO ASO');
   let y = 35;
   y = drawBlock(doc, y, 'Dados do Colaborador', [
-    ['Nome', d.nome], ['Função', d.funcao],
-    ['CPF', d.cpf], ['RG', d.rg || '—'],
-    ['Admissão', fmtBR(d.dataAdmissao)], ['Empresa', d.empresa],
+    ['Nome', d.nome], ['Funcao', d.funcao],
+    ['CPF', d.cpf], ['RG', d.rg || '---'],
+    ['Admissao', fmtBR(d.dataAdmissao)], ['Empresa', d.empresa],
+    ['Nascimento', fmtBR(d.dataNascimento)], ['Setor/GHE', d.setorGhe || '---'],
   ]);
   y = drawBlock(doc, y, 'Dados do Exame', [
     ['Data do Exame', fmtBR(d.dataExame)], ['Tipo', d.tipoExame],
-    ['Obra/Local', d.obraLocal || '—'], ['Responsável', d.responsavelContato || '—'],
-    ['Trabalho em Altura', d.trabalhoAltura ? 'Sim' : 'Não'],
-    ['Espaço Confinado', d.espacoConfinado ? 'Sim' : 'Não'],
+    ['Obra/Local', d.obraLocal || '---'], ['Responsavel', d.responsavelContato || '---'],
+    ['NR35', d.trabalhoAltura ? 'Sim' : 'Nao'],
+    ['NR33', d.espacoConfinado ? 'Sim' : 'Nao'],
+    ['Toxicologico', d.toxicologico ? 'Sim' : 'Nao'],
   ]);
   if (d.clinica) {
     doc.setDrawColor(180);
@@ -104,7 +123,7 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(85);
-    doc.text('CLÍNICA', 18, y + 6);
+    doc.text('CLINICA', 18, y + 6);
     doc.setTextColor(0);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
@@ -113,33 +132,33 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
     y += 27;
   }
   drawSignatures(doc, y + 35);
-  const fileName = `Ficha_ASO_${d.nome.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+  const fileName = makeDocumentFileName('ASO', d.empresa, d.nome, d.dataExame || new Date().toISOString().slice(0, 10));
   return { blob: doc.output('blob'), fileName };
 };
 
 export const gerarAvisoFeriasPdf = (d: AvisoFeriasData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  drawHeader(doc, d.empresa, d.cnpj || '', 'AVISO DE FÉRIAS');
+  drawHeader(doc, d.empresa, d.cnpj || '', 'AVISO DE FERIAS');
   let y = 35;
   y = drawBlock(doc, y, 'Dados do Colaborador', [
-    ['Nome', d.nome], ['Função', d.funcao],
-    ['CPF', d.cpf], ['RG', d.rg || '—'],
-    ['Matrícula', d.matricula || '—'], ['Empresa', d.empresa],
-    ['Admissão', fmtBR(d.dataAdmissao)], ['', ''],
+    ['Nome', d.nome], ['Funcao', d.funcao],
+    ['CPF', d.cpf], ['RG', d.rg || '---'],
+    ['Matricula', d.matricula || '---'], ['Empresa', d.empresa],
+    ['Admissao', fmtBR(d.dataAdmissao)], ['', ''],
   ]);
   doc.setDrawColor(180);
   doc.roundedRect(15, y, 180, 50, 1.5, 1.5);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('COMUNICAÇÃO DE FÉRIAS', 18, y + 7);
+  doc.text('COMUNICACAO DE FERIAS', 18, y + 7);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  const texto = `Comunicamos que o(a) colaborador(a) acima identificado(a) gozará férias de ${d.diasFerias} dias, com início em ${fmtBR(d.inicioFerias)} e retorno em ${fmtBR(d.retornoFerias)}.\n\nData de emissão: ${new Date().toLocaleDateString('pt-BR')}`;
+  const texto = `Comunicamos que o(a) colaborador(a) acima identificado(a) gozara ferias de ${d.diasFerias} dias, com inicio em ${fmtBR(d.inicioFerias)} e retorno em ${fmtBR(d.retornoFerias)}.\n\nData de emissao: ${new Date().toLocaleDateString('pt-BR')}`;
   const wrapped = doc.splitTextToSize(texto, 174);
   doc.text(wrapped, 18, y + 15);
   y += 55;
   drawSignatures(doc, y + 35);
-  const fileName = `Aviso_Ferias_${d.nome.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+  const fileName = makeDocumentFileName('FERIAS', d.empresa, d.nome, d.inicioFerias ? d.inicioFerias.slice(0, 4) : new Date().toISOString().slice(0, 10));
   return { blob: doc.output('blob'), fileName };
 };
 
