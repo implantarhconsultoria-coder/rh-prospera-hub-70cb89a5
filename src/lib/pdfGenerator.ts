@@ -34,7 +34,7 @@ export interface AvisoFeriasData {
   diasFerias: number;
 }
 
-const fmtBR = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '---');
+const fmtBR = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '-');
 
 const cleanFilePart = (value?: string) => String(value || 'SEM_INFORMACAO')
   .normalize('NFD')
@@ -56,7 +56,7 @@ const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) =
   doc.text(empresa, 15, 18);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`CNPJ: ${cnpj || '---'}`, 15, 24);
+  doc.text(`CNPJ: ${cnpj || '-'}`, 15, 24);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.text(titulo, 195, 22, { align: 'right' });
@@ -84,7 +84,7 @@ const drawBlock = (doc: jsPDF, y: number, titulo: string, linhas: [string, strin
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
     const labelWidth = doc.getTextWidth(`${label}: `);
-    doc.text(String(value || '---'), x + labelWidth, curY);
+    doc.text(String(value || '-'), x + labelWidth, curY);
     if (col === 1) curY += 7;
   });
   return y + altura + 5;
@@ -106,13 +106,13 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
   let y = 35;
   y = drawBlock(doc, y, 'Dados do Colaborador', [
     ['Nome', d.nome], ['Funcao', d.funcao],
-    ['CPF', d.cpf], ['RG', d.rg || '---'],
+    ['CPF', d.cpf], ['RG', d.rg || '-'],
     ['Admissao', fmtBR(d.dataAdmissao)], ['Empresa', d.empresa],
     ['Nascimento', fmtBR(d.dataNascimento)], ['Setor/GHE', d.setorGhe || '---'],
   ]);
   y = drawBlock(doc, y, 'Dados do Exame', [
     ['Data do Exame', fmtBR(d.dataExame)], ['Tipo', d.tipoExame],
-    ['Obra/Local', d.obraLocal || '---'], ['Responsavel', d.responsavelContato || '---'],
+    ['Obra/Local', d.obraLocal || '-'], ['Responsavel', d.responsavelContato || '-'],
     ['NR35', d.trabalhoAltura ? 'Sim' : 'Nao'],
     ['NR33', d.espacoConfinado ? 'Sim' : 'Nao'],
     ['Toxicologico', d.toxicologico ? 'Sim' : 'Nao'],
@@ -136,14 +136,62 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
   return { blob: doc.output('blob'), fileName };
 };
 
+export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  drawHeader(doc, d.empresa, d.cnpj || '', 'AUTORIZACAO DE EXAMES / AUDIOLIFE');
+  let y = 35;
+  y = drawBlock(doc, y, 'Dados da Empresa', [
+    ['Empresa', d.empresa],
+    ['CNPJ', d.cnpj || '---'],
+    ['Obra/Local', d.obraLocal || '---'],
+    ['Responsavel/Contato', d.responsavelContato || '---'],
+  ]);
+  y = drawBlock(doc, y, 'Dados do Colaborador', [
+    ['Funcionario', d.nome],
+    ['CPF', d.cpf],
+    ['RG', d.rg || '---'],
+    ['Nascimento', fmtBR(d.dataNascimento)],
+    ['Funcao', d.funcao],
+    ['Setor/GHE', d.setorGhe || '---'],
+    ['Data Admissao', fmtBR(d.dataAdmissao)],
+    ['Tipo de Exame', 'ADMISSIONAL'],
+  ]);
+  y = drawBlock(doc, y, 'Exames / Riscos', [
+    ['NR35', d.trabalhoAltura ? 'Sim' : 'Nao'],
+    ['NR33', d.espacoConfinado ? 'Sim' : 'Nao'],
+    ['Toxicologico', d.toxicologico ? 'Sim' : 'Nao'],
+    ['Data do Exame', fmtBR(d.dataExame)],
+  ]);
+
+  doc.setDrawColor(180);
+  doc.roundedRect(15, y, 180, 34, 1.5, 1.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(85);
+  doc.text('AGENDAMENTO', 18, y + 6);
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const texto = [
+    'E-mail para agendamento: agendamento@ponteaereaseguranca.com.br',
+    'Solicitamos o agendamento do exame admissional conforme dados acima.',
+    'Esta guia deve acompanhar a solicitacao e permanecer arquivada no historico admissional.',
+  ].join('\n');
+  doc.text(doc.splitTextToSize(texto, 174), 18, y + 13);
+  y += 42;
+  drawSignatures(doc, y + 32);
+  const fileName = makeDocumentFileName('ASO_ADMISSIONAL', d.empresa, d.nome, d.dataExame || new Date().toISOString().slice(0, 10));
+  return { blob: doc.output('blob'), fileName };
+};
+
 export const gerarAvisoFeriasPdf = (d: AvisoFeriasData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   drawHeader(doc, d.empresa, d.cnpj || '', 'AVISO DE FERIAS');
   let y = 35;
   y = drawBlock(doc, y, 'Dados do Colaborador', [
     ['Nome', d.nome], ['Funcao', d.funcao],
-    ['CPF', d.cpf], ['RG', d.rg || '---'],
-    ['Matricula', d.matricula || '---'], ['Empresa', d.empresa],
+    ['CPF', d.cpf], ['RG', d.rg || '-'],
+    ['Matricula', d.matricula || '-'], ['Empresa', d.empresa],
     ['Admissao', fmtBR(d.dataAdmissao)], ['', ''],
   ]);
   doc.setDrawColor(180);
