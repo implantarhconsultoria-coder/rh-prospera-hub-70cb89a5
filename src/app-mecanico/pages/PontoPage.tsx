@@ -12,9 +12,9 @@ import { uploadFoto } from "../lib/upload";
 
 const LABELS: Record<string, string> = {
   entrada: "Registrar Entrada",
-  almoco_inicio: "Início do Almoço",
-  almoco_fim: "Retorno do Almoço",
-  saida: "Registrar Saída",
+  almoco_inicio: "InÃ­cio do AlmoÃ§o",
+  almoco_fim: "Retorno do AlmoÃ§o",
+  saida: "Registrar SaÃ­da",
 };
 
 export default function PontoPage() {
@@ -32,7 +32,7 @@ export default function PontoPage() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
-  // Selfie obrigatória somente na primeira batida do dia (ou se for entrada e ainda não tem batidas)
+  // Selfie obrigatÃ³ria somente na primeira batida do dia (ou se for entrada e ainda nÃ£o tem batidas)
   const exigirSelfie = tipo === "entrada" && statusDia?.batidas === 0;
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function PontoPage() {
 
   const registrar = async () => {
     if (!pos.lat) {
-      toast.error("Permita acesso à localização para concluir o registro.");
+      toast.error("Permita acesso Ã  localizaÃ§Ã£o para concluir o registro.");
       return;
     }
     if (exigirSelfie && !selfieUrl) {
@@ -87,26 +87,31 @@ export default function PontoPage() {
     <Card className="p-6 space-y-4">
       <h1 className="text-xl font-semibold">{LABELS[tipo]}</h1>
       <div className="text-sm space-y-2">
-        <p><span className="text-muted-foreground">Mecânico:</span> {mecanico.nome}</p>
+        <p><span className="text-muted-foreground">MecÃ¢nico:</span> {mecanico.nome}</p>
         {mecanico.empresa && <p><span className="text-muted-foreground">Empresa:</span> {mecanico.empresa}</p>}
+        {mecanico.registro_teste && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700">
+            Registro de teste: aparece para validaÃ§Ã£o, mas nÃ£o entra em fechamento oficial.
+          </p>
+        )}
         <p><span className="text-muted-foreground">Data/Hora:</span> {new Date().toLocaleString("pt-BR")}</p>
         <p className="flex items-center gap-2">
           <MapPin className="w-4 h-4 text-muted-foreground" />
           {pos.lat ? `${pos.lat.toFixed(5)}, ${pos.lng?.toFixed(5)}` :
-            posErr ? <span className="text-destructive">GPS bloqueado</span> : "Obtendo localização..."}
+            posErr ? <span className="text-destructive">GPS bloqueado</span> : "Obtendo localizaÃ§Ã£o..."}
         </p>
       </div>
 
       {posErr && (
         <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded">
           <AlertTriangle className="w-4 h-4 mt-0.5" />
-          <span>Permita acesso à câmera e localização para concluir o registro.</span>
+          <span>Permita acesso Ã  cÃ¢mera e localizaÃ§Ã£o para concluir o registro.</span>
         </div>
       )}
 
       {exigirSelfie && (
         <div className="space-y-2">
-          <p className="text-sm font-medium">Prova de vida (selfie obrigatória)</p>
+          <p className="text-sm font-medium">Prova de vida (selfie obrigatÃ³ria)</p>
           {selfieUrl ? (
             <div className="flex items-center gap-2 text-sm text-emerald-600">
               <CheckCircle2 className="w-4 h-4" /> Selfie capturada
