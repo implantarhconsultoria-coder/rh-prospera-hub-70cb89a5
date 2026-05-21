@@ -8,7 +8,7 @@ import {
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList,
   ChevronDown, ChevronRight, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
   ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch,
-  ShoppingCart, Sparkles,
+  ShoppingCart, Sparkles, DatabaseBackup,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -72,6 +72,7 @@ const faturamentoItems: MenuItem[] = [
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
   { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
   { label: 'Importacao de Dados', icon: Sparkles, path: '/admin/faturamento/importacao-dados' },
+  { label: 'Migracao DN4', icon: DatabaseBackup, path: '/admin/faturamento/migracao-dn4' },
   { label: 'Base de Faturamento', icon: FileText, path: '/admin/faturamento/importacao' },
 ];
 
