@@ -58,6 +58,9 @@ import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
 import ConferenciaPontoPage from "@/pages/ConferenciaPontoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
+import MobileAdminLayout from "@/pages/mobile-admin/MobileAdminLayout";
+import MobileAdminHome from "@/pages/mobile-admin/MobileAdminHome";
+import MobileAdminModulo from "@/pages/mobile-admin/MobileAdminModulo";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
 import MonitoramentoPage from "@/pages/MonitoramentoPage";
@@ -340,6 +343,17 @@ const AuthGate = () => {
         <Route path="/financeiro/inadimplencia" element={<InadimplenciaPage />} />
         <Route path="/financeiro/centros-custo" element={<CentrosCustoPage />} />
         <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
+      </Route>
+
+      {/* ========== MOBILE / ADMIN ========== */}
+      <Route path="/mobile/admin" element={<MobileAdminLayout />}>
+        <Route index element={<MobileAdminHome />} />
+        <Route path="rh" element={<MobileAdminModulo moduloKey="rh" titulo="Recursos Humanos" />} />
+        <Route path="faturamento" element={<MobileAdminModulo moduloKey="faturamento" titulo="Faturamento" />} />
+        <Route path="financeiro" element={<MobileAdminModulo moduloKey="financeiro" titulo="Financeiro" />} />
+        <Route path="abastecimento" element={<MobileAdminModulo moduloKey="abastecimento" titulo="Abastecimento" />} />
+        <Route path="documentos-rh" element={<MobileAdminModulo moduloKey="documentos-rh" titulo="Documentos RH" />} />
+        <Route path="config" element={<MobileAdminModulo moduloKey="config" titulo="Configurações" />} />
       </Route>
 
       {/* Catch-all */}

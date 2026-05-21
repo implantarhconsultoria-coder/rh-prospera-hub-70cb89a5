@@ -6924,6 +6924,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      _mobile_admin_unidade: { Args: { _user_id: string }; Returns: string }
       acesso_externo_filtro_empresa: {
         Args: { p_acesso_id: string; p_modulo: string }
         Returns: Json
@@ -7140,6 +7141,16 @@ export type Database = {
       }
       fechamento_filial_sincronizar: {
         Args: { p_company_id: string; p_competencia: string }
+        Returns: Json
+      }
+      fn_liberar_acesso_mobile_admin: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
+      fn_mobile_admin_home: { Args: { p_user_id: string }; Returns: Json }
+      fn_mobile_admin_permissoes: { Args: { p_user_id: string }; Returns: Json }
+      fn_mobile_admin_status_modulos: {
+        Args: { p_user_id: string }
         Returns: Json
       }
       gen_tecnico_access_token: { Args: never; Returns: string }
