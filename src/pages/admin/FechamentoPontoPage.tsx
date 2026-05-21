@@ -41,7 +41,7 @@ const FechamentoPontoPage: React.FC = () => {
     setCarregando(true);
     setExecutado(false);
     try {
-      // 1. Selecionar funcionários relevantes (apenas operacional + ativo)
+      // 1. Selecionar funcionÃ¡rios relevantes (apenas operacional + ativo)
       const empsAlvo = employees.filter(
         (e) =>
           e.status === 'ativo' &&
@@ -49,22 +49,23 @@ const FechamentoPontoPage: React.FC = () => {
       );
 
       if (empsAlvo.length === 0) {
-        toast.error('Nenhum funcionário ativo encontrado para esta seleção.');
+        toast.error('Nenhum funcionÃ¡rio ativo encontrado para esta seleÃ§Ã£o.');
         setLinhas([]);
         setExecutado(true);
         return;
       }
 
-      // 2. Buscar TODOS os registros de ponto da competência (uma única query)
+      // 2. Buscar TODOS os registros de ponto da competÃªncia (uma Ãºnica query)
       const [y, m] = competencia.split('-').map(Number);
       const ini = `${y}-${String(m).padStart(2, '0')}-01`;
       const fim = new Date(y, m, 0).toISOString().slice(0, 10);
 
       const { data: pontos, error } = await (supabase as any)
         .from('registros_ponto')
-        .select('id, user_id, tipo, data, hora')
+        .select('id, user_id, tipo, data, hora, registro_teste')
         .gte('data', ini)
         .lte('data', fim)
+        .eq('registro_teste', false)
         .order('data', { ascending: true })
         .order('hora', { ascending: true });
 
@@ -73,9 +74,9 @@ const FechamentoPontoPage: React.FC = () => {
         return;
       }
 
-      // 3. Para cada funcionário, calcular resumo
+      // 3. Para cada funcionÃ¡rio, calcular resumo
       // Como employees tem id (do funcionario) e o ponto usa user_id (auth user),
-      // precisamos buscar o vínculo. Aqui usamos o email/cpf para tentar mapear.
+      // precisamos buscar o vÃ­nculo. Aqui usamos o email/cpf para tentar mapear.
       // Como fallback, este fechamento mostra TODOS os user_ids que registraram
       // ponto, e tentamos casar pelo nome via colaborador_veiculo + funcionarios.
 
@@ -119,13 +120,13 @@ const FechamentoPontoPage: React.FC = () => {
         resumos.push({
           ...resumo,
           nome: emp?.name || perfil?.nome || 'Colaborador desconhecido',
-          cargo: emp?.cargo || '—',
-          empresaNome: empresaInfo?.name || '—',
+          cargo: emp?.cargo || 'â€”',
+          empresaNome: empresaInfo?.name || 'â€”',
           empresaId: emp?.companyId || '',
         });
       }
 
-      // Adicionar funcionários SEM nenhum ponto registrado (faltas integrais)
+      // Adicionar funcionÃ¡rios SEM nenhum ponto registrado (faltas integrais)
       for (const emp of empsAlvo) {
         const jaTem = resumos.some(
           (r) => r.nome.toLowerCase() === emp.name.toLowerCase(),
@@ -138,7 +139,7 @@ const FechamentoPontoPage: React.FC = () => {
           ...resumo,
           nome: emp.name,
           cargo: emp.cargo,
-          empresaNome: empresaInfo?.name || '—',
+          empresaNome: empresaInfo?.name || 'â€”',
           empresaId: emp.companyId,
         });
       }
@@ -195,8 +196,8 @@ const FechamentoPontoPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Fechamento por Ponto</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Cálculo baseado <strong>somente</strong> nos registros de ponto. Não considera
-            abastecimento, galões, chamados, KM, estoque, ASO, férias ou outros módulos.
+            CÃ¡lculo baseado <strong>somente</strong> nos registros de ponto. NÃ£o considera
+            abastecimento, galÃµes, chamados, KM, estoque, ASO, fÃ©rias ou outros mÃ³dulos.
           </p>
         </div>
       </div>
@@ -218,7 +219,7 @@ const FechamentoPontoPage: React.FC = () => {
           </select>
         </div>
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Competência</label>
+          <label className="text-xs text-muted-foreground block mb-1">CompetÃªncia</label>
           <Input
             type="month"
             value={competencia}
@@ -244,7 +245,7 @@ const FechamentoPontoPage: React.FC = () => {
           ) : (
             <Lock className="w-4 h-4 mr-2" />
           )}
-          {carregando ? 'Calculando...' : 'FECHAR O MÊS'}
+          {carregando ? 'Calculando...' : 'FECHAR O MÃŠS'}
         </Button>
         {executado && (
           <Button onClick={fecharMes} variant="outline" size="icon" title="Recalcular">
@@ -310,7 +311,7 @@ const FechamentoPontoPage: React.FC = () => {
               </p>
             </Card>
             <Card className="p-4">
-              <div className="text-xs text-muted-foreground uppercase">Inconsistências</div>
+              <div className="text-xs text-muted-foreground uppercase">InconsistÃªncias</div>
               <p className="text-2xl font-bold font-display mt-1 text-warning">
                 {totais.inconsist}
               </p>
@@ -326,7 +327,7 @@ const FechamentoPontoPage: React.FC = () => {
                     'Colaborador',
                     'Empresa',
                     'Cargo',
-                    'Dias Úteis',
+                    'Dias Ãšteis',
                     'Trab.',
                     'Faltas',
                     'Atraso',
@@ -354,15 +355,15 @@ const FechamentoPontoPage: React.FC = () => {
                     <td className="px-2 py-2 text-xs">{l.cargo}</td>
                     <td className="px-2 py-2 text-xs">{l.diasUteis}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.diasTrabalhados}</td>
-                    <td className="px-2 py-2 text-xs text-destructive">{l.faltas || '—'}</td>
+                    <td className="px-2 py-2 text-xs text-destructive">{l.faltas || 'â€”'}</td>
                     <td className="px-2 py-2 text-xs">
-                      {l.atrasoTotalMin > 0 ? formatarMinutos(l.atrasoTotalMin) : '—'}
+                      {l.atrasoTotalMin > 0 ? formatarMinutos(l.atrasoTotalMin) : 'â€”'}
                     </td>
                     <td className="px-2 py-2 text-xs text-success">
-                      {l.horasExtrasMin > 0 ? formatarMinutos(l.horasExtrasMin) : '—'}
+                      {l.horasExtrasMin > 0 ? formatarMinutos(l.horasExtrasMin) : 'â€”'}
                     </td>
                     <td className="px-2 py-2 text-xs text-destructive">
-                      {l.horasFaltantesMin > 0 ? formatarMinutos(l.horasFaltantesMin) : '—'}
+                      {l.horasFaltantesMin > 0 ? formatarMinutos(l.horasFaltantesMin) : 'â€”'}
                     </td>
                     <td className="px-2 py-2 text-xs">{formatarMinutos(l.jornadaCumpridaMin)}</td>
                     <td className="px-2 py-2 text-xs text-muted-foreground">
@@ -381,7 +382,7 @@ const FechamentoPontoPage: React.FC = () => {
                           {l.inconsistencias}
                         </Badge>
                       ) : (
-                        '—'
+                        'â€”'
                       )}
                     </td>
                   </tr>
@@ -389,7 +390,7 @@ const FechamentoPontoPage: React.FC = () => {
                 {linhasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan={13} className="px-2 py-8 text-center text-muted-foreground text-sm">
-                      Nenhum colaborador para esta seleção.
+                      Nenhum colaborador para esta seleÃ§Ã£o.
                     </td>
                   </tr>
                 )}
@@ -398,8 +399,8 @@ const FechamentoPontoPage: React.FC = () => {
           </Card>
 
           <p className="text-xs text-muted-foreground italic">
-            Esta visão é exclusivamente para conferência manual. Nenhum dado é gravado
-            automaticamente — você continua fechando manualmente.
+            Esta visÃ£o Ã© exclusivamente para conferÃªncia manual. Nenhum dado Ã© gravado
+            automaticamente â€” vocÃª continua fechando manualmente.
           </p>
         </>
       )}
@@ -408,7 +409,7 @@ const FechamentoPontoPage: React.FC = () => {
         <Card className="p-8 text-center text-muted-foreground">
           <Clock className="w-10 h-10 mx-auto mb-3 opacity-40" />
           <p className="text-sm">
-            Selecione a empresa e a competência, depois clique em <strong>FECHAR O MÊS</strong>{' '}
+            Selecione a empresa e a competÃªncia, depois clique em <strong>FECHAR O MÃŠS</strong>{' '}
             para gerar o pente-fino do ponto.
           </p>
         </Card>
