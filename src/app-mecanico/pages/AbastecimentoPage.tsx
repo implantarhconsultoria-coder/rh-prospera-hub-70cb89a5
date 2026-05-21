@@ -1,38 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useMecanicoApp } from "../MecanicoAppContext";
-import { supabase } from "@/integrations/supabase/client";
-import { uploadFoto } from "../lib/upload";
-import { getBrowserLocation } from "@/lib/browserGeo";
-import CameraCapture from "../components/CameraCapture";
-import { toast } from "sonner";
+import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, Camera, Check, Copy, Fuel, Gauge, Loader2, MessageCircle, QrCode, RotateCcw, Share2 } from "lucide-react";
 import QrScanner from "qr-scanner";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
+import { getBrowserLocation } from "@/lib/browserGeo";
+import CameraCapture from "../components/CameraCapture";
+import { useMecanicoApp } from "../MecanicoAppContext";
+import { uploadFoto } from "../lib/upload";
 
-type Step = "scan" | "vale" | "bomba" | "painel" | "form" | "ok";
-type CameraMode = "environment" | "user" | null;
-
-type ScanFeedback = {
-  title: string;
-  detail?: string;
-  reason:
-    | "https"
-    | "unsupported"
-    | "blocked"
-    | "no-camera"
-    | "busy"
-    | "technical"
-    | "qr"
-    | "permission";
-};
+type Step = "scan" | "vale" | "painel" | "form" | "ok";
 
 interface Posto {
   id: string;
   codigo: string;
   nome: string;
+  unidade?: string | null;
   cnpj: string | null;
   endereco: string | null;
   telefone: string | null;
@@ -42,6 +28,10 @@ interface MecInfo {
   nome: string;
   empresa: string;
   filial: string;
+  placa?: string | null;
+  carros?: string[];
+  exige_selecao_carro?: boolean;
+  ultimo_km?: number | null;
 }
 
 interface ReceiptInfo {
@@ -58,7 +48,9 @@ interface ReceiptInfo {
   combustivel: string;
   valor: string;
   litros: string;
+  precoLitro: string;
   km: string;
+  kmRodado: number | null;
   observacao: string;
   fotoBombaUrl: string;
   fotoPainelUrl: string;
@@ -73,327 +65,93 @@ const supabaseRpc = supabase as unknown as {
 export default function AbastecimentoPage() {
   const { mecanico } = useMecanicoApp();
   const [step, setStep] = useState<Step>("scan");
-  const [posto, setPostoData] = useState<Posto | null>(null);
+  const [posto, setPosto] = useState<Posto | null>(null);
   const [mecInfo, setMecInfo] = useState<MecInfo | null>(null);
   const [codigo, setCodigo] = useState("");
   const [loading, setLoading] = useState(false);
-
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
   const [camBomba, setCamBomba] = useState(false);
   const [camPainel, setCamPainel] = useState(false);
-  const [fotoBombaUrl, setFotoBombaUrl] = useState<string | null>(null);
-  const [fotoPainelUrl, setFotoPainelUrl] = useState<string | null>(null);
-  const [analisando, setAnalisando] = useState(false);
-
+  const [fotoBombaUrl, setFotoBombaUrl] = useState("");
+  const [fotoPainelUrl, setFotoPainelUrl] = useState("");
   const [valor, setValor] = useState("");
   const [litros, setLitros] = useState("");
+  const [precoLitro, setPrecoLitro] = useState("");
   const [combustivel, setCombustivel] = useState("Diesel S10");
-  const [postoNome, setPostoNome] = useState("");
   const [placa, setPlaca] = useState("");
+  const [carros, setCarros] = useState<string[]>([]);
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
-
-  const scannerRef = useRef<QrScanner | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [scanning, setScanning] = useState(false);
-  const [scanLoading, setScanLoading] = useState(false);
-  const [scanFeedback, setScanFeedback] = useState<ScanFeedback | null>(null);
-  const [cameraMode, setCameraMode] = useState<CameraMode>(null);
+  const scannerRef = useRef<QrScanner | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const secureContext = typeof window !== "undefined" && (window.isSecureContext || window.location.hostname === "localhost");
+  const isSecure = typeof window !== "undefined" && (window.isSecureContext || window.location.hostname === "localhost");
+  const isCanonicalHost = typeof window !== "undefined" && window.location.origin === CANONICAL_BASE_URL;
   const canonicalUrl = useMemo(() => {
     if (typeof window === "undefined") return CANONICAL_BASE_URL;
     return `${CANONICAL_BASE_URL}${window.location.pathname}${window.location.search}${window.location.hash}`;
   }, []);
-  const isCanonicalHost = typeof window !== "undefined" && window.location.origin === CANONICAL_BASE_URL;
+  const kmRodado = useMemo(() => {
+    const atual = Number(km);
+    const anterior = mecInfo?.ultimo_km;
+    if (!Number.isFinite(atual) || typeof anterior !== "number") return null;
+    const diff = atual - anterior;
+    return diff >= 0 ? diff : null;
+  }, [km, mecInfo?.ultimo_km]);
 
-  const stopScanner = async () => {
-    const instance = scannerRef.current;
-    if (instance) {
-      try {
-        instance.stop();
-      } catch {
-        void 0;
-      }
-      try {
-        instance.destroy();
-      } catch {
-        void 0;
-      }
-      scannerRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+  const stopScanner = () => {
+    scannerRef.current?.stop();
+    scannerRef.current?.destroy();
+    scannerRef.current = null;
     setScanning(false);
-    setScanLoading(false);
-    setCameraMode(null);
-  };
-
-  useEffect(() => {
-    return () => {
-      stopScanner();
-    };
-  }, []);
-
-  const getPermissionHint = (reason: ScanFeedback["reason"]) => {
-    switch (reason) {
-      case "https":
-        return "Abra o App MecÃ¢nico pelo endereÃ§o seguro https://implantarhprpro.com para usar a cÃ¢mera.";
-      case "blocked":
-      case "permission":
-        return "Toque no cadeado/Ã­cone do site no navegador > PermissÃµes > CÃ¢mera > Permitir. Depois toque em Tentar novamente.";
-      case "no-camera":
-        return "Use outro aparelho com cÃ¢mera ou continue pelo envio da foto do QR / digitaÃ§Ã£o manual.";
-      case "unsupported":
-        return "Atualize o navegador do celular. Chrome Android e Safari iPhone sÃ£o compatÃ­veis.";
-      case "busy":
-        return "Feche outros apps que estejam usando a cÃ¢mera e tente novamente.";
-      case "technical":
-      case "qr":
-      default:
-        return "Se a cÃ¢mera nÃ£o abrir, continue pela galeria ou digite o cÃ³digo manualmente.";
-    }
-  };
-
-  const getCameraPermissionState = async () => {
-    try {
-      if (!navigator.permissions?.query) return null;
-      const result = await navigator.permissions.query({ name: "camera" as PermissionName });
-      return result.state;
-    } catch {
-      return null;
-    }
-  };
-
-  const resolveCameraError = async (error?: unknown): Promise<ScanFeedback> => {
-    if (!secureContext) {
-      return {
-        title: "A cÃ¢mera exige conexÃ£o segura HTTPS.",
-        detail: `Abra pelo endereÃ§o seguro ${CANONICAL_BASE_URL}.`,
-        reason: "https",
-      };
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      return {
-        title: "Este navegador nÃ£o suporta acesso Ã  cÃ¢mera.",
-        detail: "Use Chrome no Android ou Safari no iPhone atualizado.",
-        reason: "unsupported",
-      };
-    }
-
-    const permissionState = await getCameraPermissionState();
-    const name = typeof error === "object" && error && "name" in error ? String((error as { name?: string }).name) : "";
-    const message = typeof error === "object" && error && "message" in error ? String((error as { message?: string }).message) : String(error || "");
-
-    if (permissionState === "denied" || name === "NotAllowedError" || name === "PermissionDeniedError") {
-      return {
-        title: "A cÃ¢mera foi bloqueada no navegador.",
-        detail: "Permita o uso da cÃ¢mera para continuar a leitura do QR Code.",
-        reason: permissionState === "denied" ? "blocked" : "permission",
-      };
-    }
-
-    if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-      return {
-        title: "Nenhuma cÃ¢mera foi encontrada neste aparelho.",
-        detail: "Use a galeria ou digite o cÃ³digo do QR manualmente.",
-        reason: "no-camera",
-      };
-    }
-
-    if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError") {
-      return {
-        title: "A cÃ¢mera estÃ¡ ocupada ou indisponÃ­vel no momento.",
-        detail: "Feche outros aplicativos que estejam usando a cÃ¢mera e tente novamente.",
-        reason: "busy",
-      };
-    }
-
-    if (name === "SecurityError") {
-      return {
-        title: "O navegador bloqueou o acesso Ã  cÃ¢mera.",
-        detail: `Abra o App MecÃ¢nico em ${CANONICAL_BASE_URL}.`,
-        reason: "https",
-      };
-    }
-
-    return {
-      title: "NÃ£o foi possÃ­vel abrir a cÃ¢mera.",
-      detail: message && message !== "undefined" ? message : "Erro tÃ©cnico ao iniciar o leitor de QR Code.",
-      reason: "technical",
-    };
-  };
-
-  const requestCameraStream = async () => {
-    const attempts: Array<{ constraints: MediaStreamConstraints; mode: CameraMode }> = [
-      {
-        mode: "environment",
-        constraints: {
-          audio: false,
-          video: {
-            facingMode: { exact: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        },
-      },
-      {
-        mode: "environment",
-        constraints: {
-          audio: false,
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        },
-      },
-      {
-        mode: "user",
-        constraints: {
-          audio: false,
-          video: {
-            facingMode: { exact: "user" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        },
-      },
-      {
-        mode: "user",
-        constraints: {
-          audio: false,
-          video: {
-            facingMode: { ideal: "user" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        },
-      },
-    ];
-
-    let lastError: unknown = null;
-
-    for (const attempt of attempts) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
-        return { stream, mode: attempt.mode };
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    throw lastError;
   };
 
   const iniciarScanner = async () => {
-    setScanFeedback(null);
-
+    setScanError("");
     if (typeof window !== "undefined" && window.location.hostname !== "localhost" && !isCanonicalHost) {
       window.location.assign(canonicalUrl);
       return;
     }
-
-    if (!secureContext) {
-      setScanFeedback(await resolveCameraError());
+    if (!isSecure || !navigator.mediaDevices?.getUserMedia) {
+      setScanError(`Abra pelo endereco seguro ${CANONICAL_BASE_URL} ou digite o codigo manualmente.`);
       return;
     }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setScanFeedback(await resolveCameraError());
-      return;
-    }
-
-    setScanLoading(true);
-
-    // Dispara getUserMedia IMEDIATAMENTE dentro do gesto do usuÃ¡rio
-    // para garantir que o popup nativo de permissÃ£o apareÃ§a no Android/iOS.
-    let stream: MediaStream | null = null;
-    let mode: CameraMode = "environment";
     try {
-      await stopScanner();
-      const result = await requestCameraStream();
-      stream = result.stream;
-      mode = result.mode;
-    } catch (error) {
-      setScanFeedback(await resolveCameraError(error));
-      setScanLoading(false);
-      return;
-    }
-
-    try {
-      const video = videoRef.current;
-      if (!video) {
-        stream.getTracks().forEach((t) => t.stop());
-        setScanFeedback({
-          title: "NÃ£o foi possÃ­vel preparar a cÃ¢mera.",
-          detail: "Atualize a pÃ¡gina e tente novamente.",
-          reason: "technical",
-        });
-        setScanLoading(false);
-        return;
-      }
-      // Libera o stream temporÃ¡rio; QrScanner reabre com o modo correto
-      stream.getTracks().forEach((t) => t.stop());
-
+      stopScanner();
       const scanner = new QrScanner(
-        video,
+        videoRef.current!,
         (result) => {
           const decoded = typeof result === "string" ? result : result.data;
           stopScanner();
           setCodigo(decoded);
           validarQr(decoded);
         },
-        {
-          preferredCamera: mode || "environment",
-          maxScansPerSecond: 8,
-          highlightScanRegion: false,
-          highlightCodeOutline: false,
-          returnDetailedScanResult: true,
-          onDecodeError: () => {},
-        },
+        { preferredCamera: "environment", returnDetailedScanResult: true, maxScansPerSecond: 8 },
       );
-
       scannerRef.current = scanner;
       await scanner.start();
       setScanning(true);
-      setCameraMode(mode);
-    } catch (error) {
-      setScanFeedback(await resolveCameraError(error));
-      await stopScanner();
-    } finally {
-      setScanLoading(false);
+    } catch {
+      setScanError("Nao foi possivel abrir a camera. Use a galeria ou digite o codigo manualmente.");
     }
   };
 
   const lerArquivoQr = async (file: File) => {
-    setScanFeedback(null);
     try {
-      const result = await QrScanner.scanImage(file, {
-        returnDetailedScanResult: true,
-        alsoTryWithoutScanRegion: true,
-      });
+      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true, alsoTryWithoutScanRegion: true });
       const decoded = typeof result === "string" ? result : result.data;
       setCodigo(decoded);
       validarQr(decoded);
-    } catch (error) {
-      const message = typeof error === "object" && error && "message" in error ? String((error as { message?: string }).message) : "";
-      setScanFeedback({
-        title: "NÃ£o foi possÃ­vel ler o QR da imagem.",
-        detail: message && message !== "undefined" ? message : "Tente outra foto com foco melhor e boa iluminaÃ§Ã£o.",
-        reason: "qr",
-      });
+    } catch {
+      setScanError("Nao foi possivel ler o QR da imagem. Tente outra foto ou digite o codigo.");
     }
   };
 
   const validarQr = async (cod: string) => {
-    if (!cod) {
-      toast.error("Informe o cÃ³digo do QR");
-      return;
-    }
+    if (!cod.trim()) return toast.error("Informe o codigo do QR");
     setLoading(true);
     const { data, error } = await supabaseRpc.rpc("app_mecanico_validar_qr_posto", {
       p_acesso_id: mecanico.acesso_id,
@@ -401,27 +159,28 @@ export default function AbastecimentoPage() {
     });
     setLoading(false);
     const r = (data ?? null) as { ok?: boolean; error?: string; posto?: Posto; mecanico?: MecInfo } | null;
-    if (error || !r?.ok) {
-      const err = r?.error || error?.message || "qr_invalido";
-      const map: Record<string, string> = {
-        qr_nao_encontrado: "QR Code do posto ainda nÃ£o foi gerado no admin.",
-        qr_bloqueado: "QR Code bloqueado pelo administrador.",
-        acesso_nao_autorizado: "Acesso nÃ£o autorizado.",
-      };
-      const msg = map[err] || "Erro ao validar QR Code.";
-      toast.error(msg);
-      setScanFeedback({
-        title: msg,
-        detail: "Confira o cÃ³digo lido, envie uma foto mais nÃ­tida ou digite manualmente.",
-        reason: "qr",
-      });
-      setStep("scan");
-      return;
+    if (error || !r?.ok || !r.posto) {
+      const msg = r?.error === "qr_nao_encontrado" ? "QR Code do posto nao encontrado." : "Erro ao validar QR Code.";
+      setScanError(msg);
+      return toast.error(msg);
     }
-    setPostoData(r.posto);
-    setMecInfo(r.mecanico);
-    setPostoNome(r.posto?.nome || "");
+    const placas = (r.mecanico?.carros || []).map((item) => String(item).trim().toUpperCase()).filter(Boolean);
+    const placaInicial = r.mecanico?.placa || (!r.mecanico?.exige_selecao_carro && placas.length === 1 ? placas[0] : "");
+    setPosto(r.posto);
+    setMecInfo(r.mecanico || null);
+    setCarros(placas);
+    setPlaca((placaInicial || "").toUpperCase());
     setStep("vale");
+  };
+
+  const analisarFoto = async (blob: Blob, tipo?: "painel_km") => {
+    try {
+      const dataUrl = await blobToDataUrl(blob);
+      const { data } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl, tipo } });
+      return data as { ok?: boolean; valor?: string | number; litros?: string | number; valor_por_litro?: string | number; combustivel?: string; km?: string | number; km_atual?: string | number } | null;
+    } catch {
+      return null;
+    }
   };
 
   const onCaptureBomba = async (blob: Blob) => {
@@ -429,24 +188,17 @@ export default function AbastecimentoPage() {
     try {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "bomba", blob);
       setFotoBombaUrl(url);
-      setAnalisando(true);
-      try {
-        const dataUrl = await blobToDataUrl(blob);
-        const { data } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl } });
-        const r = (data ?? null) as { ok?: boolean; valor?: string | number; litros?: string | number; combustivel?: string } | null;
-        if (r?.ok) {
-          if (r.valor) setValor(String(r.valor));
-          if (r.litros) setLitros(String(r.litros));
-          if (r.combustivel) setCombustivel(r.combustivel);
-        }
-      } catch {
-        void 0;
+      const r = await analisarFoto(blob);
+      if (r?.ok) {
+        if (r.valor) setValor(String(r.valor));
+        if (r.litros) setLitros(String(r.litros));
+        if (r.valor_por_litro) setPrecoLitro(String(r.valor_por_litro));
+        if (r.combustivel) setCombustivel(r.combustivel);
       }
-      setAnalisando(false);
       setStep("painel");
-      toast.success("Foto da bomba salva. Agora a foto do painel/KM.");
-    } catch (e: unknown) {
-      toast.error(getErrorMessage(e) || "Erro no upload");
+      toast.success("Foto da bomba salva. Agora tire a foto do KM.");
+    } catch (e) {
+      toast.error(getErrorMessage(e) || "Erro no upload da bomba");
     } finally {
       setLoading(false);
     }
@@ -457,9 +209,12 @@ export default function AbastecimentoPage() {
     try {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", blob);
       setFotoPainelUrl(url);
+      const r = await analisarFoto(blob, "painel_km");
+      const detectedKm = r?.km ?? r?.km_atual;
+      if (r?.ok && detectedKm) setKm(String(detectedKm));
       setStep("form");
-    } catch (e: unknown) {
-      toast.error(getErrorMessage(e) || "Erro no upload");
+    } catch (e) {
+      toast.error(getErrorMessage(e) || "Erro no upload do KM");
     } finally {
       setLoading(false);
     }
@@ -467,14 +222,9 @@ export default function AbastecimentoPage() {
 
   const finalizar = async () => {
     if (!posto) return;
-    if (!fotoBombaUrl || !fotoPainelUrl) {
-      toast.error("Fotos obrigatÃ³rias");
-      return;
-    }
-    if (!valor || !litros) {
-      toast.error("Informe valor e litros");
-      return;
-    }
+    if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("Fotos obrigatorias");
+    if (!valor || !litros) return toast.error("Informe valor e litros");
+    if (mecInfo?.exige_selecao_carro && !placa) return toast.error("Selecione o carro");
     setLoading(true);
     const { latitude, longitude } = await getBrowserLocation();
     const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
@@ -493,15 +243,12 @@ export default function AbastecimentoPage() {
       p_endereco: null,
     });
     setLoading(false);
-    const r = (data ?? null) as { ok?: boolean; error?: string; id?: string } | null;
-    if (error || !r?.ok) {
-      toast.error(r?.error || error?.message || "Erro ao salvar");
-      return;
-    }
+    const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null } | null;
+    if (error || !r?.ok) return toast.error(r?.error || error?.message || "Erro ao salvar");
     setReceipt({
       id: r.id || "",
       codigo: posto.codigo,
-      postoNome: posto.nome || postoNome,
+      postoNome: posto.nome,
       postoCnpj: posto.cnpj || "",
       postoEndereco: posto.endereco || "",
       postoTelefone: posto.telefone || "",
@@ -512,30 +259,20 @@ export default function AbastecimentoPage() {
       combustivel,
       valor,
       litros,
+      precoLitro: String(r.preco_litro ?? r.valor_por_litro ?? precoLitro),
       km,
+      kmRodado: r.km_rodado ?? kmRodado,
       observacao: obs,
       fotoBombaUrl,
       fotoPainelUrl,
       createdAt: new Date(),
     });
-    toast.success("Abastecimento registrado!");
     setStep("ok");
+    toast.success("Abastecimento registrado!");
   };
 
-  const formatCurrency = (value: string) => {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return value || "0";
-    return number.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  };
-
-  const formatDecimal = (value: string, digits = 3) => {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return value || "0";
-    return number.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: digits });
-  };
-
-  const buildReceiptText = (info: ReceiptInfo) => {
-    const lines = [
+  const buildReceiptText = (info: ReceiptInfo) =>
+    [
       "*TOPAC RH PRO - Abastecimento*",
       `Registro: ${info.id || "salvo"}`,
       `Data/Hora: ${info.createdAt.toLocaleString("pt-BR")}`,
@@ -549,64 +286,52 @@ export default function AbastecimentoPage() {
       info.postoEndereco ? `Endereco: ${info.postoEndereco}` : "",
       `QR: ${info.codigo}`,
       "",
-      `Combustivel: ${info.combustivel || "nao informado"}`,
-      `Litros: ${formatDecimal(info.litros)} L`,
-      `Valor: ${formatCurrency(info.valor)}`,
+      `Combustivel: ${info.combustivel}`,
+      `Litros: ${fmtNumber(info.litros)} L`,
+      `Preco/L: ${fmtMoney(info.precoLitro)}`,
+      `Valor: ${fmtMoney(info.valor)}`,
       `KM: ${info.km || "nao informado"}`,
+      info.kmRodado !== null ? `KM rodado desde o ultimo registro: ${fmtNumber(String(info.kmRodado), 0)} km` : "",
       info.observacao ? `Obs.: ${info.observacao}` : "",
       "",
       `Foto da bomba: ${info.fotoBombaUrl}`,
       `Foto do KM/painel: ${info.fotoPainelUrl}`,
-    ];
-    return lines.filter(Boolean).join("\n");
-  };
+    ].filter(Boolean).join("\n");
 
   const shareReceipt = async () => {
     if (!receipt) return;
     const text = buildReceiptText(receipt);
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: "Abastecimento TOPAC", text });
-        return;
-      }
-      await navigator.clipboard.writeText(text);
-      toast.success("Notinha copiada para enviar no WhatsApp");
-    } catch (error) {
-      if ((error as { name?: string })?.name !== "AbortError") {
-        toast.error("Nao foi possivel compartilhar. Copie a notinha.");
-      }
+    if (navigator.share) {
+      await navigator.share({ title: "Abastecimento TOPAC", text });
+      return;
     }
-  };
-
-  const copyReceipt = async () => {
-    if (!receipt) return;
-    await navigator.clipboard.writeText(buildReceiptText(receipt));
+    await navigator.clipboard.writeText(text);
     toast.success("Notinha copiada");
   };
 
   const openWhatsapp = (phone?: string) => {
     if (!receipt) return;
-    const cleanPhone = (phone || "").replace(/\D/g, "");
-    const destination = cleanPhone ? `55${cleanPhone.replace(/^55/, "")}` : "";
-    const url = destination
-      ? `https://wa.me/${destination}?text=${encodeURIComponent(buildReceiptText(receipt))}`
-      : `https://wa.me/?text=${encodeURIComponent(buildReceiptText(receipt))}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    const clean = (phone || "").replace(/\D/g, "");
+    const target = clean ? `55${clean.replace(/^55/, "")}` : "";
+    window.open(`${target ? `https://wa.me/${target}` : "https://wa.me/"}?text=${encodeURIComponent(buildReceiptText(receipt))}`, "_blank", "noopener,noreferrer");
   };
 
   const reset = () => {
     stopScanner();
-    setPostoData(null);
+    setPosto(null);
     setMecInfo(null);
     setCodigo("");
-    setFotoBombaUrl(null);
-    setFotoPainelUrl(null);
+    setFotoBombaUrl("");
+    setFotoPainelUrl("");
     setValor("");
     setLitros("");
+    setPrecoLitro("");
+    setPlaca("");
+    setCarros([]);
     setKm("");
     setObs("");
     setReceipt(null);
-    setScanFeedback(null);
+    setScanError("");
     setStep("scan");
   };
 
@@ -614,111 +339,27 @@ export default function AbastecimentoPage() {
     <div className="space-y-4">
       <Card className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600">
-            <Fuel className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold">Abastecimento</h1>
-            <p className="text-xs text-muted-foreground">QR Code + foto da bomba + foto do painel</p>
-          </div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600"><Fuel className="h-5 w-5" /></div>
+          <div><h1 className="text-base font-bold">Abastecimento</h1><p className="text-xs text-muted-foreground">QR Code + foto da bomba + foto do painel</p></div>
         </div>
       </Card>
 
       {step === "scan" && (
         <Card className="space-y-3 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <QrCode className="h-4 w-4" /> Ler QR Code do posto
-          </div>
-
-          {!secureContext && (
-            <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-              <div className="font-semibold text-foreground">A cÃ¢mera precisa de HTTPS.</div>
-              <p className="mt-1">Use o App MecÃ¢nico em {CANONICAL_BASE_URL} para liberar a cÃ¢mera no celular.</p>
-              {!isCanonicalHost && (
-                <Button type="button" variant="secondary" className="mt-3 w-full" onClick={() => window.location.assign(canonicalUrl)}>
-                  Abrir versÃ£o segura
-                </Button>
-              )}
-            </div>
-          )}
-
-          <div className={`overflow-hidden rounded-xl border border-border bg-muted ${scanning || scanLoading ? "block aspect-square" : "hidden"}`}>
-            <video ref={videoRef} className="h-full w-full object-cover" muted playsInline autoPlay />
-          </div>
-
-          {!scanning ? (
-            <Button className="w-full" onClick={iniciarScanner} disabled={loading || scanLoading}>
-              {scanLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-              Abrir cÃ¢mera para ler QR
-            </Button>
-          ) : (
-            <div className="space-y-2">
-              <div className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                CÃ¢mera {cameraMode === "environment" ? "traseira" : "frontal"} ativa. Aponte para o QR Code do posto.
-              </div>
-              <Button variant="outline" className="w-full" onClick={stopScanner}>
-                Parar cÃ¢mera
-              </Button>
-            </div>
-          )}
-
-          {scanFeedback && (
-            <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 h-4 w-4 text-destructive" />
-                <div className="space-y-1">
-                  <div className="font-semibold text-foreground">{scanFeedback.title}</div>
-                  {scanFeedback.detail && <div className="text-muted-foreground">{scanFeedback.detail}</div>}
-                  <div className="text-muted-foreground">{getPermissionHint(scanFeedback.reason)}</div>
-                </div>
-              </div>
-              <div className="mt-3 space-y-2">
-                {(scanFeedback.reason === "blocked" || scanFeedback.reason === "permission") && (
-                  <Button type="button" className="w-full" onClick={iniciarScanner} disabled={scanLoading}>
-                    {scanLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Camera className="mr-2 h-4 w-4" />}
-                    Liberar cÃ¢mera
-                  </Button>
-                )}
-                <Button type="button" variant="outline" className="w-full" onClick={iniciarScanner} disabled={scanLoading}>
-                  {scanLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
-                  Tentar novamente
-                </Button>
-                {scanFeedback.reason === "https" && !isCanonicalHost && (
-                  <Button type="button" variant="secondary" className="w-full" onClick={() => window.location.assign(canonicalUrl)}>
-                    Abrir em {CANONICAL_BASE_URL}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
+          <div className="flex items-center gap-2 text-sm font-semibold"><QrCode className="h-4 w-4" /> Ler QR Code do posto</div>
+          <div className={`overflow-hidden rounded-xl border bg-muted ${scanning ? "block aspect-square" : "hidden"}`}><video ref={videoRef} className="h-full w-full object-cover" muted playsInline autoPlay /></div>
+          <Button className="w-full" onClick={scanning ? stopScanner : iniciarScanner} disabled={loading}>
+            <Camera className="mr-2 h-4 w-4" /> {scanning ? "Parar camera" : "Abrir camera para ler QR"}
+          </Button>
+          {scanError && <AlertBox text={scanError} />}
           <div className="border-t pt-3 space-y-2">
             <Label className="text-xs">Enviar foto do QR (galeria)</Label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) lerArquivoQr(file);
-                e.target.value = "";
-              }}
-            />
-            <Button variant="secondary" className="w-full" onClick={() => fileInputRef.current?.click()}>
-              Enviar imagem do QR
-            </Button>
+            <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) lerArquivoQr(f); e.target.value = ""; }} />
+            <Button variant="secondary" className="w-full" onClick={() => fileInputRef.current?.click()}>Enviar imagem do QR</Button>
           </div>
-
           <div className="border-t pt-3 space-y-2">
-            <Label className="text-xs">Ou digite o cÃ³digo manualmente</Label>
-            <div className="flex gap-2">
-              <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="COMB-XXXXXXX" />
-              <Button onClick={() => validarQr(codigo)} disabled={loading || !codigo}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "OK"}
-              </Button>
-            </div>
+            <Label className="text-xs">Ou digite o codigo manualmente</Label>
+            <div className="flex gap-2"><Input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="COMB-SP-001" /><Button onClick={() => validarQr(codigo)} disabled={loading || !codigo}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "OK"}</Button></div>
           </div>
         </Card>
       )}
@@ -727,176 +368,100 @@ export default function AbastecimentoPage() {
         <Card className="space-y-3 p-4">
           <div className="text-xs font-semibold uppercase text-muted-foreground">QR validado</div>
           <div className="space-y-1 text-sm">
-            <div><b>MecÃ¢nico:</b> {mecInfo?.nome}</div>
-            <div><b>Empresa:</b> {mecInfo?.empresa || "â€”"} {mecInfo?.filial ? `Â· ${mecInfo.filial}` : ""}</div>
+            <div><b>Mecanico:</b> {mecInfo?.nome}</div>
+            <div><b>Empresa:</b> {mecInfo?.empresa || "-"} {mecInfo?.filial ? `- ${mecInfo.filial}` : ""}</div>
             <div><b>Posto:</b> {posto.nome}</div>
+            {posto.unidade && <div className="text-xs text-muted-foreground">Unidade: {posto.unidade}</div>}
             {posto.cnpj && <div className="text-xs text-muted-foreground">CNPJ: {posto.cnpj}</div>}
             {posto.endereco && <div className="text-xs text-muted-foreground">{posto.endereco}</div>}
-            <div className="text-xs text-muted-foreground">CÃ³digo: {posto.codigo}</div>
-            <div className="text-xs text-muted-foreground">{new Date().toLocaleString("pt-BR")}</div>
+            {posto.telefone && <div className="text-xs text-muted-foreground">Telefone/WhatsApp: {posto.telefone}</div>}
+            {mecInfo?.placa && <div className="text-xs text-muted-foreground">Carro vinculado: {mecInfo.placa}</div>}
+            {mecInfo?.exige_selecao_carro && <AlertBox text="Selecione o carro usado antes de finalizar o abastecimento." />}
+            {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
           </div>
-          <Button className="w-full" onClick={() => setCamBomba(true)}>
-            <Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba
-          </Button>
-          <Button className="w-full" variant="outline" onClick={reset}>
-            <RotateCcw className="mr-2 h-4 w-4" /> Cancelar
-          </Button>
+          <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
+          <Button className="w-full" variant="outline" onClick={reset}><RotateCcw className="mr-2 h-4 w-4" /> Cancelar</Button>
         </Card>
       )}
 
       {step === "painel" && (
         <Card className="space-y-3 p-4">
-          {analisando && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" /> Analisando foto da bomba...
-            </div>
-          )}
           {fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}
-          <Button className="w-full" onClick={() => setCamPainel(true)}>
-            <Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM
-          </Button>
-          <Button className="w-full" variant="outline" onClick={() => setCamBomba(true)}>
-            <RotateCcw className="mr-2 h-4 w-4" /> Refazer foto da bomba
-          </Button>
+          <Button className="w-full" onClick={() => setCamPainel(true)}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
         </Card>
       )}
 
       {step === "form" && (
         <Card className="space-y-3 p-4">
           <div className="text-sm font-semibold">Confirme os dados</div>
-          {fotoBombaUrl && fotoPainelUrl && (
-            <div className="grid grid-cols-2 gap-2">
-              <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />
-              <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />
-            </div>
-          )}
+          <div className="grid grid-cols-2 gap-2">{fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}{fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}</div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs">Valor (R$)</Label>
-              <Input type="number" inputMode="decimal" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} />
-            </div>
-            <div>
-              <Label className="text-xs">Litros</Label>
-              <Input type="number" inputMode="decimal" step="0.001" value={litros} onChange={(e) => setLitros(e.target.value)} />
-            </div>
-            <div>
-              <Label className="text-xs">CombustÃ­vel</Label>
-              <select
-                className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-                value={combustivel}
-                onChange={(e) => setCombustivel(e.target.value)}
-              >
-                <option>Diesel S10</option>
-                <option>Diesel</option>
-                <option>Gasolina</option>
-                <option>Etanol</option>
-                <option>GNV</option>
-              </select>
-            </div>
-            <div>
-              <Label className="text-xs">KM</Label>
-              <Input type="number" inputMode="numeric" value={km} onChange={(e) => setKm(e.target.value)} />
-            </div>
+            <Field label="Valor (R$)" value={valor} setValue={setValor} type="number" />
+            <Field label="Litros" value={litros} setValue={setLitros} type="number" />
+            <Field label="Preco/L" value={precoLitro} setValue={setPrecoLitro} type="number" />
+            <div><Label className="text-xs">Combustivel</Label><select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(e) => setCombustivel(e.target.value)}><option>Diesel S10</option><option>Diesel</option><option>Gasolina</option><option>Etanol</option><option>GNV</option></select></div>
+            <div><Field label="KM" value={km} setValue={setKm} type="number" />{kmRodado !== null && <div className="mt-1 text-[11px] text-muted-foreground">Rodou {fmtNumber(String(kmRodado), 0)} km desde o ultimo registro.</div>}</div>
             <div className="col-span-2">
-              <Label className="text-xs">Placa</Label>
-              <Input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} />
+              <Label className="text-xs">{mecInfo?.exige_selecao_carro ? "Carro" : "Placa"}</Label>
+              {mecInfo?.exige_selecao_carro && carros.length > 0 ? (
+                <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())}>
+                  <option value="">Selecionar carro</option>{carros.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              ) : <Input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} disabled={Boolean(placa && !mecInfo?.exige_selecao_carro)} />}
             </div>
-            <div className="col-span-2">
-              <Label className="text-xs">Posto</Label>
-              <Input value={postoNome} onChange={(e) => setPostoNome(e.target.value)} disabled />
-            </div>
-            <div className="col-span-2">
-              <Label className="text-xs">ObservaÃ§Ã£o</Label>
-              <Input value={obs} onChange={(e) => setObs(e.target.value)} />
-            </div>
+            <div className="col-span-2"><Label className="text-xs">Posto</Label><Input value={posto?.nome || ""} disabled /></div>
+            <div className="col-span-2"><Label className="text-xs">Observacao</Label><Input value={obs} onChange={(e) => setObs(e.target.value)} /></div>
           </div>
-          <Button className="w-full" onClick={finalizar} disabled={loading}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
-            Finalizar abastecimento
-          </Button>
+          <Button className="w-full" onClick={finalizar} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} Finalizar abastecimento</Button>
         </Card>
       )}
 
-      {step === "ok" && (
+      {step === "ok" && receipt && (
         <Card className="space-y-4 p-4">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15">
-            <Check className="h-7 w-7 text-emerald-600" />
-          </div>
-          <div className="text-center">
-            <div className="text-lg font-bold">Abastecimento registrado</div>
-            <p className="text-sm text-muted-foreground">As fotos e dados foram salvos. Compartilhe a notinha no grupo e no WhatsApp do posto.</p>
-          </div>
-
-          {receipt && (
-            <div className="rounded-xl border border-border bg-muted/30 p-3 text-left text-sm">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs font-semibold uppercase text-muted-foreground">Notinha fiscal operacional</div>
-                  <div className="font-bold">{receipt.postoNome}</div>
-                </div>
-                <div className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600">Salvo</div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><span className="text-muted-foreground">Data</span><br />{receipt.createdAt.toLocaleDateString("pt-BR")}</div>
-                <div><span className="text-muted-foreground">Hora</span><br />{receipt.createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>
-                <div className="col-span-2"><span className="text-muted-foreground">Mecanico</span><br />{receipt.mecanicoNome}</div>
-                <div><span className="text-muted-foreground">Carro</span><br />{receipt.placa || "Nao informado"}</div>
-                <div><span className="text-muted-foreground">KM</span><br />{receipt.km || "Nao informado"}</div>
-                <div><span className="text-muted-foreground">Litros</span><br />{formatDecimal(receipt.litros)} L</div>
-                <div><span className="text-muted-foreground">Valor</span><br />{formatCurrency(receipt.valor)}</div>
-                <div className="col-span-2"><span className="text-muted-foreground">Combustivel</span><br />{receipt.combustivel}</div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <a href={receipt.fotoBombaUrl} target="_blank" rel="noreferrer">
-                  <img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Foto da bomba" />
-                </a>
-                <a href={receipt.fotoPainelUrl} target="_blank" rel="noreferrer">
-                  <img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Foto do painel" />
-                </a>
-              </div>
+          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Compartilhe a notinha no grupo e no WhatsApp do posto.</p></div>
+          <div className="rounded-xl border bg-muted/30 p-3 text-sm">
+            <div className="font-bold">{receipt.postoNome}</div>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <Info k="Mecanico" v={receipt.mecanicoNome} wide /><Info k="Carro" v={receipt.placa || "-"} /><Info k="KM" v={receipt.km || "-"} />
+              <Info k="Litros" v={`${fmtNumber(receipt.litros)} L`} /><Info k="Preco/L" v={fmtMoney(receipt.precoLitro)} /><Info k="Valor" v={fmtMoney(receipt.valor)} />
+              {receipt.kmRodado !== null && <Info k="KM rodado" v={`${fmtNumber(String(receipt.kmRodado), 0)} km`} />}
             </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-2">
-            <Button onClick={shareReceipt} className="w-full">
-              <Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha
-            </Button>
-            <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full">
-              <MessageCircle className="mr-2 h-4 w-4" /> Enviar no WhatsApp
-            </Button>
-            {receipt?.postoTelefone && (
-              <Button onClick={() => openWhatsapp(receipt.postoTelefone)} variant="outline" className="w-full">
-                <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp do posto
-              </Button>
-            )}
-            <Button onClick={copyReceipt} variant="outline" className="w-full">
-              <Copy className="mr-2 h-4 w-4" /> Copiar texto da notinha
-            </Button>
-            <Button onClick={reset} variant="ghost" className="w-full">Novo abastecimento</Button>
+            <div className="mt-3 grid grid-cols-2 gap-2"><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
           </div>
+          <Button onClick={shareReceipt} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha</Button>
+          <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> Enviar no WhatsApp</Button>
+          {receipt.postoTelefone && <Button onClick={() => openWhatsapp(receipt.postoTelefone)} variant="outline" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp do posto</Button>}
+          <Button onClick={() => navigator.clipboard.writeText(buildReceiptText(receipt)).then(() => toast.success("Notinha copiada"))} variant="outline" className="w-full"><Copy className="mr-2 h-4 w-4" /> Copiar texto</Button>
+          <Button onClick={reset} variant="ghost" className="w-full">Novo abastecimento</Button>
         </Card>
       )}
 
-      <CameraCapture
-        open={camBomba}
-        onClose={() => setCamBomba(false)}
-        onCapture={onCaptureBomba}
-        facing="environment"
-        title="Foto da bomba"
-        hint="Mostre o visor com valor, litros e tipo"
-      />
-      <CameraCapture
-        open={camPainel}
-        onClose={() => setCamPainel(false)}
-        onCapture={onCapturePainel}
-        facing="environment"
-        title="Foto do painel/KM"
-        hint="Mostre o hodÃ´metro/KM atual"
-      />
+      <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" title="Foto da bomba" hint="Mostre valor, litros e preco por litro" />
+      <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" title="Foto do painel/KM" hint="Mostre o hodometro/KM atual" />
     </div>
   );
+}
+
+function Field({ label, value, setValue, type = "text" }: { label: string; value: string; setValue: (v: string) => void; type?: string }) {
+  return <div><Label className="text-xs">{label}</Label><Input type={type} inputMode={type === "number" ? "decimal" : undefined} value={value} onChange={(e) => setValue(e.target.value)} /></div>;
+}
+
+function Info({ k, v, wide }: { k: string; v: string; wide?: boolean }) {
+  return <div className={wide ? "col-span-2" : ""}><span className="text-muted-foreground">{k}</span><br />{v}</div>;
+}
+
+function AlertBox({ text }: { text: string }) {
+  return <div className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700"><AlertTriangle className="h-4 w-4" />{text}</div>;
+}
+
+function fmtMoney(value: string) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : value || "R$ 0,00";
+}
+
+function fmtNumber(value: string, digits = 3) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { maximumFractionDigits: digits }) : value || "0";
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -910,6 +475,5 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "";
+  return typeof error === "string" ? error : "";
 }
