@@ -10,7 +10,7 @@ import ModuleSwitcher from '@/components/ModuleSwitcher';
 
 const FilialLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const { session, userRole, roleLoading } = useApp();
+  const { userRole, roleLoading } = useApp();
 
   if (roleLoading) {
     return (
@@ -22,10 +22,8 @@ const FilialLayout: React.FC = () => {
 
   if (!userRole) return <AguardandoAcesso />;
 
-  // Only filial roles allowed
-  if (userRole !== 'filial_praia' && userRole !== 'filial_goiania') {
-    const redirect = userRole === 'admin' ? '/' : '/';
-    return <Navigate to={redirect} replace />;
+  if (userRole !== 'filial_matriz' && userRole !== 'filial_praia' && userRole !== 'filial_goiania') {
+    return <Navigate to="/" replace />;
   }
 
   return (
