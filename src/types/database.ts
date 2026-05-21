@@ -23,7 +23,10 @@ export interface Employee {
   categoria: 'operacional' | 'socio';
   salarioBase: number;
   dataAdmissao: string;
+  dataNascimento: string;
   dataExameMedico: string;
+  setorGhe: string;
+  cpfPendenteAcesso: boolean;
   vrAtivo: boolean;
   vrDiario: number;
   vaAtivo: boolean;
@@ -32,7 +35,7 @@ export interface Employee {
   vtDiario: number;
   insalubridadeAtiva: boolean;
   insalubridadeValor: number;
-  status: 'ativo' | 'afastado' | 'ferias' | 'desligado';
+  status: 'ativo' | 'afastado' | 'férias' | 'desligado';
   telefone: string;
   celular: string;
   email: string;
@@ -49,8 +52,8 @@ export interface Employee {
 
 export interface MonthlyEntry {
   id?: string;
-  employeeId: string;   // mapped from funcionario_id
-  companyId: string;     // mapped from company_id
+  employeeId: string;
+  companyId: string;
   competencia: string;
   faltasDias: number;
   atrasos: number;
@@ -121,7 +124,10 @@ export const mapEmployee = (row: any): Employee => ({
   categoria: row.categoria || row.setor || 'operacional',
   salarioBase: Number(row.salario_base ?? row.salario) || 0,
   dataAdmissao: row.data_admissao || '',
+  dataNascimento: row.data_nascimento || '',
   dataExameMedico: row.data_exame_medico || '',
+  setorGhe: row.setor_ghe || row.setor || '',
+  cpfPendenteAcesso: row.cpf_pendente_acesso ?? !row.cpf,
   vrAtivo: row.vr_ativo ?? false,
   vrDiario: Number(row.vr_diario) || 0,
   vaAtivo: row.va_ativo ?? false,
@@ -216,7 +222,9 @@ export const employeeToRow = (data: Partial<Employee>) => {
     row.salario_base = data.salarioBase;
   }
   if (data.dataAdmissao !== undefined) row.data_admissao = data.dataAdmissao || null;
+  if (data.dataNascimento !== undefined) row.data_nascimento = data.dataNascimento || null;
   if (data.dataExameMedico !== undefined) row.data_exame_medico = data.dataExameMedico || null;
+  if (data.setorGhe !== undefined) row.setor_ghe = data.setorGhe;
   if (data.vrAtivo !== undefined) row.vr_ativo = data.vrAtivo;
   if (data.vrDiario !== undefined) row.vr_diario = data.vrDiario;
   if (data.vaAtivo !== undefined) row.va_ativo = data.vaAtivo;
