@@ -9,12 +9,15 @@ import {
 import { useApp } from '@/context/AppContext';
 import { asoStatus, calcTotalFuncionario, feriasStatus, formatCurrency } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
+import { isDirectorRole } from '@/lib/directorPermissions';
 
 const DashboardPage: React.FC = () => {
-  const { companies, employees, entries, session } = useApp();
+  const { companies, employees, entries, session, userRoles } = useApp();
   const navigate = useNavigate();
   const comp = new Date().toISOString().slice(0, 7);
   const [fechStats, setFechStats] = useState({ fechadas: 0, abertas: 0, pendentes: 0 });
+  const [liberarVisaoRhDiretor, setLiberarVisaoRhDiretor] = useState(false);
+  const isDirector = isDirectorRole(userRoles);
 
   useEffect(() => {
     supabase.from('fechamentos_filial').select('status').eq('competencia', comp).then(({ data }) => {
@@ -24,6 +27,18 @@ const DashboardPage: React.FC = () => {
       setFechStats({ fechadas, abertas, pendentes: Math.max(0, companies.length - fechadas - abertas) });
     });
   }, [comp, companies.length]);
+
+  useEffect(() => {
+    if (!isDirector) return;
+    supabase
+      .from('diretor_permissoes' as any)
+      .select('liberar_visao_rh_diretor')
+      .eq('user_id', session?.user?.id || '')
+      .maybeSingle()
+      .then(({ data }) => {
+        setLiberarVisaoRhDiretor(Boolean((data as any)?.liberar_visao_rh_diretor));
+      });
+  }, [isDirector, session?.user?.id]);
 
   const h = new Date().getHours();
   const adminName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
@@ -62,6 +77,7 @@ const DashboardPage: React.FC = () => {
   });
 
   const totalFuncionarios = employees.filter(e => e.status === 'ativo' && e.categoria === 'operacional').length;
+  const rhVisivel = !isDirector || liberarVisaoRhDiretor;
   const cardAnim = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
 
   return (
@@ -72,17 +88,35 @@ const DashboardPage: React.FC = () => {
         <p className="admin-hero-kicker">TOPAC RH PRO</p>
         <h1>TOPAC CENTRAL</h1>
         <p className="admin-hero-subtitle">
-          {greetingText}. Centro de comando operacional para RH, mecanicos, fechamento, estoque, frota e alertas em tempo real.
+          {isDirector
+            ? `${greetingText}. Dashboard executivo para indicadores consolidados e emissao de relatorios.`
+            : `${greetingText}. Centro de comando operacional para RH, mecanicos, fechamento, estoque, frota e alertas em tempo real.`
+          }
         </p>
         <div className="admin-hero-actions">
-          <button onClick={() => navigate('/admin/app-mecanico')} className="admin-primary-action"><Rocket className="h-4 w-4" />App dos mecanicos</button>
-          <button onClick={() => navigate('/admin/fechamento')} className="admin-secondary-action"><ListChecks className="h-4 w-4" />Ver fechamento</button>
+          {isDirector ? (
+            <>
+              <button onClick={() => navigate('/admin/financeiro')} className="admin-primary-action"><DollarSign className="h-4 w-4" />Financeiro</button>
+              <button onClick={() => navigate('/admin/faturamento')} className="admin-secondary-action"><FileCheck className="h-4 w-4" />Faturamento</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => navigate('/admin/app-mecanico')} className="admin-primary-action"><Rocket className="h-4 w-4" />App dos mecanicos</button>
+              <button onClick={() => navigate('/admin/fechamento')} className="admin-secondary-action"><ListChecks className="h-4 w-4" />Ver fechamento</button>
+            </>
+          )}
         </div>
       </div>
 
+      {isDirector && !liberarVisaoRhDiretor && (
+        <div className="card-premium p-4 border-amber-500/40 bg-amber-500/5 text-sm text-amber-100">
+          Dados operacionais de RH em tempo real estao ocultos para o perfil Diretor Geral. A liberacao depende do administrador.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: 'Funcionarios ativos', value: totalFuncionarios, icon: Users, color: 'text-sky-300' },
+          { label: 'Funcionarios ativos', value: rhVisivel ? totalFuncionarios : 'Restrito', icon: Users, color: 'text-sky-300' },
           { label: 'Proventos estimados', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalProventos, 0)), icon: TrendingUp, color: 'text-emerald-300' },
           { label: 'Descontos estimados', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalDescontos, 0)), icon: TrendingDown, color: 'text-fuchsia-300' },
           { label: 'Liquido estimado', value: formatCurrency(companyStats.reduce((s, c) => s + c.totalLiquido, 0)), icon: DollarSign, color: 'text-lime-300' },
@@ -96,12 +130,12 @@ const DashboardPage: React.FC = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+      {!isDirector && <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         {[
+          { label: 'Operacional', icon: FileCheck, path: '/admin/chamados' },
           { label: 'App mecanicos', icon: Wrench, path: '/admin/app-mecanico' },
           { label: 'Ponto', icon: ListChecks, path: '/admin/fechamento-ponto' },
           { label: 'QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode' },
-          { label: 'Chamados', icon: FileCheck, path: '/admin/chamados' },
           { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
           { label: 'VR / VT', icon: Bus, path: '/admin/fechamento' },
         ].map(item => (
@@ -110,9 +144,9 @@ const DashboardPage: React.FC = () => {
             <span className="text-sm font-semibold">{item.label}</span>
           </button>
         ))}
-      </div>
+      </div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {rhVisivel && <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: 'Filiais fechadas', value: fechStats.fechadas, icon: Lock, color: 'text-emerald-300' },
           { label: 'Em andamento', value: fechStats.abertas, icon: Unlock, color: 'text-yellow-300' },
@@ -125,9 +159,9 @@ const DashboardPage: React.FC = () => {
             </div>
           </motion.div>
         ))}
-      </div>
+      </div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {rhVisivel && <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {companyStats.map((cs, i) => (
           <motion.div key={cs.company.id} {...cardAnim} transition={{ delay: 0.1 + i * 0.05 }} className="card-premium p-6 space-y-4">
             <div className="flex items-center justify-between gap-4">
@@ -152,7 +186,7 @@ const DashboardPage: React.FC = () => {
             </div>
           </motion.div>
         ))}
-      </div>
+      </div>}
     </div>
   );
 };
