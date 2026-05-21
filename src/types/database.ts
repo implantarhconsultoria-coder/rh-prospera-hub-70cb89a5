@@ -32,7 +32,7 @@ export interface Employee {
   vtDiario: number;
   insalubridadeAtiva: boolean;
   insalubridadeValor: number;
-  status: 'ativo' | 'afastado' | 'fÃ©rias' | 'desligado';
+  status: 'ativo' | 'afastado' | 'férias' | 'desligado';
   telefone: string;
   celular: string;
   email: string;

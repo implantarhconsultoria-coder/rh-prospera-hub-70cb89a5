@@ -48,17 +48,17 @@ const FuncionariosPage: React.FC = () => {
 
     setSaving(true);
     const { error } = await supabase.from('funcionarios').insert({
-      empresa_id: companyId,
+      company_id: companyId,
       nome: newEmp.nome.trim(),
       cpf: newEmp.cpf,
       cargo: newEmp.cargo,
-      salario: Number(newEmp.salario_base) || 0,
+      salario_base: Number(newEmp.salario_base) || 0,
       telefone: newEmp.telefone,
       celular: newEmp.celular,
       email: newEmp.email,
       endereco: newEmp.endereco,
       rg: newEmp.rg,
-      ativo: true,
+      status: 'ativo',
       setor: 'operacional',
     });
     setSaving(false);
