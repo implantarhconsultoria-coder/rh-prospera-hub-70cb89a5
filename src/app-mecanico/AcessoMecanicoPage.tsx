@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ interface Opcao { id: string; nome: string; empresa: string; filial: string; fun
 
 export default function AcessoMecanicoPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -38,7 +39,8 @@ export default function AcessoMecanicoPage() {
 
   const entrar = (u: Opcao) => {
     localStorage.setItem("app_mecanico_acesso_id", u.id);
-    navigate(`/app-mecanico/${u.id}`);
+    const qr = searchParams.get("qr") || searchParams.get("codigo") || "";
+    navigate(`/app-mecanico/${u.id}${qr ? `/abastecimento?qr=${encodeURIComponent(qr)}` : ""}`);
   };
 
   return (
