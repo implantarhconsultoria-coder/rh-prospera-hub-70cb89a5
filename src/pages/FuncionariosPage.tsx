@@ -12,16 +12,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const FuncionariosPage: React.FC = () => {
-  const { employees, companies, session } = useApp();
+  const { employees, companies } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const { isFilial, filialCompanyId } = useFilialFilter();
   const [search, setSearch] = useState('');
   const [filterCompany, setFilterCompany] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'ativos' | 'inativos' | 'todos'>('ativos');
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // New employee form state
   const [newEmp, setNewEmp] = useState({
     nome: '', cpf: '', cargo: '', salario_base: '', data_admissao: '',
     telefone: '', celular: '', email: '', endereco: '', rg: '',
@@ -33,6 +33,8 @@ const FuncionariosPage: React.FC = () => {
   const filtered = employees.filter(e => {
     if (search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterCompany && e.companyId !== filterCompany) return false;
+    if (filterStatus === 'ativos' && e.status === 'desligado') return false;
+    if (filterStatus === 'inativos' && e.status !== 'desligado') return false;
     return true;
   });
 
@@ -40,26 +42,29 @@ const FuncionariosPage: React.FC = () => {
   const socios = filtered.filter(e => e.categoria === 'socio');
 
   const handleSaveNew = async () => {
-    if (!newEmp.nome.trim()) { toast.error('Nome Ã© obrigatÃ³rio'); return; }
-    
-    // Determine company_id: filial uses its own, admin must have a company selected
+    if (!newEmp.nome.trim()) { toast.error('Nome e obrigatorio'); return; }
     const companyId = isFilial ? filialCompanyId : filterCompany;
     if (!companyId) { toast.error('Selecione a empresa primeiro'); return; }
 
     setSaving(true);
     const { error } = await supabase.from('funcionarios').insert({
+      empresa_id: companyId,
       company_id: companyId,
       nome: newEmp.nome.trim(),
       cpf: newEmp.cpf,
       cargo: newEmp.cargo,
+      salario: Number(newEmp.salario_base) || 0,
       salario_base: Number(newEmp.salario_base) || 0,
+      data_admissao: newEmp.data_admissao || null,
       telefone: newEmp.telefone,
       celular: newEmp.celular,
       email: newEmp.email,
       endereco: newEmp.endereco,
       rg: newEmp.rg,
+      ativo: true,
       status: 'ativo',
       setor: 'operacional',
+      categoria: 'operacional',
     });
     setSaving(false);
 
@@ -67,10 +72,9 @@ const FuncionariosPage: React.FC = () => {
       toast.error('Erro ao cadastrar: ' + error.message);
       return;
     }
-    toast.success('FuncionÃ¡rio cadastrado com sucesso!');
+    toast.success('Funcionario cadastrado com sucesso!');
     setShowNew(false);
     setNewEmp({ nome: '', cpf: '', cargo: '', salario_base: '', data_admissao: '', telefone: '', celular: '', email: '', endereco: '', rg: '' });
-    // Refresh data
     window.location.reload();
   };
 
@@ -95,7 +99,7 @@ const FuncionariosPage: React.FC = () => {
           {e.status}
         </Badge>
         {e.categoria === 'socio' && (
-          <Badge variant="outline" className="text-[10px] border-accent text-accent">SÃ³cio</Badge>
+          <Badge variant="outline" className="text-[10px] border-accent text-accent">Socio</Badge>
         )}
       </div>
     </div>
@@ -104,17 +108,16 @@ const FuncionariosPage: React.FC = () => {
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold font-display text-foreground">FuncionÃ¡rios</h1>
+        <h1 className="text-2xl font-bold font-display text-foreground">Funcionarios</h1>
         <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground">
-          <UserPlus className="w-4 h-4 mr-2" /> Novo FuncionÃ¡rio
+          <UserPlus className="w-4 h-4 mr-2" /> Novo Funcionario
         </Button>
       </div>
 
-      {/* New Employee Form */}
       {showNew && (
         <div className="card-premium p-5 space-y-4 border-l-4 border-primary">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-foreground">Cadastrar Novo FuncionÃ¡rio</h2>
+            <h2 className="text-sm font-bold text-foreground">Cadastrar Novo Funcionario</h2>
             <Button variant="ghost" size="icon" onClick={() => setShowNew(false)}><X className="w-4 h-4" /></Button>
           </div>
           {isFilial && (
@@ -123,7 +126,7 @@ const FuncionariosPage: React.FC = () => {
             </p>
           )}
           {!isFilial && !filterCompany && (
-            <p className="text-xs text-warning">âš  Selecione uma empresa no filtro antes de cadastrar.</p>
+            <p className="text-xs text-warning">Selecione uma empresa no filtro antes de cadastrar.</p>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div><label className="text-xs text-muted-foreground block mb-1">Nome Completo *</label>
@@ -132,11 +135,11 @@ const FuncionariosPage: React.FC = () => {
               <Input value={newEmp.cpf} onChange={e => setNewEmp(p => ({ ...p, cpf: e.target.value }))} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">RG</label>
               <Input value={newEmp.rg} onChange={e => setNewEmp(p => ({ ...p, rg: e.target.value }))} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Cargo / FunÃ§Ã£o</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Cargo / Funcao</label>
               <Input value={newEmp.cargo} onChange={e => setNewEmp(p => ({ ...p, cargo: e.target.value }))} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">SalÃ¡rio Base</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Salario Base</label>
               <Input type="number" value={newEmp.salario_base} onChange={e => setNewEmp(p => ({ ...p, salario_base: e.target.value }))} /></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Data AdmissÃ£o</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Data Admissao</label>
               <Input type="date" value={newEmp.data_admissao} onChange={e => setNewEmp(p => ({ ...p, data_admissao: e.target.value }))} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Telefone</label>
               <Input value={newEmp.telefone} onChange={e => setNewEmp(p => ({ ...p, telefone: e.target.value }))} /></div>
@@ -147,7 +150,7 @@ const FuncionariosPage: React.FC = () => {
           </div>
           <div className="flex gap-3">
             <Button onClick={handleSaveNew} disabled={saving} className="gradient-primary text-primary-foreground">
-              <Save className="w-4 h-4 mr-2" /> {saving ? 'Salvando...' : 'Salvar FuncionÃ¡rio'}
+              <Save className="w-4 h-4 mr-2" /> {saving ? 'Salvando...' : 'Salvar Funcionario'}
             </Button>
             <Button variant="outline" onClick={() => setShowNew(false)}>Cancelar</Button>
           </div>
@@ -157,7 +160,7 @@ const FuncionariosPage: React.FC = () => {
       <div className="card-premium p-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar funcionÃ¡rio..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Buscar funcionario..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         {!isFilial && (
           <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)}
@@ -166,6 +169,12 @@ const FuncionariosPage: React.FC = () => {
             {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         )}
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as typeof filterStatus)}
+          className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+          <option value="ativos">Ativos</option>
+          <option value="inativos">Inativos</option>
+          <option value="todos">Todos</option>
+        </select>
       </div>
 
       {operacionais.length > 0 && (
@@ -179,7 +188,7 @@ const FuncionariosPage: React.FC = () => {
 
       {socios.length > 0 && (
         <>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mt-6">SÃ³cios / PrÃ³-labore ({socios.length})</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mt-6">Socios / Pro-labore ({socios.length})</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {socios.map(renderCard)}
           </div>
@@ -188,7 +197,7 @@ const FuncionariosPage: React.FC = () => {
 
       {filtered.length === 0 && (
         <div className="text-center py-12 text-muted-foreground">
-          <p>Nenhum funcionÃ¡rio cadastrado ainda.</p>
+          <p>Nenhum funcionario encontrado.</p>
         </div>
       )}
     </div>
