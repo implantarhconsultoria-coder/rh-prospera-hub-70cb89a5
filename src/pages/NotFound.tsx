@@ -1,10 +1,15 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Home, LogIn } from "lucide-react";
+import MigracaoDN4Page from "@/pages/admin/MigracaoDN4Page";
 
 const NotFound = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  if (location.pathname === "/admin/faturamento/migracao-dn4") {
+    return <MigracaoDN4Page />;
+  }
 
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
@@ -14,13 +19,13 @@ const NotFound = () => {
     <div className="flex min-h-screen items-center justify-center bg-muted p-6">
       <div className="text-center max-w-sm w-full">
         <h1 className="mb-2 text-5xl font-bold">404</h1>
-        <p className="mb-6 text-lg text-muted-foreground">Página não encontrada</p>
+        <p className="mb-6 text-lg text-muted-foreground">Pagina nao encontrada</p>
         <div className="space-y-2">
           <button
             onClick={() => navigate("/")}
             className="w-full inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl py-2.5 px-4 text-sm font-semibold transition-colors"
           >
-            <Home className="w-4 h-4" /> Voltar ao Início
+            <Home className="w-4 h-4" /> Voltar ao Inicio
           </button>
           <button
             onClick={() => { window.location.href = "/login"; }}
