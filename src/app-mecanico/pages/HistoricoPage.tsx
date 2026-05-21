@@ -9,9 +9,9 @@ import { Loader2, Clock, MapPin, Camera, Fuel, Pencil, Trash2, Save, X } from "l
 
 const TIPO_LABEL: Record<string, string> = {
   entrada: "Entrada",
-  saida: "Saida",
-  almoco_inicio: "Inicio Almoco",
-  almoco_fim: "Retorno Almoco",
+  saida: "SaÃ­da",
+  almoco_inicio: "InÃ­cio AlmoÃ§o",
+  almoco_fim: "Retorno AlmoÃ§o",
 };
 
 export default function HistoricoPage() {
@@ -74,6 +74,11 @@ export default function HistoricoPage() {
 
   return (
     <div className="space-y-4">
+      {mecanico.registro_teste && (
+        <Card className="border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700">
+          Registros de Teste: estes lanÃ§amentos servem para validaÃ§Ã£o visual e ficam fora dos relatÃ³rios oficiais.
+        </Card>
+      )}
       <Card className="p-4">
         <h2 className="font-semibold mb-3 flex items-center gap-2"><Fuel className="w-4 h-4" /> Abastecimentos recentes</h2>
         {abastecimentos.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum abastecimento.</p> : (
@@ -99,6 +104,7 @@ export default function HistoricoPage() {
                     <div className="flex justify-between items-start gap-2">
                       <div>
                         <span className="font-medium">{a.placa || "-"} - {a.posto_nome || "Posto"}</span>
+                        {a.registro_teste && <span className="ml-2 rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700">TESTE</span>}
                         <p className="text-xs text-muted-foreground">{a.combustivel || "Combustivel"} | {Number(a.litros || 0).toFixed(2)} L | R$ {Number(a.valor || 0).toFixed(2)}</p>
                       </div>
                       <span className="text-muted-foreground text-xs whitespace-nowrap">{a.data} {a.hora?.slice(0, 5)}</span>
@@ -126,11 +132,23 @@ export default function HistoricoPage() {
               <li key={p.id} className="py-2.5">
                 <div className="flex justify-between items-start gap-2">
                   <span className="font-medium">{TIPO_LABEL[p.tipo] || p.tipo}</span>
-                  <span className="text-muted-foreground text-xs whitespace-nowrap">{p.data} {p.hora?.slice(0, 5)}</span>
+                  {p.registro_teste && <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700">TESTE</span>}
+                  <span className="text-muted-foreground text-xs whitespace-nowrap">
+                    {p.data} {p.hora?.slice(0, 5)}
+                  </span>
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
-                  {(p.latitude || p.lat) && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{(p.latitude ?? p.lat)?.toFixed?.(4)}, {(p.longitude ?? p.lng)?.toFixed?.(4)}</span>}
-                  {(p.selfie_url || p.selfie) && <span className="flex items-center gap-1 text-emerald-600"><Camera className="w-3 h-3" /> selfie</span>}
+                  {(p.latitude || p.lat) && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {(p.latitude ?? p.lat)?.toFixed?.(4)}, {(p.longitude ?? p.lng)?.toFixed?.(4)}
+                    </span>
+                  )}
+                  {(p.selfie_url || p.selfie) && (
+                    <span className="flex items-center gap-1 text-emerald-600">
+                      <Camera className="w-3 h-3" /> selfie
+                    </span>
+                  )}
                 </div>
               </li>
             ))}
