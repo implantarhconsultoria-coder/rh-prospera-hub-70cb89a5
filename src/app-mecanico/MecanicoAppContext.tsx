@@ -10,6 +10,11 @@ export interface Mecanico {
   filial: string;
   funcao: string;
   funcionario_id: string | null;
+  perfil_acesso?: string;
+  registro_teste?: boolean;
+  teste_chave?: string;
+  veiculo_teste?: string;
+  placa_teste?: string;
 }
 
 interface MecanicoAppCtx {
@@ -37,14 +42,14 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
 
   const carregar = async () => {
     if (!acessoId) {
-      setErro("Acesso inválido");
+      setErro("Acesso invÃ¡lido");
       setLoading(false);
       return;
     }
     setLoading(true);
     const { data, error } = await supabase.rpc("app_mecanico_validar_acesso" as any, { p_acesso_id: acessoId });
     if (error || !(data as any)?.ok) {
-      setErro("Acesso não autorizado ou bloqueado pelo administrador.");
+      setErro("Acesso nÃ£o autorizado ou bloqueado pelo administrador.");
       setMecanico(null);
       setLoading(false);
       return;
@@ -77,7 +82,7 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <div className="max-w-sm text-center space-y-4">
           <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
-          <p className="text-base text-foreground">{erro || "Acesso inválido"}</p>
+          <p className="text-base text-foreground">{erro || "Acesso invÃ¡lido"}</p>
           <button
             onClick={() => navigate("/acesso-mecanico", { replace: true })}
             className="text-primary underline text-sm"
