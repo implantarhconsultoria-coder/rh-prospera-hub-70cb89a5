@@ -7,13 +7,13 @@ const NotFound = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  if (location.pathname === "/admin/faturamento/migracao-dn4") {
-    return <MigracaoDN4Page />;
-  }
-
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
+
+  if (location.pathname === "/admin/faturamento/migracao-dn4") {
+    return <MigracaoDN4Page />;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted p-6">
