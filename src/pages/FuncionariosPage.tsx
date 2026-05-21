@@ -52,13 +52,13 @@ const FuncionariosPage: React.FC = () => {
       nome: newEmp.nome.trim(),
       cpf: newEmp.cpf,
       cargo: newEmp.cargo,
-      salario: Number(newEmp.salario_base) || 0,
+      salario_base: Number(newEmp.salario_base) || 0,
       telefone: newEmp.telefone,
       celular: newEmp.celular,
       email: newEmp.email,
       endereco: newEmp.endereco,
       rg: newEmp.rg,
-      ativo: true,
+      status: 'ativo',
       setor: 'operacional',
     });
     setSaving(false);
