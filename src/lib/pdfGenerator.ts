@@ -53,20 +53,37 @@ export const makeDocumentFileName = (
 const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) => {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text(empresa, 15, 18);
+  const empresaLines = doc.splitTextToSize(empresa || '---', 112).slice(0, 2);
+  doc.text(empresaLines, 15, 16);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`CNPJ: ${cnpj || '-'}`, 15, 24);
+  doc.text(`CNPJ: ${cnpj || '---'}`, 15, 26);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text(titulo, 195, 22, { align: 'right' });
+  const tituloLines = doc.splitTextToSize(titulo, 72).slice(0, 2);
+  doc.text(tituloLines, 195, 17, { align: 'right' });
   doc.setLineWidth(0.5);
-  doc.line(15, 28, 195, 28);
+  doc.line(15, 31, 195, 31);
 };
 
 const drawBlock = (doc: jsPDF, y: number, titulo: string, linhas: [string, string][]) => {
+  const lineHeight = 4.8;
+  const colWidth = 80;
+  const rows: Array<[[string, string] | undefined, [string, string] | undefined]> = [];
+  for (let i = 0; i < linhas.length; i += 2) rows.push([linhas[i], linhas[i + 1]]);
+
+  doc.setFontSize(10);
+  const rowHeights = rows.map((row) => Math.max(...row.map((field) => {
+    if (!field || !field[0]) return 7;
+    const [label, value] = field;
+    const labelWidth = doc.getTextWidth(`${label}: `);
+    const valueWidth = Math.max(22, colWidth - labelWidth);
+    const wrapped = doc.splitTextToSize(String(value || '---'), valueWidth);
+    return Math.max(7, wrapped.length * lineHeight);
+  })));
+  const altura = 13 + rowHeights.reduce((sum, height) => sum + height, 0);
+
   doc.setDrawColor(180);
-  const altura = 12 + Math.ceil(linhas.length / 2) * 7;
   doc.roundedRect(15, y, 180, altura, 1.5, 1.5);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
@@ -75,17 +92,22 @@ const drawBlock = (doc: jsPDF, y: number, titulo: string, linhas: [string, strin
   doc.setTextColor(0);
   doc.setFontSize(10);
   let curY = y + 13;
-  linhas.forEach(([label, value], idx) => {
-    const col = idx % 2;
-    const x = col === 0 ? 18 : 105;
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(110);
-    doc.text(`${label}:`, x, curY);
-    doc.setTextColor(0);
-    doc.setFont('helvetica', 'bold');
-    const labelWidth = doc.getTextWidth(`${label}: `);
-    doc.text(String(value || '-'), x + labelWidth, curY);
-    if (col === 1) curY += 7;
+  rows.forEach((row, rowIndex) => {
+    row.forEach((field, col) => {
+      if (!field || !field[0]) return;
+      const [label, value] = field;
+      const x = col === 0 ? 18 : 105;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(110);
+      doc.text(`${label}:`, x, curY);
+      doc.setTextColor(0);
+      doc.setFont('helvetica', 'bold');
+      const labelWidth = doc.getTextWidth(`${label}: `);
+      const valueX = x + labelWidth;
+      const wrapped = doc.splitTextToSize(String(value || '---'), Math.max(22, colWidth - labelWidth));
+      doc.text(wrapped, valueX, curY);
+    });
+    curY += rowHeights[rowIndex];
   });
   return y + altura + 5;
 };
