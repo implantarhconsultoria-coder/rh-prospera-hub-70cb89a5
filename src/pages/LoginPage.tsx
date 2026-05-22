@@ -173,11 +173,14 @@ const LoginPage: React.FC = () => {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full border-white/10 bg-slate-900/45 text-slate-200 hover:bg-slate-800 hover:text-white"
+                className="group w-full border-white/10 bg-slate-900/45 text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,.05)] hover:border-cyan-300/35 hover:bg-slate-800/80 hover:text-white"
                 onClick={handleGoogleLogin}
                 disabled={loading}
               >
-                Entrar com Google
+                <span className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-white text-base font-black shadow-[0_0_18px_rgba(255,255,255,.12)]">
+                  <span className="bg-gradient-to-r from-[#4285f4] via-[#34a853] to-[#fbbc05] bg-clip-text text-transparent">G</span>
+                </span>
+                <span className="font-semibold">Entrar com Google</span>
               </Button>
 
               <div className="flex justify-center text-sm text-slate-400">
