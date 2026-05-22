@@ -69,13 +69,30 @@ const initialForm: Partial<PreCadastro> = {
 
 const onlyDigits = (v?: string | null) => String(v || '').replace(/\D/g, '');
 
+const ADMISSION_BUCKETS = [
+  'documentos-admissionais',
+  'documentos-funcionarios',
+  'atestados',
+  'documentos-ativos',
+];
+
 const uploadAdmissionFile = async (file: File, prefix: string) => {
   const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]+/g, '_');
   const path = `${prefix}/${Date.now()}-${safeName}`;
-  const { error } = await supabase.storage.from('documentos-admissionais').upload(path, file, { upsert: false });
-  if (error) throw error;
-  const { data } = supabase.storage.from('documentos-admissionais').getPublicUrl(path);
-  return data.publicUrl;
+  const errors: string[] = [];
+
+  for (const bucket of ADMISSION_BUCKETS) {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+    if (!error) {
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return data.publicUrl;
+    }
+
+    errors.push(`${bucket}: ${error.message}`);
+    if (!/bucket not found|not found|does not exist/i.test(error.message)) break;
+  }
+
+  throw new Error(errors.join(' | '));
 };
 
 const buildExameEmailBody = (r: Partial<PreCadastro>) => [
