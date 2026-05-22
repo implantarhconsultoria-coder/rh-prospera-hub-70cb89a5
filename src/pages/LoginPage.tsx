@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Building2, Loader2, Lock, Mail } from 'lucide-react';
+import { ArrowRight, Building2, Loader2, Lock, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -49,22 +49,26 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen gradient-primary relative overflow-hidden text-foreground">
-      <div className="absolute inset-0 opacity-10 pointer-events-none">
-        {[...Array(6)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full bg-primary-foreground/20"
-            style={{
-              width: 200 + i * 100,
-              height: 200 + i * 100,
-              top: `${10 + i * 12}%`,
-              left: `${5 + i * 15}%`,
-            }}
-          />
-        ))}
+    <div className="min-h-screen relative overflow-hidden bg-[#050b16] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_17%_48%,rgba(168,85,247,0.22),transparent_34%),radial-gradient(circle_at_72%_28%,rgba(34,211,238,0.15),transparent_30%),linear-gradient(115deg,#070918_0%,#081426_46%,#041916_100%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(103,232,249,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(103,232,249,0.035)_1px,transparent_1px)] bg-[size:56px_56px]" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.34),transparent_42%,rgba(0,0,0,0.15))]" />
+
+      <div className="absolute left-6 right-6 top-4 z-20 hidden items-center justify-between text-xs text-slate-400 lg:flex">
+        <div className="flex items-center gap-3">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <span>Nucleo TOPAC online</span>
+          <span className="text-slate-600">.</span>
+          <span>central-rh</span>
+          <span className="text-slate-600">.</span>
+          <span>v2.4.1</span>
+        </div>
+        <div className="flex items-center gap-5">
+          <span className="text-emerald-300">SLA 99.98%</span>
+          <span className="text-cyan-300">Cluster OK</span>
+          <span className="text-fuchsia-300">sync</span>
+        </div>
       </div>
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(56,189,248,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(56,189,248,0.06)_1px,transparent_1px)] bg-[size:56px_56px] pointer-events-none" />
 
       <div className="relative z-10 min-h-screen grid lg:grid-cols-[1.05fr_.95fr]">
         <motion.section
@@ -73,8 +77,8 @@ const LoginPage: React.FC = () => {
           transition={{ duration: 0.5 }}
           className="hidden lg:flex flex-col justify-center px-20"
         >
-          <div className="w-20 h-20 gradient-accent rounded-3xl flex items-center justify-center mb-10 shadow-[0_0_45px_rgba(34,211,238,.25)]">
-            <Building2 className="w-10 h-10 text-accent-foreground" />
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-10 bg-[#071827] border border-cyan-400/15 shadow-[0_0_58px_rgba(34,211,238,.28)]">
+            <Building2 className="w-10 h-10 text-cyan-300" />
           </div>
           <div className="inline-flex items-center gap-2 w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-bold tracking-[0.35em] text-cyan-200 mb-8">
             <span className="h-2 w-2 rounded-full bg-cyan-300" />
@@ -88,7 +92,7 @@ const LoginPage: React.FC = () => {
 
           <div className="mt-16 grid grid-cols-3 gap-3 max-w-xl">
             {OPERATIONAL_STATS.map((stat) => (
-              <div key={stat.label} className="rounded-xl border border-cyan-400/15 bg-slate-950/35 px-4 py-4">
+              <div key={stat.label} className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-4 backdrop-blur">
                 <p className="text-[10px] font-bold tracking-[0.28em] text-slate-400">{stat.label}</p>
                 <p className="mt-2 text-2xl font-black text-cyan-200">{stat.value}</p>
               </div>
@@ -101,27 +105,27 @@ const LoginPage: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="card-premium p-8 w-full max-w-md mx-4 relative z-10 border-cyan-400/15"
+            className="w-full max-w-md mx-4 relative z-10 rounded-2xl border border-cyan-400/15 bg-[#101829]/88 p-8 shadow-[0_0_55px_rgba(34,211,238,.13)] backdrop-blur-xl"
           >
             <div className="mb-8">
               <p className="text-xs font-bold tracking-[0.32em] text-cyan-300 uppercase">Acesso seguro</p>
-              <h2 className="mt-3 text-2xl font-bold font-display text-foreground">Entrar na central</h2>
-              <p className="text-sm text-muted-foreground mt-1">Use suas credenciais corporativas.</p>
+              <h2 className="mt-3 text-2xl font-bold font-display text-white">Entrar na central</h2>
+              <p className="text-sm text-slate-400 mt-1">Use suas credenciais corporativas.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-[0.28em] text-muted-foreground uppercase">
+                <label className="text-[10px] font-bold tracking-[0.28em] text-slate-400 uppercase">
                   Email ou usuario
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-3 w-4 h-4 text-cyan-300" />
                   <Input
                     type="text"
                     placeholder="seu@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500"
                     required
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -130,43 +134,59 @@ const LoginPage: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-[0.28em] text-muted-foreground uppercase">Senha</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold tracking-[0.28em] text-slate-400 uppercase">Senha</label>
+                  <Link to="/recuperar-senha" className="text-xs font-semibold text-cyan-300 hover:text-cyan-200">
+                    Esqueci minha senha
+                  </Link>
+                </div>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-cyan-300" />
                   <Input
                     type="password"
                     placeholder="********"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500"
                     required
                   />
                 </div>
               </div>
 
-              <Button type="submit" className="w-full gradient-primary text-primary-foreground" disabled={loading}>
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-[#45ff33] via-[#35d8f2] to-[#b875ff] text-slate-950 font-bold shadow-[0_0_34px_rgba(34,211,238,.25)] hover:opacity-95"
+                disabled={loading}
+              >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Entrar na plataforma
+                {!loading ? <ArrowRight className="ml-2 h-4 w-4" /> : null}
               </Button>
 
               <div className="relative py-2">
-                <div className="absolute inset-x-0 top-1/2 h-px bg-border" />
-                <span className="relative mx-auto block w-fit bg-card px-3 text-[10px] text-muted-foreground tracking-[0.3em]">
+                <div className="absolute inset-x-0 top-1/2 h-px bg-white/10" />
+                <span className="relative mx-auto block w-fit bg-[#101829] px-3 text-[10px] text-slate-500 tracking-[0.3em]">
                   OU
                 </span>
               </div>
 
-              <Button type="button" variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={loading}>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-white/10 bg-slate-900/45 text-slate-200 hover:bg-slate-800 hover:text-white"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+              >
                 Entrar com Google
               </Button>
 
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <Link to="/cadastro" className="hover:text-primary underline">Criar conta</Link>
-                <Link to="/recuperar-senha" className="hover:text-primary underline">Esqueci minha senha</Link>
+              <div className="flex justify-center text-sm text-slate-400">
+                <span>Ainda nao tem conta? </span>
+                <Link to="/cadastro" className="ml-1 font-semibold text-cyan-300 hover:text-cyan-200">Criar conta</Link>
               </div>
             </form>
 
-            <p className="mt-8 text-center text-[10px] tracking-[0.25em] text-muted-foreground uppercase">
+            <p className="mt-8 text-center text-[10px] tracking-[0.25em] text-slate-600 uppercase">
               TOPAC RH PRO - Central RH - Acesso restrito
             </p>
           </motion.div>
