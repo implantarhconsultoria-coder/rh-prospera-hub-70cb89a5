@@ -1,15 +1,12 @@
 export const DIRECTOR_BLOCKED_MESSAGE = 'Edicao bloqueada para este perfil. Solicite liberacao ao administrador.';
 
 const DIRECTOR_ALLOWED_ADMIN_PREFIXES = [
-  '/admin',
   '/admin/faturamento',
   '/admin/faturamento/migracao-dn4',
   '/admin/financeiro',
   '/admin/relatorio',
   '/admin/relatorio-vr',
   '/admin/relatorio-vt',
-  '/admin/documentos-ativos',
-  '/admin/almoxarifado',
 ];
 
 const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
@@ -49,6 +46,8 @@ const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
 export const isDirectorRole = (roles: string[] = []) => roles.includes('diretor_geral');
 
 export const isDirectorRouteAllowed = (pathname: string) => {
+  if (pathname === '/admin') return true;
+
   if (DIRECTOR_BLOCKED_EDIT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return false;
   }
