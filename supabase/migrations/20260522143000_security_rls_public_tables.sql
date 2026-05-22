@@ -88,6 +88,8 @@ SET search_path = public
 AS $$
 DECLARE
   v_parts text[] := ARRAY[]::text[];
+  v_ax_parts text[] := ARRAY[]::text[];
+  v_has_user_empresas boolean := to_regclass('public.user_empresas') IS NOT NULL;
 BEGIN
   IF public.topac_security_column_exists(p_table, 'user_id') THEN
     v_parts := v_parts || 'user_id = auth.uid()';
@@ -98,20 +100,34 @@ BEGIN
   IF public.topac_security_column_exists(p_table, 'criado_por') THEN
     v_parts := v_parts || 'criado_por = auth.uid()';
   END IF;
-  IF public.topac_security_column_exists(p_table, 'empresa_id') THEN
+  IF v_has_user_empresas AND public.topac_security_column_exists(p_table, 'empresa_id') THEN
     v_parts := v_parts || 'empresa_id IN (SELECT empresa_id FROM public.user_empresas WHERE user_id = auth.uid())';
   END IF;
-  IF public.topac_security_column_exists(p_table, 'company_id') THEN
+  IF v_has_user_empresas AND public.topac_security_column_exists(p_table, 'company_id') THEN
     v_parts := v_parts || 'company_id IN (SELECT empresa_id FROM public.user_empresas WHERE user_id = auth.uid())';
   END IF;
-  IF public.topac_security_column_exists(p_table, 'filial_id') THEN
+  IF v_has_user_empresas AND public.topac_security_column_exists(p_table, 'filial_id') THEN
     v_parts := v_parts || 'filial_id IN (SELECT empresa_id FROM public.user_empresas WHERE user_id = auth.uid())';
   END IF;
-  IF public.topac_security_column_exists(p_table, 'pre_cadastro_id') AND to_regclass('public.pre_cadastros_admissionais') IS NOT NULL THEN
-    v_parts := v_parts || 'EXISTS (SELECT 1 FROM public.pre_cadastros_admissionais pc WHERE pc.id = pre_cadastro_id AND (pc.criado_por = auth.uid() OR pc.empresa_id IN (SELECT empresa_id FROM public.user_empresas WHERE user_id = auth.uid())))';
+  IF public.topac_security_column_exists(p_table, 'pre_cadastro_id')
+     AND to_regclass('public.pre_cadastros_admissionais') IS NOT NULL THEN
+    IF v_has_user_empresas THEN
+      v_parts := v_parts || 'EXISTS (SELECT 1 FROM public.pre_cadastros_admissionais pc WHERE pc.id = pre_cadastro_id AND (pc.criado_por = auth.uid() OR pc.empresa_id IN (SELECT empresa_id FROM public.user_empresas WHERE user_id = auth.uid())))';
+    ELSE
+      v_parts := v_parts || 'EXISTS (SELECT 1 FROM public.pre_cadastros_admissionais pc WHERE pc.id = pre_cadastro_id AND pc.criado_por = auth.uid())';
+    END IF;
   END IF;
-  IF public.topac_security_column_exists(p_table, 'acesso_externo_id') AND to_regclass('public.acessos_externos') IS NOT NULL THEN
-    v_parts := v_parts || 'EXISTS (SELECT 1 FROM public.acessos_externos ax WHERE ax.id = acesso_externo_id AND (ax.user_id = auth.uid() OR ax.empresa_id IN (SELECT empresa_id FROM public.user_empresas WHERE user_id = auth.uid())))';
+  IF public.topac_security_column_exists(p_table, 'acesso_externo_id')
+     AND to_regclass('public.acessos_externos') IS NOT NULL THEN
+    IF public.topac_security_column_exists('acessos_externos', 'user_id') THEN
+      v_ax_parts := v_ax_parts || 'ax.user_id = auth.uid()';
+    END IF;
+    IF v_has_user_empresas AND public.topac_security_column_exists('acessos_externos', 'empresa_id') THEN
+      v_ax_parts := v_ax_parts || 'ax.empresa_id IN (SELECT empresa_id FROM public.user_empresas WHERE user_id = auth.uid())';
+    END IF;
+    IF array_length(v_ax_parts, 1) IS NOT NULL THEN
+      v_parts := v_parts || 'EXISTS (SELECT 1 FROM public.acessos_externos ax WHERE ax.id = acesso_externo_id AND (' || array_to_string(v_ax_parts, ' OR ') || '))';
+    END IF;
   END IF;
 
   IF array_length(v_parts, 1) IS NULL THEN
