@@ -63,6 +63,72 @@ $$;
 -- 1. COMPATIBILIDADE FUNCIONARIOS / EMPRESAS / FECHAMENTO
 -- =========================================================
 
+create table if not exists public.empresas (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null default '',
+  razao_social text default '',
+  cnpj text default '',
+  codigo text,
+  status text default 'ativa',
+  observacoes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.funcionarios (
+  id uuid primary key default gen_random_uuid(),
+  nome text not null default '',
+  empresa_id uuid references public.empresas(id) on delete set null,
+  company_id uuid references public.empresas(id) on delete set null,
+  registro text default '',
+  matricula_esocial text default '',
+  cpf text default '',
+  rg text default '',
+  cargo text default '',
+  categoria text default 'operacional',
+  salario numeric default 0,
+  salario_base numeric default 0,
+  data_admissao date,
+  data_nascimento date,
+  data_exame_medico date,
+  setor_ghe text default '',
+  telefone text default '',
+  celular text default '',
+  email text default '',
+  endereco text default '',
+  observacoes text default '',
+  ativo boolean default true,
+  status text default 'ativo',
+  cpf_pendente_acesso boolean default false,
+  vr_ativo boolean default false,
+  vr_diario numeric default 0,
+  va_ativo boolean default false,
+  va_mensal numeric default 0,
+  vt_ativo boolean default false,
+  vt_diario numeric default 0,
+  insalubridade_ativa boolean default false,
+  insalubridade_valor numeric default 0,
+  tem_insalubridade boolean default false,
+  valor_insalubridade numeric,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.acessos_externos (
+  id uuid primary key default gen_random_uuid(),
+  funcionario_id uuid references public.funcionarios(id) on delete set null,
+  user_id uuid,
+  cpf text default '',
+  nome text default '',
+  email text default '',
+  tipo_acesso text default 'operacional',
+  modulos_liberados jsonb not null default '[]'::jsonb,
+  ativo boolean not null default true,
+  ultimo_acesso_em timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz default now()
+);
+
 alter table public.empresas
   add column if not exists codigo text,
   add column if not exists status text default 'ativa',
