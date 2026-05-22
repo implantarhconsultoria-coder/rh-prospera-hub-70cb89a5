@@ -503,6 +503,7 @@ create table if not exists public.abastecimento_postos (
 create table if not exists public.abastecimento_qr_tokens (
   id uuid primary key default gen_random_uuid(),
   posto_id uuid references public.abastecimento_postos(id) on delete cascade,
+  unidade_codigo text not null default '',
   codigo text not null unique,
   token_hash text,
   status text not null default 'ativo',
@@ -600,11 +601,25 @@ where unidade_codigo is null or unidade_codigo = '';
 
 alter table public.abastecimento_qr_tokens
   add column if not exists posto_id uuid references public.abastecimento_postos(id) on delete cascade,
+  add column if not exists unidade_codigo text not null default '',
   add column if not exists codigo text,
   add column if not exists token_hash text,
   add column if not exists status text not null default 'ativo',
   add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
+
+alter table public.abastecimento_qr_tokens
+  alter column unidade_codigo set default '';
+
+update public.abastecimento_qr_tokens q
+set unidade_codigo = coalesce(nullif(q.unidade_codigo, ''), p.unidade_codigo, p.unidade, q.codigo, '')
+from public.abastecimento_postos p
+where q.posto_id = p.id
+  and (q.unidade_codigo is null or q.unidade_codigo = '');
+
+update public.abastecimento_qr_tokens
+set unidade_codigo = coalesce(nullif(unidade_codigo, ''), codigo, '')
+where unidade_codigo is null or unidade_codigo = '';
 
 alter table public.abastecimento_registros
   add column if not exists acesso_externo_id uuid references public.acessos_externos(id) on delete set null,
@@ -689,11 +704,15 @@ set nome = excluded.nome,
     observacao = excluded.observacao,
     updated_at = now();
 
-insert into public.abastecimento_qr_tokens(posto_id, codigo, status)
-select p.id, p.codigo, 'ativo'
+insert into public.abastecimento_qr_tokens(posto_id, unidade_codigo, codigo, status)
+select p.id, p.unidade_codigo, p.codigo, 'ativo'
 from public.abastecimento_postos p
 where p.codigo in ('COMB-SP-001', 'COMB-PG-001', 'COMB-GO-001')
-on conflict (codigo) do update set posto_id = excluded.posto_id, status = 'ativo', updated_at = now();
+on conflict (codigo) do update
+set posto_id = excluded.posto_id,
+    unidade_codigo = excluded.unidade_codigo,
+    status = 'ativo',
+    updated_at = now();
 
 insert into public.mobile_admin_modulos(codigo, nome, rota, ordem)
 values
