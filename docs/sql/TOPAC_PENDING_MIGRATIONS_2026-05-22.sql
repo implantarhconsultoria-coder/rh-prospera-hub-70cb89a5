@@ -487,6 +487,7 @@ create table if not exists public.abastecimento_unidades (
 create table if not exists public.abastecimento_postos (
   id uuid primary key default gen_random_uuid(),
   unidade_id uuid references public.abastecimento_unidades(id) on delete set null,
+  unidade_codigo text not null default '',
   codigo text not null unique,
   nome text not null,
   unidade text default '',
@@ -578,6 +579,7 @@ alter table public.abastecimento_unidades
 
 alter table public.abastecimento_postos
   add column if not exists unidade_id uuid references public.abastecimento_unidades(id) on delete set null,
+  add column if not exists unidade_codigo text not null default '',
   add column if not exists codigo text,
   add column if not exists nome text,
   add column if not exists unidade text default '',
@@ -588,6 +590,13 @@ alter table public.abastecimento_postos
   add column if not exists observacao text,
   add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
+
+alter table public.abastecimento_postos
+  alter column unidade_codigo set default '';
+
+update public.abastecimento_postos
+set unidade_codigo = coalesce(nullif(unidade_codigo, ''), unidade, codigo, '')
+where unidade_codigo is null or unidade_codigo = '';
 
 alter table public.abastecimento_qr_tokens
   add column if not exists posto_id uuid references public.abastecimento_postos(id) on delete cascade,
@@ -667,13 +676,14 @@ values
   ('goiania', 'Goiania')
 on conflict (codigo) do update set nome = excluded.nome, status = 'ativo', updated_at = now();
 
-insert into public.abastecimento_postos(codigo, nome, unidade, status, observacao)
+insert into public.abastecimento_postos(codigo, unidade_codigo, nome, unidade, status, observacao)
 values
-  ('COMB-SP-001', 'Posto Sao Paulo - TOPAC', 'TOPAC MATRIZ', 'ativo', 'QR individual Sao Paulo/Matriz'),
-  ('COMB-PG-001', 'Posto Praia Grande - TOPAC', 'TOPAC PRAIA GRANDE', 'ativo', 'QR individual Praia Grande'),
-  ('COMB-GO-001', 'Posto Goiania - TOPAC', 'TOPAC GOIANIA', 'ativo', 'QR individual Goiania')
+  ('COMB-SP-001', 'sp-matriz', 'Posto Sao Paulo - TOPAC', 'TOPAC MATRIZ', 'ativo', 'QR individual Sao Paulo/Matriz'),
+  ('COMB-PG-001', 'praia-grande', 'Posto Praia Grande - TOPAC', 'TOPAC PRAIA GRANDE', 'ativo', 'QR individual Praia Grande'),
+  ('COMB-GO-001', 'goiania', 'Posto Goiania - TOPAC', 'TOPAC GOIANIA', 'ativo', 'QR individual Goiania')
 on conflict (codigo) do update
 set nome = excluded.nome,
+    unidade_codigo = excluded.unidade_codigo,
     unidade = excluded.unidade,
     status = 'ativo',
     observacao = excluded.observacao,
