@@ -5,12 +5,29 @@
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
 ALTER TABLE public.funcionarios
+  ADD COLUMN IF NOT EXISTS empresa_id uuid,
+  ADD COLUMN IF NOT EXISTS company_id uuid,
+  ADD COLUMN IF NOT EXISTS cpf text DEFAULT '',
+  ADD COLUMN IF NOT EXISTS salario numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS salario_base numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS ativo boolean DEFAULT true,
+  ADD COLUMN IF NOT EXISTS status text DEFAULT 'ativo',
+  ADD COLUMN IF NOT EXISTS cpf_pendente_acesso boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS vt_ativo boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS vt_diario numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS vr_ativo boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS vr_diario numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS va_ativo boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS va_mensal numeric DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS insalubridade_ativa boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS insalubridade_valor numeric DEFAULT 0,
   ADD COLUMN IF NOT EXISTS tem_insalubridade boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS percentual_insalubridade numeric,
   ADD COLUMN IF NOT EXISTS valor_insalubridade numeric,
   ADD COLUMN IF NOT EXISTS base_calculo_insalubridade numeric,
   ADD COLUMN IF NOT EXISTS insalubridade_confirmada boolean DEFAULT false,
-  ADD COLUMN IF NOT EXISTS insalubridade_pendente boolean DEFAULT false;
+  ADD COLUMN IF NOT EXISTS insalubridade_pendente boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
 
 CREATE OR REPLACE FUNCTION public.topac_norm_name_beneficios(p_nome text)
 RETURNS text
