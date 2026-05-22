@@ -569,6 +569,97 @@ create table if not exists public.rh_documentos_uploads (
   created_at timestamptz not null default now()
 );
 
+alter table public.abastecimento_unidades
+  add column if not exists codigo text,
+  add column if not exists nome text,
+  add column if not exists status text not null default 'ativo',
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
+alter table public.abastecimento_postos
+  add column if not exists unidade_id uuid references public.abastecimento_unidades(id) on delete set null,
+  add column if not exists codigo text,
+  add column if not exists nome text,
+  add column if not exists unidade text default '',
+  add column if not exists cnpj text,
+  add column if not exists endereco text,
+  add column if not exists telefone text,
+  add column if not exists status text not null default 'ativo',
+  add column if not exists observacao text,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
+alter table public.abastecimento_qr_tokens
+  add column if not exists posto_id uuid references public.abastecimento_postos(id) on delete cascade,
+  add column if not exists codigo text,
+  add column if not exists token_hash text,
+  add column if not exists status text not null default 'ativo',
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
+alter table public.abastecimento_registros
+  add column if not exists acesso_externo_id uuid references public.acessos_externos(id) on delete set null,
+  add column if not exists funcionario_id uuid references public.funcionarios(id) on delete set null,
+  add column if not exists posto_id uuid references public.abastecimento_postos(id) on delete set null,
+  add column if not exists posto_codigo text,
+  add column if not exists mecanico_nome text,
+  add column if not exists empresa text,
+  add column if not exists filial text,
+  add column if not exists placa text,
+  add column if not exists combustivel text,
+  add column if not exists valor numeric default 0,
+  add column if not exists litros numeric default 0,
+  add column if not exists valor_por_litro numeric default 0,
+  add column if not exists km_atual numeric,
+  add column if not exists km_rodado numeric,
+  add column if not exists foto_bomba_url text,
+  add column if not exists foto_painel_url text,
+  add column if not exists latitude double precision,
+  add column if not exists longitude double precision,
+  add column if not exists endereco text,
+  add column if not exists observacao text,
+  add column if not exists status text default 'concluido',
+  add column if not exists recibo_texto text,
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.mobile_admin_modulos
+  add column if not exists codigo text,
+  add column if not exists nome text,
+  add column if not exists descricao text default '',
+  add column if not exists rota text default '',
+  add column if not exists ativo boolean not null default true,
+  add column if not exists ordem integer not null default 0,
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.mobile_admin_user_modulos
+  add column if not exists user_id uuid,
+  add column if not exists modulo_codigo text,
+  add column if not exists liberado boolean not null default true,
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.rh_documentos_uploads
+  add column if not exists funcionario_id uuid references public.funcionarios(id) on delete set null,
+  add column if not exists empresa_id uuid references public.empresas(id) on delete set null,
+  add column if not exists tipo_documento text not null default 'documento',
+  add column if not exists nome_arquivo text not null default '',
+  add column if not exists arquivo_url text not null default '',
+  add column if not exists status text not null default 'recebido',
+  add column if not exists criado_por uuid default auth.uid(),
+  add column if not exists metadata jsonb not null default '{}'::jsonb,
+  add column if not exists created_at timestamptz not null default now();
+
+create unique index if not exists idx_abastecimento_unidades_codigo_unique
+  on public.abastecimento_unidades(codigo);
+
+create unique index if not exists idx_abastecimento_postos_codigo_unique
+  on public.abastecimento_postos(codigo);
+
+create unique index if not exists idx_abastecimento_qr_tokens_codigo_unique
+  on public.abastecimento_qr_tokens(codigo);
+
+create unique index if not exists idx_mobile_admin_modulos_codigo_unique
+  on public.mobile_admin_modulos(codigo);
+
 insert into public.abastecimento_unidades(codigo, nome)
 values
   ('sp-matriz', 'Sao Paulo / Matriz'),
