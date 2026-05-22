@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { LogIn, LogOut, ClipboardList, Car, Fuel, History, Sparkles, Wrench, UtensilsCrossed, Coffee, Settings, ArrowUpRight, CheckSquare } from "lucide-react";
@@ -17,7 +17,19 @@ export default function HomePage() {
   const { mecanico } = useMecanicoApp();
   const navigate = useNavigate();
   const base = `/app-mecanico/${mecanico.acesso_id}`;
-  const [layoutMode, setLayoutMode] = useState(() => localStorage.getItem("topac_layout_mode") || "premium");
+  const isRodrigo = useMemo(() => {
+    const nome = (mecanico.nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return nome.includes("rodrigo") && nome.includes("sabino");
+  }, [mecanico.nome]);
+  const [layoutMode, setLayoutMode] = useState(() => {
+    return localStorage.getItem("topac_mecanico_layout_mode") || localStorage.getItem("topac_layout_mode") || "premium";
+  });
+
+  useEffect(() => {
+    if (!isRodrigo) return;
+    localStorage.setItem("topac_mecanico_layout_mode", "premium");
+    setLayoutMode("premium");
+  }, [isRodrigo]);
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
@@ -25,7 +37,7 @@ export default function HomePage() {
 
   const setLayout = () => {
     const next = layoutMode === "premium" ? "padrao" : "premium";
-    localStorage.setItem("topac_layout_mode", next);
+    localStorage.setItem("topac_mecanico_layout_mode", next);
     setLayoutMode(next);
     window.dispatchEvent(new Event("topac-layout-change"));
   };
@@ -71,7 +83,7 @@ export default function HomePage() {
         <div className="mec-pulse"><Sparkles className="w-4 h-4" /> sistema online</div>
         <h1>{greet}, {firstName}</h1>
         <p>{[mecanico.empresa, mecanico.funcao].filter(Boolean).join(" - ") || "Tudo pronto para o dia"}</p>
-        {mecanico.registro_teste && <p className="mt-2 text-amber-300">Modo teste ativo - registros isolados dos relatÃ³rios oficiais</p>}
+        {mecanico.registro_teste && <p className="mt-2 text-amber-300">Modo teste ativo - registros isolados dos relatórios oficiais</p>}
       </section>
 
       <section className="mec-mission-card">
