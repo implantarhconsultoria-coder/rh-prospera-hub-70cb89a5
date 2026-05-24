@@ -142,16 +142,58 @@ const FIELD_ALIASES: Record<string, string[]> = {
   status: ['status', 'situacao'],
 };
 
-export const detectDn4Module = (headers: string[]): Dn4MigrationModule => {
-  const normalizedHeaders = headers.map(normalize);
+const normalizeJoinedRows = (rows: Array<Record<string, unknown>> = []) =>
+  normalize(
+    rows
+      .slice(0, 40)
+      .map((row) => Object.values(row || {}).map((value) => String(value || '')).join(' '))
+      .join(' '),
+  );
+
+export const detectDn4Module = (
+  headers: string[],
+  sampleRows: Array<Record<string, unknown>> = [],
+  fileName = '',
+): Dn4MigrationModule => {
+  const normalizedHeaders = headers.map(normalize).filter(Boolean);
+  const normalizedRowsText = normalizeJoinedRows(sampleRows);
+  const normalizedFileName = normalize(fileName.replace(/\.[^.]+$/, ''));
   let best: { module: Dn4MigrationModule; score: number } = { module: 'nao_identificado', score: 0 };
 
   for (const hint of MODULE_HINTS) {
-    const score = hint.terms.filter((term) => normalizedHeaders.some((header) => header.includes(normalize(term)))).length;
+    const normalizedTerms = hint.terms.map((term) => normalize(term));
+    const headerHits = normalizedTerms.filter((term) =>
+      normalizedHeaders.some(
+        (header) => header.length >= 2 && (header === term || header.includes(term) || term.includes(header)),
+      ),
+    ).length;
+    const rowHits = normalizedTerms.filter(
+      (term) => term.length >= 3 && normalizedRowsText.includes(term),
+    ).length;
+    const fileHits = normalizedTerms.filter(
+      (term) => term.length >= 3 && normalizedFileName.includes(term),
+    ).length;
+
+    const score = headerHits * 3 + rowHits + fileHits * 2;
     if (score > best.score) best = { module: hint.module, score };
   }
 
-  return best.score > 0 ? best.module : 'nao_identificado';
+  if (best.score > 0) return best.module;
+
+  // Fallback: alguns arquivos DN4 de clientes chegam com cabecalho minimo.
+  const hasDoc = normalizedHeaders.some((header) =>
+    ['cnpj', 'cpf', 'cpf_cnpj', 'cnpj_cpf', 'documento'].some(
+      (term) => header === normalize(term) || header.includes(normalize(term)),
+    ),
+  );
+  const hasName = normalizedHeaders.some((header) =>
+    ['razao_social', 'nome_razao_social', 'cliente', 'nome'].some(
+      (term) => header === normalize(term) || header.includes(normalize(term)),
+    ),
+  );
+  if (hasDoc && hasName) return 'clientes';
+
+  return 'nao_identificado';
 };
 
 export const suggestDn4Mapping = (headers: string[]) => {
