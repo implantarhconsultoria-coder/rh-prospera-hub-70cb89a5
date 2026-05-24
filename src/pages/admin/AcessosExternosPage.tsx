@@ -5,13 +5,50 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Plus, Copy, Lock, Unlock, ExternalLink, Trash2, Search, Check, ChevronsUpDown, Wrench } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Check,
+  ChevronsUpDown,
+  Copy,
+  ExternalLink,
+  Lock,
+  Plus,
+  Search,
+  Trash2,
+  Unlock,
+  Wrench,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { createExternalSession, saveExternalSession } from "@/lib/acessoExternoAuth";
 
 type Funcionario = {
   id: string;
@@ -27,6 +64,8 @@ type Acesso = {
   cpf: string;
   cpf_clean: string;
   pin: string;
+  email: string | null;
+  observacoes: string | null;
   empresa: string | null;
   filial: string | null;
   funcao: string | null;
@@ -35,17 +74,21 @@ type Acesso = {
   status: string;
   acesso_liberado: boolean;
   ultimo_acesso_em: string | null;
+  updated_at?: string | null;
 };
 
 type GrupoUsuario = {
   cpf_clean: string;
   pin: string;
   nome: string;
+  email_corporativo: string;
+  telefone: string;
+  ultima_validacao_email_em: string | null;
   empresa: string;
   filial: string;
   funcao: string;
   acessos: Acesso[];
-  modulosAdmin: Acesso[]; // não-mecânico
+  modulosAdmin: Acesso[];
   modulosMecanico: Acesso[];
 };
 
@@ -55,8 +98,8 @@ const PERFIS = [
   { v: "faturamento", l: "Faturamento", modulo: "faturamento" },
   { v: "almoxarifado", l: "Almoxarifado", modulo: "almoxarifado" },
   { v: "operacional", l: "Operacional", modulo: "operacional" },
-  { v: "tecnico_campo", l: "Técnico de Campo", modulo: "campo" },
-  { v: "mecanico_externo", l: "Mecânico (App próprio)", modulo: "mecanico" },
+  { v: "tecnico_campo", l: "Tecnico de Campo", modulo: "campo" },
+  { v: "mecanico_externo", l: "Mecanico (App proprio)", modulo: "mecanico" },
 ];
 
 const MODULO_COLOR: Record<string, string> = {
@@ -69,6 +112,33 @@ const MODULO_COLOR: Record<string, string> = {
   mecanico: "bg-red-500/10 text-red-700 border-red-500/30",
 };
 
+const onlyDigits = (value: string) => String(value || "").replace(/\D/g, "");
+
+const parseObservacoes = (raw: unknown) => {
+  const base = { telefone: "", ultima_validacao_email_em: null as string | null };
+  if (!raw) return base;
+  if (typeof raw === "object") {
+    const value = raw as Record<string, unknown>;
+    return {
+      telefone: String(value.telefone || "").trim(),
+      ultima_validacao_email_em:
+        typeof value.ultima_validacao_email_em === "string" ? value.ultima_validacao_email_em : null,
+    };
+  }
+  const text = String(raw).trim();
+  if (!text) return base;
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    return {
+      telefone: String(parsed.telefone || "").trim(),
+      ultima_validacao_email_em:
+        typeof parsed.ultima_validacao_email_em === "string" ? parsed.ultima_validacao_email_em : null,
+    };
+  } catch {
+    return base;
+  }
+};
+
 export default function AcessosExternosPage() {
   const [lista, setLista] = useState<Acesso[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +147,13 @@ export default function AcessosExternosPage() {
   const [funcOpen, setFuncOpen] = useState(false);
   const [funcionarioId, setFuncionarioId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    nome: "", cpf: "", empresa: "", filial: "", funcao: "",
+    nome: "",
+    cpf: "",
+    email_corporativo: "",
+    telefone: "",
+    empresa: "",
+    filial: "",
+    funcao: "",
     perfis_acesso: ["filial"] as string[],
   });
 
@@ -98,28 +174,36 @@ export default function AcessosExternosPage() {
       .select("id, nome, cpf, cargo, empresas(nome)")
       .eq("status", "ativo")
       .order("nome");
-    const lista: Funcionario[] = (data || []).map((f: any) => ({
+
+    const base: Funcionario[] = (data || []).map((f: any) => ({
       id: f.id,
       nome: f.nome,
       cpf: f.cpf || "",
       cargo: f.cargo || "",
       empresa_nome: f.empresas?.nome || "",
     }));
-    setFuncionarios(lista);
+    setFuncionarios(base);
   };
 
-  useEffect(() => { carregar(); carregarFuncionarios(); }, []);
+  useEffect(() => {
+    carregar();
+    carregarFuncionarios();
+  }, []);
 
-  // Agrupa acessos por CPF (uma linha por pessoa)
   const grupos: GrupoUsuario[] = useMemo(() => {
     const map = new Map<string, GrupoUsuario>();
+
     for (const a of lista) {
-      const key = a.cpf_clean || a.pin + "::" + a.nome;
+      const key = a.cpf_clean || `${a.pin}::${a.nome}`;
       if (!map.has(key)) {
+        const obs = parseObservacoes(a.observacoes);
         map.set(key, {
           cpf_clean: a.cpf_clean || "",
           pin: a.pin,
-          nome: a.nome,
+          nome: a.nome || "",
+          email_corporativo: String(a.email || "").trim().toLowerCase(),
+          telefone: obs.telefone || "",
+          ultima_validacao_email_em: obs.ultima_validacao_email_em || null,
           empresa: a.empresa || "",
           filial: a.filial || "",
           funcao: a.funcao || "",
@@ -128,11 +212,13 @@ export default function AcessosExternosPage() {
           modulosMecanico: [],
         });
       }
+
       const g = map.get(key)!;
       g.acessos.push(a);
       if (a.modulo === "mecanico") g.modulosMecanico.push(a);
       else g.modulosAdmin.push(a);
     }
+
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [lista]);
 
@@ -140,7 +226,7 @@ export default function AcessosExternosPage() {
     setFuncionarioId(f.id);
     setForm((prev) => ({
       ...prev,
-      nome: f.nome,
+      nome: f.nome || prev.nome,
       cpf: f.cpf || prev.cpf,
       empresa: f.empresa_nome || prev.empresa,
       funcao: f.cargo || prev.funcao,
@@ -149,33 +235,76 @@ export default function AcessosExternosPage() {
   };
 
   const resetForm = () => {
-    setForm({ nome: "", cpf: "", empresa: "", filial: "", funcao: "", perfis_acesso: ["filial"] });
+    setForm({
+      nome: "",
+      cpf: "",
+      email_corporativo: "",
+      telefone: "",
+      empresa: "",
+      filial: "",
+      funcao: "",
+      perfis_acesso: ["filial"],
+    });
     setFuncionarioId(null);
   };
 
   const togglePerfil = (v: string) => {
     setForm((prev) => {
       const has = prev.perfis_acesso.includes(v);
-      return { ...prev, perfis_acesso: has ? prev.perfis_acesso.filter((x) => x !== v) : [...prev.perfis_acesso, v] };
+      return {
+        ...prev,
+        perfis_acesso: has
+          ? prev.perfis_acesso.filter((x) => x !== v)
+          : [...prev.perfis_acesso, v],
+      };
     });
   };
 
   const criar = async () => {
-    if (!form.nome || !form.cpf) { toast.error("Nome e CPF obrigatórios"); return; }
-    const cpfClean = form.cpf.replace(/\D/g, "");
-    if (cpfClean.length < 4) { toast.error("CPF inválido"); return; }
-    if (form.perfis_acesso.length === 0) { toast.error("Selecione ao menos um perfil"); return; }
+    if (!form.nome || !form.cpf || !form.email_corporativo || !form.telefone) {
+      toast.error("Nome, CPF, e-mail corporativo e telefone sao obrigatorios");
+      return;
+    }
 
-    const linhas = form.perfis_acesso.map((pv) => {
+    const cpfClean = onlyDigits(form.cpf);
+    if (cpfClean.length !== 11) {
+      toast.error("CPF invalido");
+      return;
+    }
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email_corporativo.trim().toLowerCase())) {
+      toast.error("E-mail corporativo invalido");
+      return;
+    }
+
+    if (onlyDigits(form.telefone).length < 10) {
+      toast.error("Telefone invalido");
+      return;
+    }
+
+    if (form.perfis_acesso.length === 0) {
+      toast.error("Selecione ao menos um perfil");
+      return;
+    }
+
+    const payload = form.perfis_acesso.map((pv) => {
       const perfil = PERFIS.find((p) => p.v === pv)!;
+      const observacoes = JSON.stringify({
+        telefone: form.telefone.trim(),
+        ultima_validacao_email_em: null,
+        atualizado_em: new Date().toISOString(),
+      });
       return {
-        nome: form.nome,
-        cpf: form.cpf,
+        nome: form.nome.trim(),
+        cpf: form.cpf.trim(),
         cpf_clean: cpfClean,
         pin: cpfClean.slice(-4),
-        empresa: form.empresa || null,
-        filial: form.filial || null,
-        funcao: form.funcao || null,
+        email: form.email_corporativo.trim().toLowerCase(),
+        observacoes,
+        empresa: form.empresa.trim() || null,
+        filial: form.filial.trim() || null,
+        funcao: form.funcao.trim() || null,
+        funcionario_id: funcionarioId,
         perfil_acesso: perfil.v,
         modulo: perfil.modulo,
         status: "ativo",
@@ -183,12 +312,16 @@ export default function AcessosExternosPage() {
       };
     });
 
-    // upsert para não duplicar mesmo CPF+modulo
     const { error } = await supabase
       .from("acessos_externos" as any)
-      .upsert(linhas, { onConflict: "cpf_clean,modulo", ignoreDuplicates: false });
-    if (error) { toast.error(error.message); return; }
-    toast.success(`${linhas.length} acesso(s) configurado(s)`);
+      .upsert(payload, { onConflict: "cpf_clean,modulo", ignoreDuplicates: false });
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(`${payload.length} acesso(s) configurado(s)`);
     setOpen(false);
     resetForm();
     carregar();
@@ -198,9 +331,17 @@ export default function AcessosExternosPage() {
     const algumAtivo = g.acessos.some((a) => a.status === "ativo");
     const novo = algumAtivo ? "bloqueado" : "ativo";
     const ids = g.acessos.map((a) => a.id);
-    const { error } = await supabase.from("acessos_externos" as any)
-      .update({ status: novo }).in("id", ids);
-    if (error) { toast.error(error.message); return; }
+
+    const { error } = await supabase
+      .from("acessos_externos" as any)
+      .update({ status: novo })
+      .in("id", ids);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
     toast.success(novo === "ativo" ? "Liberado" : "Bloqueado");
     carregar();
   };
@@ -209,31 +350,33 @@ export default function AcessosExternosPage() {
     if (!confirm(`Excluir TODOS os acessos de ${g.nome}?`)) return;
     const ids = g.acessos.map((a) => a.id);
     const { error } = await supabase.from("acessos_externos" as any).delete().in("id", ids);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Excluído"); carregar();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Excluido");
+    carregar();
   };
 
   const removerModulo = async (a: Acesso) => {
-    if (!confirm(`Remover acesso ao módulo "${a.modulo}"?`)) return;
+    if (!confirm(`Remover acesso ao modulo "${a.modulo}"?`)) return;
     const { error } = await supabase.from("acessos_externos" as any).delete().eq("id", a.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Módulo removido"); carregar();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Modulo removido");
+    carregar();
   };
 
-  const copiarPortal = () => {
-    const url = `${window.location.origin}/acesso-filial`;
+  const copiarLinkModulos = () => {
+    const url = `${window.location.origin}/modulos`;
     navigator.clipboard.writeText(url);
-    toast.success("Link copiado: " + url);
-  };
-  const copiarMecanico = () => {
-    const url = `${window.location.origin}/acesso-mecanico`;
-    navigator.clipboard.writeText(url);
-    toast.success("Link copiado: " + url);
+    toast.success(`Link copiado: ${url}`);
   };
 
   const testarPortal = (g: GrupoUsuario) => {
     if (g.modulosAdmin.length === 0) return;
-    // Cria sessão simulando o que o PIN faz, e abre /portais
     const portais = g.modulosAdmin.map((a) => ({
       acesso_id: a.id,
       modulo: a.modulo,
@@ -242,15 +385,22 @@ export default function AcessosExternosPage() {
       filial: a.filial || "",
       funcao: a.funcao || "",
     }));
-    sessionStorage.setItem("acesso_externo_sessao", JSON.stringify({
-      cpf_clean: g.cpf_clean, nome: g.nome, portais, ts: Date.now(),
-    }));
+
+    saveExternalSession(
+      createExternalSession({
+        cpf_clean: g.cpf_clean,
+        nome: g.nome,
+        portais,
+      }),
+    );
+
     if (portais.length === 1) {
       const a = g.modulosAdmin[0];
       window.open(`/${a.modulo}-ext/${a.id}`, "_blank");
-    } else {
-      window.open("/portais", "_blank");
+      return;
     }
+
+    window.open("/portais", "_blank");
   };
 
   const testarMecanico = (g: GrupoUsuario) => {
@@ -264,53 +414,47 @@ export default function AcessosExternosPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Acessos Externos</h1>
-          <p className="text-muted-foreground text-sm">Uma linha por pessoa. Módulos agrupados.</p>
+          <p className="text-muted-foreground text-sm">
+            Cadastro completo por CPF com acesso unico em /modulos.
+          </p>
         </div>
+
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={copiarPortal}>
-            <Copy className="w-4 h-4 mr-2" />Link Portal
+          <Button variant="outline" size="sm" onClick={copiarLinkModulos}>
+            <Copy className="w-4 h-4 mr-2" />
+            Link Modulos
           </Button>
-          <Button variant="outline" size="sm" onClick={copiarMecanico}>
-            <Wrench className="w-4 h-4 mr-2" />Link Mecânico
-          </Button>
+
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="w-4 h-4 mr-2" />Novo Acesso</Button>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Novo Acesso
+              </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Novo Acesso Externo</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>Novo Acesso Externo</DialogTitle>
+              </DialogHeader>
+
               <div className="grid gap-3 py-2">
                 <div>
-                  <Label>Buscar funcionário cadastrado</Label>
+                  <Label>Buscar funcionario cadastrado</Label>
                   <Popover open={funcOpen} onOpenChange={setFuncOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        role="combobox"
-                        className="w-full justify-between font-normal"
-                      >
+                      <Button type="button" variant="outline" role="combobox" className="w-full justify-between font-normal">
                         <span className="flex items-center gap-2 truncate">
                           <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                          {funcionarioId ? (
-                            <span className="truncate">{form.nome}</span>
-                          ) : (
-                            <span className="text-muted-foreground">Digite o nome para buscar...</span>
-                          )}
+                          {funcionarioId ? <span className="truncate">{form.nome}</span> : <span className="text-muted-foreground">Digite para buscar...</span>}
                         </span>
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                      <Command
-                        filter={(value, search) => {
-                          if (!search) return 1;
-                          return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-                        }}
-                      >
+                      <Command>
                         <CommandInput placeholder="Nome, CPF ou cargo..." />
                         <CommandList>
-                          <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+                          <CommandEmpty>Nenhum funcionario encontrado.</CommandEmpty>
                           <CommandGroup>
                             {funcionarios.map((f) => {
                               const haystack = [f.nome, f.cpf, f.cargo, f.empresa_nome].filter(Boolean).join(" | ");
@@ -332,21 +476,46 @@ export default function AcessosExternosPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-                <div><Label>Nome *</Label><Input value={form.nome} onChange={(e) => { setForm({ ...form, nome: e.target.value }); setFuncionarioId(null); }} /></div>
+
                 <div>
-                  <Label>CPF * <span className="text-xs text-muted-foreground">(PIN = 4 últimos)</span></Label>
+                  <Label>Nome completo *</Label>
+                  <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+                </div>
+
+                <div>
+                  <Label>CPF * (PIN = 4 ultimos)</Label>
                   <Input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} placeholder="000.000.000-00" />
-                  {form.cpf.replace(/\D/g, "").length >= 4 && (
-                    <p className="text-xs text-primary mt-1">PIN: {form.cpf.replace(/\D/g, "").slice(-4)}</p>
-                  )}
                 </div>
+
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Empresa</Label><Input value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} /></div>
-                  <div><Label>Filial</Label><Input value={form.filial} onChange={(e) => setForm({ ...form, filial: e.target.value })} /></div>
+                  <div>
+                    <Label>E-mail corporativo *</Label>
+                    <Input type="email" value={form.email_corporativo} onChange={(e) => setForm({ ...form, email_corporativo: e.target.value })} placeholder="nome@empresa.com.br" />
+                  </div>
+                  <div>
+                    <Label>Telefone *</Label>
+                    <Input value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="(11) 99999-9999" />
+                  </div>
                 </div>
-                <div><Label>Função</Label><Input value={form.funcao} onChange={(e) => setForm({ ...form, funcao: e.target.value })} /></div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Empresa</Label>
+                    <Input value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Filial</Label>
+                    <Input value={form.filial} onChange={(e) => setForm({ ...form, filial: e.target.value })} />
+                  </div>
+                </div>
+
                 <div>
-                  <Label>Módulos Liberados *</Label>
+                  <Label>Funcao</Label>
+                  <Input value={form.funcao} onChange={(e) => setForm({ ...form, funcao: e.target.value })} />
+                </div>
+
+                <div>
+                  <Label>Modulos liberados *</Label>
                   <div className="grid grid-cols-2 gap-2 mt-2 p-3 border rounded-md max-h-48 overflow-y-auto">
                     {PERFIS.map((p) => {
                       const checked = form.perfis_acesso.includes(p.v);
@@ -363,13 +532,13 @@ export default function AcessosExternosPage() {
                       );
                     })}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Mecânico usa o app próprio (/acesso-mecanico). Os demais usam o portal único (/acesso-filial).
-                  </p>
                 </div>
               </div>
+
               <DialogFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
                 <Button onClick={criar}>Salvar</Button>
               </DialogFooter>
             </DialogContent>
@@ -378,7 +547,9 @@ export default function AcessosExternosPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Usuários Externos ({grupos.length})</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Usuarios Externos ({grupos.length})</CardTitle>
+        </CardHeader>
         <CardContent>
           {loading ? (
             <p className="text-center text-muted-foreground py-8">Carregando...</p>
@@ -391,11 +562,12 @@ export default function AcessosExternosPage() {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>PIN</TableHead>
+                    <TableHead>Contato</TableHead>
                     <TableHead>Empresa/Filial</TableHead>
-                    <TableHead>Função</TableHead>
-                    <TableHead>Módulos Liberados</TableHead>
+                    <TableHead>Funcao</TableHead>
+                    <TableHead>Modulos</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                    <TableHead className="text-right">Acoes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -406,8 +578,16 @@ export default function AcessosExternosPage() {
                     return (
                       <TableRow key={g.cpf_clean || g.nome}>
                         <TableCell className="font-medium">{g.nome}</TableCell>
-                        <TableCell><code className="bg-muted px-2 py-0.5 rounded text-sm">{g.pin}</code></TableCell>
-                        <TableCell className="text-sm">{[g.empresa, g.filial].filter(Boolean).join(" / ") || "-"}</TableCell>
+                        <TableCell>
+                          <code className="bg-muted px-2 py-0.5 rounded text-sm">{g.pin}</code>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <div className="font-medium">{g.email_corporativo || "-"}</div>
+                          <div className="text-muted-foreground">{g.telefone || "-"}</div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {[g.empresa, g.filial].filter(Boolean).join(" / ") || "-"}
+                        </TableCell>
                         <TableCell className="text-sm">{g.funcao || "-"}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1 max-w-xs">
@@ -417,7 +597,7 @@ export default function AcessosExternosPage() {
                                 variant="outline"
                                 className={cn("text-xs cursor-pointer", MODULO_COLOR[a.modulo] || "")}
                                 onClick={() => removerModulo(a)}
-                                title="Clique para remover este módulo"
+                                title="Clique para remover este modulo"
                               >
                                 {a.modulo}
                               </Badge>
@@ -426,37 +606,37 @@ export default function AcessosExternosPage() {
                         </TableCell>
                         <TableCell>
                           {algumAtivo ? (
-                            <Badge className="bg-green-500/10 text-green-700 border-green-500/20">Ativo</Badge>
+                            <Badge className="bg-green-500/10 text-green-700 border-green-500/20">
+                              Ativo
+                            </Badge>
                           ) : (
                             <Badge variant="destructive">Bloqueado</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1 flex-wrap">
+                            <Button size="sm" variant="ghost" onClick={copiarLinkModulos} title="Copiar link">
+                              <Copy className="w-4 h-4" />
+                            </Button>
                             {temAdmin && (
-                              <Button size="sm" variant="ghost" onClick={copiarPortal} title="Copiar link Portal">
-                                <Copy className="w-4 h-4" />
-                              </Button>
-                            )}
-                            {temMecanico && (
-                              <Button size="sm" variant="ghost" onClick={copiarMecanico} title="Copiar link Mecânico">
-                                <Wrench className="w-4 h-4" />
-                              </Button>
-                            )}
-                            {temAdmin && (
-                              <Button size="sm" variant="ghost" onClick={() => testarPortal(g)} title="Visualizar Portal">
+                              <Button size="sm" variant="ghost" onClick={() => testarPortal(g)} title="Visualizar portal">
                                 <ExternalLink className="w-4 h-4" />
                               </Button>
                             )}
                             {temMecanico && (
-                              <Button size="sm" variant="ghost" onClick={() => testarMecanico(g)} title="Visualizar App Mecânico">
-                                <ExternalLink className="w-4 h-4 text-red-600" />
+                              <Button size="sm" variant="ghost" onClick={() => testarMecanico(g)} title="Visualizar mecanico">
+                                <Wrench className="w-4 h-4 text-red-600" />
                               </Button>
                             )}
-                            <Button size="sm" variant="ghost" onClick={() => toggleStatusGrupo(g)} title={algumAtivo ? "Bloquear" : "Liberar"}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleStatusGrupo(g)}
+                              title={algumAtivo ? "Bloquear" : "Liberar"}
+                            >
                               {algumAtivo ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => excluirGrupo(g)} title="Excluir tudo">
+                            <Button size="sm" variant="ghost" onClick={() => excluirGrupo(g)} title="Excluir">
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           </div>

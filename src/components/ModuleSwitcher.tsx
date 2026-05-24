@@ -20,7 +20,7 @@ interface ModuleDef {
 
 const PORTAL_MODULES: ModuleDef[] = [
   { role: 'admin', label: 'Administracao', path: '/admin' },
-  { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin' },
+  { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin/diretoria' },
   { role: 'filial_matriz', label: 'RH Matriz', path: '/filial' },
   { role: 'filial_praia', label: 'RH Praia Grande', path: '/filial' },
   { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
@@ -49,7 +49,7 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
     ? ADMIN_MODULES
     : isDirector
       ? [
-          { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin' },
+          { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin/diretoria' },
           { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
           { role: 'migracao_dn4', label: 'Relatorio Migracao DN4', path: '/admin/faturamento/migracao-dn4' },
           { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },

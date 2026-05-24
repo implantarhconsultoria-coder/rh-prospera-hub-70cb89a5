@@ -1,6 +1,7 @@
 export const DIRECTOR_BLOCKED_MESSAGE = 'Edicao bloqueada para este perfil. Solicite liberacao ao administrador.';
 
 const DIRECTOR_ALLOWED_ADMIN_PREFIXES = [
+  '/admin/diretoria',
   '/admin/faturamento',
   '/admin/faturamento/migracao-dn4',
   '/admin/financeiro',

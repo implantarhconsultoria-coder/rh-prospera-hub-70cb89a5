@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Loader2, LogOut, Wallet, TrendingUp, LayoutDashboard, Package, Headphones, Wrench, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { MODULO_REDIRECT } from "./AcessoExternoPage";
-import { isMobileDevice } from "@/lib/isMobileDevice";
+import {
+  clearExternalSession,
+  isExternalSessionExpired,
+  readExternalSession,
+  type SessaoAcessoExterno,
+} from "@/lib/acessoExternoAuth";
 
 type Portal = {
   acesso_id: string;
@@ -16,47 +21,41 @@ type Portal = {
   filial: string;
   funcao: string;
 };
-type Sessao = {
-  cpf_clean: string;
-  nome: string;
-  portais: Portal[];
-  ts: number;
-};
-
 const MODULO_INFO: Record<string, { label: string; icon: any; color: string; descricao: string }> = {
   filial: { label: "Portal Filial", icon: LayoutDashboard, color: "bg-purple-600", descricao: "RH, funcionários, fechamento" },
   financeiro: { label: "Financeiro", icon: Wallet, color: "bg-cyan-600", descricao: "Contas, bancos, fluxo de caixa" },
   faturamento: { label: "Faturamento", icon: TrendingUp, color: "bg-indigo-500", descricao: "Clientes, contratos, faturas" },
-  almoxarifado: { label: "Almoxarifado", icon: Package, color: "bg-orange-600", descricao: "EPI, uniformes, estoque" },
+  almoxarifado: { label: "Almoxarifado", icon: Package, color: "bg-orange-600", descricao: "Solicitacoes de carga e retirada" },
   operacional: { label: "Operacional", icon: Headphones, color: "bg-blue-600", descricao: "Chamados e atendimento" },
   campo: { label: "Campo", icon: Wrench, color: "bg-amber-600", descricao: "Atendimento em campo" },
+  mecanico: { label: "App Mecanico", icon: Wrench, color: "bg-red-600", descricao: "Ponto, chamados e abastecimento" },
 };
 
 export default function PortaisPage() {
   const navigate = useNavigate();
-  const [sessao, setSessao] = useState<Sessao | null>(null);
+  const [sessao, setSessao] = useState<SessaoAcessoExterno | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("acesso_externo_sessao");
-      if (!raw) {
-        navigate("/acesso-filial", { replace: true });
-        return;
-      }
-      const s = JSON.parse(raw) as Sessao;
-      if (!s.portais?.length) {
-        navigate("/acesso-filial", { replace: true });
-        return;
-      }
-      setSessao(s);
-    } catch {
-      navigate("/acesso-filial", { replace: true });
+    const s = readExternalSession();
+    if (!s || !s.portais?.length || isExternalSessionExpired(s)) {
+      clearExternalSession();
+      navigate("/modulos", { replace: true });
+      return;
     }
+    setSessao(s);
   }, [navigate]);
 
   const entrarPortal = async (p: Portal) => {
     setLoading(true);
+
+    if (p.modulo === "mecanico") {
+      localStorage.setItem("app_mecanico_acesso_id", p.acesso_id);
+      setLoading(false);
+      navigate(MODULO_REDIRECT.mecanico(p.acesso_id));
+      return;
+    }
+
     const { data, error } = await supabase.rpc("acesso_externo_obter" as any, {
       p_id: p.acesso_id,
       p_modulo: p.modulo,
@@ -78,9 +77,8 @@ export default function PortaisPage() {
   };
 
   const sair = () => {
-    sessionStorage.removeItem("acesso_externo_sessao");
-    localStorage.removeItem("acesso_externo");
-    navigate("/acesso-filial", { replace: true });
+    clearExternalSession();
+    navigate("/modulos", { replace: true });
   };
 
   if (!sessao) {

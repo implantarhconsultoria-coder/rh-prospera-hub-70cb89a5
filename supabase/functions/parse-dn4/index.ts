@@ -136,7 +136,7 @@ async function extrairTexto(bytes: Uint8Array): Promise<{ texto: string; paginas
     }).promise;
 
     const partes: string[] = [];
-    const limitePaginas = 1;
+    const limitePaginas = document.numPages || 0;
     for (let pagina = 1; pagina <= limitePaginas; pagina += 1) {
       const page = await document.getPage(pagina);
       const textContent = await page.getTextContent();
@@ -381,14 +381,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const auth = req.headers.get("Authorization") || "";
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
-      global: { headers: { Authorization: auth } },
-    });
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const body = await req.json();
     const importacaoId = body?.importacao_id;
-    const storagePath = body?.storage_path;
+    const storagePath = body?.storage_path || body?.arquivo_path || body?.arquivo_nome;
     const tipoForcado = body?.tipo_forcado;
 
     if (!importacaoId || !storagePath) {

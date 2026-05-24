@@ -56,12 +56,16 @@ const adminItems: MenuItem[] = [
 ];
 
 const directorReportItems: MenuItem[] = [
-  { label: 'Dashboard Executivo', icon: LayoutDashboard, path: '/admin' },
+  { label: 'Dashboard Executivo', icon: LayoutDashboard, path: '/admin/diretoria' },
+  { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
+  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
+  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
+  { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento' },
+  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
+  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
   { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio' },
   { label: 'Relatorio VR', icon: Receipt, path: '/admin/relatorio-vr' },
   { label: 'Relatorio VT', icon: Receipt, path: '/admin/relatorio-vt' },
-  { label: 'Frota / Relatorios', icon: Car, path: '/admin/documentos-ativos' },
-  { label: 'Almoxarifado / Relatorios', icon: Package, path: '/admin/almoxarifado' },
 ];
 
 const faturamentoItems: MenuItem[] = [
@@ -122,7 +126,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
         {!collapsed && (
           <div className="admin-sidebar-brand">
             <div className="admin-sidebar-logo">
-              <Building2 className="w-8 h-8" />
+              <img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC RH PRO" className="w-8 h-8 object-contain" />
             </div>
             <div>
               <h2>TOPAC RH PRO</h2>

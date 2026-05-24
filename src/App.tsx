@@ -22,6 +22,7 @@ import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
+import DirectorDashboardPage from "@/pages/DirectorDashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
@@ -183,13 +184,21 @@ const RoleRedirect = () => {
   }
 
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
-  if (userRoles.includes('diretor_geral')) return <Navigate to="/admin" replace />;
+  if (userRoles.includes('diretor_geral')) return <Navigate to="/admin/diretoria" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
   if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
 
   return <Navigate to="/admin" replace />;
+};
+
+const AdminHomeRoute = () => {
+  const { userRoles } = useApp();
+  if (userRoles.includes('diretor_geral') && !userRoles.includes('admin')) {
+    return <Navigate to="/admin/diretoria" replace />;
+  }
+  return <DashboardPage />;
 };
 
 const AuthGate = () => {
@@ -226,7 +235,8 @@ const AuthGate = () => {
 
       {/* ========== ADMIN PORTAL ========== */}
       <Route element={<AppLayout />}>
-        <Route path="/admin" element={<DashboardPage />} />
+        <Route path="/admin" element={<AdminHomeRoute />} />
+        <Route path="/admin/diretoria" element={<DirectorDashboardPage />} />
         <Route path="/admin/empresas" element={<EmpresasPage />} />
         <Route path="/admin/base-mestra" element={<BaseMestraPage />} />
         <Route path="/admin/funcionarios" element={<FuncionariosPage />} />
@@ -366,16 +376,18 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               {/* ========== ACESSO EXTERNO POR PIN - PORTAL UNICO ========== */}
+              <Route path="/modulos" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               {/* /acesso-filial e a rota canonica unica para todos os portais externos (exceto mecanico) */}
               <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-modulos" element={<Navigate to="/modulos" replace />} />
               <Route path="/portais" element={<ErrorBoundary><PortaisPage /></ErrorBoundary>} />
               {/* Aliases legados redirecionam para o portal unico */}
-              <Route path="/acesso-financeiro" element={<Navigate to="/acesso-filial" replace />} />
-              <Route path="/acesso-almoxarifado" element={<Navigate to="/acesso-filial" replace />} />
-              <Route path="/acesso-operacional" element={<Navigate to="/acesso-filial" replace />} />
-              <Route path="/acesso-campo" element={<Navigate to="/acesso-filial" replace />} />
-              <Route path="/acesso-faturamento" element={<Navigate to="/acesso-filial" replace />} />
-              <Route path="/acesso-rh" element={<Navigate to="/acesso-filial" replace />} />
+              <Route path="/acesso-financeiro" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-almoxarifado" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-operacional" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-campo" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-faturamento" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-rh" element={<Navigate to="/modulos" replace />} />
               {/* App Mecanico (novo) - login por PIN */}
               <Route path="/acesso-mecanico" element={<ErrorBoundary><AcessoMecanicoPage /></ErrorBoundary>} />
 

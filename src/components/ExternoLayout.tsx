@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Outlet, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, LogOut, Building2, AlertCircle, Layers, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { clearExternalSession, isExternalSessionExpired, readExternalSession } from '@/lib/acessoExternoAuth';
 
 export type ExternoNavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }>; end?: boolean };
 
@@ -20,11 +21,17 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
   const [estado, setEstado] = useState<'loading' | 'ok' | 'bloqueado' | 'invalido'>('loading');
   const [acesso, setAcesso] = useState<any>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const externalSession = useMemo(() => readExternalSession(), []);
 
   useEffect(() => {
     let cancelado = false;
     (async () => {
       if (!acessoId) { setEstado('invalido'); return; }
+      if (!externalSession || isExternalSessionExpired(externalSession)) {
+        clearExternalSession();
+        nav('/modulos', { replace: true });
+        return;
+      }
       // 1) Confere localStorage
       let local: any = null;
       try { local = JSON.parse(localStorage.getItem('acesso_externo') || 'null'); } catch { /* ignore */ }
@@ -46,31 +53,26 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
       setEstado('ok');
     })();
     return () => { cancelado = true; };
-  }, [acessoId, modulo]);
+  }, [acessoId, externalSession, modulo, nav]);
 
   const sair = () => {
-    localStorage.removeItem('acesso_externo');
-    sessionStorage.removeItem('acesso_externo_sessao');
-    nav(`/acesso-filial`, { replace: true });
+    clearExternalSession();
+    nav(`/modulos`, { replace: true });
   };
 
   const trocarPortal = () => {
     // Não limpa sessão — apenas volta para a tela de escolha
-    const sess = sessionStorage.getItem('acesso_externo_sessao');
-    if (sess) {
+    const sess = readExternalSession();
+    if (sess && !isExternalSessionExpired(sess)) {
       nav('/portais');
     } else {
       // Sem sessão multi-portal, manda para login PIN
-      nav('/acesso-filial');
+      nav('/modulos');
     }
   };
 
   // Mostra "Trocar portal" só se houver mais de um portal na sessão
-  let temMultiplosPortais = false;
-  try {
-    const s = JSON.parse(sessionStorage.getItem('acesso_externo_sessao') || 'null');
-    temMultiplosPortais = !!(s?.portais && s.portais.length > 1);
-  } catch { /* ignore */ }
+  const temMultiplosPortais = !!(externalSession?.portais && externalSession.portais.length > 1);
 
   if (estado === 'loading') {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -85,7 +87,7 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
           <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
           <h2 className="text-lg font-bold">Acesso não liberado</h2>
           <p className="text-sm text-muted-foreground">Acesso não liberado ou bloqueado pelo administrador.</p>
-          <Button onClick={() => nav(`/acesso-filial`, { replace: true })} className="w-full">Voltar</Button>
+          <Button onClick={() => nav(`/modulos`, { replace: true })} className="w-full">Voltar</Button>
         </div>
       </div>
     );

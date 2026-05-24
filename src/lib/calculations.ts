@@ -102,6 +102,64 @@ export const calcDescontoVTFaltas = (vtDiario: number, diasUteis: number, faltas
   return (vtDiario / diasUteis) * faltasDias;
 };
 
+type PayrollOptions = {
+  diasUteis: number;
+  comissaoPct: number;
+  domingosFeriados?: number;
+};
+
+export type PayrollBreakdown = {
+  he50Val: number;
+  he100Val: number;
+  dsrHE: number;
+  insVal: number;
+  comissaoVal: number;
+  faltaVal: number;
+  atrasoVal: number;
+  bruto: number;
+  inss: number;
+  irrf: number;
+  fgts: number;
+  adiantamento: number;
+  liquido: number;
+};
+
+const calcDomingosFeriados = (competencia: string, diasUteis: number) => {
+  const [y, m] = competencia.split('-').map(Number);
+  const diasNoMes = new Date(y, m, 0).getDate();
+  return Math.max(0, diasNoMes - diasUteis);
+};
+
+export const calcPayrollBreakdown = (
+  emp: Employee,
+  entry: MonthlyEntry,
+  opts: PayrollOptions,
+): PayrollBreakdown => {
+  const diasUteis = Math.max(0, opts.diasUteis || 0);
+  const domingosFeriados = opts.domingosFeriados ?? calcDomingosFeriados(entry.competencia, diasUteis);
+  const adiantamentoPadrao = Math.round(calcAdiantamento(emp.salarioBase) * 100) / 100;
+  const adiantamento = (entry.adiantamento ?? adiantamentoPadrao) > 0
+    ? (entry.adiantamento ?? adiantamentoPadrao)
+    : adiantamentoPadrao;
+
+  const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
+  const valorHora = (emp.salarioBase + insVal) / 220;
+  const he50Val = valorHora * 1.5 * entry.he50;
+  const he100Val = valorHora * 2 * entry.he100;
+  const totalHE = he50Val + he100Val;
+  const dsrHE = diasUteis > 0 ? (totalHE / diasUteis) * domingosFeriados : 0;
+  const comissaoVal = (entry.comissaoBase || 0) * opts.comissaoPct;
+  const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
+  const atrasoVal = calcAtraso(emp.salarioBase, entry.atrasos);
+  const bruto = emp.salarioBase + insVal + he50Val + he100Val + dsrHE + comissaoVal + entry.adicionais - faltaVal - atrasoVal;
+  const inss = calcINSS(bruto);
+  const irrf = calcIRRF(bruto - inss);
+  const fgts = calcFGTS(bruto);
+  const liquido = bruto - inss - irrf - adiantamento - entry.descontosDiversos;
+
+  return { he50Val, he100Val, dsrHE, insVal, comissaoVal, faltaVal, atrasoVal, bruto, inss, irrf, fgts, adiantamento, liquido };
+};
+
 export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22) => {
   const he50Val = calcHE50(emp.salarioBase, entry.he50);
   const he100Val = calcHE100(emp.salarioBase, entry.he100);

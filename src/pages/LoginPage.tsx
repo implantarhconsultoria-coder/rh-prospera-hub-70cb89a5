@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Building2, Loader2, Lock, Mail } from 'lucide-react';
+import { ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -78,7 +78,7 @@ const LoginPage: React.FC = () => {
           className="hidden lg:flex flex-col justify-center px-20"
         >
           <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-10 bg-[#071827] border border-cyan-400/15 shadow-[0_0_58px_rgba(34,211,238,.28)]">
-            <Building2 className="w-10 h-10 text-cyan-300" />
+            <img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC RH PRO" className="w-14 h-14 rounded-xl object-cover" />
           </div>
           <div className="inline-flex items-center gap-2 w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-bold tracking-[0.35em] text-cyan-200 mb-8">
             <span className="h-2 w-2 rounded-full bg-cyan-300" />
