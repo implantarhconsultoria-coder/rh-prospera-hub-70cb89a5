@@ -1,0 +1,66 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="28%" r="80%">
+      <stop offset="0%" stop-color="#123E86"/>
+      <stop offset="45%" stop-color="#071B3B"/>
+      <stop offset="100%" stop-color="#020817"/>
+    </radialGradient>
+    <linearGradient id="cyan" x1="250" y1="190" x2="780" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBFF"/>
+      <stop offset="0.35" stop-color="#DDEBFF"/>
+      <stop offset="0.62" stop-color="#10DDF2"/>
+      <stop offset="1" stop-color="#0057FF"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="120" y1="120" x2="900" y2="900" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#29F3FF"/>
+      <stop offset="0.5" stop-color="#0077FF"/>
+      <stop offset="1" stop-color="#0033AA"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0  0 0 0 0 0.75  0 0 0 0 1  0 0 0 0.95 0"/>
+      <feBlend in="SourceGraphic"/>
+    </filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#00C8FF" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="210" fill="url(#bg)"/>
+  <rect x="34" y="34" width="956" height="956" rx="184" stroke="url(#blue)" stroke-width="10" opacity="0.95" filter="url(#glow)"/>
+  <rect x="68" y="70" width="888" height="884" rx="156" stroke="#5FEAFF" stroke-opacity="0.18" stroke-width="2"/>
+
+  <g opacity="0.38" stroke="#1CE8FF" stroke-width="3" stroke-linecap="round">
+    <path d="M92 245H245L302 305H395"/>
+    <path d="M92 312H210L252 354H370"/>
+    <path d="M94 382H270L330 442H418"/>
+    <path d="M930 300H812L762 350H645"/>
+    <path d="M934 395H780L728 448H616"/>
+    <path d="M900 690H740L706 724H610"/>
+  </g>
+  <g fill="#22E8FF" opacity="0.72">
+    <circle cx="245" cy="245" r="8"/><circle cx="302" cy="305" r="7"/><circle cx="270" cy="382" r="7"/>
+    <circle cx="812" cy="300" r="8"/><circle cx="728" cy="448" r="7"/><circle cx="740" cy="690" r="7"/>
+  </g>
+
+  <g opacity="0.4" stroke="#00C8FF" stroke-width="7" stroke-linecap="round">
+    <path d="M332 240C430 164 573 158 682 232"/>
+    <path d="M708 252C781 323 809 432 779 531"/>
+    <path d="M720 606C632 714 463 746 345 665"/>
+  </g>
+  <g opacity="0.5" fill="#1EEBFF">
+    <circle cx="680" cy="232" r="10"/><circle cx="779" cy="531" r="10"/><circle cx="345" cy="665" r="10"/>
+  </g>
+
+  <g filter="url(#soft)">
+    <path d="M255 292C255 265 277 243 304 243H756C777 243 787 269 772 284L724 331C715 340 703 345 690 345H304C277 345 255 323 255 292Z" fill="url(#cyan)"/>
+    <path d="M404 345H531C558 345 580 367 580 394V700C580 717 566 731 549 731H476C459 731 445 717 445 700V424C445 389 426 360 404 345Z" fill="url(#cyan)"/>
+    <path d="M531 345H674C693 345 704 366 693 382L580 552V394C580 367 558 345 531 345Z" fill="#071B3B" opacity="0.78"/>
+    <path d="M580 552L699 379C707 367 724 373 724 388V720C724 731 711 737 703 729L580 610V552Z" fill="url(#cyan)"/>
+    <path d="M304 243H756C777 243 787 269 772 284L724 331C715 340 703 345 690 345H304C277 345 255 323 255 292C255 265 277 243 304 243Z" stroke="#EAF6FF" stroke-opacity="0.65" stroke-width="5"/>
+  </g>
+
+  <text x="512" y="805" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="800" letter-spacing="14" fill="#F8FBFF">TOPAC</text>
+  <text x="512" y="890" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="78" font-weight="800" letter-spacing="10" fill="url(#cyan)">RH PRO</text>
+  <text x="512" y="943" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" letter-spacing="16" fill="#29E8FF">MULTIEMPRESAS</text>
+</svg>
