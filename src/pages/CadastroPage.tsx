@@ -7,6 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+const AUTH_CONFIRM_REDIRECT = 'https://topacrh.pro/?confirmed=1';
+
 const CadastroPage: React.FC = () => {
   const [nomeCompleto, setNomeCompleto] = useState('');
   const [email, setEmail] = useState('');
@@ -14,6 +16,7 @@ const CadastroPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,8 +35,8 @@ const CadastroPage: React.FC = () => {
       email: emailNormalizado,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/?confirmed=1`,
-        data: { nome_completo: nomeCompleto, telefone },
+        emailRedirectTo: AUTH_CONFIRM_REDIRECT,
+        data: { nome_completo: nomeCompleto.trim(), telefone, origem: 'topacrh.pro' },
       },
     });
     setLoading(false);
@@ -43,6 +46,19 @@ const CadastroPage: React.FC = () => {
       setEmail(emailNormalizado);
       setSuccess(true);
     }
+  };
+
+  const resendConfirmation = async () => {
+    if (!email) return;
+    setResendLoading(true);
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim().toLowerCase(),
+      options: { emailRedirectTo: AUTH_CONFIRM_REDIRECT },
+    });
+    setResendLoading(false);
+    if (error) toast.error(error.message);
+    else toast.success('E-mail de confirmaÃ§Ã£o reenviado.');
   };
 
   if (success) {
@@ -57,6 +73,10 @@ const CadastroPage: React.FC = () => {
           <p className="text-sm text-muted-foreground mb-4">
             Enviamos um link de confirmação para <strong>{email}</strong>. Clique no link para ativar sua conta.
           </p>
+          <Button variant="secondary" className="w-full mb-2" onClick={resendConfirmation} disabled={resendLoading}>
+            {resendLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Reenviar confirmaÃ§Ã£o
+          </Button>
           <Link to="/login">
             <Button variant="outline" className="w-full">Voltar ao Login</Button>
           </Link>

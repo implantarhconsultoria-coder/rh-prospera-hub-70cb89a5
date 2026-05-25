@@ -14,6 +14,8 @@ interface UserWithRole {
   email: string;
   nome_completo: string;
   created_at: string;
+  email_confirmed_at?: string | null;
+  confirmation_sent_at?: string | null;
   role: AppRole | null;
   role_id: string | null;
 }
@@ -42,6 +44,23 @@ const GerenciarUsuariosPage: React.FC = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_listar_usuarios' as any);
+    const rpc = rpcData as any;
+    if (!rpcErr && rpc?.ok && Array.isArray(rpc.usuarios)) {
+      setUsers(rpc.usuarios.map((u: any) => ({
+        user_id: u.user_id,
+        email: u.email || '',
+        nome_completo: u.nome_completo || '',
+        created_at: u.created_at,
+        email_confirmed_at: u.email_confirmed_at || null,
+        confirmation_sent_at: u.confirmation_sent_at || null,
+        role: (u.role as AppRole) || null,
+        role_id: u.role_id || null,
+      })));
+      setLoading(false);
+      return;
+    }
+
     const { data: profiles, error: pErr } = await supabase
       .from('profiles')
       .select('user_id, email, nome_completo, created_at')
@@ -80,6 +99,17 @@ const GerenciarUsuariosPage: React.FC = () => {
     const user = users.find(u => u.user_id === userId);
 
     try {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_atribuir_perfil_usuario' as any, {
+        p_user_id: userId,
+        p_role: newRole,
+      });
+      const rpc = rpcData as any;
+      if (!rpcErr && rpc?.ok) {
+        toast.success(`Perfil salvo: ${ROLE_LABELS[newRole].label}`);
+        await fetchUsers();
+        return;
+      }
+
       if (user?.role_id) {
         const { error } = await supabase
           .from('user_roles')
@@ -102,10 +132,13 @@ const GerenciarUsuariosPage: React.FC = () => {
     }
   };
 
-  const filtered = users.filter(u =>
-    u.email.toLowerCase().includes(search.toLowerCase()) ||
-    u.nome_completo.toLowerCase().includes(search.toLowerCase())
-  );
+  const aguardando = (u: UserWithRole) => !u.role || u.role === 'usuario';
+  const filtered = users.filter(u => {
+    const q = search.toLowerCase();
+    return u.email.toLowerCase().includes(q) ||
+      u.nome_completo.toLowerCase().includes(q) ||
+      (u.role ? ROLE_LABELS[u.role].label.toLowerCase().includes(q) : false);
+  });
 
   return (
     <div className="space-y-6">
@@ -119,8 +152,8 @@ const GerenciarUsuariosPage: React.FC = () => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Total</p><p className="text-xl font-bold text-primary">{users.length}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Com perfil</p><p className="text-xl font-bold text-success">{users.filter(u => u.role).length}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Sem perfil</p><p className="text-xl font-bold text-warning">{users.filter(u => !u.role).length}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Liberados</p><p className="text-xl font-bold text-success">{users.filter(u => u.role && u.role !== 'usuario').length}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Aguardando liberaÃ§Ã£o</p><p className="text-xl font-bold text-warning">{users.filter(aguardando).length}</p></div>
         <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Admins</p><p className="text-xl font-bold text-destructive">{users.filter(u => u.role === 'admin').length}</p></div>
       </div>
 
@@ -138,7 +171,7 @@ const GerenciarUsuariosPage: React.FC = () => {
           {loading ? <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div> : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>Cadastro</TableHead><TableHead>Perfil</TableHead><TableHead>Portal</TableHead><TableHead>Alterar</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>E-mail</TableHead><TableHead>Cadastro</TableHead><TableHead>Perfil</TableHead><TableHead>Portal</TableHead><TableHead>Alterar</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {filtered.map(user => {
                     const meta = user.role ? ROLE_LABELS[user.role] : null;
@@ -146,8 +179,9 @@ const GerenciarUsuariosPage: React.FC = () => {
                       <TableRow key={user.user_id}>
                         <TableCell className="font-medium">{user.nome_completo || '-'}</TableCell>
                         <TableCell className="text-sm">{user.email}</TableCell>
+                        <TableCell>{user.email_confirmed_at ? <Badge className="bg-green-500 text-white">Confirmado</Badge> : <Badge variant="secondary">Pendente</Badge>}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : '-'}</TableCell>
-                        <TableCell>{meta ? <Badge className={`${meta.color} text-white`}>{meta.label}</Badge> : <Badge variant="outline">Sem perfil</Badge>}</TableCell>
+                        <TableCell>{aguardando(user) ? <Badge variant="outline">Aguardando liberaÃ§Ã£o</Badge> : meta ? <Badge className={`${meta.color} text-white`}>{meta.label}</Badge> : <Badge variant="outline">Sem perfil</Badge>}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{meta?.portal || '-'}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

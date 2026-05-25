@@ -30,7 +30,10 @@ interface MecInfo {
   nome: string;
   empresa: string;
   filial: string;
+  cpf?: string | null;
+  matricula?: string | null;
   placa?: string | null;
+  veiculo?: string | null;
   carros?: string[];
   exige_selecao_carro?: boolean;
   ultimo_km?: number | null;
@@ -40,14 +43,18 @@ interface MecInfo {
 
 interface ReceiptInfo {
   id: string;
+  protocolo: string;
   codigo: string;
   postoNome: string;
   postoCnpj: string;
   postoEndereco: string;
   postoTelefone: string;
   mecanicoNome: string;
+  cpf: string;
+  matricula: string;
   empresa: string;
   filial: string;
+  veiculo: string;
   placa: string;
   combustivel: string;
   valor: string;
@@ -60,9 +67,11 @@ interface ReceiptInfo {
   fotoPainelUrl: string;
   createdAt: Date;
   registroTeste?: boolean;
+  reciboTexto?: string;
+  whatsappText?: string;
 }
 
-const CANONICAL_BASE_URL = "https://implantarhprpro.com";
+const CANONICAL_BASE_URL = "https://topacrh.pro";
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
 };
@@ -280,6 +289,7 @@ export default function AbastecimentoPage() {
     if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("Fotos obrigatorias");
     if (!valor || !litros) return toast.error("Informe valor e litros");
     if (mecInfo?.exige_selecao_carro && !placa) return toast.error("Selecione o carro");
+    if (!window.confirm(`Confirmar abastecimento de ${placa || mecInfo?.veiculo || "veiculo"} no valor de ${fmtMoney(valor)}?`)) return;
     setLoading(true);
     const { latitude, longitude } = await getBrowserLocation();
     const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
@@ -298,18 +308,36 @@ export default function AbastecimentoPage() {
       p_endereco: null,
     });
     setLoading(false);
-    const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null; registro_teste?: boolean } | null;
+    const r = (data ?? null) as {
+      ok?: boolean;
+      error?: string;
+      id?: string;
+      protocolo?: string;
+      preco_litro?: string | number;
+      valor_por_litro?: string | number;
+      km_rodado?: number | null;
+      cpf?: string;
+      matricula?: string;
+      veiculo_nome?: string;
+      recibo_texto?: string;
+      whatsapp_text?: string;
+      registro_teste?: boolean;
+    } | null;
     if (error || !r?.ok) return toast.error(r?.error || error?.message || "Erro ao salvar");
     setReceipt({
       id: r.id || "",
+      protocolo: r.protocolo || r.id || "",
       codigo: posto.codigo,
       postoNome: posto.nome,
       postoCnpj: posto.cnpj || "",
       postoEndereco: posto.endereco || "",
       postoTelefone: posto.telefone || "",
       mecanicoNome: mecInfo?.nome || mecanico.nome || "",
+      cpf: r.cpf || mecInfo?.cpf || "",
+      matricula: r.matricula || mecInfo?.matricula || "",
       empresa: mecInfo?.empresa || mecanico.empresa || "",
       filial: mecInfo?.filial || mecanico.filial || "",
+      veiculo: r.veiculo_nome || mecInfo?.veiculo || placa,
       placa,
       combustivel,
       valor,
@@ -322,6 +350,8 @@ export default function AbastecimentoPage() {
       fotoPainelUrl,
       createdAt: new Date(),
       registroTeste: Boolean(r.registro_teste || mecInfo?.registro_teste || mecanico.registro_teste),
+      reciboTexto: r.recibo_texto || "",
+      whatsappText: r.whatsapp_text || "",
     });
     setStep("ok");
     toast.success("Abastecimento registrado!");
@@ -331,12 +361,15 @@ export default function AbastecimentoPage() {
     [
       "*TOPAC RH PRO - Abastecimento*",
       info.registroTeste ? "*REGISTRO DE TESTE - nao entra em relatorios oficiais*" : "",
-      `Registro: ${info.id || "salvo"}`,
+      `Protocolo: ${info.protocolo || info.id || "salvo"}`,
       `Data/Hora: ${info.createdAt.toLocaleString("pt-BR")}`,
       "",
-      `Mecanico: ${info.mecanicoNome}`,
+      `Funcionario: ${info.mecanicoNome}`,
+      info.cpf ? `CPF: ${info.cpf}` : "",
+      info.matricula ? `Matricula: ${info.matricula}` : "",
       `Empresa: ${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`,
-      `Carro/placa: ${info.placa || "nao informado"}`,
+      `Veiculo: ${info.veiculo || info.placa || "nao informado"}`,
+      `Placa: ${info.placa || "nao informado"}`,
       `Validado por: ${info.mecanicoNome}`,
       "",
       `Posto: ${info.postoNome}`,
@@ -356,6 +389,9 @@ export default function AbastecimentoPage() {
       `Foto da bomba: ${info.fotoBombaUrl}`,
       `Foto do KM/painel: ${info.fotoPainelUrl}`,
     ].filter(Boolean).join("\n");
+
+  const buildWhatsappText = (info: ReceiptInfo) =>
+    `Comprovante de abastecimento — ${info.mecanicoNome} — ${info.createdAt.toLocaleDateString("pt-BR")} — ${info.veiculo || info.placa || "-"} — ${fmtMoney(info.valor)}`;
 
   const shareReceipt = async () => {
     if (!receipt) return;
@@ -378,21 +414,38 @@ export default function AbastecimentoPage() {
     setTimeout(() => w.print(), 300);
   };
 
-  const downloadReceipt = () => {
+  const downloadReceipt = async () => {
     if (!receipt) return;
-    const blob = new Blob([buildReceiptText(receipt)], { type: "text/plain;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `ABASTECIMENTO_${sanitizeFile(receipt.empresa)}_${sanitizeFile(receipt.mecanicoNome)}_${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const { jsPDF } = await import("jspdf");
+    const pdf = new jsPDF({ unit: "mm", format: "a4" });
+    const margin = 12;
+    let y = 14;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(14);
+    pdf.text("TOPAC RH PRO - Recibo de Abastecimento", margin, y);
+    y += 8;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    const lines = pdf.splitTextToSize(buildReceiptText(receipt).replace(/\*/g, ""), 185) as string[];
+    for (const line of lines) {
+      if (y > 276) {
+        pdf.addPage();
+        y = 14;
+      }
+      pdf.text(line, margin, y);
+      y += 5;
+    }
+    y += 3;
+    y = await addPdfImage(pdf, receipt.fotoBombaUrl, "Foto da bomba", margin, y);
+    y = await addPdfImage(pdf, receipt.fotoPainelUrl, "Foto do painel/KM", margin, y);
+    pdf.save(`ABASTECIMENTO_${sanitizeFile(receipt.protocolo || receipt.id)}_${sanitizeFile(receipt.mecanicoNome)}.pdf`);
   };
 
   const openWhatsapp = (phone?: string) => {
     if (!receipt) return;
     const clean = (phone || "").replace(/\D/g, "");
     const target = clean ? `55${clean.replace(/^55/, "")}` : "";
-    window.open(`${target ? `https://wa.me/${target}` : "https://wa.me/"}?text=${encodeURIComponent(buildReceiptText(receipt))}`, "_blank", "noopener,noreferrer");
+    window.open(`${target ? `https://wa.me/${target}` : "https://wa.me/"}?text=${encodeURIComponent(buildWhatsappText(receipt))}`, "_blank", "noopener,noreferrer");
   };
 
   const reset = () => {
@@ -450,28 +503,35 @@ export default function AbastecimentoPage() {
           <div className="space-y-1 text-sm">
             <div><b>Mecanico:</b> {mecInfo?.nome}</div>
             <div><b>Empresa:</b> {mecInfo?.empresa || "-"} {mecInfo?.filial ? `- ${mecInfo.filial}` : ""}</div>
+            {(mecInfo?.cpf || mecInfo?.matricula) && (
+              <div className="text-xs text-muted-foreground">
+                {mecInfo?.cpf ? `CPF: ${mecInfo.cpf}` : ""}{mecInfo?.cpf && mecInfo?.matricula ? " - " : ""}{mecInfo?.matricula ? `Matricula: ${mecInfo.matricula}` : ""}
+              </div>
+            )}
             {mecInfo?.registro_teste && <AlertBox text={`Modo teste ativo${mecInfo.veiculo_teste ? ` - ${mecInfo.veiculo_teste}` : ""}. Este abastecimento nao entra em custo oficial.`} />}
             {postosOpcao.length > 1 ? (
               <div className="space-y-1">
                 <Label className="text-xs">Posto de Goiania</Label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-                  value={posto.tipo_qr === "unidade" ? "" : posto.codigo}
-                  onChange={(e) => {
-                    const selected = postosOpcao.find((p) => p.codigo === e.target.value);
-                    if (selected) setPosto(selected);
-                  }}
-                >
-                  <option value="">Selecionar posto</option>
-                  {postosOpcao.map((p) => <option key={p.codigo} value={p.codigo}>{p.nome}</option>)}
-                </select>
+                <div className="grid gap-2">
+                  {postosOpcao.map((p) => (
+                    <Button
+                      key={p.codigo}
+                      type="button"
+                      variant={posto.codigo === p.codigo ? "default" : "outline"}
+                      className="h-auto justify-start whitespace-normal py-2 text-left"
+                      onClick={() => setPosto(p)}
+                    >
+                      {p.nome}
+                    </Button>
+                  ))}
+                </div>
               </div>
             ) : <div><b>Posto:</b> {posto.nome}</div>}
             {posto.unidade && <div className="text-xs text-muted-foreground">Unidade: {posto.unidade}</div>}
             {posto.cnpj && <div className="text-xs text-muted-foreground">CNPJ: {posto.cnpj}</div>}
             {posto.endereco && <div className="text-xs text-muted-foreground">{posto.endereco}</div>}
             {posto.telefone && <div className="text-xs text-muted-foreground">Telefone/WhatsApp: {posto.telefone}</div>}
-            {mecInfo?.placa && <div className="text-xs text-muted-foreground">Carro vinculado: {mecInfo.placa}</div>}
+            {(mecInfo?.veiculo || mecInfo?.placa) && <div className="text-xs text-muted-foreground">Carro vinculado: {mecInfo.veiculo || mecInfo.placa}</div>}
             {mecInfo?.exige_selecao_carro && <AlertBox text="Selecione o carro usado antes de finalizar o abastecimento." />}
             {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
           </div>
@@ -514,22 +574,28 @@ export default function AbastecimentoPage() {
 
       {step === "ok" && receipt && (
         <Card className="space-y-4 p-4">
-          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Compartilhe a notinha no grupo e no WhatsApp do posto.</p></div>
+          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Recibo interno {receipt.protocolo || receipt.id}</p></div>
           <div className="rounded-xl border bg-muted/30 p-3 text-sm">
             <div className="font-bold">{receipt.postoNome}</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <Info k="Mecanico" v={receipt.mecanicoNome} wide /><Info k="Carro" v={receipt.placa || "-"} /><Info k="KM" v={receipt.km || "-"} />
+              <Info k="Protocolo" v={receipt.protocolo || receipt.id || "-"} wide />
+              <Info k="Funcionario" v={receipt.mecanicoNome} wide />
+              {receipt.cpf && <Info k="CPF" v={receipt.cpf} />}
+              {receipt.matricula && <Info k="Matricula" v={receipt.matricula} />}
+              <Info k="Empresa/filial" v={`${receipt.empresa}${receipt.filial ? ` - ${receipt.filial}` : ""}`} wide />
+              <Info k="Veiculo" v={receipt.veiculo || receipt.placa || "-"} /><Info k="Placa" v={receipt.placa || "-"} />
+              <Info k="CNPJ" v={receipt.postoCnpj || "-"} /><Info k="KM" v={receipt.km || "-"} />
               <Info k="Litros" v={`${fmtNumber(receipt.litros)} L`} /><Info k="Preco/L" v={fmtMoney(receipt.precoLitro)} /><Info k="Valor" v={fmtMoney(receipt.valor)} />
               {receipt.kmRodado !== null && <Info k="KM rodado" v={`${fmtNumber(String(receipt.kmRodado), 0)} km`} />}
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2"><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
           </div>
-          <Button onClick={shareReceipt} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha</Button>
+          <Button onClick={shareReceipt} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar</Button>
+          <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> Enviar por WhatsApp</Button>
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={printReceipt} variant="outline" className="w-full"><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
-            <Button onClick={downloadReceipt} variant="outline" className="w-full"><Download className="mr-2 h-4 w-4" /> Baixar</Button>
+            <Button onClick={downloadReceipt} variant="outline" className="w-full"><Download className="mr-2 h-4 w-4" /> Baixar PDF</Button>
           </div>
-          <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> Enviar no WhatsApp</Button>
           {receipt.postoTelefone && <Button onClick={() => openWhatsapp(receipt.postoTelefone)} variant="outline" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp do posto</Button>}
           <Button onClick={() => navigator.clipboard.writeText(buildReceiptText(receipt)).then(() => toast.success("Notinha copiada"))} variant="outline" className="w-full"><Copy className="mr-2 h-4 w-4" /> Copiar texto</Button>
           <Button onClick={reset} variant="ghost" className="w-full">Novo abastecimento</Button>
@@ -599,13 +665,38 @@ function sanitizeFile(value: string) {
     .toUpperCase();
 }
 
+async function addPdfImage(pdf: any, url: string, label: string, margin: number, currentY: number) {
+  let y = currentY;
+  if (!url) return y;
+  if (y > 205) {
+    pdf.addPage();
+    y = 14;
+  }
+  pdf.setFont("helvetica", "bold");
+  pdf.text(label, margin, y);
+  try {
+    const response = await fetch(url);
+    const dataUrl = await blobToDataUrl(await response.blob());
+    const format = dataUrl.startsWith("data:image/png") ? "PNG" : dataUrl.startsWith("data:image/webp") ? "WEBP" : "JPEG";
+    pdf.addImage(dataUrl, format, margin, y + 4, 86, 62);
+    return y + 72;
+  } catch {
+    pdf.setFont("helvetica", "normal");
+    pdf.text(url, margin, y + 5);
+    return y + 12;
+  }
+}
+
 function buildReceiptHtml(info: ReceiptInfo) {
   const text = [
-    ["Registro", info.id || "salvo"],
+    ["Protocolo", info.protocolo || info.id || "salvo"],
     ["Data/Hora", info.createdAt.toLocaleString("pt-BR")],
     ["Funcionario", info.mecanicoNome],
+    ["CPF", info.cpf || "-"],
+    ["Matricula", info.matricula || "-"],
     ["Unidade", `${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`],
-    ["Veiculo", info.placa || "-"],
+    ["Veiculo", info.veiculo || "-"],
+    ["Placa", info.placa || "-"],
     ["Posto", info.postoNome],
     ["CNPJ", info.postoCnpj || "-"],
     ["Endereco", info.postoEndereco || "-"],

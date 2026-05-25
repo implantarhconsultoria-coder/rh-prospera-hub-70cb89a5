@@ -17,7 +17,7 @@ additional_redirect_urls = [
 enable_signup = true
 enable_confirmations = true
 double_confirm_changes = true
-max_frequency = "1m"
+max_frequency = "30s"
 
 [auth.email.template.confirmation]
 subject = "Confirme seu e-mail - TOPAC RH PRO"
