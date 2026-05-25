@@ -76,7 +76,7 @@ const AppLayout: React.FC = () => {
     );
   }
 
-  if (!userRole) return <AguardandoAcesso />;
+  if (!userRole || userRole === 'usuario') return <AguardandoAcesso />;
 
   const handleRefresh = async () => {
     setRefreshing(true);

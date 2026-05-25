@@ -15,7 +15,7 @@ const AguardandoAcesso: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold">Aguardando Liberação</h1>
           <p className="text-muted-foreground mt-2">
-            Seu cadastro foi realizado com sucesso. O administrador precisa liberar seu acesso à plataforma.
+            Aguardando liberação do administrador.
           </p>
         </div>
         <div className="bg-muted rounded-lg p-4 text-sm text-muted-foreground">

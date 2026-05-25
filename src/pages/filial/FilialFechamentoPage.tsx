@@ -89,7 +89,7 @@ const FilialFechamentoPage: React.FC = () => {
         adicionais: c?.adicional.valor || 0,
         descontosDiversos: c?.desconto.valor || 0,
         adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
-        vrAplicado: emp.vrAtivo, vrDias: emp.vrAtivo ? diasUteis : 0, vaAplicado: emp.vaAtivo, vtAplicado: emp.vtAtivo, vtDesconto: emp.vtAtivo ? emp.vtDiario * Math.max(0, diasUteis - (c?.falta.quantidade || 0)) : 0,
+        vrAplicado: emp.vrAtivo, vrDias: emp.vrAtivo ? diasUteis : 0, vaAplicado: emp.vaAtivo, vtAplicado: emp.vtAtivo, vtDesconto: emp.vtAtivo ? emp.vtDiario : 0,
         comissaoBase: 0, insalubridadeAplicada: emp.insalubridadeAtiva, observacoes: '', statusConferencia: 'pendente',
       } as any;
       const calc = calcTotalFuncionario(emp, entry, diasUteis);
@@ -156,7 +156,7 @@ const FilialFechamentoPage: React.FC = () => {
           vr_dias: emp.vrAtivo ? diasUteis : 0,
           va_aplicado: emp.vaAtivo,
           vt_aplicado: emp.vtAtivo,
-          vt_desconto: emp.vtAtivo ? Math.round(emp.vtDiario * Math.max(0, diasUteis - (c?.falta.quantidade || 0)) * 100) / 100 : 0,
+          vt_desconto: emp.vtAtivo ? Math.round(emp.vtDiario * 100) / 100 : 0,
           insalubridade_aplicada: emp.insalubridadeAtiva,
           observacoes: obsLista.join(' | ').slice(0, 500),
           status_conferencia: 'pendente',

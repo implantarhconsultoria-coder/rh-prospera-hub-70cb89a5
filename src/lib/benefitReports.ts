@@ -31,7 +31,7 @@ const buildBenefitRow = ({
   const diasPrevistos = type === 'vr' ? (entry?.vrDias ?? diasUteis) : diasUteis;
   const diasDescontados = Math.min(faltasDias, diasPrevistos);
   const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
-  const valorDiario = type === 'vr' ? emp.vrDiario : emp.vtDiario;
+  const valorDiario = type === 'vr' ? emp.vrDiario : (entry?.vtDesconto && entry.vtDesconto > 0 ? entry.vtDesconto : emp.vtDiario);
   const valorTotal = roundCurrency(valorDiario * diasFinais);
 
   return {

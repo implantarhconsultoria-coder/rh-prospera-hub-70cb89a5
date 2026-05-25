@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import { AppContext, defaultConfig, type AppConfig } from '@/context/AppContextValue';
 import { useApp } from '@/hooks/useApp';
+import { getWorkingDays } from '@/lib/workingDays';
 
 // Re-export para compatibilidade
 export { useApp };
@@ -148,6 +149,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     creatingRef.current.add(lockKey);
 
+    const diasUteis = getWorkingDays(competencia);
     const newEntries: MonthlyEntry[] = faltam.map(emp => ({
       employeeId: emp.id,
       companyId,
@@ -160,10 +162,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       descontosDiversos: 0,
       adiantamento: Math.round(emp.salarioBase * 0.4 * 100) / 100,
       vrAplicado: emp.vrAtivo,
-      vrDias: emp.vrAtivo ? 22 : 0,
+      vrDias: emp.vrAtivo ? diasUteis : 0,
       vaAplicado: emp.vaAtivo,
       vtAplicado: emp.vtAtivo,
-      vtDesconto: 0,
+      vtDesconto: emp.vtAtivo ? emp.vtDiario : 0,
       comissaoBase: 0,
       insalubridadeAplicada: emp.insalubridadeAtiva,
       statusConferencia: 'pendente' as const,
