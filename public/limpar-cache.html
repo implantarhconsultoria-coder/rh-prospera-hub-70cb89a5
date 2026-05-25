@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>TOPAC RH PRO - Limpeza de acesso</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #050b16;
+        color: #fff;
+        font-family: Arial, sans-serif;
+      }
+      main {
+        width: min(430px, calc(100vw - 40px));
+        border: 1px solid rgba(34, 211, 238, 0.25);
+        border-radius: 16px;
+        padding: 24px;
+        background: #101829;
+        box-shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
+      }
+      h1 { margin: 0 0 8px; font-size: 20px; }
+      p { color: #cbd5e1; font-size: 14px; line-height: 1.45; }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px;
+        font-weight: 700;
+        background: #35d8f2;
+        color: #06111f;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>TOPAC RH PRO</h1>
+      <p id="status">Limpando cache local e restaurando acesso...</p>
+      <button id="retry" hidden>Reabrir plataforma</button>
+    </main>
+    <script>
+      async function clearTopacAccess() {
+        try { localStorage.clear(); } catch (error) {}
+        try { sessionStorage.clear(); } catch (error) {}
+        try {
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((key) => caches.delete(key)));
+          }
+        } catch (error) {}
+        try {
+          if ("serviceWorker" in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+          }
+        } catch (error) {}
+      }
+
+      const retry = document.getElementById("retry");
+      retry.addEventListener("click", () => {
+        location.replace("/?clean=" + Date.now());
+      });
+
+      clearTopacAccess().then(() => {
+        document.getElementById("status").textContent = "Cache limpo. Reabrindo a plataforma...";
+        setTimeout(() => location.replace("/?clean=" + Date.now()), 700);
+        retry.hidden = false;
+      });
+    </script>
+  </body>
+</html>
