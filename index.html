@@ -80,7 +80,8 @@
 
       function showRecovery(message) {
         var target = root();
-        if (!target || shown || target.childElementCount > 0) return;
+        var onlyBootFallback = target && target.querySelector("[data-topac-boot-fallback]");
+        if (!target || shown || (target.childElementCount > 0 && !onlyBootFallback)) return;
         shown = true;
         target.innerHTML = [
           '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Arial,sans-serif;background:#050b16;color:#fff">',
@@ -137,14 +138,22 @@
       document.addEventListener("DOMContentLoaded", function () {
         setTimeout(function () {
           showRecovery("O carregamento demorou mais que o esperado. Limpe o cache local para abrir a versao atual.");
-        }, 7000);
+        }, 2500);
       });
     })();
   </script>
 </head>
 
   <body class="notranslate" translate="no">
-    <div id="root"></div>
+    <div id="root">
+      <div data-topac-boot-fallback style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Arial,sans-serif;background:#050b16;color:#fff">
+        <div style="max-width:430px;width:100%;border:1px solid rgba(34,211,238,.25);border-radius:16px;padding:24px;background:#101829;box-shadow:0 20px 70px rgba(0,0,0,.35)">
+          <h1 style="margin:0 0 8px;font-size:20px">TOPAC RH PRO</h1>
+          <p style="margin:0 0 18px;color:#cbd5e1;font-size:14px;line-height:1.45">Carregando acesso seguro...</p>
+          <button onclick="window.topacRecoveryClear && window.topacRecoveryClear()" style="width:100%;border:0;border-radius:10px;padding:12px;font-weight:700;background:#35d8f2;color:#06111f">Limpar cache e reabrir</button>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

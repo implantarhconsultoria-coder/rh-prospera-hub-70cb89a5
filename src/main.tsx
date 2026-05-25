@@ -3,7 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-const BUILD_ID = "20260525-white-screen-fix-2";
+const BUILD_ID = "20260525-white-screen-fix-3";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${BUILD_ID}`;
 const RUNTIME_RELOAD_KEY = `topac-runtime-reload-${BUILD_ID}`;
 
@@ -25,7 +25,8 @@ function safeSessionSet(key: string, value: string) {
 
 function renderBootFallback(message: string) {
   const root = document.getElementById("root");
-  if (!root || root.childElementCount > 0) return;
+  const onlyBootFallback = root?.querySelector("[data-topac-boot-fallback]");
+  if (!root || (root.childElementCount > 0 && !onlyBootFallback)) return;
   root.innerHTML = `
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Arial,sans-serif;background:#050b16;color:#fff">
       <div style="max-width:420px;width:100%;border:1px solid rgba(34,211,238,.25);border-radius:16px;padding:24px;background:#101829">
