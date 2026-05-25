@@ -180,9 +180,8 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
   // VA: fixed monthly
   const vaVal = entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0;
 
-  // VT: vtDesconto armazena o valor DIA/VT; o total segue DIA/VT x dias.
-  const vtDiario = entry.vtDesconto > 0 ? entry.vtDesconto : emp.vtDiario;
-  const vtVal = entry.vtAplicado && emp.vtAtivo ? vtDiario * Math.max(0, diasUteis - entry.faltasDias) : 0;
+  // VT: benefício, sem desconto automático
+  const vtVal = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario * Math.max(0, diasUteis - entry.faltasDias) : 0;
 
   const beneficios = vrVal + vaVal + vtVal;
 

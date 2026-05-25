@@ -32,7 +32,7 @@ const CadastroPage: React.FC = () => {
       email: emailNormalizado,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/?confirmed=1`,
+        emailRedirectTo: `${window.location.origin}/login?confirmed=1`,
         data: { nome_completo: nomeCompleto, telefone },
       },
     });
