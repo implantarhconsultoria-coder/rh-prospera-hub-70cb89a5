@@ -14,6 +14,7 @@ const CadastroPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,19 +28,45 @@ const CadastroPage: React.FC = () => {
       return;
     }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: window.location.origin,
-        data: { nome_completo: nomeCompleto, telefone },
-      },
-    });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-    } else {
-      setSuccess(true);
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/login`,
+          data: { nome_completo: nomeCompleto.trim(), telefone: telefone.trim() },
+        },
+      });
+      if (error) {
+        const msg = error.message === 'Signups not allowed for this instance'
+          ? 'Cadastro temporariamente bloqueado no servidor. Avise o administrador para liberar o cadastro no Supabase.'
+          : error.message;
+        toast.error(msg);
+      } else {
+        setSuccess(true);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao cadastrar. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reenviarConfirmacao = async () => {
+    if (!email.trim()) return;
+    setResendLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim().toLowerCase(),
+        options: { emailRedirectTo: `${window.location.origin}/login` },
+      });
+      if (error) throw error;
+      toast.success('Email de confirmacao reenviado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel reenviar a confirmacao.');
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -58,6 +85,10 @@ const CadastroPage: React.FC = () => {
           <Link to="/login">
             <Button variant="outline" className="w-full">Voltar ao Login</Button>
           </Link>
+          <Button variant="ghost" className="w-full" onClick={reenviarConfirmacao} disabled={resendLoading}>
+            {resendLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Reenviar confirmacao
+          </Button>
         </motion.div>
       </div>
     );

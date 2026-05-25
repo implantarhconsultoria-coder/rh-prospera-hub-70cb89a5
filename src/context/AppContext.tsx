@@ -43,17 +43,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const creatingRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      if (!active) return;
+      console.warn('Timeout ao carregar sessao inicial do Supabase.');
+      setLoading(false);
+      setDataLoading(false);
+    }, 12000);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
+      if (!active) return;
       setSession(sess);
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session: sess } }) => {
-      setSession(sess);
-      setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session: sess } }) => {
+        if (!active) return;
+        setSession(sess);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error('Erro ao carregar sessao:', error);
+        if (!active) return;
+        setSession(null);
+        setLoading(false);
+        setDataLoading(false);
+      })
+      .finally(() => window.clearTimeout(timeout));
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchData = useCallback(async () => {

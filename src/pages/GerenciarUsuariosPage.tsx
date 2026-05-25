@@ -7,13 +7,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { Users, Shield, Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import type { AppRole } from '@/hooks/useUserRole';
 
 interface UserWithRole {
   user_id: string;
   email: string;
   nome_completo: string;
+  telefone?: string | null;
+  cpf?: string | null;
+  empresa?: string | null;
+  filial?: string | null;
   created_at: string;
+  email_confirmed?: boolean;
+  blocked?: boolean;
   role: AppRole | null;
   role_id: string | null;
 }
@@ -32,7 +39,7 @@ const ROLE_LABELS: Record<AppRole, { label: string; color: string; portal: strin
   usuario: { label: 'Usuario Basico', color: 'bg-gray-500', portal: 'Sem portal', note: 'Aguardando permissao.' },
 };
 
-const ALL_ROLES: AppRole[] = ['admin', 'filial_matriz', 'filial_praia', 'filial_goiania', 'almoxarifado', 'tecnico_campo', 'operacional', 'faturamento', 'financeiro', 'usuario'];
+const ALL_ROLES: AppRole[] = ['admin', 'diretor_geral', 'filial_matriz', 'filial_praia', 'filial_goiania', 'almoxarifado', 'tecnico_campo', 'operacional', 'faturamento', 'financeiro', 'usuario'];
 
 const GerenciarUsuariosPage: React.FC = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
@@ -42,9 +49,31 @@ const GerenciarUsuariosPage: React.FC = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
+    const { data: adminUsers, error: adminErr } = await (supabase as any)
+      .rpc('admin_listar_usuarios');
+
+    if (!adminErr && Array.isArray(adminUsers)) {
+      setUsers(adminUsers.map((u: any) => ({
+        user_id: u.user_id,
+        email: u.email || '',
+        nome_completo: u.nome_completo || '',
+        telefone: u.telefone || null,
+        cpf: u.cpf || null,
+        empresa: u.empresa || null,
+        filial: u.filial || null,
+        created_at: u.created_at,
+        email_confirmed: Boolean(u.email_confirmed),
+        blocked: Boolean(u.blocked),
+        role: (u.role as AppRole) || null,
+        role_id: u.role_id || null,
+      })));
+      setLoading(false);
+      return;
+    }
+
     const { data: profiles, error: pErr } = await supabase
       .from('profiles')
-      .select('user_id, email, nome_completo, created_at')
+      .select('user_id, email, nome_completo, telefone, created_at')
       .order('created_at', { ascending: false });
 
     if (pErr) {
@@ -63,7 +92,10 @@ const GerenciarUsuariosPage: React.FC = () => {
         user_id: p.user_id,
         email: p.email || '',
         nome_completo: p.nome_completo || '',
+        telefone: p.telefone || null,
         created_at: p.created_at,
+        email_confirmed: false,
+        blocked: false,
         role: (r?.role as AppRole) || null,
         role_id: r?.id || null,
       };
@@ -102,9 +134,29 @@ const GerenciarUsuariosPage: React.FC = () => {
     }
   };
 
+  const handleBlock = async (userId: string, bloquear: boolean) => {
+    setSaving(userId);
+    try {
+      const { data, error } = await (supabase as any).rpc('admin_bloquear_usuario', {
+        p_user_id: userId,
+        p_bloquear: bloquear,
+      });
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data.error || 'Falha ao alterar bloqueio');
+      toast.success(bloquear ? 'Usuario bloqueado' : 'Usuario desbloqueado');
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel alterar o bloqueio.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const filtered = users.filter(u =>
     u.email.toLowerCase().includes(search.toLowerCase()) ||
-    u.nome_completo.toLowerCase().includes(search.toLowerCase())
+    u.nome_completo.toLowerCase().includes(search.toLowerCase()) ||
+    (u.cpf || '').includes(search) ||
+    (u.empresa || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -119,18 +171,21 @@ const GerenciarUsuariosPage: React.FC = () => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Total</p><p className="text-xl font-bold text-primary">{users.length}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Com perfil</p><p className="text-xl font-bold text-success">{users.filter(u => u.role).length}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Sem perfil</p><p className="text-xl font-bold text-warning">{users.filter(u => !u.role).length}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Admins</p><p className="text-xl font-bold text-destructive">{users.filter(u => u.role === 'admin').length}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Pendentes</p><p className="text-xl font-bold text-warning">{users.filter(u => !u.role || u.role === 'usuario').length}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Confirmados</p><p className="text-xl font-bold text-success">{users.filter(u => u.email_confirmed).length}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Bloqueados</p><p className="text-xl font-bold text-destructive">{users.filter(u => u.blocked).length}</p></div>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <CardTitle className="flex items-center gap-2 text-lg"><Users className="w-5 h-5" /> Usuarios Cadastrados</CardTitle>
-            <div className="relative w-64">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Buscar por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            <div className="flex items-center gap-2">
+              <div className="relative w-64">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Buscar por nome, email ou CPF..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchUsers}>Atualizar</Button>
             </div>
           </div>
         </CardHeader>
@@ -138,7 +193,7 @@ const GerenciarUsuariosPage: React.FC = () => {
           {loading ? <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div> : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>Cadastro</TableHead><TableHead>Perfil</TableHead><TableHead>Portal</TableHead><TableHead>Alterar</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>CPF</TableHead><TableHead>Empresa/Filial</TableHead><TableHead>Status</TableHead><TableHead>Cadastro</TableHead><TableHead>Perfil</TableHead><TableHead>Portal</TableHead><TableHead>Alterar</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {filtered.map(user => {
                     const meta = user.role ? ROLE_LABELS[user.role] : null;
@@ -146,15 +201,26 @@ const GerenciarUsuariosPage: React.FC = () => {
                       <TableRow key={user.user_id}>
                         <TableCell className="font-medium">{user.nome_completo || '-'}</TableCell>
                         <TableCell className="text-sm">{user.email}</TableCell>
+                        <TableCell className="text-xs">{user.cpf || '-'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{[user.empresa, user.filial].filter(Boolean).join(' / ') || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            {user.blocked ? <Badge variant="destructive">Bloqueado</Badge> : user.email_confirmed ? <Badge className="bg-green-500 text-white">Email confirmado</Badge> : <Badge variant="secondary">Email pendente</Badge>}
+                            {!user.role || user.role === 'usuario' ? <Badge variant="outline">Aguardando liberacao</Badge> : null}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-sm text-muted-foreground">{user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : '-'}</TableCell>
                         <TableCell>{meta ? <Badge className={`${meta.color} text-white`}>{meta.label}</Badge> : <Badge variant="outline">Sem perfil</Badge>}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{meta?.portal || '-'}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Select value={user.role || ''} onValueChange={(val) => handleRoleChange(user.user_id, val as AppRole)} disabled={saving === user.user_id}>
                               <SelectTrigger className="w-52"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                               <SelectContent>{ALL_ROLES.map(r => <SelectItem key={r} value={r}>{ROLE_LABELS[r].label}</SelectItem>)}</SelectContent>
                             </Select>
+                            <Button size="sm" variant={user.blocked ? 'outline' : 'destructive'} onClick={() => handleBlock(user.user_id, !user.blocked)} disabled={saving === user.user_id}>
+                              {user.blocked ? 'Desbloquear' : 'Bloquear'}
+                            </Button>
                             {saving === user.user_id && <Loader2 className="w-4 h-4 animate-spin" />}
                           </div>
                         </TableCell>

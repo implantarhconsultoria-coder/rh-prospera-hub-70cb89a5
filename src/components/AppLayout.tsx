@@ -7,9 +7,10 @@ import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
-import { Loader2, Search, RefreshCw, Circle, X, Building2, User, FileText } from 'lucide-react';
+import { Search, RefreshCw, Circle, X, Building2, User, FileText } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import StableLoading from '@/components/StableLoading';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
@@ -69,11 +70,7 @@ const AppLayout: React.FC = () => {
   }, []);
 
   if (roleLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <StableLoading label="Carregando permissao do usuario..." />;
   }
 
   if (!userRole) return <AguardandoAcesso />;

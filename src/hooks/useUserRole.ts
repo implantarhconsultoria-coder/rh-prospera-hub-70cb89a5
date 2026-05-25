@@ -26,22 +26,30 @@ export const useUserRole = (session: Session | null) => {
     setLoading(true);
 
     const fetchRole = async () => {
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', session.user.id);
+      try {
+        const { data, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id);
 
-      const all = (data || []).map((r) => r.role as AppRole);
-      if (BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '') && !all.includes('admin')) {
-        all.unshift('admin');
+        if (error) throw error;
+
+        const all = (data || []).map((r) => r.role as AppRole);
+        if (BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '') && !all.includes('admin')) {
+          all.unshift('admin');
+        }
+
+        setRoles(all);
+
+        const primary = ROLE_PRIORITY.find((p) => all.includes(p)) || null;
+        setRole(primary);
+      } catch (error) {
+        console.error('Erro ao carregar perfil do usuario:', error);
+        setRoles([]);
+        setRole(null);
+      } finally {
+        setLoading(false);
       }
-
-      setRoles(all);
-
-      // Pick highest-priority role
-      const primary = ROLE_PRIORITY.find((p) => all.includes(p)) || null;
-      setRole(primary);
-      setLoading(false);
     };
 
     fetchRole();

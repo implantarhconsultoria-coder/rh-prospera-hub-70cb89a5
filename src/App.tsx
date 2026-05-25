@@ -106,8 +106,9 @@ import AcessoExternoPage from "@/pages/AcessoExternoPage";
 import PortaisPage from "@/pages/PortaisPage";
 import AcessosExternosPage from "@/pages/admin/AcessosExternosPage";
 import AssistentePage from "@/pages/admin/AssistentePage";
-import { Loader2 } from "lucide-react";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import GlobalErrorCatcher from "@/components/GlobalErrorCatcher";
+import StableLoading from "@/components/StableLoading";
 import ExternoLayout from "@/components/ExternoLayout";
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Building, Landmark, TrendingDown, AlertTriangle, Layers, GitMerge,
@@ -174,13 +175,12 @@ const queryClient = new QueryClient();
 
 /**
  * RoleRedirect - after login, sends user to the correct portal based on role.
- * App Mecanico antigo removido; tecnico_campo/operacional caem no admin como fallback.
  */
 const RoleRedirect = () => {
   const { userRoles, roleLoading } = useApp();
 
   if (roleLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+    return <StableLoading label="Carregando permissao de acesso..." />;
   }
 
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
@@ -189,6 +189,7 @@ const RoleRedirect = () => {
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
   if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
+  if (userRoles.includes('operacional') || userRoles.includes('tecnico_campo')) return <Navigate to="/modulos" replace />;
 
   return <Navigate to="/admin" replace />;
 };
@@ -205,11 +206,7 @@ const AuthGate = () => {
   const { isAuthenticated, loading } = useApp();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <StableLoading label="Carregando sessao..." />;
   }
 
   if (!isAuthenticated) {
@@ -376,6 +373,7 @@ const App = () => (
         <Sonner />
         <AppProvider>
           <BrowserRouter>
+            <GlobalErrorCatcher />
             <Routes>
               {/* ========== ACESSO EXTERNO POR PIN - PORTAL UNICO ========== */}
               <Route path="/modulos" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />

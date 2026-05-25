@@ -62,7 +62,7 @@ interface ReceiptInfo {
   registroTeste?: boolean;
 }
 
-const CANONICAL_BASE_URL = "https://implantarhprpro.com";
+const CANONICAL_BASE_URL = "https://topacrh.pro";
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
 };
