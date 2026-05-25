@@ -2,7 +2,7 @@ import React from 'react';
 import { Outlet, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
-import { Loader2, Wallet, ArrowDownCircle, ArrowUpCircle, Building, Landmark, TrendingDown, AlertTriangle, Layers, GitMerge, LogOut, Building2, Fuel } from 'lucide-react';
+import { Loader2, Wallet, ArrowDownCircle, ArrowUpCircle, Building, Landmark, TrendingDown, AlertTriangle, Layers, GitMerge, LogOut, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
@@ -17,7 +17,6 @@ const ITEMS = [
   { to: '/financeiro/inadimplencia', label: 'Inadimplência', icon: AlertTriangle },
   { to: '/financeiro/centros-custo', label: 'Centros de Custo', icon: Layers },
   { to: '/financeiro/conciliacao', label: 'Conciliação', icon: GitMerge },
-  { to: '/financeiro/abastecimentos', label: 'Abastecimentos', icon: Fuel },
 ];
 
 const FinanceiroLayout: React.FC = () => {

@@ -360,7 +360,6 @@ const AuthGate = () => {
         <Route path="/financeiro/inadimplencia" element={<InadimplenciaPage />} />
         <Route path="/financeiro/centros-custo" element={<CentrosCustoPage />} />
         <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
-        <Route path="/financeiro/abastecimentos" element={<CombustivelQRAdminPage />} />
       </Route>
 
       {/* Catch-all */}

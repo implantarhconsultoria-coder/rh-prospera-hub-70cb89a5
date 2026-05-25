@@ -24,45 +24,30 @@ export const useUserRole = (session: Session | null) => {
     setRole(null);
     setRoles([]);
     setLoading(true);
-    let ativo = true;
 
     const fetchRole = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', session.user.id);
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id);
 
-        if (!ativo) return;
-        if (error) {
-          console.error('Erro ao carregar perfil do usuario:', error);
-        }
-
-        const all = (data || []).map((r) => r.role as AppRole);
-        if (all.length === 0 && BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '')) {
-          setRoles(['admin']);
-          setRole('admin');
-          setLoading(false);
-          return;
-        }
-
-        setRoles(all);
-
-        // Pick highest-priority role
-        const primary = ROLE_PRIORITY.find((p) => all.includes(p)) || null;
-        setRole(primary);
-      } catch (error) {
-        if (!ativo) return;
-        console.error('Falha inesperada ao carregar perfil do usuario:', error);
-        setRoles([]);
-        setRole(null);
-      } finally {
-        if (ativo) setLoading(false);
+      const all = (data || []).map((r) => r.role as AppRole);
+      if (all.length === 0 && BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '')) {
+        setRoles(['admin']);
+        setRole('admin');
+        setLoading(false);
+        return;
       }
+
+      setRoles(all);
+
+      // Pick highest-priority role
+      const primary = ROLE_PRIORITY.find((p) => all.includes(p)) || null;
+      setRole(primary);
+      setLoading(false);
     };
 
     fetchRole();
-    return () => { ativo = false; };
   }, [session?.user?.id]);
 
   return { role, roles, roleLoading: loading };

@@ -49,17 +49,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLoading(false);
     });
 
-    supabase.auth.getSession()
-      .then(({ data: { session: sess } }) => {
-        setSession(sess);
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error('Falha ao recuperar sessao do Supabase:', error);
-        setSession(null);
-        setLoading(false);
-        supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
-      });
+    supabase.auth.getSession().then(({ data: { session: sess } }) => {
+      setSession(sess);
+      setLoading(false);
+    });
 
     return () => subscription.unsubscribe();
   }, []);
