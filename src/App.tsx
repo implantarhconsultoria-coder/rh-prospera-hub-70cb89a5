@@ -236,6 +236,8 @@ const AuthGate = () => {
       {/* ========== ADMIN PORTAL ========== */}
       <Route element={<AppLayout />}>
         <Route path="/admin" element={<AdminHomeRoute />} />
+        <Route path="/admin/implanta-central" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/implanta-central/*" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/diretoria" element={<DirectorDashboardPage />} />
         <Route path="/admin/empresas" element={<EmpresasPage />} />
         <Route path="/admin/base-mestra" element={<BaseMestraPage />} />

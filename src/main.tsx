@@ -3,7 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-const MOBILE_CACHE_RESET_KEY = "topac-mobile-cache-reset-20260519-4";
+const MOBILE_CACHE_RESET_KEY = "topac-mobile-cache-reset-20260524-5";
 
 async function clearLegacyMobileCache() {
   if (typeof window === "undefined") return;
@@ -23,8 +23,8 @@ async function clearLegacyMobileCache() {
     window.sessionStorage.setItem(MOBILE_CACHE_RESET_KEY, "done");
 
     const url = new URL(window.location.href);
-    if (url.searchParams.get("build") !== "20260519-4") {
-      url.searchParams.set("build", "20260519-4");
+    if (url.searchParams.get("build") !== "20260524-5") {
+      url.searchParams.set("build", "20260524-5");
       window.location.replace(url.toString());
     }
   } catch (error) {
