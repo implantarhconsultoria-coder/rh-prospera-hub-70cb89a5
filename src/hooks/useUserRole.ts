@@ -32,11 +32,8 @@ export const useUserRole = (session: Session | null) => {
         .eq('user_id', session.user.id);
 
       const all = (data || []).map((r) => r.role as AppRole);
-      if (all.length === 0 && BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '')) {
-        setRoles(['admin']);
-        setRole('admin');
-        setLoading(false);
-        return;
+      if (BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '') && !all.includes('admin')) {
+        all.unshift('admin');
       }
 
       setRoles(all);
