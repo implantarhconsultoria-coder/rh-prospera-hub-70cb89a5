@@ -18,7 +18,6 @@ const CadastroPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const emailNormalizado = email.trim().toLowerCase();
     if (password !== confirmPassword) {
       toast.error('As senhas não coincidem');
       return;
@@ -29,10 +28,10 @@ const CadastroPage: React.FC = () => {
     }
     setLoading(true);
     const { error } = await supabase.auth.signUp({
-      email: emailNormalizado,
+      email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/login?confirmed=1`,
+        emailRedirectTo: window.location.origin,
         data: { nome_completo: nomeCompleto, telefone },
       },
     });
@@ -40,7 +39,6 @@ const CadastroPage: React.FC = () => {
     if (error) {
       toast.error(error.message);
     } else {
-      setEmail(emailNormalizado);
       setSuccess(true);
     }
   };
