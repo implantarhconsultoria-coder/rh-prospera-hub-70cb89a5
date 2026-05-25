@@ -9,6 +9,8 @@ import { FileCheck, Lock, Unlock, RefreshCw, AlertTriangle, CheckCircle2, Clock 
 import { toast } from 'sonner';
 import { calcTotalFuncionario, formatCurrency } from '@/lib/calculations';
 import { TIPOS_OCORRENCIA, type MovimentoRow, type FechamentoRow, type TipoOcorrencia } from '@/lib/movimento';
+import { getWorkingDays } from '@/lib/workingDays';
+import { useFeriados } from '@/hooks/useFeriados';
 
 const FilialFechamentoPage: React.FC = () => {
   const { companies, employees, session } = useApp();
@@ -19,6 +21,8 @@ const FilialFechamentoPage: React.FC = () => {
   const [historico, setHistorico] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [processando, setProcessando] = useState(false);
+  const { datas: feriadosDatas } = useFeriados(competencia, companyId);
+  const diasUteis = getWorkingDays(competencia, feriadosDatas);
 
   useEffect(() => { if (companies.length && !companyId) setCompanyId(companies[0].id); }, [companies, companyId]);
 
@@ -85,17 +89,17 @@ const FilialFechamentoPage: React.FC = () => {
         adicionais: c?.adicional.valor || 0,
         descontosDiversos: c?.desconto.valor || 0,
         adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
-        vrAplicado: emp.vrAtivo, vrDias: 0, vaAplicado: emp.vaAtivo, vtAplicado: emp.vtAtivo, vtDesconto: 0,
+        vrAplicado: emp.vrAtivo, vrDias: emp.vrAtivo ? diasUteis : 0, vaAplicado: emp.vaAtivo, vtAplicado: emp.vtAtivo, vtDesconto: emp.vtAtivo ? emp.vtDiario * Math.max(0, diasUteis - (c?.falta.quantidade || 0)) : 0,
         comissaoBase: 0, insalubridadeAplicada: emp.insalubridadeAtiva, observacoes: '', statusConferencia: 'pendente',
       } as any;
-      const calc = calcTotalFuncionario(emp, entry);
+      const calc = calcTotalFuncionario(emp, entry, diasUteis);
       proventos += calc.proventos;
       descontos += calc.descontos;
       liquido += calc.liquido;
       if (c) funcAfetados += 1;
     });
     return { proventos, descontos, liquido, funcAfetados };
-  }, [consolidado, compEmps]);
+  }, [consolidado, compEmps, diasUteis]);
 
   const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || '';
   const empresaNome = companies.find(c => c.id === companyId)?.name || '';
@@ -149,8 +153,10 @@ const FilialFechamentoPage: React.FC = () => {
           descontos_diversos: c?.desconto.valor || 0,
           adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
           vr_aplicado: emp.vrAtivo,
+          vr_dias: emp.vrAtivo ? diasUteis : 0,
           va_aplicado: emp.vaAtivo,
           vt_aplicado: emp.vtAtivo,
+          vt_desconto: emp.vtAtivo ? Math.round(emp.vtDiario * Math.max(0, diasUteis - (c?.falta.quantidade || 0)) * 100) / 100 : 0,
           insalubridade_aplicada: emp.insalubridadeAtiva,
           observacoes: obsLista.join(' | ').slice(0, 500),
           status_conferencia: 'pendente',

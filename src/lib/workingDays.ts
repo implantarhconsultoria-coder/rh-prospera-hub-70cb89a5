@@ -6,7 +6,8 @@ export const getWorkingDays = (competencia: string, feriados: string[] = []): nu
   const [year, month] = competencia.split('-').map(Number);
   if (!year || !month) return 22;
 
-  const feriadoSet = new Set(feriados);
+  const defaultFeriados = competencia === '2026-06' ? ['2026-06-04'] : [];
+  const feriadoSet = new Set([...defaultFeriados, ...feriados]);
   const daysInMonth = new Date(year, month, 0).getDate();
   let count = 0;
   for (let d = 1; d <= daysInMonth; d++) {
