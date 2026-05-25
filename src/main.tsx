@@ -3,7 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-const BUILD_ID = "20260525-white-screen-fix";
+const BUILD_ID = "20260525-white-screen-fix-2";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${BUILD_ID}`;
 const RUNTIME_RELOAD_KEY = `topac-runtime-reload-${BUILD_ID}`;
 
@@ -54,7 +54,8 @@ function forceFreshReload(reason: string) {
   safeSessionSet(RUNTIME_RELOAD_KEY, reason);
   const url = new URL(window.location.href);
   url.searchParams.set("build", BUILD_ID);
-  window.location.replace(url.toString());
+  renderBootFallback("Atualizando pacote da plataforma. Aguarde alguns segundos...");
+  window.setTimeout(() => window.location.replace(url.toString()), 80);
 }
 
 async function clearLegacyMobileCache() {
@@ -73,12 +74,6 @@ async function clearLegacyMobileCache() {
     }
 
     safeSessionSet(MOBILE_CACHE_RESET_KEY, "done");
-
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("build") !== BUILD_ID) {
-      url.searchParams.set("build", BUILD_ID);
-      window.location.replace(url.toString());
-    }
   } catch (error) {
     console.warn("Falha ao limpar cache antigo do mobile:", error);
   }
@@ -123,6 +118,7 @@ try {
       <App />
     </ErrorBoundary>
   );
+  window.setTimeout(() => renderBootFallback("Carregando a plataforma. Recarregue se permanecer em branco."), 3500);
 } catch (error) {
   console.error("Falha ao iniciar TOPAC RH PRO:", error);
   renderBootFallback("Nao foi possivel iniciar a plataforma neste navegador.");
