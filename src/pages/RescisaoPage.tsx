@@ -18,8 +18,17 @@ import { formatCurrency } from '@/lib/calculations';
 import { openEmailClient, getDestinatariosRescisao, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 
+const isMissingRescisaoSchema = (error: any) => {
+  const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
+  return error?.code === 'PGRST205' ||
+    (text.includes('schema cache') && text.includes('rescisoes')) ||
+    text.includes('could not find the table') ||
+    text.includes('relation "public.rescisoes" does not exist') ||
+    text.includes('relation "rescisoes" does not exist');
+};
+
 const RescisaoPage: React.FC = () => {
-  const { session, employees, companies, updateEmployee, refreshData } = useApp();
+  const { session, employees, companies, refreshData } = useApp();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [list, setList] = useState<any[]>([]);
@@ -37,8 +46,17 @@ const RescisaoPage: React.FC = () => {
 
   const fetchList = async () => {
     setLoading(true);
-    const { data } = await supabase.from('rescisoes').select('*').order('created_at', { ascending: false });
-    setList(data || []);
+    const { data, error } = await supabase.from('rescisoes').select('*').order('created_at', { ascending: false });
+    if (error) {
+      if (isMissingRescisaoSchema(error)) {
+        console.warn('Tabela de rescisoes ainda nao disponivel no Supabase:', error);
+      } else {
+        toast.error('Erro ao carregar rescisoes: ' + error.message);
+      }
+      setList([]);
+    } else {
+      setList(data || []);
+    }
     setLoading(false);
   };
 
@@ -197,26 +215,45 @@ const RescisaoPage: React.FC = () => {
         usuario_nome: session.user.email || '',
       };
 
-      const { data: saved, error } = await supabase
+      let saved: any = null;
+      let persisted = true;
+      const { data: savedData, error } = await supabase
         .from('rescisoes')
         .insert(payload)
         .select('*')
         .single();
-      if (error) throw error;
+      if (error) {
+        if (!isMissingRescisaoSchema(error)) throw error;
+        persisted = false;
+        saved = payload;
+        toast.warning('Tabela de rescisoes ainda nao esta criada no banco. Vou desligar e abrir o e-mail mesmo assim.');
+      } else {
+        saved = savedData || payload;
+      }
 
-      await updateEmployee(emp.id, {
+      const observacaoDesligamento = [
+        emp.observacoes,
+        `[RESCISAO] Desligamento: ${dataDesligamento} | Tipo: ${tipoRescisaoLabel(tipo)} | Motivo: ${motivo || '-'}`,
+      ].filter(Boolean).join('\n');
+
+      const { error: employeeError } = await supabase
+        .from('funcionarios')
+        .update({
         status: 'desligado',
-        observacoes: [
-          emp.observacoes,
-          `[RESCISAO] Desligamento: ${dataDesligamento} | Tipo: ${tipoRescisaoLabel(tipo)} | Motivo: ${motivo || '-'}`,
-        ].filter(Boolean).join('\n'),
-      } as any);
+        observacoes: observacaoDesligamento,
+      } as any)
+        .eq('id', emp.id);
 
-      toast.success('Rescisao registrada, funcionario desligado e e-mail preparado.');
+      if (employeeError) throw employeeError;
+
+      toast.success(persisted
+        ? 'Rescisao registrada, funcionario desligado e e-mail preparado.'
+        : 'Funcionario desligado e e-mail preparado. Historico sera gravado quando a tabela estiver no banco.');
       setOpen(false);
       resetForm();
       await refreshData();
-      await fetchList();
+      if (persisted) await fetchList();
+      else setList((prev) => [saved, ...prev]);
       enviarEmailRescisao(saved || payload);
     } catch (e: any) {
       toast.error('Erro ao salvar: ' + e.message);
