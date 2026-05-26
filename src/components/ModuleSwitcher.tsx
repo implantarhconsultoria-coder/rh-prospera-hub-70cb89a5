@@ -26,6 +26,9 @@ const PORTAL_MODULES: ModuleDef[] = [
   { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
   { role: 'faturamento', label: 'Faturamento', path: '/faturamento' },
   { role: 'financeiro', label: 'Financeiro', path: '/financeiro' },
+  { role: 'almoxarifado', label: 'Almoxarifado', path: '/almoxarifado' },
+  { role: 'operacional', label: 'Operacional', path: '/operacional' },
+  { role: 'tecnico_campo', label: 'Campo', path: '/campo' },
 ];
 
 const ADMIN_MODULES: ModuleDef[] = [

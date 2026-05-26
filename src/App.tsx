@@ -17,6 +17,9 @@ import AppLayout from "@/components/AppLayout";
 import FilialLayout from "@/components/FilialLayout";
 import FaturamentoLayout from "@/components/FaturamentoLayout";
 import FinanceiroLayout from "@/components/FinanceiroLayout";
+import AlmoxarifadoLayout from "@/components/AlmoxarifadoLayout";
+import OperacionalLayout from "@/components/OperacionalLayout";
+import CampoLayout from "@/components/CampoLayout";
 import LoginPage from "@/pages/LoginPage";
 import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
@@ -77,6 +80,11 @@ import MecVeiculoPage from "@/app-mecanico/pages/VeiculoPage";
 import MecHistoricoPage from "@/app-mecanico/pages/HistoricoPage";
 import MecAbastecimentoPage from "@/app-mecanico/pages/AbastecimentoPage";
 import DespacharChamadoPage from "@/pages/campo/DespacharChamadoPage";
+import CampoHomePage from "@/pages/campo/CampoHomePage";
+import CampoPontoPage from "@/pages/campo/PontoPage";
+import CampoChamadosPage from "@/pages/campo/ChamadosPage";
+import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
+import RegistroKmPage from "@/pages/campo/RegistroKmPage";
 import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
 import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
 import ClienteDetailPage from "@/pages/faturamento/ClienteDetailPage";
@@ -188,8 +196,9 @@ const RoleRedirect = () => {
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
   if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
-  if (userRoles.includes('almoxarifado')) return <Navigate to="/filial" replace />;
-  if (userRoles.includes('operacional') || userRoles.includes('tecnico_campo')) return <Navigate to="/modulos" replace />;
+  if (userRoles.includes('almoxarifado')) return <Navigate to="/almoxarifado" replace />;
+  if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
+  if (userRoles.includes('tecnico_campo')) return <Navigate to="/campo" replace />;
 
   return <Navigate to="/admin" replace />;
 };
@@ -328,7 +337,26 @@ const AuthGate = () => {
         <Route path="/filial/documentos" element={<FilialDocumentosPage />} />
       </Route>
 
-      {/* App Mecanico antigo removido - campo/operacional nao tem portal proprio por enquanto */}
+      {/* ========== ALMOXARIFADO PORTAL ========== */}
+      <Route element={<AlmoxarifadoLayout />}>
+        <Route path="/almoxarifado" element={<AlmoxarifadoPage />} />
+      </Route>
+
+      {/* ========== OPERACIONAL PORTAL ========== */}
+      <Route element={<OperacionalLayout />}>
+        <Route path="/operacional" element={<DespacharChamadoPage />} />
+        <Route path="/operacional/chamados" element={<DespacharChamadoPage />} />
+        <Route path="/operacional/importacao-dados" element={<ImportacoesDN4Page />} />
+      </Route>
+
+      {/* ========== CAMPO PORTAL ========== */}
+      <Route element={<CampoLayout />}>
+        <Route path="/campo" element={<CampoHomePage />} />
+        <Route path="/campo/ponto" element={<CampoPontoPage />} />
+        <Route path="/campo/chamados" element={<CampoChamadosPage />} />
+        <Route path="/campo/estoque" element={<EstoqueVeiculoPage />} />
+        <Route path="/campo/km" element={<RegistroKmPage />} />
+      </Route>
 
       {/* ========== FATURAMENTO PORTAL (acesso teste FAT) ========== */}
       <Route element={<FaturamentoLayout />}>
@@ -357,6 +385,7 @@ const AuthGate = () => {
         <Route path="/financeiro/inadimplencia" element={<InadimplenciaPage />} />
         <Route path="/financeiro/centros-custo" element={<CentrosCustoPage />} />
         <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
+        <Route path="/financeiro/importacao-dados" element={<ImportacoesDN4Page />} />
       </Route>
 
       {/* Catch-all */}

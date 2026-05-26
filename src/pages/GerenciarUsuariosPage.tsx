@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Users, Shield, Loader2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { AppRole } from '@/hooks/useUserRole';
 
 interface UserWithRole {
@@ -18,9 +19,11 @@ interface UserWithRole {
   cpf?: string | null;
   empresa?: string | null;
   filial?: string | null;
+  cargo?: string | null;
   created_at: string;
   email_confirmed?: boolean;
   blocked?: boolean;
+  roles: AppRole[];
   role: AppRole | null;
   role_id: string | null;
 }
@@ -40,6 +43,14 @@ const ROLE_LABELS: Record<AppRole, { label: string; color: string; portal: strin
 };
 
 const ALL_ROLES: AppRole[] = ['admin', 'diretor_geral', 'filial_matriz', 'filial_praia', 'filial_goiania', 'almoxarifado', 'tecnico_campo', 'operacional', 'faturamento', 'financeiro', 'usuario'];
+const MODULE_ROLES: AppRole[] = ['financeiro', 'faturamento', 'almoxarifado', 'filial_matriz', 'filial_praia', 'filial_goiania', 'operacional', 'tecnico_campo', 'diretor_geral', 'admin'];
+
+const rolePriority = (roles: AppRole[]) => ALL_ROLES.find((role) => roles.includes(role)) || null;
+const normalizeRoles = (roles: unknown): AppRole[] => {
+  const raw = Array.isArray(roles) ? roles : [];
+  const clean = raw.filter((r): r is AppRole => ALL_ROLES.includes(r as AppRole));
+  return Array.from(new Set(clean));
+};
 
 const GerenciarUsuariosPage: React.FC = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
@@ -49,24 +60,63 @@ const GerenciarUsuariosPage: React.FC = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
+    const { data: adminUsersV2, error: adminV2Err } = await (supabase as any)
+      .rpc('admin_listar_usuarios_v2');
+
+    if (!adminV2Err && Array.isArray(adminUsersV2)) {
+      setUsers(adminUsersV2.map((u: any) => {
+        const roles = normalizeRoles(u.roles || (u.role ? [u.role] : []));
+        return {
+          user_id: u.user_id,
+          email: u.email || '',
+          nome_completo: u.nome_completo || '',
+          telefone: u.telefone || null,
+          cpf: u.cpf || null,
+          empresa: u.empresa || null,
+          filial: u.filial || null,
+          cargo: u.cargo || null,
+          created_at: u.created_at,
+          email_confirmed: Boolean(u.email_confirmed),
+          blocked: Boolean(u.blocked),
+          roles,
+          role: rolePriority(roles),
+          role_id: u.role_id || null,
+        };
+      }));
+      setLoading(false);
+      return;
+    }
+
     const { data: adminUsers, error: adminErr } = await (supabase as any)
       .rpc('admin_listar_usuarios');
 
     if (!adminErr && Array.isArray(adminUsers)) {
-      setUsers(adminUsers.map((u: any) => ({
-        user_id: u.user_id,
-        email: u.email || '',
-        nome_completo: u.nome_completo || '',
-        telefone: u.telefone || null,
-        cpf: u.cpf || null,
-        empresa: u.empresa || null,
-        filial: u.filial || null,
-        created_at: u.created_at,
-        email_confirmed: Boolean(u.email_confirmed),
-        blocked: Boolean(u.blocked),
-        role: (u.role as AppRole) || null,
-        role_id: u.role_id || null,
-      })));
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('id, user_id, role');
+
+      setUsers(adminUsers.map((u: any) => {
+        const allRoles = normalizeRoles((rolesData || [])
+          .filter((r: any) => r.user_id === u.user_id)
+          .map((r: any) => r.role));
+        const roles = allRoles.length ? allRoles : normalizeRoles(u.role ? [u.role] : []);
+        return {
+          user_id: u.user_id,
+          email: u.email || '',
+          nome_completo: u.nome_completo || '',
+          telefone: u.telefone || null,
+          cpf: u.cpf || null,
+          empresa: u.empresa || null,
+          filial: u.filial || null,
+          cargo: u.cargo || null,
+          created_at: u.created_at,
+          email_confirmed: Boolean(u.email_confirmed),
+          blocked: Boolean(u.blocked),
+          roles,
+          role: rolePriority(roles),
+          role_id: u.role_id || null,
+        };
+      }));
       setLoading(false);
       return;
     }
@@ -96,6 +146,7 @@ const GerenciarUsuariosPage: React.FC = () => {
         created_at: p.created_at,
         email_confirmed: false,
         blocked: false,
+        roles: r?.role ? [r.role as AppRole] : [],
         role: (r?.role as AppRole) || null,
         role_id: r?.id || null,
       };
@@ -107,28 +158,62 @@ const GerenciarUsuariosPage: React.FC = () => {
 
   useEffect(() => { fetchUsers(); }, []);
 
-  const handleRoleChange = async (userId: string, newRole: AppRole) => {
+  const updateUserLocal = (userId: string, patch: Partial<UserWithRole>) => {
+    setUsers((prev) => prev.map((user) => user.user_id === userId ? { ...user, ...patch } : user));
+  };
+
+  const setPrimaryRole = (userId: string, newRole: AppRole) => {
+    const user = users.find((u) => u.user_id === userId);
+    const current = user?.roles || [];
+    const roles = normalizeRoles(newRole === 'usuario' ? ['usuario'] : [newRole, ...current.filter((r) => r !== 'usuario')]);
+    updateUserLocal(userId, { roles, role: rolePriority(roles) });
+  };
+
+  const toggleModuleRole = (userId: string, moduleRole: AppRole, checked: boolean) => {
+    const user = users.find((u) => u.user_id === userId);
+    const current = user?.roles || [];
+    const roles = normalizeRoles(
+      checked
+        ? [...current.filter((r) => r !== 'usuario'), moduleRole]
+        : current.filter((r) => r !== moduleRole),
+    );
+    updateUserLocal(userId, { roles, role: rolePriority(roles) });
+  };
+
+  const handleSaveUser = async (userId: string) => {
     setSaving(userId);
     const user = users.find(u => u.user_id === userId);
+    if (!user) {
+      setSaving(null);
+      return;
+    }
 
     try {
-      if (user?.role_id) {
-        const { error } = await supabase
-          .from('user_roles')
-          .update({ role: newRole } as any)
-          .eq('id', user.role_id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('user_roles')
-          .insert({ user_id: userId, role: newRole } as any);
-        if (error) throw error;
+      const rolesToSave = user.roles.filter((r) => r !== 'usuario');
+      const { data, error } = await (supabase as any).rpc('admin_salvar_usuario_acesso', {
+        p_user_id: userId,
+        p_nome: user.nome_completo || '',
+        p_telefone: user.telefone || '',
+        p_cpf: user.cpf || '',
+        p_empresa: user.empresa || '',
+        p_filial: user.filial || '',
+        p_cargo: user.cargo || '',
+        p_roles: rolesToSave,
+      });
+
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data.error || 'Falha ao salvar usuario');
+
+      if (!rolesToSave.length && user.role_id) {
+        await supabase.from('user_roles').delete().eq('user_id', userId);
+      } else if (!rolesToSave.length) {
+        await supabase.from('user_roles').delete().eq('user_id', userId);
       }
 
-      toast.success(`Perfil salvo: ${ROLE_LABELS[newRole].label}`);
+      toast.success('Usuario e modulos salvos');
       await fetchUsers();
     } catch (err: any) {
-      toast.error('Erro ao salvar perfil: ' + (err.message || ''));
+      toast.error('Erro ao salvar usuario: ' + (err.message || ''));
     } finally {
       setSaving(null);
     }
@@ -152,11 +237,34 @@ const GerenciarUsuariosPage: React.FC = () => {
     }
   };
 
+  const handleDelete = async (userId: string) => {
+    const user = users.find((u) => u.user_id === userId);
+    const ok = window.confirm(`Excluir o usuario ${user?.email || userId}? Esta acao remove o acesso.`);
+    if (!ok) return;
+
+    setSaving(userId);
+    try {
+      const { data, error } = await (supabase as any).rpc('admin_excluir_usuario', {
+        p_user_id: userId,
+      });
+      if (error) throw error;
+      if (data?.ok === false) throw new Error(data.error || 'Falha ao excluir usuario');
+      toast.success('Usuario excluido');
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel excluir o usuario.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const filtered = users.filter(u =>
     u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.nome_completo.toLowerCase().includes(search.toLowerCase()) ||
     (u.cpf || '').includes(search) ||
-    (u.empresa || '').toLowerCase().includes(search.toLowerCase())
+    (u.empresa || '').toLowerCase().includes(search.toLowerCase()) ||
+    (u.filial || '').toLowerCase().includes(search.toLowerCase()) ||
+    (u.cargo || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -193,33 +301,61 @@ const GerenciarUsuariosPage: React.FC = () => {
           {loading ? <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div> : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>CPF</TableHead><TableHead>Empresa/Filial</TableHead><TableHead>Status</TableHead><TableHead>Cadastro</TableHead><TableHead>Perfil</TableHead><TableHead>Portal</TableHead><TableHead>Alterar</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Usuario</TableHead><TableHead>Dados</TableHead><TableHead>Status</TableHead><TableHead>Perfil</TableHead><TableHead>Modulos liberados</TableHead><TableHead>Acoes</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {filtered.map(user => {
                     const meta = user.role ? ROLE_LABELS[user.role] : null;
                     return (
                       <TableRow key={user.user_id}>
-                        <TableCell className="font-medium">{user.nome_completo || '-'}</TableCell>
-                        <TableCell className="text-sm">{user.email}</TableCell>
-                        <TableCell className="text-xs">{user.cpf || '-'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{[user.empresa, user.filial].filter(Boolean).join(' / ') || '-'}</TableCell>
+                        <TableCell className="min-w-[260px]">
+                          <div className="space-y-2">
+                            <Input value={user.nome_completo || ''} onChange={(e) => updateUserLocal(user.user_id, { nome_completo: e.target.value })} placeholder="Nome completo" />
+                            <div className="text-xs text-muted-foreground break-all">{user.email}</div>
+                            <div className="text-xs text-muted-foreground">Cadastro: {user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : '-'}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="min-w-[280px]">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input value={user.cpf || ''} onChange={(e) => updateUserLocal(user.user_id, { cpf: e.target.value })} placeholder="CPF" />
+                            <Input value={user.cargo || ''} onChange={(e) => updateUserLocal(user.user_id, { cargo: e.target.value })} placeholder="Funcao" />
+                            <Input value={user.empresa || ''} onChange={(e) => updateUserLocal(user.user_id, { empresa: e.target.value })} placeholder="Empresa" />
+                            <Input value={user.filial || ''} onChange={(e) => updateUserLocal(user.user_id, { filial: e.target.value })} placeholder="Filial" />
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             {user.blocked ? <Badge variant="destructive">Bloqueado</Badge> : user.email_confirmed ? <Badge className="bg-green-500 text-white">Email confirmado</Badge> : <Badge variant="secondary">Email pendente</Badge>}
                             {!user.role || user.role === 'usuario' ? <Badge variant="outline">Aguardando liberacao</Badge> : null}
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{user.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : '-'}</TableCell>
-                        <TableCell>{meta ? <Badge className={`${meta.color} text-white`}>{meta.label}</Badge> : <Badge variant="outline">Sem perfil</Badge>}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{meta?.portal || '-'}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Select value={user.role || ''} onValueChange={(val) => handleRoleChange(user.user_id, val as AppRole)} disabled={saving === user.user_id}>
-                              <SelectTrigger className="w-52"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                        <TableCell className="min-w-[220px]">
+                          <div className="space-y-2">
+                            {meta ? <Badge className={`${meta.color} text-white`}>{meta.label}</Badge> : <Badge variant="outline">Sem perfil</Badge>}
+                            <Select value={user.role || ''} onValueChange={(val) => setPrimaryRole(user.user_id, val as AppRole)} disabled={saving === user.user_id}>
+                              <SelectTrigger className="w-full"><SelectValue placeholder="Perfil principal..." /></SelectTrigger>
                               <SelectContent>{ALL_ROLES.map(r => <SelectItem key={r} value={r}>{ROLE_LABELS[r].label}</SelectItem>)}</SelectContent>
                             </Select>
+                            <p className="text-[10px] text-muted-foreground">{meta?.portal || 'Sem portal liberado'}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="min-w-[320px]">
+                          <div className="grid grid-cols-2 gap-2">
+                            {MODULE_ROLES.map((r) => (
+                              <label key={r} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs">
+                                <Checkbox checked={user.roles.includes(r)} onCheckedChange={(checked) => toggleModuleRole(user.user_id, r, checked === true)} disabled={saving === user.user_id} />
+                                <span>{ROLE_LABELS[r].label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="min-w-[180px]">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button size="sm" onClick={() => handleSaveUser(user.user_id)} disabled={saving === user.user_id}>Salvar</Button>
                             <Button size="sm" variant={user.blocked ? 'outline' : 'destructive'} onClick={() => handleBlock(user.user_id, !user.blocked)} disabled={saving === user.user_id}>
                               {user.blocked ? 'Desbloquear' : 'Bloquear'}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleDelete(user.user_id)} disabled={saving === user.user_id}>
+                              Excluir
                             </Button>
                             {saving === user.user_id && <Loader2 className="w-4 h-4 animate-spin" />}
                           </div>

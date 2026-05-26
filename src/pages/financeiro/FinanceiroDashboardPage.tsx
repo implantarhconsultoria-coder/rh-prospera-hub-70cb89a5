@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Clock, Building2, RefreshCw, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
@@ -9,6 +9,7 @@ const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'c
 
 const FinanceiroDashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const ext = useAcessoExternoFiltro();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -18,6 +19,9 @@ const FinanceiroDashboardPage: React.FC = () => {
   });
   const [contas, setContas] = useState<Array<{ nome: string; saldo: number; empresa: string }>>([]);
   const [topInadimplentes, setTopInadimplentes] = useState<Array<{ cliente: string; valor: number; dias: number }>>([]);
+  const portalBase = location.pathname.match(/^\/financeiro-ext\/[^/]+/)?.[0]
+    || (location.pathname.startsWith('/financeiro') ? '/financeiro' : '/admin/financeiro');
+  const finPath = (path = '') => `${portalBase}${path}`;
 
   const carregar = async () => {
     setLoading(true);
@@ -78,11 +82,11 @@ const FinanceiroDashboardPage: React.FC = () => {
   useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
   const cards = [
-    { label: 'Saldo em Bancos', value: fmtBRL(stats.saldoBancos), icon: Wallet, color: 'text-primary', onClick: () => navigate('/admin/financeiro/bancos') },
+    { label: 'Saldo em Bancos', value: fmtBRL(stats.saldoBancos), icon: Wallet, color: 'text-primary', onClick: () => navigate(finPath('/bancos')) },
     { label: 'Saldo Previsto', value: fmtBRL(stats.saldoPrevisto), icon: TrendingUp, color: stats.saldoPrevisto >= 0 ? 'text-success' : 'text-destructive' },
-    { label: 'A Receber', value: fmtBRL(stats.aReceber), icon: ArrowDownCircle, color: 'text-success', onClick: () => navigate('/admin/financeiro/contas-receber') },
-    { label: 'A Pagar', value: fmtBRL(stats.aPagar), icon: ArrowUpCircle, color: 'text-warning', onClick: () => navigate('/admin/financeiro/contas-pagar') },
-    { label: 'Inadimplência', value: fmtBRL(stats.inadimplencia), icon: AlertTriangle, color: 'text-destructive', onClick: () => navigate('/admin/financeiro/inadimplencia') },
+    { label: 'A Receber', value: fmtBRL(stats.aReceber), icon: ArrowDownCircle, color: 'text-success', onClick: () => navigate(finPath('/contas-receber')) },
+    { label: 'A Pagar', value: fmtBRL(stats.aPagar), icon: ArrowUpCircle, color: 'text-warning', onClick: () => navigate(finPath('/contas-pagar')) },
+    { label: 'Inadimplência', value: fmtBRL(stats.inadimplencia), icon: AlertTriangle, color: 'text-destructive', onClick: () => navigate(finPath('/inadimplencia')) },
     { label: 'Pagar Vencido', value: fmtBRL(stats.aPagarVencido), icon: Clock, color: 'text-destructive' },
   ];
 

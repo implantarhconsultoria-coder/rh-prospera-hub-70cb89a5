@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw, ClipboardCheck, UserX } from 'lucide-react';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
@@ -9,6 +9,7 @@ const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', cur
 
 const FaturamentoDashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const ext = useAcessoExternoFiltro();
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<any>(null);
@@ -19,6 +20,9 @@ const FaturamentoDashboardPage: React.FC = () => {
   });
   const [porEmpresa, setPorEmpresa] = useState<Array<{ nome: string; total: number }>>([]);
   const [topClientes, setTopClientes] = useState<Array<{ razao_social: string; total: number }>>([]);
+  const portalBase = location.pathname.match(/^\/faturamento-ext\/[^/]+/)?.[0]
+    || (location.pathname.startsWith('/faturamento') ? '/faturamento' : '/admin/faturamento');
+  const fatPath = (path = '') => `${portalBase}${path}`;
 
   const carregar = async () => {
     setLoading(true);
@@ -89,16 +93,16 @@ const FaturamentoDashboardPage: React.FC = () => {
     { label: 'Faturamento Previsto', value: fmtBRL(stats.previsto), icon: TrendingUp, color: 'text-primary' },
     { label: 'Total Emitido', value: fmtBRL(stats.emitido), icon: FileText, color: 'text-foreground' },
     { label: 'Recebido (Pago)', value: fmtBRL(stats.pago), icon: CheckCircle2, color: 'text-success' },
-    { label: 'Vencidos', value: fmtBRL(stats.vencidos), icon: AlertTriangle, color: 'text-destructive', onClick: () => navigate('/admin/faturamento/faturas?status=vencida') },
+    { label: 'Vencidos', value: fmtBRL(stats.vencidos), icon: AlertTriangle, color: 'text-destructive', onClick: () => navigate(fatPath('/faturas?status=vencida')) },
     { label: 'A Vencer (30d)', value: fmtBRL(stats.aVencer), icon: Clock, color: 'text-warning' },
-    { label: 'Pendências', value: stats.pendencias.toString(), icon: AlertTriangle, color: stats.pendencias > 0 ? 'text-destructive' : 'text-success', onClick: () => navigate('/admin/faturamento/pendencias') },
+    { label: 'Pendências', value: stats.pendencias.toString(), icon: AlertTriangle, color: stats.pendencias > 0 ? 'text-destructive' : 'text-success', onClick: () => navigate(fatPath('/pendencias')) },
   ];
 
   const mini = [
-    { label: 'Contratos Ativos', value: stats.contratosAtivos, icon: FileText, path: '/admin/faturamento/contratos' },
-    { label: 'Clientes Ativos', value: stats.clientesAtivos, icon: Users, path: '/admin/faturamento/clientes' },
-    { label: 'Equipamentos Faturando', value: stats.equipamentosFaturando, icon: Package, path: '/admin/faturamento/contratos' },
-    { label: 'Reajustes próx. 30d', value: stats.reajustesProximos, icon: RefreshCw, path: '/admin/faturamento/reajustes' },
+    { label: 'Contratos Ativos', value: stats.contratosAtivos, icon: FileText, path: fatPath('/contratos') },
+    { label: 'Clientes Ativos', value: stats.clientesAtivos, icon: Users, path: fatPath('/clientes') },
+    { label: 'Equipamentos Faturando', value: stats.equipamentosFaturando, icon: Package, path: fatPath('/contratos') },
+    { label: 'Reajustes próx. 30d', value: stats.reajustesProximos, icon: RefreshCw, path: fatPath('/reajustes') },
   ];
 
   return (
