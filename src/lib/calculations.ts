@@ -1,5 +1,7 @@
 import type { Employee, MonthlyEntry } from '@/types/database';
 
+const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+
 export const valorHora = (salario: number) => salario / 220;
 
 export const calcHE50 = (salario: number, horas: number) => valorHora(salario) * 1.5 * horas;
@@ -8,62 +10,80 @@ export const calcFalta = (salario: number, dias: number) => (salario / 30) * dia
 export const calcAtraso = (salario: number, horas: number) => valorHora(salario) * horas;
 export const calcAdiantamento = (salario: number, pct: number = 40) => salario * (pct / 100);
 
+export const getComissaoPercentual = (company?: { codigo?: string; name?: string; city?: string; nome?: string; cidade?: string } | null) => {
+  const text = `${company?.codigo || ''} ${company?.name || company?.nome || ''} ${company?.city || company?.cidade || ''}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return text.includes('topac-gyn') || text.includes('gyn') || text.includes('goian') ? 0.02 : 0.01;
+};
+
 /**
- * INSS 2024 progressive table
+ * INSS 2026 progressive table for empregado/domestico/avulso.
  */
 export const calcINSS = (baseINSS: number): number => {
   if (baseINSS <= 0) return 0;
   const faixas = [
-    { teto: 1412.00, aliq: 0.075 },
-    { teto: 2666.68, aliq: 0.09 },
-    { teto: 4000.03, aliq: 0.12 },
-    { teto: 7786.02, aliq: 0.14 },
+    { teto: 1621.00, aliq: 0.075 },
+    { teto: 2902.84, aliq: 0.09 },
+    { teto: 4354.27, aliq: 0.12 },
+    { teto: 8475.55, aliq: 0.14 },
   ];
   let inss = 0;
   let anterior = 0;
+  const base = Math.min(baseINSS, faixas[faixas.length - 1].teto);
   for (const f of faixas) {
-    if (baseINSS <= f.teto) {
-      inss += (baseINSS - anterior) * f.aliq;
+    if (base <= f.teto) {
+      inss += Math.max(0, base - anterior) * f.aliq;
       break;
-    } else {
+    }
+    if (base > f.teto) {
       inss += (f.teto - anterior) * f.aliq;
       anterior = f.teto;
-      if (f === faixas[faixas.length - 1]) {
-        // cap at last bracket
-        break;
-      }
     }
   }
-  return Math.round(inss * 100) / 100;
+  return round2(inss);
 };
 
 /**
- * IRRF progressive table (after INSS deduction)
+ * IRRF 2026 monthly table.
+ * baseIR is normally taxable remuneration after INSS; rendimentoTributavel
+ * applies the 2026 monthly reduction rule.
  */
-export const calcIRRF = (baseIR: number, dependentes: number = 0): number => {
+export const calcIRRF = (baseIR: number, dependentes: number = 0, rendimentoTributavel?: number): number => {
   const dedDep = dependentes * 189.59;
   const base = baseIR - dedDep;
-  if (base <= 2259.20) return 0;
+  if (base <= 2428.80) return 0;
   const faixas = [
-    { teto: 2826.65, aliq: 0.075, ded: 169.44 },
-    { teto: 3751.05, aliq: 0.15, ded: 381.44 },
-    { teto: 4664.68, aliq: 0.225, ded: 662.77 },
-    { teto: Infinity, aliq: 0.275, ded: 896.00 },
+    { teto: 2826.65, aliq: 0.075, ded: 182.16 },
+    { teto: 3751.05, aliq: 0.15, ded: 394.16 },
+    { teto: 4664.68, aliq: 0.225, ded: 675.49 },
+    { teto: Infinity, aliq: 0.275, ded: 908.73 },
   ];
+  let imposto = 0;
   for (const f of faixas) {
     if (base <= f.teto) {
-      const ir = base * f.aliq - f.ded;
-      return Math.max(0, Math.round(ir * 100) / 100);
+      imposto = Math.max(0, base * f.aliq - f.ded);
+      break;
     }
   }
-  return 0;
+
+  const rendimento = Math.max(0, rendimentoTributavel ?? baseIR);
+  let reducao = 0;
+  if (rendimento <= 5000) {
+    reducao = imposto;
+  } else if (rendimento <= 7350) {
+    reducao = Math.max(0, 978.62 - (0.133145 * rendimento));
+  }
+
+  return round2(Math.max(0, imposto - reducao));
 };
 
 /**
  * FGTS: 8% sobre remuneração bruta
  */
 export const calcFGTS = (baseFGTS: number): number => {
-  return Math.round(baseFGTS * 0.08 * 100) / 100;
+  return round2(baseFGTS * 0.08);
 };
 
 /**
@@ -86,7 +106,7 @@ export const calcDSR = (totalHE: number, diasUteis: number, competencia?: string
     diasNoMes = new Date(y, m, 0).getDate();
   }
   const diasDescanso = diasNoMes - diasUteis;
-  return (totalHE / diasUteis) * diasDescanso;
+  return round2((totalHE / diasUteis) * diasDescanso);
 };
 
 /**
@@ -106,22 +126,38 @@ type PayrollOptions = {
   diasUteis: number;
   comissaoPct: number;
   domingosFeriados?: number;
+  dependentes?: number;
 };
 
 export type PayrollBreakdown = {
+  valorHora: number;
   he50Val: number;
   he100Val: number;
+  totalHE: number;
   dsrHE: number;
   insVal: number;
+  comissaoBase: number;
+  comissaoPct: number;
   comissaoVal: number;
+  dsrComissao: number;
   faltaVal: number;
   atrasoVal: number;
+  adicionais: number;
+  proventos: number;
   bruto: number;
+  baseINSS: number;
   inss: number;
+  baseFGTS: number;
   irrf: number;
+  baseIRRF: number;
   fgts: number;
+  fgtsInformativo: number;
   adiantamento: number;
+  descontosDiversos: number;
+  descontosLegais: number;
+  descontosOperacionais: number;
   liquido: number;
+  pendencias: string[];
 };
 
 const calcDomingosFeriados = (competencia: string, diasUteis: number) => {
@@ -144,20 +180,66 @@ export const calcPayrollBreakdown = (
 
   const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
   const valorHora = (emp.salarioBase + insVal) / 220;
-  const he50Val = valorHora * 1.5 * entry.he50;
-  const he100Val = valorHora * 2 * entry.he100;
-  const totalHE = he50Val + he100Val;
-  const dsrHE = diasUteis > 0 ? (totalHE / diasUteis) * domingosFeriados : 0;
-  const comissaoVal = (entry.comissaoBase || 0) * opts.comissaoPct;
-  const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
-  const atrasoVal = calcAtraso(emp.salarioBase, entry.atrasos);
-  const bruto = emp.salarioBase + insVal + he50Val + he100Val + dsrHE + comissaoVal + entry.adicionais - faltaVal - atrasoVal;
-  const inss = calcINSS(bruto);
-  const irrf = calcIRRF(bruto - inss);
-  const fgts = calcFGTS(bruto);
-  const liquido = bruto - inss - irrf - adiantamento - entry.descontosDiversos;
+  const he50Val = round2(valorHora * 1.5 * (entry.he50 || 0));
+  const he100Val = round2(valorHora * 2 * (entry.he100 || 0));
+  const totalHE = round2(he50Val + he100Val);
+  const dsrHE = diasUteis > 0 ? round2((totalHE / diasUteis) * domingosFeriados) : 0;
+  const comissaoBase = entry.comissaoBase || 0;
+  const comissaoPct = opts.comissaoPct || 0;
+  const comissaoVal = round2(comissaoBase * comissaoPct);
+  const dsrComissao = diasUteis > 0 && comissaoVal > 0
+    ? round2((comissaoVal / diasUteis) * domingosFeriados)
+    : 0;
+  const faltaVal = round2(calcFalta(emp.salarioBase, entry.faltasDias || 0));
+  const atrasoVal = round2(calcAtraso(emp.salarioBase, entry.atrasos || 0));
+  const adicionais = round2(entry.adicionais || 0);
+  const descontosDiversos = round2(entry.descontosDiversos || 0);
+  const proventos = round2(emp.salarioBase + insVal + he50Val + he100Val + dsrHE + comissaoVal + dsrComissao + adicionais);
+  const descontosOperacionais = round2(faltaVal + atrasoVal);
+  const bruto = round2(Math.max(0, proventos - descontosOperacionais));
+  const baseINSS = bruto;
+  const inss = calcINSS(baseINSS);
+  const baseIRRF = round2(Math.max(0, baseINSS - inss));
+  const irrf = calcIRRF(baseIRRF, opts.dependentes || 0, baseINSS);
+  const baseFGTS = bruto;
+  const fgts = calcFGTS(baseFGTS);
+  const descontosLegais = round2(inss + irrf);
+  const liquido = round2(bruto - descontosLegais - adiantamento - descontosDiversos);
+  const pendencias = [
+    emp.salarioBase > 0 ? '' : 'salario',
+    diasUteis > 0 ? '' : 'dias_uteis',
+  ].filter(Boolean);
 
-  return { he50Val, he100Val, dsrHE, insVal, comissaoVal, faltaVal, atrasoVal, bruto, inss, irrf, fgts, adiantamento, liquido };
+  return {
+    valorHora: round2(valorHora),
+    he50Val,
+    he100Val,
+    totalHE,
+    dsrHE,
+    insVal,
+    comissaoBase,
+    comissaoPct,
+    comissaoVal,
+    dsrComissao,
+    faltaVal,
+    atrasoVal,
+    adicionais,
+    proventos,
+    bruto,
+    baseINSS,
+    inss,
+    baseFGTS,
+    irrf,
+    baseIRRF,
+    fgts,
+    fgtsInformativo: fgts,
+    adiantamento: round2(adiantamento),
+    descontosDiversos,
+    descontosLegais,
+    descontosOperacionais,
+    liquido,
+    pendencias,
+  };
 };
 
 export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22) => {

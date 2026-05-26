@@ -14,9 +14,11 @@ import { toast } from 'sonner';
 import { calcularRescisao, tipoRescisaoLabel, type TipoRescisao, type AvisoPrevio } from '@/lib/rescisaoCalc';
 import { buildRescisaoHtml } from '@/lib/rescisaoPdf';
 import { printDocumentInPage } from '@/lib/printInPage';
-import { formatCurrency } from '@/lib/calculations';
+import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
+import { getWorkingDays } from '@/lib/workingDays';
 import { openEmailClient, getDestinatariosRescisao, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
+import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 
 const isMissingRescisaoSchema = (error: any) => {
   const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
@@ -28,7 +30,7 @@ const isMissingRescisaoSchema = (error: any) => {
 };
 
 const RescisaoPage: React.FC = () => {
-  const { session, employees, companies, refreshData } = useApp();
+  const { session, employees, companies, entries, refreshData } = useApp();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [list, setList] = useState<any[]>([]);
@@ -65,6 +67,33 @@ const RescisaoPage: React.FC = () => {
   const emp = employees.find((employee) => employee.id === empId);
   const empresa = emp ? companies.find((company) => company.id === emp.companyId) : null;
 
+  const mediasRescisao = useMemo(() => {
+    if (!emp || !empresa) return { mediaHorasExtras: 0, mediaComissao: 0, meses: 0 };
+    const competenciaLimite = dataDesligamento.slice(0, 7);
+    const historico = entries
+      .filter((entry) => entry.employeeId === emp.id && entry.competencia <= competenciaLimite)
+      .sort((a, b) => b.competencia.localeCompare(a.competencia))
+      .slice(0, 12);
+    if (!historico.length) return { mediaHorasExtras: 0, mediaComissao: 0, meses: 0 };
+
+    const comissaoPct = getComissaoPercentual(empresa);
+    const totais = historico.reduce((acc, entry) => {
+      const diasUteis = getWorkingDays(entry.competencia);
+      const [y, m] = entry.competencia.split('-').map(Number);
+      const domingosFeriados = new Date(y, m, 0).getDate() - diasUteis;
+      const payroll = calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct });
+      acc.horasExtras += payroll.he50Val + payroll.he100Val + payroll.dsrHE;
+      acc.comissao += payroll.comissaoVal + payroll.dsrComissao;
+      return acc;
+    }, { horasExtras: 0, comissao: 0 });
+
+    return {
+      mediaHorasExtras: Math.round((totais.horasExtras / historico.length) * 100) / 100,
+      mediaComissao: Math.round((totais.comissao / historico.length) * 100) / 100,
+      meses: historico.length,
+    };
+  }, [emp, empresa, entries, dataDesligamento]);
+
   const resultado = useMemo(() => {
     if (!emp) return null;
     return calcularRescisao({
@@ -77,8 +106,10 @@ const RescisaoPage: React.FC = () => {
       saldoFgtsDepositado: saldoFgts,
       outrosDescontos,
       feriasVencidasMeses,
+      mediaHorasExtras: mediasRescisao.mediaHorasExtras,
+      mediaComissao: mediasRescisao.mediaComissao,
     });
-  }, [emp, dataDesligamento, tipo, aviso, saldoFgts, outrosDescontos, feriasVencidasMeses]);
+  }, [emp, dataDesligamento, tipo, aviso, saldoFgts, outrosDescontos, feriasVencidasMeses, mediasRescisao]);
 
   const resultadoFromRow = (r: any) => ({
     diasAviso: Number(r.dias_aviso) || 0,
@@ -88,6 +119,9 @@ const RescisaoPage: React.FC = () => {
     feriasProporcionais: Number(r.ferias_proporcionais) || 0,
     tercoFerias: Number(r.terco_ferias) || 0,
     decimoTerceiro: Number(r.decimo_terceiro) || 0,
+    mediaHorasExtras: Number(r.snapshot_json?.mediaHorasExtras) || 0,
+    mediaComissao: Number(r.snapshot_json?.mediaComissao) || 0,
+    baseRemuneracao: Number(r.snapshot_json?.baseRemuneracao) || Number(r.salario_base) || 0,
     inss: Number(r.inss) || 0,
     irrf: Number(r.irrf) || 0,
     fgtsMes: Number(r.fgts_mes) || 0,
@@ -130,6 +164,8 @@ const RescisaoPage: React.FC = () => {
     'Resumo dos valores calculados:',
     `Saldo de salario: ${formatCurrency(Number(r.saldo_salario) || 0)}`,
     `Aviso previo: ${formatCurrency(Number(r.aviso_previo_valor) || 0)}`,
+    `Media horas extras: ${formatCurrency(Number(r.snapshot_json?.mediaHorasExtras) || 0)}`,
+    `Media comissao: ${formatCurrency(Number(r.snapshot_json?.mediaComissao) || 0)}`,
     `Ferias vencidas: ${formatCurrency(Number(r.ferias_vencidas) || 0)}`,
     `Ferias proporcionais: ${formatCurrency(Number(r.ferias_proporcionais) || 0)}`,
     `1/3 ferias: ${formatCurrency(Number(r.terco_ferias) || 0)}`,
@@ -322,15 +358,15 @@ const RescisaoPage: React.FC = () => {
               </div>
               <div>
                 <Label>Saldo FGTS depositado (R$)</Label>
-                <Input type="number" step="0.01" value={saldoFgts} onChange={(e) => setSaldoFgts(Number(e.target.value))} />
+                <MoneyInput value={saldoFgts} onValueChange={setSaldoFgts} />
               </div>
               <div>
                 <Label>Meses de ferias vencidas</Label>
-                <Input type="number" value={feriasVencidasMeses} onChange={(e) => setFeriasVencidasMeses(Number(e.target.value))} placeholder="0 ou 12" />
+                <DecimalInput value={feriasVencidasMeses} decimals={0} onValueChange={setFeriasVencidasMeses} placeholder="0 ou 12" />
               </div>
               <div>
                 <Label>Outros descontos (R$)</Label>
-                <Input type="number" step="0.01" value={outrosDescontos} onChange={(e) => setOutrosDescontos(Number(e.target.value))} />
+                <MoneyInput value={outrosDescontos} onValueChange={setOutrosDescontos} />
               </div>
               <div className="md:col-span-2">
                 <Label>Motivo</Label>
@@ -344,6 +380,9 @@ const RescisaoPage: React.FC = () => {
               {resultado && (
                 <div className="md:col-span-2 bg-muted p-3 rounded space-y-1 text-sm">
                   <div className="font-bold text-base mb-2">Previa dos calculos</div>
+                  <div className="flex justify-between"><span>Base de remuneracao</span><span>{formatCurrency(resultado.baseRemuneracao)}</span></div>
+                  <div className="flex justify-between"><span>Media HE ({mediasRescisao.meses} meses)</span><span>{formatCurrency(resultado.mediaHorasExtras)}</span></div>
+                  <div className="flex justify-between"><span>Media comissao ({mediasRescisao.meses} meses)</span><span>{formatCurrency(resultado.mediaComissao)}</span></div>
                   <div className="flex justify-between"><span>Saldo de salario</span><span>{formatCurrency(resultado.saldoSalario)}</span></div>
                   {resultado.avisoPrevioValor > 0 && <div className="flex justify-between"><span>Aviso previo indenizado ({resultado.diasAviso} dias)</span><span>{formatCurrency(resultado.avisoPrevioValor)}</span></div>}
                   {resultado.feriasVencidas > 0 && <div className="flex justify-between"><span>Ferias vencidas</span><span>{formatCurrency(resultado.feriasVencidas)}</span></div>}
@@ -354,6 +393,8 @@ const RescisaoPage: React.FC = () => {
                   <div className="flex justify-between text-destructive"><span>(-) INSS</span><span>{formatCurrency(resultado.inss)}</span></div>
                   <div className="flex justify-between text-destructive"><span>(-) IRRF</span><span>{formatCurrency(resultado.irrf)}</span></div>
                   {resultado.outrosDescontos > 0 && <div className="flex justify-between text-destructive"><span>(-) Outros</span><span>{formatCurrency(resultado.outrosDescontos)}</span></div>}
+                  <div className="flex justify-between text-muted-foreground"><span>FGTS rescisorio/informativo</span><span>{formatCurrency(resultado.fgtsMes)}</span></div>
+                  <div className="text-xs text-muted-foreground">Bases: INSS {formatCurrency(resultado.detalhe.baseInssMes || 0)} + 13o {formatCurrency(resultado.detalhe.baseInss13 || 0)}; IRRF {formatCurrency(resultado.detalhe.baseIrrfMes || 0)} + 13o {formatCurrency(resultado.detalhe.baseIrrf13 || 0)}.</div>
                   <div className="flex justify-between font-bold text-lg border-t pt-2 mt-2 text-success"><span>Liquido</span><span>{formatCurrency(resultado.liquido)}</span></div>
                   <div className="text-xs text-muted-foreground">Ao salvar, o funcionario sera marcado como desligado e o e-mail sera aberto com a ficha preenchida.</div>
                 </div>

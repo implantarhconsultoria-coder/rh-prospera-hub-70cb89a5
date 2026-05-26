@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Clock, FileText, Lock, Save, Table, Trash2, Upload, UtensilsCrossed, Bus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
-import { calcAtraso, calcFalta, calcFGTS, calcINSS, calcIRRF, calcTotalFuncionario, formatCurrency } from '@/lib/calculations';
+import { calcPayrollBreakdown, calcTotalFuncionario, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const FechamentoPage: React.FC = () => {
@@ -23,6 +24,10 @@ const FechamentoPage: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!selectedCompany && companies.length) setSelectedCompany(companies[0].id);
+  }, [companies, selectedCompany]);
+
+  useEffect(() => {
     const du = getWorkingDays(competencia);
     const [y, m] = competencia.split('-').map(Number);
     setDiasUteisManual(du);
@@ -36,7 +41,8 @@ const FechamentoPage: React.FC = () => {
   const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional');
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
-  const comissaoPct = selectedCompany === 'topac-gyn' ? 0.02 : 0.01;
+  const selectedCompanyData = companies.find(c => c.id === selectedCompany);
+  const comissaoPct = getComissaoPercentual(selectedCompanyData);
   const diasUteis = diasUteisManual;
 
   const getFaltaDatas = (observacoes = '') => observacoes.match(/FALTAS:\s*([^|]+)/i)?.[1]?.trim() || '';
@@ -46,22 +52,13 @@ const FechamentoPage: React.FC = () => {
   };
 
   const calcPayroll = (emp: typeof compEmps[0], entry: typeof compEntries[0]) => {
-    const adiantamento = entry.adiantamento && entry.adiantamento > 0 ? entry.adiantamento : Math.round(emp.salarioBase * 0.4 * 100) / 100;
-    const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
-    const valorHora = (emp.salarioBase + insVal) / 220;
-    const he50Val = valorHora * 1.5 * entry.he50;
-    const he100Val = valorHora * 2 * entry.he100;
-    const dsrHE = diasUteis > 0 ? ((he50Val + he100Val) / diasUteis) * domingosFeriados : 0;
-    const comissaoVal = (entry.comissaoBase || 0) * comissaoPct;
-    const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
-    const atrasoVal = calcAtraso(emp.salarioBase, entry.atrasos);
-    const bruto = emp.salarioBase + insVal + he50Val + he100Val + dsrHE + comissaoVal + entry.adicionais - faltaVal - atrasoVal;
-    const inss = calcINSS(bruto);
-    const irrf = calcIRRF(bruto - inss);
-    const fgts = calcFGTS(bruto);
-    const liquido = bruto - inss - irrf - adiantamento - entry.descontosDiversos;
     const calc = calcTotalFuncionario(emp, entry, diasUteis);
-    return { he50Val, he100Val, dsrHE, insVal, comissaoVal, faltaVal, atrasoVal, bruto, inss, irrf, fgts, adiantamento, liquido, vrDisplay: calc.vrVal, vrDiasEfetivos: calc.vrDiasEfetivos, vtDisplay: calc.vtVal };
+    return {
+      ...calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct }),
+      vrDisplay: calc.vrVal,
+      vrDiasEfetivos: calc.vrDiasEfetivos,
+      vtDisplay: calc.vtVal,
+    };
   };
 
   const totals = useMemo(() => {
@@ -72,18 +69,18 @@ const FechamentoPage: React.FC = () => {
       const c = calcTotalFuncionario(emp, entry, diasUteis);
       acc.tBruto += p.bruto; acc.tINSS += p.inss; acc.tIRRF += p.irrf; acc.tFGTS += p.fgts; acc.tLiq += p.liquido;
       acc.tBen += c.vrVal + c.vaVal + c.vtVal; acc.tIns += p.insVal; acc.tFD += entry.faltasDias; acc.tFV += p.faltaVal;
-      acc.tAdiant += p.adiantamento; acc.tComissao += p.comissaoVal;
+      acc.tAdiant += p.adiantamento; acc.tComissao += p.comissaoVal; acc.tDSRHE += p.dsrHE; acc.tDSRComissao += p.dsrComissao;
       return acc;
-    }, { tBruto: 0, tINSS: 0, tIRRF: 0, tFGTS: 0, tLiq: 0, tBen: 0, tIns: 0, tFD: 0, tFV: 0, tAdiant: 0, tComissao: 0 });
+    }, { tBruto: 0, tINSS: 0, tIRRF: 0, tFGTS: 0, tLiq: 0, tBen: 0, tIns: 0, tFD: 0, tFV: 0, tAdiant: 0, tComissao: 0, tDSRHE: 0, tDSRComissao: 0 });
   }, [compEmps, compEntries, diasUteis, domingosFeriados, comissaoPct]);
 
   const exportApontamentoCsv = () => {
-    const headers = ['Funcionario', 'Empresa', 'Faltas', 'Datas das faltas', 'HE 50%', 'HE 100%', 'Comissao/Adicional', 'Observacoes'];
+    const headers = ['Funcionario', 'Empresa', 'Faltas', 'Datas das faltas', 'HE 50%', 'HE 100%', 'Valor HE', 'DSR HE', 'Comissao', 'DSR Comissao', 'Adicional', 'INSS', 'IRRF', 'FGTS informativo', 'Liquido', 'Observacoes'];
     const rows = compEmps.map(emp => {
       const entry = compEntries.find(e => e.employeeId === emp.id);
       if (!entry) return null;
       const p = calcPayroll(emp, entry);
-      return [emp.name, companies.find(c => c.id === emp.companyId)?.name || '', entry.faltasDias, getFaltaDatas(entry.observacoes), entry.he50, entry.he100, p.comissaoVal + entry.adicionais, entry.observacoes];
+      return [emp.name, companies.find(c => c.id === emp.companyId)?.name || '', entry.faltasDias, getFaltaDatas(entry.observacoes), entry.he50, entry.he100, p.totalHE, p.dsrHE, p.comissaoVal, p.dsrComissao, entry.adicionais, p.inss, p.irrf, p.fgtsInformativo, p.liquido, entry.observacoes];
     }).filter(Boolean) as Array<Array<string | number>>;
     const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -121,37 +118,101 @@ const FechamentoPage: React.FC = () => {
           {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="w-48" />
-        <span className="text-xs text-muted-foreground">Dias uteis:</span><Input type="number" value={diasUteisManual} onChange={e => setDiasUteisManual(Number(e.target.value))} className="w-16 text-xs h-7" />
-        <span className="text-xs text-muted-foreground">Dom/Feriados:</span><Input type="number" value={domingosFeriados} onChange={e => setDomingosFeriados(Number(e.target.value))} className="w-16 text-xs h-7" />
+        <span className="text-xs text-muted-foreground">Dias uteis:</span><DecimalInput value={diasUteisManual} decimals={0} onValueChange={setDiasUteisManual} className="w-16 text-xs h-7" />
+        <span className="text-xs text-muted-foreground">Dom/Feriados:</span><DecimalInput value={domingosFeriados} decimals={0} onValueChange={setDomingosFeriados} className="w-16 text-xs h-7" />
         <Badge className={`${statusColor} ml-2`}>{fechamento.status.replace('_', ' ')}</Badge>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[['Total Bruto', totals.tBruto], ['Total INSS', totals.tINSS], ['Total IRRF', totals.tIRRF], ['Total FGTS', totals.tFGTS], ['Beneficios VR/VT/VA', totals.tBen], ['Liquido Estimado', totals.tLiq], ['Faltas (dias)', totals.tFD], ['Funcionarios', compEmps.length]].map(([label, value]) => (
+        {[['Total Bruto', totals.tBruto], ['Total INSS', totals.tINSS], ['Total IRRF', totals.tIRRF], ['FGTS Info', totals.tFGTS], ['Beneficios VR/VT/VA', totals.tBen], ['Liquido Estimado', totals.tLiq], ['Faltas (dias)', totals.tFD], ['Funcionarios', compEmps.length]].map(([label, value]) => (
           <div key={String(label)} className="card-premium p-4 text-center"><p className="text-xs text-muted-foreground uppercase">{label}</p><p className="text-lg font-bold font-display mt-1">{typeof value === 'number' && label !== 'Faltas (dias)' && label !== 'Funcionarios' ? formatCurrency(value) : value}</p></div>
         ))}
       </div>
 
       <div className="card-premium overflow-x-auto">
-        <table className="w-full text-sm"><thead><tr className="border-b bg-muted/50">{['Funcionario','Salario','Faltas','Datas faltas','Atrasos','HE50','HE100','DSR','Adic.','VR','VT','Comissao','INSS','FGTS','IRRF','Desc.','Adiant.','Liquido','Acoes'].map(h => <th key={h} className="px-2 py-3 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>)}</tr></thead>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              {['Nome', 'Cargo', 'Salario fixo', 'Insalubridade', 'HE 50%', 'HE 100%', 'DSR HE', 'Comissao', 'DSR Comissao', 'Faltas/Desc.', 'Adiantamento', 'INSS', 'IRRF', 'Liquido final', 'FGTS info', 'Acoes'].map(h => (
+                <th key={h} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
           <tbody>{compEmps.map(emp => {
             const entry = compEntries.find(e => e.employeeId === emp.id); if (!entry) return null;
             const p = calcPayroll(emp, entry); const update = (data: any) => updateEntry(emp.id, competencia, data);
-            return <tr key={emp.id} className="border-b hover:bg-muted/20">
-              <td className="px-2 py-2 font-medium whitespace-nowrap text-xs">{emp.name}</td><td className="px-2 py-2 text-xs">{formatCurrency(emp.salarioBase)}</td>
-              <td className="px-2 py-2"><Input type="number" value={entry.faltasDias} onChange={e => update({ faltasDias: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
-              <td className="px-2 py-2"><Input value={getFaltaDatas(entry.observacoes)} onChange={e => update({ observacoes: setFaltaDatas(entry.observacoes, e.target.value) })} placeholder="19, 22" className="w-24 text-xs h-7" /></td>
-              <td className="px-2 py-2"><Input type="number" value={entry.atrasos} onChange={e => update({ atrasos: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
-              <td className="px-2 py-2"><Input type="number" value={entry.he50} onChange={e => update({ he50: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
-              <td className="px-2 py-2"><Input type="number" value={entry.he100} onChange={e => update({ he100: Number(e.target.value) })} className="w-14 text-xs h-7" /></td>
-              <td className="px-2 py-2 text-xs">{formatCurrency(p.dsrHE)}</td><td className="px-2 py-2"><Input type="number" value={entry.adicionais} onChange={e => update({ adicionais: Number(e.target.value) })} className="w-16 text-xs h-7" /></td>
-              <td className="px-2 py-2 text-xs">{entry.vrAplicado && emp.vrAtivo ? `${formatCurrency(p.vrDisplay)} (${p.vrDiasEfetivos}d)` : '-'}</td><td className="px-2 py-2 text-xs">{entry.vtAplicado && emp.vtAtivo ? formatCurrency(p.vtDisplay) : '-'}</td>
-              <td className="px-2 py-2"><Input type="number" value={entry.comissaoBase || ''} onChange={e => update({ comissaoBase: Number(e.target.value) })} placeholder="Base" className="w-20 text-xs h-7" /></td>
-              <td className="px-2 py-2 text-xs text-destructive">{formatCurrency(p.inss)}</td><td className="px-2 py-2 text-xs">{formatCurrency(p.fgts)}</td><td className="px-2 py-2 text-xs text-destructive">{p.irrf > 0 ? formatCurrency(p.irrf) : '-'}</td>
-              <td className="px-2 py-2"><Input type="number" value={entry.descontosDiversos} onChange={e => update({ descontosDiversos: Number(e.target.value) })} className="w-16 text-xs h-7" /></td><td className="px-2 py-2 text-xs">{formatCurrency(p.adiantamento)}</td><td className="px-2 py-2 font-bold text-xs">{formatCurrency(p.liquido)}</td>
-              <td className="px-2 py-2"><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Apagar lancamento de {emp.name}?</AlertDialogTitle><AlertDialogDescription>Os valores variaveis serao removidos deste fechamento.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteEntry(emp.id, competencia)} className="bg-destructive text-destructive-foreground">Apagar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></td>
-            </tr>;
-          })}</tbody></table>
+            return (
+              <tr key={emp.id} className="border-b hover:bg-muted/20 align-top">
+                <td className="px-3 py-3 font-medium whitespace-nowrap text-xs">
+                  {emp.name}
+                  {p.pendencias.length > 0 && <Badge variant="destructive" className="ml-2 text-[10px]">Pendente conferencia</Badge>}
+                </td>
+                <td className="px-3 py-3 text-xs min-w-32">{emp.cargo || '-'}</td>
+                <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{formatCurrency(emp.salarioBase)}</td>
+                <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{p.insVal > 0 ? formatCurrency(p.insVal) : '-'}</td>
+                <td className="px-3 py-3 min-w-36">
+                  <DecimalInput value={entry.he50} decimals={2} onValueChange={(value) => update({ he50: value })} className="w-24 h-8 text-xs text-right" />
+                  <div className="mt-1 text-[11px] text-muted-foreground">Hora {formatCurrency(p.valorHora)} | {formatCurrency(p.he50Val)}</div>
+                </td>
+                <td className="px-3 py-3 min-w-36">
+                  <DecimalInput value={entry.he100} decimals={2} onValueChange={(value) => update({ he100: value })} className="w-24 h-8 text-xs text-right" />
+                  <div className="mt-1 text-[11px] text-muted-foreground">Hora {formatCurrency(p.valorHora)} | {formatCurrency(p.he100Val)}</div>
+                </td>
+                <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{formatCurrency(p.dsrHE)}</td>
+                <td className="px-3 py-3 min-w-40">
+                  <MoneyInput value={entry.comissaoBase || 0} onValueChange={(value) => update({ comissaoBase: value })} placeholder="Base" className="w-28 h-8 text-xs text-right" />
+                  <div className="mt-1 text-[11px] text-muted-foreground">{(p.comissaoPct * 100).toFixed(0)}% = {formatCurrency(p.comissaoVal)}</div>
+                  <div className="mt-2 text-[11px] text-muted-foreground">Adicionais</div>
+                  <MoneyInput value={entry.adicionais || 0} onValueChange={(value) => update({ adicionais: value })} className="w-28 h-8 text-xs text-right" />
+                </td>
+                <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{formatCurrency(p.dsrComissao)}</td>
+                <td className="px-3 py-3 min-w-44">
+                  <div className="flex items-center gap-2">
+                    <DecimalInput value={entry.faltasDias} decimals={1} onValueChange={(value) => update({ faltasDias: value })} className="w-20 h-8 text-xs text-right" />
+                    <Input value={getFaltaDatas(entry.observacoes)} onChange={e => update({ observacoes: setFaltaDatas(entry.observacoes, e.target.value) })} placeholder="Datas" className="w-24 text-xs h-8" />
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span>Atrasos h</span>
+                    <DecimalInput value={entry.atrasos} decimals={2} onValueChange={(value) => update({ atrasos: value })} className="w-20 h-8 text-xs text-right" />
+                  </div>
+                  <div className="mt-1 text-[11px] text-destructive">Faltas/atrasos {formatCurrency(p.descontosOperacionais)}</div>
+                  <MoneyInput value={entry.descontosDiversos || 0} onValueChange={(value) => update({ descontosDiversos: value })} className="mt-2 w-28 h-8 text-xs text-right" />
+                </td>
+                <td className="px-3 py-3">
+                  <MoneyInput value={p.adiantamento} onValueChange={(value) => update({ adiantamento: value })} className="w-28 h-8 text-xs text-right" />
+                </td>
+                <td className="px-3 py-3 text-xs text-destructive tabular-nums whitespace-nowrap">
+                  {formatCurrency(p.inss)}
+                  <div className="text-[11px] text-muted-foreground">Base {formatCurrency(p.baseINSS)}</div>
+                </td>
+                <td className="px-3 py-3 text-xs text-destructive tabular-nums whitespace-nowrap">
+                  {p.irrf > 0 ? formatCurrency(p.irrf) : '-'}
+                  <div className="text-[11px] text-muted-foreground">Base {formatCurrency(p.baseIRRF)}</div>
+                </td>
+                <td className="px-3 py-3 font-bold text-xs text-success tabular-nums whitespace-nowrap">{formatCurrency(p.liquido)}</td>
+                <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                  {formatCurrency(p.fgtsInformativo)}
+                  <div className="text-[11px]">Base {formatCurrency(p.baseFGTS)}</div>
+                </td>
+                <td className="px-3 py-3">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Apagar lancamento de {emp.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>Os valores variaveis serao removidos deste fechamento.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteEntry(emp.id, competencia)} className="bg-destructive text-destructive-foreground">Apagar</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </td>
+              </tr>
+            );
+          })}</tbody>
+        </table>
       </div>
 
       <div className="flex justify-end"><Button variant="outline" size="sm" onClick={async () => { await refreshEntries(); toast.success('Lancamentos recarregados.'); }}><RefreshCw className="w-3.5 h-3.5 mr-2" />Recarregar</Button></div>

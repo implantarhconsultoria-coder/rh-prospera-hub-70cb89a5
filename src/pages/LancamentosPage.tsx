@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/calculations';
 import { Input } from '@/components/ui/input';
+import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -185,12 +186,12 @@ const LancamentosPage: React.FC = () => {
                       <div className="text-xs text-muted-foreground">{emp.cargo}</div>
                     </td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap">{formatCurrency(emp.salarioBase)}</td>
-                    <td className="px-4 py-3 text-center"><Input disabled={isLocked} type="number" min="0" value={entry.faltasDias} onChange={e => update({ faltasDias: Number(e.target.value) })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
-                    <td className="px-4 py-3 text-center"><Input disabled={isLocked} type="number" min="0" step="0.5" value={entry.atrasos} onChange={e => update({ atrasos: Number(e.target.value) })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
-                    <td className="px-4 py-3 text-center"><Input disabled={isLocked} type="number" min="0" step="0.5" value={entry.he50} onChange={e => update({ he50: Number(e.target.value) })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
-                    <td className="px-4 py-3 text-center"><Input disabled={isLocked} type="number" min="0" step="0.5" value={entry.he100} onChange={e => update({ he100: Number(e.target.value) })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
-                    <td className="px-4 py-3 text-right"><Input disabled={isLocked} type="number" min="0" step="0.01" value={entry.adicionais} onChange={e => update({ adicionais: Number(e.target.value) })} className="w-24 h-9 text-sm text-right ml-auto" /></td>
-                    <td className="px-4 py-3 text-right"><Input disabled={isLocked} type="number" min="0" step="0.01" value={entry.descontosDiversos} onChange={e => update({ descontosDiversos: Number(e.target.value) })} className="w-24 h-9 text-sm text-right ml-auto" /></td>
+                    <td className="px-4 py-3 text-center"><DecimalInput disabled={isLocked} value={entry.faltasDias} decimals={1} onValueChange={value => update({ faltasDias: value })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
+                    <td className="px-4 py-3 text-center"><DecimalInput disabled={isLocked} value={entry.atrasos} decimals={2} onValueChange={value => update({ atrasos: value })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
+                    <td className="px-4 py-3 text-center"><DecimalInput disabled={isLocked} value={entry.he50} decimals={2} onValueChange={value => update({ he50: value })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
+                    <td className="px-4 py-3 text-center"><DecimalInput disabled={isLocked} value={entry.he100} decimals={2} onValueChange={value => update({ he100: value })} className="w-20 h-9 text-sm text-center mx-auto" /></td>
+                    <td className="px-4 py-3 text-right"><MoneyInput disabled={isLocked} value={entry.adicionais} onValueChange={value => update({ adicionais: value })} className="w-24 h-9 text-sm text-right ml-auto" /></td>
+                    <td className="px-4 py-3 text-right"><MoneyInput disabled={isLocked} value={entry.descontosDiversos} onValueChange={value => update({ descontosDiversos: value })} className="w-24 h-9 text-sm text-right ml-auto" /></td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap text-muted-foreground">{formatCurrency(entry.adiantamento || 0)}</td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap text-muted-foreground">{emp.insalubridadeAtiva ? formatCurrency(emp.insalubridadeValor) : '—'}</td>
                     <td className="px-4 py-3">

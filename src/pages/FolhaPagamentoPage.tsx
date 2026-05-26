@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { calcINSS, calcIRRF, calcFGTS, calcFalta, calcAtraso, formatCurrency } from '@/lib/calculations';
+import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,31 +39,15 @@ const FolhaPagamentoPage: React.FC = () => {
     [entries, selectedCompany, competencia]
   );
 
-  const comissaoPct = selectedCompany.includes('gyn') ? 0.02 : 0.01;
+  const empresa = companies.find(c => c.id === selectedCompany);
+  const comissaoPct = getComissaoPercentual(empresa);
 
   const calc = (emp: typeof compEmps[0], entry: typeof compEntries[0] | undefined) => {
     const e = entry || {
       faltasDias: 0, atrasos: 0, he50: 0, he100: 0, adicionais: 0,
       descontosDiversos: 0, adiantamento: 0, comissaoBase: 0, insalubridadeAplicada: false,
     } as any;
-    const adiantamento = e.adiantamento ?? Math.round(emp.salarioBase * 0.4 * 100) / 100;
-    const insVal = e.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
-    const baseHE = emp.salarioBase + insVal;
-    const valorHora = baseHE / 220;
-    const he50Val = valorHora * 1.5 * (e.he50 || 0);
-    const he100Val = valorHora * 2 * (e.he100 || 0);
-    const totalHE = he50Val + he100Val;
-    const dsr = diasUteis > 0 ? (totalHE / diasUteis) * domingosFeriados : 0;
-    const comissaoVal = (e.comissaoBase || 0) * comissaoPct;
-    const faltaVal = calcFalta(emp.salarioBase, e.faltasDias || 0);
-    const atrasoVal = calcAtraso(emp.salarioBase, e.atrasos || 0);
-    const bruto =
-      emp.salarioBase + insVal + he50Val + he100Val + dsr + comissaoVal + (e.adicionais || 0) - faltaVal - atrasoVal;
-    const inss = calcINSS(bruto);
-    const irrf = calcIRRF(bruto - inss);
-    const fgts = calcFGTS(bruto);
-    const liquido = bruto - inss - irrf - adiantamento - (e.descontosDiversos || 0);
-    return { he50Val, he100Val, dsr, insVal, comissaoVal, faltaVal, atrasoVal, bruto, inss, irrf, fgts, adiantamento, liquido };
+    return calcPayrollBreakdown(emp, e, { diasUteis, domingosFeriados, comissaoPct });
   };
 
   const totals = useMemo(() => {
@@ -75,8 +59,6 @@ const FolhaPagamentoPage: React.FC = () => {
     });
     return { bruto, inss, irrf, fgts, liq };
   }, [compEmps, compEntries, diasUteis]);
-
-  const empresa = companies.find(c => c.id === selectedCompany);
 
   const imprimirFolha = () => {
     if (!empresa) return;
@@ -108,7 +90,8 @@ const FolhaPagamentoPage: React.FC = () => {
     if (p.insVal > 0) linhas.push({ descricao: 'Insalubridade', referencia: '', proventos: p.insVal, descontos: 0 });
     if (p.he50Val > 0) linhas.push({ descricao: 'Horas Extras 50%', referencia: `${entry?.he50 ?? 0}h`, proventos: p.he50Val, descontos: 0 });
     if (p.he100Val > 0) linhas.push({ descricao: 'Horas Extras 100%', referencia: `${entry?.he100 ?? 0}h`, proventos: p.he100Val, descontos: 0 });
-    if (p.dsr > 0) linhas.push({ descricao: 'DSR sobre HE', referencia: '', proventos: p.dsr, descontos: 0 });
+    if (p.dsrHE > 0) linhas.push({ descricao: 'DSR sobre HE', referencia: '', proventos: p.dsrHE, descontos: 0 });
+    if (p.dsrComissao > 0) linhas.push({ descricao: 'DSR sobre comissao', referencia: '', proventos: p.dsrComissao, descontos: 0 });
     if (p.comissaoVal > 0) linhas.push({ descricao: 'Comissão', referencia: '', proventos: p.comissaoVal, descontos: 0 });
     if (entry?.adicionais) linhas.push({ descricao: 'Adicionais', referencia: '', proventos: entry.adicionais, descontos: 0 });
     if (p.faltaVal > 0) linhas.push({ descricao: 'Faltas', referencia: `${entry?.faltasDias ?? 0} dias`, proventos: 0, descontos: p.faltaVal });
@@ -194,7 +177,7 @@ const FolhaPagamentoPage: React.FC = () => {
                   <td className="p-2 text-right">{formatCurrency(p.insVal)}</td>
                   <td className="p-2 text-right">{formatCurrency(p.he50Val)}</td>
                   <td className="p-2 text-right">{formatCurrency(p.he100Val)}</td>
-                  <td className="p-2 text-right">{formatCurrency(p.dsr)}</td>
+                  <td className="p-2 text-right">{formatCurrency(p.dsrHE + p.dsrComissao)}</td>
                   <td className="p-2 text-right">{formatCurrency(p.comissaoVal)}</td>
                   <td className="p-2 text-right">{formatCurrency(entry?.adicionais || 0)}</td>
                   <td className="p-2 text-right text-destructive">{formatCurrency(p.faltaVal)}</td>
