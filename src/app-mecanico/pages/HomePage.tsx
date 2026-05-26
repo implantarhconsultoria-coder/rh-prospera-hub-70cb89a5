@@ -44,9 +44,9 @@ export default function HomePage() {
 
   const cards: Card[] = [
     { label: "Entrada", sub: "Bater ponto", icon: LogIn, to: `${base}/ponto?tipo=entrada`, tint: "from-cyan-400 to-violet-500" },
-    { label: "Almoco", sub: "Inicio", icon: UtensilsCrossed, to: `${base}/ponto?tipo=almoco_inicio`, tint: "from-sky-500/20 to-violet-500/20" },
-    { label: "Retorno", sub: "Almoco", icon: Coffee, to: `${base}/ponto?tipo=almoco_fim`, tint: "from-sky-500/20 to-violet-500/20" },
-    { label: "Saida", sub: "Encerrar dia", icon: LogOut, to: `${base}/ponto?tipo=saida`, tint: "from-cyan-400/20 to-fuchsia-500/20" },
+    { label: "Início Almoço", sub: "Pausa", icon: UtensilsCrossed, to: `${base}/ponto?tipo=almoco_inicio`, tint: "from-sky-500/20 to-violet-500/20" },
+    { label: "Retorno Almoço", sub: "Voltar", icon: Coffee, to: `${base}/ponto?tipo=almoco_fim`, tint: "from-sky-500/20 to-violet-500/20" },
+    { label: "Saída", sub: "Encerrar dia", icon: LogOut, to: `${base}/ponto?tipo=saida`, tint: "from-cyan-400/20 to-fuchsia-500/20" },
     { label: "Chamados", sub: "Atendimentos", icon: ClipboardList, to: `${base}/chamados`, tint: "from-sky-500/20 to-violet-500/20" },
     { label: "Veiculo / KM", sub: "Registrar KM", icon: Car, to: `${base}/veiculo`, tint: "from-sky-500/20 to-violet-500/20" },
     { label: "Abastecer", sub: "QR + bomba", icon: Fuel, to: `${base}/abastecimento`, tint: "from-cyan-400/20 to-violet-500/20" },

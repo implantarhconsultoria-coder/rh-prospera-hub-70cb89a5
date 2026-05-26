@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2, Clock, MapPin, Camera, Fuel, Pencil, Trash2, Save, X } from "lucide-react";
+import { formatarDataHoraBrasil } from "@/lib/brTime";
 
 const TIPO_LABEL: Record<string, string> = {
   entrada: "Entrada",
-  saida: "SaÃ­da",
-  almoco_inicio: "InÃ­cio AlmoÃ§o",
-  almoco_fim: "Retorno AlmoÃ§o",
+  saida: "Saída",
+  almoco_inicio: "Início Almoço",
+  almoco_fim: "Retorno Almoço",
+  almoco_saida: "Início Almoço",
+  almoco_volta: "Retorno Almoço",
 };
 
 export default function HistoricoPage() {
@@ -76,7 +79,7 @@ export default function HistoricoPage() {
     <div className="space-y-4">
       {mecanico.registro_teste && (
         <Card className="border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700">
-          Registros de Teste: estes lanÃ§amentos servem para validaÃ§Ã£o visual e ficam fora dos relatÃ³rios oficiais.
+          Registros de Teste: estes lançamentos servem para validação visual e ficam fora dos relatórios oficiais.
         </Card>
       )}
       <Card className="p-4">
@@ -107,7 +110,7 @@ export default function HistoricoPage() {
                         {a.registro_teste && <span className="ml-2 rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700">TESTE</span>}
                         <p className="text-xs text-muted-foreground">{a.combustivel || "Combustivel"} | {Number(a.litros || 0).toFixed(2)} L | R$ {Number(a.valor || 0).toFixed(2)}</p>
                       </div>
-                      <span className="text-muted-foreground text-xs whitespace-nowrap">{a.data} {a.hora?.slice(0, 5)}</span>
+                      <span className="text-muted-foreground text-xs whitespace-nowrap">{formatarDataHoraBrasil(a.data, a.hora)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[11px] text-muted-foreground">KM {a.km_atual || "-"} | {a.empresa || ""}</span>
@@ -134,7 +137,7 @@ export default function HistoricoPage() {
                   <span className="font-medium">{TIPO_LABEL[p.tipo] || p.tipo}</span>
                   {p.registro_teste && <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700">TESTE</span>}
                   <span className="text-muted-foreground text-xs whitespace-nowrap">
-                    {p.data} {p.hora?.slice(0, 5)}
+                    {formatarDataHoraBrasil(p.data, p.hora)}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">

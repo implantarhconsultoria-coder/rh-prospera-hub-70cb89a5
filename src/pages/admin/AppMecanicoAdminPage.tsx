@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Copy, ExternalLink, Lock, Unlock, Wrench, History, MapPin, Loader2, Plus, Fuel } from "lucide-react";
 import { toast } from "sonner";
+import { formatarDataHoraBrasil } from "@/lib/brTime";
 
 interface Acesso {
   id: string;
@@ -26,9 +27,11 @@ interface Acesso {
 
 const TIPO_LABEL: Record<string, string> = {
   entrada: "Entrada",
-  saida: "Saida",
-  almoco_inicio: "Inicio almoco",
-  almoco_fim: "Retorno almoco",
+  saida: "Saída",
+  almoco_inicio: "Início Almoço",
+  almoco_fim: "Retorno Almoço",
+  almoco_saida: "Início Almoço",
+  almoco_volta: "Retorno Almoço",
 };
 
 const onlyDigits = (value: string) => String(value || "").replace(/\D/g, "");
@@ -245,7 +248,7 @@ export default function AppMecanicoAdminPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {a.ultimo_acesso_em ? new Date(a.ultimo_acesso_em).toLocaleString("pt-BR") : "-"}
+                        {a.ultimo_acesso_em ? new Date(a.ultimo_acesso_em).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "-"}
                       </TableCell>
                       <TableCell className="text-right space-x-1">
                         <Button size="sm" variant="ghost" onClick={() => abrirHistorico(a)} title="Ver historico">
@@ -373,7 +376,7 @@ export default function AppMecanicoAdminPage() {
                       {hist.pontos.map((p) => (
                         <TableRow key={p.id}>
                           <TableCell className="text-sm">
-                            {p.data} {String(p.hora || "").slice(0, 5)}
+                            {formatarDataHoraBrasil(p.data, p.hora)}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{TIPO_LABEL[p.tipo] || p.tipo}</Badge>
@@ -426,7 +429,7 @@ export default function AppMecanicoAdminPage() {
                       {hist.abastecimentos.map((a) => (
                         <TableRow key={a.id}>
                           <TableCell className="text-sm">
-                            {a.data} {String(a.hora || "").slice(0, 5)}
+                            {formatarDataHoraBrasil(a.data, a.hora)}
                           </TableCell>
                           <TableCell className="text-sm">{a.posto_nome || "-"}</TableCell>
                           <TableCell className="text-xs">{a.placa || "-"}</TableCell>

@@ -39,7 +39,7 @@ export const getJornada = (empresaCodigo?: string): JornadaConfig => {
   return JORNADA_PADRAO;
 };
 
-export type TipoBatida = 'entrada' | 'almoco_saida' | 'almoco_volta' | 'saida';
+export type TipoBatida = 'entrada' | 'almoco_saida' | 'almoco_volta' | 'almoco_inicio' | 'almoco_fim' | 'saida';
 
 export interface RegistroPonto {
   id: string;
@@ -131,11 +131,11 @@ export const calcularResumoColaborador = (
   const dias: DiaPonto[] = listarDiasDoMes(competencia).map((data) => {
     const util = isDiaUtil(data);
     const regs = porData.get(data) || [];
-    const get = (tipo: string) => regs.find((r) => r.tipo === tipo)?.hora;
+    const get = (...tipos: string[]) => regs.find((r) => tipos.includes(r.tipo))?.hora;
 
     const entrada = get('entrada');
-    const almocoSaida = get('almoco_saida');
-    const almocoVolta = get('almoco_volta');
+    const almocoSaida = get('almoco_saida', 'almoco_inicio');
+    const almocoVolta = get('almoco_volta', 'almoco_fim');
     const saida = get('saida');
 
     const inconsistencias: string[] = [];
