@@ -13,6 +13,8 @@ import type { AppRole } from '@/hooks/useUserRole';
 
 interface UserWithRole {
   user_id: string;
+  pending_id?: string | null;
+  origem?: 'auth' | 'pendente' | string | null;
   email: string;
   nome_completo: string;
   telefone?: string | null;
@@ -22,7 +24,10 @@ interface UserWithRole {
   cargo?: string | null;
   created_at: string;
   email_confirmed?: boolean;
+  email_confirmed_manual?: boolean;
   blocked?: boolean;
+  status_cadastro?: string | null;
+  email_rate_limited?: boolean;
   roles: AppRole[];
   role: AppRole | null;
   role_id: string | null;
@@ -44,6 +49,7 @@ const ROLE_LABELS: Record<AppRole, { label: string; color: string; portal: strin
 
 const ALL_ROLES: AppRole[] = ['admin', 'diretor_geral', 'filial_matriz', 'filial_praia', 'filial_goiania', 'almoxarifado', 'tecnico_campo', 'operacional', 'faturamento', 'financeiro', 'usuario'];
 const MODULE_ROLES: AppRole[] = ['financeiro', 'faturamento', 'almoxarifado', 'filial_matriz', 'filial_praia', 'filial_goiania', 'operacional', 'tecnico_campo', 'diretor_geral', 'admin'];
+const RATE_LIMIT_MESSAGE = 'Limite temporario de envio de e-mail atingido. O administrador podera liberar o acesso manualmente.';
 
 const rolePriority = (roles: AppRole[]) => ALL_ROLES.find((role) => roles.includes(role)) || null;
 const normalizeRoles = (roles: unknown): AppRole[] => {
@@ -52,11 +58,54 @@ const normalizeRoles = (roles: unknown): AppRole[] => {
   return Array.from(new Set(clean));
 };
 
+const translateAdminError = (error?: string) => {
+  switch (error) {
+    case 'usuario_auth_nao_criado':
+      return 'Cadastro pendente salvo, mas ainda nao existe usuario Auth. Use Reenviar confirmacao ou refaca o cadastro para criar a conta antes de aprovar.';
+    case 'selecione_perfil_ou_modulo':
+      return 'Selecione pelo menos um perfil ou modulo antes de aprovar.';
+    case 'nao_autorizado':
+      return 'Usuario atual nao autorizado para esta acao.';
+    default:
+      return error || 'Falha na operacao.';
+  }
+};
+
+const isRateLimitError = (message?: string) => {
+  const normalized = (message || '').toLowerCase();
+  return normalized.includes('rate limit') || normalized.includes('email rate') || normalized.includes('too many');
+};
+
 const GerenciarUsuariosPage: React.FC = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+
+  const mapAdminUser = (u: any): UserWithRole => {
+    const roles = normalizeRoles(u.roles || (u.role ? [u.role] : []));
+    return {
+      user_id: u.user_id,
+      pending_id: u.pending_id || null,
+      origem: u.origem || 'auth',
+      email: u.email || '',
+      nome_completo: u.nome_completo || '',
+      telefone: u.telefone || null,
+      cpf: u.cpf || null,
+      empresa: u.empresa || null,
+      filial: u.filial || null,
+      cargo: u.cargo || null,
+      created_at: u.created_at,
+      email_confirmed: Boolean(u.email_confirmed),
+      email_confirmed_manual: Boolean(u.email_confirmed_manual),
+      blocked: Boolean(u.blocked),
+      status_cadastro: u.status_cadastro || null,
+      email_rate_limited: Boolean(u.email_rate_limited),
+      roles,
+      role: rolePriority(roles),
+      role_id: u.role_id || null,
+    };
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -64,25 +113,7 @@ const GerenciarUsuariosPage: React.FC = () => {
       .rpc('admin_listar_usuarios_v2');
 
     if (!adminV2Err && Array.isArray(adminUsersV2)) {
-      setUsers(adminUsersV2.map((u: any) => {
-        const roles = normalizeRoles(u.roles || (u.role ? [u.role] : []));
-        return {
-          user_id: u.user_id,
-          email: u.email || '',
-          nome_completo: u.nome_completo || '',
-          telefone: u.telefone || null,
-          cpf: u.cpf || null,
-          empresa: u.empresa || null,
-          filial: u.filial || null,
-          cargo: u.cargo || null,
-          created_at: u.created_at,
-          email_confirmed: Boolean(u.email_confirmed),
-          blocked: Boolean(u.blocked),
-          roles,
-          role: rolePriority(roles),
-          role_id: u.role_id || null,
-        };
-      }));
+      setUsers(adminUsersV2.map(mapAdminUser));
       setLoading(false);
       return;
     }
@@ -101,17 +132,7 @@ const GerenciarUsuariosPage: React.FC = () => {
           .map((r: any) => r.role));
         const roles = allRoles.length ? allRoles : normalizeRoles(u.role ? [u.role] : []);
         return {
-          user_id: u.user_id,
-          email: u.email || '',
-          nome_completo: u.nome_completo || '',
-          telefone: u.telefone || null,
-          cpf: u.cpf || null,
-          empresa: u.empresa || null,
-          filial: u.filial || null,
-          cargo: u.cargo || null,
-          created_at: u.created_at,
-          email_confirmed: Boolean(u.email_confirmed),
-          blocked: Boolean(u.blocked),
+          ...mapAdminUser(u),
           roles,
           role: rolePriority(roles),
           role_id: u.role_id || null,
@@ -140,6 +161,8 @@ const GerenciarUsuariosPage: React.FC = () => {
       const r = roles?.find((role: any) => role.user_id === p.user_id);
       return {
         user_id: p.user_id,
+        pending_id: null,
+        origem: 'auth',
         email: p.email || '',
         nome_completo: p.nome_completo || '',
         telefone: p.telefone || null,
@@ -157,6 +180,8 @@ const GerenciarUsuariosPage: React.FC = () => {
   };
 
   useEffect(() => { fetchUsers(); }, []);
+
+  const getActionKey = (user: UserWithRole) => user.user_id || user.pending_id || user.email;
 
   const updateUserLocal = (userId: string, patch: Partial<UserWithRole>) => {
     setUsers((prev) => prev.map((user) => user.user_id === userId ? { ...user, ...patch } : user));
@@ -180,54 +205,146 @@ const GerenciarUsuariosPage: React.FC = () => {
     updateUserLocal(userId, { roles, role: rolePriority(roles) });
   };
 
-  const handleSaveUser = async (userId: string) => {
-    setSaving(userId);
-    const user = users.find(u => u.user_id === userId);
-    if (!user) {
-      setSaving(null);
+  const saveAuthUser = async (user: UserWithRole) => {
+    const rolesToSave = user.roles.filter((r) => r !== 'usuario');
+    const { data, error } = await (supabase as any).rpc('admin_salvar_usuario_acesso', {
+      p_user_id: user.user_id,
+      p_nome: user.nome_completo || '',
+      p_telefone: user.telefone || '',
+      p_cpf: user.cpf || '',
+      p_empresa: user.empresa || '',
+      p_filial: user.filial || '',
+      p_cargo: user.cargo || '',
+      p_roles: rolesToSave,
+    });
+
+    if (error) throw error;
+    if (data?.ok === false) throw new Error(data.error || 'Falha ao salvar usuario');
+
+    if (!rolesToSave.length) {
+      await supabase.from('user_roles').delete().eq('user_id', user.user_id);
+    }
+  };
+
+  const approvePendingUser = async (user: UserWithRole) => {
+    if (!user.pending_id) {
+      await saveAuthUser(user);
       return;
     }
 
+    const rolesToSave = user.roles.filter((r) => r !== 'usuario');
+    const { data, error } = await (supabase as any).rpc('admin_aprovar_cadastro_pendente', {
+      p_pending_id: user.pending_id,
+      p_nome: user.nome_completo || '',
+      p_telefone: user.telefone || '',
+      p_cpf: user.cpf || '',
+      p_empresa: user.empresa || '',
+      p_filial: user.filial || '',
+      p_cargo: user.cargo || '',
+      p_roles: rolesToSave,
+    });
+
+    if (error) throw error;
+    if (data?.ok === false) throw new Error(data.message || translateAdminError(data.error));
+  };
+
+  const handleSaveUser = async (userId: string) => {
+    const user = users.find(u => u.user_id === userId);
+    if (!user) return;
+
+    setSaving(getActionKey(user));
     try {
-      const rolesToSave = user.roles.filter((r) => r !== 'usuario');
-      const { data, error } = await (supabase as any).rpc('admin_salvar_usuario_acesso', {
-        p_user_id: userId,
-        p_nome: user.nome_completo || '',
-        p_telefone: user.telefone || '',
-        p_cpf: user.cpf || '',
-        p_empresa: user.empresa || '',
-        p_filial: user.filial || '',
-        p_cargo: user.cargo || '',
-        p_roles: rolesToSave,
-      });
-
-      if (error) throw error;
-      if (data?.ok === false) throw new Error(data.error || 'Falha ao salvar usuario');
-
-      if (!rolesToSave.length && user.role_id) {
-        await supabase.from('user_roles').delete().eq('user_id', userId);
-      } else if (!rolesToSave.length) {
-        await supabase.from('user_roles').delete().eq('user_id', userId);
+      if (user.origem === 'pendente') {
+        await approvePendingUser(user);
+      } else {
+        await saveAuthUser(user);
       }
-
       toast.success('Usuario e modulos salvos');
       await fetchUsers();
     } catch (err: any) {
-      toast.error('Erro ao salvar usuario: ' + (err.message || ''));
+      toast.error('Erro ao salvar usuario: ' + translateAdminError(err.message));
     } finally {
       setSaving(null);
     }
   };
 
-  const handleBlock = async (userId: string, bloquear: boolean) => {
-    setSaving(userId);
+  const handleApproveUser = async (user: UserWithRole) => {
+    setSaving(getActionKey(user));
     try {
-      const { data, error } = await (supabase as any).rpc('admin_bloquear_usuario', {
-        p_user_id: userId,
-        p_bloquear: bloquear,
+      await approvePendingUser(user);
+      toast.success('Usuario aprovado e liberado conforme modulos selecionados');
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(translateAdminError(error?.message));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleConfirmEmail = async (user: UserWithRole) => {
+    setSaving(getActionKey(user));
+    try {
+      const { data, error } = await (supabase as any).rpc('admin_confirmar_email_manual', {
+        p_user_id: user.origem === 'auth' ? user.user_id : null,
+        p_pending_id: user.pending_id || null,
       });
       if (error) throw error;
-      if (data?.ok === false) throw new Error(data.error || 'Falha ao alterar bloqueio');
+      if (data?.ok === false) throw new Error(data.error || 'Falha ao confirmar email');
+      toast.success('Email confirmado manualmente');
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(translateAdminError(error?.message));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleResendConfirmation = async (user: UserWithRole) => {
+    setSaving(getActionKey(user));
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: user.email,
+        options: { emailRedirectTo: `${window.location.origin}/login` },
+      });
+      if (error) throw error;
+      await (supabase as any).rpc('admin_marcar_reenvio_confirmacao', {
+        p_email: user.email,
+        p_ok: true,
+        p_error: null,
+      });
+      toast.success('Confirmacao reenviada');
+      await fetchUsers();
+    } catch (error: any) {
+      await (supabase as any).rpc('admin_marcar_reenvio_confirmacao', {
+        p_email: user.email,
+        p_ok: false,
+        p_error: error?.message || 'resend_failed',
+      });
+      toast.error(isRateLimitError(error?.message) ? RATE_LIMIT_MESSAGE : (error?.message || 'Nao foi possivel reenviar confirmacao.'));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleBlock = async (user: UserWithRole, bloquear: boolean) => {
+    setSaving(getActionKey(user));
+    try {
+      if (user.origem === 'pendente' && user.pending_id) {
+        const { data, error } = await (supabase as any).rpc('admin_bloquear_cadastro_pendente', {
+          p_pending_id: user.pending_id,
+          p_bloquear: bloquear,
+        });
+        if (error) throw error;
+        if (data?.ok === false) throw new Error(data.error || 'Falha ao alterar bloqueio');
+      } else {
+        const { data, error } = await (supabase as any).rpc('admin_bloquear_usuario', {
+          p_user_id: user.user_id,
+          p_bloquear: bloquear,
+        });
+        if (error) throw error;
+        if (data?.ok === false) throw new Error(data.error || 'Falha ao alterar bloqueio');
+      }
       toast.success(bloquear ? 'Usuario bloqueado' : 'Usuario desbloqueado');
       await fetchUsers();
     } catch (error: any) {
@@ -237,18 +354,25 @@ const GerenciarUsuariosPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (userId: string) => {
-    const user = users.find((u) => u.user_id === userId);
-    const ok = window.confirm(`Excluir o usuario ${user?.email || userId}? Esta acao remove o acesso.`);
+  const handleDelete = async (user: UserWithRole) => {
+    const ok = window.confirm(`Excluir o usuario ${user.email || user.user_id}? Esta acao remove o acesso.`);
     if (!ok) return;
 
-    setSaving(userId);
+    setSaving(getActionKey(user));
     try {
-      const { data, error } = await (supabase as any).rpc('admin_excluir_usuario', {
-        p_user_id: userId,
-      });
-      if (error) throw error;
-      if (data?.ok === false) throw new Error(data.error || 'Falha ao excluir usuario');
+      if (user.origem === 'pendente' && user.pending_id) {
+        const { data, error } = await (supabase as any).rpc('admin_excluir_cadastro_pendente', {
+          p_pending_id: user.pending_id,
+        });
+        if (error) throw error;
+        if (data?.ok === false) throw new Error(data.error || 'Falha ao excluir cadastro pendente');
+      } else {
+        const { data, error } = await (supabase as any).rpc('admin_excluir_usuario', {
+          p_user_id: user.user_id,
+        });
+        if (error) throw error;
+        if (data?.ok === false) throw new Error(data.error || 'Falha ao excluir usuario');
+      }
       toast.success('Usuario excluido');
       await fetchUsers();
     } catch (error: any) {
@@ -267,6 +391,8 @@ const GerenciarUsuariosPage: React.FC = () => {
     (u.cargo || '').toLowerCase().includes(search.toLowerCase())
   );
 
+  const pendingCount = users.filter(u => u.origem === 'pendente' || !u.role || u.role === 'usuario' || u.status_cadastro === 'email_rate_limit').length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -279,7 +405,7 @@ const GerenciarUsuariosPage: React.FC = () => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Total</p><p className="text-xl font-bold text-primary">{users.length}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Pendentes</p><p className="text-xl font-bold text-warning">{users.filter(u => !u.role || u.role === 'usuario').length}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Pendentes</p><p className="text-xl font-bold text-warning">{pendingCount}</p></div>
         <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Confirmados</p><p className="text-xl font-bold text-success">{users.filter(u => u.email_confirmed).length}</p></div>
         <div className="card-premium p-4"><p className="text-[10px] text-muted-foreground uppercase">Bloqueados</p><p className="text-xl font-bold text-destructive">{users.filter(u => u.blocked).length}</p></div>
       </div>
@@ -305,8 +431,10 @@ const GerenciarUsuariosPage: React.FC = () => {
                 <TableBody>
                   {filtered.map(user => {
                     const meta = user.role ? ROLE_LABELS[user.role] : null;
+                    const actionKey = getActionKey(user);
+                    const isSaving = saving === actionKey;
                     return (
-                      <TableRow key={user.user_id}>
+                      <TableRow key={`${user.origem || 'auth'}-${user.user_id}`}>
                         <TableCell className="min-w-[260px]">
                           <div className="space-y-2">
                             <Input value={user.nome_completo || ''} onChange={(e) => updateUserLocal(user.user_id, { nome_completo: e.target.value })} placeholder="Nome completo" />
@@ -325,13 +453,16 @@ const GerenciarUsuariosPage: React.FC = () => {
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             {user.blocked ? <Badge variant="destructive">Bloqueado</Badge> : user.email_confirmed ? <Badge className="bg-green-500 text-white">Email confirmado</Badge> : <Badge variant="secondary">Email pendente</Badge>}
+                            {user.email_confirmed_manual ? <Badge className="bg-emerald-600 text-white">Confirmado manual</Badge> : null}
+                            {user.email_rate_limited || user.status_cadastro === 'email_rate_limit' ? <Badge variant="destructive">Rate limit e-mail</Badge> : null}
+                            {user.origem === 'pendente' ? <Badge variant="outline">Cadastro pendente</Badge> : null}
                             {!user.role || user.role === 'usuario' ? <Badge variant="outline">Aguardando liberacao</Badge> : null}
                           </div>
                         </TableCell>
                         <TableCell className="min-w-[220px]">
                           <div className="space-y-2">
                             {meta ? <Badge className={`${meta.color} text-white`}>{meta.label}</Badge> : <Badge variant="outline">Sem perfil</Badge>}
-                            <Select value={user.role || ''} onValueChange={(val) => setPrimaryRole(user.user_id, val as AppRole)} disabled={saving === user.user_id}>
+                            <Select value={user.role || ''} onValueChange={(val) => setPrimaryRole(user.user_id, val as AppRole)} disabled={isSaving}>
                               <SelectTrigger className="w-full"><SelectValue placeholder="Perfil principal..." /></SelectTrigger>
                               <SelectContent>{ALL_ROLES.map(r => <SelectItem key={r} value={r}>{ROLE_LABELS[r].label}</SelectItem>)}</SelectContent>
                             </Select>
@@ -342,22 +473,31 @@ const GerenciarUsuariosPage: React.FC = () => {
                           <div className="grid grid-cols-2 gap-2">
                             {MODULE_ROLES.map((r) => (
                               <label key={r} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs">
-                                <Checkbox checked={user.roles.includes(r)} onCheckedChange={(checked) => toggleModuleRole(user.user_id, r, checked === true)} disabled={saving === user.user_id} />
+                                <Checkbox checked={user.roles.includes(r)} onCheckedChange={(checked) => toggleModuleRole(user.user_id, r, checked === true)} disabled={isSaving} />
                                 <span>{ROLE_LABELS[r].label}</span>
                               </label>
                             ))}
                           </div>
                         </TableCell>
-                        <TableCell className="min-w-[180px]">
+                        <TableCell className="min-w-[240px]">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Button size="sm" onClick={() => handleSaveUser(user.user_id)} disabled={saving === user.user_id}>Salvar</Button>
-                            <Button size="sm" variant={user.blocked ? 'outline' : 'destructive'} onClick={() => handleBlock(user.user_id, !user.blocked)} disabled={saving === user.user_id}>
+                            <Button size="sm" onClick={() => handleSaveUser(user.user_id)} disabled={isSaving}>Salvar</Button>
+                            <Button size="sm" variant="default" onClick={() => handleApproveUser(user)} disabled={isSaving}>
+                              Aprovar
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleResendConfirmation(user)} disabled={isSaving || !user.email}>
+                              Reenviar confirmacao
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleConfirmEmail(user)} disabled={isSaving}>
+                              Confirmar email
+                            </Button>
+                            <Button size="sm" variant={user.blocked ? 'outline' : 'destructive'} onClick={() => handleBlock(user, !user.blocked)} disabled={isSaving}>
                               {user.blocked ? 'Desbloquear' : 'Bloquear'}
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleDelete(user.user_id)} disabled={saving === user.user_id}>
+                            <Button size="sm" variant="outline" onClick={() => handleDelete(user)} disabled={isSaving}>
                               Excluir
                             </Button>
-                            {saving === user.user_id && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
                           </div>
                         </TableCell>
                       </TableRow>

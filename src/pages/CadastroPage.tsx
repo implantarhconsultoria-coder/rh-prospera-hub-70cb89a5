@@ -7,6 +7,26 @@ import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+const RATE_LIMIT_MESSAGE = 'Limite temporario de envio de e-mail atingido. O administrador podera liberar seu acesso manualmente.';
+const SIGNUPS_DISABLED_MESSAGE = 'Cadastro recebido para liberacao manual. O administrador podera concluir seu acesso.';
+
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+const isRateLimitError = (message?: string) => {
+  const normalized = (message || '').toLowerCase();
+  return normalized.includes('rate limit') || normalized.includes('email rate') || normalized.includes('too many');
+};
+
+const isOperationalSignupError = (message?: string) => {
+  const normalized = (message || '').toLowerCase();
+  return isRateLimitError(message)
+    || normalized.includes('signups not allowed')
+    || normalized.includes('smtp')
+    || normalized.includes('send email')
+    || normalized.includes('sending email')
+    || normalized.includes('confirmation email');
+};
+
 const CadastroPage: React.FC = () => {
   const [nomeCompleto, setNomeCompleto] = useState('');
   const [email, setEmail] = useState('');
@@ -16,37 +36,107 @@ const CadastroPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [manualFallback, setManualFallback] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const registrarPendente = async (motivo: string) => {
+    const { data, error } = await (supabase as any).rpc('registrar_cadastro_pendente', {
+      p_email: normalizeEmail(email),
+      p_nome: nomeCompleto.trim(),
+      p_telefone: telefone.trim(),
+      p_motivo: motivo,
+    });
+
+    if (error) {
+      console.warn('Nao foi possivel registrar cadastro pendente:', error.message);
+      return { ok: false, error: error.message };
+    }
+
+    return data || { ok: true };
+  };
+
+  const criarAuthPorFallback = async (motivo: string) => {
+    const response = await fetch('/api/signup-fallback', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: normalizeEmail(email),
+        password,
+        nome_completo: nomeCompleto.trim(),
+        telefone: telefone.trim(),
+        motivo,
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(payload?.error || 'fallback_signup_failed');
+    }
+    return payload;
+  };
+
+  const concluirCadastroManual = async (motivo: string, mensagem: string) => {
+    await registrarPendente(motivo);
+
+    try {
+      await criarAuthPorFallback(motivo);
+      setSuccessMessage('Cadastro recebido e conta preparada para liberacao manual. O administrador precisa aprovar seu acesso.');
+    } catch (fallbackError) {
+      console.warn('Fallback Auth indisponivel:', fallbackError);
+      setSuccessMessage(mensagem);
+    }
+
+    setManualFallback(true);
+    setSuccess(true);
+    toast.warning(mensagem);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
-      toast.error('As senhas não coincidem');
+      toast.error('As senhas nao coincidem');
       return;
     }
     if (password.length < 6) {
       toast.error('A senha deve ter pelo menos 6 caracteres');
       return;
     }
+
     setLoading(true);
     try {
       const { error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
+        email: normalizeEmail(email),
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/login`,
           data: { nome_completo: nomeCompleto.trim(), telefone: telefone.trim() },
         },
       });
+
       if (error) {
-        const msg = error.message === 'Signups not allowed for this instance'
-          ? 'Cadastro temporariamente bloqueado no servidor. Avise o administrador para liberar o cadastro no Supabase.'
-          : error.message;
-        toast.error(msg);
+        if (isOperationalSignupError(error.message)) {
+          await concluirCadastroManual(
+            error.message || 'email_rate_limit',
+            isRateLimitError(error.message) ? RATE_LIMIT_MESSAGE : SIGNUPS_DISABLED_MESSAGE,
+          );
+        } else {
+          toast.error(error.message || 'Erro ao cadastrar. Tente novamente.');
+        }
       } else {
+        await registrarPendente('email_enviado_aguardando_liberacao');
+        setManualFallback(false);
+        setSuccessMessage('Enviamos um link de confirmacao. Depois da confirmacao, seu acesso continuara aguardando liberacao do administrador.');
         setSuccess(true);
       }
     } catch (error: any) {
-      toast.error(error?.message || 'Erro ao cadastrar. Tente novamente.');
+      if (isOperationalSignupError(error?.message)) {
+        await concluirCadastroManual(
+          error?.message || 'email_rate_limit',
+          isRateLimitError(error?.message) ? RATE_LIMIT_MESSAGE : SIGNUPS_DISABLED_MESSAGE,
+        );
+      } else {
+        toast.error(error?.message || 'Erro ao cadastrar. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -58,13 +148,23 @@ const CadastroPage: React.FC = () => {
     try {
       const { error } = await supabase.auth.resend({
         type: 'signup',
-        email: email.trim().toLowerCase(),
+        email: normalizeEmail(email),
         options: { emailRedirectTo: `${window.location.origin}/login` },
       });
       if (error) throw error;
+      await (supabase as any).rpc('admin_marcar_reenvio_confirmacao', {
+        p_email: normalizeEmail(email),
+        p_ok: true,
+        p_error: null,
+      });
       toast.success('Email de confirmacao reenviado.');
     } catch (error: any) {
-      toast.error(error?.message || 'Nao foi possivel reenviar a confirmacao.');
+      await (supabase as any).rpc('admin_marcar_reenvio_confirmacao', {
+        p_email: normalizeEmail(email),
+        p_ok: false,
+        p_error: error?.message || 'resend_failed',
+      });
+      toast.error(isRateLimitError(error?.message) ? RATE_LIMIT_MESSAGE : (error?.message || 'Nao foi possivel reenviar a confirmacao.'));
     } finally {
       setResendLoading(false);
     }
@@ -80,8 +180,13 @@ const CadastroPage: React.FC = () => {
           </div>
           <h1 className="text-xl font-bold font-display text-foreground mb-2">Verifique seu email</h1>
           <p className="text-sm text-muted-foreground mb-4">
-            Enviamos um link de confirmação para <strong>{email}</strong>. Clique no link para ativar sua conta.
+            {successMessage || `Enviamos um link de confirmacao para ${email}. Clique no link para ativar sua conta.`}
           </p>
+          {manualFallback ? (
+            <p className="text-xs text-muted-foreground mb-4">
+              Seu cadastro aparecera em Gerenciar Usuarios &gt; Aguardando Liberacao.
+            </p>
+          ) : null}
           <Link to="/login">
             <Button variant="outline" className="w-full">Voltar ao Login</Button>
           </Link>
@@ -142,7 +247,7 @@ const CadastroPage: React.FC = () => {
             Cadastrar
           </Button>
           <p className="text-xs text-center text-muted-foreground">
-            Já tem conta? <Link to="/login" className="underline hover:text-primary">Entrar</Link>
+            Ja tem conta? <Link to="/login" className="underline hover:text-primary">Entrar</Link>
           </p>
         </form>
       </motion.div>
