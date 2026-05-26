@@ -1,15 +1,8 @@
 /**
- * Abre o cliente de e-mail padrão (Outlook etc.) com campos pré-preenchidos.
+ * Abre o cliente de e-mail padrao (Outlook etc.) com campos preenchidos.
  *
- * IMPORTANTE — texto limpo:
- * O "+" no corpo do e-mail acontece quando se usa URLSearchParams (que
- * codifica espaços como "+"). O protocolo mailto: exige encodeURIComponent,
- * que converte espaço em "%20" — o Outlook decodifica para espaço real.
- *
- * IMPORTANTE — anexo:
- * O protocolo mailto: NÃO suporta anexos por restrição de segurança dos
- * navegadores. O fluxo correto é: baixar o PDF localmente antes de abrir
- * o Outlook e instruir o operador a arrastar o arquivo na janela aberta.
+ * O protocolo mailto: nao suporta anexos por seguranca do navegador. Quando
+ * houver PDF/documento, o fluxo correto e baixar o arquivo e anexar no Outlook.
  */
 export interface EmailParams {
   to: readonly string[];
@@ -25,23 +18,23 @@ export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
   params.push(`subject=${enc(subject)}`);
   params.push(`body=${enc(body)}`);
   const mailto = `mailto:${to.map(enc).join(',')}?${params.join('&')}`;
-  // _self preserva o histórico e evita popup blocker
   window.location.href = mailto;
 };
 
-/** Cópia obrigatória em todos os envios */
 export const CC_OBRIGATORIO = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
 
-/** Destinatários ASO/Agendamento — únicos para todas as unidades */
 export const DESTINATARIOS_ASO = ['agendamento@ponteaereaseguranca.com.br'] as const;
 
-/** Destinatários de Férias variam por unidade */
 export const getDestinatariosFerias = (unidade: string): readonly string[] => {
-  const u = (unidade || '').toUpperCase();
-  if (u.includes('GOIÂNIA') || u.includes('GOIANIA')) {
+  const u = (unidade || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+  if (u.includes('GOIANIA') || u.includes('GOIANA')) {
     return ['requisicao@incocontabilidade.com.br'];
   }
-  // Praia Grande, Matriz, LMT, Alqui, demais → AAT
+
   return [
     'marisa@aatconsultoria.com.br',
     'lucilene@aatconsultoria.com.br',
@@ -49,8 +42,12 @@ export const getDestinatariosFerias = (unidade: string): readonly string[] => {
   ];
 };
 
-/** Mantido para retrocompatibilidade — não usar em novo código */
+export const getDestinatariosRescisao = (unidade: string): readonly string[] => {
+  return getDestinatariosFerias(unidade);
+};
+
 export const DESTINATARIOS = {
   ferias: getDestinatariosFerias(''),
+  rescisao: getDestinatariosRescisao(''),
   aso: DESTINATARIOS_ASO,
 } as const;
