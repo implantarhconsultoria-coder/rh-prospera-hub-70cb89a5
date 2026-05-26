@@ -8,24 +8,19 @@ import { useApp } from '@/hooks/useApp';
 import type { Employee } from '@/types/database';
 
 interface EmployeeComboboxProps {
-  value?: string; // employee id
+  value?: string;
   onChange: (employee: Employee | null) => void;
   placeholder?: string;
-  companyId?: string;        // restrict to one company
-  includeInactive?: boolean; // default false
+  companyId?: string;
+  includeInactive?: boolean;
   className?: string;
   disabled?: boolean;
 }
 
-/**
- * Busca digitável de funcionário com autocomplete.
- * Aceita: nome, CPF, matrícula, registro, função.
- * Reutilizável em todas as telas (EPI, Uniformes, Combustível, etc).
- */
 const EmployeeCombobox: React.FC<EmployeeComboboxProps> = ({
   value,
   onChange,
-  placeholder = 'Buscar funcionário (nome, CPF, matrícula)...',
+  placeholder = 'Buscar funcionario (nome, CPF, funcao, empresa/filial)...',
   companyId,
   includeInactive = false,
   className,
@@ -34,14 +29,19 @@ const EmployeeCombobox: React.FC<EmployeeComboboxProps> = ({
   const { employees, companies } = useApp();
   const [open, setOpen] = useState(false);
 
+  const companyById = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
+  const empresaNome = (cid: string) => {
+    const company = companyById.get(cid);
+    return [company?.name, company?.city].filter(Boolean).join(' / ');
+  };
+
   const list = useMemo(() => {
     return (employees || [])
-      .filter(e => includeInactive || e.status === 'ativo')
-      .filter(e => !companyId || e.companyId === companyId);
+      .filter((employee) => includeInactive || employee.status === 'ativo')
+      .filter((employee) => !companyId || employee.companyId === companyId);
   }, [employees, companyId, includeInactive]);
 
-  const selected = list.find(e => e.id === value);
-  const empresaNome = (cid: string) => companies.find(c => c.id === cid)?.name || '';
+  const selected = list.find((employee) => employee.id === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -59,7 +59,7 @@ const EmployeeCombobox: React.FC<EmployeeComboboxProps> = ({
             {selected ? (
               <span className="truncate">
                 <span className="font-medium">{selected.name}</span>
-                {selected.cpf && <span className="text-muted-foreground"> · {selected.cpf}</span>}
+                {selected.cpf && <span className="text-muted-foreground"> - {selected.cpf}</span>}
               </span>
             ) : (
               <span className="text-muted-foreground">{placeholder}</span>
@@ -68,31 +68,51 @@ const EmployeeCombobox: React.FC<EmployeeComboboxProps> = ({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[420px] p-0" align="start">
+      <PopoverContent className="w-[420px] max-w-[calc(100vw-2rem)] p-0" align="start">
         <Command
           filter={(value, search) => {
             if (!search) return 1;
             return value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
           }}
         >
-          <CommandInput placeholder="Digite nome, CPF, matrícula ou cargo..." />
+          <CommandInput placeholder="Digite nome, CPF, funcao ou empresa/filial..." />
           <CommandList>
-            <CommandEmpty>Nenhum funcionário encontrado.</CommandEmpty>
+            <CommandEmpty>Nenhum funcionario encontrado.</CommandEmpty>
             <CommandGroup>
-              {list.map(e => {
-                const haystack = [e.name, e.cpf, e.matriculaEsocial, e.registro, e.cargo, empresaNome(e.companyId)]
-                  .filter(Boolean).join(' | ');
+              {list.map((employee) => {
+                const company = companyById.get(employee.companyId);
+                const haystack = [
+                  employee.id,
+                  employee.name,
+                  employee.cpf,
+                  employee.matriculaEsocial,
+                  employee.registro,
+                  employee.cargo,
+                  employee.setorGhe,
+                  employee.email,
+                  employee.telefone,
+                  employee.celular,
+                  company?.name,
+                  company?.city,
+                  company?.codigo,
+                ]
+                  .filter(Boolean)
+                  .join(' | ');
+
                 return (
                   <CommandItem
-                    key={e.id}
+                    key={employee.id}
                     value={haystack}
-                    onSelect={() => { onChange(e); setOpen(false); }}
+                    onSelect={() => {
+                      onChange(employee);
+                      setOpen(false);
+                    }}
                   >
-                    <Check className={cn('mr-2 h-4 w-4', value === e.id ? 'opacity-100' : 'opacity-0')} />
-                    <div className="flex flex-col">
-                      <span className="text-sm font-medium">{e.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {[e.cpf, e.cargo, empresaNome(e.companyId)].filter(Boolean).join(' · ')}
+                    <Check className={cn('mr-2 h-4 w-4', value === employee.id ? 'opacity-100' : 'opacity-0')} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium truncate">{employee.name}</span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {[employee.cpf, employee.cargo, empresaNome(employee.companyId)].filter(Boolean).join(' - ')}
                       </span>
                     </div>
                   </CommandItem>

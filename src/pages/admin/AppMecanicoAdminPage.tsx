@@ -11,6 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Copy, ExternalLink, Lock, Unlock, Wrench, History, MapPin, Loader2, Plus, Fuel } from "lucide-react";
 import { toast } from "sonner";
 import { formatarDataHoraBrasil } from "@/lib/brTime";
+import EmployeeCombobox from "@/components/EmployeeCombobox";
+import { useApp } from "@/hooks/useApp";
+import type { Employee } from "@/types/database";
+import { getFuncionarioVeiculoInfo, onlyDigits, upsertFuncionarioBase } from "@/lib/funcionariosBase";
 
 interface Acesso {
   id: string;
@@ -23,6 +27,7 @@ interface Acesso {
   status: string;
   acesso_liberado: boolean;
   ultimo_acesso_em: string | null;
+  funcionario_id?: string | null;
 }
 
 const TIPO_LABEL: Record<string, string> = {
@@ -34,9 +39,8 @@ const TIPO_LABEL: Record<string, string> = {
   almoco_volta: "Retorno Almoço",
 };
 
-const onlyDigits = (value: string) => String(value || "").replace(/\D/g, "");
-
 export default function AppMecanicoAdminPage() {
+  const { employees, companies, refreshData } = useApp();
   const [lista, setLista] = useState<Acesso[]>([]);
   const [loading, setLoading] = useState(true);
   const [histAberto, setHistAberto] = useState<Acesso | null>(null);
@@ -45,6 +49,9 @@ export default function AppMecanicoAdminPage() {
 
   const [cadastroAberto, setCadastroAberto] = useState(false);
   const [cadastroLoading, setCadastroLoading] = useState(false);
+  const [funcionarioId, setFuncionarioId] = useState<string | null>(null);
+  const [veiculoVinculado, setVeiculoVinculado] = useState("");
+  const [veiculoPlaca, setVeiculoPlaca] = useState("");
   const [form, setForm] = useState({
     nome: "",
     cpf: "",
@@ -60,7 +67,7 @@ export default function AppMecanicoAdminPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("acessos_externos" as any)
-      .select("id,nome,pin,empresa,filial,funcao,perfil_acesso,status,acesso_liberado,ultimo_acesso_em")
+      .select("id,nome,pin,empresa,filial,funcao,perfil_acesso,status,acesso_liberado,ultimo_acesso_em,funcionario_id")
       .eq("modulo", "mecanico")
       .eq("perfil_acesso", "mecanico_externo")
       .order("nome");
@@ -117,6 +124,9 @@ export default function AppMecanicoAdminPage() {
   };
 
   const resetForm = () => {
+    setFuncionarioId(null);
+    setVeiculoVinculado("");
+    setVeiculoPlaca("");
     setForm({
       nome: "",
       cpf: "",
@@ -127,6 +137,32 @@ export default function AppMecanicoAdminPage() {
       funcao: "Mecanico",
       observacoes: "",
     });
+  };
+
+  const aplicarFuncionario = async (employee: Employee | null) => {
+    if (!employee) {
+      setFuncionarioId(null);
+      setVeiculoVinculado("");
+      setVeiculoPlaca("");
+      return;
+    }
+
+    const company = companies.find((c) => c.id === employee.companyId);
+    setFuncionarioId(employee.id);
+    setForm((prev) => ({
+      ...prev,
+      nome: employee.name || prev.nome,
+      cpf: employee.cpf || prev.cpf,
+      email_corporativo: employee.email || prev.email_corporativo,
+      telefone: employee.telefone || employee.celular || prev.telefone,
+      empresa: company?.name || prev.empresa,
+      filial: company?.city || prev.filial,
+      funcao: employee.cargo || prev.funcao || "Mecanico",
+    }));
+
+    const veiculo = await getFuncionarioVeiculoInfo(employee.id);
+    setVeiculoVinculado(veiculo?.descricao || "");
+    setVeiculoPlaca(veiculo?.placa || "");
   };
 
   const cadastrarMecanico = async () => {
@@ -144,10 +180,39 @@ export default function AppMecanicoAdminPage() {
     const email = form.email_corporativo.trim().toLowerCase();
     setCadastroLoading(true);
 
+    const funcionarioSelecionado = funcionarioId
+      ? employees.find((employee) => employee.id === funcionarioId)
+      : null;
+
+    const funcionarioBase = await upsertFuncionarioBase({
+      funcionarioId,
+      employees,
+      companies,
+      companyId: funcionarioSelecionado?.companyId || null,
+      empresaNome: form.empresa,
+      nome: form.nome,
+      cpf: form.cpf,
+      cargo: form.funcao,
+      email,
+      telefone: form.telefone,
+      setor: "operacional",
+    });
+
+    if (!funcionarioBase.ok) {
+      setCadastroLoading(false);
+      toast.error(funcionarioBase.error);
+      return;
+    }
+
+    const notas = [
+      form.observacoes.trim(),
+      veiculoPlaca ? `Carro vinculado: ${veiculoPlaca}` : null,
+    ].filter(Boolean).join(" | ");
+
     const observacoes = JSON.stringify({
-      notas: form.observacoes.trim() || null,
       telefone: form.telefone.trim() || null,
       atualizado_em: new Date().toISOString(),
+      notas: notas || null,
     });
 
     const payload = {
@@ -162,6 +227,7 @@ export default function AppMecanicoAdminPage() {
       empresa: form.empresa.trim() || null,
       filial: form.filial.trim() || null,
       funcao: form.funcao.trim() || "Mecanico",
+      funcionario_id: funcionarioBase.employeeId,
       perfil_acesso: "mecanico_externo",
       modulo: "mecanico",
       status: "ativo",
@@ -181,6 +247,7 @@ export default function AppMecanicoAdminPage() {
     toast.success(`Mecanico cadastrado. PIN: ${payload.pin}`);
     setCadastroAberto(false);
     resetForm();
+    await refreshData();
     carregar();
   };
 
@@ -281,6 +348,17 @@ export default function AppMecanicoAdminPage() {
             <DialogTitle>Novo mecanico</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-1">
+            <div className="space-y-1.5">
+              <Label>Buscar funcionario cadastrado</Label>
+              <EmployeeCombobox
+                value={funcionarioId || undefined}
+                onChange={aplicarFuncionario}
+                placeholder="Buscar por nome, CPF, funcao, empresa/filial..."
+              />
+              {veiculoVinculado ? (
+                <p className="text-xs text-muted-foreground">Veiculo vinculado: {veiculoVinculado}</p>
+              ) : null}
+            </div>
             <div className="space-y-1.5">
               <Label>Nome completo *</Label>
               <Input value={form.nome} onChange={(e) => setForm((prev) => ({ ...prev, nome: e.target.value }))} />

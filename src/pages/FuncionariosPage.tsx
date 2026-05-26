@@ -8,11 +8,11 @@ import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { upsertFuncionarioBase } from '@/lib/funcionariosBase';
 
 const FuncionariosPage: React.FC = () => {
-  const { employees, companies } = useApp();
+  const { employees, companies, refreshData } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const { isFilial, filialCompanyId } = useFilialFilter();
@@ -47,32 +47,32 @@ const FuncionariosPage: React.FC = () => {
     if (!companyId) { toast.error('Selecione a empresa primeiro'); return; }
 
     setSaving(true);
-    const { error } = await supabase.from('funcionarios').insert({
-      company_id: companyId,
+    const result = await upsertFuncionarioBase({
+      employees,
+      companies,
+      companyId,
       nome: newEmp.nome.trim(),
       cpf: newEmp.cpf,
       cargo: newEmp.cargo,
-      salario_base: Number(newEmp.salario_base) || 0,
-      data_admissao: newEmp.data_admissao || null,
+      salarioBase: Number(newEmp.salario_base) || 0,
+      dataAdmissao: newEmp.data_admissao || null,
       telefone: newEmp.telefone,
       celular: newEmp.celular,
       email: newEmp.email,
       endereco: newEmp.endereco,
       rg: newEmp.rg,
-      status: 'ativo',
       setor: 'operacional',
-      categoria: 'operacional',
     });
     setSaving(false);
 
-    if (error) {
-      toast.error('Erro ao cadastrar: ' + error.message);
+    if (!result.ok) {
+      toast.error(result.error);
       return;
     }
-    toast.success('Funcionario cadastrado com sucesso!');
+    toast.success(result.action === 'created' ? 'Funcionario cadastrado com sucesso!' : 'Funcionario existente atualizado e vinculado.');
     setShowNew(false);
     setNewEmp({ nome: '', cpf: '', cargo: '', salario_base: '', data_admissao: '', telefone: '', celular: '', email: '', endereco: '', rg: '' });
-    window.location.reload();
+    await refreshData();
   };
 
   const renderCard = (e: typeof employees[0]) => (

@@ -49,13 +49,20 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { createExternalSession, saveExternalSession } from "@/lib/acessoExternoAuth";
+import { useApp } from "@/hooks/useApp";
+import { onlyDigits, upsertFuncionarioBase } from "@/lib/funcionariosBase";
 
 type Funcionario = {
   id: string;
   nome: string;
   cpf: string;
   cargo: string;
+  email: string;
+  telefone: string;
+  celular: string;
+  company_id: string | null;
   empresa_nome: string;
+  filial: string;
 };
 
 type Acesso = {
@@ -112,8 +119,6 @@ const MODULO_COLOR: Record<string, string> = {
   mecanico: "bg-red-500/10 text-red-700 border-red-500/30",
 };
 
-const onlyDigits = (value: string) => String(value || "").replace(/\D/g, "");
-
 const parseObservacoes = (raw: unknown) => {
   const base = { telefone: "", ultima_validacao_email_em: null as string | null };
   if (!raw) return base;
@@ -140,6 +145,7 @@ const parseObservacoes = (raw: unknown) => {
 };
 
 export default function AcessosExternosPage() {
+  const { employees, companies, refreshData } = useApp();
   const [lista, setLista] = useState<Acesso[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -171,7 +177,7 @@ export default function AcessosExternosPage() {
   const carregarFuncionarios = async () => {
     const { data } = await supabase
       .from("funcionarios")
-      .select("id, nome, cpf, cargo, empresas(nome)")
+      .select("id, nome, cpf, cargo, email, telefone, celular, company_id, empresas(nome,cidade)")
       .eq("status", "ativo")
       .order("nome");
 
@@ -180,7 +186,12 @@ export default function AcessosExternosPage() {
       nome: f.nome,
       cpf: f.cpf || "",
       cargo: f.cargo || "",
+      email: f.email || "",
+      telefone: f.telefone || "",
+      celular: f.celular || "",
+      company_id: f.company_id || null,
       empresa_nome: f.empresas?.nome || "",
+      filial: f.empresas?.cidade || "",
     }));
     setFuncionarios(base);
   };
@@ -228,7 +239,10 @@ export default function AcessosExternosPage() {
       ...prev,
       nome: f.nome || prev.nome,
       cpf: f.cpf || prev.cpf,
+      email_corporativo: f.email || prev.email_corporativo,
+      telefone: f.telefone || f.celular || prev.telefone,
       empresa: f.empresa_nome || prev.empresa,
+      filial: f.filial || prev.filial,
       funcao: f.cargo || prev.funcao,
     }));
     setFuncOpen(false);
@@ -287,6 +301,29 @@ export default function AcessosExternosPage() {
       return;
     }
 
+    const funcionarioSelecionado = funcionarioId
+      ? employees.find((employee) => employee.id === funcionarioId)
+      : null;
+
+    const funcionarioBase = await upsertFuncionarioBase({
+      funcionarioId,
+      employees,
+      companies,
+      companyId: funcionarioSelecionado?.companyId || null,
+      empresaNome: form.empresa,
+      nome: form.nome,
+      cpf: form.cpf,
+      cargo: form.funcao,
+      email: form.email_corporativo,
+      telefone: form.telefone,
+      setor: "operacional",
+    });
+
+    if (!funcionarioBase.ok) {
+      toast.error(funcionarioBase.error);
+      return;
+    }
+
     const payload = form.perfis_acesso.map((pv) => {
       const perfil = PERFIS.find((p) => p.v === pv)!;
       const observacoes = JSON.stringify({
@@ -304,7 +341,7 @@ export default function AcessosExternosPage() {
         empresa: form.empresa.trim() || null,
         filial: form.filial.trim() || null,
         funcao: form.funcao.trim() || null,
-        funcionario_id: funcionarioId,
+        funcionario_id: funcionarioBase.employeeId,
         perfil_acesso: perfil.v,
         modulo: perfil.modulo,
         status: "ativo",
@@ -324,6 +361,8 @@ export default function AcessosExternosPage() {
     toast.success(`${payload.length} acesso(s) configurado(s)`);
     setOpen(false);
     resetForm();
+    await refreshData();
+    await carregarFuncionarios();
     carregar();
   };
 
@@ -452,12 +491,12 @@ export default function AcessosExternosPage() {
                     </PopoverTrigger>
                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                       <Command>
-                        <CommandInput placeholder="Nome, CPF ou cargo..." />
+                        <CommandInput placeholder="Nome, CPF, cargo ou empresa/filial..." />
                         <CommandList>
                           <CommandEmpty>Nenhum funcionario encontrado.</CommandEmpty>
                           <CommandGroup>
                             {funcionarios.map((f) => {
-                              const haystack = [f.nome, f.cpf, f.cargo, f.empresa_nome].filter(Boolean).join(" | ");
+                              const haystack = [f.nome, f.cpf, f.cargo, f.empresa_nome, f.filial, f.email, f.telefone, f.celular].filter(Boolean).join(" | ");
                               return (
                                 <CommandItem key={f.id} value={haystack} onSelect={() => selecionarFuncionario(f)}>
                                   <Check className={cn("mr-2 h-4 w-4", funcionarioId === f.id ? "opacity-100" : "opacity-0")} />
@@ -466,6 +505,9 @@ export default function AcessosExternosPage() {
                                     <span className="text-xs text-muted-foreground">
                                       {[f.cpf, f.cargo, f.empresa_nome].filter(Boolean).join(" · ")}
                                     </span>
+                                    {f.filial ? (
+                                      <span className="text-xs text-muted-foreground">{f.filial}</span>
+                                    ) : null}
                                   </div>
                                 </CommandItem>
                               );
