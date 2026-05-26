@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 
 const RATE_LIMIT_MESSAGE = 'Limite temporario de envio de e-mail atingido. O administrador podera liberar seu acesso manualmente.';
 const SIGNUPS_DISABLED_MESSAGE = 'Cadastro recebido para liberacao manual. O administrador podera concluir seu acesso.';
+const MANUAL_SIGNUP_REASON = 'cadastro_sem_envio_email_liberacao_manual';
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -91,6 +92,20 @@ const CadastroPage: React.FC = () => {
     toast.warning(mensagem);
   };
 
+  const cadastrarSemEnvioEmail = async () => {
+    try {
+      await criarAuthPorFallback(MANUAL_SIGNUP_REASON);
+      setManualFallback(true);
+      setSuccessMessage('Cadastro recebido sem depender de envio de e-mail. Aguarde a liberacao do administrador.');
+      setSuccess(true);
+      toast.success('Cadastro recebido. O administrador ja pode liberar seu acesso.');
+      return true;
+    } catch (error) {
+      console.warn('Cadastro sem envio de e-mail indisponivel, usando fluxo padrao:', error);
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
@@ -104,6 +119,9 @@ const CadastroPage: React.FC = () => {
 
     setLoading(true);
     try {
+      const savedWithoutEmail = await cadastrarSemEnvioEmail();
+      if (savedWithoutEmail) return;
+
       const { error } = await supabase.auth.signUp({
         email: normalizeEmail(email),
         password,
@@ -178,7 +196,7 @@ const CadastroPage: React.FC = () => {
           <div className="w-16 h-16 gradient-accent rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Mail className="w-8 h-8 text-accent-foreground" />
           </div>
-          <h1 className="text-xl font-bold font-display text-foreground mb-2">Verifique seu email</h1>
+          <h1 className="text-xl font-bold font-display text-foreground mb-2">{manualFallback ? 'Cadastro recebido' : 'Verifique seu email'}</h1>
           <p className="text-sm text-muted-foreground mb-4">
             {successMessage || `Enviamos um link de confirmacao para ${email}. Clique no link para ativar sua conta.`}
           </p>
@@ -190,10 +208,12 @@ const CadastroPage: React.FC = () => {
           <Link to="/login">
             <Button variant="outline" className="w-full">Voltar ao Login</Button>
           </Link>
-          <Button variant="ghost" className="w-full" onClick={reenviarConfirmacao} disabled={resendLoading}>
-            {resendLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Reenviar confirmacao
-          </Button>
+          {!manualFallback ? (
+            <Button variant="ghost" className="w-full" onClick={reenviarConfirmacao} disabled={resendLoading}>
+              {resendLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Reenviar confirmacao
+            </Button>
+          ) : null}
         </motion.div>
       </div>
     );

@@ -81,6 +81,7 @@ export default async function handler(req: any, res?: any) {
     } else {
       await supabase.auth.admin.updateUserById(user.id, {
         email_confirm: true,
+        password,
         user_metadata: {
           ...user.user_metadata,
           nome_completo: user.user_metadata?.nome_completo || nomeCompleto,
