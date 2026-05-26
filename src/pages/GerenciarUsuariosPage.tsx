@@ -391,7 +391,7 @@ const GerenciarUsuariosPage: React.FC = () => {
     (u.cargo || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const pendingCount = users.filter(u => u.origem === 'pendente' || !u.role || u.role === 'usuario' || u.status_cadastro === 'email_rate_limit').length;
+  const pendingCount = users.filter(u => u.origem === 'pendente' || !u.role || u.role === 'usuario' || (u.status_cadastro === 'email_rate_limit' && !u.email_confirmed)).length;
 
   return (
     <div className="space-y-6">
@@ -454,7 +454,7 @@ const GerenciarUsuariosPage: React.FC = () => {
                           <div className="flex flex-col gap-1">
                             {user.blocked ? <Badge variant="destructive">Bloqueado</Badge> : user.email_confirmed ? <Badge className="bg-green-500 text-white">Email confirmado</Badge> : <Badge variant="secondary">Email pendente</Badge>}
                             {user.email_confirmed_manual ? <Badge className="bg-emerald-600 text-white">Confirmado manual</Badge> : null}
-                            {user.email_rate_limited || user.status_cadastro === 'email_rate_limit' ? <Badge variant="destructive">Rate limit e-mail</Badge> : null}
+                            {user.email_rate_limited || (user.status_cadastro === 'email_rate_limit' && !user.email_confirmed) ? <Badge variant="destructive">Rate limit e-mail</Badge> : null}
                             {user.origem === 'pendente' ? <Badge variant="outline">Cadastro pendente</Badge> : null}
                             {!user.role || user.role === 'usuario' ? <Badge variant="outline">Aguardando liberacao</Badge> : null}
                           </div>
