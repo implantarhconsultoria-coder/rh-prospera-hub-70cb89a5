@@ -47,8 +47,6 @@ const ALL_ITEMS: Item[] = [
   { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes', group: 'Faturamento' },
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes', group: 'Faturamento' },
   { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias', group: 'Faturamento' },
-  { label: 'Base de Faturamento', icon: Sparkles, path: '/admin/faturamento/importacao', group: 'Faturamento' },
-  { label: 'Migracao DN4', icon: Sparkles, path: '/admin/faturamento/migracao-dn4', group: 'Faturamento' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: 'Financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Financeiro' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: 'Financeiro' },
@@ -58,10 +56,6 @@ const ALL_ITEMS: Item[] = [
   { label: 'Conciliacao', icon: CheckSquare, path: '/admin/financeiro/conciliacao', group: 'Financeiro' },
   { label: 'Inadimplencia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia', group: 'Financeiro' },
   { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo', group: 'Financeiro' },
-  { label: 'Gerenciar Usuarios', icon: Shield, path: '/admin/gerenciar-usuarios', group: 'Administracao' },
-  { label: 'Acessos Externos', icon: Shield, path: '/admin/acessos-externos', group: 'Administracao' },
-  { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento', group: 'Administracao' },
-  { label: 'Configuracoes', icon: Settings, path: '/admin/configuracoes', group: 'Administracao' },
 ];
 
 const HOME_QUICK: Item[] = [
@@ -74,12 +68,11 @@ const HOME_QUICK: Item[] = [
 ];
 
 const DIRECTOR_ITEMS: Item[] = [
-  { label: 'Dashboard Executivo', icon: LayoutDashboard, path: '/admin', group: 'Diretoria' },
+  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin', group: 'Diretoria' },
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Diretoria' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes', group: 'Diretoria' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos', group: 'Diretoria' },
   { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas', group: 'Diretoria' },
-  { label: 'Migracao DN4', icon: Sparkles, path: '/admin/faturamento/migracao-dn4', group: 'Diretoria' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: 'Diretoria' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Diretoria' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: 'Diretoria' },
@@ -102,7 +95,7 @@ const AdminMobileLayout: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
-  const isDirector = isDirectorRole(userRoles);
+  const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
   const visibleItems = isDirector ? DIRECTOR_ITEMS : ALL_ITEMS;
   const quickItems = isDirector ? DIRECTOR_HOME_QUICK : HOME_QUICK;
   const searchModules: SearchModule[] = useMemo(() => visibleItems.map(i => ({ label: i.label, path: i.path })), [visibleItems]);

@@ -25,7 +25,6 @@ import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
-import DirectorDashboardPage from "@/pages/DirectorDashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
@@ -66,8 +65,6 @@ import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
-import MonitoramentoPage from "@/pages/MonitoramentoPage";
-import GerenciarUsuariosPage from "@/pages/GerenciarUsuariosPage";
 import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
 import AppMecanicoAdminPage from "@/pages/admin/AppMecanicoAdminPage";
 import CombustivelQRAdminPage from "@/pages/admin/CombustivelQRAdminPage";
@@ -92,14 +89,6 @@ import ContratosPage from "@/pages/faturamento/ContratosPage";
 import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
 import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
 import ConferenciaPage from "@/pages/faturamento/ConferenciaPage";
-import ImportacoesDN4Page from "@/pages/faturamento/ImportacoesDN4Page";
-import MigracaoDN4Page from "@/pages/admin/MigracaoDN4Page";
-import FaturamentoDN4Layout from "@/pages/admin/faturamento-dn4/FaturamentoDN4Layout";
-import FaturamentoDN4DashboardPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4DashboardPage";
-import FaturamentoDN4NovoPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4NovoPage";
-import FaturamentoDN4ConferenciaPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4ConferenciaPage";
-import FaturamentoDN4HistoricoPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4HistoricoPage";
-import FaturamentoDN4RelatorioPage from "@/pages/admin/faturamento-dn4/FaturamentoDN4RelatorioPage";
 import FinanceiroDashboardPage from "@/pages/financeiro/FinanceiroDashboardPage";
 import ContasReceberPage from "@/pages/financeiro/ContasReceberPage";
 import ContasPagarPage from "@/pages/financeiro/ContasPagarPage";
@@ -111,8 +100,8 @@ import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
 import NotFound from "@/pages/NotFound";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
+import AcessoDiretoPage from "@/pages/AcessoDiretoPage";
 import PortaisPage from "@/pages/PortaisPage";
-import AcessosExternosPage from "@/pages/admin/AcessosExternosPage";
 import AssistentePage from "@/pages/admin/AssistentePage";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import GlobalErrorCatcher from "@/components/GlobalErrorCatcher";
@@ -193,7 +182,7 @@ const RoleRedirect = () => {
   }
 
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
-  if (userRoles.includes('diretor_geral')) return <Navigate to="/admin/diretoria" replace />;
+  if (userRoles.includes('diretor_geral')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
   if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
@@ -205,10 +194,6 @@ const RoleRedirect = () => {
 };
 
 const AdminHomeRoute = () => {
-  const { userRoles } = useApp();
-  if (userRoles.includes('diretor_geral') && !userRoles.includes('admin')) {
-    return <Navigate to="/admin/diretoria" replace />;
-  }
   return <DashboardPage />;
 };
 
@@ -245,7 +230,7 @@ const AuthGate = () => {
         <Route path="/admin" element={<AdminHomeRoute />} />
         <Route path="/admin/implanta-central" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/implanta-central/*" element={<Navigate to="/admin" replace />} />
-        <Route path="/admin/diretoria" element={<DirectorDashboardPage />} />
+        <Route path="/admin/diretoria" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/empresas" element={<EmpresasPage />} />
         <Route path="/admin/base-mestra" element={<BaseMestraPage />} />
         <Route path="/admin/funcionarios" element={<FuncionariosPage />} />
@@ -274,8 +259,8 @@ const AuthGate = () => {
         <Route path="/admin/folha-pagamento" element={<FolhaPagamentoPage />} />
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
         <Route path="/admin/compras" element={<ComprasPage />} />
-        <Route path="/admin/monitoramento" element={<MonitoramentoPage />} />
-        <Route path="/admin/gerenciar-usuarios" element={<GerenciarUsuariosPage />} />
+        <Route path="/admin/monitoramento" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/operacional" element={<DespacharChamadoPage />} />
         <Route path="/admin/chamados" element={<Navigate to="/admin/operacional" replace />} />
         {/* App Mecanico (novo) */}
@@ -285,7 +270,7 @@ const AuthGate = () => {
         <Route path="/admin/combustivel-qr" element={<Navigate to="/admin/abastecimento-qrcode" replace />} />
         <Route path="/admin/abastecimento-qrcode" element={<CombustivelQRAdminPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
-        <Route path="/admin/acessos-externos" element={<AcessosExternosPage />} />
+        <Route path="/admin/acessos-externos" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/assistente" element={<AssistentePage />} />
         {/* Faturamento */}
         <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
@@ -299,18 +284,12 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/admin/faturamento/conferencia" element={<ConferenciaPage />} />
         {/* Base de Faturamento (importacao) */}
-        <Route path="/admin/faturamento/importacao-dados" element={<ImportacoesDN4Page />} />
-        <Route path="/admin/faturamento/migracao-dn4" element={<MigracaoDN4Page />} />
-        <Route path="/admin/faturamento/importacao" element={<FaturamentoDN4Layout />}>
-          <Route index element={<FaturamentoDN4DashboardPage />} />
-          <Route path="novo" element={<FaturamentoDN4NovoPage />} />
-          <Route path="conferencia" element={<FaturamentoDN4ConferenciaPage />} />
-          <Route path="historico" element={<FaturamentoDN4HistoricoPage />} />
-          <Route path="relatorio" element={<FaturamentoDN4RelatorioPage />} />
-        </Route>
+        <Route path="/admin/faturamento/importacao-dados" element={<Navigate to="/admin/faturamento" replace />} />
+        <Route path="/admin/faturamento/migracao-dn4" element={<Navigate to="/admin/faturamento" replace />} />
+        <Route path="/admin/faturamento/importacao/*" element={<Navigate to="/admin/faturamento" replace />} />
         {/* Redirecionamentos legados (rota interna antiga) */}
-        <Route path="/admin/faturamento/dn4" element={<Navigate to="/admin/faturamento/importacao-dados" replace />} />
-        <Route path="/admin/faturamento/dn4/*" element={<Navigate to="/admin/faturamento/importacao-dados" replace />} />
+        <Route path="/admin/faturamento/dn4" element={<Navigate to="/admin/faturamento" replace />} />
+        <Route path="/admin/faturamento/dn4/*" element={<Navigate to="/admin/faturamento" replace />} />
         {/* Financeiro */}
         <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
         <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />
@@ -347,7 +326,7 @@ const AuthGate = () => {
       <Route element={<OperacionalLayout />}>
         <Route path="/operacional" element={<DespacharChamadoPage />} />
         <Route path="/operacional/chamados" element={<DespacharChamadoPage />} />
-        <Route path="/operacional/importacao-dados" element={<ImportacoesDN4Page />} />
+        <Route path="/operacional/importacao-dados" element={<Navigate to="/operacional" replace />} />
       </Route>
 
       {/* ========== CAMPO PORTAL ========== */}
@@ -371,8 +350,8 @@ const AuthGate = () => {
         <Route path="/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/faturamento/conferencia" element={<ConferenciaPage />} />
-        <Route path="/faturamento/importacao-dados" element={<ImportacoesDN4Page />} />
-        <Route path="/faturamento/importacoes-dn4" element={<Navigate to="/faturamento/importacao-dados" replace />} />
+        <Route path="/faturamento/importacao-dados" element={<Navigate to="/faturamento" replace />} />
+        <Route path="/faturamento/importacoes-dn4" element={<Navigate to="/faturamento" replace />} />
       </Route>
 
       {/* ========== FINANCEIRO PORTAL (acesso teste FIN) ========== */}
@@ -386,7 +365,7 @@ const AuthGate = () => {
         <Route path="/financeiro/inadimplencia" element={<InadimplenciaPage />} />
         <Route path="/financeiro/centros-custo" element={<CentrosCustoPage />} />
         <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
-        <Route path="/financeiro/importacao-dados" element={<ImportacoesDN4Page />} />
+        <Route path="/financeiro/importacao-dados" element={<Navigate to="/financeiro" replace />} />
       </Route>
 
       {/* Catch-all */}
@@ -407,6 +386,7 @@ const App = () => (
             <Routes>
               {/* ========== ACESSO EXTERNO POR PIN - PORTAL UNICO ========== */}
               <Route path="/modulos" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso/:slug" element={<ErrorBoundary><AcessoDiretoPage /></ErrorBoundary>} />
               {/* /acesso-filial e a rota canonica unica para todos os portais externos (exceto mecanico) */}
               <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso-modulos" element={<Navigate to="/modulos" replace />} />

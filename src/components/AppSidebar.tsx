@@ -48,15 +48,10 @@ const operationalItems: MenuItem[] = [
   { label: 'Historico', icon: History, path: '/admin/historico' },
 ];
 
-const adminItems: MenuItem[] = [
-  { label: 'Gerenciar Usuarios', icon: Shield, path: '/admin/gerenciar-usuarios' },
-  { label: 'Acessos Externos (PIN)', icon: Shield, path: '/admin/acessos-externos' },
-  { label: 'Monitoramento', icon: Monitor, path: '/admin/monitoramento' },
-  { label: 'Configuracoes', icon: Settings, path: '/admin/configuracoes' },
-];
+const adminItems: MenuItem[] = [];
 
 const directorReportItems: MenuItem[] = [
-  { label: 'Dashboard Executivo', icon: LayoutDashboard, path: '/admin/diretoria' },
+  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
@@ -76,9 +71,6 @@ const faturamentoItems: MenuItem[] = [
   { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
   { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
-  { label: 'Importacao de Dados', icon: Sparkles, path: '/admin/faturamento/importacao-dados' },
-  { label: 'Migracao DN4', icon: DatabaseBackup, path: '/admin/faturamento/migracao-dn4' },
-  { label: 'Base de Faturamento', icon: FileText, path: '/admin/faturamento/importacao' },
 ];
 
 const financeiroItems: MenuItem[] = [
@@ -102,7 +94,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const location = useLocation();
   const [fatOpen, setFatOpen] = useState(location.pathname.startsWith('/admin/faturamento'));
   const [finOpen, setFinOpen] = useState(location.pathname.startsWith('/admin/financeiro'));
-  const isDirector = isDirectorRole(userRoles);
+  const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
 
   const renderLink = (item: MenuItem) => (
     <NavLink key={item.path} to={item.path}
@@ -212,12 +204,12 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
           financeiroItems.map(renderLink)
         )}
 
-        {!isDirector && !collapsed && (
+        {!isDirector && adminItems.length > 0 && !collapsed && (
           <div className="pt-3 mt-3 border-t border-sidebar-border">
             <p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">Administracao</p>
           </div>
         )}
-        {!isDirector && collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
+        {!isDirector && adminItems.length > 0 && collapsed && <div className="pt-2 mt-2 border-t border-sidebar-border" />}
         {!isDirector && adminItems.map(renderLink)}
 
         {!collapsed && (

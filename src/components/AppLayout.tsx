@@ -30,7 +30,7 @@ const AppLayout: React.FC = () => {
 
   useActivityTracker(session);
 
-  const isDirector = isDirectorRole(userRoles);
+  const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
 
   const globalResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -39,7 +39,7 @@ const AppLayout: React.FC = () => {
       ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionarios', '/admin/funcionarios'],
       ['Pre-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
       ['Atestados', '/admin/atestados'], ['Fechamento', '/admin/fechamento'],
-      ['Faturamento', '/admin/faturamento'], ['Importacao de dados', '/admin/faturamento/importacao-dados'],
+      ['Faturamento', '/admin/faturamento'],
       ['Financeiro', '/admin/financeiro'], ['Frota / Documentos', '/admin/documentos-ativos'],
       ['Almoxarifado', '/admin/almoxarifado'], ['Abastecimento QR Code', '/admin/abastecimento-qrcode'],
     ]

@@ -361,36 +361,6 @@ export default function AcessoExternoPage() {
       return;
     }
 
-    const nome = ativos[0]?.nome || "";
-    const email =
-      ativos
-        .map((r) => String(r.email || "").trim().toLowerCase())
-        .find(Boolean) || "";
-    const metas = ativos.map((r) => parseLegacyObservacoes(r.observacoes));
-    const telefone = metas.map((m) => String(m.telefone || "").trim()).find(Boolean) || "";
-    const ultimaValidacao = metas.map((m) => m.ultima_validacao_email_em).find(Boolean) || null;
-
-    if (!email || !telefone) {
-      setCadastro({
-        cpf_clean: cpfDigits,
-        nome,
-        email_corporativo: email,
-        telefone,
-      });
-      return;
-    }
-
-    if (needsWeeklyValidation(ultimaValidacao)) {
-      setDesafio({
-        cpf_clean: cpfDigits,
-        nome,
-        email_corporativo: email,
-        email_mask: maskEmail(email),
-        ultima_validacao_email_em: ultimaValidacao,
-      });
-      return;
-    }
-
     const lista = mapLegacyRowsToUsuarios(ativos);
     if (!lista.length) {
       setErro("Nenhum modulo liberado para este CPF.");
@@ -529,7 +499,7 @@ export default function AcessoExternoPage() {
     setDesafio(null);
 
     if (cpfDigits.length !== 11 && cpfDigits.length !== 4) {
-      setErro("Digite o CPF completo (11 digitos).");
+      setErro("Digite o CPF completo ou os 4 ultimos numeros.");
       return;
     }
 
@@ -544,70 +514,7 @@ export default function AcessoExternoPage() {
       const mecanicoDireto = await tentarAcessoDiretoMecanico(cpfDigits);
       if (mecanicoDireto) return;
 
-      if (legacyFallback) {
-        await validarCpfLegacy(cpfDigits);
-        return;
-      }
-
-      const { data, error } = await supabase.rpc("acesso_externo_listar_por_cpf" as any, {
-        p_cpf: cpfDigits,
-      });
-
-      if (error) {
-        if (isMissingFunctionError(error, "acesso_externo_listar_por_cpf")) {
-          setLegacyFallback(true);
-          await validarCpfLegacy(cpfDigits);
-          return;
-        }
-        setErro("Erro ao validar acesso. Tente novamente.");
-        return;
-      }
-
-      const res = data as any;
-      if (!res?.ok) {
-        if (res?.error === "cadastro_incompleto") {
-          setCadastro({
-            cpf_clean: res?.cadastro?.cpf_clean || cpfDigits,
-            nome: res?.cadastro?.nome || "",
-            email_corporativo: res?.cadastro?.email_corporativo || "",
-            telefone: res?.cadastro?.telefone || "",
-          });
-          return;
-        }
-
-        if (res?.error === "validacao_email_obrigatoria") {
-          setDesafio({
-            cpf_clean: res?.desafio?.cpf_clean || cpfDigits,
-            nome: res?.desafio?.nome || "",
-            email_corporativo: res?.desafio?.email_corporativo || "",
-            email_mask: res?.desafio?.email_mask || maskEmail(res?.desafio?.email_corporativo || ""),
-            ultima_validacao_email_em: res?.desafio?.ultima_validacao_email_em || null,
-          });
-          return;
-        }
-
-        if (res?.error === "bloqueado") {
-          setErro("Acesso bloqueado pelo administrador.");
-          return;
-        }
-
-        if (res?.error === "cpf_nao_encontrado") {
-          setErro("CPF nao encontrado para acesso externo.");
-          return;
-        }
-
-        setErro("Acesso nao liberado.");
-        return;
-      }
-
-      const lista = (res?.usuarios || []) as Usuario[];
-      if (!lista.length) {
-        setErro("Nenhum modulo liberado para este CPF.");
-        return;
-      }
-
-      if (lista.length === 1) escolherUsuario(lista[0]);
-      else setUsuarios(lista);
+      await validarCpfLegacy(cpfDigits);
     } finally {
       setLoading(false);
     }

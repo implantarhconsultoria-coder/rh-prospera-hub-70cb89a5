@@ -17,7 +17,6 @@ const ITEMS = [
   { to: '/financeiro/inadimplencia', label: 'Inadimplência', icon: AlertTriangle },
   { to: '/financeiro/centros-custo', label: 'Centros de Custo', icon: Layers },
   { to: '/financeiro/conciliacao', label: 'Conciliação', icon: GitMerge },
-  { to: '/financeiro/importacao-dados', label: 'Importacao DN4', icon: FileUp },
 ];
 
 const FinanceiroLayout: React.FC = () => {

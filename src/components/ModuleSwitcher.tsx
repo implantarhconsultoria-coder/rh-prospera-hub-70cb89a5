@@ -20,7 +20,6 @@ interface ModuleDef {
 
 const PORTAL_MODULES: ModuleDef[] = [
   { role: 'admin', label: 'Administracao', path: '/admin' },
-  { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin/diretoria' },
   { role: 'filial_matriz', label: 'RH Matriz', path: '/filial' },
   { role: 'filial_praia', label: 'RH Praia Grande', path: '/filial' },
   { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
@@ -38,7 +37,6 @@ const ADMIN_MODULES: ModuleDef[] = [
   { role: 'operacional', label: 'Operacional', path: '/admin/chamados' },
   { role: 'app_mecanico', label: 'App Mecanico', path: '/admin/app-mecanico' },
   { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
-  { role: 'migracao_dn4', label: 'Migracao DN4', path: '/admin/faturamento/migracao-dn4' },
   { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
 ];
 
@@ -47,14 +45,13 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const navigate = useNavigate();
 
   const isAdmin = userRoles.includes('admin');
-  const isDirector = userRoles.includes('diretor_geral');
+  const isDirector = userRoles.includes('diretor_geral') && !userRoles.includes('admin');
   const available = isAdmin
     ? ADMIN_MODULES
     : isDirector
       ? [
-          { role: 'diretor_geral', label: 'Dashboard Diretor', path: '/admin/diretoria' },
+          { role: 'diretor_geral', label: 'Central TOPAC', path: '/admin' },
           { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
-          { role: 'migracao_dn4', label: 'Relatorio Migracao DN4', path: '/admin/faturamento/migracao-dn4' },
           { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
           { role: 'relatorios', label: 'Relatorios', path: '/admin/relatorio' },
         ]

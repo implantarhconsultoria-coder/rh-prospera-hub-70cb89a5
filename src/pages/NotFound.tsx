@@ -1,7 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { Home, LogIn } from "lucide-react";
-import MigracaoDN4Page from "@/pages/admin/MigracaoDN4Page";
 
 const NotFound = () => {
   const location = useLocation();
@@ -10,10 +9,6 @@ const NotFound = () => {
   useEffect(() => {
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
-
-  if (location.pathname === "/admin/faturamento/migracao-dn4") {
-    return <MigracaoDN4Page />;
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted p-6">
