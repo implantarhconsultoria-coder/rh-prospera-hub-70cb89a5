@@ -34,3 +34,12 @@ export const getFirstBusinessDayOfNextMonth = (competencia: string): string => {
 
   return issueDate.toLocaleDateString('pt-BR');
 };
+
+export const formatCompetencia = (competencia: string): string => {
+  const [year, month] = competencia.split('-').map(Number);
+  if (!year || !month) return competencia;
+  return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  });
+};

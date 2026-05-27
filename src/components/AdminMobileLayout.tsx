@@ -22,6 +22,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin', group: 'Principal' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas', group: 'Principal' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento', group: 'Principal' },
+  { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade', group: 'Principal' },
   { label: 'Rescisoes', icon: FileX, path: '/admin/rescisoes', group: 'Principal' },
   { label: 'App Mecanico', icon: Wrench, path: '/admin/app-mecanico', group: 'Operacional' },
   { label: 'Ponto dos Mecanicos', icon: Clock, path: '/admin/fechamento-ponto', group: 'Operacional' },

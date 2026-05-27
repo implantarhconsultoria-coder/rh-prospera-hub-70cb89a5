@@ -30,6 +30,7 @@ import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
 import FilialFechamentoPage from "@/pages/filial/FilialFechamentoPage";
 import FilialDocumentosPage from "@/pages/filial/FilialDocumentosPage";
+import FilialApontamentoPage from "@/pages/filial/FilialApontamentoPage";
 import FechamentosFiliaisPage from "@/pages/admin/FechamentosFiliaisPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
@@ -57,6 +58,7 @@ import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
 import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
 import RecibosBeneficioImpressaoPage from "@/pages/RecibosBeneficioImpressaoPage";
 import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividualPage";
+import ApontamentoContabilidadePage from "@/pages/admin/ApontamentoContabilidadePage";
 import HistoricoPage from "@/pages/HistoricoPage";
 import AtestadosImportPage from "@/pages/AtestadosImportPage";
 import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
@@ -65,6 +67,7 @@ import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
+import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
 import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
 import AppMecanicoAdminPage from "@/pages/admin/AppMecanicoAdminPage";
 import CombustivelQRAdminPage from "@/pages/admin/CombustivelQRAdminPage";
@@ -163,6 +166,7 @@ const EXT_ITEMS_FILIAL = [
   { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
   { to: 'alertas', label: 'Alertas', icon: Bell },
   { to: 'movimento-diario', label: 'Movimento Diario', icon: Activity },
+  { to: 'apontamento', label: 'Apontamento', icon: ClipboardCheck },
   { to: 'fechamento', label: 'Fechamento', icon: ClipboardCheck },
 ];
 const EXT_ITEMS_CAMPO = [
@@ -237,6 +241,7 @@ const AuthGate = () => {
         <Route path="/admin/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/admin/lancamentos" element={<LancamentosPage />} />
         <Route path="/admin/fechamento" element={<FechamentoPage />} />
+        <Route path="/admin/apontamento-contabilidade" element={<ApontamentoContabilidadePage />} />
         <Route path="/admin/fechamento-ponto" element={<FechamentoPontoPage />} />
         <Route path="/admin/fechamentos-filiais" element={<FechamentosFiliaisPage />} />
         <Route path="/admin/relatorio" element={<RelatorioPage />} />
@@ -259,6 +264,7 @@ const AuthGate = () => {
         <Route path="/admin/folha-pagamento" element={<FolhaPagamentoPage />} />
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
         <Route path="/admin/compras" element={<ComprasPage />} />
+        <Route path="/admin/emails-contabilidade" element={<EmailsContabilidadePage />} />
         <Route path="/admin/monitoramento" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/operacional" element={<DespacharChamadoPage />} />
@@ -313,6 +319,7 @@ const AuthGate = () => {
         <Route path="/filial/protocolo" element={<ProtocoloPage />} />
         <Route path="/filial/alertas" element={<FilialAlertasPage />} />
         <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
+        <Route path="/filial/apontamento" element={<FilialApontamentoPage />} />
         <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
         <Route path="/filial/documentos" element={<FilialDocumentosPage />} />
       </Route>
@@ -464,6 +471,7 @@ const App = () => (
                 <Route path="protocolo" element={<ProtocoloPage />} />
                 <Route path="alertas" element={<FilialAlertasPage />} />
                 <Route path="movimento-diario" element={<MovimentoDiarioPage />} />
+                <Route path="apontamento" element={<FilialApontamentoPage />} />
                 <Route path="fechamento" element={<FilialFechamentoPage />} />
               </Route>
 
