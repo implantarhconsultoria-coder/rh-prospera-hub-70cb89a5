@@ -27,6 +27,14 @@ export const useUserRole = (session: Session | null) => {
 
     const fetchRole = async () => {
       try {
+        const { error: syncError } = await (supabase as any).rpc('topac_aplicar_acesso_usuario', {
+          p_user_id: session.user.id,
+        });
+
+        if (syncError) {
+          console.warn('Nao foi possivel sincronizar acesso por CPF:', syncError.message);
+        }
+
         const { data, error } = await supabase
           .from('user_roles')
           .select('role')

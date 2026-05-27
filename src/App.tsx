@@ -118,6 +118,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import GlobalErrorCatcher from "@/components/GlobalErrorCatcher";
 import StableLoading from "@/components/StableLoading";
 import ExternoLayout from "@/components/ExternoLayout";
+import AguardandoAcesso from "@/components/AguardandoAcesso";
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Building, Landmark, TrendingDown, AlertTriangle, Layers, GitMerge,
   FileText, Users, FileSignature, Receipt, TrendingUp, ClipboardCheck,
@@ -200,7 +201,7 @@ const RoleRedirect = () => {
   if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
   if (userRoles.includes('tecnico_campo')) return <Navigate to="/campo" replace />;
 
-  return <Navigate to="/admin" replace />;
+  return <AguardandoAcesso />;
 };
 
 const AdminHomeRoute = () => {

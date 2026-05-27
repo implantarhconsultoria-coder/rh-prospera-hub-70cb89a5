@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Building2, Lock, Mail, User, Phone, Loader2 } from 'lucide-react';
+import { Building2, Lock, Mail, User, Phone, Loader2, Fingerprint } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +12,7 @@ const SIGNUPS_DISABLED_MESSAGE = 'Cadastro recebido para liberacao manual. O adm
 const MANUAL_SIGNUP_REASON = 'cadastro_sem_envio_email_liberacao_manual';
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
 
 const isRateLimitError = (message?: string) => {
   const normalized = (message || '').toLowerCase();
@@ -30,6 +31,7 @@ const isOperationalSignupError = (message?: string) => {
 
 const CadastroPage: React.FC = () => {
   const [nomeCompleto, setNomeCompleto] = useState('');
+  const [cpf, setCpf] = useState('');
   const [email, setEmail] = useState('');
   const [telefone, setTelefone] = useState('');
   const [password, setPassword] = useState('');
@@ -41,10 +43,11 @@ const CadastroPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
 
   const registrarPendente = async (motivo: string) => {
-    const { data, error } = await (supabase as any).rpc('registrar_cadastro_pendente', {
+    const { data, error } = await (supabase as any).rpc('registrar_cadastro_pendente_v2', {
       p_email: normalizeEmail(email),
       p_nome: nomeCompleto.trim(),
       p_telefone: telefone.trim(),
+      p_cpf: onlyDigits(cpf),
       p_motivo: motivo,
     });
 
@@ -64,6 +67,7 @@ const CadastroPage: React.FC = () => {
         email: normalizeEmail(email),
         password,
         nome_completo: nomeCompleto.trim(),
+        cpf: onlyDigits(cpf),
         telefone: telefone.trim(),
         motivo,
       }),
@@ -94,11 +98,13 @@ const CadastroPage: React.FC = () => {
 
   const cadastrarSemEnvioEmail = async () => {
     try {
-      await criarAuthPorFallback(MANUAL_SIGNUP_REASON);
+      const payload = await criarAuthPorFallback(MANUAL_SIGNUP_REASON);
       setManualFallback(true);
-      setSuccessMessage('Cadastro recebido sem depender de envio de e-mail. Aguarde a liberacao do administrador.');
+      setSuccessMessage(payload?.authorized
+        ? 'Cadastro confirmado pelo CPF autorizado. Voce ja pode entrar na plataforma.'
+        : 'Cadastro recebido sem depender de envio de e-mail. Aguarde a liberacao do administrador.');
       setSuccess(true);
-      toast.success('Cadastro recebido. O administrador ja pode liberar seu acesso.');
+      toast.success(payload?.authorized ? 'Acesso liberado pelo CPF.' : 'Cadastro recebido. O administrador ja pode liberar seu acesso.');
       return true;
     } catch (error) {
       console.warn('Cadastro sem envio de e-mail indisponivel, usando fluxo padrao:', error);
@@ -116,6 +122,10 @@ const CadastroPage: React.FC = () => {
       toast.error('A senha deve ter pelo menos 6 caracteres');
       return;
     }
+    if (onlyDigits(cpf).length !== 11) {
+      toast.error('Informe um CPF valido com 11 numeros');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -127,7 +137,7 @@ const CadastroPage: React.FC = () => {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/login`,
-          data: { nome_completo: nomeCompleto.trim(), telefone: telefone.trim() },
+          data: { nome_completo: nomeCompleto.trim(), telefone: telefone.trim(), cpf: onlyDigits(cpf) },
         },
       });
 
@@ -241,6 +251,11 @@ const CadastroPage: React.FC = () => {
             <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Nome completo" value={nomeCompleto} onChange={e => setNomeCompleto(e.target.value)}
               className="pl-10" required />
+          </div>
+          <div className="relative">
+            <Fingerprint className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="CPF" value={cpf} onChange={e => setCpf(e.target.value)}
+              className="pl-10" inputMode="numeric" required />
           </div>
           <div className="relative">
             <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />

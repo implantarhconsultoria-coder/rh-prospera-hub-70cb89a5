@@ -154,8 +154,8 @@ const LoginPage: React.FC = () => {
     setLoading(true);
     const raw = email.trim().toLowerCase();
     const pin = raw.replace(/\D/g, '');
-    if (pin.length === 4 && !password.trim()) {
-      await handleCpfPinLogin(pin);
+    if ((pin.length === 4 || pin.length === 11) && !password.trim()) {
+      await handleCpfPinLogin(pin.slice(-4));
       setLoading(false);
       return;
     }
@@ -247,13 +247,13 @@ const LoginPage: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <label className="text-[10px] font-bold tracking-[0.28em] text-slate-400 uppercase">
-                  Email ou usuario
+                  Email ou CPF
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 w-4 h-4 text-cyan-300" />
                   <Input
                     type="text"
-                    placeholder="seu@email.com"
+                    placeholder="seu@email.com ou CPF"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500"
@@ -281,7 +281,7 @@ const LoginPage: React.FC = () => {
                     className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500"
                   />
                 </div>
-                <p className="text-[11px] text-slate-500">Para CPF/PIN, digite os 4 ultimos numeros acima e deixe a senha em branco.</p>
+                <p className="text-[11px] text-slate-500">Para CPF/PIN de campo, digite o CPF ou os 4 ultimos numeros e deixe a senha em branco.</p>
               </div>
 
               <Button
