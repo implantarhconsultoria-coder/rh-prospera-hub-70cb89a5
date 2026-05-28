@@ -437,11 +437,11 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const imprimir = () => {
     if (!company) {
       toast.error('Selecione uma empresa antes de imprimir.');
-      return;
+      return false;
     }
     if (items.length === 0) {
       toast.error('Sem dados para imprimir.');
-      return;
+      return false;
     }
 
     const money = (value: number) => formatBRL(Number(value || 0));
@@ -582,11 +582,12 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const printWindow = window.open('', '_blank', 'width=1280,height=900');
     if (!printWindow) {
       toast.error('O navegador bloqueou a janela de impressão.');
-      return;
+      return false;
     }
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
+    return true;
   };
 
   const exportarExcel = () => {
@@ -638,7 +639,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
     }
 
     // 1) abre o PDF/preview do apontamento direto, sem gerar CSV.
-    imprimir();
+    const pdfAberto = imprimir();
+    if (!pdfAberto) return;
 
     // 2) registra no histórico
     await registrarAcao({
@@ -651,16 +653,18 @@ const ApontamentoContabilidadePage: React.FC = () => {
     });
 
     // 3) abre o cliente de e-mail, no mesmo fluxo do pre-cadastro.
-    openEmailClient({
-      to: para,
-      cc,
-      subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
-      body:
-      `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
-      `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
-      `IMPORTANTE: o PDF do apontamento foi aberto automaticamente. Por favor, salve/anexe o PDF a este e-mail antes de enviar.\n\n` +
-      `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
-    });
+    window.setTimeout(() => {
+      openEmailClient({
+        to: para,
+        cc,
+        subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
+        body:
+        `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
+        `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
+        `IMPORTANTE: o PDF do apontamento foi aberto automaticamente. Por favor, salve/anexe o PDF a este e-mail antes de enviar.\n\n` +
+        `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
+      });
+    }, 900);
     toast.success('PDF aberto e e-mail preenchido. Anexe o PDF antes de enviar.');
   };
 
