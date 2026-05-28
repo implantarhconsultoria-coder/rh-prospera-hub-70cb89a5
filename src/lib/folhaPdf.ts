@@ -1,4 +1,5 @@
 import { formatCurrency } from './calculations';
+import { cleanDocumentText } from './textClean';
 
 export interface HoleriteLinha {
   descricao: string;
@@ -51,7 +52,7 @@ export const buildHoleriteHtml = (h: HoleriteData) => {
     </tr>
   `).join('');
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Holerite ${h.funcionario}</title><style>${css}</style></head><body>
+  return cleanDocumentText(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Holerite ${h.funcionario}</title><style>${css}</style></head><body>
     <h1>Recibo de Pagamento de Salário</h1>
     <div class="head">
       <div><strong>Empresa:</strong> ${h.empresa}</div>
@@ -90,7 +91,7 @@ export const buildHoleriteHtml = (h: HoleriteData) => {
     </table>
     <p style="margin-top:24px; font-size:10px;">Declaro ter recebido a importância líquida acima discriminada.</p>
     <p style="margin-top:30px; font-size:10px;">_____________________________________<br>Assinatura do funcionário</p>
-  </body></html>`;
+  </body></html>`);
 };
 
 export interface FolhaConsolidadaLinha {
@@ -129,7 +130,7 @@ export const buildFolhaConsolidadaHtml = (
     </tr>
   `).join('');
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Folha ${empresa} ${competencia}</title><style>${css}</style></head><body>
+  return cleanDocumentText(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Folha ${empresa} ${competencia}</title><style>${css}</style></head><body>
     <h1>Folha de Pagamento</h1>
     <div class="head">
       <div><strong>Empresa:</strong> ${empresa}</div>
@@ -151,5 +152,5 @@ export const buildFolhaConsolidadaHtml = (
         <td class="num">${formatCurrency(totalFGTS)}</td>
       </tr></tfoot>
     </table>
-  </body></html>`;
+  </body></html>`);
 };

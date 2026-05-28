@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { cleanText } from './textClean';
 
 export interface FichaASOData {
   empresa: string;
@@ -36,7 +37,7 @@ export interface AvisoFeriasData {
 
 const fmtBR = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '-');
 
-const cleanFilePart = (value?: string) => String(value || 'SEM_INFORMACAO')
+const cleanFilePart = (value?: string) => cleanText(value || 'SEM_INFORMACAO')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-zA-Z0-9]+/g, '_')
@@ -53,14 +54,14 @@ export const makeDocumentFileName = (
 const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) => {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  const empresaLines = doc.splitTextToSize(empresa || '---', 112).slice(0, 2);
+  const empresaLines = doc.splitTextToSize(cleanText(empresa) || '---', 112).slice(0, 2);
   doc.text(empresaLines, 15, 16);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`CNPJ: ${cnpj || '---'}`, 15, 26);
+  doc.text(`CNPJ: ${cleanText(cnpj) || '---'}`, 15, 26);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  const tituloLines = doc.splitTextToSize(titulo, 72).slice(0, 2);
+  const tituloLines = doc.splitTextToSize(cleanText(titulo), 72).slice(0, 2);
   doc.text(tituloLines, 195, 17, { align: 'right' });
   doc.setLineWidth(0.5);
   doc.line(15, 31, 195, 31);
@@ -78,7 +79,7 @@ const drawBlock = (doc: jsPDF, y: number, titulo: string, linhas: [string, strin
     const [label, value] = field;
     const labelWidth = doc.getTextWidth(`${label}: `);
     const valueWidth = Math.max(22, colWidth - labelWidth);
-    const wrapped = doc.splitTextToSize(String(value || '---'), valueWidth);
+    const wrapped = doc.splitTextToSize(cleanText(value) || '---', valueWidth);
     return Math.max(7, wrapped.length * lineHeight);
   })));
   const altura = 13 + rowHeights.reduce((sum, height) => sum + height, 0);
@@ -104,7 +105,7 @@ const drawBlock = (doc: jsPDF, y: number, titulo: string, linhas: [string, strin
       doc.setFont('helvetica', 'bold');
       const labelWidth = doc.getTextWidth(`${label}: `);
       const valueX = x + labelWidth;
-      const wrapped = doc.splitTextToSize(String(value || '---'), Math.max(22, colWidth - labelWidth));
+      const wrapped = doc.splitTextToSize(cleanText(value) || '---', Math.max(22, colWidth - labelWidth));
       doc.text(wrapped, valueX, curY);
     });
     curY += rowHeights[rowIndex];
