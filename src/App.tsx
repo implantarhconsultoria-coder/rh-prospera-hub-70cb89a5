@@ -146,7 +146,6 @@ const EXT_ITEMS_RH = [
   { to: 'aso', label: 'ASO', icon: Stethoscope },
   { to: 'atestados', label: 'Atestados', icon: FileWarning },
   { to: 'aviso-ferias', label: 'Aviso de Ferias', icon: CalendarDays },
-  { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
 ];
 // EPI e Uniformes NAO sao liberados para acesso externo/almoxarifado/filial.
 // Ficam restritos ao admin central (rota /admin/epi e /admin/uniformes).
@@ -156,6 +155,7 @@ const EXT_ITEMS_ALMOX = [
 const EXT_ITEMS_OP = [
   { to: '', label: 'Chamados', icon: Headphones, end: true },
   { to: 'tecnicos', label: 'Tecnicos', icon: Wrench },
+  { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
 ];
 const EXT_ITEMS_FILIAL = [
   { to: '', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -163,7 +163,6 @@ const EXT_ITEMS_FILIAL = [
   { to: 'aviso-ferias', label: 'Aviso de Ferias', icon: CalendarDays },
   { to: 'aso', label: 'ASO', icon: Stethoscope },
   { to: 'atestados', label: 'Atestados', icon: FileWarning },
-  { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
   { to: 'alertas', label: 'Alertas', icon: Bell },
   { to: 'movimento-diario', label: 'Movimento Diario', icon: Activity },
   { to: 'apontamento', label: 'Apontamento', icon: ClipboardCheck },
@@ -333,6 +332,7 @@ const AuthGate = () => {
       <Route element={<OperacionalLayout />}>
         <Route path="/operacional" element={<DespacharChamadoPage />} />
         <Route path="/operacional/chamados" element={<DespacharChamadoPage />} />
+        <Route path="/operacional/protocolo" element={<ProtocoloPage />} />
         <Route path="/operacional/importacao-dados" element={<Navigate to="/operacional" replace />} />
       </Route>
 
@@ -459,6 +459,7 @@ const App = () => (
                 <Route path="chamados" element={<DespacharChamadoPage />} />
                 <Route path="tecnicos" element={<AppMecanicoEmReconstrucaoPage />} />
                 <Route path="tecnicos/:id" element={<AppMecanicoEmReconstrucaoPage />} />
+                <Route path="protocolo" element={<ProtocoloPage />} />
               </Route>
 
               <Route path="/filial-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="filial" titulo="Portal Filial" cor="bg-purple-600" items={EXT_ITEMS_FILIAL} /></ErrorBoundary>}>
