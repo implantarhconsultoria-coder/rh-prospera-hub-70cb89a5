@@ -1036,10 +1036,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
         subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
         body:
         `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
-        `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
-      `IMPORTANTE: o PDF ja esta anexado neste e-mail e tambem foi salvo no TOPAC RH PRO.\n\n` +
-      `` +
-      `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
+        `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n\n` +
+      `Atenciosamente,\nRodrigo De Souza Sabino`,
       });
     }, 900);
     toast.success('PDF salvo na plataforma, aberto e e-mail preenchido.');
@@ -1108,10 +1106,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
           subject: `Apontamento Contabilidade - ${formatCompetencia(competencia)} - Matriz/Praia/LMT/ALQUI`,
           body:
             `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} das empresas: ${nomes}.\n\n` +
-            `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionÃ¡rios: ${qtdFuncionarios}\n\n` +
-            `IMPORTANTE: o PDF consolidado ja esta anexado neste e-mail e tambem foi salvo no TOPAC RH PRO.\n\n` +
-            `` +
-            `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
+            `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n\n` +
+            `Atenciosamente,\nRodrigo De Souza Sabino`,
         });
       }, 900);
 

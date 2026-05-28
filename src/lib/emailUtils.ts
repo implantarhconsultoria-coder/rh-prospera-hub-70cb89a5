@@ -101,7 +101,7 @@ export const downloadEmailWithAttachment = async ({
       to,
       cc,
       subject,
-      body: `${body}\n\nATENCAO: o envio automatico com anexo ainda nao esta configurado na Vercel (${error?.message || 'email_send_failed'}). O PDF foi aberto em outra aba para anexar manualmente.`,
+      body,
     });
     return { ok: false, mode: 'manual_fallback', error: error?.message || 'email_send_failed' };
   }
