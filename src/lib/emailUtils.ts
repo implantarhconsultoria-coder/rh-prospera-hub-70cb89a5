@@ -34,6 +34,41 @@ const openPdfPreview = (blob: Blob, fileName: string) => {
   return { opened: Boolean(win), fileName };
 };
 
+const blobToBase64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+
+const sendPdfByPlatform = async ({
+  to,
+  cc,
+  subject,
+  body,
+  attachmentBlob,
+  attachmentName,
+}: EmailParams & { attachmentBlob: Blob; attachmentName: string }) => {
+  const response = await fetch('/api/send-email-pdf', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      to,
+      cc: cc || [],
+      subject,
+      body,
+      attachmentName,
+      attachmentBase64: await blobToBase64(attachmentBlob),
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.ok === false) {
+    throw new Error(data?.error || 'email_send_failed');
+  }
+  return data;
+};
+
 export const downloadEmailWithAttachment = async ({
   to,
   cc,
@@ -50,13 +85,26 @@ export const downloadEmailWithAttachment = async ({
     ? safeFileName(attachmentName)
     : `${safeFileName(attachmentName)}.pdf`;
 
-  openPdfPreview(attachmentBlob, cleanAttachmentName);
-  openEmailClient({
-    to,
-    cc,
-    subject,
-    body: `${body}\n\nO PDF foi aberto automaticamente em outra aba. Anexe o PDF aberto antes de enviar.`,
-  });
+  try {
+    await sendPdfByPlatform({
+      to,
+      cc,
+      subject,
+      body,
+      attachmentBlob,
+      attachmentName: cleanAttachmentName,
+    });
+    return { ok: true, mode: 'platform_email' };
+  } catch (error: any) {
+    openPdfPreview(attachmentBlob, cleanAttachmentName);
+    openEmailClient({
+      to,
+      cc,
+      subject,
+      body: `${body}\n\nATENCAO: o envio automatico com anexo ainda nao esta configurado na Vercel (${error?.message || 'email_send_failed'}). O PDF foi aberto em outra aba para anexar manualmente.`,
+    });
+    return { ok: false, mode: 'manual_fallback', error: error?.message || 'email_send_failed' };
+  }
 };
 
 export const CC_OBRIGATORIO = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
