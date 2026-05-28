@@ -99,15 +99,7 @@ const RecibosPreviewModal: React.FC<Props> = ({ open, onOpenChange, tipo, compan
                       </tbody>
                     </table>
 
-                    <p className="text-sm text-justify mb-10 leading-relaxed">
-                      Declaro ter recebido da empresa acima identificada o valor referente ao {beneficio} da competência informada.
-                    </p>
-
-                    <div className="mt-12">
-                      <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
-                      <p className="text-center text-xs mt-1">Nome: {r.emp.name}</p>
-                      <p className="text-center text-xs mt-1">Data: ____/____/________</p>
-                    </div>
+                    <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">{' '}</div>
                   </div>
                   <p className="text-center text-[10px] text-gray-400 mt-2">Página {idx + 1} de {totalPaginas}</p>
                 </div>
