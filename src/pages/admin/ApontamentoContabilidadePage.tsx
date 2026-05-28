@@ -433,7 +433,160 @@ const ApontamentoContabilidadePage: React.FC = () => {
     }
   };
 
-  const imprimir = () => window.print();
+  const imprimir = () => {
+    if (!company) {
+      toast.error('Selecione uma empresa antes de imprimir.');
+      return;
+    }
+    if (items.length === 0) {
+      toast.error('Sem dados para imprimir.');
+      return;
+    }
+
+    const money = (value: number) => formatBRL(Number(value || 0));
+    const hours = (value: number) =>
+      `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
+    const esc = (value: unknown) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    const titulo = `${company.name.toUpperCase().replace('TOPAC FILIAL ', 'TOPAC - ').replace('TOPAC ', 'TOPAC - ')} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
+    const rows = items.map((r) => {
+      const heQtd = isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas;
+      const heValor = isGO ? r.hora_extra_60 : r.hora_extra_50;
+      return `
+        <tr>
+          <td class="nome">${esc(r.nome || '-')}</td>
+          <td>${esc(r.cpf || '-')}</td>
+          <td class="num">${money(r.salario)}</td>
+          <td class="num">${money(r.insalubridade)}</td>
+          <td class="num">${hours(heQtd)}</td>
+          <td class="num">${money(heValor)}</td>
+          <td class="num">${hours(r.hora_extra_100_horas)}</td>
+          <td class="num">${money(r.hora_extra_100)}</td>
+          <td class="num">${Number(r.faltas_qtd || 0).toLocaleString('pt-BR')}</td>
+          <td class="num">${money(r.desconto_falta)}</td>
+          <td class="num">${money(r.adiantamento)}</td>
+          <td class="num total">${money(r.total)}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `<!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>${esc(titulo)}</title>
+          <style>
+            @page { size: A4 landscape; margin: 6mm; }
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              color: #000;
+              background: #fff;
+              font-family: Arial, Helvetica, sans-serif;
+              font-size: 9px;
+            }
+            .page { width: 100%; }
+            h1 {
+              margin: 0 0 4px;
+              text-align: center;
+              font-size: 13px;
+              line-height: 1.2;
+              text-transform: uppercase;
+            }
+            .teste {
+              margin: 0 0 5px;
+              text-align: center;
+              font-size: 12px;
+              font-weight: 700;
+              color: #b00000;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+            }
+            th, td {
+              border: 1px solid #111;
+              padding: 3px 4px;
+              line-height: 1.15;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+            th {
+              background: #e9e9e9;
+              font-weight: 700;
+              text-align: left;
+            }
+            .nome { width: 22%; }
+            .num { text-align: right; }
+            .total { font-weight: 700; }
+            tfoot td {
+              background: #efefef;
+              font-weight: 700;
+            }
+            .rodape {
+              margin-top: 6px;
+              text-align: center;
+              font-size: 8px;
+            }
+          </style>
+        </head>
+        <body>
+          <main class="page">
+            <h1>${esc(titulo)}</h1>
+            <div class="teste">TESTE FUNÇÃO REAL</div>
+            <table>
+              <thead>
+                <tr>
+                  <th class="nome">Nome</th>
+                  <th>CPF</th>
+                  <th>Salário</th>
+                  <th>Insalub.</th>
+                  <th>HE ${heLabelPct} Qtd</th>
+                  <th>HE ${heLabelPct} Valor</th>
+                  <th>HE 100% Qtd</th>
+                  <th>HE 100% Valor</th>
+                  <th>Faltas</th>
+                  <th>Desc. Falta</th>
+                  <th>Adiantamento</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="11">TOTAL GERAL</td>
+                  <td class="num">${money(totalGeral)}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div class="rodape">
+              Total = Salário + Insalubridade + Comissão Valor + HE ${heLabelPct} + HE 100% - Assistência Médica - Desconto Falta - Desconto DSR - Adiantamento.
+            </div>
+          </main>
+          <script>
+            window.onload = function () {
+              window.focus();
+              setTimeout(function () { window.print(); }, 150);
+            };
+          </script>
+        </body>
+      </html>`;
+
+    const printWindow = window.open('', '_blank', 'width=1280,height=900');
+    if (!printWindow) {
+      toast.error('O navegador bloqueou a janela de impressão.');
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
   const exportarExcel = () => {
     const heLabel = isGO ? 'HE60' : 'HE50';
