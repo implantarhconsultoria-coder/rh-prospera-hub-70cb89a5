@@ -630,27 +630,15 @@ const ApontamentoContabilidadePage: React.FC = () => {
     if (isGyn) {
       para = ['gyn@topac.com.br', 'requisicao@incocontabilidade.com.br'];
     } else {
-      const { data: cfg } = await supabase
-        .from('config_emails_contabilidade' as any)
-        .select('*')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      const c = (cfg as any) || {};
-      if (c.email_marisa) para.push(c.email_marisa);
-      if (c.email_robson && !cc.includes(c.email_robson)) cc.push(c.email_robson);
-      if (c.emails_copia) {
-        c.emails_copia.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
-          .forEach((e: string) => { if (!cc.includes(e)) cc.push(e); });
-      }
-      if (para.length === 0) {
-        toast.error('Configure os e-mails da contabilidade em Configurações → E-mails Contabilidade');
-        return;
-      }
+      para = [
+        'marisa@aatconsultoria.com.br',
+        'dp@aatconsultoria.com.br',
+        'lucilene@aatconsultoria.com.br',
+      ];
     }
 
-    // 1) gera e baixa o CSV automaticamente para anexar
-    exportarExcel();
+    // 1) abre o PDF/preview do apontamento direto, sem gerar CSV.
+    imprimir();
 
     // 2) registra no histórico
     await registrarAcao({
@@ -670,10 +658,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
       body:
       `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
       `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
-      `IMPORTANTE: o arquivo do apontamento foi baixado automaticamente em seu computador. Por favor, anexe-o a este e-mail antes de enviar.\n\n` +
+      `IMPORTANTE: o PDF do apontamento foi aberto automaticamente. Por favor, salve/anexe o PDF a este e-mail antes de enviar.\n\n` +
       `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
     });
-    toast.success('Arquivo baixado. Anexe ao e-mail antes de enviar.');
+    toast.success('PDF aberto e e-mail preenchido. Anexe o PDF antes de enviar.');
   };
 
   return (
