@@ -676,59 +676,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* CSS de impressão A4 paisagem — espelha a tela em uma única tabela */}
+      {/* Impressao/PDF usa exclusivamente a janela criada por imprimir(). */}
       <style>{`
         @media print {
-          @page { size: A4 landscape; margin: 6mm; }
-          html, body { background: #fff !important; }
-          body * { visibility: hidden !important; }
-          .apont-print, .apont-print * { visibility: visible !important; }
-          .apont-print {
-            position: absolute !important;
-            left: 0 !important; top: 0 !important;
-            width: 100% !important; max-width: 100% !important;
-            margin: 0 !important; padding: 0 !important;
-            transform: none !important; zoom: 1 !important;
-            box-shadow: none !important; border: none !important;
-            background: #fff !important; color: #000 !important;
-            overflow: visible !important;
-            max-height: none !important;
-          }
-          /* Garante que nenhum wrapper esconda colunas */
-          .apont-print, .apont-print * { overflow: visible !important; max-height: none !important; }
-          .apont-print table {
-            width: 100% !important;
-            table-layout: fixed !important;
-            border-collapse: collapse !important;
-            font-size: 7.5px !important;
-          }
-          .apont-print th, .apont-print td {
-            padding: 1px 2px !important;
-            border: 1px solid #000 !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-            line-height: 1.15 !important;
-          }
-          /* Inputs viram texto puro na impressão */
-          .apont-print input {
-            border: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            font-size: 7.5px !important;
-            background: transparent !important;
-            width: 100% !important;
-            min-width: 0 !important;
-            text-align: inherit !important;
-            color: #000 !important;
-            -webkit-appearance: none !important;
-            appearance: none !important;
-          }
-          .apont-print input[type="checkbox"] { width: 8px !important; height: 8px !important; }
-          .apont-print thead { display: table-header-group !important; }
-          .apont-print tfoot { display: table-footer-group !important; }
-          .apont-print tr { page-break-inside: avoid !important; }
-          .no-print, aside, nav, header, .sidebar, .lovable-badge, [data-sonner-toaster] { display: none !important; }
+          body { display: none !important; }
         }
       `}</style>
 
@@ -776,7 +727,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         </button>
       </div>
 
-      <div className="card-premium p-5 apont-print">
+      <div className="card-premium p-5 no-print">
         <div className="text-center border-b-2 border-foreground pb-2 mb-4">
           <h2 className="font-bold text-base uppercase">
             {company
