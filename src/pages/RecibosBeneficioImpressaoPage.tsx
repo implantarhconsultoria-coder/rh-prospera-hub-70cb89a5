@@ -152,15 +152,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     items.forEach(({ company, emp, vr, vt }, index) => {
       if (index > 0) doc.addPage();
       const isAmbos = formato === 'ambos';
-      const titulo = isAmbos
-        ? 'RECIBO DE BENEFICIOS - VR E VT'
-        : formato === 'vr' ? 'RECIBO DE VALE-REFEICAO' : 'RECIBO DE VALE-TRANSPORTE';
-      const totalGeral = (vr?.valorTotal || 0) + (vt?.valorTotal || 0);
-
       doc.setTextColor(0, 0, 0);
       doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.4);
-      doc.rect(12, 12, 186, 265);
 
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12);
@@ -168,71 +161,60 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.text(`CNPJ: ${company.cnpj || '-'}`, 18, 28);
-      doc.text(`Competencia: ${competenciaLabel}`, 145, 22);
-      doc.text(`Pagamento: ${dataPagamento}`, 145, 28);
-      doc.line(18, 34, 192, 34);
-
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(13);
-      doc.text(titulo, 105, 44, { align: 'center' });
-
-      doc.setFontSize(10);
-      doc.text('Funcionario:', 18, 58);
-      doc.text('Funcao:', 18, 66);
-      doc.text('Competencia:', 18, 74);
+      doc.text('FICHA INDIVIDUAL DE BENEFICIOS', 188, 22, { align: 'right' });
       doc.setFont('helvetica', 'normal');
-      doc.text(String(emp.name || '-'), 48, 58);
-      doc.text(String(emp.cargo || '-'), 48, 66);
-      doc.text(competenciaLabel, 48, 74);
+      doc.text(`Competencia: ${competenciaLabel}`, 188, 28, { align: 'right' });
+      doc.text(`Emissao: ${dataPagamento}`, 188, 34, { align: 'right' });
+      doc.setLineWidth(0.5);
+      doc.line(18, 42, 192, 42);
+
+      doc.roundedRect(18, 50, 174, 24, 1, 1);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Nome:', 22, 58);
+      doc.text('Cargo:', 112, 58);
+      doc.text('CPF:', 22, 67);
+      doc.text('Registro:', 112, 67);
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(emp.name || '-'), 35, 58);
+      doc.text(String(emp.cargo || '-'), 126, 58);
+      doc.text(String(emp.cpf || '-'), 32, 67);
+      doc.text(String(emp.registro || '-'), 128, 67);
 
       let y = 88;
       const drawBenefit = (label: string, row: BenefitReportRow, sigla: 'VR' | 'VT') => {
-        doc.setDrawColor(0, 0, 0);
-        doc.rect(18, y, 174, 42);
-        doc.setFillColor(238, 238, 238);
+        doc.setFillColor(229, 231, 235);
         doc.rect(18, y, 174, 8, 'F');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
+        doc.setFontSize(10);
         doc.text(label.toUpperCase(), 21, y + 5.5);
-        doc.setFont('helvetica', 'normal');
         const lines = [
-          ['Dias previstos', String(row.diasPrevistos || 0)],
-          ['Descontos / faltas', row.diasDescontados > 0 ? `${row.diasDescontados} - ${row.motivo || ''}` : '-'],
-          ['Dias considerados', String(row.diasFinais || 0)],
-          ['Valor diario', formatCurrency(row.valorDiario || 0)],
-          [`TOTAL ${sigla}`, formatCurrency(row.valorTotal || 0)],
+          ['Valor Diario', formatCurrency(row.valorDiario || 0)],
+          ['Dias Previstos', String(row.diasPrevistos || 0)],
+          ['Dias Descontados', String(row.diasDescontados || 0)],
+          ['Dias Finais', String(row.diasFinais || 0)],
+          ['Motivo Desconto', row.motivo || '-'],
+          ['Valor Total', formatCurrency(row.valorTotal || 0)],
         ];
         lines.forEach(([labelLinha, valor], i) => {
-          const lineY = y + 16 + i * 5;
-          doc.setFont('helvetica', i === 4 ? 'bold' : 'normal');
-          doc.text(labelLinha, 22, lineY);
-          doc.text(valor, 188, lineY, { align: 'right' });
+          const rowY = y + 14 + i * 7;
+          doc.setDrawColor(209, 213, 219);
+          doc.line(18, rowY - 5, 192, rowY - 5);
+          doc.setFont('helvetica', i === 5 ? 'bold' : 'normal');
+          doc.text(labelLinha, 21, rowY);
+          doc.text(valor, 188, rowY, { align: 'right' });
         });
-        y += 50;
+        doc.setDrawColor(209, 213, 219);
+        doc.rect(18, y + 8, 174, 42);
+        y += 62;
       };
 
       if ((formato === 'vr' || isAmbos) && vr) drawBenefit('Vale-Refeicao', vr, 'VR');
       if ((formato === 'vt' || isAmbos) && vt) drawBenefit('Vale-Transporte', vt, 'VT');
 
-      if (isAmbos) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.text(`TOTAL GERAL: ${formatCurrency(totalGeral)}`, 188, y, { align: 'right' });
-        y += 12;
-      }
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      const declaracao = isAmbos
-        ? 'Declaro ter recebido da empresa acima identificada os valores referentes aos beneficios de Vale-Refeicao e Vale-Transporte da competencia informada.'
-        : `Declaro ter recebido da empresa acima identificada o valor referente ao ${formato === 'vr' ? 'Vale-Refeicao' : 'Vale-Transporte'} da competencia informada.`;
-      doc.text(doc.splitTextToSize(declaracao, 172), 18, Math.max(y, 188));
-
-      doc.line(42, 238, 168, 238);
-      doc.setFontSize(8);
-      doc.text('Assinatura do colaborador', 105, 244, { align: 'center' });
-      doc.text(`Nome: ${emp.name || '-'}`, 105, 250, { align: 'center' });
-      doc.text('Data: ____/____/________', 105, 256, { align: 'center' });
+      doc.setDrawColor(156, 163, 175);
+      doc.line(18, Math.max(y + 8, 236), 192, Math.max(y + 8, 236));
     });
     return doc.output('blob');
   };
@@ -300,6 +282,22 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     </table>
   );
 
+  const renderFichaBloco = (label: string, row: BenefitReportRow) => (
+    <div className="mb-6">
+      <h3 className="text-sm font-bold mb-2 bg-gray-200 px-2 py-1">{label}</h3>
+      <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
+        <tbody>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium w-1/2">Valor Di√°rio</td><td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(row.valorDiario)}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Previstos</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasPrevistos}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Descontados</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasDescontados || 0}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Finais</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasFinais}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Motivo Desconto</td><td className="border border-gray-300 px-2 py-1 text-right">{row.motivo || '‚Äî'}</td></tr>
+          <tr className="bg-gray-100 font-bold"><td className="border border-gray-400 px-2 py-1">Valor Total</td><td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(row.valorTotal)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <>
       <style>{`
@@ -338,63 +336,46 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
           </div>
         </div>
 
-        <div id="recibos-print" className="max-w-[210mm] mx-auto">
+        <div id="recibos-print" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
           {recibos.map(({ company, emp, vr, vt }, idx) => {
             const isAmbos = formato === 'ambos';
-            const titulo = isAmbos
-              ? 'RECIBO DE BENEF√çCIOS ‚Äî VR E VT'
-              : formato === 'vr' ? 'RECIBO DE VALE-REFEI√á√ÉO' : 'RECIBO DE VALE-TRANSPORTE';
-            const declaracao = isAmbos
-              ? 'Declaro ter recebido da empresa acima identificada os valores referentes aos benef√≠cios de Vale-Refei√ß√£o e Vale-Transporte da compet√™ncia informada.'
-              : `Declaro ter recebido da empresa acima identificada o valor referente ao ${formato === 'vr' ? 'Vale-Refei√ß√£o' : 'Vale-Transporte'} da compet√™ncia informada.`;
-            const totalGeral = (vr?.valorTotal || 0) + (vt?.valorTotal || 0);
-            const corrigido = vr?.corrigido || vt?.corrigido;
             return (
-              <div key={`${company.id}-${emp.id}-${idx}`} className="recibo-page px-8 py-6" style={{ minHeight: '270mm' }}>
-                <div className="border-2 border-black p-5">
-                  <div className="border-b-2 border-black pb-2 mb-3 flex justify-between items-start">
+              <div key={`${company.id}-${emp.id}-${idx}`} className="recibo-page" style={{ minHeight: '270mm' }}>
+                <div className="border-b-2 border-black pb-3 mb-4">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <h1 className="text-base font-bold uppercase">{company.name}</h1>
-                      <p className="text-xs">CNPJ: {company.cnpj}</p>
+                      <h1 className="text-lg font-bold">{company.name}</h1>
+                      <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
                     </div>
-                    <div className="text-right text-xs">
-                      <p>Compet√™ncia: <strong>{competenciaLabel}</strong></p>
-                      <p>Pagamento: <strong>{dataPagamento}</strong></p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold">FICHA INDIVIDUAL DE BENEFÕCIOS</p>
+                      <p className="text-xs">CompetÍncia: {competenciaLabel}</p>
+                      <p className="text-xs">Emiss„o: {dataPagamento}</p>
                     </div>
-                  </div>
-
-                  <h2 className="text-center text-base font-bold mb-2 tracking-wide">{titulo}</h2>
-                  {corrigido && (
-                    <p className="text-center text-[11px] text-amber-700 border border-amber-400 bg-amber-50 rounded px-2 py-1 mb-3">
-                      Recibo ajustado conforme corre√ß√£o administrativa registrada.
-                    </p>
-                  )}
-
-                  <table className="w-full text-sm mb-3">
-                    <tbody>
-                      <tr><td className="py-1 pr-4 font-semibold w-1/3">Funcion√°rio:</td><td className="py-1">{emp.name}</td></tr>
-                      <tr><td className="py-1 pr-4 font-semibold">Fun√ß√£o:</td><td className="py-1">{emp.cargo}</td></tr>
-                      <tr><td className="py-1 pr-4 font-semibold">Compet√™ncia:</td><td className="py-1">{competenciaLabel}</td></tr>
-                    </tbody>
-                  </table>
-
-                  {(formato === 'vr' || isAmbos) && vr && renderBloco('Vale-Refei√ß√£o', vr, 'VR')}
-                  {(formato === 'vt' || isAmbos) && vt && renderBloco('Vale-Transporte', vt, 'VT')}
-
-                  {isAmbos && (
-                    <div className="text-right text-base font-bold border-t-2 border-black pt-2 mb-3">
-                      TOTAL GERAL: {formatCurrency(totalGeral)}
-                    </div>
-                  )}
-
-                  <p className="text-sm text-justify mb-10 leading-relaxed">{declaracao}</p>
-
-                  <div className="mt-12">
-                    <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
-                    <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
-                    <p className="text-center text-xs mt-1">Data: ____/____/________</p>
                   </div>
                 </div>
+
+                <div className="border border-gray-400 rounded p-3 mb-4" style={{ fontSize: '10px' }}>
+                  <div className="grid grid-cols-2 gap-1">
+                    <p><strong>Nome:</strong> {emp.name}</p>
+                    <p><strong>Cargo:</strong> {emp.cargo}</p>
+                    <p><strong>CPF:</strong> {emp.cpf || 'ó'}</p>
+                    <p><strong>Registro:</strong> {emp.registro || 'ó'}</p>
+                    <p><strong>Admiss„o:</strong> {emp.dataAdmissao ? new Date(emp.dataAdmissao).toLocaleDateString('pt-BR') : 'ó'}</p>
+                    <p><strong>Dias ˙teis:</strong> {diasUteis}</p>
+                  </div>
+                </div>
+
+                {(formato === 'vr' || isAmbos) && vr && renderFichaBloco('VALE REFEI«√O (VR)', vr)}
+                {(formato === 'vt' || isAmbos) && vt && renderFichaBloco('VALE TRANSPORTE (VT)', vt)}
+
+                {(vr?.corrigido || vt?.corrigido) && (
+                  <p className="text-[10px] text-amber-700 border border-amber-300 bg-amber-50 rounded px-2 py-1 mb-4">
+                    Ficha ajustada conforme correÁ„o administrativa registrada.
+                  </p>
+                )}
+
+                <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">{' '}</div>
               </div>
             );
           })}
