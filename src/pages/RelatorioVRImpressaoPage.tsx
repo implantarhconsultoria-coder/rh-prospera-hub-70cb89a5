@@ -95,6 +95,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
+  const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
   const empresasParam = searchParams.get('empresas') || '';
   const empresaSingle = searchParams.get('empresa') || '';
 
@@ -115,7 +116,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
   }, [empresaIds.join(','), competencia]);
 
   const blocks: EmpresaBlock[] = useMemo(() => {
-    const diasUteis = getWorkingDays(competencia, feriadosDatas);
+    const diasUteis = diasUteisManual > 0 ? diasUteisManual : getWorkingDays(competencia, feriadosDatas);
     return empresaIds
       .map(id => companies.find(c => c.id === id))
       .filter(Boolean)
@@ -140,7 +141,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
         const total = sumBenefitRows(rows);
         return { company, diasUteis, dataFechamento: fech.dataFechamento || '', rows, total };
       });
-  }, [empresaIds, companies, employees, entries, competencia, feriadosDatas, correcoes]);
+  }, [empresaIds, companies, employees, entries, competencia, feriadosDatas, correcoes, diasUteisManual]);
 
   const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
 

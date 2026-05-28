@@ -33,13 +33,14 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const formato = (searchParams.get('formato') || searchParams.get('tipo') || 'vr') as Formato;
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
+  const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
   const empresasParam = searchParams.get('empresas') || '';
   const funcionariosParam = searchParams.get('funcionarios') || '';
 
   const empresaIds = empresasParam.split(',').filter(Boolean);
   const funcionarioIds = funcionariosParam ? funcionariosParam.split(',').filter(Boolean) : null;
 
-  const diasUteis = getWorkingDays(competencia);
+  const diasUteis = diasUteisManual > 0 ? diasUteisManual : getWorkingDays(competencia);
   const dataPagamento = getFirstBusinessDayOfNextMonth(competencia);
 
   useEffect(() => {

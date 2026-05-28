@@ -37,9 +37,13 @@ const RelatorioVTPage: React.FC = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState<BenefitReportRow[]>([]);
   const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
+  const [diasUteisManual, setDiasUteisManual] = useState('');
+  const [diasUteisEmpresaManual, setDiasUteisEmpresaManual] = useState('');
 
   const { datas: feriadosDatas } = useFeriados(competencia, selectedCompany);
-  const diasUteis = getWorkingDays(competencia, feriadosDatas);
+  const diasUteisCalculado = getWorkingDays(competencia, feriadosDatas);
+  const diasUteis = Number(diasUteisManual) > 0 ? Number(diasUteisManual) : diasUteisCalculado;
+  const diasUteisEmpresa = Number(diasUteisEmpresaManual) > 0 ? Number(diasUteisEmpresaManual) : undefined;
   const fechamento = getFechamento(selectedCompany, competencia);
   const dataFechamento = fechamento.dataFechamento || '';
 
@@ -75,14 +79,18 @@ const RelatorioVTPage: React.FC = () => {
 
   const handlePrintRelatorio = () => {
     addBenefitReport({ type: 'vt', companyId: selectedCompany, competencia });
-    navigate(`/relatorio-vt-impressao?empresa=${selectedCompany}&competencia=${competencia}`);
+    const params = new URLSearchParams({ empresa: selectedCompany, competencia });
+    if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
+    navigate(`/relatorio-vt-impressao?${params.toString()}`);
   };
 
   const handlePrintConsolidadoTodas = () => {
     if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
     companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
     const ids = companies.map(c => c.id).join(',');
-    window.open(`/relatorio-vt-impressao?empresas=${ids}&competencia=${competenciaEmpresa}`, '_blank');
+    const params = new URLSearchParams({ empresas: ids, competencia: competenciaEmpresa });
+    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
+    window.open(`/relatorio-vt-impressao?${params.toString()}`, '_blank');
   };
 
   const handlePrintConsolidadoSelecionadas = () => {
@@ -90,7 +98,9 @@ const RelatorioVTPage: React.FC = () => {
     if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
     Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
     const ids = Array.from(multiCompanies).join(',');
-    window.open(`/relatorio-vt-impressao?empresas=${ids}&competencia=${competenciaEmpresa}`, '_blank');
+    const params = new URLSearchParams({ empresas: ids, competencia: competenciaEmpresa });
+    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
+    window.open(`/relatorio-vt-impressao?${params.toString()}`, '_blank');
   };
 
   const goRecibos = (empresas: string[], funcionarios?: string[], formatoOverride?: 'vr' | 'vt' | 'ambos') => {
@@ -98,6 +108,7 @@ const RelatorioVTPage: React.FC = () => {
     if (empresasLimpas.length === 0) { toast.error('Selecione uma empresa antes de gerar recibos'); return; }
     if (!competencia) { toast.error('Selecione a competência'); return; }
     const params = new URLSearchParams({ formato: formatoOverride || formato, competencia, empresas: empresasLimpas.join(',') });
+    if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
     if (funcionarios && funcionarios.length) params.set('funcionarios', funcionarios.join(','));
     window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
@@ -112,6 +123,7 @@ const RelatorioVTPage: React.FC = () => {
     if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
     companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
     const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: companies.map(c => c.id).join(',') });
+    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
     window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
   const handleRecibosEmpresasSelecionadas = () => {
@@ -119,6 +131,7 @@ const RelatorioVTPage: React.FC = () => {
     if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
     Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
     const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: Array.from(multiCompanies).join(',') });
+    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
     window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
 
@@ -174,7 +187,13 @@ const RelatorioVTPage: React.FC = () => {
             <option value="ambos">VR + VT na mesma folha</option>
           </select>
         </div>
-        <span className="text-xs text-muted-foreground">Dias úteis: <strong className="text-foreground">{diasUteis}</strong></span>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Dias uteis pagos (opcional)</label>
+          <Input type="number" min="1" step="1" value={diasUteisManual}
+            onChange={e => { setDiasUteisManual(e.target.value); setGenerated(false); }}
+            placeholder={String(diasUteisCalculado)} className="w-32" />
+        </div>
+        <span className="text-xs text-muted-foreground">Dias uteis: <strong className="text-foreground">{diasUteis}</strong>{diasUteisManual ? ' (manual)' : ''}</span>
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório
         </Button>
@@ -189,6 +208,12 @@ const RelatorioVTPage: React.FC = () => {
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Competência (mês)</label>
             <Input type="month" value={competenciaEmpresa} onChange={e => setCompetenciaEmpresa(e.target.value)} className="w-44" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Dias pagos (opcional)</label>
+            <Input type="number" min="1" step="1" value={diasUteisEmpresaManual}
+              onChange={e => setDiasUteisEmpresaManual(e.target.value)}
+              placeholder="auto" className="w-28" />
           </div>
           <Button onClick={handleRecibosTodasEmpresas} variant="outline" size="sm">
             <Printer className="w-4 h-4 mr-2" /> Recibos de todas as empresas
@@ -351,3 +376,5 @@ const RelatorioVTPage: React.FC = () => {
 };
 
 export default RelatorioVTPage;
+
+
