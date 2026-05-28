@@ -39,6 +39,8 @@ const RelatorioVTPage: React.FC = () => {
   const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
   const [diasUteisManual, setDiasUteisManual] = useState('');
   const [diasUteisEmpresaManual, setDiasUteisEmpresaManual] = useState('');
+  const [dataPagamentoManual, setDataPagamentoManual] = useState('');
+  const [dataPagamentoEmpresaManual, setDataPagamentoEmpresaManual] = useState('');
 
   const { datas: feriadosDatas } = useFeriados(competencia, selectedCompany);
   const diasUteisCalculado = getWorkingDays(competencia, feriadosDatas);
@@ -109,6 +111,7 @@ const RelatorioVTPage: React.FC = () => {
     if (!competencia) { toast.error('Selecione a competência'); return; }
     const params = new URLSearchParams({ formato: formatoOverride || formato, competencia, empresas: empresasLimpas.join(',') });
     if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
+    if (dataPagamentoManual) params.set('dataPagamento', dataPagamentoManual);
     if (funcionarios && funcionarios.length) params.set('funcionarios', funcionarios.join(','));
     window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
@@ -124,6 +127,7 @@ const RelatorioVTPage: React.FC = () => {
     companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
     const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: companies.map(c => c.id).join(',') });
     if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
+    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
     window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
   const handleRecibosEmpresasSelecionadas = () => {
@@ -132,6 +136,7 @@ const RelatorioVTPage: React.FC = () => {
     Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
     const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: Array.from(multiCompanies).join(',') });
     if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
+    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
     window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
   };
 
@@ -193,6 +198,10 @@ const RelatorioVTPage: React.FC = () => {
             onChange={e => { setDiasUteisManual(e.target.value); setGenerated(false); }}
             placeholder={String(diasUteisCalculado)} className="w-32" />
         </div>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Data pagamento (opcional)</label>
+          <Input type="date" value={dataPagamentoManual} onChange={e => setDataPagamentoManual(e.target.value)} className="w-40" />
+        </div>
         <span className="text-xs text-muted-foreground">Dias uteis: <strong className="text-foreground">{diasUteis}</strong>{diasUteisManual ? ' (manual)' : ''}</span>
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório
@@ -214,6 +223,10 @@ const RelatorioVTPage: React.FC = () => {
             <Input type="number" min="1" step="1" value={diasUteisEmpresaManual}
               onChange={e => setDiasUteisEmpresaManual(e.target.value)}
               placeholder="auto" className="w-28" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Data pagamento</label>
+            <Input type="date" value={dataPagamentoEmpresaManual} onChange={e => setDataPagamentoEmpresaManual(e.target.value)} className="w-40" />
           </div>
           <Button onClick={handleRecibosTodasEmpresas} variant="outline" size="sm">
             <Printer className="w-4 h-4 mr-2" /> Recibos de todas as empresas

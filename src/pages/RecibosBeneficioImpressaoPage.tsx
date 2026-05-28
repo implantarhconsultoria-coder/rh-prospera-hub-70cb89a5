@@ -18,6 +18,13 @@ const competenciaPt = (competencia: string) => {
   return `${meses[Number(m) - 1]} / ${y}`;
 };
 
+
+const formatInputDateBr = (value: string) => {
+  if (!value) return '';
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+};
 const applyCorrecao = (r: BenefitReportRow, c: any | undefined): BenefitReportRow => {
   if (!c) return r;
   return {
@@ -62,6 +69,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const formato = (searchParams.get('formato') || searchParams.get('tipo') || 'vr') as Formato;
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
+  const dataPagamentoParam = searchParams.get('dataPagamento') || '';
   const empresasParam = searchParams.get('empresas') || '';
   const funcionariosParam = searchParams.get('funcionarios') || '';
 
@@ -69,7 +77,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const funcionarioIds = funcionariosParam ? funcionariosParam.split(',').filter(Boolean) : null;
 
   const diasUteis = diasUteisManual > 0 ? diasUteisManual : getWorkingDays(competencia);
-  const dataPagamento = getFirstBusinessDayOfNextMonth(competencia);
+  const dataEmissao = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const dataPagamento = formatInputDateBr(dataPagamentoParam) || getFirstBusinessDayOfNextMonth(competencia);
 
   useEffect(() => {
     if (!dataLoading) empresaIds.forEach((cid) => getOrCreateEntries(cid, competencia));
@@ -168,7 +177,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       doc.text('FICHA INDIVIDUAL DE BENEFICIOS', pageRight, 22, { align: 'right' });
       doc.setFont('helvetica', 'normal');
       doc.text(`Competencia: ${competenciaLabel}`, pageRight, 28, { align: 'right' });
-      doc.text(`Emissao: ${dataPagamento}`, pageRight, 34, { align: 'right' });
+      doc.text(`Pagamento: ${dataPagamento}`, pageRight, 34, { align: 'right' });
+      doc.text(`Emissao: ${dataEmissao}`, pageRight, 40, { align: 'right' });
       doc.setLineWidth(0.5);
       doc.line(pageLeft, 42, pageRight, 42);
 
@@ -371,7 +381,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
                     <div className="text-right">
                       <p className="text-sm font-bold">FICHA INDIVIDUAL DE BENEFÍCIOS</p>
                       <p className="text-xs">Competência: {competenciaLabel}</p>
-                      <p className="text-xs">Emissão: {dataPagamento}</p>
+                      <p className="text-xs">Pagamento: {dataPagamento}</p>
+                      <p className="text-xs">Emissão: {dataEmissao}</p>
                     </div>
                   </div>
                 </div>
@@ -415,4 +426,5 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
 };
 
 export default RecibosBeneficioImpressaoPage;
+
 
