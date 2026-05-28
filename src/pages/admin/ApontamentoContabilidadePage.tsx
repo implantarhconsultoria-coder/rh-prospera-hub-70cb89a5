@@ -626,13 +626,6 @@ const ApontamentoContabilidadePage: React.FC = () => {
               line-height: 1.2;
               text-transform: uppercase;
             }
-            .teste {
-              margin: 0 0 5px;
-              text-align: center;
-              font-size: 12px;
-              font-weight: 700;
-              color: #b00000;
-            }
             table {
               width: 100%;
               border-collapse: collapse;
@@ -668,7 +661,6 @@ const ApontamentoContabilidadePage: React.FC = () => {
         <body>
           <main class="page">
             <h1>${esc(titulo)}</h1>
-            <div class="teste">TESTE FUNÇÃO REAL</div>
             <table>
               <thead>
                 <tr>
@@ -764,19 +756,29 @@ const ApontamentoContabilidadePage: React.FC = () => {
     let y = margin;
 
     const drawHeader = () => {
+      doc.setTextColor(0, 0, 0);
+      doc.setDrawColor(0, 0, 0);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
       doc.text(titulo, pageW / 2, y + 3, { align: 'center' });
-      y += 8;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.text(`Funcionarios: ${items.length}   Total: ${money(totalGeral)}   Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageW / 2, y + 7, { align: 'center' });
+      y += 11;
       doc.setFontSize(6.5);
-      doc.setFillColor(230, 230, 230);
+      doc.setFont('helvetica', 'bold');
       let x = margin;
       headers.forEach((h, idx) => {
+        doc.setFillColor(245, 245, 245);
+        doc.setTextColor(0, 0, 0);
+        doc.setDrawColor(0, 0, 0);
         doc.rect(x, y, widths[idx], rowH, 'FD');
         doc.text(h, x + 1, y + 3.4);
         x += widths[idx];
       });
       y += rowH;
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0, 0, 0);
     };
 
     drawHeader();
@@ -809,6 +811,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
       ];
       let x = margin;
       values.forEach((value, idx) => {
+        doc.setTextColor(0, 0, 0);
+        doc.setDrawColor(0, 0, 0);
         doc.rect(x, y, widths[idx], rowH);
         const text = doc.splitTextToSize(String(value), widths[idx] - 2)[0] || '';
         doc.text(text, x + 1, y + 3.4);
@@ -872,19 +876,29 @@ const ApontamentoContabilidadePage: React.FC = () => {
       const titulo = `${grupo.company.name.toUpperCase()} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
 
       const drawHeader = () => {
+        doc.setTextColor(0, 0, 0);
+        doc.setDrawColor(0, 0, 0);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(11);
         doc.text(titulo, pageW / 2, y + 3, { align: 'center' });
-        y += 8;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.text(`Funcionarios: ${grupo.items.length}   Total: ${money(totalGrupo)}   Gerado em: ${new Date().toLocaleString('pt-BR')}`, pageW / 2, y + 7, { align: 'center' });
+        y += 11;
         doc.setFontSize(6.5);
-        doc.setFillColor(230, 230, 230);
+        doc.setFont('helvetica', 'bold');
         let x = margin;
         headers.forEach((h, idx) => {
+          doc.setFillColor(245, 245, 245);
+          doc.setTextColor(0, 0, 0);
+          doc.setDrawColor(0, 0, 0);
           doc.rect(x, y, widths[idx], rowH, 'FD');
           doc.text(h, x + 1, y + 3.4);
           x += widths[idx];
         });
         y += rowH;
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
       };
 
       drawHeader();
@@ -917,6 +931,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
         ];
         let x = margin;
         values.forEach((value, idx) => {
+          doc.setTextColor(0, 0, 0);
+          doc.setDrawColor(0, 0, 0);
           doc.rect(x, y, widths[idx], rowH);
           const text = doc.splitTextToSize(String(value), widths[idx] - 2)[0] || '';
           doc.text(text, x + 1, y + 3.4);
