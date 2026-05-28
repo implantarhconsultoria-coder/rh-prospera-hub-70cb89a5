@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { Building2, MapPin, Users, ChevronRight, ArrowLeft, Search, Plus, X, Save } from 'lucide-react';
+import { Building2, MapPin, Users, ChevronRight, ArrowLeft, Search, Plus, X, Save, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,12 +12,13 @@ import { toast } from 'sonner';
 const companyOrder = ['topac-matriz', 'topac-pg', 'topac-gyn', 'lmt', 'alqui'];
 
 const EmpresasPage: React.FC = () => {
-  const { companies, employees } = useApp();
+  const { companies, employees, refreshData } = useApp();
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState('');
   const [search, setSearch] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [savingCompany, setSavingCompany] = useState(false);
+  const [deletingEmployeeId, setDeletingEmployeeId] = useState('');
   const [newCompany, setNewCompany] = useState({
     nome: '',
     cnpj: '',
@@ -47,6 +48,39 @@ const EmpresasPage: React.FC = () => {
     window.location.reload();
   };
 
+  const deleteEmployee = async (employee: typeof employees[number]) => {
+    const ok = window.confirm(`Excluir ${employee.name} da base desta empresa?\n\nEssa ação remove o duplicado da listagem, mas não altera o fechamento já feito.`);
+    if (!ok) return;
+
+    setDeletingEmployeeId(employee.id);
+    const observacoes = [
+      employee.observacoes || '',
+      `Excluido em ${new Date().toLocaleString('pt-BR')} pela tela de empresas.`,
+    ].filter(Boolean).join('\n');
+
+    const softDelete = await supabase
+      .from('funcionarios')
+      .update({ ativo: false, status: 'excluido', observacoes } as any)
+      .eq('id', employee.id);
+
+    if (softDelete.error) {
+      const hardDelete = await supabase
+        .from('funcionarios')
+        .delete()
+        .eq('id', employee.id);
+
+      if (hardDelete.error) {
+        setDeletingEmployeeId('');
+        toast.error('Erro ao excluir funcionario: ' + hardDelete.error.message);
+        return;
+      }
+    }
+
+    await refreshData();
+    setDeletingEmployeeId('');
+    toast.success('Funcionario excluido da listagem.');
+  };
+
   const orderedCompanies = [...companies].sort((a, b) => {
     const ai = companyOrder.indexOf(a.codigo || a.id);
     const bi = companyOrder.indexOf(b.codigo || b.id);
@@ -55,7 +89,7 @@ const EmpresasPage: React.FC = () => {
   const selected = companies.find(c => c.id === selectedId);
 
   if (selected) {
-    const emps = employees.filter(e => e.companyId === selected.id);
+    const emps = employees.filter(e => e.companyId === selected.id && e.status !== 'excluido');
     const ativos = emps.filter(e => e.status === 'ativo');
     const afastados = emps.filter(e => e.status === 'afastado');
     const ferias = emps.filter(e => e.status === 'férias');
@@ -136,6 +170,7 @@ const EmpresasPage: React.FC = () => {
                 <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Cargo</th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Salario</th>
                 <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground uppercase">Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -152,6 +187,22 @@ const EmpresasPage: React.FC = () => {
                     <Badge className={`text-[10px] ${e.status === 'ativo' ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}`}>
                       {e.status}
                     </Badge>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={deletingEmployeeId === e.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void deleteEmployee(e);
+                      }}
+                      title="Excluir funcionario"
+                      className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </td>
                 </tr>
               ))}

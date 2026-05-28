@@ -37,7 +37,7 @@ export interface Employee {
   vtDiario: number;
   insalubridadeAtiva: boolean;
   insalubridadeValor: number;
-  status: 'ativo' | 'afastado' | 'férias' | 'desligado';
+  status: 'ativo' | 'afastado' | 'férias' | 'desligado' | 'excluido';
   telefone: string;
   celular: string;
   email: string;
@@ -138,7 +138,7 @@ export const mapEmployee = (row: any): Employee => ({
   vtDiario: Number(row.vt_diario) || 0,
   insalubridadeAtiva: row.insalubridade_ativa ?? false,
   insalubridadeValor: Number(row.insalubridade_valor) || 0,
-  status: row.ativo === false ? 'desligado' : (row.status || 'ativo'),
+  status: row.status === 'excluido' ? 'excluido' : (row.ativo === false ? 'desligado' : (row.status || 'ativo')),
   telefone: cleanNullableText(row.telefone),
   celular: cleanNullableText(row.celular),
   email: cleanNullableText(row.email),
