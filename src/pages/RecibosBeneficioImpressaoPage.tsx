@@ -1,11 +1,14 @@
-import React, { useEffect, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Loader2, Mail } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays, getFirstBusinessDayOfNextMonth } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, buildVTReportRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import { downloadEmailWithAttachment } from '@/lib/emailUtils';
+import { toast } from 'sonner';
 
 type Formato = 'vr' | 'vt' | 'ambos';
 
@@ -28,9 +31,34 @@ const applyCorrecao = (r: BenefitReportRow, c: any | undefined): BenefitReportRo
   };
 };
 
+const sanitizeFileName = (value: string) =>
+  (value || 'recibos')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const normalizeText = (value: string) =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+const getEmailDestinoRecibo = (companyName: string) => {
+  const nome = normalizeText(companyName);
+  if (nome.includes('PRAIA')) {
+    return { key: 'praia', to: ['antonio.carlos@topac.com.br'], cc: ['robson@topac.com.br'] };
+  }
+  if (nome.includes('GOIANIA') || nome.includes('GOIANA') || nome.includes('GOIAN')) {
+    return { key: 'goiania', to: ['gyn@topac.com.br'], cc: ['robson@topac.com.br'] };
+  }
+  return null;
+};
+
 const RecibosBeneficioImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, dataLoading, loading } = useApp();
   const [searchParams] = useSearchParams();
+  const [sendingEmail, setSendingEmail] = useState(false);
   const formato = (searchParams.get('formato') || searchParams.get('tipo') || 'vr') as Formato;
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
@@ -116,6 +144,147 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
 
   const formatoLabel = formato === 'vr' ? 'VR' : formato === 'vt' ? 'VT' : 'VR + VT';
 
+  const recibosComEmail = recibos.filter((r) => getEmailDestinoRecibo(r.company?.name || ''));
+  const podeEnviarEmail = recibosComEmail.length > 0;
+
+  const gerarPdfRecibosBlob = (items: ReciboItem[]) => {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    items.forEach(({ company, emp, vr, vt }, index) => {
+      if (index > 0) doc.addPage();
+      const isAmbos = formato === 'ambos';
+      const titulo = isAmbos
+        ? 'RECIBO DE BENEFICIOS - VR E VT'
+        : formato === 'vr' ? 'RECIBO DE VALE-REFEICAO' : 'RECIBO DE VALE-TRANSPORTE';
+      const totalGeral = (vr?.valorTotal || 0) + (vt?.valorTotal || 0);
+
+      doc.setTextColor(0, 0, 0);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.rect(12, 12, 186, 265);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text(String(company.name || '').toUpperCase(), 18, 22);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text(`CNPJ: ${company.cnpj || '-'}`, 18, 28);
+      doc.text(`Competencia: ${competenciaLabel}`, 145, 22);
+      doc.text(`Pagamento: ${dataPagamento}`, 145, 28);
+      doc.line(18, 34, 192, 34);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(titulo, 105, 44, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.text('Funcionario:', 18, 58);
+      doc.text('Funcao:', 18, 66);
+      doc.text('Competencia:', 18, 74);
+      doc.setFont('helvetica', 'normal');
+      doc.text(String(emp.name || '-'), 48, 58);
+      doc.text(String(emp.cargo || '-'), 48, 66);
+      doc.text(competenciaLabel, 48, 74);
+
+      let y = 88;
+      const drawBenefit = (label: string, row: BenefitReportRow, sigla: 'VR' | 'VT') => {
+        doc.setDrawColor(0, 0, 0);
+        doc.rect(18, y, 174, 42);
+        doc.setFillColor(238, 238, 238);
+        doc.rect(18, y, 174, 8, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(label.toUpperCase(), 21, y + 5.5);
+        doc.setFont('helvetica', 'normal');
+        const lines = [
+          ['Dias previstos', String(row.diasPrevistos || 0)],
+          ['Descontos / faltas', row.diasDescontados > 0 ? `${row.diasDescontados} - ${row.motivo || ''}` : '-'],
+          ['Dias considerados', String(row.diasFinais || 0)],
+          ['Valor diario', formatCurrency(row.valorDiario || 0)],
+          [`TOTAL ${sigla}`, formatCurrency(row.valorTotal || 0)],
+        ];
+        lines.forEach(([labelLinha, valor], i) => {
+          const lineY = y + 16 + i * 5;
+          doc.setFont('helvetica', i === 4 ? 'bold' : 'normal');
+          doc.text(labelLinha, 22, lineY);
+          doc.text(valor, 188, lineY, { align: 'right' });
+        });
+        y += 50;
+      };
+
+      if ((formato === 'vr' || isAmbos) && vr) drawBenefit('Vale-Refeicao', vr, 'VR');
+      if ((formato === 'vt' || isAmbos) && vt) drawBenefit('Vale-Transporte', vt, 'VT');
+
+      if (isAmbos) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(`TOTAL GERAL: ${formatCurrency(totalGeral)}`, 188, y, { align: 'right' });
+        y += 12;
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      const declaracao = isAmbos
+        ? 'Declaro ter recebido da empresa acima identificada os valores referentes aos beneficios de Vale-Refeicao e Vale-Transporte da competencia informada.'
+        : `Declaro ter recebido da empresa acima identificada o valor referente ao ${formato === 'vr' ? 'Vale-Refeicao' : 'Vale-Transporte'} da competencia informada.`;
+      doc.text(doc.splitTextToSize(declaracao, 172), 18, Math.max(y, 188));
+
+      doc.line(42, 238, 168, 238);
+      doc.setFontSize(8);
+      doc.text('Assinatura do colaborador', 105, 244, { align: 'center' });
+      doc.text(`Nome: ${emp.name || '-'}`, 105, 250, { align: 'center' });
+      doc.text('Data: ____/____/________', 105, 256, { align: 'center' });
+    });
+    return doc.output('blob');
+  };
+
+  const handleEnviarEmail = async () => {
+    if (!podeEnviarEmail) {
+      toast.info('Envio por e-mail disponivel apenas para Praia Grande e Goiania. As demais empresas ficam somente para impressao.');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const grupos = new Map<string, { destino: NonNullable<ReturnType<typeof getEmailDestinoRecibo>>; items: ReciboItem[] }>();
+      recibosComEmail.forEach((item) => {
+        const destino = getEmailDestinoRecibo(item.company?.name || '');
+        if (!destino) return;
+        const atual = grupos.get(destino.key) || { destino, items: [] };
+        atual.items.push(item);
+        grupos.set(destino.key, atual);
+      });
+
+      for (const { destino, items } of Array.from(grupos.values())) {
+        const empresaNome = items[0]?.company?.name || 'TOPAC';
+        const pdfBlob = gerarPdfRecibosBlob(items);
+        const attachmentName = `${sanitizeFileName(`recibos_${formatoLabel}_${empresaNome}_${competencia}`)}.pdf`;
+        await downloadEmailWithAttachment({
+          to: destino.to,
+          cc: destino.cc,
+          subject: `Recibos ${formatoLabel} - ${empresaNome} - ${competenciaLabel}`,
+          body: [
+            'Prezados,',
+            '',
+            `Segue em anexo o PDF com os recibos de ${formatoLabel} referente a ${competenciaLabel} da empresa ${empresaNome}.`,
+            '',
+            `Quantidade de recibos: ${items.length}`,
+            '',
+            'Atenciosamente,',
+            'Departamento Pessoal - TOPAC',
+          ].join('\n'),
+          attachmentBlob: pdfBlob,
+          attachmentName,
+          fileName: `email_recibos_${destino.key}_${competencia}`,
+        });
+      }
+      toast.success('E-mail dos recibos gerado com PDF em anexo.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel gerar o e-mail dos recibos.');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const renderBloco = (label: string, row: BenefitReportRow, sigla: 'VR' | 'VT') => (
     <table className="w-full text-sm mb-3 border border-black/40">
       <tbody>
@@ -150,6 +319,15 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
         <div className="no-print flex flex-wrap items-center gap-3 px-8 py-3 bg-gray-100 border-b sticky top-0 z-10">
           <button onClick={() => window.history.back()} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">← Voltar</button>
           <button onClick={() => window.print()} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">🖨 Imprimir / PDF</button>
+          <button
+            onClick={handleEnviarEmail}
+            disabled={!podeEnviarEmail || sendingEmail}
+            title={podeEnviarEmail ? 'Gerar e-mail com PDF em anexo para Praia Grande ou Goiania' : 'Disponivel apenas para Praia Grande e Goiania'}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 disabled:opacity-45 disabled:cursor-not-allowed"
+          >
+            {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+            Enviar por e-mail
+          </button>
           <div className="text-sm text-gray-700 ml-2">
             <strong>Pré-visualização:</strong> {recibos.length} recibo(s) — {recibos.length} página(s) ({formatoLabel})
             {recibos.some((r) => r.vr?.corrigido || r.vt?.corrigido) && (
