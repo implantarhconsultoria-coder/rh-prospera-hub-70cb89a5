@@ -1,8 +1,5 @@
 /**
  * Abre o cliente de e-mail padrao (Outlook etc.) com campos preenchidos.
- *
- * O protocolo mailto: nao suporta anexos por seguranca do navegador. Quando
- * houver PDF/documento, o fluxo correto e baixar o arquivo e anexar no Outlook.
  */
 export interface EmailParams {
   to: readonly string[];
@@ -21,23 +18,21 @@ export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
   window.location.href = mailto;
 };
 
-const blobToBase64 = (blob: Blob) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-
-const wrapBase64 = (value: string) => value.replace(/(.{76})/g, '$1\r\n');
-
-const safeMailFileName = (value: string) =>
+const safeFileName = (value: string) =>
   (value || 'email')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9._-]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 150);
+
+const openPdfPreview = (blob: Blob, fileName: string) => {
+  const pdf = new Blob([blob], { type: 'application/pdf' });
+  const url = URL.createObjectURL(pdf);
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+  return { opened: Boolean(win), fileName };
+};
 
 export const downloadEmailWithAttachment = async ({
   to,
@@ -46,49 +41,36 @@ export const downloadEmailWithAttachment = async ({
   body,
   attachmentBlob,
   attachmentName,
-  fileName,
 }: EmailParams & {
   attachmentBlob: Blob;
   attachmentName: string;
   fileName?: string;
 }) => {
-  const boundary = `----TOPAC-RH-${Date.now()}`;
-  const attachmentBase64 = wrapBase64(await blobToBase64(attachmentBlob));
-  const from = 'TOPAC RH PRO <adm.matriz@topac.com.br>';
-  const eml = [
-    `From: ${from}`,
-    `To: ${to.join(', ')}`,
-    ...(cc?.length ? [`Cc: ${cc.join(', ')}`] : []),
-    `Subject: ${subject}`,
-    'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    '',
-    `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'Content-Transfer-Encoding: 8bit',
-    '',
-    body,
-    '',
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${attachmentName}"`,
-    'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${attachmentName}"`,
-    '',
-    attachmentBase64,
-    '',
-    `--${boundary}--`,
-    '',
-  ].join('\r\n');
+  const cleanAttachmentName = safeFileName(attachmentName).endsWith('.pdf')
+    ? safeFileName(attachmentName)
+    : `${safeFileName(attachmentName)}.pdf`;
+  const pdfFile = new File([attachmentBlob], cleanAttachmentName, { type: 'application/pdf' });
+  const nav = navigator as Navigator & {
+    canShare?: (data: ShareData) => boolean;
+    share?: (data: ShareData) => Promise<void>;
+  };
 
-  const blob = new Blob([eml], { type: 'message/rfc822;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${safeMailFileName(fileName || subject)}.eml`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+  if (nav.share && (!nav.canShare || nav.canShare({ files: [pdfFile] }))) {
+    await nav.share({
+      title: subject,
+      text: `${body}\n\nPara: ${to.join(', ')}${cc?.length ? `\nCc: ${cc.join(', ')}` : ''}`,
+      files: [pdfFile],
+    });
+    return;
+  }
+
+  openPdfPreview(attachmentBlob, cleanAttachmentName);
+  openEmailClient({
+    to,
+    cc,
+    subject,
+    body: `${body}\n\nO PDF foi aberto automaticamente em outra aba. Anexe o PDF aberto antes de enviar.`,
+  });
 };
 
 export const CC_OBRIGATORIO = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
