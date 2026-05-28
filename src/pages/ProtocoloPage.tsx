@@ -84,19 +84,38 @@ const ProtocoloPage: React.FC = () => {
       }
       return '';
     };
+    const placaValue = pick([/\bplaca\s*[:\-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i]);
+    const patrimonioValue = pick([
+      /\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:\-]?\s*([A-Z0-9./-]{2,30})\b/i,
+      /(?:^|\n|\s)([A-Z]{1,4}\d{1,4}(?:[./-]\d{1,6})?)\s*(?:[-–—]\s*)?(?:placa|ve[ií]culo|compressor)\b/i,
+    ]);
+    const destinoMatch = flat.match(/encaminhad[ao]s?\s+(?:a|à)\s+empresa\s+(.+?)(?:\s+aos cuidados de\s+|\s+a\/c\s+|[.,;\n]|$)/i);
+    let empresaDestino = '';
+    let localDestino = '';
+    if (destinoMatch?.[1]) {
+      const destino = destinoMatch[1].trim();
+      const canteiroIdx = destino.toLowerCase().indexOf(' canteiro ');
+      if (canteiroIdx >= 0) {
+        empresaDestino = destino.slice(0, canteiroIdx).trim();
+        localDestino = destino.slice(canteiroIdx + 1).trim();
+      } else {
+        empresaDestino = destino;
+      }
+    }
     const descricaoMatch = flat.match(/\b(compressor|ve[ií]culo|caminh[aã]o|carro|equipamento|m[aá]quina|munck|guindaste)\b[^.,;\n]*/i);
     return {
-      empresa_destinataria: pick([
+      empresa_destinataria: empresaDestino || pick([
         /(?:encaminhad[ao]s?\s+(?:a|à)\s+empresa|empresa destinat[aá]ria|empresa)\s*[:\-]?\s*([A-ZÁ-Ú0-9][A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+(?:aos cuidados|referente|para|no|na|$)|[.,;\n])/i,
       ]),
-      local_canteiro: pick([
+      local_canteiro: localDestino || pick([
         /(?:local|canteiro|obra)\s*[:\-]?\s*([A-ZÁ-Ú0-9][A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+(?:aos cuidados|respons[aá]vel|referente|$)|[.,;\n])/i,
+        /\b(canteiro\s+(?:de|da|do)\s+[A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+aos cuidados|[.,;\n]|$)/i,
       ]),
       responsavel_recebimento: pick([
-        /(?:aos cuidados de|a\/c|respons[aá]vel(?: pelo recebimento)?|recebimento)\s*[:\-]?\s*([A-ZÁ-Ú][A-ZÁ-Úa-zá-ú ]{2,60}?)(?=[.,;\n]|$)/i,
+        /(?:aos cuidados (?:de|do|da)|a\/c|respons[aá]vel(?: pelo recebimento)?|recebimento)\s*[:\-]?\s*([A-ZÁ-Ú][A-ZÁ-Úa-zá-ú ]{2,60}?)(?=[.,;\n]|$)/i,
       ]),
-      placa: pick([/\bplaca\s*[:\-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i]),
-      patrimonio: pick([/\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:\-]?\s*([A-Z0-9./-]{2,30})\b/i]),
+      placa: placaValue,
+      patrimonio: patrimonioValue,
       renavam: pick([/\brenavam\s*[:\-]?\s*(\d{6,20})\b/i]),
       chassi: pick([/\bchassi\s*[:\-]?\s*([A-Z0-9]{8,30})\b/i]),
       ano_fabricacao: pick([/\bano fabrica[cç][aã]o\s*[:\-]?\s*(\d{4})\b/i, /\bfabrica[cç][aã]o\s*[:\-]?\s*(\d{4})\b/i]),
@@ -108,9 +127,9 @@ const ProtocoloPage: React.FC = () => {
   const mergeParsedData = (aiData: any, localData: any) => {
     const d = aiData || {};
     return {
-      empresa_destinataria: firstFilled(d.empresa_destinataria, d.empresa, localData.empresa_destinataria),
-      local_canteiro: firstFilled(d.local_canteiro, d.local, d.canteiro, localData.local_canteiro),
-      responsavel_recebimento: firstFilled(d.responsavel_recebimento, d.responsavel, d.recebedor, localData.responsavel_recebimento),
+      empresa_destinataria: firstFilled(localData.empresa_destinataria, d.empresa_destinataria, d.empresa),
+      local_canteiro: firstFilled(localData.local_canteiro, d.local_canteiro, d.local, d.canteiro),
+      responsavel_recebimento: firstFilled(localData.responsavel_recebimento, d.responsavel_recebimento, d.responsavel, d.recebedor),
       placa: firstFilled(d.placa, localData.placa),
       patrimonio: firstFilled(d.patrimonio, localData.patrimonio),
       renavam: firstFilled(d.renavam, localData.renavam),
@@ -118,7 +137,7 @@ const ProtocoloPage: React.FC = () => {
       ano_fabricacao: firstFilled(d.ano_fabricacao, localData.ano_fabricacao),
       ano_modelo: firstFilled(d.ano_modelo, localData.ano_modelo),
       empresa: firstFilled(d.empresa),
-      descricao_ativo: firstFilled(d.descricao_ativo, d.descricao, localData.descricao_ativo),
+      descricao_ativo: firstFilled(localData.descricao_ativo, d.descricao_ativo, d.descricao),
       observacoes: firstFilled(d.observacoes, d.observacao, localData.observacoes),
     };
   };
@@ -208,7 +227,7 @@ const ProtocoloPage: React.FC = () => {
     }
 
     const normalizedPlaca = sanitize(placa);
-    const normalizedPatrimonio = patrimonio.trim().toLowerCase();
+    const normalizedPatrimonio = sanitize(patrimonio);
     const normalizedRenavam = renavam.trim();
     const normalizedChassi = chassi.trim().toLowerCase();
 
@@ -217,7 +236,7 @@ const ProtocoloPage: React.FC = () => {
       : null;
 
     const match = plateMatch || ativosCache.find(a => {
-      if (normalizedPatrimonio && hasValue(a.patrimonio) && a.patrimonio.toLowerCase() === normalizedPatrimonio) return true;
+      if (normalizedPatrimonio && hasValue(a.patrimonio) && sanitize(a.patrimonio) === normalizedPatrimonio) return true;
       if (normalizedRenavam && hasValue(a.renavam) && a.renavam === normalizedRenavam) return true;
       if (normalizedChassi && hasValue(a.chassi) && a.chassi.toLowerCase() === normalizedChassi) return true;
       return false;
