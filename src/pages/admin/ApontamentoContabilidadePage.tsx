@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Save, Printer, FileText, Loader2, RefreshCw, Send } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCompetencia } from '@/lib/workingDays';
@@ -159,6 +160,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const [apontamentoId, setApontamentoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [ultimoPdfUrl, setUltimoPdfUrl] = useState<string | null>(null);
 
   const company = companies.find(c => c.id === companyId);
   const isGO = !!company && usaHE60(company.name);
@@ -620,6 +622,107 @@ const ApontamentoContabilidadePage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const gerarPdfBlob = () => {
+    if (!company) throw new Error('Selecione uma empresa');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 6;
+    const rowH = 5;
+    const heTitulo = isGO ? 'HE 60%' : 'HE 50%';
+    const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+    const widths = [46, 24, 21, 18, 18, 22, 19, 22, 13, 21, 21, 22];
+    const money = (v: number) => formatBRL(Number(v || 0));
+    const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
+    const titulo = `${company.name.toUpperCase()} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
+    let y = margin;
+
+    const drawHeader = () => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text(titulo, pageW / 2, y + 3, { align: 'center' });
+      y += 8;
+      doc.setFontSize(6.5);
+      doc.setFillColor(230, 230, 230);
+      let x = margin;
+      headers.forEach((h, idx) => {
+        doc.rect(x, y, widths[idx], rowH, 'FD');
+        doc.text(h, x + 1, y + 3.4);
+        x += widths[idx];
+      });
+      y += rowH;
+    };
+
+    drawHeader();
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.3);
+
+    items.forEach((r) => {
+      if (y + rowH > pageH - 12) {
+        doc.addPage();
+        y = margin;
+        drawHeader();
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.3);
+      }
+      const heQtd = isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas;
+      const heValor = isGO ? r.hora_extra_60 : r.hora_extra_50;
+      const values = [
+        r.nome || '-',
+        r.cpf || '-',
+        money(r.salario),
+        money(r.insalubridade),
+        hours(heQtd),
+        money(heValor),
+        hours(r.hora_extra_100_horas),
+        money(r.hora_extra_100),
+        String(Number(r.faltas_qtd || 0)),
+        money(r.desconto_falta),
+        money(r.adiantamento),
+        money(r.total),
+      ];
+      let x = margin;
+      values.forEach((value, idx) => {
+        doc.rect(x, y, widths[idx], rowH);
+        const text = doc.splitTextToSize(String(value), widths[idx] - 2)[0] || '';
+        doc.text(text, x + 1, y + 3.4);
+        x += widths[idx];
+      });
+      y += rowH;
+    });
+
+    if (y + rowH > pageH - 12) {
+      doc.addPage();
+      y = margin;
+      drawHeader();
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.rect(margin, y, widths.slice(0, 11).reduce((s, w) => s + w, 0), rowH);
+    doc.text('TOTAL GERAL', margin + 1, y + 3.4);
+    const totalX = margin + widths.slice(0, 11).reduce((s, w) => s + w, 0);
+    doc.rect(totalX, y, widths[11], rowH);
+    doc.text(money(totalGeral), totalX + 1, y + 3.4);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}. Documento salvo no TOPAC RH PRO.`, margin, pageH - 5);
+    return doc.output('blob');
+  };
+
+  const salvarPdfApontamento = async () => {
+    if (!company) throw new Error('Selecione uma empresa');
+    const blob = gerarPdfBlob();
+    const safeCompany = company.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const fileName = `apontamentos-contabilidade/${competencia}/${safeCompany}_${Date.now()}.pdf`;
+    const { error } = await supabase.storage
+      .from('documentos-ativos')
+      .upload(fileName, blob, { contentType: 'application/pdf', upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from('documentos-ativos').getPublicUrl(fileName);
+    setUltimoPdfUrl(data.publicUrl);
+    return data.publicUrl;
+  };
+
   const enviarParaContabilidade = async () => {
     if (!company) { toast.error('Selecione uma empresa'); return; }
     if (items.length === 0) { toast.error('Sem itens para enviar'); return; }
@@ -641,6 +744,13 @@ const ApontamentoContabilidadePage: React.FC = () => {
     // 1) abre o PDF/preview do apontamento direto, sem gerar CSV.
     const pdfAberto = imprimir();
     if (!pdfAberto) return;
+    let pdfUrl = '';
+    try {
+      pdfUrl = await salvarPdfApontamento();
+    } catch (e: any) {
+      toast.error(`PDF nao foi salvo na plataforma: ${e.message || 'erro desconhecido'}`);
+      return;
+    }
 
     // 2) registra no histórico
     await registrarAcao({
@@ -648,7 +758,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
       entidade: 'apontamento_contabilidade',
       entidadeId: apontamentoId || undefined,
       acao: 'enviou',
-      depois: { para, cc, total_geral: totalGeral, itens: items.length, competencia, empresa: company.name },
+      depois: { para, cc, total_geral: totalGeral, itens: items.length, competencia, empresa: company.name, pdf_url: pdfUrl },
+      arquivoUrl: pdfUrl,
       observacao: `Envio do apontamento ${formatCompetencia(competencia)} para contabilidade`,
     });
 
@@ -661,11 +772,12 @@ const ApontamentoContabilidadePage: React.FC = () => {
         body:
         `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
-        `IMPORTANTE: o PDF do apontamento foi aberto automaticamente. Por favor, salve/anexe o PDF a este e-mail antes de enviar.\n\n` +
-        `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
+      `IMPORTANTE: o PDF foi salvo no TOPAC RH PRO e aberto automaticamente. Por favor, anexe o PDF a este e-mail antes de enviar.\n\n` +
+      `Link interno do PDF salvo: ${pdfUrl}\n\n` +
+      `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
       });
     }, 900);
-    toast.success('PDF aberto e e-mail preenchido. Anexe o PDF antes de enviar.');
+    toast.success('PDF salvo na plataforma, aberto e e-mail preenchido.');
   };
 
   return (
@@ -719,6 +831,11 @@ const ApontamentoContabilidadePage: React.FC = () => {
           className="btn-primary inline-flex items-center gap-2">
           <Send className="w-4 h-4" /> Enviar para Contabilidade
         </button>
+        {ultimoPdfUrl && (
+          <a href={ultimoPdfUrl} target="_blank" rel="noreferrer" className="btn-secondary inline-flex items-center gap-2">
+            <FileText className="w-4 h-4" /> Abrir PDF salvo
+          </a>
+        )}
       </div>
 
       <div className="card-premium p-5 no-print">
