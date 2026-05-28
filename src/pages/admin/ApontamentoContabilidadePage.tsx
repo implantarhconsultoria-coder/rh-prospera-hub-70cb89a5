@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatCompetencia } from '@/lib/workingDays';
 import { registrarAcao } from '@/lib/acoesLog';
 import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
+import { openEmailClient } from '@/lib/emailUtils';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -661,16 +662,17 @@ const ApontamentoContabilidadePage: React.FC = () => {
       observacao: `Envio do apontamento ${formatCompetencia(competencia)} para contabilidade`,
     });
 
-    // 3) abre o cliente de e-mail
-    const subject = encodeURIComponent(`Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`);
-    const body = encodeURIComponent(
+    // 3) abre o cliente de e-mail, no mesmo fluxo do pre-cadastro.
+    openEmailClient({
+      to: para,
+      cc,
+      subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
+      body:
       `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
       `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
       `IMPORTANTE: o arquivo do apontamento foi baixado automaticamente em seu computador. Por favor, anexe-o a este e-mail antes de enviar.\n\n` +
-      `Atenciosamente,\nDepartamento Pessoal - TOPAC`
-    );
-    const mailto = `mailto:${para.join(',')}?cc=${cc.join(',')}&subject=${subject}&body=${body}`;
-    window.location.href = mailto;
+      `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
+    });
     toast.success('Arquivo baixado. Anexe ao e-mail antes de enviar.');
   };
 
