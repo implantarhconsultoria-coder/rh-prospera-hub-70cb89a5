@@ -22,6 +22,12 @@ const isMissingSchema = (error: any) => {
     msg.includes('does not exist');
 };
 
+const missingColumnFromError = (error: any): string | null => {
+  const message = `${error?.message || ''} ${error?.details || ''}`;
+  const match = message.match(/Could not find the '([^']+)' column/i) || message.match(/column "([^"]+)" .* does not exist/i);
+  return match?.[1] || null;
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,12 +139,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
     const row = employeeToRow(data);
     if (Object.keys(row).length > 0) {
-      const { data: saved, error } = await supabase
+      let payload = { ...row };
+      let result = await supabase
         .from('funcionarios')
-        .update(row)
+        .update(payload)
         .eq('id', id)
         .select('*')
         .single();
+
+      let missingColumn = missingColumnFromError(result.error);
+      while (result.error && missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
+        delete payload[missingColumn];
+        if (Object.keys(payload).length === 0) break;
+        result = await supabase
+          .from('funcionarios')
+          .update(payload)
+          .eq('id', id)
+          .select('*')
+          .single();
+        missingColumn = missingColumnFromError(result.error);
+      }
+
+      const { data: saved, error } = result;
       if (error) {
         console.error('Erro ao salvar funcionario:', error);
         toast.error('Erro ao salvar funcionario: ' + error.message);

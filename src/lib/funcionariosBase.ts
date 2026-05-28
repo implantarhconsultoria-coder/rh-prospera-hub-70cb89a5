@@ -129,7 +129,7 @@ export const upsertFuncionarioBase = async (
   addFilled(row, 'celular', input.celular?.trim() || localEmployee?.celular);
   addFilled(row, 'rg', input.rg?.trim() || localEmployee?.rg);
   addFilled(row, 'endereco', input.endereco?.trim() || localEmployee?.endereco);
-  addFilled(row, 'setor', input.setor?.trim() || localEmployee?.setorGhe || 'operacional');
+  addFilled(row, 'categoria', input.setor?.trim() || localEmployee?.categoria || 'operacional');
   addFilled(row, 'salario_base', input.salarioBase ?? localEmployee?.salarioBase ?? 0);
   addFilled(row, 'data_admissao', input.dataAdmissao || localEmployee?.dataAdmissao || null);
 

@@ -216,7 +216,6 @@ export const employeeToRow = (data: Partial<Employee>) => {
   if (data.rg !== undefined) row.rg = data.rg;
   if (data.cargo !== undefined) row.cargo = data.cargo;
   if (data.categoria !== undefined) {
-    row.setor = data.categoria;
     row.categoria = data.categoria;
   }
   if (data.salarioBase !== undefined) {
@@ -243,10 +242,6 @@ export const employeeToRow = (data: Partial<Employee>) => {
   if (data.celular !== undefined) row.celular = data.celular;
   if (data.email !== undefined) row.email = data.email;
   if (data.endereco !== undefined) row.endereco = data.endereco;
-  if (data.pix !== undefined) row.pix = data.pix;
-  if (data.banco !== undefined) row.banco = data.banco;
-  if (data.agencia !== undefined) row.agencia = data.agencia;
-  if (data.conta !== undefined) row.conta = data.conta;
   if (data.observacoes !== undefined) row.observacoes = data.observacoes;
   return row;
 };
