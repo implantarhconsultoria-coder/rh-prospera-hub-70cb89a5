@@ -119,7 +119,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
         {!collapsed && (
           <div className="admin-sidebar-brand">
             <div className="admin-sidebar-logo">
-              <img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC RH PRO" className="w-8 h-8 object-contain" />
+              <img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC RH PRO" className="w-14 h-14 object-contain" />
             </div>
             <div>
               <h2>TOPAC RH PRO</h2>
