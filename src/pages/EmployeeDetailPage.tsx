@@ -91,6 +91,10 @@ const EmployeeDetailPage: React.FC = () => {
             <Field label="Telefone" {...fieldFor('telefone')} />
             <Field label="E-mail" {...fieldFor('email')} />
             <Field label="Endereço" {...fieldFor('endereco')} />
+            <Field label="PIX" {...fieldFor('pix')} />
+            <Field label="Banco" {...fieldFor('banco')} />
+            <Field label="Agencia" {...fieldFor('agencia')} />
+            <Field label="Conta" {...fieldFor('conta')} />
           </div>
         )}
         {activeTab === 1 && (

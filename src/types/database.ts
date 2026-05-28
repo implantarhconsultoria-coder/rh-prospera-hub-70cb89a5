@@ -88,6 +88,52 @@ export interface Fechamento {
 
 const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
 
+type BankingInfo = {
+  pix?: string;
+  banco?: string;
+  agencia?: string;
+  conta?: string;
+};
+
+export const parseEmployeeObservacoes = (value: unknown): { text: string; banking: BankingInfo } => {
+  const raw = String(value || '');
+  if (!raw.trim()) return { text: '', banking: {} };
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.__topac_rh_meta === true) {
+      const banking = parsed.dados_bancarios || {};
+      return {
+        text: cleanNullableText(parsed.texto),
+        banking: {
+          pix: cleanNullableText(banking.pix),
+          banco: cleanNullableText(banking.banco),
+          agencia: cleanNullableText(banking.agencia),
+          conta: cleanNullableText(banking.conta),
+        },
+      };
+    }
+  } catch {
+    // Texto livre antigo: manter como observacao normal.
+  }
+
+  return { text: cleanNullableText(raw), banking: {} };
+};
+
+export const buildEmployeeObservacoes = (
+  text: unknown,
+  banking: BankingInfo,
+): string => JSON.stringify({
+  __topac_rh_meta: true,
+  texto: cleanNullableText(text),
+  dados_bancarios: {
+    pix: cleanNullableText(banking.pix),
+    banco: cleanNullableText(banking.banco),
+    agencia: cleanNullableText(banking.agencia),
+    conta: cleanNullableText(banking.conta),
+  },
+});
+
 const inferCompanyCode = (row: any): string => {
   if (row.codigo) return row.codigo;
   const cnpj = onlyDigits(row.cnpj);
@@ -114,44 +160,47 @@ export const mapCompany = (row: any): Company => ({
   notes: cleanNullableText(row.observacoes || row.tipo),
 });
 
-export const mapEmployee = (row: any): Employee => ({
-  id: row.id,
-  companyId: row.company_id || row.empresa_id,
-  registro: cleanNullableText(row.registro),
-  matriculaEsocial: cleanNullableText(row.matricula_esocial),
-  name: cleanNullableText(row.nome),
-  cpf: cleanNullableText(row.cpf),
-  rg: cleanNullableText(row.rg),
-  cargo: cleanNullableText(row.cargo),
-  categoria: row.categoria || row.setor || 'operacional',
-  salarioBase: Number(row.salario_base ?? row.salario) || 0,
-  dataAdmissao: cleanNullableText(row.data_admissao),
-  dataNascimento: cleanNullableText(row.data_nascimento),
-  dataExameMedico: cleanNullableText(row.data_exame_medico),
-  setorGhe: cleanNullableText(row.setor_ghe || row.setor),
-  cpfPendenteAcesso: row.cpf_pendente_acesso ?? !row.cpf,
-  vrAtivo: row.vr_ativo ?? false,
-  vrDiario: Number(row.vr_diario) || 0,
-  vaAtivo: row.va_ativo ?? false,
-  vaMensal: Number(row.va_mensal) || 0,
-  vtAtivo: row.vt_ativo ?? false,
-  vtDiario: Number(row.vt_diario) || 0,
-  insalubridadeAtiva: row.insalubridade_ativa ?? false,
-  insalubridadeValor: Number(row.insalubridade_valor) || 0,
-  status: row.status === 'excluido' ? 'excluido' : (row.ativo === false ? 'desligado' : (row.status || 'ativo')),
-  telefone: cleanNullableText(row.telefone),
-  celular: cleanNullableText(row.celular),
-  email: cleanNullableText(row.email),
-  endereco: cleanNullableText(row.endereco),
-  pix: cleanNullableText(row.pix),
-  banco: cleanNullableText(row.banco),
-  agencia: cleanNullableText(row.agencia),
-  conta: cleanNullableText(row.conta),
-  observacoes: cleanNullableText(row.observacoes),
-  inss: row.inss ? Number(row.inss) : undefined,
-  liquido: row.liquido ? Number(row.liquido) : undefined,
-  referenciaCompetencia: row.referencia_competencia || undefined,
-});
+export const mapEmployee = (row: any): Employee => {
+  const notes = parseEmployeeObservacoes(row.observacoes);
+  return {
+    id: row.id,
+    companyId: row.company_id || row.empresa_id,
+    registro: cleanNullableText(row.registro),
+    matriculaEsocial: cleanNullableText(row.matricula_esocial),
+    name: cleanNullableText(row.nome),
+    cpf: cleanNullableText(row.cpf),
+    rg: cleanNullableText(row.rg),
+    cargo: cleanNullableText(row.cargo),
+    categoria: row.categoria || row.setor || 'operacional',
+    salarioBase: Number(row.salario_base ?? row.salario) || 0,
+    dataAdmissao: cleanNullableText(row.data_admissao),
+    dataNascimento: cleanNullableText(row.data_nascimento),
+    dataExameMedico: cleanNullableText(row.data_exame_medico),
+    setorGhe: cleanNullableText(row.setor_ghe || row.setor),
+    cpfPendenteAcesso: row.cpf_pendente_acesso ?? !row.cpf,
+    vrAtivo: row.vr_ativo ?? false,
+    vrDiario: Number(row.vr_diario) || 0,
+    vaAtivo: row.va_ativo ?? false,
+    vaMensal: Number(row.va_mensal) || 0,
+    vtAtivo: row.vt_ativo ?? false,
+    vtDiario: Number(row.vt_diario) || 0,
+    insalubridadeAtiva: row.insalubridade_ativa ?? false,
+    insalubridadeValor: Number(row.insalubridade_valor) || 0,
+    status: row.status === 'excluido' ? 'excluido' : (row.ativo === false ? 'desligado' : (row.status || 'ativo')),
+    telefone: cleanNullableText(row.telefone),
+    celular: cleanNullableText(row.celular),
+    email: cleanNullableText(row.email),
+    endereco: cleanNullableText(row.endereco),
+    pix: cleanNullableText(row.pix) || notes.banking.pix || '',
+    banco: cleanNullableText(row.banco) || notes.banking.banco || '',
+    agencia: cleanNullableText(row.agencia) || notes.banking.agencia || '',
+    conta: cleanNullableText(row.conta) || notes.banking.conta || '',
+    observacoes: notes.text,
+    inss: row.inss ? Number(row.inss) : undefined,
+    liquido: row.liquido ? Number(row.liquido) : undefined,
+    referenciaCompetencia: row.referencia_competencia || undefined,
+  };
+};
 
 export const mapEntry = (row: any): MonthlyEntry => ({
   id: row.id,

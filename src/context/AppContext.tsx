@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { type Company, type Employee, type MonthlyEntry, type Fechamento, mapCompany, mapEmployee, mapEntry, entryToRow, employeeToRow } from '@/types/database';
+import { type Company, type Employee, type MonthlyEntry, type Fechamento, mapCompany, mapEmployee, mapEntry, entryToRow, employeeToRow, buildEmployeeObservacoes } from '@/types/database';
 import type { Delivery, BenefitReport } from '@/data/deliveries';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
@@ -138,6 +138,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateEmployee = useCallback(async (id: string, data: Partial<Employee>) => {
     setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
     const row = employeeToRow(data);
+    const currentEmployee = employees.find(e => e.id === id);
+    const hasBankingData = ['pix', 'banco', 'agencia', 'conta'].some((key) =>
+      Object.prototype.hasOwnProperty.call(data, key),
+    );
+    if (hasBankingData || data.observacoes !== undefined) {
+      row.observacoes = buildEmployeeObservacoes(
+        data.observacoes ?? currentEmployee?.observacoes ?? '',
+        {
+          pix: data.pix ?? currentEmployee?.pix ?? '',
+          banco: data.banco ?? currentEmployee?.banco ?? '',
+          agencia: data.agencia ?? currentEmployee?.agencia ?? '',
+          conta: data.conta ?? currentEmployee?.conta ?? '',
+        },
+      );
+    }
     if (Object.keys(row).length > 0) {
       let payload = { ...row };
       let result = await supabase
@@ -172,7 +187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
     return { ok: true };
-  }, [fetchData]);
+  }, [employees, fetchData]);
 
   /**
    * Garante que existem lancamentos para todos os funcionarios ativos da empresa/competencia.
