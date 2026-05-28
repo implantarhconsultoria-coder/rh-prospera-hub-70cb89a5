@@ -152,43 +152,51 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     items.forEach(({ company, emp, vr, vt }, index) => {
       if (index > 0) doc.addPage();
       const isAmbos = formato === 'ambos';
+      const pageLeft = 18;
+      const pageRight = 192;
+      const contentWidth = pageRight - pageLeft;
       doc.setTextColor(0, 0, 0);
       doc.setDrawColor(0, 0, 0);
 
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text(String(company.name || '').toUpperCase(), 18, 22);
+      doc.setFontSize(11);
+      doc.text(String(company.name || '').toUpperCase(), pageLeft, 22);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.text(`CNPJ: ${company.cnpj || '-'}`, 18, 28);
+      doc.setFontSize(8);
+      doc.text(`CNPJ: ${company.cnpj || '-'}`, pageLeft, 28);
       doc.setFont('helvetica', 'bold');
-      doc.text('FICHA INDIVIDUAL DE BENEFICIOS', 188, 22, { align: 'right' });
+      doc.text('FICHA INDIVIDUAL DE BENEFICIOS', pageRight, 22, { align: 'right' });
       doc.setFont('helvetica', 'normal');
-      doc.text(`Competencia: ${competenciaLabel}`, 188, 28, { align: 'right' });
-      doc.text(`Emissao: ${dataPagamento}`, 188, 34, { align: 'right' });
+      doc.text(`Competencia: ${competenciaLabel}`, pageRight, 28, { align: 'right' });
+      doc.text(`Emissao: ${dataPagamento}`, pageRight, 34, { align: 'right' });
       doc.setLineWidth(0.5);
-      doc.line(18, 42, 192, 42);
+      doc.line(pageLeft, 42, pageRight, 42);
 
-      doc.roundedRect(18, 50, 174, 24, 1, 1);
-      doc.setFontSize(10);
+      doc.setDrawColor(156, 163, 175);
+      doc.roundedRect(pageLeft, 50, contentWidth, 22, 1, 1);
+      doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
-      doc.text('Nome:', 22, 58);
-      doc.text('Cargo:', 112, 58);
-      doc.text('CPF:', 22, 67);
-      doc.text('Registro:', 112, 67);
+      doc.text('Nome:', 22, 57);
+      doc.text('Cargo:', 112, 57);
+      doc.text('CPF:', 22, 64);
+      doc.text('Registro:', 112, 64);
+      doc.text('Admissao:', 22, 69);
+      doc.text('Dias uteis:', 112, 69);
       doc.setFont('helvetica', 'normal');
-      doc.text(String(emp.name || '-'), 35, 58);
-      doc.text(String(emp.cargo || '-'), 126, 58);
-      doc.text(String(emp.cpf || '-'), 32, 67);
-      doc.text(String(emp.registro || '-'), 128, 67);
+      doc.text(String(emp.name || '-').slice(0, 47), 34, 57);
+      doc.text(String(emp.cargo || '-').slice(0, 35), 124, 57);
+      doc.text(String(emp.cpf || '-'), 31, 64);
+      doc.text(String(emp.registro || '-'), 127, 64);
+      doc.text(emp.dataAdmissao ? new Date(emp.dataAdmissao).toLocaleDateString('pt-BR') : '-', 37, 69);
+      doc.text(String(diasUteis), 128, 69);
 
-      let y = 88;
-      const drawBenefit = (label: string, row: BenefitReportRow, sigla: 'VR' | 'VT') => {
+      let y = 82;
+      const drawBenefit = (label: string, row: BenefitReportRow) => {
         doc.setFillColor(229, 231, 235);
-        doc.rect(18, y, 174, 8, 'F');
+        doc.rect(pageLeft, y, contentWidth, 7, 'F');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.text(label.toUpperCase(), 21, y + 5.5);
+        doc.setFontSize(8);
+        doc.text(label.toUpperCase(), 20, y + 5);
         const lines = [
           ['Valor Diario', formatCurrency(row.valorDiario || 0)],
           ['Dias Previstos', String(row.diasPrevistos || 0)],
@@ -197,37 +205,41 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
           ['Motivo Desconto', row.motivo || '-'],
           ['Valor Total', formatCurrency(row.valorTotal || 0)],
         ];
-        lines.forEach(([labelLinha, valor], i) => {
-          const rowY = y + 14 + i * 7;
-          doc.setDrawColor(209, 213, 219);
-          doc.line(18, rowY - 5, 192, rowY - 5);
-          doc.setFont('helvetica', i === 5 ? 'bold' : 'normal');
-          doc.text(labelLinha, 21, rowY);
-          doc.text(valor, 188, rowY, { align: 'right' });
-        });
         doc.setDrawColor(209, 213, 219);
-        doc.rect(18, y + 8, 174, 42);
-        y += 62;
+        lines.forEach(([labelLinha, valor], i) => {
+          const top = y + 7 + i * 6;
+          const rowY = top + 4;
+          doc.line(pageLeft, top, pageRight, top);
+          doc.line(pageLeft, top, pageLeft, top + 6);
+          doc.line(pageLeft + contentWidth / 2, top, pageLeft + contentWidth / 2, top + 6);
+          doc.line(pageRight, top, pageRight, top + 6);
+          doc.setFont('helvetica', i === 5 ? 'bold' : 'normal');
+          doc.setFontSize(7);
+          doc.text(labelLinha, 20, rowY);
+          doc.text(valor, 189, rowY, { align: 'right' });
+        });
+        doc.line(pageLeft, y + 43, pageRight, y + 43);
+        y += 55;
       };
 
-      if ((formato === 'vr' || isAmbos) && vr) drawBenefit('Vale-Refeicao', vr, 'VR');
-      if ((formato === 'vt' || isAmbos) && vt) drawBenefit('Vale-Transporte', vt, 'VT');
+      if ((formato === 'vr' || isAmbos) && vr) drawBenefit('Vale-Refeicao', vr);
+      if ((formato === 'vt' || isAmbos) && vt) drawBenefit('Vale-Transporte', vt);
 
       if (isAmbos) {
+        const assinaturaY = Math.max(y + 14, 202);
         doc.setDrawColor(0, 0, 0);
-        doc.line(42, 226, 168, 226);
+        doc.line(52, assinaturaY, 158, assinaturaY);
         doc.setFontSize(8);
-        doc.text('Assinatura do colaborador', 105, 232, { align: 'center' });
-        doc.text(`Nome: ${emp.name || '-'}`, 105, 238, { align: 'center' });
-        doc.text('Data: ____/____/________', 105, 244, { align: 'center' });
+        doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
+        doc.text(`Nome: ${emp.name || '-'}`, 105, assinaturaY + 12, { align: 'center' });
+        doc.text('Data: ____/____/________', 105, assinaturaY + 18, { align: 'center' });
       }
 
       doc.setDrawColor(156, 163, 175);
-      doc.line(18, isAmbos ? 252 : Math.max(y + 8, 236), 192, isAmbos ? 252 : Math.max(y + 8, 236));
+      doc.line(pageLeft, isAmbos ? 252 : Math.max(y + 8, 236), pageRight, isAmbos ? 252 : Math.max(y + 8, 236));
     });
     return doc.output('blob');
   };
-
   const handleEnviarEmail = async () => {
     if (!podeEnviarEmail) {
       toast.info('Envio por e-mail disponivel apenas para Praia Grande e Goiania. As demais empresas ficam somente para impressao.');
@@ -403,3 +415,4 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
 };
 
 export default RecibosBeneficioImpressaoPage;
+
