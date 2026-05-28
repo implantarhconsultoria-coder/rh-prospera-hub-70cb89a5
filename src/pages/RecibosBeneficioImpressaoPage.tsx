@@ -213,8 +213,17 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       if ((formato === 'vr' || isAmbos) && vr) drawBenefit('Vale-Refeicao', vr, 'VR');
       if ((formato === 'vt' || isAmbos) && vt) drawBenefit('Vale-Transporte', vt, 'VT');
 
+      if (isAmbos) {
+        doc.setDrawColor(0, 0, 0);
+        doc.line(42, 226, 168, 226);
+        doc.setFontSize(8);
+        doc.text('Assinatura do colaborador', 105, 232, { align: 'center' });
+        doc.text(`Nome: ${emp.name || '-'}`, 105, 238, { align: 'center' });
+        doc.text('Data: ____/____/________', 105, 244, { align: 'center' });
+      }
+
       doc.setDrawColor(156, 163, 175);
-      doc.line(18, Math.max(y + 8, 236), 192, Math.max(y + 8, 236));
+      doc.line(18, isAmbos ? 252 : Math.max(y + 8, 236), 192, isAmbos ? 252 : Math.max(y + 8, 236));
     });
     return doc.output('blob');
   };
@@ -373,6 +382,14 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
                   <p className="text-[10px] text-amber-700 border border-amber-300 bg-amber-50 rounded px-2 py-1 mb-4">
                     Ficha ajustada conforme correção administrativa registrada.
                   </p>
+                )}
+
+                {isAmbos && (
+                  <div className="mt-12">
+                    <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
+                    <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
+                    <p className="text-center text-xs mt-1">Data: ____/____/________</p>
+                  </div>
                 )}
 
                 <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">{' '}</div>
