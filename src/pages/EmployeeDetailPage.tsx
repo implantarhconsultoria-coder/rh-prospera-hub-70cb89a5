@@ -87,7 +87,7 @@ const EmployeeDetailPage: React.FC = () => {
         {activeTab === 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Field label="Nome Completo" {...fieldFor('name')} />
-            <Field label="CPF" value={emp.cpf} />
+            <Field label="CPF" {...fieldFor('cpf')} />
             <Field label="Telefone" {...fieldFor('telefone')} />
             <Field label="E-mail" {...fieldFor('email')} />
             <Field label="Endereço" {...fieldFor('endereco')} />
