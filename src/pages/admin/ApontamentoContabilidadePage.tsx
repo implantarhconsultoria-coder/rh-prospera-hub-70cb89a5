@@ -25,6 +25,9 @@ const defaultComissaoPct = (nomeEmp: string, nomeFunc: string): number => {
   return 0;
 };
 
+const isEmpresaLoteContabilidade = (nomeEmpresa: string) =>
+  /matriz|praia|lmt|alqui/i.test(nomeEmpresa || '') && !/goi[Ã¢a]nia/i.test(nomeEmpresa || '');
+
 interface ItemRow {
   id?: string;
   funcionario_id?: string | null;
@@ -161,10 +164,19 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [ultimoPdfUrl, setUltimoPdfUrl] = useState<string | null>(null);
+  const [empresasLoteIds, setEmpresasLoteIds] = useState<string[]>([]);
 
   const company = companies.find(c => c.id === companyId);
   const isGO = !!company && usaHE60(company.name);
   const heLabelPct = isGO ? '60%' : '50%';
+  const empresasLoteDisponiveis = useMemo(
+    () => companies.filter((c) => isEmpresaLoteContabilidade(c.name)),
+    [companies],
+  );
+
+  useEffect(() => {
+    setEmpresasLoteIds((prev) => prev.filter((id) => empresasLoteDisponiveis.some((c) => c.id === id)));
+  }, [empresasLoteDisponiveis]);
 
   useEffect(() => {
     if (!companyId || !competencia) return;
@@ -434,6 +446,120 @@ const ApontamentoContabilidadePage: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const montarLinhaSalva = (r: any): ItemRow => {
+    const hasStructured = (Number(r.comissao_base || 0) + Number(r.comissao_percentual || 0) + Number(r.comissao_valor || 0)) > 0
+      || r.tem_comissao === true;
+    const comissaoValor = hasStructured ? Number(r.comissao_valor || 0) : Number(r.comissao || 0);
+    const salario = Number(r.salario || 0);
+    const adiantamento = Number(r.adiantamento || 0);
+    const adiantManual = r.adiantamento_manual === true;
+    const row: ItemRow = {
+      id: r.id,
+      funcionario_id: r.funcionario_id,
+      nome: r.nome,
+      cpf: r.cpf,
+      salario,
+      insalubridade: Number(r.insalubridade || 0),
+      tem_comissao: r.tem_comissao === true || comissaoValor > 0 || Number(r.comissao_base || 0) > 0,
+      comissao_base: Number(r.comissao_base || 0),
+      comissao_percentual: Number(r.comissao_percentual || 0),
+      comissao_valor: comissaoValor,
+      hora_extra_50_horas: Number(r.hora_extra_50_horas || 0),
+      hora_extra_50: Number(r.hora_extra_50 || 0),
+      hora_extra_60_horas: Number(r.hora_extra_60_horas || 0),
+      hora_extra_60: Number(r.hora_extra_60 || 0),
+      hora_extra_100_horas: Number(r.hora_extra_100_horas || 0),
+      hora_extra_100: Number(r.hora_extra_100 || 0),
+      assistencia_medica: Number(r.assistencia_medica || 0),
+      faltas_qtd: Number(r.faltas_qtd || 0),
+      desconto_falta: Number(r.desconto_falta || r.falta_dsr || 0),
+      dsr_qtd: Number(r.dsr_qtd || 0),
+      desconto_dsr: Number(r.desconto_dsr || 0),
+      adiantamento: adiantManual ? adiantamento : (adiantamento > 0 ? adiantamento : calcAdiantamentoAuto(salario)),
+      adiantamento_manual: adiantManual,
+      total: 0,
+    };
+    row.total = calcTotal(row);
+    return row;
+  };
+
+  const montarItensCalculadosEmpresa = (empId: string, nomeEmpresa: string): ItemRow[] => {
+    const compEmps = employees.filter(e => e.companyId === empId && e.status === 'ativo');
+    const compEntries = entries.filter(e => e.companyId === empId && e.competencia === competencia);
+    const empGO = usaHE60(nomeEmpresa);
+    return compEmps.map(emp => {
+      const ent = compEntries.find(e => e.employeeId === emp.id);
+      const salario = Number(emp.salarioBase || 0);
+      const insal = emp.insalubridadeAtiva ? Number(emp.insalubridadeValor || config.valorInsalubridade || 0) : 0;
+      const valorHora = salario / 220;
+      const heExtraHoras = Number(ent?.he50 || 0);
+      const he100Horas = Number(ent?.he100 || 0);
+      const pctDefault = defaultComissaoPct(nomeEmpresa, emp.name);
+      const baseDefault = Number(ent?.comissaoBase || 0);
+      const temComissao = pctDefault > 0 || baseDefault > 0;
+      const row: ItemRow = {
+        funcionario_id: emp.id,
+        nome: emp.name,
+        cpf: emp.cpf,
+        salario,
+        insalubridade: insal,
+        tem_comissao: temComissao,
+        comissao_base: baseDefault,
+        comissao_percentual: pctDefault,
+        comissao_valor: temComissao ? calcComissaoValor(baseDefault, pctDefault) : 0,
+        hora_extra_50_horas: empGO ? 0 : heExtraHoras,
+        hora_extra_50: empGO ? 0 : round2(heExtraHoras * valorHora * 1.5),
+        hora_extra_60_horas: empGO ? heExtraHoras : 0,
+        hora_extra_60: empGO ? round2(heExtraHoras * valorHora * 1.6) : 0,
+        hora_extra_100_horas: he100Horas,
+        hora_extra_100: round2(he100Horas * valorHora * 2),
+        assistencia_medica: 0,
+        faltas_qtd: Number(ent?.faltasDias || 0),
+        desconto_falta: round2(Number(ent?.faltasDias || 0) * (salario / 30)),
+        dsr_qtd: 0,
+        desconto_dsr: 0,
+        adiantamento: calcAdiantamentoAuto(salario),
+        adiantamento_manual: false,
+        total: 0,
+      };
+      row.total = calcTotal(row);
+      return row;
+    });
+  };
+
+  const carregarApontamentoEmpresa = async (empId: string) => {
+    const emp = companies.find((c) => c.id === empId);
+    if (!emp) throw new Error('Empresa nao encontrada');
+
+    const { data: header } = await supabase
+      .from('apontamentos_contabilidade')
+      .select('*')
+      .eq('company_id', empId)
+      .eq('competencia', competencia)
+      .maybeSingle();
+
+    if (header) {
+      const { data: itens, error } = await supabase
+        .from('apontamentos_contabilidade_itens')
+        .select('*')
+        .eq('apontamento_id', (header as any).id)
+        .order('nome');
+      if (error) throw error;
+      return {
+        company: emp,
+        apontamentoId: (header as any).id as string,
+        items: ((itens as any[]) || []).map(montarLinhaSalva),
+      };
+    }
+
+    await getOrCreateEntries(empId, competencia);
+    return {
+      company: emp,
+      apontamentoId: undefined as string | undefined,
+      items: montarItensCalculadosEmpresa(empId, emp.name),
+    };
   };
 
   const imprimir = () => {
@@ -723,6 +849,120 @@ const ApontamentoContabilidadePage: React.FC = () => {
     return data.publicUrl;
   };
 
+  type GrupoApontamento = { company: any; apontamentoId?: string; items: ItemRow[] };
+
+  const gerarPdfBlobLote = (grupos: GrupoApontamento[]) => {
+    if (grupos.length === 0) throw new Error('Selecione ao menos uma empresa');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 6;
+    const rowH = 5;
+    const money = (v: number) => formatBRL(Number(v || 0));
+    const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
+    const widths = [46, 24, 21, 18, 18, 22, 19, 22, 13, 21, 21, 22];
+
+    grupos.forEach((grupo, grupoIdx) => {
+      if (grupoIdx > 0) doc.addPage();
+      let y = margin;
+      const grupoIsGO = usaHE60(grupo.company.name);
+      const heTitulo = grupoIsGO ? 'HE 60%' : 'HE 50%';
+      const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+      const totalGrupo = round2(grupo.items.reduce((s, r) => s + Number(r.total || 0), 0));
+      const titulo = `${grupo.company.name.toUpperCase()} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
+
+      const drawHeader = () => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(titulo, pageW / 2, y + 3, { align: 'center' });
+        y += 8;
+        doc.setFontSize(6.5);
+        doc.setFillColor(230, 230, 230);
+        let x = margin;
+        headers.forEach((h, idx) => {
+          doc.rect(x, y, widths[idx], rowH, 'FD');
+          doc.text(h, x + 1, y + 3.4);
+          x += widths[idx];
+        });
+        y += rowH;
+      };
+
+      drawHeader();
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.3);
+
+      grupo.items.forEach((r) => {
+        if (y + rowH > pageH - 12) {
+          doc.addPage();
+          y = margin;
+          drawHeader();
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6.3);
+        }
+        const heQtd = grupoIsGO ? r.hora_extra_60_horas : r.hora_extra_50_horas;
+        const heValor = grupoIsGO ? r.hora_extra_60 : r.hora_extra_50;
+        const values = [
+          r.nome || '-',
+          r.cpf || '-',
+          money(r.salario),
+          money(r.insalubridade),
+          hours(heQtd),
+          money(heValor),
+          hours(r.hora_extra_100_horas),
+          money(r.hora_extra_100),
+          String(Number(r.faltas_qtd || 0)),
+          money(r.desconto_falta),
+          money(r.adiantamento),
+          money(r.total),
+        ];
+        let x = margin;
+        values.forEach((value, idx) => {
+          doc.rect(x, y, widths[idx], rowH);
+          const text = doc.splitTextToSize(String(value), widths[idx] - 2)[0] || '';
+          doc.text(text, x + 1, y + 3.4);
+          x += widths[idx];
+        });
+        y += rowH;
+      });
+
+      if (y + rowH > pageH - 12) {
+        doc.addPage();
+        y = margin;
+        drawHeader();
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.rect(margin, y, widths.slice(0, 11).reduce((s, w) => s + w, 0), rowH);
+      doc.text('TOTAL GERAL', margin + 1, y + 3.4);
+      const totalX = margin + widths.slice(0, 11).reduce((s, w) => s + w, 0);
+      doc.rect(totalX, y, widths[11], rowH);
+      doc.text(money(totalGrupo), totalX + 1, y + 3.4);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}. Documento salvo no TOPAC RH PRO.`, margin, pageH - 5);
+    });
+
+    return doc.output('blob');
+  };
+
+  const abrirPdfBlob = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
+  const salvarPdfLote = async (blob: Blob, grupos: GrupoApontamento[]) => {
+    const nomes = grupos.map((g) => g.company.name).join('_');
+    const safeName = nomes.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120);
+    const fileName = `apontamentos-contabilidade/${competencia}/LOTE_${safeName}_${Date.now()}.pdf`;
+    const { error } = await supabase.storage
+      .from('documentos-ativos')
+      .upload(fileName, blob, { contentType: 'application/pdf', upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from('documentos-ativos').getPublicUrl(fileName);
+    setUltimoPdfUrl(data.publicUrl);
+    return data.publicUrl;
+  };
+
   const enviarParaContabilidade = async () => {
     if (!company) { toast.error('Selecione uma empresa'); return; }
     if (items.length === 0) { toast.error('Sem itens para enviar'); return; }
@@ -780,6 +1020,76 @@ const ApontamentoContabilidadePage: React.FC = () => {
     toast.success('PDF salvo na plataforma, aberto e e-mail preenchido.');
   };
 
+  const enviarLoteContabilidade = async () => {
+    if (empresasLoteIds.length === 0) {
+      toast.error('Selecione Matriz, Praia, LMT ou ALQUI para enviar em lote.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const grupos = (await Promise.all(empresasLoteIds.map((id) => carregarApontamentoEmpresa(id))))
+        .filter((g) => g.items.length > 0);
+
+      if (grupos.length === 0) {
+        toast.error('Nenhum apontamento encontrado para as empresas selecionadas.');
+        return;
+      }
+
+      const blob = gerarPdfBlobLote(grupos);
+      abrirPdfBlob(blob);
+      const pdfUrl = await salvarPdfLote(blob, grupos);
+
+      const para = [
+        'marisa@aatconsultoria.com.br',
+        'dp@aatconsultoria.com.br',
+        'lucilene@aatconsultoria.com.br',
+      ];
+      const cc = ['robson@topac.com.br'];
+      const nomes = grupos.map((g) => g.company.name).join(', ');
+      const totalLote = round2(grupos.reduce((s, g) => s + g.items.reduce((t, r) => t + Number(r.total || 0), 0), 0));
+      const qtdFuncionarios = grupos.reduce((s, g) => s + g.items.length, 0);
+
+      await registrarAcao({
+        modulo: 'contabilidade',
+        entidade: 'apontamento_contabilidade',
+        entidadeId: grupos[0].apontamentoId || apontamentoId || undefined,
+        acao: 'enviou',
+        depois: {
+          para,
+          cc,
+          total_geral: totalLote,
+          itens: qtdFuncionarios,
+          competencia,
+          empresas: grupos.map((g) => g.company.name),
+          pdf_url: pdfUrl,
+        },
+        arquivoUrl: pdfUrl,
+        observacao: `Envio em lote do apontamento ${formatCompetencia(competencia)} para contabilidade`,
+      });
+
+      window.setTimeout(() => {
+        openEmailClient({
+          to: para,
+          cc,
+          subject: `Apontamento Contabilidade - ${formatCompetencia(competencia)} - Matriz/Praia/LMT/ALQUI`,
+          body:
+            `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} das empresas: ${nomes}.\n\n` +
+            `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionÃ¡rios: ${qtdFuncionarios}\n\n` +
+            `IMPORTANTE: o PDF consolidado foi salvo no TOPAC RH PRO e aberto automaticamente. Por favor, anexe o PDF a este e-mail antes de enviar.\n\n` +
+            `Link interno do PDF salvo: ${pdfUrl}\n\n` +
+            `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
+        });
+      }, 900);
+
+      toast.success('PDF em lote salvo, aberto e e-mail preenchido.');
+    } catch (e: any) {
+      toast.error(`Erro no envio em lote: ${e.message || 'erro desconhecido'}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Impressao/PDF usa exclusivamente a janela criada por imprimir(). */}
@@ -830,6 +1140,38 @@ const ApontamentoContabilidadePage: React.FC = () => {
         <button onClick={enviarParaContabilidade} disabled={!company || items.length === 0}
           className="btn-primary inline-flex items-center gap-2">
           <Send className="w-4 h-4" /> Enviar para Contabilidade
+        </button>
+        <div className="border border-border rounded-lg px-3 py-2 bg-background/60">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">Enviar juntas:</span>
+            {empresasLoteDisponiveis.map((c) => (
+              <label key={c.id} className="inline-flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={empresasLoteIds.includes(c.id)}
+                  onChange={(e) => {
+                    setEmpresasLoteIds((prev) =>
+                      e.target.checked ? Array.from(new Set([...prev, c.id])) : prev.filter((id) => id !== c.id)
+                    );
+                  }}
+                />
+                {c.name}
+              </label>
+            ))}
+            {empresasLoteDisponiveis.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setEmpresasLoteIds(empresasLoteDisponiveis.map((c) => c.id))}
+                className="text-xs underline text-primary"
+              >
+                marcar todas
+              </button>
+            )}
+          </div>
+        </div>
+        <button onClick={enviarLoteContabilidade} disabled={saving || empresasLoteIds.length === 0}
+          className="btn-primary inline-flex items-center gap-2">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Enviar selecionadas juntas
         </button>
         {ultimoPdfUrl && (
           <a href={ultimoPdfUrl} target="_blank" rel="noreferrer" className="btn-secondary inline-flex items-center gap-2">
