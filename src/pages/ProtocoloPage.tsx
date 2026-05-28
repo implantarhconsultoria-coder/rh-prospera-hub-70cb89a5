@@ -8,6 +8,7 @@ import { FileCheck, Printer, Sparkles, Upload, Loader2, Search, LinkIcon } from 
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
+import { registrarAcao } from '@/lib/acoesLog';
 
 interface AtivoDoc {
   id: string;
@@ -45,6 +46,8 @@ const ProtocoloPage: React.FC = () => {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState('');
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [savingProtocol, setSavingProtocol] = useState(false);
+  const [lastSavedProtocolId, setLastSavedProtocolId] = useState<string | null>(null);
 
   // Auto-lookup state
   const [ativosCache, setAtivosCache] = useState<AtivoDoc[]>([]);
@@ -65,6 +68,60 @@ const ProtocoloPage: React.FC = () => {
 
   const sanitize = (value: string) => (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const hasValue = (value?: string | null) => Boolean(value?.trim());
+  const firstFilled = (...values: Array<unknown>) =>
+    values.find((value) => typeof value === 'string' && value.trim()) as string | undefined;
+  const normalizeDateInput = (value: string) => {
+    const match = (value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return match ? `${match[3]}-${match[2]}-${match[1]}` : value;
+  };
+  const extractLocalProtocolData = (rawText: string) => {
+    const text = (rawText || '').replace(/\r/g, '').trim();
+    const flat = text.replace(/\s+/g, ' ');
+    const pick = (patterns: RegExp[]) => {
+      for (const pattern of patterns) {
+        const match = flat.match(pattern) || text.match(pattern);
+        if (match?.[1]) return match[1].replace(/\s+(por favor|favor)$/i, '').trim();
+      }
+      return '';
+    };
+    const descricaoMatch = flat.match(/\b(compressor|ve[ií]culo|caminh[aã]o|carro|equipamento|m[aá]quina|munck|guindaste)\b[^.,;\n]*/i);
+    return {
+      empresa_destinataria: pick([
+        /(?:encaminhad[ao]s?\s+(?:a|à)\s+empresa|empresa destinat[aá]ria|empresa)\s*[:\-]?\s*([A-ZÁ-Ú0-9][A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+(?:aos cuidados|referente|para|no|na|$)|[.,;\n])/i,
+      ]),
+      local_canteiro: pick([
+        /(?:local|canteiro|obra)\s*[:\-]?\s*([A-ZÁ-Ú0-9][A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+(?:aos cuidados|respons[aá]vel|referente|$)|[.,;\n])/i,
+      ]),
+      responsavel_recebimento: pick([
+        /(?:aos cuidados de|a\/c|respons[aá]vel(?: pelo recebimento)?|recebimento)\s*[:\-]?\s*([A-ZÁ-Ú][A-ZÁ-Úa-zá-ú ]{2,60}?)(?=[.,;\n]|$)/i,
+      ]),
+      placa: pick([/\bplaca\s*[:\-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i]),
+      patrimonio: pick([/\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:\-]?\s*([A-Z0-9./-]{2,30})\b/i]),
+      renavam: pick([/\brenavam\s*[:\-]?\s*(\d{6,20})\b/i]),
+      chassi: pick([/\bchassi\s*[:\-]?\s*([A-Z0-9]{8,30})\b/i]),
+      ano_fabricacao: pick([/\bano fabrica[cç][aã]o\s*[:\-]?\s*(\d{4})\b/i, /\bfabrica[cç][aã]o\s*[:\-]?\s*(\d{4})\b/i]),
+      ano_modelo: pick([/\bano modelo\s*[:\-]?\s*(\d{4})\b/i, /\bmodelo\s*[:\-]?\s*(\d{4})\b/i]),
+      descricao_ativo: descricaoMatch ? descricaoMatch[0].trim() : '',
+      observacoes: text,
+    };
+  };
+  const mergeParsedData = (aiData: any, localData: any) => {
+    const d = aiData || {};
+    return {
+      empresa_destinataria: firstFilled(d.empresa_destinataria, d.empresa, localData.empresa_destinataria),
+      local_canteiro: firstFilled(d.local_canteiro, d.local, d.canteiro, localData.local_canteiro),
+      responsavel_recebimento: firstFilled(d.responsavel_recebimento, d.responsavel, d.recebedor, localData.responsavel_recebimento),
+      placa: firstFilled(d.placa, localData.placa),
+      patrimonio: firstFilled(d.patrimonio, localData.patrimonio),
+      renavam: firstFilled(d.renavam, localData.renavam),
+      chassi: firstFilled(d.chassi, localData.chassi),
+      ano_fabricacao: firstFilled(d.ano_fabricacao, localData.ano_fabricacao),
+      ano_modelo: firstFilled(d.ano_modelo, localData.ano_modelo),
+      empresa: firstFilled(d.empresa),
+      descricao_ativo: firstFilled(d.descricao_ativo, d.descricao, localData.descricao_ativo),
+      observacoes: firstFilled(d.observacoes, d.observacao, localData.observacoes),
+    };
+  };
 
   const analyzeVehiclePdf = async (sourceUrl: string, fileLabel: string) => {
     const { bytes, pageUrls } = await renderPdfPagesToDataUrls(sourceUrl, 1.15, 2);
@@ -197,33 +254,38 @@ const ProtocoloPage: React.FC = () => {
     if (!textoColado.trim()) { toast.error('Cole o texto primeiro'); return; }
     setParsing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('parse-text', {
-        body: { text: textoColado, type: 'protocolo' },
-      });
-      if (error) throw error;
-      const d = data?.data;
-      if (d) {
-        if (d.empresa_destinataria) setEmpresaDestinataria(d.empresa_destinataria);
-        if (d.local_canteiro) setLocalCanteiro(d.local_canteiro);
-        if (d.responsavel_recebimento) setResponsavelRecebimento(d.responsavel_recebimento);
-        if (d.placa) setPlaca(d.placa);
-        if (d.patrimonio) setPatrimonio(d.patrimonio);
-        if (d.renavam) setRenavam(d.renavam);
-        if (d.chassi) setChassi(d.chassi);
-        if (d.ano_fabricacao) setAnoFabricacao(d.ano_fabricacao);
-        if (d.ano_modelo) setAnoModelo(d.ano_modelo);
-        if (d.empresa) setEmpresaDestinataria(d.empresa);
-        if (d.descricao_ativo) setDescricaoEquipamento(d.descricao_ativo);
-        if (d.observacoes) setObservacoes(d.observacoes);
-        toast.success('Campos preenchidos pela IA — revise e edite antes de imprimir.');
+      const localData = extractLocalProtocolData(textoColado);
+      let aiData = {};
+      try {
+        const { data, error } = await supabase.functions.invoke('parse-text', {
+          body: { text: textoColado, type: 'protocolo' },
+        });
+        if (error) throw error;
+        aiData = data?.data || {};
+      } catch (e) {
+        console.warn('[protocolo] parse-text indisponivel, usando leitura local', e);
       }
+
+      const d = mergeParsedData(aiData, localData);
+      if (d.empresa_destinataria) setEmpresaDestinataria(d.empresa_destinataria);
+      if (d.local_canteiro) setLocalCanteiro(d.local_canteiro);
+      if (d.responsavel_recebimento) setResponsavelRecebimento(d.responsavel_recebimento);
+      if (d.placa) setPlaca(d.placa);
+      if (d.patrimonio) setPatrimonio(d.patrimonio);
+      if (d.renavam) setRenavam(d.renavam);
+      if (d.chassi) setChassi(d.chassi);
+      if (d.ano_fabricacao) setAnoFabricacao(d.ano_fabricacao);
+      if (d.ano_modelo) setAnoModelo(d.ano_modelo);
+      if (d.empresa && !d.empresa_destinataria) setEmpresaDestinataria(d.empresa);
+      if (d.descricao_ativo) setDescricaoEquipamento(d.descricao_ativo);
+      if (d.observacoes) setObservacoes(d.observacoes);
+      toast.success('Texto lido e campos preenchidos. Revise antes de salvar ou imprimir.');
     } catch (e: any) {
       toast.error('Erro ao processar texto: ' + (e.message || 'Tente novamente'));
     } finally {
       setParsing(false);
     }
   };
-
   const handleSelectAtivo = (a: AtivoDoc) => {
     setMatchedAtivo(a);
     applyMatchedAtivo(a);
@@ -282,11 +344,74 @@ const ProtocoloPage: React.FC = () => {
     </div>`;
   };
 
+  const buildProtocolPayload = () => ({
+    empresa_origem: topac?.name || 'TOPAC MATRIZ',
+    empresa_destinataria: empresaDestinataria,
+    local_canteiro: localCanteiro,
+    responsavel_recebimento: responsavelRecebimento,
+    data_emissao: normalizeDateInput(dataEmissao),
+    descricao_ativo: descricaoEquipamento,
+    placa,
+    renavam,
+    chassi,
+    ano_fabricacao: anoFabricacao,
+    ano_modelo: anoModelo,
+    patrimonio,
+    exercicio,
+    observacoes,
+    texto_original: textoColado,
+    pdf_url: pdfUrl,
+    ativo_id: matchedAtivo?.id || null,
+  });
+
+  const saveProtocol = async ({ silent = false } = {}) => {
+    if (!empresaDestinataria && !descricaoEquipamento && !placa && !patrimonio) {
+      if (!silent) toast.error('Preencha ou leia o texto antes de salvar.');
+      return null;
+    }
+
+    const payload = buildProtocolPayload();
+    setSavingProtocol(true);
+    try {
+      const { data, error } = await supabase
+        .from('protocolos_documentos')
+        .insert(payload as any)
+        .select('id')
+        .single();
+      if (error) throw error;
+      const id = (data as any)?.id || null;
+      setLastSavedProtocolId(id);
+      await registrarAcao({
+        modulo: 'protocolo',
+        entidade: 'protocolos_documentos',
+        entidadeId: id,
+        acao: 'gerou',
+        depois: payload,
+        arquivoUrl: pdfUrl || undefined,
+        observacao: `Protocolo salvo para ${empresaDestinataria || descricaoEquipamento || placa || patrimonio}`,
+      });
+      if (!silent) toast.success('Protocolo salvo e arquivado no sistema.');
+      return id;
+    } catch (e) {
+      console.warn('[protocolo] falha ao salvar no Supabase, arquivando localmente', e);
+      const fallbackId = `local-${Date.now()}`;
+      const current = JSON.parse(localStorage.getItem('topac_protocolos_documentos') || '[]');
+      localStorage.setItem('topac_protocolos_documentos', JSON.stringify([{ id: fallbackId, ...payload, created_at: new Date().toISOString() }, ...current].slice(0, 200)));
+      setLastSavedProtocolId(fallbackId);
+      if (!silent) toast.warning('Protocolo arquivado localmente. Assim que a tabela estiver ativa, volta a salvar no banco.');
+      return fallbackId;
+    } finally {
+      setSavingProtocol(false);
+    }
+  };
+
   const handlePrint = async () => {
     if (!placa && !patrimonio && !descricaoEquipamento) {
       toast.error('Informe ao menos placa, patrimônio ou descrição');
       return;
     }
+
+    await saveProtocol({ silent: true });
 
     let fullHtml = buildProtocoloHtml(1, 2) + buildProtocoloHtml(2, 2);
 
@@ -474,12 +599,20 @@ const ProtocoloPage: React.FC = () => {
             {!pdfUrl && <p className="text-xs text-muted-foreground mt-1">Sem PDF: imprime apenas 2 vias do protocolo</p>}
           </div>
         </div>
-        <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold" size="lg">
-          <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir — {pdfUrl ? '2 vias + Documento Anexo' : '2 vias'}
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={() => saveProtocol()} disabled={savingProtocol} variant="outline" size="lg">
+            {savingProtocol ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileCheck className="w-4 h-4 mr-2" />}
+            Salvar no sistema
+          </Button>
+          <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold" size="lg">
+            <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir - {pdfUrl ? '2 vias + Documento Anexo' : '2 vias'}
+          </Button>
+          {lastSavedProtocolId && <span className="self-center text-xs text-success">Arquivado: {lastSavedProtocolId}</span>}
+        </div>
       </div>
     </div>
   );
 };
 
 export default ProtocoloPage;
+
