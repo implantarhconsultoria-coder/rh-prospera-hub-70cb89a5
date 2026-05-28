@@ -49,20 +49,6 @@ export const downloadEmailWithAttachment = async ({
   const cleanAttachmentName = safeFileName(attachmentName).endsWith('.pdf')
     ? safeFileName(attachmentName)
     : `${safeFileName(attachmentName)}.pdf`;
-  const pdfFile = new File([attachmentBlob], cleanAttachmentName, { type: 'application/pdf' });
-  const nav = navigator as Navigator & {
-    canShare?: (data: ShareData) => boolean;
-    share?: (data: ShareData) => Promise<void>;
-  };
-
-  if (nav.share && (!nav.canShare || nav.canShare({ files: [pdfFile] }))) {
-    await nav.share({
-      title: subject,
-      text: `${body}\n\nPara: ${to.join(', ')}${cc?.length ? `\nCc: ${cc.join(', ')}` : ''}`,
-      files: [pdfFile],
-    });
-    return;
-  }
 
   openPdfPreview(attachmentBlob, cleanAttachmentName);
   openEmailClient({
