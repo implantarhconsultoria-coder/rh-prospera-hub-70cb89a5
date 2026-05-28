@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { formatDate, formatCurrency } from '@/lib/calculations';
+import { formatDate } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -13,8 +13,34 @@ const HistoricoPage: React.FC = () => {
   const [filterType, setFilterType] = useState<FilterType>('todos');
   const [filterCompany, setFilterCompany] = useState('');
   const [filterEmployee, setFilterEmployee] = useState('');
-  const [filterPeriodStart, setFilterPeriodStart] = useState('');
-  const [filterPeriodEnd, setFilterPeriodEnd] = useState('');
+
+  const normalize = (value: string) =>
+    (value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const matchesEmployeeQuickSearch = (name: string, query: string) => {
+    const q = normalize(query);
+    if (!q) return true;
+    const n = normalize(name);
+    const words = n.split(/\s+/).filter(Boolean);
+    const initials = words.map((word) => word[0]).join('');
+    return (
+      n.includes(q) ||
+      initials.startsWith(q) ||
+      words.some((word) => word.startsWith(q)) ||
+      words.some((word, index) => `${word}${words[index + 1] || ''}`.startsWith(q))
+    );
+  };
+
+  const employeeSuggestions = useMemo(() => {
+    if (!filterEmployee.trim()) return [];
+    return employees
+      .filter((emp) => (!filterCompany || emp.companyId === filterCompany) && matchesEmployeeQuickSearch(emp.name, filterEmployee))
+      .slice(0, 8);
+  }, [employees, filterCompany, filterEmployee]);
 
   const records = useMemo(() => {
     const items: Array<{
@@ -28,61 +54,67 @@ const HistoricoPage: React.FC = () => {
       printUrl: string;
     }> = [];
 
-    deliveries.forEach(d => {
+    deliveries.forEach((delivery) => {
       items.push({
-        id: d.id,
-        type: d.type,
-        date: d.date,
-        companyId: d.companyId,
-        employeeId: d.employeeId,
-        description: `${d.items.length} item(ns) — ${d.responsavel}`,
-        printUrl: `/entrega-impressao?id=${d.id}`,
+        id: delivery.id,
+        type: delivery.type,
+        date: delivery.date,
+        companyId: delivery.companyId,
+        employeeId: delivery.employeeId,
+        description: `${delivery.items.length} item(ns) - ${delivery.responsavel}`,
+        printUrl: `/entrega-impressao?id=${delivery.id}`,
       });
     });
 
-    benefitReports.forEach(r => {
+    benefitReports.forEach((report) => {
       items.push({
-        id: r.id,
-        type: r.type,
-        date: r.createdAt,
-        companyId: r.companyId,
-        competencia: r.competencia,
-        description: `Competência: ${r.competencia}`,
-        printUrl: r.type === 'vr'
-          ? `/relatorio-vr-impressao?empresa=${r.companyId}&competencia=${r.competencia}`
-          : `/relatorio-vt-impressao?empresa=${r.companyId}&competencia=${r.competencia}`,
+        id: report.id,
+        type: report.type,
+        date: report.createdAt,
+        companyId: report.companyId,
+        competencia: report.competencia,
+        description: `Competencia: ${report.competencia}`,
+        printUrl: report.type === 'vr'
+          ? `/relatorio-vr-impressao?empresa=${report.companyId}&competencia=${report.competencia}`
+          : `/relatorio-vt-impressao?empresa=${report.companyId}&competencia=${report.competencia}`,
       });
     });
 
     return items
-      .filter(i => filterType === 'todos' || i.type === filterType)
-      .filter(i => !filterCompany || i.companyId === filterCompany)
-      .filter(i => {
-        if (!filterEmployee) return true;
-        if (!i.employeeId) return false;
-        const emp = employees.find(e => e.id === i.employeeId);
-        return emp?.name.toLowerCase().includes(filterEmployee.toLowerCase());
-      })
-      .filter(i => {
-        if (filterPeriodStart && i.date < filterPeriodStart) return false;
-        if (filterPeriodEnd && i.date > filterPeriodEnd) return false;
-        return true;
+      .filter((item) => filterType === 'todos' || item.type === filterType)
+      .filter((item) => !filterCompany || item.companyId === filterCompany)
+      .filter((item) => {
+        if (!filterEmployee.trim()) return true;
+        if (!item.employeeId) return false;
+        const emp = employees.find((e) => e.id === item.employeeId);
+        return emp ? matchesEmployeeQuickSearch(emp.name, filterEmployee) : false;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [deliveries, benefitReports, filterType, filterCompany, filterEmployee, filterPeriodStart, filterPeriodEnd, employees]);
+  }, [deliveries, benefitReports, filterType, filterCompany, filterEmployee, employees]);
 
-  const typeLabel = (t: string) => {
-    switch (t) {
+  const groupedRecords = useMemo(() => {
+    return records.reduce((acc, record) => {
+      const key = record.date?.slice(0, 10) || 'sem-data';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(record);
+      return acc;
+    }, {} as Record<string, typeof records>);
+  }, [records]);
+
+  const groupedDates = useMemo(() => Object.keys(groupedRecords).sort((a, b) => b.localeCompare(a)), [groupedRecords]);
+
+  const typeLabel = (type: string) => {
+    switch (type) {
       case 'epi': return 'EPI';
       case 'uniforme': return 'Uniforme';
       case 'vr': return 'VR';
       case 'vt': return 'VT';
-      default: return t;
+      default: return type;
     }
   };
 
-  const typeBadgeClass = (t: string) => {
-    switch (t) {
+  const typeBadgeClass = (type: string) => {
+    switch (type) {
       case 'epi': return 'bg-primary/10 text-primary';
       case 'uniforme': return 'bg-accent/10 text-accent-foreground';
       case 'vr': return 'bg-success/10 text-success';
@@ -99,13 +131,12 @@ const HistoricoPage: React.FC = () => {
             <History className="w-7 h-7" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display">Histórico</h1>
-            <p className="text-primary-foreground/70 text-sm">Entregas de EPI, Uniformes e Relatórios de VR/VT</p>
+            <h1 className="text-2xl font-bold font-display">Historico</h1>
+            <p className="text-primary-foreground/70 text-sm">Entregas de EPI, Uniformes e Relatorios de VR/VT</p>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="card-premium p-5 space-y-3">
         <div className="flex items-center gap-2 mb-2">
           <Filter className="w-4 h-4 text-muted-foreground" />
@@ -113,8 +144,8 @@ const HistoricoPage: React.FC = () => {
         </div>
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">Tipo</label>
-            <select value={filterType} onChange={e => setFilterType(e.target.value as FilterType)}
+            <label className="text-xs text-muted-foreground block mb-1">Tipo de historico</label>
+            <select value={filterType} onChange={event => setFilterType(event.target.value as FilterType)}
               className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
               <option value="todos">Todos</option>
               <option value="epi">EPI</option>
@@ -125,34 +156,48 @@ const HistoricoPage: React.FC = () => {
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
-            <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)}
-              className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+            <select value={filterCompany} onChange={event => setFilterCompany(event.target.value)}
+              className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-w-[220px]">
               <option value="">Todas</option>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
             </select>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Funcionário</label>
-            <Input placeholder="Nome..." value={filterEmployee} onChange={e => setFilterEmployee(e.target.value)} className="w-48" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">De</label>
-            <Input type="date" value={filterPeriodStart} onChange={e => setFilterPeriodStart(e.target.value)} className="w-40" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Até</label>
-            <Input type="date" value={filterPeriodEnd} onChange={e => setFilterPeriodEnd(e.target.value)} className="w-40" />
+          <div className="relative">
+            <label className="text-xs text-muted-foreground block mb-1">Pesquisa rapida funcionario</label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Iniciais ou nome..."
+                value={filterEmployee}
+                onChange={event => setFilterEmployee(event.target.value)}
+                className="w-60 pl-9"
+              />
+            </div>
+            {employeeSuggestions.length > 0 && (
+              <div className="absolute z-20 mt-1 w-80 rounded-lg border bg-popover shadow-lg overflow-hidden">
+                {employeeSuggestions.map(emp => (
+                  <button
+                    key={emp.id}
+                    type="button"
+                    onClick={() => setFilterEmployee(emp.name)}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-muted"
+                  >
+                    <span className="font-medium text-foreground">{emp.name}</span>
+                    <span className="block text-muted-foreground">{companies.find(company => company.id === emp.companyId)?.name || ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Records */}
       <div className="card-premium overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              {['Tipo', 'Data', 'Empresa', 'Funcionário', 'Descrição', 'Ações'].map(h => (
-                <th key={h} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{h}</th>
+              {['Tipo', 'Data', 'Empresa', 'Funcionario', 'Descricao', 'Acoes'].map(header => (
+                <th key={header} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">{header}</th>
               ))}
             </tr>
           </thead>
@@ -160,24 +205,33 @@ const HistoricoPage: React.FC = () => {
             {records.length === 0 && (
               <tr><td colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado</td></tr>
             )}
-            {records.map(r => {
-              const emp = r.employeeId ? employees.find(e => e.id === r.employeeId) : null;
-              const co = companies.find(c => c.id === r.companyId);
-              return (
-                <tr key={r.id} className="border-b hover:bg-muted/20">
-                  <td className="px-3 py-2"><Badge className={typeBadgeClass(r.type)}>{typeLabel(r.type)}</Badge></td>
-                  <td className="px-3 py-2 text-xs">{formatDate(r.date)}</td>
-                  <td className="px-3 py-2 text-xs">{co?.name || '—'}</td>
-                  <td className="px-3 py-2 text-xs font-medium">{emp?.name || '—'}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{r.description}</td>
-                  <td className="px-3 py-2">
-                    <Button size="sm" variant="ghost" onClick={() => window.open(r.printUrl, '_blank')}>
-                      <FileText className="w-4 h-4 mr-1" /> Reimprimir
-                    </Button>
+            {groupedDates.map(dateKey => (
+              <React.Fragment key={dateKey}>
+                <tr className="bg-primary/5 border-b">
+                  <td colSpan={6} className="px-3 py-2 text-xs font-bold text-primary">
+                    {dateKey === 'sem-data' ? 'Sem data' : formatDate(dateKey)}
                   </td>
                 </tr>
-              );
-            })}
+                {groupedRecords[dateKey].map(record => {
+                  const emp = record.employeeId ? employees.find(e => e.id === record.employeeId) : null;
+                  const company = companies.find(c => c.id === record.companyId);
+                  return (
+                    <tr key={record.id} className="border-b hover:bg-muted/20">
+                      <td className="px-3 py-2"><Badge className={typeBadgeClass(record.type)}>{typeLabel(record.type)}</Badge></td>
+                      <td className="px-3 py-2 text-xs">{formatDate(record.date)}</td>
+                      <td className="px-3 py-2 text-xs">{company?.name || '-'}</td>
+                      <td className="px-3 py-2 text-xs font-medium">{emp?.name || '-'}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{record.description}</td>
+                      <td className="px-3 py-2">
+                        <Button size="sm" variant="ghost" onClick={() => window.open(record.printUrl, '_blank')}>
+                          <FileText className="w-4 h-4 mr-1" /> Reimprimir
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </tbody>
         </table>
       </div>
