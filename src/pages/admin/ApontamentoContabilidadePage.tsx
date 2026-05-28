@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatCompetencia } from '@/lib/workingDays';
 import { registrarAcao } from '@/lib/acoesLog';
 import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
-import { openEmailClient } from '@/lib/emailUtils';
+import { downloadEmailWithAttachment } from '@/lib/emailUtils';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -835,9 +835,9 @@ const ApontamentoContabilidadePage: React.FC = () => {
     return doc.output('blob');
   };
 
-  const salvarPdfApontamento = async () => {
+  const salvarPdfApontamento = async (pdfBlob?: Blob) => {
     if (!company) throw new Error('Selecione uma empresa');
-    const blob = gerarPdfBlob();
+    const blob = pdfBlob || gerarPdfBlob();
     const safeCompany = company.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     const fileName = `apontamentos-contabilidade/${competencia}/${safeCompany}_${Date.now()}.pdf`;
     const { error } = await supabase.storage
@@ -984,9 +984,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
     // 1) abre o PDF/preview do apontamento direto, sem gerar CSV.
     const pdfAberto = imprimir();
     if (!pdfAberto) return;
+    const pdfBlob = gerarPdfBlob();
     let pdfUrl = '';
     try {
-      pdfUrl = await salvarPdfApontamento();
+      pdfUrl = await salvarPdfApontamento(pdfBlob);
     } catch (e: any) {
       toast.error(`PDF nao foi salvo na plataforma: ${e.message || 'erro desconhecido'}`);
       return;
@@ -1003,6 +1004,14 @@ const ApontamentoContabilidadePage: React.FC = () => {
       observacao: `Envio do apontamento ${formatCompetencia(competencia)} para contabilidade`,
     });
 
+    const openEmailClient = (params: { to: string[]; cc: string[]; subject: string; body: string }) =>
+      downloadEmailWithAttachment({
+        ...params,
+        attachmentBlob: pdfBlob,
+        attachmentName: `Apontamento_${company.name}_${competencia}.pdf`.replace(/[^a-zA-Z0-9._-]+/g, '_'),
+        fileName: `Email_Apontamento_${company.name}_${competencia}`,
+      });
+
     // 3) abre o cliente de e-mail, no mesmo fluxo do pre-cadastro.
     window.setTimeout(() => {
       openEmailClient({
@@ -1012,8 +1021,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
         body:
         `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionários: ${items.length}\n\n` +
-      `IMPORTANTE: o PDF foi salvo no TOPAC RH PRO e aberto automaticamente. Por favor, anexe o PDF a este e-mail antes de enviar.\n\n` +
-      `Link interno do PDF salvo: ${pdfUrl}\n\n` +
+      `IMPORTANTE: o PDF ja esta anexado neste e-mail e tambem foi salvo no TOPAC RH PRO.\n\n` +
+      `` +
       `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
       });
     }, 900);
@@ -1068,6 +1077,14 @@ const ApontamentoContabilidadePage: React.FC = () => {
         observacao: `Envio em lote do apontamento ${formatCompetencia(competencia)} para contabilidade`,
       });
 
+      const openEmailClient = (params: { to: string[]; cc: string[]; subject: string; body: string }) =>
+        downloadEmailWithAttachment({
+          ...params,
+          attachmentBlob: blob,
+          attachmentName: `Apontamento_Lote_${competencia}.pdf`,
+          fileName: `Email_Apontamento_Lote_${competencia}`,
+        });
+
       window.setTimeout(() => {
         openEmailClient({
           to: para,
@@ -1076,8 +1093,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
           body:
             `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} das empresas: ${nomes}.\n\n` +
             `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionÃ¡rios: ${qtdFuncionarios}\n\n` +
-            `IMPORTANTE: o PDF consolidado foi salvo no TOPAC RH PRO e aberto automaticamente. Por favor, anexe o PDF a este e-mail antes de enviar.\n\n` +
-            `Link interno do PDF salvo: ${pdfUrl}\n\n` +
+            `IMPORTANTE: o PDF consolidado ja esta anexado neste e-mail e tambem foi salvo no TOPAC RH PRO.\n\n` +
+            `` +
             `Atenciosamente,\nDepartamento Pessoal - TOPAC`,
         });
       }, 900);
