@@ -131,6 +131,12 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
           {/* VT section */}
           {renderBenefitTable('VALE TRANSPORTE (VT)', vtData)}
 
+          <div className="mt-12 mb-6">
+            <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
+            <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
+            <p className="text-center text-xs mt-1">Data: ____/____/________</p>
+          </div>
+
           {/* Footer */}
           <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
             {' '}

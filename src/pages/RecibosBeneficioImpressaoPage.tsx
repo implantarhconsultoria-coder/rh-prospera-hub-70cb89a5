@@ -235,18 +235,17 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       if ((formato === 'vr' || isAmbos) && vr) drawBenefit('Vale-Refeicao', vr);
       if ((formato === 'vt' || isAmbos) && vt) drawBenefit('Vale-Transporte', vt);
 
-      if (isAmbos) {
-        const assinaturaY = Math.max(y + 14, 202);
-        doc.setDrawColor(0, 0, 0);
-        doc.line(52, assinaturaY, 158, assinaturaY);
-        doc.setFontSize(8);
-        doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
-        doc.text(`Nome: ${emp.name || '-'}`, 105, assinaturaY + 12, { align: 'center' });
-        doc.text('Data: ____/____/________', 105, assinaturaY + 18, { align: 'center' });
-      }
+      const assinaturaY = Math.max(y + 14, isAmbos ? 202 : 180);
+      doc.setDrawColor(0, 0, 0);
+      doc.line(52, assinaturaY, 158, assinaturaY);
+      doc.setFontSize(8);
+      doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
+      doc.text(`Nome: ${emp.name || '-'}`, 105, assinaturaY + 12, { align: 'center' });
+      doc.text('Data: ____/____/________', 105, assinaturaY + 18, { align: 'center' });
 
       doc.setDrawColor(156, 163, 175);
-      doc.line(pageLeft, isAmbos ? 252 : Math.max(y + 8, 236), pageRight, isAmbos ? 252 : Math.max(y + 8, 236));
+      const footerY = Math.min(266, Math.max(assinaturaY + 28, isAmbos ? 252 : 236));
+      doc.line(pageLeft, footerY, pageRight, footerY);
     });
     return doc.output('blob');
   };
@@ -407,13 +406,11 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
                   </p>
                 )}
 
-                {isAmbos && (
-                  <div className="mt-12">
-                    <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
-                    <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
-                    <p className="text-center text-xs mt-1">Data: ____/____/________</p>
-                  </div>
-                )}
+                <div className="mt-12">
+                  <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
+                  <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
+                  <p className="text-center text-xs mt-1">Data: ____/____/________</p>
+                </div>
 
                 <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">{' '}</div>
               </div>
