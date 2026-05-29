@@ -378,7 +378,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (options.persist === false) return { ok: true };
 
     try {
-      const company = companies.find(c => c.id === companyId);
       const userName = session?.user?.user_metadata?.nome_completo ||
         session?.user?.user_metadata?.full_name ||
         session?.user?.email ||
@@ -390,17 +389,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const payload = {
         company_id: companyId,
-        empresa_nome: company?.name || '',
         competencia,
         status: nextFechamento.status,
         observacoes: nextFechamento.observacoes || '',
         fechado_em: fechadoEm,
-        fechado_por_user_id: isFechado ? (session?.user?.id || null) : (nextFechamento.fechadoPorUserId || current?.fechadoPorUserId || null),
         fechado_por_nome: isFechado ? userName : (nextFechamento.fechadoPorNome || current?.fechadoPorNome || ''),
-        total_funcionarios: Math.round(Number(nextFechamento.totalFuncionarios) || 0),
-        total_proventos: Number(nextFechamento.totalProventos) || 0,
-        total_descontos: Number(nextFechamento.totalDescontos) || 0,
-        total_liquido: Number(nextFechamento.totalLiquido) || 0,
       };
 
       const { data: saved, error } = await supabase
@@ -409,7 +402,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .select('*')
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro Supabase ao salvar fechamento:', error, { etapa: 'upsert_fechamentos_filial', payload });
+        throw error;
+      }
 
       const savedFechamento = mapFechamento(saved);
       setFechamentos(prev => {
@@ -434,7 +430,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .eq('competencia', competencia)
         .is('apagado_em', null);
 
-      if (lancError) throw lancError;
+      if (lancError) {
+        console.error('Erro Supabase ao salvar fechamento:', lancError, { etapa: 'vincular_lancamentos_mensais', payload: lancamentoPatch });
+        throw lancError;
+      }
 
       setEntries(prev => prev.map(entry =>
         entry.companyId === companyId && entry.competencia === competencia
@@ -451,10 +450,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           usuario_nome: userName || session.user.email || 'Sistema',
           detalhes: {
             status: savedFechamento.status,
-            total_funcionarios: savedFechamento.totalFuncionarios || 0,
-            total_proventos: savedFechamento.totalProventos || 0,
-            total_descontos: savedFechamento.totalDescontos || 0,
-            total_liquido: savedFechamento.totalLiquido || 0,
+            total_funcionarios: Math.round(Number(nextFechamento.totalFuncionarios) || 0),
+            total_proventos: Number(nextFechamento.totalProventos) || 0,
+            total_descontos: Number(nextFechamento.totalDescontos) || 0,
+            total_liquido: Number(nextFechamento.totalLiquido) || 0,
           },
         } as any);
         if (histError) console.error('Erro ao registrar historico do fechamento:', histError);
@@ -462,10 +461,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return { ok: true };
     } catch (error) {
-      console.error('Erro ao persistir fechamento:', error);
+      console.error('Erro Supabase ao salvar fechamento:', error);
       return { ok: false, error };
     }
-  }, [companies, fechamentos, session]);
+  }, [fechamentos, session]);
 
   const addDelivery = useCallback((data: Omit<Delivery, 'id' | 'createdAt'>): Delivery => {
     deliveryCounter++;
