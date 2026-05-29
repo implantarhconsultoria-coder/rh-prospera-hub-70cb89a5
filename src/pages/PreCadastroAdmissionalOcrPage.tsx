@@ -73,6 +73,28 @@ const FIELD_TO_FORM: Record<string, keyof PreCadastro> = {
   nome: 'nome', cpf: 'cpf', rg: 'rg', data_nascimento: 'data_nascimento', endereco: 'endereco', funcao: 'funcao', empresa: 'empresa_nome', salario: 'salario', data_admissao: 'data_admissao', filiacao: 'filiacao', escolaridade: 'escolaridade', experiencia: 'experiencia', epi: 'epi', beneficios: 'beneficios', insalubridade: 'insalubridade', setor_ghe: 'setor_ghe', obra_local: 'obra_local', jornada: 'jornada', responsavel_contato: 'responsavel_contato',
 };
 
+type RoleOption = {
+  cargo: string;
+  salarioBase: number;
+  insalubridadeAtiva: boolean;
+  insalubridadeValor: number;
+};
+
+const normalizeRole = (value?: string | null) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+
+const isMechanicRole = (value?: string | null) => normalizeRole(value).includes('MECANIC');
+
+const formatBRL = (value: number) =>
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const formatInsalubridade = (value: number) => `Sim - ${formatBRL(value)}`;
+
 const uploadAdmissionFile = async (file: File, prefix: string) => {
   const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]+/g, '_');
   const path = `${prefix}/${Date.now()}-${safeName}`;
@@ -98,7 +120,7 @@ const buildContabilidadeEmailBody = (r: Partial<PreCadastro>) => [
 ].join('\n');
 
 const PreCadastroAdmissionalOcrPage: React.FC = () => {
-  const { companies, refreshData, session } = useApp();
+  const { companies, employees, refreshData, session, config } = useApp();
   const [rows, setRows] = useState<PreCadastro[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [form, setForm] = useState<Partial<PreCadastro>>(initialForm);
@@ -123,9 +145,66 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
 
   const filtered = useMemo(() => { const q = search.toLowerCase(); return rows.filter(r => !q || `${r.nome} ${r.cpf} ${r.empresa_nome} ${r.status} ${r.funcao}`.toLowerCase().includes(q)); }, [rows, search]);
   const duplicateCpf = useMemo(() => { const cpf = onlyDigits(form.cpf); return !!cpf && rows.some(r => r.id !== form.id && onlyDigits(r.cpf) === cpf); }, [rows, form.cpf, form.id]);
+  const roleOptions = useMemo<RoleOption[]>(() => {
+    if (!form.empresa_id) return [];
+    const byRole = new Map<string, RoleOption>();
+    employees
+      .filter(emp => emp.companyId === form.empresa_id && emp.categoria !== 'socio' && normalizeRole(emp.cargo))
+      .forEach(emp => {
+        const key = normalizeRole(emp.cargo);
+        const existing = byRole.get(key);
+        const salarioBase = Number(emp.salarioBase) || 0;
+        const insalubridadeValor = Number(emp.insalubridadeValor || config.valorInsalubridade || 0);
+        const insalubridadeAtiva = Boolean(emp.insalubridadeAtiva || isMechanicRole(emp.cargo));
+        if (!existing) {
+          byRole.set(key, {
+            cargo: emp.cargo,
+            salarioBase,
+            insalubridadeAtiva,
+            insalubridadeValor,
+          });
+          return;
+        }
+        if (!existing.salarioBase && salarioBase) existing.salarioBase = salarioBase;
+        if (insalubridadeAtiva) {
+          existing.insalubridadeAtiva = true;
+          existing.insalubridadeValor = insalubridadeValor || existing.insalubridadeValor;
+        }
+      });
+    return Array.from(byRole.values()).sort((a, b) => a.cargo.localeCompare(b.cargo, 'pt-BR'));
+  }, [employees, form.empresa_id, config.valorInsalubridade]);
+  const roleByName = useMemo(() => new Map(roleOptions.map(role => [normalizeRole(role.cargo), role])), [roleOptions]);
 
   const setCompany = (id: string) => { const c = companies.find(x => x.id === id); setForm(p => ({ ...p, empresa_id: id, empresa_nome: c?.name || '', cnpj: c?.cnpj || '' })); };
+  const setFuncaoComPadroes = (funcao: string) => {
+    const role = roleByName.get(normalizeRole(funcao));
+    const insalubridadeAtiva = Boolean(role?.insalubridadeAtiva || isMechanicRole(funcao));
+    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
+    setForm(p => ({
+      ...p,
+      funcao,
+      salario: role?.salarioBase || p.salario || null,
+      insalubridade: insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : 'Nao',
+    }));
+  };
   const novo = () => { setSelectedId(''); setForm(initialForm); setOcrResult(null); setLastFichaFile(null); };
+
+  useEffect(() => {
+    const funcao = form.funcao || '';
+    if (!funcao) return;
+    const role = roleByName.get(normalizeRole(funcao));
+    const shouldFillSalary = Boolean(role?.salarioBase && !Number(form.salario || 0));
+    const insalubridadeAtiva = Boolean(role?.insalubridadeAtiva || isMechanicRole(funcao));
+    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
+    const nextInsalubridade = insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : role ? 'Nao' : '';
+    const shouldFillInsalubridade = Boolean(nextInsalubridade && form.insalubridade !== nextInsalubridade);
+    if (!shouldFillSalary && !shouldFillInsalubridade) return;
+    setForm(p => ({
+      ...p,
+      salario: shouldFillSalary ? role?.salarioBase || p.salario || null : p.salario,
+      insalubridade: shouldFillInsalubridade ? nextInsalubridade : p.insalubridade,
+    }));
+  }, [form.funcao, form.salario, form.insalubridade, roleByName, config.valorInsalubridade]);
 
   const salvar = async () => {
     setSaving(true);
@@ -230,7 +309,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
         <div className="rounded-xl border border-dashed border-primary/40 p-4"><label className="text-sm font-semibold flex items-center gap-2 mb-2"><Upload className="w-4 h-4" /> Ficha de Solicitacao de Emprego</label><input type="file" accept=".pdf,image/*" onChange={e => uploadFicha(e.target.files?.[0])} className="text-sm" />{form.arquivo_ficha_url && <a href={form.arquivo_ficha_url} target="_blank" className="block mt-2 text-xs text-primary underline">Abrir ficha anexada</a>}<div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{ocrLoading && <span className="inline-flex items-center gap-2 text-primary"><Loader2 className="w-3 h-3 animate-spin" /> Lendo PDF/imagem com OCR...</span>}{!ocrLoading && ocrResult?.confianca_geral !== undefined && <Badge variant="outline">OCR {(Number(ocrResult.confianca_geral || 0) * 100).toFixed(0)}%</Badge>}{lastFichaFile && !ocrLoading && <Button type="button" size="sm" variant="outline" onClick={() => form.arquivo_ficha_url && runFichaOcr(lastFichaFile, form.arquivo_ficha_url)}><RefreshCw className="w-3 h-3 mr-1" /> Reler ficha</Button>}</div></div>
         {ocrResult && <div className={`rounded-xl border p-4 space-y-3 ${ocrResult.ok === false ? 'border-warning bg-warning/10' : 'border-primary/30 bg-primary/5'}`}><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-sm flex items-center gap-2">{ocrResult.ok === false && <AlertTriangle className="w-4 h-4 text-warning" />}Conferencia OCR da ficha</div><p className="text-xs text-muted-foreground">Campos com baixa confianca ficam marcados para revisao manual antes da aprovacao oficial.</p></div>{ocrResult.ok !== false && <Badge className="bg-primary/15 text-primary">Standby</Badge>}</div>{ocrResult.error && <div className="text-sm text-warning">{ocrResult.error}</div>}{Object.keys(ocrResult.campos || {}).length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">{Object.entries(ocrResult.campos || {}).map(([key, field]) => { const confidence = Number(field?.confianca || 0); const low = confidence < LOW_CONFIDENCE; return <div key={key} className={`rounded-lg border p-2 ${low ? 'border-warning/50 bg-warning/10' : 'border-border bg-background/60'}`}><div className="flex items-center justify-between gap-2"><span className="text-[11px] uppercase tracking-wide text-muted-foreground">{OCR_FIELD_LABELS[key] || key}</span><Badge variant="outline" className={low ? 'text-warning border-warning/50' : ''}>{Math.round(confidence * 100)}%</Badge></div><div className="mt-1 text-sm font-medium break-words">{String(field?.valor || '-')}</div>{low && <div className="mt-1 text-[11px] text-warning">Revisar antes de salvar.</div>}</div>; })}</div>}{(ocrResult.pendencias || []).length > 0 && <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">{(ocrResult.pendencias || []).map((p, idx) => <div key={`${p}-${idx}`}>- {p}</div>)}</div>}</div>}
         {duplicateCpf && <div className="rounded-lg border border-warning bg-warning/10 p-3 text-sm text-warning">CPF ja existe em outro pre-cadastro. Confira antes de aprovar.</div>}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div><label className="text-xs text-muted-foreground">Empresa contratante</label><select value={form.empresa_id || ''} onChange={e => setCompany(e.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background"><option value="">Selecionar empresa</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div><Field label="Nome" value={form.nome} onChange={v => setForm(p => ({ ...p, nome: v }))} /><Field label="CPF" value={form.cpf} onChange={v => setForm(p => ({ ...p, cpf: v }))} /><Field label="RG" value={form.rg} onChange={v => setForm(p => ({ ...p, rg: v }))} /><DateField label="Data nascimento" value={form.data_nascimento} onChange={v => setForm(p => ({ ...p, data_nascimento: v }))} /><DateField label="Data admissao/inicio" value={form.data_admissao} onChange={v => setForm(p => ({ ...p, data_admissao: v }))} /><Field label="Funcao" value={form.funcao} onChange={v => setForm(p => ({ ...p, funcao: v }))} /><Field label="Setor/GHE" value={form.setor_ghe} onChange={v => setForm(p => ({ ...p, setor_ghe: v }))} /><Field label="Obra/Local" value={form.obra_local} onChange={v => setForm(p => ({ ...p, obra_local: v }))} /><div><label className="text-xs text-muted-foreground">Salario</label><Input type="number" value={form.salario || ''} onChange={e => setForm(p => ({ ...p, salario: Number(e.target.value) || null }))} /></div><Field label="Tipo admissao" value={form.tipo_admissao} onChange={v => setForm(p => ({ ...p, tipo_admissao: v }))} /><Field label="Jornada" value={form.jornada} onChange={v => setForm(p => ({ ...p, jornada: v }))} /><Field label="Filiacao" value={form.filiacao} onChange={v => setForm(p => ({ ...p, filiacao: v }))} /><Field label="Escolaridade" value={form.escolaridade} onChange={v => setForm(p => ({ ...p, escolaridade: v }))} /><Field label="Responsavel/Contato" value={form.responsavel_contato} onChange={v => setForm(p => ({ ...p, responsavel_contato: v }))} /><div className="md:col-span-3"><Field label="Endereco" value={form.endereco} onChange={v => setForm(p => ({ ...p, endereco: v }))} /></div><div className="md:col-span-3"><Field label="Experiencia" value={form.experiencia} onChange={v => setForm(p => ({ ...p, experiencia: v }))} /></div><Field label="EPI" value={form.epi} onChange={v => setForm(p => ({ ...p, epi: v }))} /><Field label="Beneficios" value={form.beneficios} onChange={v => setForm(p => ({ ...p, beneficios: v }))} /><Field label="Insalubridade" value={form.insalubridade} onChange={v => setForm(p => ({ ...p, insalubridade: v }))} /></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div><label className="text-xs text-muted-foreground">Empresa contratante</label><select value={form.empresa_id || ''} onChange={e => setCompany(e.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background"><option value="">Selecionar empresa</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div><Field label="Nome" value={form.nome} onChange={v => setForm(p => ({ ...p, nome: v }))} /><Field label="CPF" value={form.cpf} onChange={v => setForm(p => ({ ...p, cpf: v }))} /><Field label="RG" value={form.rg} onChange={v => setForm(p => ({ ...p, rg: v }))} /><DateField label="Data nascimento" value={form.data_nascimento} onChange={v => setForm(p => ({ ...p, data_nascimento: v }))} /><DateField label="Data admissao/inicio" value={form.data_admissao} onChange={v => setForm(p => ({ ...p, data_admissao: v }))} /><div><label className="text-xs text-muted-foreground">Funcao</label><select value={form.funcao || ''} onChange={e => setFuncaoComPadroes(e.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background"><option value="">Selecionar funcao</option>{form.funcao && !roleByName.has(normalizeRole(form.funcao)) && <option value={form.funcao}>{form.funcao}</option>}{roleOptions.map(role => <option key={normalizeRole(role.cargo)} value={role.cargo}>{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : ''}</option>)}</select></div><Field label="Setor/GHE" value={form.setor_ghe} onChange={v => setForm(p => ({ ...p, setor_ghe: v }))} /><Field label="Obra/Local" value={form.obra_local} onChange={v => setForm(p => ({ ...p, obra_local: v }))} /><div><label className="text-xs text-muted-foreground">Salario</label><Input type="number" value={form.salario || ''} onChange={e => setForm(p => ({ ...p, salario: Number(e.target.value) || null }))} /></div><Field label="Tipo admissao" value={form.tipo_admissao} onChange={v => setForm(p => ({ ...p, tipo_admissao: v }))} /><Field label="Jornada" value={form.jornada} onChange={v => setForm(p => ({ ...p, jornada: v }))} /><Field label="Filiacao" value={form.filiacao} onChange={v => setForm(p => ({ ...p, filiacao: v }))} /><Field label="Escolaridade" value={form.escolaridade} onChange={v => setForm(p => ({ ...p, escolaridade: v }))} /><Field label="Responsavel/Contato" value={form.responsavel_contato} onChange={v => setForm(p => ({ ...p, responsavel_contato: v }))} /><div className="md:col-span-3"><Field label="Endereco" value={form.endereco} onChange={v => setForm(p => ({ ...p, endereco: v }))} /></div><div className="md:col-span-3"><Field label="Experiencia" value={form.experiencia} onChange={v => setForm(p => ({ ...p, experiencia: v }))} /></div><Field label="EPI" value={form.epi} onChange={v => setForm(p => ({ ...p, epi: v }))} /><Field label="Beneficios" value={form.beneficios} onChange={v => setForm(p => ({ ...p, beneficios: v }))} /><Field label="Insalubridade" value={form.insalubridade} onChange={v => setForm(p => ({ ...p, insalubridade: v }))} /></div>
         <div className="flex flex-wrap gap-2"><Button onClick={salvar} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar conferencia'}</Button><Button onClick={enviarExame} variant="outline"><Mail className="w-4 h-4 mr-2" />Enviar solicitacao de exame</Button><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Anexar documentos<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadDocumento('documentacao_admissional', e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Subir ASO<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadASO(e.target.files?.[0])} /></label><Button onClick={enviarContabilidade} variant="outline"><ArrowRight className="w-4 h-4 mr-2" />E-mail contabilidade</Button><Button onClick={aprovarOficial} className="gradient-accent text-accent-foreground"><CheckCircle2 className="w-4 h-4 mr-2" />Aprovar cadastro oficial</Button></div>
       </div>
     </div>
