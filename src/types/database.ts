@@ -79,11 +79,18 @@ export interface MonthlyEntry {
 }
 
 export interface Fechamento {
+  id?: string;
   companyId: string;
   competencia: string;
-  status: 'aberto' | 'em_conferencia' | 'fechado';
+  status: 'aberto' | 'em_conferencia' | 'fechado' | 'reaberto';
   observacoes: string;
   dataFechamento?: string;
+  fechadoPorUserId?: string | null;
+  fechadoPorNome?: string;
+  totalFuncionarios?: number;
+  totalProventos?: number;
+  totalDescontos?: number;
+  totalLiquido?: number;
 }
 
 const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
@@ -227,6 +234,27 @@ export const mapEntry = (row: any): MonthlyEntry => ({
   bloqueado: row.bloqueado ?? false,
   fechamentoId: row.fechamento_id || null,
 });
+
+export const mapFechamento = (row: any): Fechamento => {
+  const status: Fechamento['status'] = ['aberto', 'em_conferencia', 'fechado', 'reaberto'].includes(row.status)
+    ? row.status
+    : 'aberto';
+
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    competencia: row.competencia,
+    status,
+    observacoes: cleanNullableText(row.observacoes),
+    dataFechamento: row.fechado_em || row.data_fechamento || undefined,
+    fechadoPorUserId: row.fechado_por_user_id || row.fechado_por || null,
+    fechadoPorNome: cleanNullableText(row.fechado_por_nome),
+    totalFuncionarios: Number(row.total_funcionarios) || 0,
+    totalProventos: Number(row.total_proventos) || 0,
+    totalDescontos: Number(row.total_descontos) || 0,
+    totalLiquido: Number(row.total_liquido) || 0,
+  };
+};
 
 export const entryToRow = (entry: Partial<MonthlyEntry>) => {
   const row: any = {};

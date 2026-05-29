@@ -32,7 +32,12 @@ export interface AppState {
   fechamentos: Fechamento[];
   setFechamentos: React.Dispatch<React.SetStateAction<Fechamento[]>>;
   getFechamento: (companyId: string, competencia: string) => Fechamento;
-  updateFechamento: (companyId: string, competencia: string, data: Partial<Fechamento>) => void;
+  updateFechamento: (
+    companyId: string,
+    competencia: string,
+    data: Partial<Fechamento>,
+    options?: { persist?: boolean },
+  ) => Promise<{ ok: boolean; error?: unknown }>;
   config: AppConfig;
   setConfig: React.Dispatch<React.SetStateAction<AppConfig>>;
   deliveries: Delivery[];

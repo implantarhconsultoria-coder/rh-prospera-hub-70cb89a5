@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { type Company, type Employee, type MonthlyEntry, type Fechamento, mapCompany, mapEmployee, mapEntry, entryToRow, employeeToRow, buildEmployeeObservacoes } from '@/types/database';
+import { type Company, type Employee, type MonthlyEntry, type Fechamento, mapCompany, mapEmployee, mapEntry, mapFechamento, entryToRow, employeeToRow, buildEmployeeObservacoes } from '@/types/database';
 import type { Delivery, BenefitReport } from '@/data/deliveries';
 import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
@@ -87,23 +87,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const fetchData = useCallback(async () => {
     if (!session) {
-      setCompanies([]); setEmployees([]); setEntries([]);
+      setCompanies([]); setEmployees([]); setEntries([]); setFechamentos([]);
       setDataLoading(false);
       return;
     }
 
     setDataLoading(true);
     try {
-      const [companiesRes, employeesRes] = await Promise.all([
+      const [companiesRes, employeesRes, fechamentosRes] = await Promise.all([
         supabase.from('empresas').select('*').order('nome'),
         supabase.from('funcionarios').select('*').order('nome'),
+        supabase.from('fechamentos_filial').select('*'),
       ]);
 
       if (companiesRes.error) console.error('Erro ao carregar empresas:', companiesRes.error);
       if (employeesRes.error) console.error('Erro ao carregar funcionarios:', employeesRes.error);
+      if (fechamentosRes.error && !isMissingSchema(fechamentosRes.error)) console.error('Erro ao carregar fechamentos:', fechamentosRes.error);
 
       setCompanies((companiesRes.data || []).map(mapCompany));
       setEmployees((employeesRes.data || []).map(mapEmployee));
+      setFechamentos(fechamentosRes.error ? [] : ((fechamentosRes.data || []).map(mapFechamento)));
 
       const entriesRes = await supabase
         .from('lancamentos_mensais')
@@ -346,7 +349,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return f || { companyId, competencia, status: 'aberto', observacoes: '' };
   }, [fechamentos]);
 
-  const updateFechamento = useCallback((companyId: string, competencia: string, data: Partial<Fechamento>) => {
+  const updateFechamento = useCallback(async (
+    companyId: string,
+    competencia: string,
+    data: Partial<Fechamento>,
+    options: { persist?: boolean } = {},
+  ): Promise<{ ok: boolean; error?: unknown }> => {
+    const current = fechamentos.find(f => f.companyId === companyId && f.competencia === competencia);
+    const nextFechamento: Fechamento = {
+      companyId,
+      competencia,
+      status: 'aberto',
+      observacoes: '',
+      ...current,
+      ...data,
+    };
+
     setFechamentos(prev => {
       const idx = prev.findIndex(f => f.companyId === companyId && f.competencia === competencia);
       if (idx >= 0) {
@@ -354,9 +372,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updated[idx] = { ...updated[idx], ...data };
         return updated;
       }
-      return [...prev, { companyId, competencia, status: 'aberto', observacoes: '', ...data }];
+      return [...prev, nextFechamento];
     });
-  }, []);
+
+    if (options.persist === false) return { ok: true };
+
+    try {
+      const company = companies.find(c => c.id === companyId);
+      const userName = session?.user?.user_metadata?.nome_completo ||
+        session?.user?.user_metadata?.full_name ||
+        session?.user?.email ||
+        '';
+      const isFechado = nextFechamento.status === 'fechado';
+      const fechadoEm = isFechado
+        ? (nextFechamento.dataFechamento || new Date().toISOString())
+        : (nextFechamento.dataFechamento || current?.dataFechamento || null);
+
+      const payload = {
+        company_id: companyId,
+        empresa_nome: company?.name || '',
+        competencia,
+        status: nextFechamento.status,
+        observacoes: nextFechamento.observacoes || '',
+        fechado_em: fechadoEm,
+        fechado_por_user_id: isFechado ? (session?.user?.id || null) : (nextFechamento.fechadoPorUserId || current?.fechadoPorUserId || null),
+        fechado_por_nome: isFechado ? userName : (nextFechamento.fechadoPorNome || current?.fechadoPorNome || ''),
+        total_funcionarios: Math.round(Number(nextFechamento.totalFuncionarios) || 0),
+        total_proventos: Number(nextFechamento.totalProventos) || 0,
+        total_descontos: Number(nextFechamento.totalDescontos) || 0,
+        total_liquido: Number(nextFechamento.totalLiquido) || 0,
+      };
+
+      const { data: saved, error } = await supabase
+        .from('fechamentos_filial')
+        .upsert(payload as any, { onConflict: 'company_id,competencia' })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      const savedFechamento = mapFechamento(saved);
+      setFechamentos(prev => {
+        const idx = prev.findIndex(f => f.companyId === companyId && f.competencia === competencia);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedFechamento;
+          return updated;
+        }
+        return [...prev, savedFechamento];
+      });
+
+      const lancamentoPatch: Record<string, unknown> = {
+        fechamento_id: savedFechamento.id,
+        bloqueado: isFechado,
+      };
+
+      const { error: lancError } = await supabase
+        .from('lancamentos_mensais')
+        .update(lancamentoPatch as any)
+        .eq('company_id', companyId)
+        .eq('competencia', competencia)
+        .is('apagado_em', null);
+
+      if (lancError) throw lancError;
+
+      setEntries(prev => prev.map(entry =>
+        entry.companyId === companyId && entry.competencia === competencia
+          ? { ...entry, fechamentoId: savedFechamento.id || null, bloqueado: isFechado }
+          : entry,
+      ));
+
+      if (session?.user?.id && savedFechamento.id) {
+        const acao = isFechado ? 'fechado' : (current?.id ? 'ajustado' : 'criado');
+        const { error: histError } = await supabase.from('fechamentos_historico').insert({
+          fechamento_id: savedFechamento.id,
+          acao,
+          user_id: session.user.id,
+          usuario_nome: userName || session.user.email || 'Sistema',
+          detalhes: {
+            status: savedFechamento.status,
+            total_funcionarios: savedFechamento.totalFuncionarios || 0,
+            total_proventos: savedFechamento.totalProventos || 0,
+            total_descontos: savedFechamento.totalDescontos || 0,
+            total_liquido: savedFechamento.totalLiquido || 0,
+          },
+        } as any);
+        if (histError) console.error('Erro ao registrar historico do fechamento:', histError);
+      }
+
+      return { ok: true };
+    } catch (error) {
+      console.error('Erro ao persistir fechamento:', error);
+      return { ok: false, error };
+    }
+  }, [companies, fechamentos, session]);
 
   const addDelivery = useCallback((data: Omit<Delivery, 'id' | 'createdAt'>): Delivery => {
     deliveryCounter++;
