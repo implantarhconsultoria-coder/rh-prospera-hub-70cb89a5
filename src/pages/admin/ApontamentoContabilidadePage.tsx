@@ -1020,27 +1020,23 @@ const ApontamentoContabilidadePage: React.FC = () => {
       observacao: `Envio do apontamento ${formatCompetencia(competencia)} para contabilidade`,
     });
 
-    const openEmailClient = (params: { to: string[]; cc: string[]; subject: string; body: string }) =>
-      downloadEmailWithAttachment({
-        ...params,
-        attachmentBlob: pdfBlob,
-        attachmentName: `Apontamento_${company.name}_${competencia}.pdf`.replace(/[^a-zA-Z0-9._-]+/g, '_'),
-        fileName: `Email_Apontamento_${company.name}_${competencia}`,
-      });
-
-    // 3) abre o cliente de e-mail, no mesmo fluxo do pre-cadastro.
-    window.setTimeout(() => {
-      openEmailClient({
+    try {
+      await downloadEmailWithAttachment({
         to: para,
         cc,
         subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
         body:
         `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n\n` +
-      `Atenciosamente,\nRodrigo De Souza Sabino`,
+        `Atenciosamente,\nRodrigo De Souza Sabino`,
+        attachmentBlob: pdfBlob,
+        attachmentName: `Apontamento_${company.name}_${competencia}.pdf`.replace(/[^a-zA-Z0-9._-]+/g, '_'),
+        fileName: `Email_Apontamento_${company.name}_${competencia}`,
       });
-    }, 900);
-    toast.success('PDF salvo na plataforma, aberto e e-mail preenchido.');
+      toast.success('PDF salvo na plataforma e e-mail enviado com anexo.');
+    } catch (e: any) {
+      toast.error(`PDF salvo, mas o e-mail com anexo falhou: ${e.message || 'erro desconhecido'}`);
+    }
   };
 
   const enviarLoteContabilidade = async () => {
@@ -1091,27 +1087,20 @@ const ApontamentoContabilidadePage: React.FC = () => {
         observacao: `Envio em lote do apontamento ${formatCompetencia(competencia)} para contabilidade`,
       });
 
-      const openEmailClient = (params: { to: string[]; cc: string[]; subject: string; body: string }) =>
-        downloadEmailWithAttachment({
-          ...params,
-          attachmentBlob: blob,
-          attachmentName: `Apontamento_Lote_${competencia}.pdf`,
-          fileName: `Email_Apontamento_Lote_${competencia}`,
-        });
+      await downloadEmailWithAttachment({
+        to: para,
+        cc,
+        subject: `Apontamento Contabilidade - ${formatCompetencia(competencia)} - Matriz/Praia/LMT/ALQUI`,
+        body:
+          `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} das empresas: ${nomes}.\n\n` +
+          `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n\n` +
+          `Atenciosamente,\nRodrigo De Souza Sabino`,
+        attachmentBlob: blob,
+        attachmentName: `Apontamento_Lote_${competencia}.pdf`,
+        fileName: `Email_Apontamento_Lote_${competencia}`,
+      });
 
-      window.setTimeout(() => {
-        openEmailClient({
-          to: para,
-          cc,
-          subject: `Apontamento Contabilidade - ${formatCompetencia(competencia)} - Matriz/Praia/LMT/ALQUI`,
-          body:
-            `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} das empresas: ${nomes}.\n\n` +
-            `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n\n` +
-            `Atenciosamente,\nRodrigo De Souza Sabino`,
-        });
-      }, 900);
-
-      toast.success('PDF em lote salvo, aberto e e-mail preenchido.');
+      toast.success('PDF em lote salvo e e-mail enviado com anexo.');
     } catch (e: any) {
       toast.error(`Erro no envio em lote: ${e.message || 'erro desconhecido'}`);
     } finally {

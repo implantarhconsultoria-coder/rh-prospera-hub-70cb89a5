@@ -21,6 +21,18 @@ const cleanList = (value: unknown) =>
     ? value.map((item) => String(item || '').trim()).filter((item) => item.includes('@'))
     : [];
 
+const PDF_CONTENT_TYPE = 'application/pdf';
+
+const normalizeAttachmentName = (value: unknown) => {
+  const fileName = String(value || 'documento.pdf').trim() || 'documento.pdf';
+  return fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+};
+
+const normalizeBase64 = (value: unknown) =>
+  String(value || '')
+    .trim()
+    .replace(/^data:[^;]+;base64,/, '');
+
 const sendWithResend = async (payload: any) => {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return null;
@@ -41,6 +53,7 @@ const sendWithResend = async (payload: any) => {
         {
           filename: payload.attachmentName,
           content: payload.attachmentBase64,
+          content_type: payload.attachmentContentType,
         },
       ],
     }),
@@ -78,7 +91,7 @@ const sendWithSendGrid = async (payload: any) => {
         {
           content: payload.attachmentBase64,
           filename: payload.attachmentName,
-          type: 'application/pdf',
+          type: payload.attachmentContentType,
           disposition: 'attachment',
         },
       ],
@@ -109,8 +122,10 @@ export default async function handler(req: any, res?: any) {
     cc: cleanList(body.cc),
     subject: String(body.subject || '').trim(),
     body: String(body.body || '').trim(),
-    attachmentName: String(body.attachmentName || 'documento.pdf').trim(),
-    attachmentBase64: String(body.attachmentBase64 || '').replace(/^data:application\/pdf;base64,/, ''),
+    attachmentName: normalizeAttachmentName(body.attachmentName),
+    attachmentBase64: normalizeBase64(body.attachmentBase64 || body.attachment || body.content),
+    attachmentContentType: PDF_CONTENT_TYPE,
+    attachmentSize: Number(body.attachmentSize || 0),
   };
 
   if (!payload.to.length || !payload.subject || !payload.body || !payload.attachmentBase64) {
