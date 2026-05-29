@@ -8,6 +8,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, buildVTReportRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { downloadEmailWithAttachment } from '@/lib/emailUtils';
+import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
 import { toast } from 'sonner';
 
 type Formato = 'vr' | 'vt' | 'ambos';
@@ -63,7 +64,7 @@ const getEmailDestinoRecibo = (companyName: string) => {
 };
 
 const RecibosBeneficioImpressaoPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, dataLoading, loading } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, dataLoading, loading, session } = useApp();
   const [searchParams] = useSearchParams();
   const [sendingEmail, setSendingEmail] = useState(false);
   const formato = (searchParams.get('formato') || searchParams.get('tipo') || 'vr') as Formato;
@@ -249,6 +250,39 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     });
     return doc.output('blob');
   };
+  const getNomeUsuarioAtual = async () => session?.user?.email || 'Sistema TOPAC RH';
+
+  const arquivarRecibosNoHistorico = async (items: ReciboItem[], origem: 'impressao' | 'email') => {
+    if (!session?.user) return;
+    const nomeUsuario = await getNomeUsuarioAtual();
+    for (const item of items) {
+      const pdfBlob = gerarPdfRecibosBlob([item]);
+      await arquivarDocumentoFuncionario({
+        funcionarioId: item.emp.id,
+        funcionarioNome: item.emp.name,
+        companyId: item.company.id,
+        empresaNome: item.company.name || '',
+        tipoDocumento: `Recibo ${formatoLabel}`,
+        competencia,
+        descricao: `Recibo ${formatoLabel} - ${competenciaLabel} - ${origem} - Pagamento: ${dataPagamento}`,
+        conteudo: pdfBlob,
+        extensao: 'pdf',
+        storageTipo: `recibo-${formatoLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        geradoPorUserId: session.user.id,
+        geradoPorNome: nomeUsuario,
+        unidade: item.company.name || '',
+      });
+    }
+  };
+
+  const handleImprimirPdf = async () => {
+    await arquivarRecibosNoHistorico(recibos, 'impressao').catch((error) => {
+      console.error('Erro ao arquivar recibos no historico:', error);
+      toast.warning('PDF aberto, mas alguns recibos nao foram salvos no historico.');
+    });
+    window.print();
+  };
+
   const handleEnviarEmail = async () => {
     if (!podeEnviarEmail) {
       toast.info('Envio por e-mail disponivel apenas para Praia Grande e Goiania. As demais empresas ficam somente para impressao.');
@@ -269,6 +303,10 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       for (const { destino, items } of Array.from(grupos.values())) {
         const empresaNome = items[0]?.company?.name || 'TOPAC';
         const pdfBlob = gerarPdfRecibosBlob(items);
+        await arquivarRecibosNoHistorico(items, 'email').catch((error) => {
+          console.error('Erro ao arquivar recibos no historico:', error);
+          toast.warning('E-mail gerado, mas alguns recibos nao foram salvos no historico.');
+        });
         const attachmentName = `${sanitizeFileName(`recibos_${formatoLabel}_${empresaNome}_${competencia}`)}.pdf`;
         await downloadEmailWithAttachment({
           to: destino.to,
@@ -346,7 +384,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       <div className="bg-white text-black min-h-screen" style={{ fontFamily: "'Segoe UI', Arial, sans-serif" }}>
         <div className="no-print flex flex-wrap items-center gap-3 px-8 py-3 bg-gray-100 border-b sticky top-0 z-10">
           <button onClick={() => window.history.back()} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">← Voltar</button>
-          <button onClick={() => window.print()} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">🖨 Imprimir / PDF</button>
+          <button onClick={handleImprimirPdf} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">🖨 Imprimir / PDF</button>
           <button
             onClick={handleEnviarEmail}
             disabled={!podeEnviarEmail || sendingEmail}

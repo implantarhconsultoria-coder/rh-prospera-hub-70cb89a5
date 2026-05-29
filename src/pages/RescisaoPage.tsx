@@ -17,6 +17,7 @@ import { printDocumentInPage } from '@/lib/printInPage';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import { openEmailClient, getDestinatariosRescisao, CC_OBRIGATORIO } from '@/lib/emailUtils';
+import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 
@@ -182,7 +183,43 @@ const RescisaoPage: React.FC = () => {
     'Atenciosamente.',
   ].filter((line) => line !== '').join('\n');
 
-  const enviarEmailRescisao = (r: any) => {
+  const getNomeUsuarioAtual = async () => {
+    if (!session?.user) return '';
+    const { data } = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
+    return data?.nome_completo || session.user.email || '';
+  };
+
+  const arquivarRescisaoDocumento = async (r: any, html?: string) => {
+    if (!session?.user) return null;
+    const funcionarioId = r.funcionario_id || emp?.id;
+    const funcionarioNome = r.funcionario_nome || emp?.name || '';
+    if (!funcionarioId || !funcionarioNome) return null;
+    const nomeUsuario = await getNomeUsuarioAtual();
+    return arquivarDocumentoFuncionario({
+      funcionarioId,
+      funcionarioNome,
+      companyId: r.company_id || emp?.companyId || '',
+      empresaNome: r.empresa_nome || empresa?.name || '',
+      tipoDocumento: 'Ficha de Rescisao',
+      competencia: String(r.data_desligamento || dataDesligamento || '').slice(0, 7),
+      descricao: `Rescisao - ${tipoRescisaoLabel(r.tipo_rescisao)} - Desligamento: ${r.data_desligamento || dataDesligamento} - Liquido: ${formatCurrency(Number(r.liquido) || 0)}`,
+      conteudo: html || rowToDocumento(r),
+      extensao: 'html',
+      storageTipo: 'rescisao',
+      geradoPorUserId: session.user.id,
+      geradoPorNome: nomeUsuario,
+      unidade: r.empresa_nome || empresa?.name || '',
+    });
+  };
+
+  const enviarEmailRescisao = async (r: any, options: { arquivar?: boolean } = {}) => {
+    let registro: any = null;
+    if (options.arquivar !== false) {
+      registro = await arquivarRescisaoDocumento(r).catch((error) => {
+        console.error('Erro ao arquivar rescisao no historico:', error);
+        return null;
+      });
+    }
     const unidade = [r.empresa_nome, r.empresa_municipio, r.empresa_uf].filter(Boolean).join(' ');
     const destinatarios = getDestinatariosRescisao(unidade);
     openEmailClient({
@@ -191,6 +228,10 @@ const RescisaoPage: React.FC = () => {
       subject: `Rescisao - ${r.funcionario_nome || ''} - ${r.empresa_nome || ''}`,
       body: buildEmailBody(r),
     });
+    if (registro?.id && session?.user) {
+      const nomeUsuario = await getNomeUsuarioAtual();
+      await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
+    }
     toast.success('E-mail de rescisao aberto com a ficha preenchida.');
   };
 
@@ -290,7 +331,7 @@ const RescisaoPage: React.FC = () => {
       await refreshData();
       if (persisted) await fetchList();
       else setList((prev) => [saved, ...prev]);
-      enviarEmailRescisao(saved || payload);
+      await enviarEmailRescisao(saved || payload);
     } catch (e: any) {
       toast.error('Erro ao salvar: ' + e.message);
     } finally {
@@ -298,8 +339,12 @@ const RescisaoPage: React.FC = () => {
     }
   };
 
-  const imprimir = (r: any) => {
-    printDocumentInPage(rowToDocumento(r));
+  const imprimir = async (r: any) => {
+    const html = rowToDocumento(r);
+    await arquivarRescisaoDocumento(r, html).catch((error) => {
+      console.error('Erro ao arquivar rescisao no historico:', error);
+    });
+    printDocumentInPage(html);
   };
 
   return (

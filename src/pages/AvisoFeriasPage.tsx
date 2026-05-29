@@ -8,7 +8,7 @@ import { CalendarCheck, Printer, Save, ArrowLeft, AlertTriangle, Mail } from 'lu
 import { formatDate, feriasStatus } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { openEmailClient, getDestinatariosFerias, CC_OBRIGATORIO } from '@/lib/emailUtils';
-import { registrarDocumento, marcarComoEnviado, uploadDocumentoPdf } from '@/lib/documentoHistorico';
+import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import { gerarAvisoFeriasPdf, downloadPdf } from '@/lib/pdfGenerator';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -307,6 +307,33 @@ const AvisoFeriasPage: React.FC = () => {
 
   const [lastDocId, setLastDocId] = useState('');
 
+  const getNomeUsuarioAtual = async () => {
+    if (!session?.user) return '';
+    const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
+    return profile.data?.nome_completo || session.user.email || '';
+  };
+
+  const arquivarAvisoFerias = async (pdf: { blob: Blob; fileName: string }) => {
+    if (!emp || !company || !session?.user) return null;
+    const nomeUsuario = await getNomeUsuarioAtual();
+    const registro = await arquivarDocumentoFuncionario({
+      funcionarioId: emp.id,
+      funcionarioNome: emp.name,
+      companyId: emp.companyId,
+      empresaNome: company.name || '',
+      tipoDocumento: 'Aviso de Ferias',
+      descricao: `Ferias de ${diasFerias} dias - Inicio: ${new Date(inicioFerias).toLocaleDateString('pt-BR')} - Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '-'}`,
+      conteudo: pdf.blob,
+      extensao: 'pdf',
+      storageTipo: 'aviso-ferias',
+      geradoPorUserId: session.user.id,
+      geradoPorNome: nomeUsuario,
+      unidade: company.name || '',
+    });
+    setLastDocId(registro?.id || '');
+    return registro;
+  };
+
   const handlePrint = async () => {
     if (!emp || !inicioFerias) { toast.error('Preencha os dados'); return; }
     const pdf = gerarPdfAtual();
@@ -316,23 +343,8 @@ const AvisoFeriasPage: React.FC = () => {
 
     if (session?.user) {
       try {
-        const arquivoUrl = await uploadDocumentoPdf(emp.id, 'aviso-ferias', pdf.blob, 'pdf');
-        await salvarFeriasNoBanco({ silent: true, avisoPdfUrl: arquivoUrl });
-        const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
-        const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
-
-        const registro = await registrarDocumento({
-          funcionarioId: emp.id,
-          funcionarioNome: emp.name,
-          companyId: emp.companyId,
-          empresaNome: company?.name || '',
-          tipoDocumento: 'Aviso de Férias',
-          descricao: `Férias de ${diasFerias} dias — Início: ${new Date(inicioFerias).toLocaleDateString('pt-BR')} — Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '—'}`,
-          arquivoUrl,
-          geradoPorUserId: session.user.id,
-          geradoPorNome: nomeUsuario,
-          unidade: company?.name || '',
-        });
+        const registro = await arquivarAvisoFerias(pdf);
+        await salvarFeriasNoBanco({ silent: true, avisoPdfUrl: (registro as any)?.arquivo_url || '' });
         setLastDocId(registro?.id || '');
         toast.success('PDF gerado, baixado e salvo no histórico!');
       } catch {
@@ -408,7 +420,8 @@ const AvisoFeriasPage: React.FC = () => {
               // 1. Garante PDF baixado para o operador anexar
               const pdf = gerarPdfAtual();
               if (pdf) downloadPdf(pdf.blob, pdf.fileName);
-              await salvarFeriasNoBanco({ silent: true });
+              const registro = pdf ? await arquivarAvisoFerias(pdf) : null;
+              await salvarFeriasNoBanco({ silent: true, avisoPdfUrl: (registro as any)?.arquivo_url || '' });
 
               const destinatarios = getDestinatariosFerias(company?.name || '');
               // 2. Texto humano e legível, sem "+", sem URL params quebrados
@@ -435,10 +448,10 @@ const AvisoFeriasPage: React.FC = () => {
                 body,
               });
 
-              if (lastDocId && session?.user) {
-                const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
-                const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
-                await marcarComoEnviado(lastDocId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
+              const documentoId = (registro as any)?.id || lastDocId;
+              if (documentoId && session?.user) {
+                const nomeUsuario = await getNomeUsuarioAtual();
+                await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
               }
               toast.success('Outlook aberto — arraste o PDF baixado para anexar');
             }} variant="outline" className="border-primary text-primary hover:bg-primary/10">

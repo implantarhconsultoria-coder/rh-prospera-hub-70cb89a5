@@ -14,6 +14,21 @@ export interface DocumentoRegistro {
   unidade?: string;
 }
 
+export interface ArquivarDocumentoFuncionarioInput extends Omit<DocumentoRegistro, 'arquivoUrl'> {
+  conteudo?: string | Blob;
+  extensao?: 'pdf' | 'html';
+  storageTipo?: string;
+  arquivoUrl?: string;
+}
+
+const safeStorageName = (value: string) =>
+  (value || 'documento')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase() || 'documento';
+
 /** Registra um documento no histórico do funcionário */
 export const registrarDocumento = async (doc: DocumentoRegistro) => {
   const { data, error } = await supabase.from('documentos_funcionario').insert({
@@ -36,6 +51,33 @@ export const registrarDocumento = async (doc: DocumentoRegistro) => {
     throw error;
   }
   return data;
+};
+
+export const arquivarDocumentoFuncionario = async (doc: ArquivarDocumentoFuncionarioInput) => {
+  let arquivoUrl = doc.arquivoUrl || '';
+
+  if (!arquivoUrl && doc.conteudo) {
+    arquivoUrl = await uploadDocumentoPdf(
+      doc.funcionarioId,
+      safeStorageName(doc.storageTipo || doc.tipoDocumento),
+      doc.conteudo,
+      doc.extensao || 'pdf',
+    );
+  }
+
+  return registrarDocumento({
+    funcionarioId: doc.funcionarioId,
+    funcionarioNome: doc.funcionarioNome,
+    companyId: doc.companyId,
+    empresaNome: doc.empresaNome,
+    tipoDocumento: doc.tipoDocumento,
+    competencia: doc.competencia,
+    descricao: doc.descricao,
+    arquivoUrl,
+    geradoPorUserId: doc.geradoPorUserId,
+    geradoPorNome: doc.geradoPorNome,
+    unidade: doc.unidade,
+  });
 };
 
 /** Marca um documento como enviado */

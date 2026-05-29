@@ -9,7 +9,7 @@ import { Stethoscope, Printer, Search, ArrowLeft, Save, AlertTriangle, Mail } fr
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { openEmailClient, DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
-import { registrarDocumento, marcarComoEnviado, uploadDocumentoPdf } from '@/lib/documentoHistorico';
+import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import { gerarFichaASOPdf, downloadPdf } from '@/lib/pdfGenerator';
 
 const CLINICAS: Record<string, string> = {
@@ -38,6 +38,33 @@ const ASOPage: React.FC = () => {
   const [responsavelContato, setResponsavelContato] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastDocId, setLastDocId] = useState('');
+
+  const getNomeUsuarioAtual = async () => {
+    if (!session?.user) return '';
+    const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
+    return profile.data?.nome_completo || session.user.email || '';
+  };
+
+  const arquivarFichaASO = async (pdf: { blob: Blob; fileName: string }) => {
+    if (!emp || !company || !session?.user) return null;
+    const nomeUsuario = await getNomeUsuarioAtual();
+    const registro = await arquivarDocumentoFuncionario({
+      funcionarioId: emp.id,
+      funcionarioNome: emp.name,
+      companyId: emp.companyId,
+      empresaNome: company.name || '',
+      tipoDocumento: `Ficha ASO - ${tipoExame}`,
+      descricao: `Exame ${tipoExame} - Data: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'} - ${obraLocal || 'Sem local'}`,
+      conteudo: pdf.blob,
+      extensao: 'pdf',
+      storageTipo: 'ficha-aso',
+      geradoPorUserId: session.user.id,
+      geradoPorNome: nomeUsuario,
+      unidade: company.name || '',
+    });
+    setLastDocId(registro?.id || '');
+    return registro;
+  };
 
   const filteredEmps = employees.filter(e => {
     if (e.status !== 'ativo' || e.categoria !== 'operacional') return false;
@@ -88,22 +115,8 @@ const ASOPage: React.FC = () => {
 
     if (session?.user) {
       try {
-        const arquivoUrl = await uploadDocumentoPdf(emp.id, 'ficha-aso', pdf.blob, 'pdf');
-        const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
-        const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
+        const registro = await arquivarFichaASO(pdf);
 
-        const registro = await registrarDocumento({
-          funcionarioId: emp.id,
-          funcionarioNome: emp.name,
-          companyId: emp.companyId,
-          empresaNome: company?.name || '',
-          tipoDocumento: `Ficha ASO — ${tipoExame}`,
-          descricao: `Exame ${tipoExame} — Data: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'} — ${obraLocal || 'Sem local'}`,
-          arquivoUrl,
-          geradoPorUserId: session.user.id,
-          geradoPorNome: nomeUsuario,
-          unidade: company?.name || '',
-        });
         setLastDocId(registro?.id || '');
         toast.success('PDF gerado, baixado e salvo no histórico!');
       } catch {
@@ -222,6 +235,7 @@ const ASOPage: React.FC = () => {
               // 1. Garante PDF baixado para o operador anexar
               const pdf = gerarPdfAtual();
               if (pdf) downloadPdf(pdf.blob, pdf.fileName);
+              const registro = pdf ? await arquivarFichaASO(pdf) : null;
 
               // 2. Texto humano e legível, sem "+", sem URL params quebrados
               const linhas = [
@@ -245,10 +259,10 @@ const ASOPage: React.FC = () => {
                 body: linhas.join('\n'),
               });
 
-              if (lastDocId && session?.user) {
-                const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
-                const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
-                await marcarComoEnviado(lastDocId, session.user.id, nomeUsuario, [...DESTINATARIOS_ASO, ...CC_OBRIGATORIO].join(', '));
+              const documentoId = (registro as any)?.id || lastDocId;
+              if (documentoId && session?.user) {
+                const nomeUsuario = await getNomeUsuarioAtual();
+                await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...DESTINATARIOS_ASO, ...CC_OBRIGATORIO].join(', '));
               }
               toast.success('Outlook aberto — arraste o PDF baixado para anexar');
             }} variant="outline" className="border-primary text-primary hover:bg-primary/10">
