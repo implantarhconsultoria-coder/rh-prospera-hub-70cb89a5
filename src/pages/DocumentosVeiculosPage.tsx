@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
+import { extractPdfText, extractPdfTextByLines, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle, Wrench, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
@@ -98,6 +98,131 @@ const writeLocalList = <T,>(key: string, list: T[]) => {
   localStorage.setItem(key, JSON.stringify(list));
 };
 
+const normalizePlainText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const formatPlaca = (value: string) => {
+  const clean = normalizePlainText(value).replace(/[^A-Z0-9]/g, '');
+  const match = clean.match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/);
+  return match?.[0] || '';
+};
+
+const formatRenavam = (value: string) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  const match = digits.match(/\d{9,11}/);
+  return match?.[0] || '';
+};
+
+const formatChassi = (value: string) => {
+  const clean = normalizePlainText(value).replace(/[^A-Z0-9]/g, '');
+  const match = clean.match(/[A-HJ-NPR-Z0-9]{17}/);
+  return match?.[0] || '';
+};
+
+const isPlateLike = (value: string) => !!formatPlaca(value) && normalizePlainText(value).replace(/[^A-Z0-9]/g, '').length <= 8;
+
+const findInLabelWindow = (lines: string[], label: RegExp, value: RegExp, fallbackText = '') => {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = normalizePlainText(lines[index]);
+    if (!label.test(line)) continue;
+    const windowText = normalizePlainText(lines.slice(index, index + 4).join(' '));
+    const match = windowText.match(value);
+    if (match?.[1] || match?.[0]) return match[1] || match[0];
+  }
+  const fallback = normalizePlainText(fallbackText).match(value);
+  return fallback?.[1] || fallback?.[0] || '';
+};
+
+const cleanModelText = (value: string) => {
+  const text = normalizePlainText(value)
+    .replace(/\b(MARCA|MODELO|VERSAO|VEICULO|CODIGO|RENAVAM|CHASSI|PLACA|ANO|FABRICACAO|FAB|MOD)\b/g, ' ')
+    .replace(/[|:;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text || isPlateLike(text) || /^\d+$/.test(text)) return '';
+  return text.length > 80 ? text.slice(0, 80).trim() : text;
+};
+
+const findModelText = (lines: string[]) => {
+  const labels = /(MARCA\s*\/?\s*MODELO|MARCA\s+MODELO|MODELO\s*\/?\s*VERSAO|MARCA)/;
+  for (let index = 0; index < lines.length; index += 1) {
+    const normalized = normalizePlainText(lines[index]);
+    if (!labels.test(normalized)) continue;
+    const sameLine = cleanModelText(lines[index]);
+    if (sameLine && !labels.test(sameLine)) return sameLine;
+    for (let next = index + 1; next <= index + 3 && next < lines.length; next += 1) {
+      const candidate = cleanModelText(lines[next]);
+      if (candidate && !/(RENAVAM|CHASSI|PLACA|CPF|CNPJ|NOME|EXERCICIO)/.test(candidate)) return candidate;
+    }
+  }
+  return '';
+};
+
+const inferDescricaoTipo = (text: string, model = '') => {
+  const normalized = normalizePlainText(`${model} ${text}`);
+  const isCarroceria =
+    /(SEMI\s*REBOQUE|SEMI-REBOQUE|REBOQUE|CARRETA|DOLLY|SR\/|R\/|REB\/|CARROCERIA\s+(BAU|ABERTA|FECHADA|METALICA)|RANDON|FACCHINI|GUERRA|LIBRELATO)/.test(normalized);
+  const tipo = isCarroceria ? 'CARROCERIA' : 'CARRO';
+  const modelo = cleanModelText(model);
+  return modelo ? `${tipo} - ${modelo}` : tipo;
+};
+
+const normalizeVehicleExtraction = (aiData: any, localData: any, fileName: string) => {
+  const rawDescricao = String(aiData?.descricao || localData?.descricao || '');
+  const marcaModelo = cleanModelText(aiData?.marca_modelo || aiData?.modelo || localData?.marca_modelo || rawDescricao);
+  const context = `${rawDescricao} ${marcaModelo} ${localData?.sourceText || ''}`;
+  const descricao = inferDescricaoTipo(context, isPlateLike(rawDescricao) ? marcaModelo : rawDescricao || marcaModelo);
+
+  return {
+    placa: formatPlaca(localData?.placa || aiData?.placa || fileName),
+    renavam: formatRenavam(localData?.renavam || aiData?.renavam || ''),
+    chassi: formatChassi(localData?.chassi || aiData?.chassi || ''),
+    ano_fabricacao: String(localData?.ano_fabricacao || aiData?.ano_fabricacao || '').replace(/\D/g, '').slice(0, 4),
+    ano_modelo: String(localData?.ano_modelo || aiData?.ano_modelo || '').replace(/\D/g, '').slice(0, 4),
+    patrimonio: String(aiData?.patrimonio || localData?.patrimonio || '').trim(),
+    descricao,
+    empresa: String(aiData?.empresa || localData?.empresa || 'TOPAC MATRIZ').trim(),
+    observacao: String(aiData?.observacao || localData?.observacao || '').trim(),
+  };
+};
+
+const parseVehicleTextLocally = (text: string, fileName: string) => {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const all = `${fileName}\n${text}`;
+  const normalizedAll = normalizePlainText(all);
+  const anoPair = normalizedAll.match(/\b((?:19|20)\d{2})\s*\/\s*((?:19|20)\d{2})\b/);
+
+  return {
+    placa: formatPlaca(findInLabelWindow(lines, /\bPLACA\b/, /([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})/, all) || fileName),
+    renavam: formatRenavam(findInLabelWindow(lines, /\bRENAVAM\b/, /(\d{9,11})/)),
+    chassi: formatChassi(findInLabelWindow(lines, /\b(CHASSI|VIN)\b/, /([A-HJ-NPR-Z0-9]{17})/, all)),
+    ano_fabricacao: findInLabelWindow(lines, /\b(FABRICACAO|ANO FAB|FAB\/MOD)\b/, /((?:19|20)\d{2})/, all) || anoPair?.[1] || '',
+    ano_modelo: findInLabelWindow(lines, /\b(MODELO|ANO MOD|FAB\/MOD)\b/, /(?:19|20)\d{2}\s*\/\s*((?:19|20)\d{2})/, all) || anoPair?.[2] || '',
+    marca_modelo: findModelText(lines),
+    descricao: inferDescricaoTipo(all, findModelText(lines)),
+    sourceText: normalizedAll,
+  };
+};
+
+const normalizeAtivoForDisplay = (ativo: Ativo): Ativo => {
+  const placaFromDescricao = !ativo.placa ? formatPlaca(ativo.descricao) : '';
+  const descricaoLooksLikePlate = isPlateLike(ativo.descricao);
+  return {
+    ...ativo,
+    placa: ativo.placa || placaFromDescricao,
+    descricao: descricaoLooksLikePlate || !ativo.descricao?.trim()
+      ? inferDescricaoTipo(`${ativo.observacao || ''} ${ativo.arquivo_url || ''}`)
+      : ativo.descricao,
+    renavam: formatRenavam(ativo.renavam || ''),
+    chassi: formatChassi(ativo.chassi || ''),
+  };
+};
+
 const DocumentosVeiculosPage: React.FC = () => {
   const { session } = useApp();
   const [ativos, setAtivos] = useState<Ativo[]>([]);
@@ -127,15 +252,14 @@ const DocumentosVeiculosPage: React.FC = () => {
     if (error) {
       if (isMissingSchema(error)) {
         setAtivosErro('Tabela de veiculos ainda nao existe no Supabase. Os PDFs serao guardados localmente ate a base ser aplicada.');
-        setAtivos(readLocalList<Ativo>(VEICULOS_LOCAL_KEY));
+        setAtivos(readLocalList<Ativo>(VEICULOS_LOCAL_KEY).map(normalizeAtivoForDisplay));
       } else {
         setAtivosErro(error.message || 'Erro ao carregar documentos de veiculos.');
       }
       return;
     }
     setAtivosErro('');
-    const local = readLocalList<Ativo>(VEICULOS_LOCAL_KEY);
-    setAtivos([...(data as unknown as Ativo[]), ...local]);
+    setAtivos(((data as unknown as Ativo[]) || []).map(normalizeAtivoForDisplay));
   };
 
   const fetchManutencoes = async () => {
@@ -154,8 +278,7 @@ const DocumentosVeiculosPage: React.FC = () => {
       return;
     }
     setManutencaoErro('');
-    const local = readLocalList<Manutencao>(MANUTENCOES_LOCAL_KEY);
-    setManutencoes([...(((data as any) || []) as Manutencao[]), ...local]);
+    setManutencoes((((data as any) || []) as Manutencao[]));
   };
 
   useEffect(() => { fetchAtivos(); fetchManutencoes(); }, []);
@@ -169,21 +292,28 @@ const DocumentosVeiculosPage: React.FC = () => {
 
   const analyzeVehiclePdf = async (source: File | Uint8Array, fileName: string) => {
     const bytes = source instanceof File ? new Uint8Array(await source.arrayBuffer()) : source;
-    const extractedText = await extractPdfText(bytes).catch(() => '');
+    const extractedText = await extractPdfTextByLines(bytes)
+      .catch(() => extractPdfText(bytes))
+      .catch(() => '');
+    const localData = parseVehicleTextLocally(extractedText, fileName);
     const { pageUrls } = await renderPdfPagesToDataUrls(bytes, 1.15, 2);
-    const { data, error } = await supabase.functions.invoke('parse-text', {
-      body: {
-        text: `Arquivo: ${fileName}\n\n${extractedText}`.trim(),
-        images: pageUrls,
-        type: 'documento_veiculo',
-      },
-    });
+    let aiData: any = {};
 
-    if (error) {
-      throw error;
+    try {
+      const { data, error } = await supabase.functions.invoke('parse-text', {
+        body: {
+          text: `Arquivo: ${fileName}\n\n${extractedText}`.trim(),
+          images: pageUrls,
+          type: 'documento_veiculo',
+        },
+      });
+
+      if (!error) aiData = data?.data ?? {};
+    } catch (error) {
+      console.warn('parse-text indisponivel para documento de veiculo; usando leitura local.', error);
     }
 
-    return data?.data ?? {};
+    return normalizeVehicleExtraction(aiData, localData, fileName);
   };
 
   const uploadDocumentoVeiculo = async (file: File, basePath: string) => {
@@ -395,7 +525,8 @@ const DocumentosVeiculosPage: React.FC = () => {
         (a.descricao || '').toLowerCase().includes(q) ||
         (a.placa || '').toLowerCase().includes(q) ||
           (a.patrimonio || '').toLowerCase().includes(q) ||
-          (a.renavam || '').toLowerCase().includes(q)
+          (a.renavam || '').toLowerCase().includes(q) ||
+          (a.chassi || '').toLowerCase().includes(q)
       );
     }
     if (filterType === 'ipva_vencer') list = list.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer');
@@ -419,6 +550,8 @@ const DocumentosVeiculosPage: React.FC = () => {
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.patrimonio || '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.renavam || '-'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.chassi || '-'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${[a.ano_fabricacao, a.ano_modelo].filter(Boolean).join('/') || '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_ipva ? new Date(a.vencimento_ipva).toLocaleDateString('pt-BR') : '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_licenciamento ? new Date(a.vencimento_licenciamento).toLocaleDateString('pt-BR') : '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.empresa}</td>
@@ -436,7 +569,7 @@ const DocumentosVeiculosPage: React.FC = () => {
     </style></head><body>
     <h1>Documentos de Veiculos - ${filterLabel}</h1>
     <h2>${filtered.length} veiculo(s) - Gerado em ${new Date().toLocaleDateString('pt-BR')}</h2>
-    <table><thead><tr><th>Descricao</th><th>Placa</th><th>Patrimonio</th><th>Renavam</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th></tr></thead>
+    <table><thead><tr><th>Descricao</th><th>Placa</th><th>Patrimonio</th><th>Renavam</th><th>Chassi</th><th>Ano</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th></tr></thead>
     <tbody>${rows}</tbody></table>
     </body></html>`;
     printDocumentInPage(html);
@@ -495,7 +628,7 @@ const DocumentosVeiculosPage: React.FC = () => {
       <div className="card-premium p-5 space-y-4">
         <div className="flex items-center gap-3 flex-wrap">
           <Search className="w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar por descricao, placa ou patrimonio..." value={search}
+          <Input placeholder="Buscar por descricao, placa, RENAVAM ou chassi..." value={search}
             onChange={e => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
           <select value={filterType} onChange={e => setFilterType(e.target.value as FilterType)}
             className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
@@ -636,6 +769,8 @@ const DocumentosVeiculosPage: React.FC = () => {
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Placa</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Patrimonio</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Renavam</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Chassi</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Ano</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">IPVA</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Licenciamento</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Empresa</th>
@@ -649,6 +784,8 @@ const DocumentosVeiculosPage: React.FC = () => {
                 <td className="px-3 py-2 text-xs">{a.placa || '-'}</td>
                 <td className="px-3 py-2 text-xs">{a.patrimonio || '-'}</td>
                 <td className="px-3 py-2 text-xs">{a.renavam || '-'}</td>
+                <td className="px-3 py-2 text-xs">{a.chassi || '-'}</td>
+                <td className="px-3 py-2 text-xs">{[a.ano_fabricacao, a.ano_modelo].filter(Boolean).join('/') || '-'}</td>
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_ipva))}</td>
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_licenciamento))}</td>
                 <td className="px-3 py-2 text-xs">{a.empresa}</td>
@@ -665,7 +802,7 @@ const DocumentosVeiculosPage: React.FC = () => {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={9} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
           </tbody>
         </table>
         <div className="p-3 text-xs text-muted-foreground border-t">{filtered.length} documento(s)</div>

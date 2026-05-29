@@ -40,6 +40,8 @@ Retorne APENAS um JSON com estes campos:
 - ano_fabricacao
 - ano_modelo
 - patrimonio
+- tipo_ativo
+- marca_modelo
 - descricao
 - empresa
 - observacao`;
@@ -101,6 +103,8 @@ Retorne APENAS um JSON com estes campos:
                   ano_fabricacao: { type: "string" },
                   ano_modelo: { type: "string" },
                   patrimonio: { type: "string" },
+                  tipo_ativo: { type: "string" },
+                  marca_modelo: { type: "string" },
                   descricao: { type: "string" },
                   empresa: { type: "string" },
                   observacao: { type: "string" },
