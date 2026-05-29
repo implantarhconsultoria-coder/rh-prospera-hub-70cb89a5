@@ -10,6 +10,7 @@ import { useApp } from '@/context/AppContext';
 import { asoStatus, calcTotalFuncionario, feriasStatus, formatCurrency } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import { isDirectorRole } from '@/lib/directorPermissions';
+import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 
 const DashboardPage: React.FC = () => {
   const { companies, employees, entries, session, userRoles } = useApp();
@@ -72,7 +73,8 @@ const DashboardPage: React.FC = () => {
       feriasProximas: emps.filter(e => feriasStatus(e.dataAdmissao).status !== 'em dia').length,
       asoAlerta: emps.filter(e => asoStatus(e.dataExameMedico).status !== 'ok').length,
       beneficiosAtivos: emps.filter(e => e.vrAtivo || e.vaAtivo || e.vtAtivo).length,
-      totalInsalubridade: emps.filter(e => e.insalubridadeAtiva).reduce((s, e) => s + e.insalubridadeValor, 0),
+      totalInsalubridade: emps.reduce((s, e) => s + getInsalubridadeAplicavel(e), 0),
+      totalPericulosidade: emps.reduce((s, e) => s + getPericulosidadeAplicavel(e), 0),
     };
   });
 
@@ -181,6 +183,7 @@ const DashboardPage: React.FC = () => {
                 { l: 'ASO alerta', v: cs.asoAlerta },
                 { l: 'Beneficios', v: cs.beneficiosAtivos },
                 { l: 'Insalubridade', v: formatCurrency(cs.totalInsalubridade) },
+                { l: 'Periculosidade', v: formatCurrency(cs.totalPericulosidade) },
                 { l: 'Status', v: 'Aberto' },
               ].map(item => <div key={item.l} className="admin-metric-cell"><p>{item.l}</p><strong>{item.v}</strong></div>)}
             </div>

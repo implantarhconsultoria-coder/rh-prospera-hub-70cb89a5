@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Search, Filter } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 
 const BaseMestraPage: React.FC = () => {
   const { employees, companies } = useApp();
@@ -59,7 +60,7 @@ const BaseMestraPage: React.FC = () => {
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="border-b bg-muted">
-              {['Empresa','CNPJ','Nº Reg','Mat. eSocial','Nome','CPF','Cargo','Salário Base','Admissão','ASO','Férias','VR','VA','VT','Insal.','Status'].map(h => (
+              {['Empresa','CNPJ','Nº Reg','Mat. eSocial','Nome','CPF','Cargo','Salário Base','Admissão','ASO','Férias','VR','VA','VT','Insal.','Peric.','Status'].map(h => (
                 <th key={h} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -93,7 +94,8 @@ const BaseMestraPage: React.FC = () => {
                   <td className="px-3 py-2.5 text-center">{e.vrAtivo ? '✓' : '—'}</td>
                   <td className="px-3 py-2.5 text-center">{e.vaAtivo ? '✓' : '—'}</td>
                   <td className="px-3 py-2.5 text-center">{e.vtAtivo ? '✓' : '—'}</td>
-                  <td className="px-3 py-2.5 text-center">{e.insalubridadeAtiva ? formatCurrency(e.insalubridadeValor) : '—'}</td>
+                  <td className="px-3 py-2.5 text-center">{getInsalubridadeAplicavel(e) > 0 ? formatCurrency(getInsalubridadeAplicavel(e)) : '—'}</td>
+                  <td className="px-3 py-2.5 text-center">{getPericulosidadeAplicavel(e) > 0 ? formatCurrency(getPericulosidadeAplicavel(e)) : '—'}</td>
                   <td className="px-3 py-2.5"><Badge className={`text-[10px] ${statusColor(e.status)}`}>{e.status}</Badge></td>
                 </tr>
               );

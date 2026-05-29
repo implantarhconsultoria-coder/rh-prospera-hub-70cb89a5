@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Save } from 'lucide-react';
 import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
+import { getPericulosidadeAplicavel, isMechanicRole } from '@/lib/employeeRoleRules';
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
@@ -52,6 +53,8 @@ const EmployeeDetailPage: React.FC = () => {
   const company = companies.find(c => c.id === emp.companyId);
   const fer = feriasStatus(emp.dataAdmissao);
   const aso = asoStatus(emp.dataExameMedico);
+  const isMechanic = isMechanicRole(emp.cargo);
+  const periculosidade = getPericulosidadeAplicavel(emp);
 
   const fieldFor = (field: keyof typeof emp, type: string = 'text') => ({
     value: (emp as any)[field] ?? '',
@@ -126,8 +129,23 @@ const EmployeeDetailPage: React.FC = () => {
             {emp.vaAtivo && <Field label="Valor Mensal VA" {...fieldFor('vaMensal', 'number')} />}
             <ToggleRow label="Vale Transporte (VT)" {...toggleFor('vtAtivo')} valueLabel="Diário" value={emp.vtDiario} />
             {emp.vtAtivo && <Field label="Valor Diário VT" {...fieldFor('vtDiario', 'number')} />}
-            <ToggleRow label="Insalubridade" {...toggleFor('insalubridadeAtiva')} valueLabel="Valor" value={emp.insalubridadeValor} />
-            {emp.insalubridadeAtiva && <Field label="Valor Insalubridade" {...fieldFor('insalubridadeValor', 'number')} />}
+            {isMechanic ? (
+              <>
+                <ToggleRow label="Insalubridade" {...toggleFor('insalubridadeAtiva')} valueLabel="Valor" value={emp.insalubridadeValor} />
+                {emp.insalubridadeAtiva && <Field label="Valor Insalubridade" {...fieldFor('insalubridadeValor', 'number')} />}
+              </>
+            ) : (
+              <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+                <span className="text-sm font-medium text-foreground">Insalubridade</span>
+                <span className="text-xs text-muted-foreground">Somente mecanicos</span>
+              </div>
+            )}
+            {periculosidade > 0 && (
+              <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
+                <span className="text-sm font-medium text-foreground">Periculosidade</span>
+                <span className="text-xs text-muted-foreground">30% do salario: {formatCurrency(periculosidade)}</span>
+              </div>
+            )}
           </div>
         )}
         {activeTab === 3 && (

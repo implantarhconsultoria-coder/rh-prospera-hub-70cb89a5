@@ -1,4 +1,5 @@
 import { cleanNullableText } from '@/lib/textClean';
+import { getInsalubridadeAplicavel, isMechanicRole } from '@/lib/employeeRoleRules';
 
 // Types for the application - matching Supabase schema but with app-friendly names
 // Companies and employees are fetched from Supabase tables
@@ -169,6 +170,8 @@ export const mapCompany = (row: any): Company => ({
 
 export const mapEmployee = (row: any): Employee => {
   const notes = parseEmployeeObservacoes(row.observacoes);
+  const cargo = cleanNullableText(row.cargo);
+  const insalubridadeAtiva = isMechanicRole(cargo);
   return {
     id: row.id,
     companyId: row.company_id || row.empresa_id,
@@ -177,7 +180,7 @@ export const mapEmployee = (row: any): Employee => {
     name: cleanNullableText(row.nome),
     cpf: cleanNullableText(row.cpf),
     rg: cleanNullableText(row.rg),
-    cargo: cleanNullableText(row.cargo),
+    cargo,
     categoria: row.categoria || row.setor || 'operacional',
     salarioBase: Number(row.salario_base ?? row.salario) || 0,
     dataAdmissao: cleanNullableText(row.data_admissao),
@@ -191,8 +194,8 @@ export const mapEmployee = (row: any): Employee => {
     vaMensal: Number(row.va_mensal) || 0,
     vtAtivo: row.vt_ativo ?? false,
     vtDiario: Number(row.vt_diario) || 0,
-    insalubridadeAtiva: row.insalubridade_ativa ?? false,
-    insalubridadeValor: Number(row.insalubridade_valor) || 0,
+    insalubridadeAtiva,
+    insalubridadeValor: getInsalubridadeAplicavel({ cargo, insalubridadeAtiva, insalubridadeValor: Number(row.insalubridade_valor) || 0 }),
     status: row.status === 'excluido' ? 'excluido' : (row.ativo === false ? 'desligado' : (row.status || 'ativo')),
     telefone: cleanNullableText(row.telefone),
     celular: cleanNullableText(row.celular),
@@ -309,8 +312,14 @@ export const employeeToRow = (data: Partial<Employee>) => {
   if (data.vaMensal !== undefined) row.va_mensal = data.vaMensal;
   if (data.vtAtivo !== undefined) row.vt_ativo = data.vtAtivo;
   if (data.vtDiario !== undefined) row.vt_diario = data.vtDiario;
-  if (data.insalubridadeAtiva !== undefined) row.insalubridade_ativa = data.insalubridadeAtiva;
-  if (data.insalubridadeValor !== undefined) row.insalubridade_valor = data.insalubridadeValor;
+  if (data.cargo !== undefined) {
+    const insalubridadeAtiva = isMechanicRole(data.cargo);
+    row.insalubridade_ativa = insalubridadeAtiva;
+    row.insalubridade_valor = insalubridadeAtiva ? Number(data.insalubridadeValor || 648.40) : 0;
+  } else {
+    if (data.insalubridadeAtiva !== undefined) row.insalubridade_ativa = data.insalubridadeAtiva;
+    if (data.insalubridadeValor !== undefined) row.insalubridade_valor = data.insalubridadeValor;
+  }
   if (data.status !== undefined) {
     row.ativo = data.status !== 'desligado';
     row.status = data.status;

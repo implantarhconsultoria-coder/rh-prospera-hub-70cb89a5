@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Lock, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Employee, MonthlyEntry } from '@/types/database';
+import { isMechanicRole } from '@/lib/employeeRoleRules';
 import {
   calcularResumoColaborador,
   formatarMinutos,
@@ -273,7 +274,7 @@ const FechamentoPontoPage: React.FC = () => {
         vaAplicado: existente?.vaAplicado ?? emp?.vaAtivo ?? false,
         vtAplicado: existente?.vtAplicado ?? emp?.vtAtivo ?? false,
         vtDesconto: existente?.vtDesconto ?? 0,
-        insalubridadeAplicada: existente?.insalubridadeAplicada ?? emp?.insalubridadeAtiva ?? false,
+        insalubridadeAplicada: existente?.insalubridadeAplicada ?? isMechanicRole(emp?.cargo),
       };
 
       return {

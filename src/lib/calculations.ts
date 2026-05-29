@@ -1,4 +1,5 @@
 import type { Employee, MonthlyEntry } from '@/types/database';
+import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
@@ -136,6 +137,7 @@ export type PayrollBreakdown = {
   totalHE: number;
   dsrHE: number;
   insVal: number;
+  periculosidadeVal: number;
   comissaoBase: number;
   comissaoPct: number;
   comissaoVal: number;
@@ -178,8 +180,9 @@ export const calcPayrollBreakdown = (
     ? (entry.adiantamento ?? adiantamentoPadrao)
     : adiantamentoPadrao;
 
-  const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
-  const valorHora = (emp.salarioBase + insVal) / 220;
+  const insVal = getInsalubridadeAplicavel(emp, entry);
+  const periculosidadeVal = getPericulosidadeAplicavel(emp);
+  const valorHora = (emp.salarioBase + insVal + periculosidadeVal) / 220;
   const he50Val = round2(valorHora * 1.5 * (entry.he50 || 0));
   const he100Val = round2(valorHora * 2 * (entry.he100 || 0));
   const totalHE = round2(he50Val + he100Val);
@@ -194,7 +197,7 @@ export const calcPayrollBreakdown = (
   const atrasoVal = round2(calcAtraso(emp.salarioBase, entry.atrasos || 0));
   const adicionais = round2(entry.adicionais || 0);
   const descontosDiversos = round2(entry.descontosDiversos || 0);
-  const proventos = round2(emp.salarioBase + insVal + he50Val + he100Val + dsrHE + comissaoVal + dsrComissao + adicionais);
+  const proventos = round2(emp.salarioBase + insVal + periculosidadeVal + he50Val + he100Val + dsrHE + comissaoVal + dsrComissao + adicionais);
   const descontosOperacionais = round2(faltaVal + atrasoVal);
   const bruto = round2(Math.max(0, proventos - descontosOperacionais));
   const baseINSS = bruto;
@@ -217,6 +220,7 @@ export const calcPayrollBreakdown = (
     totalHE,
     dsrHE,
     insVal,
+    periculosidadeVal,
     comissaoBase,
     comissaoPct,
     comissaoVal,
@@ -243,8 +247,11 @@ export const calcPayrollBreakdown = (
 };
 
 export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22) => {
-  const he50Val = calcHE50(emp.salarioBase, entry.he50);
-  const he100Val = calcHE100(emp.salarioBase, entry.he100);
+  const insVal = getInsalubridadeAplicavel(emp, entry);
+  const periculosidadeVal = getPericulosidadeAplicavel(emp);
+  const baseHora = emp.salarioBase + insVal + periculosidadeVal;
+  const he50Val = calcHE50(baseHora, entry.he50);
+  const he100Val = calcHE100(baseHora, entry.he100);
   const totalHE = he50Val + he100Val;
   const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
 
@@ -253,7 +260,8 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
     + he100Val
     + dsrHE
     + entry.adicionais
-    + (entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0);
+    + insVal
+    + periculosidadeVal;
 
   // VR: use entry vrDias (auto or manual), discount faltas
   const vrDiasEfetivos = Math.max(0, (entry.vrDias ?? diasUteis) - entry.faltasDias);
@@ -284,6 +292,8 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
     he50Val,
     he100Val,
     dsrHE,
+    insVal,
+    periculosidadeVal,
   };
 };
 

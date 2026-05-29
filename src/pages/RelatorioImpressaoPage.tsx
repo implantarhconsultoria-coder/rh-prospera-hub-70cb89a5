@@ -1,9 +1,37 @@
 import React, { useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
-import { calcTotalFuncionario, calcHE50, calcHE100, calcFalta, calcAtraso, formatCurrency } from '@/lib/calculations';
-import { getWorkingDays } from '@/lib/workingDays';
 import { useSearchParams } from 'react-router-dom';
+import { useApp } from '@/context/AppContext';
+import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
+import { getWorkingDays } from '@/lib/workingDays';
+import type { Employee, MonthlyEntry } from '@/types/database';
+import { isMechanicRole } from '@/lib/employeeRoleRules';
+
+const money = (value: unknown) => formatCurrency(Number(value) || 0);
+const hours = (value: unknown) =>
+  `${(Number(value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
+
+const defaultEntry = (emp: Employee, competencia: string, diasUteis: number): MonthlyEntry => ({
+  employeeId: emp.id,
+  companyId: emp.companyId,
+  competencia,
+  faltasDias: 0,
+  atrasos: 0,
+  he50: 0,
+  he100: 0,
+  adicionais: 0,
+  descontosDiversos: 0,
+  adiantamento: Math.round((Number(emp.salarioBase) || 0) * 0.4 * 100) / 100,
+  vrAplicado: true,
+  vrDias: diasUteis,
+  vaAplicado: false,
+  vtAplicado: emp.vtAtivo,
+  vtDesconto: 0,
+  comissaoBase: 0,
+  insalubridadeAplicada: isMechanicRole(emp.cargo),
+  statusConferencia: 'pendente',
+  observacoes: '',
+});
 
 const RelatorioImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
@@ -13,6 +41,9 @@ const RelatorioImpressaoPage: React.FC = () => {
 
   const company = companies.find(c => c.id === companyId);
   const diasUteis = getWorkingDays(competencia);
+  const comissaoPct = getComissaoPercentual(company);
+  const [year, month] = competencia.split('-').map(Number);
+  const domingosFeriados = year && month ? Math.max(0, new Date(year, month, 0).getDate() - diasUteis) : 0;
 
   useEffect(() => {
     if (companyId && competencia) getOrCreateEntries(companyId, competencia);
@@ -23,64 +54,71 @@ const RelatorioImpressaoPage: React.FC = () => {
   const fechamento = getFechamento(companyId, competencia);
 
   const { rows, totals } = useMemo(() => {
-    let tProv = 0, tDesc = 0, tLiq = 0, tBen = 0, tIns = 0;
-    let tHE50 = 0, tHE100 = 0, tAdic = 0, tVR = 0, tVT = 0;
-    let tFaltaDias = 0, tFaltaVal = 0, tSalarios = 0, tAdiant = 0, tDescDiv = 0;
-    const r = compEmps.map(emp => {
-      const entry = compEntries.find(e => e.employeeId === emp.id);
-      if (!entry) return null;
-      const calc = calcTotalFuncionario(emp, entry, diasUteis);
-      const he50Val = calcHE50(emp.salarioBase, entry.he50);
-      const he100Val = calcHE100(emp.salarioBase, entry.he100);
-      const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
-      const insVal = entry.insalubridadeAplicada && emp.insalubridadeAtiva ? emp.insalubridadeValor : 0;
-
-      tProv += calc.proventos; tDesc += calc.descontos; tLiq += calc.liquido;
-      tBen += calc.beneficios; tIns += insVal;
-      tHE50 += he50Val; tHE100 += he100Val;
-      tAdic += entry.adicionais;
-      tVR += calc.vrVal; tVT += calc.vtVal;
-      tFaltaDias += entry.faltasDias; tFaltaVal += faltaVal;
-      tSalarios += emp.salarioBase;
-      tAdiant += entry.adiantamento;
-      tDescDiv += entry.descontosDiversos;
-
-      return { emp, entry, calc, he50Val, he100Val, faltaVal, insVal };
-    }).filter(Boolean) as any[];
-
-    return {
-      rows: r,
-      totals: {
-        proventos: tProv, descontos: tDesc, liquido: tLiq, beneficios: tBen,
-        insalubridade: tIns, he50: tHE50, he100: tHE100, adicionais: tAdic,
-        vr: tVR, vt: tVT,
-        faltaDias: tFaltaDias, faltaVal: tFaltaVal,
-        salarios: tSalarios, adiantamentos: tAdiant, descontosDiv: tDescDiv,
-      },
+    const total = {
+      proventos: 0,
+      descontos: 0,
+      liquido: 0,
+      salarios: 0,
+      insalubridade: 0,
+      periculosidade: 0,
+      he50Horas: 0,
+      he50Valor: 0,
+      he100Horas: 0,
+      he100Valor: 0,
+      adiantamentos: 0,
+      faltasDias: 0,
+      faltasDescontos: 0,
+      descontosDiversos: 0,
+      fgts: 0,
     };
-  }, [compEmps, compEntries, diasUteis]);
+
+    const mappedRows = compEmps.map(emp => {
+      const entry = compEntries.find(e => e.employeeId === emp.id) || defaultEntry(emp, competencia, diasUteis);
+      const calc = calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct });
+
+      total.proventos += calc.proventos;
+      total.descontos += calc.descontosLegais + calc.descontosOperacionais + calc.adiantamento + calc.descontosDiversos;
+      total.liquido += calc.liquido;
+      total.salarios += Number(emp.salarioBase || 0);
+      total.insalubridade += calc.insVal;
+      total.periculosidade += calc.periculosidadeVal;
+      total.he50Horas += Number(entry.he50 || 0);
+      total.he50Valor += calc.he50Val;
+      total.he100Horas += Number(entry.he100 || 0);
+      total.he100Valor += calc.he100Val;
+      total.adiantamentos += calc.adiantamento;
+      total.faltasDias += Number(entry.faltasDias || 0);
+      total.faltasDescontos += calc.descontosOperacionais;
+      total.descontosDiversos += calc.descontosDiversos;
+      total.fgts += calc.fgtsInformativo;
+
+      return { emp, entry, calc };
+    });
+
+    return { rows: mappedRows, totals: total };
+  }, [compEmps, compEntries, competencia, diasUteis, domingosFeriados, comissaoPct]);
 
   const competenciaLabel = (() => {
     const [y, m] = competencia.split('-');
-    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-    return `${meses[Number(m) - 1]} / ${y}`;
+    const meses = ['Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    return `${meses[Number(m) - 1] || competencia} / ${y || ''}`;
   })();
 
-  // Wait for auth + data hydration before declaring not-found (avoids race when opening in new tab)
   if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-foreground">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Carregando relatório…</p>
+        <p className="text-sm text-muted-foreground">Carregando relatorio...</p>
       </div>
     );
   }
-  if (!company) return <div className="p-10 text-center text-lg">Empresa não encontrada. Acesse via relatório.</div>;
+
+  if (!company) return <div className="p-10 text-center text-lg">Empresa nao encontrada. Acesse via relatorio.</div>;
 
   return (
     <>
       <style>{`
-        @page { size: A4 landscape; margin: 10mm; }
+        @page { size: A4 landscape; margin: 8mm; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
           body * { visibility: hidden !important; }
@@ -95,102 +133,103 @@ const RelatorioImpressaoPage: React.FC = () => {
         <div className="no-print flex items-center gap-3 px-8 py-3 bg-gray-100 border-b">
           <button onClick={() => window.history.length > 1 ? window.history.back() : window.location.href = '/relatorio'}
             className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-            ← Voltar
+            Voltar
           </button>
           <button onClick={() => window.print()}
             className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
-            🖨 Imprimir / PDF
+            Imprimir / PDF
           </button>
         </div>
-        <div id="fech-print-area" className="max-w-[297mm] mx-auto px-6 py-5 print:px-4 print:py-3" style={{ fontSize: '11px' }}>
-        {/* Header */}
-        <div className="border-b-2 border-black pb-3 mb-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">{company.name}</h1>
-              <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-base font-bold">RELATÓRIO DE FECHAMENTO</p>
-              <p className="text-xs">Competência: {competenciaLabel}</p>
-              <p className="text-xs">Dias úteis: {diasUteis}</p>
+
+        <div id="fech-print-area" className="max-w-[297mm] mx-auto px-5 py-4 print:px-2 print:py-2" style={{ fontSize: '10px' }}>
+          <div className="border-b-2 border-black pb-3 mb-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight">{company.name}</h1>
+                <p className="text-xs text-gray-600">CNPJ: {company.cnpj || '-'}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-base font-bold">RELATORIO DE FECHAMENTO</p>
+                <p className="text-xs">Competencia: {competenciaLabel}</p>
+                <p className="text-xs">Dias uteis: {diasUteis}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          {[
-            { l: 'Funcionários', v: String(compEmps.length) },
-            { l: 'Total Proventos', v: formatCurrency(totals.proventos) },
-            { l: 'Total Descontos', v: formatCurrency(totals.descontos) },
-            { l: 'Líquido', v: formatCurrency(totals.liquido) },
-            { l: 'Benefícios', v: formatCurrency(totals.beneficios) },
-            { l: 'Insalubridade', v: formatCurrency(totals.insalubridade) },
-            { l: 'Faltas (dias)', v: `${totals.faltaDias} dias` },
-            { l: 'Desc. Faltas', v: formatCurrency(totals.faltaVal) },
-          ].map((c, i) => (
-            <div key={i} className="border border-gray-400 rounded px-2 py-1 text-center">
-              <p className="text-[9px] text-gray-500 uppercase">{c.l}</p>
-              <p className="text-xs font-bold">{c.v}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Employee table */}
-        <table className="w-full border-collapse" style={{ fontSize: '9.5px' }}>
-          <thead>
-            <tr className="bg-gray-200">
-              {['Nome','Cargo','Salário','HE 50%','HE 100%','Adic.','Insal.','VR','VT','Faltas','Adiant.','Desc.','Líquido'].map(h => (
-                <th key={h} className="border border-gray-400 px-1 py-1 text-left font-semibold whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r: any) => (
-              <tr key={r.emp.id} className="even:bg-gray-50">
-                <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap font-medium">{r.emp.name}</td>
-                <td className="border border-gray-300 px-1 py-0.5 whitespace-nowrap">{r.emp.cargo}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.emp.salarioBase)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.he50Val)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.he100Val)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.entry.adicionais)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.insVal)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.calc.vrVal)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.calc.vtVal)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{r.entry.faltasDias > 0 ? `${r.entry.faltasDias}d — ${formatCurrency(r.faltaVal)}` : '—'}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.entry.adiantamento)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right">{formatCurrency(r.entry.descontosDiversos)}</td>
-                <td className="border border-gray-300 px-1 py-0.5 text-right font-bold">{formatCurrency(r.calc.liquido)}</td>
-              </tr>
+          <div className="grid grid-cols-5 gap-2 mb-4">
+            {[
+              { l: 'Funcionarios', v: String(compEmps.length) },
+              { l: 'Salario base', v: money(totals.salarios) },
+              { l: 'Insalubridade', v: money(totals.insalubridade) },
+              { l: 'Periculosidade', v: money(totals.periculosidade) },
+              { l: 'HE 50% qtd.', v: hours(totals.he50Horas) },
+              { l: 'HE 100% qtd.', v: hours(totals.he100Horas) },
+              { l: 'Adiantamentos', v: money(totals.adiantamentos) },
+              { l: 'Faltas/Desc.', v: money(totals.faltasDescontos + totals.descontosDiversos) },
+              { l: 'FGTS info', v: money(totals.fgts) },
+              { l: 'Total descontos', v: money(totals.descontos) },
+              { l: 'Liquido', v: money(totals.liquido) },
+            ].map((c, i) => (
+              <div key={i} className="border border-gray-400 rounded px-2 py-1 text-center">
+                <p className="text-[8px] text-gray-500 uppercase">{c.l}</p>
+                <p className="text-xs font-bold">{c.v}</p>
+              </div>
             ))}
-          </tbody>
-          <tfoot>
-            <tr className="bg-gray-200 font-bold">
-              <td className="border border-gray-400 px-1 py-1" colSpan={2}>TOTAIS</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.salarios)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.he50)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.he100)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.adicionais)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.insalubridade)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.vr)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.vt)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{totals.faltaDias > 0 ? `${totals.faltaDias}d — ${formatCurrency(totals.faltaVal)}` : '—'}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.adiantamentos)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.descontosDiv)}</td>
-              <td className="border border-gray-400 px-1 py-1 text-right">{formatCurrency(totals.liquido)}</td>
-            </tr>
-          </tfoot>
-        </table>
-
-        {/* Observations */}
-        {fechamento.observacoes && (
-          <div className="mt-4 border border-gray-400 rounded p-2">
-            <p className="text-[9px] text-gray-500 uppercase mb-1">Observações</p>
-            <p className="text-xs">{fechamento.observacoes}</p>
           </div>
-        )}
 
+          <table className="w-full border-collapse" style={{ fontSize: '8.3px', tableLayout: 'fixed' }}>
+            <thead>
+              <tr className="bg-gray-200">
+                {['Nome','Cargo','Salario/Base','HE50 qtd','HE50 valor','HE100 qtd','HE100 valor','Insal.','Peric.','Adiant.','Faltas/Desc.','Desc. extra','FGTS info','Liquido'].map(h => (
+                  <th key={h} className="border border-gray-400 px-1 py-1 text-left font-semibold">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.emp.id} className="even:bg-gray-50">
+                  <td className="border border-gray-300 px-1 py-0.5 font-medium">{r.emp.name || '-'}</td>
+                  <td className="border border-gray-300 px-1 py-0.5">{r.emp.cargo || '-'}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.emp.salarioBase)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{hours(r.entry.he50)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.calc.he50Val)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{hours(r.entry.he100)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.calc.he100Val)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.calc.insVal)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.calc.periculosidadeVal)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.calc.adiantamento)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{`${Number(r.entry.faltasDias || 0).toLocaleString('pt-BR')}d / ${money(r.calc.descontosOperacionais)}`}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.calc.descontosDiversos)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right">{money(r.calc.fgtsInformativo)}</td>
+                  <td className="border border-gray-300 px-1 py-0.5 text-right font-bold">{money(r.calc.liquido)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-200 font-bold">
+                <td className="border border-gray-400 px-1 py-1" colSpan={2}>TOTAIS</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.salarios)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{hours(totals.he50Horas)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.he50Valor)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{hours(totals.he100Horas)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.he100Valor)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.insalubridade)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.periculosidade)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.adiantamentos)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{`${Number(totals.faltasDias || 0).toLocaleString('pt-BR')}d / ${money(totals.faltasDescontos)}`}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.descontosDiversos)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.fgts)}</td>
+                <td className="border border-gray-400 px-1 py-1 text-right">{money(totals.liquido)}</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {fechamento.observacoes && (
+            <div className="mt-4 border border-gray-400 rounded p-2">
+              <p className="text-[9px] text-gray-500 uppercase mb-1">Observacoes</p>
+              <p className="text-xs">{fechamento.observacoes}</p>
+            </div>
+          )}
         </div>
       </div>
     </>

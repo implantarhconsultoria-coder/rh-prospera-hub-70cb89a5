@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { formatCurrency } from '@/lib/calculations';
+import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 import { Input } from '@/components/ui/input';
 import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 import { Badge } from '@/components/ui/badge';
@@ -193,7 +194,9 @@ const LancamentosPage: React.FC = () => {
                     <td className="px-4 py-3 text-right"><MoneyInput disabled={isLocked} value={entry.adicionais} onValueChange={value => update({ adicionais: value })} className="w-24 h-9 text-sm text-right ml-auto" /></td>
                     <td className="px-4 py-3 text-right"><MoneyInput disabled={isLocked} value={entry.descontosDiversos} onValueChange={value => update({ descontosDiversos: value })} className="w-24 h-9 text-sm text-right ml-auto" /></td>
                     <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap text-muted-foreground">{formatCurrency(entry.adiantamento || 0)}</td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap text-muted-foreground">{emp.insalubridadeAtiva ? formatCurrency(emp.insalubridadeValor) : '—'}</td>
+                    <td className="px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap text-muted-foreground">
+                      {getInsalubridadeAplicavel(emp, entry) > 0 ? formatCurrency(getInsalubridadeAplicavel(emp, entry)) : getPericulosidadeAplicavel(emp) > 0 ? `Peric. ${formatCurrency(getPericulosidadeAplicavel(emp))}` : '-'}
+                    </td>
                     <td className="px-4 py-3">
                       <select disabled={isLocked} value={entry.statusConferencia} onChange={e => update({ statusConferencia: e.target.value })}
                         className="border rounded-md px-2 py-1.5 text-xs bg-background text-foreground h-9">

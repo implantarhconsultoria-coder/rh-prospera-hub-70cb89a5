@@ -7,6 +7,7 @@ import { formatCompetencia } from '@/lib/workingDays';
 import { registrarAcao } from '@/lib/acoesLog';
 import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
 import { downloadEmailWithAttachment } from '@/lib/emailUtils';
+import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -35,6 +36,7 @@ interface ItemRow {
   cpf: string;
   salario: number;
   insalubridade: number;
+  periculosidade: number;
   // Comissão estruturada
   tem_comissao: boolean;
   comissao_base: number;
@@ -70,6 +72,7 @@ const calcTotal = (r: ItemRow) =>
   round2(
     Number(r.salario || 0) +
     Number(r.insalubridade || 0) +
+    Number(r.periculosidade || 0) +
     Number(r.comissao_valor || 0) +
     Number(r.hora_extra_50 || 0) +
     Number(r.hora_extra_60 || 0) +
@@ -206,6 +209,9 @@ const ApontamentoContabilidadePage: React.FC = () => {
           const adiantamento = Number(r.adiantamento || 0);
           const adiantManual = r.adiantamento_manual === true;
           const salario = Number(r.salario || 0);
+          const savedEmp = employees.find(emp => emp.id === r.funcionario_id);
+          const insalubridade = savedEmp ? getInsalubridadeAplicavel(savedEmp, null, config.valorInsalubridade) : Number(r.insalubridade || 0);
+          const periculosidade = savedEmp ? getPericulosidadeAplicavel(savedEmp) : 0;
           const adiantamentoFinal = adiantManual
             ? adiantamento
             : (adiantamento > 0 ? adiantamento : calcAdiantamentoAuto(salario));
@@ -215,7 +221,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
             nome: r.nome,
             cpf: r.cpf,
             salario,
-            insalubridade: Number(r.insalubridade || 0),
+            insalubridade,
+            periculosidade,
             tem_comissao: r.tem_comissao === true || comissaoValor > 0 || comissaoBase > 0,
             comissao_base: comissaoBase,
             comissao_percentual: comissaoPct,
@@ -247,8 +254,9 @@ const ApontamentoContabilidadePage: React.FC = () => {
         const rows: ItemRow[] = compEmps.map(emp => {
           const ent = compEntries.find(e => e.employeeId === emp.id);
           const salario = Number(emp.salarioBase || 0);
-          const insal = emp.insalubridadeAtiva ? Number(emp.insalubridadeValor || config.valorInsalubridade || 0) : 0;
-          const valorHora = salario / 220;
+          const insal = getInsalubridadeAplicavel(emp, ent, config.valorInsalubridade);
+          const periculosidade = getPericulosidadeAplicavel(emp);
+          const valorHora = (salario + insal + periculosidade) / 220;
           const heExtraHoras = Number(ent?.he50 || 0);
           const he100Horas = Number(ent?.he100 || 0);
           const he50Valor = !empGO ? round2(heExtraHoras * valorHora * 1.5) : 0;
@@ -267,6 +275,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
             cpf: emp.cpf,
             salario,
             insalubridade: insal,
+            periculosidade,
             tem_comissao: temComissao,
             comissao_base: baseDefault,
             comissao_percentual: pctDefault,
@@ -305,7 +314,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
       const next = [...prev];
       const row: ItemRow = { ...next[idx], ...patch } as ItemRow;
       // Recalcular dependentes
-      const valorHora = Number(row.salario || 0) / 220;
+      const valorHora = (Number(row.salario || 0) + Number(row.insalubridade || 0) + Number(row.periculosidade || 0)) / 220;
       // se editou horas, recalcular valor de HE
       if ('hora_extra_50_horas' in patch)
         row.hora_extra_50 = round2(Number(row.hora_extra_50_horas) * valorHora * 1.5);
@@ -343,7 +352,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
 
   const recalcularTudo = () => {
     setItems(prev => prev.map(r => {
-      const valorHora = Number(r.salario || 0) / 220;
+      const valorHora = (Number(r.salario || 0) + Number(r.insalubridade || 0) + Number(r.periculosidade || 0)) / 220;
       const adiant = r.adiantamento_manual ? r.adiantamento : calcAdiantamentoAuto(r.salario);
       const comissaoValor = r.tem_comissao ? calcComissaoValor(r.comissao_base, r.comissao_percentual) : 0;
       const next: ItemRow = {
@@ -455,13 +464,17 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const salario = Number(r.salario || 0);
     const adiantamento = Number(r.adiantamento || 0);
     const adiantManual = r.adiantamento_manual === true;
+    const savedEmp = employees.find(emp => emp.id === r.funcionario_id);
+    const insalubridade = savedEmp ? getInsalubridadeAplicavel(savedEmp, null, config.valorInsalubridade) : Number(r.insalubridade || 0);
+    const periculosidade = savedEmp ? getPericulosidadeAplicavel(savedEmp) : 0;
     const row: ItemRow = {
       id: r.id,
       funcionario_id: r.funcionario_id,
       nome: r.nome,
       cpf: r.cpf,
       salario,
-      insalubridade: Number(r.insalubridade || 0),
+      insalubridade,
+      periculosidade,
       tem_comissao: r.tem_comissao === true || comissaoValor > 0 || Number(r.comissao_base || 0) > 0,
       comissao_base: Number(r.comissao_base || 0),
       comissao_percentual: Number(r.comissao_percentual || 0),
@@ -492,8 +505,9 @@ const ApontamentoContabilidadePage: React.FC = () => {
     return compEmps.map(emp => {
       const ent = compEntries.find(e => e.employeeId === emp.id);
       const salario = Number(emp.salarioBase || 0);
-      const insal = emp.insalubridadeAtiva ? Number(emp.insalubridadeValor || config.valorInsalubridade || 0) : 0;
-      const valorHora = salario / 220;
+      const insal = getInsalubridadeAplicavel(emp, ent, config.valorInsalubridade);
+      const periculosidade = getPericulosidadeAplicavel(emp);
+      const valorHora = (salario + insal + periculosidade) / 220;
       const heExtraHoras = Number(ent?.he50 || 0);
       const he100Horas = Number(ent?.he100 || 0);
       const pctDefault = defaultComissaoPct(nomeEmpresa, emp.name);
@@ -505,6 +519,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         cpf: emp.cpf,
         salario,
         insalubridade: insal,
+        periculosidade,
         tem_comissao: temComissao,
         comissao_base: baseDefault,
         comissao_percentual: pctDefault,
@@ -592,6 +607,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           <td>${esc(r.cpf || '-')}</td>
           <td class="num">${money(r.salario)}</td>
           <td class="num">${money(r.insalubridade)}</td>
+          <td class="num">${money(r.periculosidade)}</td>
           <td class="num">${hours(heQtd)}</td>
           <td class="num">${money(heValor)}</td>
           <td class="num">${hours(r.hora_extra_100_horas)}</td>
@@ -668,6 +684,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
                   <th>CPF</th>
                   <th>Salário</th>
                   <th>Insalub.</th>
+                  <th>Peric.</th>
                   <th>HE ${heLabelPct} Qtd</th>
                   <th>HE ${heLabelPct} Valor</th>
                   <th>HE 100% Qtd</th>
@@ -681,13 +698,13 @@ const ApontamentoContabilidadePage: React.FC = () => {
               <tbody>${rows}</tbody>
               <tfoot>
                 <tr>
-                  <td colspan="11">TOTAL GERAL</td>
+                  <td colspan="12">TOTAL GERAL</td>
                   <td class="num">${money(totalGeral)}</td>
                 </tr>
               </tfoot>
             </table>
             <div class="rodape">
-              Total = Salário + Insalubridade + Comissão Valor + HE ${heLabelPct} + HE 100% - Assistência Médica - Desconto Falta - Desconto DSR - Adiantamento.
+              Total = Salário + Insalubridade + Periculosidade + Comissão Valor + HE ${heLabelPct} + HE 100% - Assistência Médica - Desconto Falta - Desconto DSR - Adiantamento.
             </div>
           </main>
           <script>
@@ -713,7 +730,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const exportarExcel = () => {
     const heLabel = isGO ? 'HE60' : 'HE50';
     const headers = [
-      'Nome','CPF','Salario','Insalubridade',
+      'Nome','CPF','Salario','Insalubridade','Periculosidade',
       'Tem Comissao','Base Comissao','Comissao %','Comissao Valor',
       `${heLabel}-Horas`, `${heLabel}-Valor`,
       'HE100-Horas','HE100-Valor',
@@ -722,7 +739,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
     ];
     const rows = items.map(r => [
       r.nome, r.cpf,
-      r.salario, r.insalubridade,
+      r.salario, r.insalubridade, r.periculosidade,
       r.tem_comissao ? 'Sim' : 'Não', r.comissao_base, r.comissao_percentual, r.comissao_valor,
       isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas,
       isGO ? r.hora_extra_60 : r.hora_extra_50,
@@ -748,8 +765,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const margin = 6;
     const rowH = 5;
     const heTitulo = isGO ? 'HE 60%' : 'HE 50%';
-    const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
-    const widths = [46, 24, 21, 18, 18, 22, 19, 22, 13, 21, 21, 22];
+    const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+    const widths = [46, 24, 21, 18, 18, 18, 22, 19, 22, 13, 21, 21, 22];
     const money = (v: number) => formatBRL(Number(v || 0));
     const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
     const titulo = `${company.name.toUpperCase()} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
@@ -800,6 +817,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         r.cpf || '-',
         money(r.salario),
         money(r.insalubridade),
+        money(r.periculosidade),
         hours(heQtd),
         money(heValor),
         hours(r.hora_extra_100_horas),
@@ -827,10 +845,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
       drawHeader();
     }
     doc.setFont('helvetica', 'bold');
-    doc.rect(margin, y, widths.slice(0, 11).reduce((s, w) => s + w, 0), rowH);
+    doc.rect(margin, y, widths.slice(0, 12).reduce((s, w) => s + w, 0), rowH);
     doc.text('TOTAL GERAL', margin + 1, y + 3.4);
-    const totalX = margin + widths.slice(0, 11).reduce((s, w) => s + w, 0);
-    doc.rect(totalX, y, widths[11], rowH);
+    const totalX = margin + widths.slice(0, 12).reduce((s, w) => s + w, 0);
+    doc.rect(totalX, y, widths[12], rowH);
     doc.text(money(totalGeral), totalX + 1, y + 3.4);
 
     doc.setFont('helvetica', 'normal');
@@ -864,14 +882,14 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const rowH = 5;
     const money = (v: number) => formatBRL(Number(v || 0));
     const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
-    const widths = [46, 24, 21, 18, 18, 22, 19, 22, 13, 21, 21, 22];
+    const widths = [46, 24, 21, 18, 18, 18, 22, 19, 22, 13, 21, 21, 22];
 
     grupos.forEach((grupo, grupoIdx) => {
       if (grupoIdx > 0) doc.addPage();
       let y = margin;
       const grupoIsGO = usaHE60(grupo.company.name);
       const heTitulo = grupoIsGO ? 'HE 60%' : 'HE 50%';
-      const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+      const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
       const totalGrupo = round2(grupo.items.reduce((s, r) => s + Number(r.total || 0), 0));
       const titulo = `${grupo.company.name.toUpperCase()} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
 
@@ -920,6 +938,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           r.cpf || '-',
           money(r.salario),
           money(r.insalubridade),
+          money(r.periculosidade),
           hours(heQtd),
           money(heValor),
           hours(r.hora_extra_100_horas),
@@ -947,10 +966,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
         drawHeader();
       }
       doc.setFont('helvetica', 'bold');
-      doc.rect(margin, y, widths.slice(0, 11).reduce((s, w) => s + w, 0), rowH);
+      doc.rect(margin, y, widths.slice(0, 12).reduce((s, w) => s + w, 0), rowH);
       doc.text('TOTAL GERAL', margin + 1, y + 3.4);
-      const totalX = margin + widths.slice(0, 11).reduce((s, w) => s + w, 0);
-      doc.rect(totalX, y, widths[11], rowH);
+      const totalX = margin + widths.slice(0, 12).reduce((s, w) => s + w, 0);
+      doc.rect(totalX, y, widths[12], rowH);
       doc.text(money(totalGrupo), totalX + 1, y + 3.4);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
@@ -1218,6 +1237,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
               <col style={{ width: '8%' }} />{/* CPF */}
               <col style={{ width: '6%' }} />{/* Salário */}
               <col style={{ width: '5%' }} />{/* Insalub */}
+              <col style={{ width: '5%' }} />{/* Periculosidade */}
               <col style={{ width: '3.5%' }} />{/* Tem com */}
               <col style={{ width: '6%' }} />{/* Base com */}
               <col style={{ width: '4%' }} />{/* Com % */}
@@ -1240,6 +1260,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
                 <th className="px-2 py-2 text-left font-semibold border border-border">CPF</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">Salário</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">Insalub.</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">Peric.</th>
                 <th className="px-2 py-2 text-center font-semibold border border-border">Tem Com.</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">Base Com.</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">Com. %</th>
@@ -1270,6 +1291,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
                     <CurrencyInput value={r.insalubridade} onCommit={(n) => updateRow(idx, { insalubridade: n })}
                       className="w-20 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
                   </td>
+                  <td className="px-2 py-1 border border-border text-right font-semibold">{formatBRL(r.periculosidade)}</td>
                   <td className="px-1 py-1 border border-border text-center">
                     <input type="checkbox" checked={r.tem_comissao}
                       onChange={(e) => updateRow(idx, { tem_comissao: e.target.checked })} />
@@ -1325,7 +1347,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
             </tbody>
             <tfoot>
               <tr className="bg-muted font-bold">
-                <td colSpan={18} className="px-2 py-2 border border-border text-right">TOTAL GERAL</td>
+                <td colSpan={19} className="px-2 py-2 border border-border text-right">TOTAL GERAL</td>
                 <td className="px-2 py-2 border border-border text-right">{formatBRL(totalGeral)}</td>
               </tr>
             </tfoot>
@@ -1334,7 +1356,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
 
         <p className="text-[10px] text-muted-foreground mt-4 text-center">
           Documento para conferência da contabilidade. Não inclui VR, VT nem reembolso.
-          Total = Salário + Insalubridade + Comissão Valor + HE {heLabelPct} + HE 100% − Assistência Médica − Desconto Falta − Desconto DSR − Adiantamento.
+          Total = Salário + Insalubridade + Periculosidade + Comissão Valor + HE {heLabelPct} + HE 100% − Assistência Médica − Desconto Falta − Desconto DSR − Adiantamento.
         </p>
       </div>
     </div>

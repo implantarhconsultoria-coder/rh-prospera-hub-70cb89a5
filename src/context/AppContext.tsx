@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import { AppContext, defaultConfig, type AppConfig } from '@/context/AppContextValue';
 import { useApp } from '@/hooks/useApp';
+import { isMechanicRole } from '@/lib/employeeRoleRules';
 
 // Re-export para compatibilidade
 export { useApp };
@@ -228,7 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       vtAplicado: emp.vtAtivo,
       vtDesconto: 0,
       comissaoBase: 0,
-      insalubridadeAplicada: emp.insalubridadeAtiva,
+      insalubridadeAplicada: isMechanicRole(emp.cargo),
       statusConferencia: 'pendente' as const,
       observacoes: '',
     }));

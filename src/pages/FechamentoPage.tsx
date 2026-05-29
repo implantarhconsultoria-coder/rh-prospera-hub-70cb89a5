@@ -70,13 +70,13 @@ const FechamentoPage: React.FC = () => {
       acc.tProventos += p.proventos;
       acc.tDescontos += p.descontosLegais + p.descontosOperacionais + p.adiantamento + p.descontosDiversos;
       acc.tBruto += p.bruto; acc.tINSS += p.inss; acc.tIRRF += p.irrf; acc.tFGTS += p.fgts; acc.tLiq += p.liquido;
-      acc.tBen += c.vrVal + c.vaVal + c.vtVal; acc.tIns += p.insVal; acc.tFD += entry.faltasDias; acc.tFV += p.faltaVal;
+      acc.tBen += c.vrVal + c.vaVal + c.vtVal; acc.tIns += p.insVal; acc.tPeric += p.periculosidadeVal; acc.tFD += entry.faltasDias; acc.tFV += p.faltaVal;
       acc.tAdiant += p.adiantamento; acc.tComissao += p.comissaoVal; acc.tDSRHE += p.dsrHE; acc.tDSRComissao += p.dsrComissao;
       acc.tHE50Qtd += Number(entry.he50 || 0); acc.tHE100Qtd += Number(entry.he100 || 0);
       acc.tHE50Val += p.he50Val; acc.tHE100Val += p.he100Val;
       acc.tDescOp += p.descontosOperacionais; acc.tDescDiv += p.descontosDiversos;
       return acc;
-    }, { tProventos: 0, tDescontos: 0, tBruto: 0, tINSS: 0, tIRRF: 0, tFGTS: 0, tLiq: 0, tBen: 0, tIns: 0, tFD: 0, tFV: 0, tAdiant: 0, tComissao: 0, tDSRHE: 0, tDSRComissao: 0, tHE50Qtd: 0, tHE100Qtd: 0, tHE50Val: 0, tHE100Val: 0, tDescOp: 0, tDescDiv: 0 });
+    }, { tProventos: 0, tDescontos: 0, tBruto: 0, tINSS: 0, tIRRF: 0, tFGTS: 0, tLiq: 0, tBen: 0, tIns: 0, tPeric: 0, tFD: 0, tFV: 0, tAdiant: 0, tComissao: 0, tDSRHE: 0, tDSRComissao: 0, tHE50Qtd: 0, tHE100Qtd: 0, tHE50Val: 0, tHE100Val: 0, tDescOp: 0, tDescDiv: 0 });
   }, [compEmps, compEntries, diasUteis, domingosFeriados, comissaoPct]);
 
   const fechamentoTotals = {
@@ -175,6 +175,7 @@ const FechamentoPage: React.FC = () => {
             ['Funcionarios', compEmps.length, false],
             ['Salario base', compEmps.reduce((sum, emp) => sum + Number(emp.salarioBase || 0), 0), true],
             ['Insalubridade', totals.tIns, true],
+            ['Periculosidade', totals.tPeric, true],
             ['HE 50% qtd.', `${totals.tHE50Qtd.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, false],
             ['HE 100% qtd.', `${totals.tHE100Qtd.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, false],
             ['Adiantamentos', totals.tAdiant, true],
@@ -195,7 +196,7 @@ const FechamentoPage: React.FC = () => {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/40">
-                {['Funcionario','Cargo','Salario','Insal.','HE50 qtd','HE100 qtd','Adiant.','Faltas/Desc.','Liquido'].map(h => (
+                {['Funcionario','Cargo','Salario','Insal.','Peric.','HE50 qtd','HE100 qtd','Adiant.','Faltas/Desc.','Liquido'].map(h => (
                   <th key={h} className="px-2 py-2 text-left font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -211,6 +212,7 @@ const FechamentoPage: React.FC = () => {
                     <td className="px-2 py-2 whitespace-nowrap">{emp.cargo || '-'}</td>
                     <td className="px-2 py-2 text-right">{formatCurrency(emp.salarioBase || 0)}</td>
                     <td className="px-2 py-2 text-right">{formatCurrency(p.insVal || 0)}</td>
+                    <td className="px-2 py-2 text-right">{formatCurrency(p.periculosidadeVal || 0)}</td>
                     <td className="px-2 py-2 text-right">{Number(entry.he50 || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h</td>
                     <td className="px-2 py-2 text-right">{Number(entry.he100 || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h</td>
                     <td className="px-2 py-2 text-right">{formatCurrency(p.adiantamento || 0)}</td>
@@ -228,7 +230,7 @@ const FechamentoPage: React.FC = () => {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              {['Nome', 'Cargo', 'Salario fixo', 'Insalubridade', 'HE 50%', 'HE 100%', 'DSR HE', 'Comissao', 'DSR Comissao', 'Faltas/Desc.', 'Adiantamento', 'INSS', 'IRRF', 'Liquido final', 'FGTS info', 'Acoes'].map(h => (
+              {['Nome', 'Cargo', 'Salario fixo', 'Insalubridade', 'Periculosidade', 'HE 50%', 'HE 100%', 'DSR HE', 'Comissao', 'DSR Comissao', 'Faltas/Desc.', 'Adiantamento', 'INSS', 'IRRF', 'Liquido final', 'FGTS info', 'Acoes'].map(h => (
                 <th key={h} className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -245,6 +247,7 @@ const FechamentoPage: React.FC = () => {
                 <td className="px-3 py-3 text-xs min-w-32">{emp.cargo || '-'}</td>
                 <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{formatCurrency(emp.salarioBase)}</td>
                 <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{p.insVal > 0 ? formatCurrency(p.insVal) : '-'}</td>
+                <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{p.periculosidadeVal > 0 ? formatCurrency(p.periculosidadeVal) : '-'}</td>
                 <td className="px-3 py-3 min-w-36">
                   <DecimalInput value={entry.he50} decimals={2} onValueChange={(value) => update({ he50: value })} className="w-24 h-8 text-xs text-right" />
                   <div className="mt-1 text-[11px] text-muted-foreground">Hora {formatCurrency(p.valorHora)} | {formatCurrency(p.he50Val)}</div>
