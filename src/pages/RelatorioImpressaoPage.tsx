@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import type { Employee, MonthlyEntry } from '@/types/database';
-import { isMechanicRole } from '@/lib/employeeRoleRules';
+import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
 
 const money = (value: unknown) => formatCurrency(Number(value) || 0);
 const hours = (value: unknown) =>
@@ -28,7 +28,7 @@ const defaultEntry = (emp: Employee, competencia: string, diasUteis: number): Mo
   vtAplicado: emp.vtAtivo,
   vtDesconto: 0,
   comissaoBase: 0,
-  insalubridadeAplicada: isMechanicRole(emp.cargo),
+  insalubridadeAplicada: employeeHasInsalubridade(emp),
   statusConferencia: 'pendente',
   observacoes: '',
 });

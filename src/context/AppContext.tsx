@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import { AppContext, defaultConfig, type AppConfig } from '@/context/AppContextValue';
 import { useApp } from '@/hooks/useApp';
-import { isMechanicRole } from '@/lib/employeeRoleRules';
+import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
 
 // Re-export para compatibilidade
 export { useApp };
@@ -141,8 +141,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateEmployee = useCallback(async (id: string, data: Partial<Employee>) => {
     setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
-    const row = employeeToRow(data);
     const currentEmployee = employees.find(e => e.id === id);
+    const row = employeeToRow({
+      ...data,
+      name: data.name ?? currentEmployee?.name,
+      cargo: data.cargo ?? currentEmployee?.cargo,
+      insalubridadeValor: data.insalubridadeValor ?? currentEmployee?.insalubridadeValor,
+    });
     const hasBankingData = ['pix', 'banco', 'agencia', 'conta'].some((key) =>
       Object.prototype.hasOwnProperty.call(data, key),
     );
@@ -229,7 +234,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       vtAplicado: emp.vtAtivo,
       vtDesconto: 0,
       comissaoBase: 0,
-      insalubridadeAplicada: isMechanicRole(emp.cargo),
+      insalubridadeAplicada: employeeHasInsalubridade(emp),
       statusConferencia: 'pendente' as const,
       observacoes: '',
     }));

@@ -1,5 +1,5 @@
 import { cleanNullableText } from '@/lib/textClean';
-import { getInsalubridadeAplicavel, isMechanicRole } from '@/lib/employeeRoleRules';
+import { employeeHasInsalubridade, getInsalubridadeAplicavel } from '@/lib/employeeRoleRules';
 
 // Types for the application - matching Supabase schema but with app-friendly names
 // Companies and employees are fetched from Supabase tables
@@ -171,13 +171,14 @@ export const mapCompany = (row: any): Company => ({
 export const mapEmployee = (row: any): Employee => {
   const notes = parseEmployeeObservacoes(row.observacoes);
   const cargo = cleanNullableText(row.cargo);
-  const insalubridadeAtiva = isMechanicRole(cargo);
+  const name = cleanNullableText(row.nome);
+  const insalubridadeAtiva = employeeHasInsalubridade({ name, cargo });
   return {
     id: row.id,
     companyId: row.company_id || row.empresa_id,
     registro: cleanNullableText(row.registro),
     matriculaEsocial: cleanNullableText(row.matricula_esocial),
-    name: cleanNullableText(row.nome),
+    name,
     cpf: cleanNullableText(row.cpf),
     rg: cleanNullableText(row.rg),
     cargo,
@@ -195,7 +196,7 @@ export const mapEmployee = (row: any): Employee => {
     vtAtivo: row.vt_ativo ?? false,
     vtDiario: Number(row.vt_diario) || 0,
     insalubridadeAtiva,
-    insalubridadeValor: getInsalubridadeAplicavel({ cargo, insalubridadeAtiva, insalubridadeValor: Number(row.insalubridade_valor) || 0 }),
+    insalubridadeValor: getInsalubridadeAplicavel({ name, cargo, insalubridadeAtiva, insalubridadeValor: Number(row.insalubridade_valor) || 0 }),
     status: row.status === 'excluido' ? 'excluido' : (row.ativo === false ? 'desligado' : (row.status || 'ativo')),
     telefone: cleanNullableText(row.telefone),
     celular: cleanNullableText(row.celular),
@@ -313,7 +314,7 @@ export const employeeToRow = (data: Partial<Employee>) => {
   if (data.vtAtivo !== undefined) row.vt_ativo = data.vtAtivo;
   if (data.vtDiario !== undefined) row.vt_diario = data.vtDiario;
   if (data.cargo !== undefined) {
-    const insalubridadeAtiva = isMechanicRole(data.cargo);
+    const insalubridadeAtiva = employeeHasInsalubridade(data);
     row.insalubridade_ativa = insalubridadeAtiva;
     row.insalubridade_valor = insalubridadeAtiva ? Number(data.insalubridadeValor || 648.40) : 0;
   } else {

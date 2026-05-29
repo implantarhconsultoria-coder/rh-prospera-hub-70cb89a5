@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileCheck, Lock, Unlock, RefreshCw, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { calcTotalFuncionario, formatCurrency } from '@/lib/calculations';
-import { isMechanicRole } from '@/lib/employeeRoleRules';
+import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
 import { TIPOS_OCORRENCIA, type MovimentoRow, type FechamentoRow, type TipoOcorrencia } from '@/lib/movimento';
 
 const FilialFechamentoPage: React.FC = () => {
@@ -87,7 +87,7 @@ const FilialFechamentoPage: React.FC = () => {
         descontosDiversos: c?.desconto.valor || 0,
         adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
         vrAplicado: emp.vrAtivo, vrDias: 0, vaAplicado: emp.vaAtivo, vtAplicado: emp.vtAtivo, vtDesconto: 0,
-        comissaoBase: 0, insalubridadeAplicada: isMechanicRole(emp.cargo), observacoes: '', statusConferencia: 'pendente',
+        comissaoBase: 0, insalubridadeAplicada: employeeHasInsalubridade(emp), observacoes: '', statusConferencia: 'pendente',
       } as any;
       const calc = calcTotalFuncionario(emp, entry);
       proventos += calc.proventos;
@@ -152,7 +152,7 @@ const FilialFechamentoPage: React.FC = () => {
           vr_aplicado: emp.vrAtivo,
           va_aplicado: emp.vaAtivo,
           vt_aplicado: emp.vtAtivo,
-          insalubridade_aplicada: isMechanicRole(emp.cargo),
+          insalubridade_aplicada: employeeHasInsalubridade(emp),
           observacoes: obsLista.join(' | ').slice(0, 500),
           status_conferencia: 'pendente',
           fechamento_id: fechamentoId,
