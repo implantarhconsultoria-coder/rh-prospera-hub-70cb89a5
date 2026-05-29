@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,129 @@ import { toast } from 'sonner';
 import { openEmailClient, getDestinatariosFerias, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { registrarDocumento, marcarComoEnviado, uploadDocumentoPdf } from '@/lib/documentoHistorico';
 import { gerarAvisoFeriasPdf, downloadPdf } from '@/lib/pdfGenerator';
+import { supabase } from '@/integrations/supabase/client';
+
+type FeriasAvisoRow = {
+  id: string;
+  funcionario_id: string | null;
+  company_id: string | null;
+  funcionario_nome: string;
+  funcionario_cpf: string;
+  funcionario_cargo: string;
+  empresa_nome: string;
+  periodo_gozo_inicio: string;
+  periodo_gozo_fim: string;
+  data_retorno: string;
+  dias_ferias: number;
+  status: string;
+  status_pagamento: string;
+  observacao: string;
+  aviso_pdf_url: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type FeriasStatusCode = 'em_dia' | 'atencao' | 'vencido' | 'marcada' | 'em_ferias' | 'ja_tirou';
+
+type FeriasInfo = {
+  code: FeriasStatusCode;
+  status: string;
+  label: string;
+  mesesNoPeriodo: number;
+  periodoAtual: number;
+  inicio?: string;
+  fim?: string;
+  dias?: number;
+  origem: 'cadastro' | 'salvo' | 'rascunho';
+};
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+const toDateOnly = (value: string) => {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+};
+
+const toISODateOnly = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+
+const todayISO = () => toISODateOnly(new Date());
+
+const addDaysISO = (value: string, days: number) => {
+  const date = toDateOnly(value);
+  date.setDate(date.getDate() + days);
+  return toISODateOnly(date);
+};
+
+const feriasPeriodoStatus = (inicio?: string, fim?: string): Pick<FeriasInfo, 'code' | 'label'> | null => {
+  if (!inicio || !fim) return null;
+  const hoje = todayISO();
+  if (hoje < inicio) return { code: 'marcada', label: 'Férias marcadas' };
+  if (hoje <= fim) return { code: 'em_ferias', label: 'Em férias' };
+  return { code: 'ja_tirou', label: 'Já tirou' };
+};
+
+const legacyBadgeStatus = (code: FeriasStatusCode) => {
+  if (code === 'em_dia' || code === 'ja_tirou') return 'em dia';
+  if (code === 'atencao' || code === 'marcada' || code === 'em_ferias') return 'atenção';
+  return 'vencido';
+};
+
+const feriasFallbackStatus = (dataAdmissao: string): FeriasInfo => {
+  const fer = feriasStatus(dataAdmissao);
+  const raw = String(fer.status);
+  if (raw === 'vencido') {
+    return { code: 'vencido', status: 'vencido', label: 'Vencido', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
+  }
+  if (raw === 'em dia') {
+    return { code: 'em_dia', status: 'em dia', label: 'Em dia', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
+  }
+  return { code: 'atencao', status: 'atenção', label: 'Atenção', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
+};
+
+const buildFeriasInfo = (
+  dataAdmissao: string,
+  aviso?: FeriasAvisoRow,
+  rascunho?: { inicio: string; fim: string; dias: number },
+): FeriasInfo => {
+  const base = feriasFallbackStatus(dataAdmissao);
+  const periodo = rascunho?.inicio
+    ? { inicio: rascunho.inicio, fim: rascunho.fim, dias: rascunho.dias, origem: 'rascunho' as const }
+    : aviso?.periodo_gozo_inicio
+      ? { inicio: aviso.periodo_gozo_inicio, fim: aviso.periodo_gozo_fim || aviso.data_retorno, dias: Number(aviso.dias_ferias) || undefined, origem: 'salvo' as const }
+      : null;
+  const statusPeriodo = periodo ? feriasPeriodoStatus(periodo.inicio, periodo.fim) : null;
+  if (!periodo || !statusPeriodo) return base;
+  return {
+    ...base,
+    ...statusPeriodo,
+    status: legacyBadgeStatus(statusPeriodo.code),
+    inicio: periodo.inicio,
+    fim: periodo.fim,
+    dias: periodo.dias,
+    origem: periodo.origem,
+  };
+};
+
+const statusBadgeClass = (code: FeriasStatusCode) => {
+  if (code === 'em_dia' || code === 'ja_tirou') return 'bg-success text-success-foreground';
+  if (code === 'atencao' || code === 'marcada' || code === 'em_ferias') return 'bg-warning text-warning-foreground';
+  return 'bg-destructive text-destructive-foreground';
+};
+
+const statusOutlineClass = (code: FeriasStatusCode) => {
+  if (code === 'em_dia' || code === 'ja_tirou') return 'border-success text-success';
+  if (code === 'atencao' || code === 'marcada' || code === 'em_ferias') return 'border-warning text-warning';
+  return 'border-destructive text-destructive';
+};
+
+const statusOrder: Record<FeriasStatusCode, number> = {
+  em_ferias: 0,
+  vencido: 1,
+  atencao: 2,
+  marcada: 3,
+  em_dia: 4,
+  ja_tirou: 5,
+};
 
 const AvisoFeriasPage: React.FC = () => {
   const { companies, employees, updateEmployee, session } = useApp();
@@ -19,7 +142,61 @@ const AvisoFeriasPage: React.FC = () => {
   const [inicioFerias, setInicioFerias] = useState('');
   const [diasFerias, setDiasFerias] = useState(30);
   const [filterCompany, setFilterCompany] = useState('');
+  const [feriasAvisos, setFeriasAvisos] = useState<FeriasAvisoRow[]>([]);
+  const [savingFerias, setSavingFerias] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+
+  const feriasByEmployee = useMemo(() => {
+    const map = new Map<string, FeriasAvisoRow>();
+    feriasAvisos.forEach(aviso => {
+      if (aviso.funcionario_id && !map.has(aviso.funcionario_id)) {
+        map.set(aviso.funcionario_id, aviso);
+      }
+    });
+    return map;
+  }, [feriasAvisos]);
+
+  useEffect(() => {
+    const loadFeriasAvisos = async () => {
+      const employeeIds = employees
+        .filter(e => e.status === 'ativo' && e.categoria === 'operacional')
+        .filter(e => !isFilial || e.companyId === filialCompanyId)
+        .map(e => e.id);
+      if (employeeIds.length === 0) {
+        setFeriasAvisos([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('ferias_avisos')
+        .select('id, funcionario_id, company_id, funcionario_nome, funcionario_cpf, funcionario_cargo, empresa_nome, periodo_gozo_inicio, periodo_gozo_fim, data_retorno, dias_ferias, status, status_pagamento, observacao, aviso_pdf_url, created_at, updated_at')
+        .in('funcionario_id', employeeIds)
+        .order('periodo_gozo_inicio', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro ao carregar avisos de ferias:', error);
+        toast.error('Erro ao carregar historico de ferias');
+        return;
+      }
+
+      setFeriasAvisos((data || []) as FeriasAvisoRow[]);
+    };
+
+    loadFeriasAvisos();
+  }, [employees, isFilial, filialCompanyId]);
+
+  useEffect(() => {
+    if (!selectedEmpId) return;
+    const aviso = feriasByEmployee.get(selectedEmpId);
+    if (aviso?.periodo_gozo_inicio) {
+      setInicioFerias(aviso.periodo_gozo_inicio);
+      setDiasFerias(Number(aviso.dias_ferias) || 30);
+      return;
+    }
+    setInicioFerias('');
+    setDiasFerias(30);
+  }, [selectedEmpId, feriasByEmployee]);
 
   const empsList = useMemo(() => {
     return employees
@@ -29,8 +206,8 @@ const AvisoFeriasPage: React.FC = () => {
         return true;
       })
       .map(e => {
-        const fer = feriasStatus(e.dataAdmissao);
-        return { ...e, ferStatus: fer.status, ferMeses: fer.mesesNoPeriodo };
+        const fer = buildFeriasInfo(e.dataAdmissao, feriasByEmployee.get(e.id));
+        return { ...e, ferCode: fer.code, ferStatus: fer.status, ferLabel: fer.label, ferMeses: fer.mesesNoPeriodo, ferInicio: fer.inicio, ferFim: fer.fim };
       })
       .filter(e => {
         if (search && !e.name.toLowerCase().includes(search.toLowerCase()) && !e.cpf.includes(search)) return false;
@@ -38,30 +215,77 @@ const AvisoFeriasPage: React.FC = () => {
         return true;
       })
       .sort((a, b) => {
-        const order = { vencida: 0, atenção: 1, 'em dia': 2 };
-        return (order[a.ferStatus as keyof typeof order] ?? 2) - (order[b.ferStatus as keyof typeof order] ?? 2);
+        return (statusOrder[a.ferCode as FeriasStatusCode] ?? 9) - (statusOrder[b.ferCode as FeriasStatusCode] ?? 9);
       });
-  }, [employees, search, filterCompany, isFilial, filialCompanyId]);
+  }, [employees, search, filterCompany, isFilial, filialCompanyId, feriasByEmployee]);
 
-  const alertas = useMemo(() => empsList.filter(e => e.ferStatus === 'vencido' || e.ferStatus === 'atenção'), [empsList]);
+  const alertas = useMemo(() => empsList.filter(e => e.ferCode === 'vencido' || e.ferCode === 'atencao' || e.ferCode === 'em_ferias'), [empsList]);
 
   const emp = employees.find(e => e.id === selectedEmpId);
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
 
   const calcRetorno = () => {
     if (!inicioFerias) return '';
-    const d = new Date(inicioFerias);
-    d.setDate(d.getDate() + diasFerias);
-    return d.toISOString().slice(0, 10);
+    return addDaysISO(inicioFerias, Math.max(0, diasFerias - 1));
   };
   const retorno = calcRetorno();
 
-  const handleSaveDate = () => {
-    if (!emp || !inicioFerias) { toast.error('Selecione funcionário e data'); return; }
-    updateEmployee(emp.id, {
-      observacoes: `${emp.observacoes}\n[FÉRIAS] Início previsto: ${inicioFerias} | Retorno: ${retorno} | ${diasFerias} dias`.trim(),
-    });
-    toast.success('Data de férias salva no cadastro!');
+  const salvarFeriasNoBanco = async (options: { silent?: boolean; avisoPdfUrl?: string } = {}) => {
+    if (!emp || !inicioFerias) { toast.error('Selecione funcionario e data'); return null; }
+    if (!retorno) { toast.error('Informe o periodo de ferias'); return null; }
+
+    setSavingFerias(true);
+    try {
+      const avisoAtual = feriasByEmployee.get(emp.id);
+      const statusAtual = feriasPeriodoStatus(inicioFerias, retorno);
+      const observacao = `Ferias de ${diasFerias} dias. Inicio: ${formatDate(inicioFerias)}. Fim/retorno previsto: ${formatDate(retorno)}.`;
+      const payload: Record<string, unknown> = {
+        funcionario_id: emp.id,
+        company_id: emp.companyId,
+        funcionario_nome: emp.name,
+        funcionario_cpf: emp.cpf,
+        funcionario_cargo: emp.cargo,
+        empresa_nome: company?.name || '',
+        periodo_gozo_inicio: inicioFerias,
+        periodo_gozo_fim: retorno,
+        data_retorno: retorno,
+        dias_ferias: diasFerias,
+        status: statusAtual?.code || 'marcada',
+        status_pagamento: avisoAtual?.status_pagamento || 'pendente',
+        observacao,
+        updated_at: new Date().toISOString(),
+        user_nome: session?.user?.email || '',
+      };
+      if (session?.user?.id) payload.user_id = session.user.id;
+      if (options.avisoPdfUrl) payload.aviso_pdf_url = options.avisoPdfUrl;
+
+      const feriasTable = supabase.from('ferias_avisos') as any;
+      const result = avisoAtual?.id
+        ? await feriasTable.update(payload).eq('id', avisoAtual.id).select('*').single()
+        : await feriasTable.insert(payload).select('*').single();
+
+      if (result.error) {
+        console.error('Erro Supabase ao salvar ferias:', result.error);
+        toast.error('Erro ao salvar ferias no banco');
+        return null;
+      }
+
+      const saved = result.data as FeriasAvisoRow;
+      setFeriasAvisos(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
+
+      await updateEmployee(emp.id, {
+        observacoes: `${emp.observacoes || ''}\n[FERIAS] Inicio: ${inicioFerias} | Fim/retorno previsto: ${retorno} | ${diasFerias} dias | Status: ${statusAtual?.label || 'Ferias marcadas'}`.trim(),
+      });
+
+      if (!options.silent) toast.success('Ferias salvas e status atualizado!');
+      return saved;
+    } finally {
+      setSavingFerias(false);
+    }
+  };
+
+  const handleSaveDate = async () => {
+    await salvarFeriasNoBanco();
   };
 
   const gerarPdfAtual = () => {
@@ -93,9 +317,8 @@ const AvisoFeriasPage: React.FC = () => {
     if (session?.user) {
       try {
         const arquivoUrl = await uploadDocumentoPdf(emp.id, 'aviso-ferias', pdf.blob, 'pdf');
-        const profile = await import('@/integrations/supabase/client').then(m =>
-          m.supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single()
-        );
+        await salvarFeriasNoBanco({ silent: true, avisoPdfUrl: arquivoUrl });
+        const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
         const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
 
         const registro = await registrarDocumento({
@@ -122,7 +345,11 @@ const AvisoFeriasPage: React.FC = () => {
 
   // Detail view
   if (selectedEmpId && emp) {
-    const fer = feriasStatus(emp.dataAdmissao);
+    const fer = buildFeriasInfo(
+      emp.dataAdmissao,
+      feriasByEmployee.get(emp.id),
+      inicioFerias && retorno ? { inicio: inicioFerias, fim: retorno, dias: diasFerias } : undefined,
+    );
     return (
       <div className="space-y-5 animate-fade-in">
         <div className="card-premium p-6 gradient-primary text-primary-foreground">
@@ -139,15 +366,17 @@ const AvisoFeriasPage: React.FC = () => {
 
         <div className="card-premium p-5 space-y-3">
           <h2 className="text-sm font-bold text-foreground">Situação de Férias</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
             <div><span className="text-xs text-muted-foreground block">Status</span>
-              <Badge className={fer.status === 'em dia' ? 'bg-success text-success-foreground' : fer.status === 'atenção' ? 'bg-warning text-warning-foreground' : 'bg-destructive text-destructive-foreground'}>
-                {fer.status}
+              <Badge className={statusBadgeClass(fer.code)}>
+                {fer.label}
               </Badge>
             </div>
             <div><span className="text-xs text-muted-foreground block">Admissão</span><strong>{formatDate(emp.dataAdmissao)}</strong></div>
             <div><span className="text-xs text-muted-foreground block">Meses no Período</span><strong>{fer.mesesNoPeriodo} meses</strong></div>
             <div><span className="text-xs text-muted-foreground block">CPF</span>{emp.cpf}</div>
+            <div><span className="text-xs text-muted-foreground block">Inicio marcado</span><strong>{fer.inicio ? formatDate(fer.inicio) : 'Sem data'}</strong></div>
+            <div><span className="text-xs text-muted-foreground block">Fim/retorno</span><strong>{fer.fim ? formatDate(fer.fim) : 'Sem data'}</strong></div>
           </div>
         </div>
 
@@ -168,8 +397,8 @@ const AvisoFeriasPage: React.FC = () => {
               <p className="text-sm font-medium bg-muted/50 px-3 py-2 rounded-md">{retorno ? formatDate(retorno) : '—'}</p></div>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <Button onClick={handleSaveDate} variant="outline">
-              <Save className="w-4 h-4 mr-2" /> Salvar Data no Cadastro
+            <Button onClick={handleSaveDate} variant="outline" disabled={savingFerias}>
+              <Save className="w-4 h-4 mr-2" /> {savingFerias ? 'Salvando...' : 'Salvar Data no Cadastro'}
             </Button>
             <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold">
               <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir Aviso
@@ -179,6 +408,7 @@ const AvisoFeriasPage: React.FC = () => {
               // 1. Garante PDF baixado para o operador anexar
               const pdf = gerarPdfAtual();
               if (pdf) downloadPdf(pdf.blob, pdf.fileName);
+              await salvarFeriasNoBanco({ silent: true });
 
               const destinatarios = getDestinatariosFerias(company?.name || '');
               // 2. Texto humano e legível, sem "+", sem URL params quebrados
@@ -206,9 +436,7 @@ const AvisoFeriasPage: React.FC = () => {
               });
 
               if (lastDocId && session?.user) {
-                const profile = await import('@/integrations/supabase/client').then(m =>
-                  m.supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single()
-                );
+                const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
                 const nomeUsuario = profile.data?.nome_completo || session.user.email || '';
                 await marcarComoEnviado(lastDocId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
               }
@@ -247,7 +475,7 @@ const AvisoFeriasPage: React.FC = () => {
             {alertas.slice(0, 5).map(e => (
               <Badge key={e.id} variant="outline" className="text-xs cursor-pointer hover:bg-muted/50"
                 onClick={() => setSelectedEmpId(e.id)}>
-                {e.name} — {e.ferStatus}
+                {e.name} — {e.ferLabel}
               </Badge>
             ))}
             {alertas.length > 5 && <Badge variant="outline" className="text-xs">+{alertas.length - 5} mais</Badge>}
@@ -289,9 +517,14 @@ const AvisoFeriasPage: React.FC = () => {
                   <td className="px-3 py-2.5">{e.cargo}</td>
                   <td className="px-3 py-2.5 text-xs">{formatDate(e.dataAdmissao)}</td>
                   <td className="px-3 py-2.5">
-                    <Badge variant="outline" className={`text-[10px] ${e.ferStatus === 'em dia' ? 'border-success text-success' : e.ferStatus === 'atenção' ? 'border-warning text-warning' : 'border-destructive text-destructive'}`}>
-                      {e.ferStatus}
+                    <Badge variant="outline" className={`text-[10px] ${statusOutlineClass(e.ferCode as FeriasStatusCode)}`}>
+                      {e.ferLabel}
                     </Badge>
+                    {e.ferInicio && e.ferFim && (
+                      <div className="text-[10px] text-muted-foreground mt-1">
+                        {formatDate(e.ferInicio)} a {formatDate(e.ferFim)}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
