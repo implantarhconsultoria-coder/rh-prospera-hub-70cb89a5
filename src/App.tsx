@@ -253,7 +253,7 @@ const AuthGate = () => {
         <Route path="/admin/pre-cadastro-admissional" element={<PreCadastroAdmissionalPage />} />
         <Route path="/admin/prestadores" element={<PrestadoresPage />} />
         <Route path="/admin/galoes-combustivel" element={<CombustivelPage />} />
-        <Route path="/admin/protocolo" element={<ProtocoloPage />} />
+        <Route path="/admin/protocolo" element={<Navigate to="/admin/operacional/protocolo" replace />} />
         <Route path="/admin/documentos-ativos" element={<DocumentosVeiculosPage />} />
         <Route path="/admin/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/admin/atestados" element={<AtestadosImportPage />} />
@@ -267,6 +267,7 @@ const AuthGate = () => {
         <Route path="/admin/monitoramento" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/operacional" element={<DespacharChamadoPage />} />
+        <Route path="/admin/operacional/protocolo" element={<ProtocoloPage />} />
         <Route path="/admin/chamados" element={<Navigate to="/admin/operacional" replace />} />
         {/* App Mecanico (novo) */}
         <Route path="/admin/app-mecanico" element={<AppMecanicoAdminPage />} />

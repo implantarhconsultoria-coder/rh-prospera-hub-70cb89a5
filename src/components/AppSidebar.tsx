@@ -30,14 +30,14 @@ const menuItems: MenuItem[] = [
 ];
 
 const operationalItems: MenuItem[] = [
-  { label: 'Operacional', icon: ClipboardList, path: '/admin/chamados' },
+  { label: 'Operacional', icon: ClipboardList, path: '/admin/operacional' },
   { label: 'App Mecanico', icon: Wrench, path: '/admin/app-mecanico' },
   { label: 'Ponto dos Mecanicos', icon: Clock, path: '/admin/fechamento-ponto' },
   { label: 'Abastecimento QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Combustivel (Galoes)', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
-  { label: 'Protocolo', icon: FileCheck, path: '/admin/protocolo' },
+  { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
   { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias' },

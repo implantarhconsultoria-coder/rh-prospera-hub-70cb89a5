@@ -33,7 +33,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos', group: 'Operacional' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi', group: 'Operacional' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', group: 'Operacional' },
-  { label: 'Protocolo', icon: FileCheck, path: '/admin/protocolo', group: 'Operacional' },
+  { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo', group: 'Operacional' },
   { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias', group: 'Operacional' },
   { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados', group: 'Operacional' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso', group: 'Operacional' },

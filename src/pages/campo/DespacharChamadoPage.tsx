@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Building2, ClipboardList, EyeOff, FileText, Loader2, Package, Search, Send, User, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,8 @@ const statusLabel: Record<string, string> = {
 
 const DespacharChamadoPage: React.FC = () => {
   const { session } = useApp();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<'clientes' | 'novo' | 'lista'>('clientes');
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,6 +75,21 @@ const DespacharChamadoPage: React.FC = () => {
 
   const abrirChamado = (clienteId: string) => { selecionarCliente(clienteId); setTab('novo'); };
 
+  const canShowProtocolo =
+    location.pathname.startsWith('/admin/operacional') ||
+    location.pathname.startsWith('/operacional') ||
+    location.pathname.startsWith('/operacional-ext');
+
+  const abrirProtocolo = () => {
+    if (location.pathname.startsWith('/operacional-ext/')) {
+      const base = location.pathname.match(/^\/operacional-ext\/[^/]+/)?.[0] || '/operacional-ext';
+      navigate(`${base}/protocolo`);
+      return;
+    }
+
+    navigate(location.pathname.startsWith('/operacional') ? '/operacional/protocolo' : '/admin/operacional/protocolo');
+  };
+
   const enviar = async () => {
     if (!form.colaborador_id || !form.cliente) return toast.error('Preencha tecnico e cliente');
     setLoading(true);
@@ -109,6 +127,7 @@ const DespacharChamadoPage: React.FC = () => {
           <Button variant={tab === 'clientes' ? 'default' : 'ghost'} size="sm" onClick={() => setTab('clientes')}>Clientes</Button>
           <Button variant={tab === 'novo' ? 'default' : 'ghost'} size="sm" onClick={() => setTab('novo')}>Novo chamado</Button>
           <Button variant={tab === 'lista' ? 'default' : 'ghost'} size="sm" onClick={() => setTab('lista')}>Lista</Button>
+          {canShowProtocolo && <Button variant="ghost" size="sm" onClick={abrirProtocolo}>Protocolo</Button>}
         </div>
       </div>
 
