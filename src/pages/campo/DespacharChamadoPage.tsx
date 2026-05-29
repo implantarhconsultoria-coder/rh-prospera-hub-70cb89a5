@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Building2, ClipboardList, EyeOff, FileText, Loader2, Package, Search, Send, User, Wrench } from 'lucide-react';
+import { Building2, ClipboardList, Edit2, EyeOff, FileText, Loader2, Package, Search, Send, Trash2, User, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import { toast } from 'sonner';
@@ -16,6 +17,18 @@ const statusLabel: Record<string, string> = {
   no_local: 'No local',
   em_execucao: 'Em execucao',
   concluido: 'Concluido',
+};
+
+const emptyChamadoForm = {
+  colaborador_id: '',
+  cliente_id: '',
+  contrato_id: '',
+  equipamento_id: '',
+  cliente: '',
+  local_servico: '',
+  tipo_servico: '',
+  itens_previstos: '',
+  observacoes: '',
 };
 
 const DespacharChamadoPage: React.FC = () => {
@@ -30,24 +43,38 @@ const DespacharChamadoPage: React.FC = () => {
   const [contratos, setContratos] = useState<any[]>([]);
   const [equipamentos, setEquipamentos] = useState<any[]>([]);
   const [chamados, setChamados] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    colaborador_id: '', cliente_id: '', contrato_id: '', equipamento_id: '', cliente: '',
-    local_servico: '', tipo_servico: '', itens_previstos: '', observacoes: '',
-  });
+  const [form, setForm] = useState(emptyChamadoForm);
+  const [editando, setEditando] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState(emptyChamadoForm);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const carregar = async () => {
-    const [roles, cl, ct, eq, ch] = await Promise.all([
-      supabase.from('user_roles').select('user_id').eq('role', 'tecnico_campo'),
+    const [tec, cl, ct, eq, ch] = await Promise.all([
+      supabase
+        .from('acessos_externos' as any)
+        .select('id,nome,email,email_corporativo,empresa,filial,funcao,funcionario_id,status,acesso_liberado')
+        .eq('modulo', 'mecanico')
+        .eq('perfil_acesso', 'mecanico_externo')
+        .eq('status', 'ativo')
+        .eq('acesso_liberado', true)
+        .not('funcionario_id', 'is', null)
+        .order('nome'),
       supabase.from('clientes_fat').select('id, razao_social, nome_fantasia, cnpj_cpf, telefone, email, cidade, uf, endereco, status').eq('status', 'ativo').order('razao_social'),
       supabase.from('contratos').select('id, numero, cliente_id, tipo, status, data_inicio, data_fim, observacoes, clientes_fat(razao_social)').eq('status', 'ativo').order('created_at', { ascending: false }),
       supabase.from('contrato_equipamentos').select('id, contrato_id, descricao_livre, patrimonio, placa, status, observacao, ativos(descricao, placa, patrimonio, tipo)').eq('status', 'ativo').order('created_at', { ascending: false }),
       supabase.from('chamados').select('*').order('created_at', { ascending: false }).limit(80),
     ]);
-    if (roles.data?.length) {
-      const ids = roles.data.map(r => r.user_id);
-      const { data } = await supabase.from('profiles').select('user_id, nome_completo, email').in('user_id', ids);
-      setTecnicos(data || []);
-    }
+    if (tec.error) toast.error(tec.error.message || 'Erro ao carregar mecanicos.');
+    setTecnicos(((tec.data as any[]) || []).map(t => ({
+      user_id: t.funcionario_id,
+      nome_completo: t.nome,
+      email: t.email_corporativo || t.email || '',
+      empresa: t.empresa || '',
+      filial: t.filial || '',
+      funcao: t.funcao || '',
+      acesso_id: t.id,
+    })));
     setClientes(cl.data || []);
     setContratos(ct.data || []);
     setEquipamentos(eq.data || []);
@@ -112,8 +139,73 @@ const DespacharChamadoPage: React.FC = () => {
     setLoading(false);
     if (error) return toast.error(error.message);
     toast.success('Chamado operacional enviado');
-    setForm({ colaborador_id: '', cliente_id: '', contrato_id: '', equipamento_id: '', cliente: '', local_servico: '', tipo_servico: '', itens_previstos: '', observacoes: '' });
+    setForm(emptyChamadoForm);
     carregar(); setTab('lista');
+  };
+
+  const nomeTecnico = (funcionarioId: string | null) =>
+    tecnicos.find(t => t.user_id === funcionarioId)?.nome_completo || '-';
+
+  const abrirEdicao = (chamado: any) => {
+    setEditando(chamado);
+    setEditForm({
+      colaborador_id: chamado.colaborador_id || '',
+      cliente_id: '',
+      contrato_id: '',
+      equipamento_id: '',
+      cliente: chamado.cliente || '',
+      local_servico: chamado.local_servico || '',
+      tipo_servico: chamado.tipo_servico || '',
+      itens_previstos: chamado.itens_previstos || '',
+      observacoes: chamado.observacoes || '',
+    });
+  };
+
+  const salvarEdicao = async () => {
+    if (!editando) return;
+    if (!editForm.colaborador_id || !editForm.cliente.trim()) {
+      toast.error('Preencha tecnico e cliente.');
+      return;
+    }
+
+    setSavingEdit(true);
+    const { error } = await supabase
+      .from('chamados')
+      .update({
+        colaborador_id: editForm.colaborador_id,
+        cliente: editForm.cliente.trim(),
+        local_servico: editForm.local_servico.trim(),
+        tipo_servico: editForm.tipo_servico.trim(),
+        itens_previstos: editForm.itens_previstos,
+        observacoes: editForm.observacoes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editando.id);
+    setSavingEdit(false);
+
+    if (error) {
+      toast.error(error.message || 'Erro ao editar chamado.');
+      return;
+    }
+
+    toast.success('Chamado atualizado.');
+    setEditando(null);
+    setEditForm(emptyChamadoForm);
+    carregar();
+  };
+
+  const excluirChamado = async (chamado: any) => {
+    if (!window.confirm(`Excluir chamado de ${chamado.cliente || 'cliente sem nome'}?`)) return;
+    setDeletingId(chamado.id);
+    const { error } = await supabase.from('chamados').delete().eq('id', chamado.id);
+    setDeletingId(null);
+    if (error) {
+      toast.error(error.message || 'Erro ao excluir chamado.');
+      return;
+    }
+
+    toast.success('Chamado excluido.');
+    carregar();
   };
 
   return (
@@ -143,7 +235,7 @@ const DespacharChamadoPage: React.FC = () => {
       </div>}
 
       {tab === 'novo' && <div className="card-premium p-5 space-y-3">
-        <Select value={form.colaborador_id} onValueChange={v => setForm(f => ({ ...f, colaborador_id: v }))}><SelectTrigger><SelectValue placeholder="Selecionar mecanico / tecnico" /></SelectTrigger><SelectContent>{tecnicos.map(t => <SelectItem key={t.user_id} value={t.user_id}>{t.nome_completo} ({t.email})</SelectItem>)}</SelectContent></Select>
+        <Select value={form.colaborador_id} onValueChange={v => setForm(f => ({ ...f, colaborador_id: v }))}><SelectTrigger><SelectValue placeholder="Selecionar mecanico / tecnico" /></SelectTrigger><SelectContent>{tecnicos.length === 0 ? <SelectItem value="sem-mecanico-cadastrado" disabled>Nenhum mecanico cadastrado</SelectItem> : tecnicos.map(t => <SelectItem key={t.user_id} value={t.user_id}>{t.nome_completo}{t.empresa ? ` - ${t.empresa}` : ''}{t.email ? ` (${t.email})` : ''}</SelectItem>)}</SelectContent></Select>
         <Select value={form.cliente_id} onValueChange={selecionarCliente}><SelectTrigger><SelectValue placeholder="Selecionar cliente do faturamento" /></SelectTrigger><SelectContent>{clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.razao_social}</SelectItem>)}</SelectContent></Select>
         <Select value={form.contrato_id} onValueChange={v => setForm(f => ({ ...f, contrato_id: v, equipamento_id: '' }))} disabled={!form.cliente_id}><SelectTrigger><SelectValue placeholder="Selecionar contrato sem exibir valor" /></SelectTrigger><SelectContent>{contratosCliente.map(c => <SelectItem key={c.id} value={c.id}>{c.numero} - {c.tipo}</SelectItem>)}</SelectContent></Select>
         <Select value={form.equipamento_id} onValueChange={v => setForm(f => ({ ...f, equipamento_id: v }))} disabled={!form.contrato_id}><SelectTrigger><SelectValue placeholder="Selecionar equipamento / compressor" /></SelectTrigger><SelectContent>{equipamentosContrato.map(e => <SelectItem key={e.id} value={e.id}>{e.ativos?.descricao || e.descricao_livre || e.patrimonio || e.placa || 'Equipamento'}</SelectItem>)}</SelectContent></Select>
@@ -155,7 +247,51 @@ const DespacharChamadoPage: React.FC = () => {
         <Button className="w-full h-12 text-base font-semibold rounded-xl" onClick={enviar} disabled={loading}>{loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Send className="w-5 h-5 mr-2" />}Enviar chamado</Button>
       </div>}
 
-      {tab === 'lista' && <div className="space-y-2">{chamados.length === 0 ? <p className="text-center text-sm text-muted-foreground py-8">Nenhum chamado</p> : chamados.map(c => <div key={c.id} className="card-premium p-4 space-y-1"><div className="flex justify-between items-center"><span className="font-semibold text-sm">{c.cliente}</span><span className="text-[10px] bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{statusLabel[c.status] || c.status}</span></div><div className="text-xs text-muted-foreground flex items-center gap-1"><Wrench className="w-3 h-3" />{c.tipo_servico || 'Sem tipo'}</div><div className="text-xs text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" />{tecnicos.find(t => t.user_id === c.colaborador_id)?.nome_completo || '-'}</div>{c.info_adicional && <div className="text-xs text-muted-foreground flex items-start gap-1 whitespace-pre-wrap"><FileText className="w-3 h-3 mt-0.5" />{c.info_adicional}</div>}</div>)}</div>}
+      {tab === 'lista' && <div className="space-y-2">
+        {chamados.length === 0 ? <p className="text-center text-sm text-muted-foreground py-8">Nenhum chamado</p> : chamados.map(c => <div key={c.id} className="card-premium p-4 space-y-2">
+          <div className="flex justify-between items-center gap-3">
+            <span className="font-semibold text-sm">{c.cliente}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{statusLabel[c.status] || c.status}</span>
+              <Button size="icon" variant="ghost" title="Editar chamado" onClick={() => abrirEdicao(c)}>
+                <Edit2 className="w-4 h-4" />
+              </Button>
+              <Button size="icon" variant="ghost" title="Excluir chamado" onClick={() => excluirChamado(c)} disabled={deletingId === c.id}>
+                {deletingId === c.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground flex items-center gap-1"><Wrench className="w-3 h-3" />{c.tipo_servico || 'Sem tipo'}</div>
+          <div className="text-xs text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" />{nomeTecnico(c.colaborador_id)}</div>
+          {c.info_adicional && <div className="text-xs text-muted-foreground flex items-start gap-1 whitespace-pre-wrap"><FileText className="w-3 h-3 mt-0.5" />{c.info_adicional}</div>}
+        </div>)}
+      </div>}
+
+      <Dialog open={!!editando} onOpenChange={(open) => { if (!open) setEditando(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar chamado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Select value={editForm.colaborador_id} onValueChange={v => setEditForm(f => ({ ...f, colaborador_id: v }))}>
+              <SelectTrigger><SelectValue placeholder="Selecionar mecanico / tecnico" /></SelectTrigger>
+              <SelectContent>{tecnicos.map(t => <SelectItem key={t.user_id} value={t.user_id}>{t.nome_completo}{t.empresa ? ` - ${t.empresa}` : ''}</SelectItem>)}</SelectContent>
+            </Select>
+            <Input placeholder="Cliente" value={editForm.cliente} onChange={e => setEditForm(f => ({ ...f, cliente: e.target.value }))} />
+            <Input placeholder="Local do servico" value={editForm.local_servico} onChange={e => setEditForm(f => ({ ...f, local_servico: e.target.value }))} />
+            <Input placeholder="Tipo de servico" value={editForm.tipo_servico} onChange={e => setEditForm(f => ({ ...f, tipo_servico: e.target.value }))} />
+            <Textarea placeholder="Itens previstos" value={editForm.itens_previstos} onChange={e => setEditForm(f => ({ ...f, itens_previstos: e.target.value }))} rows={2} />
+            <Textarea placeholder="Observacoes" value={editForm.observacoes} onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))} rows={2} />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditando(null)}>Cancelar</Button>
+              <Button onClick={salvarEdicao} disabled={savingEdit}>
+                {savingEdit && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
