@@ -43,6 +43,7 @@ class EmailConfigError extends Error {
 
 const env = (name: string) => String(process.env[name] || '').trim();
 const DEFAULT_EMAIL_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
+const DEFAULT_EMAIL_REPLY_TO = 'adm.matriz@topac.com.br';
 
 const isResendSandboxFrom = (value: string) => /@resend\.dev/i.test(value);
 
@@ -50,6 +51,8 @@ const getEmailFrom = () => {
   const configured = env('EMAIL_FROM') || env('MAIL_FROM');
   return configured && !isResendSandboxFrom(configured) ? configured : DEFAULT_EMAIL_FROM;
 };
+
+const getEmailReplyTo = () => env('EMAIL_REPLY_TO') || env('REPLY_TO') || DEFAULT_EMAIL_REPLY_TO;
 
 const parseEmailAddress = (value: string) => {
   const match = value.match(/<([^>]+)>/);
@@ -106,8 +109,10 @@ const wrapBase64 = (value: string) => value.replace(/.{1,76}/g, '$&\r\n').trim()
 const buildMimeMessage = (payload: any, from: string) => {
   const boundary = `topac-pdf-${Date.now()}`;
   const recipients = [...payload.to, ...payload.cc];
+  const replyTo = getEmailReplyTo();
   const headers = [
     `From: ${from}`,
+    ...(replyTo ? [`Reply-To: ${replyTo}`] : []),
     `To: ${payload.to.join(', ')}`,
     ...(payload.cc.length ? [`Cc: ${payload.cc.join(', ')}`] : []),
     `Subject: ${encodeHeader(payload.subject)}`,
@@ -238,6 +243,7 @@ const sendWithResend = async (payload: any) => {
     },
     body: JSON.stringify({
       from,
+      reply_to: getEmailReplyTo(),
       to: payload.to,
       cc: payload.cc,
       subject: payload.subject,
@@ -296,6 +302,9 @@ const sendWithSendGrid = async (payload: any) => {
       from: {
         email: env('MAIL_FROM_EMAIL') || env('EMAIL_FROM_EMAIL') || parseEmailAddress(from),
         name: env('MAIL_FROM_NAME') || env('EMAIL_FROM_NAME') || parseEmailName(from),
+      },
+      reply_to: {
+        email: parseEmailAddress(getEmailReplyTo()),
       },
       content: [{ type: 'text/plain', value: payload.body }],
       attachments: [
