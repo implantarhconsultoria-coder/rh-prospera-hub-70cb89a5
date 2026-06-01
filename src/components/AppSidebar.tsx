@@ -41,7 +41,6 @@ const operationalItems: MenuItem[] = [
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
   { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
-  { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
   { label: 'Pre-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },

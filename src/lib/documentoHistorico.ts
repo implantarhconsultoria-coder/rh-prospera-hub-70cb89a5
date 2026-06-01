@@ -1,5 +1,31 @@
 import { supabase } from '@/integrations/supabase/client';
 
+export const DOCUMENTO_CATEGORIAS_PADRAO = [
+  'DOCUMENTACAO ADMISSIONAL',
+  'CONTRATO',
+  'ASO',
+  'ATESTADO',
+  'EPI',
+  'UNIFORME',
+  'VALE-TRANSPORTE / VT',
+  'VALE-REFEICAO / VR',
+  'FERIAS',
+  'RECIBOS',
+  'TERMOS',
+  'APONTAMENTO CONTABILIDADE',
+  'FECHAMENTO',
+  'OUTROS',
+] as const;
+
+export const DOCUMENTO_ORIGENS_PADRAO = [
+  'gerado_sistema',
+  'upload_manual',
+  'pre_cadastro',
+] as const;
+
+export type DocumentoCategoria = typeof DOCUMENTO_CATEGORIAS_PADRAO[number] | string;
+export type DocumentoOrigem = typeof DOCUMENTO_ORIGENS_PADRAO[number] | string;
+
 export interface DocumentoRegistro {
   funcionarioId: string;
   funcionarioNome: string;
@@ -12,6 +38,13 @@ export interface DocumentoRegistro {
   geradoPorUserId: string;
   geradoPorNome: string;
   unidade?: string;
+  categoria?: DocumentoCategoria;
+  origem?: DocumentoOrigem;
+  observacao?: string;
+  nomeArquivo?: string;
+  dataDocumento?: string;
+  storageBucket?: string;
+  storagePath?: string;
 }
 
 export interface ArquivarDocumentoFuncionarioInput extends Omit<DocumentoRegistro, 'arquivoUrl'> {
@@ -29,9 +62,26 @@ const safeStorageName = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'documento';
 
-/** Registra um documento no histórico do funcionário */
+const isMissingEnhancedColumnError = (error: any) =>
+  /could not find|schema cache|column/i.test(error?.message || '') &&
+  /categoria|origem|observacao|nome_arquivo|data_documento|storage_bucket|storage_path/i.test(error?.message || '');
+
+const getFileExtension = (fileName: string, fallback = 'pdf') => {
+  const match = String(fileName || '').match(/\.([a-z0-9]+)$/i);
+  return (match?.[1] || fallback).toLowerCase();
+};
+
+const contentTypeFromExtension = (ext: string) => {
+  if (ext === 'pdf') return 'application/pdf';
+  if (['jpg', 'jpeg'].includes(ext)) return 'image/jpeg';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'html') return 'text/html';
+  return 'application/octet-stream';
+};
+
 export const registrarDocumento = async (doc: DocumentoRegistro) => {
-  const { data, error } = await supabase.from('documentos_funcionario').insert({
+  const basePayload = {
     funcionario_id: doc.funcionarioId,
     funcionario_nome: doc.funcionarioNome,
     company_id: doc.companyId,
@@ -44,13 +94,60 @@ export const registrarDocumento = async (doc: DocumentoRegistro) => {
     gerado_por_nome: doc.geradoPorNome,
     unidade: doc.unidade || '',
     status_envio: 'gerado',
-  } as any).select().single();
+  };
+
+  const enhancedPayload = {
+    ...basePayload,
+    categoria: doc.categoria || doc.tipoDocumento,
+    origem: doc.origem || 'gerado_sistema',
+    observacao: doc.observacao || doc.descricao || '',
+    nome_arquivo: doc.nomeArquivo || '',
+    data_documento: doc.dataDocumento || new Date().toISOString(),
+    storage_bucket: doc.storageBucket || (doc.arquivoUrl ? 'documentos-funcionarios' : ''),
+    storage_path: doc.storagePath || doc.arquivoUrl || '',
+  };
+
+  let result = await supabase.from('documentos_funcionario').insert(enhancedPayload as any).select().single();
+
+  if (result.error && isMissingEnhancedColumnError(result.error)) {
+    result = await supabase.from('documentos_funcionario').insert(basePayload as any).select().single();
+  }
+
+  if (result.error) {
+    console.error('Erro ao registrar documento:', result.error);
+    throw result.error;
+  }
+  return result.data;
+};
+
+export const uploadDocumentoArquivo = async (
+  funcionarioId: string,
+  tipoDocumento: string,
+  arquivo: File | Blob | string,
+  nomeArquivo: string,
+  funcionarioNome?: string,
+  competencia?: string,
+): Promise<string> => {
+  const ext = getFileExtension(nomeArquivo, arquivo instanceof Blob && arquivo.type === 'text/html' ? 'html' : 'pdf');
+  const blob = typeof arquivo === 'string'
+    ? new Blob([arquivo], { type: 'text/html' })
+    : arquivo;
+  const contentType = blob.type || contentTypeFromExtension(ext);
+  const nomeParte = safeStorageName(funcionarioNome || 'funcionario');
+  const competenciaParte = safeStorageName(competencia || new Date().toISOString().slice(0, 10));
+  const baseArquivo = safeStorageName(nomeArquivo.replace(/\.[^.]+$/, ''));
+  const fileName = `${funcionarioId}/${safeStorageName(tipoDocumento)}/${competenciaParte}_${nomeParte}_${Date.now()}_${baseArquivo}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from('documentos-funcionarios')
+    .upload(fileName, blob, { contentType, upsert: false });
 
   if (error) {
-    console.error('Erro ao registrar documento:', error);
+    console.error('Erro no upload:', error);
     throw error;
   }
-  return data;
+
+  return fileName;
 };
 
 export const arquivarDocumentoFuncionario = async (doc: ArquivarDocumentoFuncionarioInput) => {
@@ -79,10 +176,16 @@ export const arquivarDocumentoFuncionario = async (doc: ArquivarDocumentoFuncion
     geradoPorUserId: doc.geradoPorUserId,
     geradoPorNome: doc.geradoPorNome,
     unidade: doc.unidade,
+    categoria: doc.categoria || doc.tipoDocumento,
+    origem: doc.origem || 'gerado_sistema',
+    observacao: doc.observacao || doc.descricao,
+    nomeArquivo: doc.nomeArquivo,
+    dataDocumento: doc.dataDocumento,
+    storageBucket: doc.storageBucket || 'documentos-funcionarios',
+    storagePath: doc.storagePath || arquivoUrl,
   });
 };
 
-/** Marca um documento como enviado */
 export const marcarComoEnviado = async (
   documentoId: string,
   enviadoPorUserId: string,
@@ -100,7 +203,6 @@ export const marcarComoEnviado = async (
   if (error) console.error('Erro ao marcar envio:', error);
 };
 
-/** Busca histórico de documentos de um funcionário */
 export const buscarHistoricoFuncionario = async (funcionarioId: string) => {
   const { data, error } = await supabase
     .from('documentos_funcionario')
@@ -109,13 +211,28 @@ export const buscarHistoricoFuncionario = async (funcionarioId: string) => {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Erro ao buscar histórico:', error);
+    console.error('Erro ao buscar historico:', error);
     return [];
   }
   return data || [];
 };
 
-/** Upload de arquivo (PDF preferencialmente) para storage e retorna URL pública */
+export const excluirDocumentoFuncionario = async (documento: { id: string; arquivo_url?: string | null; storage_path?: string | null; storage_bucket?: string | null }) => {
+  const path = documento.storage_path || documento.arquivo_url || '';
+  const bucket = documento.storage_bucket || 'documentos-funcionarios';
+
+  const { error } = await supabase.from('documentos_funcionario').delete().eq('id', documento.id);
+  if (error) {
+    console.error('Erro ao excluir documento:', error);
+    throw error;
+  }
+
+  if (path && !/^https?:\/\//i.test(path)) {
+    const { error: storageError } = await supabase.storage.from(bucket).remove([path]);
+    if (storageError) console.warn('Documento removido do historico, mas storage nao foi limpo:', storageError);
+  }
+};
+
 export const uploadDocumentoPdf = async (
   funcionarioId: string,
   tipoDocumento: string,
@@ -127,21 +244,14 @@ export const uploadDocumentoPdf = async (
   const blob = typeof conteudo === 'string'
     ? new Blob([conteudo], { type: 'text/html' })
     : conteudo;
-  const contentType = extensao === 'pdf' ? 'application/pdf' : 'text/html';
   const nomeParte = safeStorageName(funcionarioNome || 'funcionario');
   const competenciaParte = safeStorageName(competencia || new Date().toISOString().slice(0, 10));
-  const fileName = `${funcionarioId}/${tipoDocumento}_${nomeParte}_${competenciaParte}_${Date.now()}.${extensao}`;
-
-  const { error } = await supabase.storage
-    .from('documentos-funcionarios')
-    .upload(fileName, blob, { contentType, upsert: false });
-
-  if (error) {
-    console.error('Erro no upload:', error);
-    return '';
-  }
-
-  // Bucket é privado: armazena o caminho (storage path) no banco.
-  // O visualizador (PdfDocumentViewer/getDocumentUrl) gera signed URL sob demanda.
-  return fileName;
+  return uploadDocumentoArquivo(
+    funcionarioId,
+    tipoDocumento,
+    blob,
+    `${tipoDocumento}_${nomeParte}_${competenciaParte}_${Date.now()}.${extensao}`,
+    funcionarioNome,
+    competencia,
+  );
 };

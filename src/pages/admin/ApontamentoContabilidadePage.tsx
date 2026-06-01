@@ -9,6 +9,7 @@ import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 import { downloadPdfBlob, sanitizePdfFileName } from '@/lib/savePdf';
+import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -49,6 +50,16 @@ const buildStoragePdfPathName = (fileName: string) =>
     .replace(/\.pdf$/i, '')
     .replace(/\s+/g, '_')
     .slice(0, 150);
+
+const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
+const onlyDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
+const normalizeMatchText = (value?: string | null) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
 
 interface ItemRow {
   id?: string;
@@ -183,7 +194,7 @@ const PercentInput: React.FC<{
 };
 
 const ApontamentoContabilidadePage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, config } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, config, session } = useApp();
   const [companyId, setCompanyId] = useState('');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [items, setItems] = useState<ItemRow[]>([]);
@@ -786,6 +797,51 @@ const ApontamentoContabilidadePage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const buscarFuncionarioDoItem = (empresaId: string, row: ItemRow) => {
+    const cpfRow = onlyDigits(row.cpf);
+    const nomeRow = normalizeMatchText(row.nome);
+    return employees.find((emp) =>
+      emp.id === row.funcionario_id ||
+      (!!cpfRow && onlyDigits(emp.cpf) === cpfRow) ||
+      (emp.companyId === empresaId && normalizeMatchText(emp.name) === nomeRow)
+    );
+  };
+
+  const arquivarPdfApontamentoNoHistorico = async (
+    empresa: any,
+    rows: ItemRow[],
+    blob: Blob,
+    nomeArquivo: string,
+  ) => {
+    const competenciaLabel = formatCompetencia(competencia);
+    for (const row of rows) {
+      const funcionario = buscarFuncionarioDoItem(empresa.id, row);
+      if (!funcionario) {
+        console.warn('Apontamento nao arquivado: funcionario nao localizado', row);
+        continue;
+      }
+      await arquivarDocumentoFuncionario({
+        funcionarioId: funcionario.id,
+        funcionarioNome: funcionario.name,
+        companyId: empresa.id,
+        empresaNome: empresa.name,
+        tipoDocumento: 'APONTAMENTO CONTABILIDADE',
+        categoria: 'APONTAMENTO CONTABILIDADE',
+        origem: 'gerado_sistema',
+        competencia,
+        descricao: `Apontamento Contabilidade - ${empresa.name} - ${competenciaLabel}`,
+        observacao: `Total do funcionario no apontamento: ${formatBRL(row.total)}`,
+        conteudo: blob,
+        extensao: 'pdf',
+        storageTipo: 'apontamento-contabilidade',
+        nomeArquivo,
+        geradoPorUserId: session?.user?.id || ZERO_UUID,
+        geradoPorNome: session?.user?.email || 'Sistema',
+        unidade: empresa.name,
+      });
+    }
+  };
+
   const gerarPdfBlob = () => {
     if (!company) throw new Error('Selecione uma empresa');
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -900,6 +956,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
     if (error) throw error;
     const { data } = supabase.storage.from('documentos-ativos').getPublicUrl(fileName);
     setUltimoPdfUrl(data.publicUrl);
+    await arquivarPdfApontamentoNoHistorico(company, items, blob, buildApontamentoPdfName(company.name, competencia));
     return data.publicUrl;
   };
 
@@ -1039,6 +1096,15 @@ const ApontamentoContabilidadePage: React.FC = () => {
     if (error) throw error;
     const { data } = supabase.storage.from('documentos-ativos').getPublicUrl(fileName);
     setUltimoPdfUrl(data.publicUrl);
+    for (const grupo of grupos) {
+      const grupoBlob = gerarPdfBlobLote([grupo]);
+      await arquivarPdfApontamentoNoHistorico(
+        grupo.company,
+        grupo.items,
+        grupoBlob,
+        buildApontamentoPdfName(grupo.company.name, competencia),
+      );
+    }
     return data.publicUrl;
   };
 

@@ -38,7 +38,7 @@ const AppLayout: React.FC = () => {
     const moduleResults = [
       ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionarios', '/admin/funcionarios'],
       ['Pre-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
-      ['Atestados', '/admin/atestados'], ['Fechamento', '/admin/fechamento'],
+      ['Fechamento', '/admin/fechamento'],
       ['Faturamento', '/admin/faturamento'],
       ['Financeiro', '/admin/financeiro'], ['Frota / Documentos', '/admin/documentos-ativos'],
       ['Almoxarifado', '/admin/almoxarifado'], ['Abastecimento QR Code', '/admin/abastecimento-qrcode'],

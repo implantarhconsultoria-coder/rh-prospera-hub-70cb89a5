@@ -35,7 +35,6 @@ const ALL_ITEMS: Item[] = [
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', group: 'Operacional' },
   { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo', group: 'Operacional' },
   { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias', group: 'Operacional' },
-  { label: 'Importar Atestados', icon: FileSearch, path: '/admin/atestados', group: 'Operacional' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso', group: 'Operacional' },
   { label: 'Pre-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional', group: 'Operacional' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores', group: 'Operacional' },

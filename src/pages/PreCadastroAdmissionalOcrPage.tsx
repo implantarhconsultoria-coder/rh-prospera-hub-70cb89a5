@@ -11,6 +11,7 @@ import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel, isMotoboyRole } from '@/lib/employeeRoleRules';
+import { registrarDocumento } from '@/lib/documentoHistorico';
 
 type PreCadastro = {
   id: string;
@@ -68,6 +69,7 @@ const onlyDigits = (v?: string | null) => String(v || '').replace(/\D/g, '');
 const fileToDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result || '')); r.onerror = () => reject(new Error('Nao foi possivel ler o arquivo')); r.readAsDataURL(file); });
 const normalizeDate = (value: unknown) => { const text = String(value || '').trim(); if (!text) return ''; if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text; const br = text.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/); if (!br) return ''; const y = br[3].length === 2 ? `20${br[3]}` : br[3]; return `${y}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`; };
 const normalizeMoney = (value: unknown) => { if (typeof value === 'number') return value; const n = Number(String(value || '').replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
 
 const OCR_FIELD_LABELS: Record<string, string> = {
   nome: 'Nome completo', cpf: 'CPF', rg: 'RG', data_nascimento: 'Data nascimento', endereco: 'Endereco', telefone: 'Telefone', funcao: 'Funcao/cargo', empresa: 'Empresa', salario: 'Salario', data_admissao: 'Data admissao', vt_endereco: 'VT/endereco residencial', documentos_anexados: 'Documentos anexados', filiacao: 'Filiacao', escolaridade: 'Escolaridade', experiencia: 'Experiencia', epi: 'EPI', beneficios: 'Beneficios', insalubridade: 'Insalubridade', setor_ghe: 'Setor/GHE', obra_local: 'Obra/local', jornada: 'Jornada', responsavel_contato: 'Responsavel/contato',
@@ -121,6 +123,13 @@ const uploadAdmissionFile = async (file: File, prefix: string) => {
     if (!/bucket not found|not found|does not exist/i.test(error.message)) break;
   }
   throw new Error(errors.join(' | '));
+};
+
+const categoriaPreCadastro = (tipo?: string | null) => {
+  const normalizado = String(tipo || '').toLowerCase();
+  if (normalizado.includes('aso') || normalizado.includes('exame')) return 'ASO';
+  if (normalizado.includes('contrato')) return 'CONTRATO';
+  return 'DOCUMENTACAO ADMISSIONAL';
 };
 
 const uploadAdmissionBlob = async (blob: Blob, prefix: string, fileName: string) => {
@@ -444,7 +453,62 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   };
 
   const enviarContabilidade = async () => { openEmailClient({ to: ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'], cc: ['robson@topac.com.br'], subject: `Solicitacao de Registro - ${form.nome || ''} - ${form.empresa_nome || ''}`, body: buildContabilidadeEmailBody(form) }); if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_preparar_contabilidade', { p_id: form.id }); await carregar(); } toast.success('E-mail para contabilidade aberto. Anexe a documentacao completa.'); };
-  const aprovarOficial = async () => { if (!form.id) return; if (!form.empresa_id || !form.nome) { toast.error('Empresa e nome sao obrigatorios'); return; } const { error } = await (supabase as any).rpc('admin_pre_cadastro_aprovar_oficial', { p_id: form.id }); if (error) { toast.error(`Erro ao aprovar: ${error.message}`); return; } toast.success('Cadastro oficial criado/atualizado em Funcionarios'); await Promise.all([carregar(), refreshData()]); };
+
+  const migrarDocumentosPreCadastro = async (funcionarioId: string) => {
+    if (!form.id || !funcionarioId || !form.empresa_id) return 0;
+    const empresa = companies.find(c => c.id === form.empresa_id);
+    const { data: docs, error } = await (supabase as any)
+      .from('pre_cadastro_documentos')
+      .select('*')
+      .eq('pre_cadastro_id', form.id);
+    if (error) throw error;
+
+    let migrados = 0;
+    for (const doc of docs || []) {
+      if (!doc.arquivo_url) continue;
+      const { data: existente } = await (supabase as any)
+        .from('documentos_funcionario')
+        .select('id')
+        .eq('funcionario_id', funcionarioId)
+        .eq('arquivo_url', doc.arquivo_url)
+        .maybeSingle();
+      if (existente?.id) continue;
+
+      await registrarDocumento({
+        funcionarioId,
+        funcionarioNome: form.nome || 'Funcionario',
+        companyId: form.empresa_id,
+        empresaNome: empresa?.name || form.empresa_nome || '',
+        tipoDocumento: categoriaPreCadastro(doc.tipo_documento),
+        categoria: categoriaPreCadastro(doc.tipo_documento),
+        origem: 'pre_cadastro',
+        descricao: `Documento migrado do pre-cadastro: ${doc.nome_arquivo || doc.tipo_documento || 'arquivo'}`,
+        observacao: `Origem: pre-cadastro admissional (${doc.tipo_documento || 'documento'})`,
+        arquivoUrl: doc.arquivo_url,
+        nomeArquivo: doc.nome_arquivo || '',
+        dataDocumento: doc.created_at || new Date().toISOString(),
+        geradoPorUserId: session?.user?.id || ZERO_UUID,
+        geradoPorNome: session?.user?.email || 'Sistema',
+        unidade: empresa?.name || form.empresa_nome || '',
+      });
+      migrados += 1;
+    }
+    return migrados;
+  };
+
+  const aprovarOficial = async () => {
+    if (!form.id) return;
+    if (!form.empresa_id || !form.nome) { toast.error('Empresa e nome sao obrigatorios'); return; }
+    const { data: funcionarioId, error } = await (supabase as any).rpc('admin_pre_cadastro_aprovar_oficial', { p_id: form.id });
+    if (error) { toast.error(`Erro ao aprovar: ${error.message}`); return; }
+    try {
+      const migrados = await migrarDocumentosPreCadastro(String(funcionarioId || ''));
+      toast.success(`Cadastro oficial criado/atualizado em Funcionarios. Documentos migrados: ${migrados}.`);
+    } catch (e: any) {
+      toast.warning(`Cadastro oficial aprovado, mas os anexos nao foram migrados automaticamente: ${e.message || 'erro desconhecido'}`);
+    }
+    await Promise.all([carregar(), refreshData()]);
+  };
 
   return <div className="space-y-5 animate-fade-in">
     <div className="card-premium p-6 gradient-primary text-primary-foreground"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center"><FileSearch className="w-7 h-7" /></div><div><h1 className="text-2xl font-bold font-display">Pre-cadastro Admissional</h1><p className="text-primary-foreground/70 text-sm">Ficha, exame, documentos, ASO e aprovacao antes da base oficial.</p></div></div></div>
