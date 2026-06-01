@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { cleanText } from './textClean';
+import { ponteAereaLogoDataUrl } from '@/assets/ponteAereaLogoData';
 
 export interface FichaASOData {
   empresa: string;
@@ -166,89 +167,130 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
 
 export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-
-  const field = (label: string, value?: string) => `${label}: ${cleanText(value) || '---'}`;
-  const check = (checked: boolean) => checked ? '( X ) SIM   (   ) NAO' : '(   ) SIM   ( X ) NAO';
   const today = new Date().toISOString().slice(0, 10);
   const dataExame = d.dataExame || today;
   const tipoExame = cleanText(d.tipoExame || 'Admissional').toUpperCase();
   const responsavel = cleanText(d.responsavelContato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385');
+  const x = 18;
+  const w = 174;
+  let y = 5;
 
-  doc.setTextColor(0, 0, 0);
-  doc.setDrawColor(0, 0, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('AUTORIZACAO DE EXAMES', 105, 13, { align: 'center' });
-
-  doc.setFontSize(9);
-  doc.rect(12, 18, 186, 43);
-  doc.text('LOCAL DE ATENDIMENTO:', 15, 24);
-  doc.setFont('helvetica', 'normal');
-  doc.text('AVENIDA SAO JOAO, 313, 1o ANDAR', 15, 30);
-  doc.text('OBS: PROXIMO AO LARGO PAISSANDU E METRO SAO BENTO', 15, 36);
-  doc.text('CENTRO - SAO PAULO.', 15, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.text('HORARIO DE ATENDIMENTO:', 15, 49);
-  doc.setFont('helvetica', 'normal');
-  doc.text('DE SEGUNDA A SEXTA DAS 07h30 AS 15:00. PARA RAIO-X ATE AS 12:00. POR ORDEM DE CHEGADA.', 15, 55);
-
-  let y = 69;
-  doc.setFontSize(10);
-  const drawLine = (text: string) => {
-    doc.setFont('helvetica', 'normal');
-    doc.text(doc.splitTextToSize(text, 180), 15, y);
-    y += 8;
+  const write = (
+    text: string,
+    tx: number,
+    ty: number,
+    options: { size?: number; bold?: boolean; align?: 'left' | 'center' | 'right'; maxWidth?: number; color?: [number, number, number] } = {},
+  ) => {
+    doc.setFont('times', options.bold ? 'bold' : 'normal');
+    doc.setFontSize(options.size || 9);
+    doc.setTextColor(...(options.color || [0, 0, 0]));
+    const value = cleanText(text);
+    const lines = options.maxWidth ? doc.splitTextToSize(value, options.maxWidth) : value;
+    doc.text(lines, tx, ty, { align: options.align || 'left' });
   };
+  const rect = (height: number, fill?: [number, number, number]) => {
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.25);
+    if (fill) {
+      doc.setFillColor(...fill);
+      doc.rect(x, y, w, height, 'FD');
+    } else {
+      doc.rect(x, y, w, height);
+    }
+  };
+  const next = (height: number) => { y += height; };
+  const checkbox = (checked?: boolean) => checked ? '(  X  ) SIM    (     ) NÃO' : '(     ) SIM    (     ) NÃO';
 
-  drawLine(field('NOME DA EMPRESA', d.empresa));
-  drawLine(field('CNPJ', d.cnpj || ''));
-  drawLine(field('DATA DO EXAME', fmtBR(dataExame)));
-  drawLine(field('OBRA / LOCAL', d.obraLocal || ''));
-  drawLine(field('FUNCIONARIO', d.nome));
-  drawLine(field('SETOR / GHE', d.setorGhe || ''));
-  drawLine(field('FUNCAO', d.funcao));
-  drawLine(field('DATA DE NASCIMENTO', fmtBR(d.dataNascimento)));
-  drawLine(field('CPF', d.cpf));
-  drawLine(field('DATA DE ADMISSAO', fmtBR(d.dataAdmissao)));
+  const headerH = 23;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.rect(x, y, 65, headerH);
+  doc.rect(x + 65, y, w - 65, headerH);
+  try { doc.addImage(ponteAereaLogoDataUrl, 'PNG', x + 4, y + 2.5, 47, 18); } catch {}
+  write('AUTORIZAÇÃO DE EXAMES', x + 65 + (w - 65) / 2, y + 14, { size: 14, align: 'center' });
+  next(headerH);
 
-  y += 2;
-  doc.setFont('helvetica', 'bold');
-  doc.text('DESCREVER ABAIXO O TIPO DE EXAME', 15, y);
-  y += 6;
-  doc.setFont('helvetica', 'normal');
-  doc.text('(ADMISSIONAL / PERIODICO / DEMISSIONAL / MUDANCA DE FUNCAO / RETORNO AO TRABALHO / AVALIACAO MEDICA / OUTROS)', 15, y);
-  y += 8;
-  doc.setFont('helvetica', 'bold');
-  doc.text(`EXAME ${tipoExame}`, 15, y);
+  const atendimentoH = 52;
+  rect(atendimentoH);
+  const centerX = x + w / 2;
+  write('LOCAL DE ATENDIMENTO:', centerX, y + 7, { size: 13, bold: true, align: 'center' });
+  write('AVENIDA SÃO JOÃO, 313, 1 º ANDAR', centerX, y + 14, { size: 12, align: 'center' });
+  write('OBS: PRÓXIMO AO LARGO PAISSANDU E METRO SÃO BENTO', centerX, y + 21, { size: 12, align: 'center' });
+  write('CENTRO - SÃO PAULO.', centerX, y + 28, { size: 12, align: 'center' });
+  write('HORÁRIO DE ATENDIMENTO:', centerX, y + 35, { size: 13, bold: true, align: 'center' });
+  write('DE SEGUNDA A SEXTA DAS 07h30HS AS 15:00HS.', centerX, y + 41, { size: 11.5, align: 'center' });
+  write('PARA RAIO-X (ATÉ AS 12:00)', centerX, y + 46, { size: 10.5, bold: true, align: 'center' });
+  write('(por ordem de chegada)', centerX, y + 50, { size: 10.5, align: 'center' });
+  next(atendimentoH);
 
-  y += 14;
-  doc.setFont('helvetica', 'bold');
-  doc.text('ASSINALAR "SIM" CASO SE APLIQUE AOS ITENS ABAIXO:', 15, y);
-  y += 9;
-  doc.setFont('helvetica', 'normal');
-  doc.text(`REALIZARA EXAMES P/ TRABALHO EM ALTURA - NR35   ${check(Boolean(d.trabalhoAltura))}`, 15, y);
-  y += 8;
-  doc.text(`REALIZARA EXAMES P/ TRABALHO EM ESPACO CONFINADO - NR33   ${check(Boolean(d.espacoConfinado))}`, 15, y);
-  y += 8;
-  doc.text(`REALIZARA EXAME TOXICOLOGICO   ${check(Boolean(d.toxicologico))}`, 15, y);
+  const empresaH = 21;
+  doc.rect(x, y, 90, empresaH);
+  doc.rect(x + 90, y, w - 90, empresaH);
+  write(`NOME DA EMPRESA: ${d.empresa || ''}`, x + 3, y + 8, { size: 9.5, bold: true, maxWidth: 84 });
+  write(`CNPJ:${d.cnpj || ''}`, x + 3, y + 15, { size: 9.5, bold: true });
+  write(`DATA DO EXAME: ${fmtBR(dataExame)}`, x + 93, y + 12, { size: 9.5, bold: true });
+  next(empresaH);
 
-  y += 13;
-  doc.setFont('helvetica', 'bold');
-  doc.text('CENTRAL DE AGENDAMENTO:', 15, y);
-  y += 7;
-  doc.setFont('helvetica', 'normal');
-  doc.text('E-mail: agendamento@ponteaereaseguranca.com.br', 15, y);
-  y += 6;
-  doc.text('(11) 95301-3663 (Duvidas e informacoes) / (11) 3333-1717', 15, y);
-  y += 10;
-  doc.text('Mediante agendamento previo no telefone e/ou e-mail acima indicado.', 15, y);
-  y += 6;
-  doc.text('E obrigatorio que o funcionario compareca munido de documento de identidade e CPF.', 15, y);
-  y += 11;
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Nome do Responsavel / Contato (OBRIGATORIO): ${responsavel}`, 15, y);
+  const funcionarioH = 44;
+  rect(funcionarioH);
+  write(`OBRA / LOCAL: ${d.obraLocal || ''}`, x + 3, y + 6, { size: 9.5, bold: true });
+  write(`FUNCIONÁRIO: ${d.nome || ''}`, x + 3, y + 12.5, { size: 9.5, bold: true });
+  write(`SETOR/ GHE: ${d.setorGhe || ''}`, x + 3, y + 19, { size: 9.5, bold: true });
+  write(`FUNÇÃO:  ${d.funcao || ''}`, x + 3, y + 25.5, { size: 9.5, bold: true });
+  write(`DATA DE NASCIMENTO: ${fmtBR(d.dataNascimento)}`, x + 3, y + 32, { size: 9.5, bold: true });
+  write(`CPF: ${d.cpf || ''}`, x + 3, y + 38.5, { size: 9.5, bold: true });
+  write(`DATA DE ADMISSÃO: ${fmtBR(d.dataAdmissao)}`, x + 78, y + 38.5, { size: 9.5, bold: true });
+  next(funcionarioH);
 
-  drawSignatures(doc, 282);
+  const descH = 17;
+  rect(descH, [219, 219, 219]);
+  write('DESCREVER ABAIXO O TIPO DE EXAME (ADMISSIONAL/ PERIÓDICO / DEMISSIONAL / MUDANÇA DE FUNÇÃO / RETORNO AO TRABALHO / AVALIAÇÃO MÉDICA /', centerX, y + 6, { size: 8.6, bold: true, align: 'center', maxWidth: 166 });
+  write('OUTROS QUAL (DESCREVER)', centerX, y + 13, { size: 8.8, bold: true, align: 'center' });
+  next(descH);
+
+  const examH = 18;
+  rect(examH);
+  const examText = `EXAME ${tipoExame}`;
+  const examTextWidth = doc.getTextWidth(examText) + 4;
+  doc.setFillColor(255, 0, 0);
+  doc.rect(centerX - examTextWidth / 2, y + 7, examTextWidth, 6, 'F');
+  write(examText, centerX, y + 12, { size: 10.5, bold: true, align: 'center' });
+  next(examH);
+
+  const assH = 14;
+  rect(assH, [219, 219, 219]);
+  doc.setFillColor(251, 228, 213);
+  doc.rect(x + 3, y + 4, w - 6, 6, 'F');
+  write('ASSINALAR “SIM” CASO SE APLIQUE AOS ITENS ABAIXO:', centerX, y + 8.5, { size: 9, bold: true, align: 'center' });
+  next(assH);
+
+  const nrH = 12;
+  rect(nrH);
+  write(`REALIZARÁ EXAMES P/ TRABALHO EM ALTURA – NR35   ${checkbox(d.trabalhoAltura)}`, x + 3, y + 8, { size: 9.5, bold: true });
+  next(nrH);
+  rect(nrH);
+  write(`REALIZARÁ EXAMES P/ TRABALHO EM ESPAÇO CONFINADO – NR33   ${checkbox(d.espacoConfinado)}`, x + 3, y + 8, { size: 9.5, bold: true });
+  next(nrH);
+  rect(nrH);
+  write(`REALIZARÁ EXAME TOXICOLÓGICO   ${checkbox(d.toxicologico)}`, x + 3, y + 8, { size: 9.5, bold: true });
+  next(nrH);
+
+  const centralH = 40;
+  rect(centralH);
+  write('CENTRAL DE AGENDAMENTO:', centerX, y + 8, { size: 10, bold: true, align: 'center' });
+  write('E-mail: agendamento@ponteaereaseguranca.com.br', centerX, y + 15, { size: 9.5, bold: true, align: 'center' });
+  write('(11) 95301-3663 (Dúvidas e informações)', centerX, y + 21.5, { size: 9.5, bold: true, align: 'center' });
+  write('(11) 3333-1717', centerX, y + 28, { size: 9.5, bold: true, align: 'center' });
+  write('Mediante agendamento prévio no telefone e (ou) e-mail acima indicado;', centerX, y + 34, { size: 8.7, bold: true, align: 'center' });
+  write('É obrigatório que o funcionário compareça munido de documento de identidade e CPF.', centerX, y + 38, { size: 8.5, bold: true, align: 'center' });
+  next(centralH);
+
+  rect(5);
+  next(5);
+  rect(16);
+  write('Nome do Responsável / Contato (OBRIGATÓRIO):', x + 3, y + 9, { size: 9.5, bold: true });
+  write(responsavel, x + 83, y + 9, { size: 9.5, bold: true, maxWidth: 86 });
+
   const fileName = `GUIA ASO AUDIOLIFE - ${cleanFilePart(d.nome).replace(/_/g, ' ')} - ${dataExame}.pdf`;
   return { blob: doc.output('blob'), fileName };
 };
