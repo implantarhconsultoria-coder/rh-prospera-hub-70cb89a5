@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, Loader2, Mail, RefreshCw, Save, Upload } from 'lucide-react';
-import { openEmailClient } from '@/lib/emailUtils';
-import { downloadPdf, gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
+import { downloadEmailWithAttachment, openEmailClient } from '@/lib/emailUtils';
+import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel, isMotoboyRole } from '@/lib/employeeRoleRules';
 
@@ -46,6 +46,7 @@ type PreCadastro = {
 
 type OcrField = { valor?: string | number | null; confianca?: number; observacao?: string };
 type OcrResult = { ok?: boolean; confianca_geral?: number; texto_bruto?: string; campos?: Record<string, OcrField>; pendencias?: string[]; log?: string[]; error?: string };
+type GeneratedAsoGuide = { blob: Blob; fileName: string; url: string };
 
 const statusLabel: Record<string, string> = {
   aguardando_validacao: 'Aguardando validacao',
@@ -121,10 +122,34 @@ const uploadAdmissionFile = async (file: File, prefix: string) => {
   throw new Error(errors.join(' | '));
 };
 
+const uploadAdmissionBlob = async (blob: Blob, prefix: string, fileName: string) => {
+  const safeName = fileName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]+/g, '_');
+  const path = `${prefix}/${Date.now()}-${safeName}`;
+  const errors: string[] = [];
+  for (const bucket of ADMISSION_BUCKETS) {
+    const { error } = await supabase.storage.from(bucket).upload(path, blob, { contentType: 'application/pdf', upsert: false });
+    if (!error) { const { data } = supabase.storage.from(bucket).getPublicUrl(path); return data.publicUrl; }
+    errors.push(`${bucket}: ${error.message}`);
+    if (!/bucket not found|not found|does not exist/i.test(error.message)) break;
+  }
+  throw new Error(errors.join(' | '));
+};
+
 const buildExameEmailBody = (r: Partial<PreCadastro>) => [
-  'Prezados, bom dia.', '', 'Solicitamos, por gentileza, o agendamento do exame admissional do colaborador abaixo:', '',
-  `Nome: ${r.nome || ''}`, `CPF: ${r.cpf || ''}`, `Data de nascimento: ${r.data_nascimento || ''}`, `Empresa: ${r.empresa_nome || ''}`, `CNPJ: ${r.cnpj || ''}`, `Funcao: ${r.funcao || ''}`, `Setor/GHE: ${r.setor_ghe || ''}`, `Obra/Local: ${r.obra_local || ''}`,
-  '', 'Segue guia de autorizacao de exame em anexo.', '', 'Pedimos, por gentileza, a confirmacao do recebimento deste e-mail e do agendamento.', '', 'Atenciosamente,', 'TOPAC RH PRO',
+  'Prezados, bom dia.', '', 'Solicito, por gentileza, o agendamento do exame admissional conforme guia ASO anexa.', '',
+  `Nome: ${r.nome || ''}`,
+  `CPF: ${r.cpf || ''}`,
+  `RG: ${r.rg || ''}`,
+  `Data de nascimento: ${r.data_nascimento || ''}`,
+  `Empresa: ${r.empresa_nome || ''}`,
+  `CNPJ: ${r.cnpj || ''}`,
+  `Funcao: ${r.funcao || ''}`,
+  `Setor/GHE: ${r.setor_ghe || ''}`,
+  `Obra/Local: ${r.obra_local || ''}`,
+  `Data de admissao/inicio: ${r.data_admissao || ''}`,
+  '', 'Escopo: exame admissional ocupacional para liberacao do colaborador no processo de pre-cadastro TOPAC.',
+  '', 'Por favor, confirmar recebimento, data e horario disponivel para atendimento.',
+  '', 'Atenciosamente,', 'Rodrigo De Souza Sabino',
 ].join('\n');
 const buildContabilidadeEmailBody = (r: Partial<PreCadastro>) => [
   'Prezados, bom dia.', '', 'Solicitamos, por gentileza, o registro do colaborador abaixo:', '',
@@ -143,6 +168,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [lastFichaFile, setLastFichaFile] = useState<File | null>(null);
+  const [lastAsoGuide, setLastAsoGuide] = useState<GeneratedAsoGuide | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -155,6 +181,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   useEffect(() => { carregar(); }, []);
   useEffect(() => { const onRefresh = () => carregar(); window.addEventListener('topac:refresh-current', onRefresh); return () => window.removeEventListener('topac:refresh-current', onRefresh); }, []);
   useEffect(() => { const selected = rows.find(r => r.id === selectedId); if (selected) { setForm(selected); setOcrResult((selected.dados_extraidos as OcrResult) || null); } }, [rows, selectedId]);
+  useEffect(() => () => { if (lastAsoGuide?.url) URL.revokeObjectURL(lastAsoGuide.url); }, [lastAsoGuide?.url]);
 
   const filtered = useMemo(() => { const q = search.toLowerCase(); return rows.filter(r => !q || `${r.nome} ${r.cpf} ${r.empresa_nome} ${r.status} ${r.funcao}`.toLowerCase().includes(q)); }, [rows, search]);
   const duplicateCpf = useMemo(() => { const cpf = onlyDigits(form.cpf); return !!cpf && rows.some(r => r.id !== form.id && onlyDigits(r.cpf) === cpf); }, [rows, form.cpf, form.id]);
@@ -216,7 +243,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
       };
     });
   };
-  const novo = () => { setSelectedId(''); setForm(initialForm); setOcrResult(null); setLastFichaFile(null); };
+  const novo = () => { setSelectedId(''); setForm(initialForm); setOcrResult(null); setLastFichaFile(null); setLastAsoGuide(null); };
 
   useEffect(() => {
     const funcao = form.funcao || '';
@@ -314,13 +341,82 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     catch (e: any) { toast.error(`Erro ao anexar documento: ${e.message}`); }
   };
 
-  const enviarExame = async () => {
-    if (!form.nome) { toast.error('Informe o nome do funcionario'); return; }
-    const pdf = gerarAutorizacaoExameAdmissionalPdf({ empresa: form.empresa_nome || '', cnpj: form.cnpj || '', nome: form.nome || '', cpf: form.cpf || '', rg: form.rg || '', funcao: form.funcao || '', dataAdmissao: form.data_admissao || '', dataNascimento: form.data_nascimento || '', setorGhe: form.setor_ghe || '', dataExame: new Date().toISOString().slice(0, 10), tipoExame: 'Admissional', obraLocal: form.obra_local || '', trabalhoAltura: false, espacoConfinado: false, toxicologico: false, responsavelContato: form.responsavel_contato || '' });
-    downloadPdf(pdf.blob, pdf.fileName);
-    openEmailClient({ to: ['agendamento@ponteaereaseguranca.com.br'], cc: ['robson@topac.com.br'], subject: `Solicitacao de Agendamento de Exame Admissional - ${form.nome}`, body: buildExameEmailBody(form) });
-    if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_marcar_exame_enviado', { p_id: form.id }); await carregar(); }
-    toast.success('E-mail aberto e guia baixada. Anexe o PDF baixado antes de enviar.');
+  const buildGuiaAsoPdf = () => {
+    if (!form.nome || !form.empresa_nome || !form.cpf || !form.funcao) {
+      toast.error('Informe empresa, nome, CPF e funcao antes de gerar a guia ASO.');
+      return null;
+    }
+    return gerarAutorizacaoExameAdmissionalPdf({
+      empresa: form.empresa_nome || '',
+      cnpj: form.cnpj || '',
+      nome: form.nome || '',
+      cpf: form.cpf || '',
+      rg: form.rg || '',
+      funcao: form.funcao || '',
+      dataAdmissao: form.data_admissao || '',
+      dataNascimento: form.data_nascimento || '',
+      setorGhe: form.setor_ghe || '',
+      dataExame: new Date().toISOString().slice(0, 10),
+      tipoExame: 'Admissional',
+      obraLocal: form.obra_local || '',
+      trabalhoAltura: false,
+      espacoConfinado: false,
+      toxicologico: false,
+      responsavelContato: form.responsavel_contato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385',
+    });
+  };
+
+  const arquivarGuiaAso = async (pdf: { blob: Blob; fileName: string }) => {
+    if (!form.id) return '';
+    const url = await uploadAdmissionBlob(pdf.blob, `guia-aso/${form.id}`, pdf.fileName);
+    await (supabase as any).from('pre_cadastro_documentos').insert({
+      pre_cadastro_id: form.id,
+      tipo_documento: 'guia_aso_audiolife',
+      nome_arquivo: pdf.fileName,
+      arquivo_url: url,
+    });
+    return url;
+  };
+
+  const gerarGuiaAso = async () => {
+    const pdf = buildGuiaAsoPdf();
+    if (!pdf) return null;
+    const url = URL.createObjectURL(pdf.blob);
+    setLastAsoGuide(prev => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return { ...pdf, url };
+    });
+    window.open(url, '_blank', 'noopener,noreferrer');
+    if (form.id) {
+      try {
+        await arquivarGuiaAso(pdf);
+        toast.success('Guia ASO gerada, aberta e arquivada no pre-cadastro.');
+      } catch (e: any) {
+        toast.warning(`Guia aberta, mas nao foi arquivada: ${e.message || 'erro desconhecido'}`);
+      }
+    } else {
+      toast.success('Guia ASO gerada e aberta. Salve o pre-cadastro para arquivar.');
+    }
+    return pdf;
+  };
+
+  const enviarGuiaAso = async () => {
+    const pdf = lastAsoGuide || await gerarGuiaAso();
+    if (!pdf) return;
+    try {
+      await downloadEmailWithAttachment({
+        to: ['agendamento@ponteaereaseguranca.com.br'],
+        cc: ['robson@topac.com.br'],
+        subject: `Solicitacao de exame admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`,
+        body: buildExameEmailBody(form),
+        attachmentBlob: pdf.blob,
+        attachmentName: pdf.fileName,
+      });
+      if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_marcar_exame_enviado', { p_id: form.id }); await carregar(); }
+      toast.success('Guia ASO enviada para agendamento com PDF anexo.');
+    } catch (e: any) {
+      toast.error(`Nao foi possivel enviar a guia com anexo: ${e.message || 'erro desconhecido'}`);
+    }
   };
 
   const uploadASO = async (file?: File | null) => {
@@ -341,7 +437,8 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
         {ocrResult && <div className={`rounded-xl border p-4 space-y-3 ${ocrResult.ok === false ? 'border-warning bg-warning/10' : 'border-primary/30 bg-primary/5'}`}><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-sm flex items-center gap-2">{ocrResult.ok === false && <AlertTriangle className="w-4 h-4 text-warning" />}Conferencia OCR da ficha</div><p className="text-xs text-muted-foreground">Campos com baixa confianca ficam marcados para revisao manual antes da aprovacao oficial.</p></div>{ocrResult.ok !== false && <Badge className="bg-primary/15 text-primary">Standby</Badge>}</div>{ocrResult.error && <div className="text-sm text-warning">{ocrResult.error}</div>}{Object.keys(ocrResult.campos || {}).length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">{Object.entries(ocrResult.campos || {}).map(([key, field]) => { const confidence = Number(field?.confianca || 0); const low = confidence < LOW_CONFIDENCE; return <div key={key} className={`rounded-lg border p-2 ${low ? 'border-warning/50 bg-warning/10' : 'border-border bg-background/60'}`}><div className="flex items-center justify-between gap-2"><span className="text-[11px] uppercase tracking-wide text-muted-foreground">{OCR_FIELD_LABELS[key] || key}</span><Badge variant="outline" className={low ? 'text-warning border-warning/50' : ''}>{Math.round(confidence * 100)}%</Badge></div><div className="mt-1 text-sm font-medium break-words">{String(field?.valor || '-')}</div>{low && <div className="mt-1 text-[11px] text-warning">Revisar antes de salvar.</div>}</div>; })}</div>}{(ocrResult.pendencias || []).length > 0 && <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">{(ocrResult.pendencias || []).map((p, idx) => <div key={`${p}-${idx}`}>- {p}</div>)}</div>}</div>}
         {duplicateCpf && <div className="rounded-lg border border-warning bg-warning/10 p-3 text-sm text-warning">CPF ja existe em outro pre-cadastro. Confira antes de aprovar.</div>}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div><label className="text-xs text-muted-foreground">Empresa contratante</label><select value={form.empresa_id || ''} onChange={e => setCompany(e.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background"><option value="">Selecionar empresa</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div><Field label="Nome" value={form.nome} onChange={v => setForm(p => ({ ...p, nome: v }))} /><Field label="CPF" value={form.cpf} onChange={v => setForm(p => ({ ...p, cpf: v }))} /><Field label="RG" value={form.rg} onChange={v => setForm(p => ({ ...p, rg: v }))} /><DateField label="Data nascimento" value={form.data_nascimento} onChange={v => setForm(p => ({ ...p, data_nascimento: v }))} /><DateField label="Data admissao/inicio" value={form.data_admissao} onChange={v => setForm(p => ({ ...p, data_admissao: v }))} /><div><label className="text-xs text-muted-foreground">Funcao</label><select value={form.funcao || ''} onChange={e => setFuncaoComPadroes(e.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background"><option value="">Selecionar funcao</option>{form.funcao && !roleByName.has(normalizeRole(form.funcao)) && <option value={form.funcao}>{form.funcao}</option>}{roleOptions.map(role => <option key={normalizeRole(role.cargo)} value={role.cargo}>{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}</option>)}</select></div><Field label="Setor/GHE" value={form.setor_ghe} onChange={v => setForm(p => ({ ...p, setor_ghe: v }))} /><Field label="Obra/Local" value={form.obra_local} onChange={v => setForm(p => ({ ...p, obra_local: v }))} /><div><label className="text-xs text-muted-foreground">Salario</label><Input type="number" value={form.salario || ''} onChange={e => setForm(p => ({ ...p, salario: Number(e.target.value) || null }))} /></div><Field label="Tipo admissao" value={form.tipo_admissao} onChange={v => setForm(p => ({ ...p, tipo_admissao: v }))} /><Field label="Jornada" value={form.jornada} onChange={v => setForm(p => ({ ...p, jornada: v }))} /><Field label="Filiacao" value={form.filiacao} onChange={v => setForm(p => ({ ...p, filiacao: v }))} /><Field label="Escolaridade" value={form.escolaridade} onChange={v => setForm(p => ({ ...p, escolaridade: v }))} /><Field label="Responsavel/Contato" value={form.responsavel_contato} onChange={v => setForm(p => ({ ...p, responsavel_contato: v }))} /><div className="md:col-span-3"><Field label="Endereco" value={form.endereco} onChange={v => setForm(p => ({ ...p, endereco: v }))} /></div><div className="md:col-span-3"><Field label="Experiencia" value={form.experiencia} onChange={v => setForm(p => ({ ...p, experiencia: v }))} /></div><Field label="EPI" value={form.epi} onChange={v => setForm(p => ({ ...p, epi: v }))} /><Field label="Beneficios" value={form.beneficios} onChange={v => setForm(p => ({ ...p, beneficios: v }))} /><Field label="Insalubridade" value={form.insalubridade} onChange={v => setForm(p => ({ ...p, insalubridade: v }))} /></div>
-        <div className="flex flex-wrap gap-2"><Button onClick={salvar} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar conferencia'}</Button><Button onClick={enviarExame} variant="outline"><Mail className="w-4 h-4 mr-2" />Enviar solicitacao de exame</Button><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Anexar documentos<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadDocumento('documentacao_admissional', e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Subir ASO<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadASO(e.target.files?.[0])} /></label><Button onClick={enviarContabilidade} variant="outline"><ArrowRight className="w-4 h-4 mr-2" />E-mail contabilidade</Button><Button onClick={aprovarOficial} className="gradient-accent text-accent-foreground"><CheckCircle2 className="w-4 h-4 mr-2" />Aprovar cadastro oficial</Button></div>
+        {lastAsoGuide && <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm flex flex-wrap items-center gap-3"><span className="font-medium">Guia ASO pronta:</span><a href={lastAsoGuide.url} target="_blank" rel="noreferrer" className="text-primary underline">{lastAsoGuide.fileName}</a><Button size="sm" variant="outline" onClick={enviarGuiaAso}><Mail className="w-4 h-4 mr-2" />Enviar guia por e-mail</Button></div>}
+        <div className="flex flex-wrap gap-2"><Button onClick={salvar} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar conferencia'}</Button><Button onClick={gerarGuiaAso} variant="outline"><FileSearch className="w-4 h-4 mr-2" />Gerar Guia ASO</Button><Button onClick={enviarGuiaAso} variant="outline"><Mail className="w-4 h-4 mr-2" />Enviar guia ASO</Button><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Anexar documentos<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadDocumento('documentacao_admissional', e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Subir ASO<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadASO(e.target.files?.[0])} /></label><Button onClick={enviarContabilidade} variant="outline"><ArrowRight className="w-4 h-4 mr-2" />E-mail contabilidade</Button><Button onClick={aprovarOficial} className="gradient-accent text-accent-foreground"><CheckCircle2 className="w-4 h-4 mr-2" />Aprovar cadastro oficial</Button></div>
       </div>
     </div>
   </div>;

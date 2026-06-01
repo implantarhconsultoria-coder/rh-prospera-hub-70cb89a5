@@ -35,7 +35,12 @@ export interface AvisoFeriasData {
   diasFerias: number;
 }
 
-const fmtBR = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('pt-BR') : '-');
+const fmtBR = (iso?: string) => {
+  if (!iso) return '-';
+  const match = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return new Date(iso).toLocaleDateString('pt-BR');
+};
 
 const cleanFilePart = (value?: string) => cleanText(value || 'SEM_INFORMACAO')
   .normalize('NFD')
@@ -161,49 +166,90 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
 
 export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  drawHeader(doc, d.empresa, d.cnpj || '', 'AUTORIZACAO DE EXAMES / AUDIOLIFE');
-  let y = 35;
-  y = drawBlock(doc, y, 'Dados da Empresa', [
-    ['Empresa', d.empresa],
-    ['CNPJ', d.cnpj || '---'],
-    ['Obra/Local', d.obraLocal || '---'],
-    ['Responsavel/Contato', d.responsavelContato || '---'],
-  ]);
-  y = drawBlock(doc, y, 'Dados do Colaborador', [
-    ['Funcionario', d.nome],
-    ['CPF', d.cpf],
-    ['RG', d.rg || '---'],
-    ['Nascimento', fmtBR(d.dataNascimento)],
-    ['Funcao', d.funcao],
-    ['Setor/GHE', d.setorGhe || '---'],
-    ['Data Admissao', fmtBR(d.dataAdmissao)],
-    ['Tipo de Exame', 'ADMISSIONAL'],
-  ]);
-  y = drawBlock(doc, y, 'Exames / Riscos', [
-    ['NR35', d.trabalhoAltura ? 'Sim' : 'Nao'],
-    ['NR33', d.espacoConfinado ? 'Sim' : 'Nao'],
-    ['Toxicologico', d.toxicologico ? 'Sim' : 'Nao'],
-    ['Data do Exame', fmtBR(d.dataExame)],
-  ]);
 
-  doc.setDrawColor(180);
-  doc.roundedRect(15, y, 180, 34, 1.5, 1.5);
+  const field = (label: string, value?: string) => `${label}: ${cleanText(value) || '---'}`;
+  const check = (checked: boolean) => checked ? '( X ) SIM   (   ) NAO' : '(   ) SIM   ( X ) NAO';
+  const today = new Date().toISOString().slice(0, 10);
+  const dataExame = d.dataExame || today;
+  const tipoExame = cleanText(d.tipoExame || 'Admissional').toUpperCase();
+  const responsavel = cleanText(d.responsavelContato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385');
+
+  doc.setTextColor(0, 0, 0);
+  doc.setDrawColor(0, 0, 0);
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('AUTORIZACAO DE EXAMES', 105, 13, { align: 'center' });
+
   doc.setFontSize(9);
-  doc.setTextColor(85);
-  doc.text('AGENDAMENTO', 18, y + 6);
-  doc.setTextColor(0);
+  doc.rect(12, 18, 186, 43);
+  doc.text('LOCAL DE ATENDIMENTO:', 15, 24);
   doc.setFont('helvetica', 'normal');
+  doc.text('AVENIDA SAO JOAO, 313, 1o ANDAR', 15, 30);
+  doc.text('OBS: PROXIMO AO LARGO PAISSANDU E METRO SAO BENTO', 15, 36);
+  doc.text('CENTRO - SAO PAULO.', 15, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.text('HORARIO DE ATENDIMENTO:', 15, 49);
+  doc.setFont('helvetica', 'normal');
+  doc.text('DE SEGUNDA A SEXTA DAS 07h30 AS 15:00. PARA RAIO-X ATE AS 12:00. POR ORDEM DE CHEGADA.', 15, 55);
+
+  let y = 69;
   doc.setFontSize(10);
-  const texto = [
-    'E-mail para agendamento: agendamento@ponteaereaseguranca.com.br',
-    'Solicitamos o agendamento do exame admissional conforme dados acima.',
-    'Esta guia deve acompanhar a solicitacao e permanecer arquivada no historico admissional.',
-  ].join('\n');
-  doc.text(doc.splitTextToSize(texto, 174), 18, y + 13);
-  y += 42;
-  drawSignatures(doc, y + 32);
-  const fileName = makeDocumentFileName('ASO_ADMISSIONAL', d.empresa, d.nome, d.dataExame || new Date().toISOString().slice(0, 10));
+  const drawLine = (text: string) => {
+    doc.setFont('helvetica', 'normal');
+    doc.text(doc.splitTextToSize(text, 180), 15, y);
+    y += 8;
+  };
+
+  drawLine(field('NOME DA EMPRESA', d.empresa));
+  drawLine(field('CNPJ', d.cnpj || ''));
+  drawLine(field('DATA DO EXAME', fmtBR(dataExame)));
+  drawLine(field('OBRA / LOCAL', d.obraLocal || ''));
+  drawLine(field('FUNCIONARIO', d.nome));
+  drawLine(field('SETOR / GHE', d.setorGhe || ''));
+  drawLine(field('FUNCAO', d.funcao));
+  drawLine(field('DATA DE NASCIMENTO', fmtBR(d.dataNascimento)));
+  drawLine(field('CPF', d.cpf));
+  drawLine(field('DATA DE ADMISSAO', fmtBR(d.dataAdmissao)));
+
+  y += 2;
+  doc.setFont('helvetica', 'bold');
+  doc.text('DESCREVER ABAIXO O TIPO DE EXAME', 15, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.text('(ADMISSIONAL / PERIODICO / DEMISSIONAL / MUDANCA DE FUNCAO / RETORNO AO TRABALHO / AVALIACAO MEDICA / OUTROS)', 15, y);
+  y += 8;
+  doc.setFont('helvetica', 'bold');
+  doc.text(`EXAME ${tipoExame}`, 15, y);
+
+  y += 14;
+  doc.setFont('helvetica', 'bold');
+  doc.text('ASSINALAR "SIM" CASO SE APLIQUE AOS ITENS ABAIXO:', 15, y);
+  y += 9;
+  doc.setFont('helvetica', 'normal');
+  doc.text(`REALIZARA EXAMES P/ TRABALHO EM ALTURA - NR35   ${check(Boolean(d.trabalhoAltura))}`, 15, y);
+  y += 8;
+  doc.text(`REALIZARA EXAMES P/ TRABALHO EM ESPACO CONFINADO - NR33   ${check(Boolean(d.espacoConfinado))}`, 15, y);
+  y += 8;
+  doc.text(`REALIZARA EXAME TOXICOLOGICO   ${check(Boolean(d.toxicologico))}`, 15, y);
+
+  y += 13;
+  doc.setFont('helvetica', 'bold');
+  doc.text('CENTRAL DE AGENDAMENTO:', 15, y);
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  doc.text('E-mail: agendamento@ponteaereaseguranca.com.br', 15, y);
+  y += 6;
+  doc.text('(11) 95301-3663 (Duvidas e informacoes) / (11) 3333-1717', 15, y);
+  y += 10;
+  doc.text('Mediante agendamento previo no telefone e/ou e-mail acima indicado.', 15, y);
+  y += 6;
+  doc.text('E obrigatorio que o funcionario compareca munido de documento de identidade e CPF.', 15, y);
+  y += 11;
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Nome do Responsavel / Contato (OBRIGATORIO): ${responsavel}`, 15, y);
+
+  drawSignatures(doc, 282);
+  const fileName = `GUIA ASO AUDIOLIFE - ${cleanFilePart(d.nome).replace(/_/g, ' ')} - ${dataExame}.pdf`;
   return { blob: doc.output('blob'), fileName };
 };
 
