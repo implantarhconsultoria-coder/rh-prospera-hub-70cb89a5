@@ -24,11 +24,10 @@ type EmailPdfModalProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-const parseEmails = (value: string) =>
-  value
-    .split(/[;,]/)
-    .map((email) => email.trim())
-    .filter(Boolean);
+const parseEmails = (value: string) => {
+  const matches = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+  return Array.from(new Set(matches.map((email) => email.trim().toLowerCase())));
+};
 
 const formatEmails = (value?: string[]) => (value || []).join('; ');
 

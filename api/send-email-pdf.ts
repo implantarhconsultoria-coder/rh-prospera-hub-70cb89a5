@@ -19,10 +19,11 @@ const parseBody = (req: any) => {
   }
 };
 
-const cleanList = (value: unknown) =>
-  Array.isArray(value)
-    ? value.map((item) => String(item || '').trim()).filter((item) => item.includes('@'))
-    : [];
+const cleanList = (value: unknown) => {
+  const raw = Array.isArray(value) ? value.join(' ') : String(value || '');
+  const matches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+  return Array.from(new Set(matches.map((email) => email.trim().toLowerCase())));
+};
 
 const PDF_CONTENT_TYPE = 'application/pdf';
 const EMAIL_TIMEOUT_MS = 30000;
