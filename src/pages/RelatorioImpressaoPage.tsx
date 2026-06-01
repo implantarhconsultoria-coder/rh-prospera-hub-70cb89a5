@@ -6,6 +6,8 @@ import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/l
 import { getWorkingDays } from '@/lib/workingDays';
 import type { Employee, MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
+import { saveElementAsPdf } from '@/lib/savePdf';
+import { toast } from 'sonner';
 
 const money = (value: unknown) => formatCurrency(Number(value) || 0);
 const hours = (value: unknown) =>
@@ -104,6 +106,20 @@ const RelatorioImpressaoPage: React.FC = () => {
     return `${meses[Number(m) - 1] || competencia} / ${y || ''}`;
   })();
 
+  const handleSalvarPdf = async () => {
+    try {
+      await saveElementAsPdf({
+        element: document.getElementById('fech-print-area'),
+        fileName: `relatorio_fechamento_${company?.name || 'empresa'}_${competencia}.pdf`,
+        orientation: 'landscape',
+        margin: 6,
+      });
+      toast.success('PDF salvo com sucesso.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');
+    }
+  };
+
   if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-foreground">
@@ -138,6 +154,10 @@ const RelatorioImpressaoPage: React.FC = () => {
           <button onClick={() => window.print()}
             className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
             Imprimir / PDF
+          </button>
+          <button onClick={handleSalvarPdf}
+            className="px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors">
+            Salvar PDF
           </button>
         </div>
 

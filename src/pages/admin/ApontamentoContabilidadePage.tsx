@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Save, Printer, FileText, Loader2, RefreshCw, Send } from 'lucide-react';
+import { ClipboardList, Save, Printer, FileText, Loader2, RefreshCw, Send, Download } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,6 +8,7 @@ import { registrarAcao } from '@/lib/acoesLog';
 import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
 import { downloadEmailWithAttachment } from '@/lib/emailUtils';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
+import { downloadPdfBlob } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -871,6 +872,26 @@ const ApontamentoContabilidadePage: React.FC = () => {
     return data.publicUrl;
   };
 
+  const salvarPdfDireto = async () => {
+    if (!company || items.length === 0) {
+      toast.error('Selecione uma empresa com apontamento calculado antes de salvar o PDF.');
+      return;
+    }
+    try {
+      const blob = gerarPdfBlob();
+      const safeCompany = company.name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      downloadPdfBlob(blob, `apontamento_contabilidade_${safeCompany}_${competencia}.pdf`);
+      await salvarPdfApontamento(blob);
+      toast.success('PDF salvo e arquivado na plataforma.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');
+    }
+  };
+
   type GrupoApontamento = { company: any; apontamentoId?: string; items: ItemRow[] };
 
   const gerarPdfBlobLote = (grupos: GrupoApontamento[]) => {
@@ -1173,6 +1194,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
         </button>
         <button onClick={imprimir} className="btn-secondary inline-flex items-center gap-2"><Printer className="w-4 h-4" /> Imprimir / PDF</button>
+        <button onClick={salvarPdfDireto} disabled={!company || items.length === 0}
+          className="btn-secondary inline-flex items-center gap-2">
+          <Download className="w-4 h-4" /> Salvar PDF
+        </button>
         <button onClick={exportarExcel} className="btn-secondary inline-flex items-center gap-2"><FileText className="w-4 h-4" /> Exportar CSV</button>
         <button onClick={enviarParaContabilidade} disabled={!company || items.length === 0}
           className="btn-primary inline-flex items-center gap-2">

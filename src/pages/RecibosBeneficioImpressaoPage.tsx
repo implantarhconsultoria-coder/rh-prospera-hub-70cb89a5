@@ -9,6 +9,7 @@ import { buildVRReportRows, buildVTReportRows, type BenefitReportRow } from '@/l
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { downloadEmailWithAttachment } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
+import { downloadPdfBlob } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 type Formato = 'vr' | 'vt' | 'ambos';
@@ -67,6 +68,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, dataLoading, loading, session } = useApp();
   const [searchParams] = useSearchParams();
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [savingPdf, setSavingPdf] = useState(false);
   const formato = (searchParams.get('formato') || searchParams.get('tipo') || 'vr') as Formato;
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
@@ -252,7 +254,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   };
   const getNomeUsuarioAtual = async () => session?.user?.email || 'Sistema TOPAC RH';
 
-  const arquivarRecibosNoHistorico = async (items: ReciboItem[], origem: 'impressao' | 'email') => {
+  const arquivarRecibosNoHistorico = async (items: ReciboItem[], origem: 'impressao' | 'email' | 'download') => {
     if (!session?.user) return;
     const nomeUsuario = await getNomeUsuarioAtual();
     for (const item of items) {
@@ -283,6 +285,23 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     window.print();
   };
 
+  const handleSalvarPdf = async () => {
+    setSavingPdf(true);
+    try {
+      const pdfBlob = gerarPdfRecibosBlob(recibos);
+      const fileName = `${sanitizeFileName(`recibos_${formatoLabel}_${competencia}`)}.pdf`;
+      downloadPdfBlob(pdfBlob, fileName);
+      await arquivarRecibosNoHistorico(recibos, 'download').catch((error) => {
+        console.error('Erro ao arquivar recibos no historico:', error);
+        toast.warning('PDF salvo, mas alguns recibos nao foram salvos no historico.');
+      });
+      toast.success('PDF salvo com sucesso.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');
+    } finally {
+      setSavingPdf(false);
+    }
+  };
   const handleEnviarEmail = async () => {
     if (!podeEnviarEmail) {
       toast.info('Envio por e-mail disponivel apenas para Praia Grande e Goiania. As demais empresas ficam somente para impressao.');
@@ -385,6 +404,13 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
         <div className="no-print flex flex-wrap items-center gap-3 px-8 py-3 bg-gray-100 border-b sticky top-0 z-10">
           <button onClick={() => window.history.back()} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">← Voltar</button>
           <button onClick={handleImprimirPdf} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">🖨 Imprimir / PDF</button>
+          <button
+            onClick={handleSalvarPdf}
+            disabled={savingPdf}
+            className="px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {savingPdf ? 'Salvando...' : 'Salvar PDF'}
+          </button>
           <button
             onClick={handleEnviarEmail}
             disabled={!podeEnviarEmail || sendingEmail}

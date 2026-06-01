@@ -7,6 +7,8 @@ import { formatCurrency } from '@/lib/calculations';
 import { buildVTReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useFeriados } from '@/hooks/useFeriados';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import { saveElementAsPdf } from '@/lib/savePdf';
+import { toast } from 'sonner';
 
 const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const competenciaLabel = (competencia: string) => {
@@ -136,6 +138,18 @@ const RelatorioVTImpressaoPage: React.FC = () => {
 
   const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
 
+  const handleSalvarPdf = async () => {
+    try {
+      await saveElementAsPdf({
+        element: document.getElementById('vt-print-area'),
+        fileName: `relatorio_vt_${competencia}.pdf`,
+      });
+      toast.success('PDF salvo com sucesso.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');
+    }
+  };
+
   if (loading || dataLoading || (isAuthenticated && companies.length === 0)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-foreground">
@@ -172,6 +186,10 @@ const RelatorioVTImpressaoPage: React.FC = () => {
           <button onClick={() => window.print()}
             className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
             🖨 Imprimir / PDF
+          </button>
+          <button onClick={handleSalvarPdf}
+            className="px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors">
+            Salvar PDF
           </button>
           {consolidado && (
             <span className="text-xs text-gray-700 ml-2">

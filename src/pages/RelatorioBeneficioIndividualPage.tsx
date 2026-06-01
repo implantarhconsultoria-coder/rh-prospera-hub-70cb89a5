@@ -5,6 +5,8 @@ import { useApp } from '@/context/AppContext';
 import { getFirstBusinessDayOfNextMonth, getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildIndividualBenefitData } from '@/lib/benefitReports';
+import { saveElementAsPdf } from '@/lib/savePdf';
+import { toast } from 'sonner';
 
 const RelatorioBeneficioIndividualPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
@@ -38,6 +40,18 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
 
   // VT calculation
   const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: 'vt' }), [emp, entry, diasUteis]);
+
+  const handleSalvarPdf = async () => {
+    try {
+      await saveElementAsPdf({
+        element: document.getElementById('benefit-individual-print'),
+        fileName: `ficha_beneficios_${emp?.name || 'funcionario'}_${competencia}.pdf`,
+      });
+      toast.success('PDF salvo com sucesso.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');
+    }
+  };
 
   if (loading || dataLoading || (isAuthenticated && (companies.length === 0 || employees.length === 0))) {
     return (
@@ -93,6 +107,10 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
           <button onClick={() => window.print()}
             className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
             🖨 Imprimir / PDF
+          </button>
+          <button onClick={handleSalvarPdf}
+            className="px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors">
+            Salvar PDF
           </button>
         </div>
 

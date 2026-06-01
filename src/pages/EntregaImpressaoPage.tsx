@@ -5,6 +5,8 @@ import { RESPONSIBILITY_TEXT, type Delivery } from '@/data/deliveries';
 import type { Company, Employee } from '@/types/database';
 import { formatDate } from '@/lib/calculations';
 import { registrarDocumento } from '@/lib/documentoHistorico';
+import { saveElementAsPdf } from '@/lib/savePdf';
+import { toast } from 'sonner';
 
 type DeliveryPreview = Pick<Delivery, 'type' | 'date' | 'items'> & { responsavel?: string };
 
@@ -97,6 +99,18 @@ const EntregaImpressaoPage: React.FC = () => {
   const title = isEpi ? 'FICHA DE ENTREGA DE EPI' : 'FICHA DE ENTREGA DE UNIFORMES';
   const setor = emp.categoria === 'operacional' ? 'Operacional' : 'Sócio';
 
+  const handleSalvarPdf = async () => {
+    try {
+      await saveElementAsPdf({
+        element: document.getElementById('entrega-print'),
+        fileName: `${isEpi ? 'ficha_epi' : 'ficha_uniforme'}_${emp.name}_${delivery.date}.pdf`,
+      });
+      toast.success('PDF salvo com sucesso.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');
+    }
+  };
+
   return (
     <div className="bg-white text-black min-h-screen print:bg-white" style={{ fontFamily: "'Segoe UI', Arial, sans-serif" }}>
       <style>{`
@@ -125,6 +139,10 @@ const EntregaImpressaoPage: React.FC = () => {
         <button onClick={() => window.print()}
           className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
           🖨 Imprimir / PDF
+        </button>
+        <button onClick={handleSalvarPdf}
+          className="px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors">
+          Salvar PDF
         </button>
       </div>
       <div id="entrega-print" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
