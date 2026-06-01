@@ -29,6 +29,18 @@ const missingColumnFromError = (error: any): string | null => {
   return match?.[1] || null;
 };
 
+const FILIAL_ROLE_TO_COMPANY_CODE: Record<string, string> = {
+  filial_matriz: 'topac-matriz',
+  filial_praia: 'topac-pg',
+  filial_goiania: 'topac-gyn',
+};
+
+const getFilialCompanyIds = (companies: Company[], role: string | null) => {
+  const code = role ? FILIAL_ROLE_TO_COMPANY_CODE[role] : null;
+  if (!code) return null;
+  return new Set(companies.filter((company) => company.codigo === code).map((company) => company.id));
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,6 +105,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    if (roleLoading) return;
+
     setDataLoading(true);
     try {
       const [companiesRes, employeesRes, fechamentosRes] = await Promise.all([
@@ -105,9 +119,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (employeesRes.error) console.error('Erro ao carregar funcionarios:', employeesRes.error);
       if (fechamentosRes.error && !isMissingSchema(fechamentosRes.error)) console.error('Erro ao carregar fechamentos:', fechamentosRes.error);
 
-      setCompanies((companiesRes.data || []).map(mapCompany));
-      setEmployees((employeesRes.data || []).map(mapEmployee));
-      setFechamentos(fechamentosRes.error ? [] : ((fechamentosRes.data || []).map(mapFechamento)));
+      const mappedCompanies = (companiesRes.data || []).map(mapCompany);
+      const filialCompanyIds = getFilialCompanyIds(mappedCompanies, userRole);
+      const visibleCompanies = filialCompanyIds
+        ? mappedCompanies.filter((company) => filialCompanyIds.has(company.id))
+        : mappedCompanies;
+      const mappedEmployees = (employeesRes.data || []).map(mapEmployee);
+      const visibleEmployees = filialCompanyIds
+        ? mappedEmployees.filter((employee) => filialCompanyIds.has(employee.companyId))
+        : mappedEmployees;
+      const mappedFechamentos = fechamentosRes.error ? [] : ((fechamentosRes.data || []).map(mapFechamento));
+      const visibleFechamentos = filialCompanyIds
+        ? mappedFechamentos.filter((fechamento) => filialCompanyIds.has(fechamento.companyId))
+        : mappedFechamentos;
+
+      setCompanies(visibleCompanies);
+      setEmployees(visibleEmployees);
+      setFechamentos(visibleFechamentos);
 
       const entriesRes = await supabase
         .from('lancamentos_mensais')
@@ -121,18 +149,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.error('Erro ao carregar lancamentos mensais:', entriesRes.error);
         }
       } else {
-        setEntries((entriesRes.data || []).map(mapEntry));
+        const mappedEntries = (entriesRes.data || []).map(mapEntry);
+        setEntries(filialCompanyIds ? mappedEntries.filter((entry) => filialCompanyIds.has(entry.companyId)) : mappedEntries);
       }
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
       setDataLoading(false);
     }
-  }, [session]);
+  }, [session, roleLoading, userRole]);
 
   useEffect(() => {
-    if (session) fetchData();
-  }, [session, fetchData]);
+    if (session && !roleLoading) fetchData();
+  }, [session, roleLoading, fetchData]);
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
@@ -347,8 +376,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .select('*')
       .is('apagado_em', null);
     if (error) { console.error('refreshEntries falhou:', error); return; }
-    if (data) setEntries(data.map(mapEntry));
-  }, []);
+    if (data) {
+      const filialCompanyIds = getFilialCompanyIds(companies, userRole);
+      const mappedEntries = data.map(mapEntry);
+      setEntries(filialCompanyIds ? mappedEntries.filter((entry) => filialCompanyIds.has(entry.companyId)) : mappedEntries);
+    }
+  }, [companies, userRole]);
 
   const getFechamento = useCallback((companyId: string, competencia: string): Fechamento => {
     const f = fechamentos.find(f => f.companyId === companyId && f.competencia === competencia);

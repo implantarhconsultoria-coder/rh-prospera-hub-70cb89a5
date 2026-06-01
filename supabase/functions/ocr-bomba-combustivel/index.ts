@@ -21,6 +21,9 @@ Regras:
 - valor = total abastecido em reais, sem simbolo.
 - litros = quantidade abastecida.
 - valor_por_litro = preco unitario da bomba.
+- Procure principalmente campos como TOTAL, VALOR A PAGAR, LITROS, VOLUME, PRECO/LITRO, R$/L.
+- Nao confunda CNPJ, data, hora, numero da bomba ou codigo do bico com valor/litros/KM.
+- Pode devolver numeros em formato brasileiro; o sistema normaliza depois.
 - Se nao conseguir ler um campo, devolva 0 ou "".
 - Nao invente. Apenas JSON puro.`;
 
@@ -32,8 +35,45 @@ Devolva SOMENTE um JSON valido, sem markdown, neste formato:
 }
 Regras:
 - km = quilometragem atual do hodometro, sem pontos de milhar.
+- Leia apenas odometro/quilometragem. Nao use temperatura, velocidade, hora ou autonomia.
 - Se nao conseguir ler, devolva 0.
 - Nao invente. Apenas JSON puro.`;
+
+function parseBrNumber(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  let raw = String(value ?? "").trim();
+  if (!raw) return 0;
+  raw = raw.replace(/[^\d.,-]/g, "");
+  if (!raw) return 0;
+
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+  let normalized = raw;
+
+  if (lastComma > lastDot) {
+    normalized = raw.replace(/\./g, "").replace(",", ".");
+  } else if (lastDot > lastComma) {
+    const decimalLen = raw.length - lastDot - 1;
+    normalized = decimalLen === 3 && !raw.includes(",") ? raw.replace(/\./g, "") : raw.replace(/,/g, "");
+  } else {
+    normalized = raw.replace(",", ".");
+  }
+
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseKm(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? Math.round(value) : 0;
+  const digits = String(value ?? "").replace(/\D/g, "");
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function round(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Number.isFinite(value) ? Math.round(value * factor) / factor : 0;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -101,16 +141,24 @@ Deno.serve(async (req: Request) => {
     if (isPanel) {
       return new Response(JSON.stringify({
         ok: true,
-        km: Number(parsed.km ?? parsed.km_atual) || 0,
+        km: parseKm(parsed.km ?? parsed.km_atual ?? parsed.odometro ?? parsed.hodometro),
         confianca: Number(parsed.confianca) || 0,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const valor = parseBrNumber(parsed.valor ?? parsed.valor_total ?? parsed.total ?? parsed.total_pagar);
+    const litros = parseBrNumber(parsed.litros ?? parsed.quantidade_litros ?? parsed.volume);
+    let valorPorLitro = parseBrNumber(parsed.valor_por_litro ?? parsed.preco_litro ?? parsed.preco_por_litro ?? parsed.unitario);
+    let valorFinal = valor;
+
+    if (!valorPorLitro && valorFinal > 0 && litros > 0) valorPorLitro = round(valorFinal / litros, 3);
+    if (!valorFinal && litros > 0 && valorPorLitro > 0) valorFinal = round(litros * valorPorLitro, 2);
+
     return new Response(JSON.stringify({
       ok: true,
-      valor: Number(parsed.valor) || 0,
-      litros: Number(parsed.litros) || 0,
-      valor_por_litro: Number(parsed.valor_por_litro) || 0,
+      valor: valorFinal,
+      litros,
+      valor_por_litro: valorPorLitro,
       combustivel: String(parsed.combustivel || ""),
       confianca: Number(parsed.confianca) || 0,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

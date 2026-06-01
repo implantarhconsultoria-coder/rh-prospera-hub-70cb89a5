@@ -218,6 +218,23 @@ export default function CombustivelQRAdminPage() {
     a.click();
   };
 
+  const imprimirRelatorio = () => {
+    if (!relatorio.length) return;
+    const w = window.open("", "_blank", "width=1280,height=900");
+    if (!w) return;
+    w.document.write(buildFuelReportPrintHtml({
+      competencia: comp,
+      filtroEmpresa: fEmp,
+      filtroPosto: fPosto === "todos" ? "Todos" : postos.find((p) => p.id === fPosto)?.nome || "Todos",
+      totais,
+      porEmpresa,
+      relatorio,
+    }));
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 250);
+  };
+
   const salvarAbast = async () => {
     if (!editAbast) return;
     const { error } = await supabase.from("abastecimentos" as any).update({
@@ -289,7 +306,7 @@ export default function CombustivelQRAdminPage() {
 
         <TabsContent value="empresas"><Card><CardHeader><CardTitle>Custo por Empresa - {comp}</CardTitle></CardHeader><CardContent>{porEmpresa.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">Sem dados no periodo.</p> : <Table><TableHeader><TableRow><TableHead>Empresa</TableHead><TableHead className="text-right">Mecanicos</TableHead><TableHead className="text-right">Veiculos</TableHead><TableHead className="text-right">Abast.</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{porEmpresa.map((e) => <TableRow key={e.empresa}><TableCell className="font-medium">{e.empresa}</TableCell><TableCell className="text-right">{e.mecanicos}</TableCell><TableCell className="text-right">{e.veiculos}</TableCell><TableCell className="text-right">{e.qtd}</TableCell><TableCell className="text-right">{e.litros.toFixed(2)}</TableCell><TableCell className="text-right font-semibold">R$ {e.valor.toFixed(2)}</TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card></TabsContent>
 
-        <TabsContent value="rel"><Card><CardHeader><CardTitle className="flex items-center justify-between flex-wrap gap-2"><span>Relatorio Mensal - {comp}</span><div className="flex gap-2"><Button variant="outline" size="sm" onClick={exportarCsv} disabled={!relatorio.length}><FileSpreadsheet className="w-4 h-4 mr-1" /> CSV</Button><Button variant="outline" size="sm" onClick={() => window.print()} disabled={!relatorio.length}><Printer className="w-4 h-4 mr-1" /> Imprimir</Button></div></CardTitle></CardHeader><CardContent><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"><Card className="p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{totais.qtd}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Litros totais</div><div className="text-xl font-bold">{totais.litros.toFixed(2)}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Valor total</div><div className="text-xl font-bold">R$ {totais.valor.toFixed(2)}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Media R$/L</div><div className="text-xl font-bold">{totais.media.toFixed(3)}</div></Card></div>{relatorio.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">Sem dados no periodo.</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Empresa</TableHead><TableHead>Mecanico</TableHead><TableHead>Placa</TableHead><TableHead className="text-right">Qtd</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">R$/L</TableHead><TableHead className="text-right">KM ini</TableHead><TableHead className="text-right">KM fim</TableHead><TableHead className="text-right">Rodado</TableHead><TableHead className="text-right">R$/KM</TableHead><TableHead>Postos</TableHead></TableRow></TableHeader><TableBody>{relatorio.map((l, i) => <TableRow key={i}><TableCell className="text-xs">{l.empresa}</TableCell><TableCell className="text-sm">{l.mecanico}</TableCell><TableCell className="text-xs">{l.placa}</TableCell><TableCell className="text-right text-xs">{l.qtd}</TableCell><TableCell className="text-right text-xs">{l.litros.toFixed(2)}</TableCell><TableCell className="text-right text-xs font-semibold">R$ {l.valor.toFixed(2)}</TableCell><TableCell className="text-right text-xs">{l.media_litro.toFixed(3)}</TableCell><TableCell className="text-right text-xs">{l.km_inicial ?? "-"}</TableCell><TableCell className="text-right text-xs">{l.km_final ?? "-"}</TableCell><TableCell className="text-right text-xs">{l.km_rodado || "-"}</TableCell><TableCell className="text-right text-xs">{l.custo_km > 0 ? l.custo_km.toFixed(3) : "-"}</TableCell><TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{l.postos}</TableCell></TableRow>)}</TableBody></Table></div>}</CardContent></Card></TabsContent>
+        <TabsContent value="rel"><Card><CardHeader><CardTitle className="flex items-center justify-between flex-wrap gap-2"><span>Relatorio Mensal - {comp}</span><div className="flex gap-2"><Button variant="outline" size="sm" onClick={exportarCsv} disabled={!relatorio.length}><FileSpreadsheet className="w-4 h-4 mr-1" /> CSV</Button><Button variant="outline" size="sm" onClick={imprimirRelatorio} disabled={!relatorio.length}><Printer className="w-4 h-4 mr-1" /> Imprimir</Button></div></CardTitle></CardHeader><CardContent><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"><Card className="p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{totais.qtd}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Litros totais</div><div className="text-xl font-bold">{totais.litros.toFixed(2)}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Valor total</div><div className="text-xl font-bold">R$ {totais.valor.toFixed(2)}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Media R$/L</div><div className="text-xl font-bold">{totais.media.toFixed(3)}</div></Card></div>{relatorio.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">Sem dados no periodo.</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Empresa</TableHead><TableHead>Mecanico</TableHead><TableHead>Placa</TableHead><TableHead className="text-right">Qtd</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">R$/L</TableHead><TableHead className="text-right">KM ini</TableHead><TableHead className="text-right">KM fim</TableHead><TableHead className="text-right">Rodado</TableHead><TableHead className="text-right">R$/KM</TableHead><TableHead>Postos</TableHead></TableRow></TableHeader><TableBody>{relatorio.map((l, i) => <TableRow key={i}><TableCell className="text-xs">{l.empresa}</TableCell><TableCell className="text-sm">{l.mecanico}</TableCell><TableCell className="text-xs">{l.placa}</TableCell><TableCell className="text-right text-xs">{l.qtd}</TableCell><TableCell className="text-right text-xs">{l.litros.toFixed(2)}</TableCell><TableCell className="text-right text-xs font-semibold">R$ {l.valor.toFixed(2)}</TableCell><TableCell className="text-right text-xs">{l.media_litro.toFixed(3)}</TableCell><TableCell className="text-right text-xs">{l.km_inicial ?? "-"}</TableCell><TableCell className="text-right text-xs">{l.km_final ?? "-"}</TableCell><TableCell className="text-right text-xs">{l.km_rodado || "-"}</TableCell><TableCell className="text-right text-xs">{l.custo_km > 0 ? l.custo_km.toFixed(3) : "-"}</TableCell><TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{l.postos}</TableCell></TableRow>)}</TableBody></Table></div>}</CardContent></Card></TabsContent>
 
         <TabsContent value="cfg"><Card><CardHeader><CardTitle>Configuracoes</CardTitle></CardHeader><CardContent className="space-y-4 text-sm text-muted-foreground"><div><strong className="text-foreground">QR Code</strong>: cada QR abre o login do App Mecanico e preserva o posto/unidade lido. Matriz e Praia usam posto fixo; Goiania abre a selecao dos dois postos.</div><div><strong className="text-foreground">Empresas reconhecidas</strong>:<ul className="list-disc pl-6 mt-1">{EMPRESAS_PADRAO.map((e) => <li key={e}>{e}</li>)}</ul></div><div><strong className="text-foreground">Recibo</strong>: o app salva fotos, KM, litros, valor, posto, CNPJ, endereco e telefone para compartilhamento.</div></CardContent></Card></TabsContent>
       </Tabs>
@@ -307,6 +324,93 @@ function qrPrintHtml(itens: { p: Posto; url: string }[], folha: boolean) {
   return `<html><head><title>QR Codes Abastecimento</title><style>body{font-family:Arial,sans-serif;margin:18px;color:#111}h1{font-size:18px;margin:0 0 14px}.grid{display:grid;grid-template-columns:${folha ? "repeat(2,1fr)" : "1fr"};gap:12px}.card{border:1px solid #222;padding:10px;min-height:${folha ? "285px" : "auto"};break-inside:avoid;text-align:center}.single{max-width:420px;margin:auto}img{width:${folha ? "155px" : "340px"};height:${folha ? "155px" : "340px"}}.name{font-weight:bold;font-size:13px;margin-bottom:3px}.meta{font-size:10px;color:#333;line-height:1.3}.code{font-family:monospace;font-size:11px;margin-top:5px}@media print{.card{break-inside:avoid}}</style></head><body><h1>TOPAC RH PRO - QR Codes de Abastecimento</h1><div class="grid">${itens.map(({ p, url }) => `<div class="card ${folha ? "" : "single"}"><div class="name">${escapeHtml(p.nome)}</div><div class="meta">${escapeHtml(p.unidade || "")}</div>${p.cnpj ? `<div class="meta">CNPJ: ${escapeHtml(p.cnpj)}</div>` : ""}${p.endereco ? `<div class="meta">${escapeHtml(p.endereco)}</div>` : ""}${p.telefone ? `<div class="meta">Tel: ${escapeHtml(p.telefone)}</div>` : ""}<img src="${url}" /><div class="code">${escapeHtml(p.codigo)}</div><div class="meta">QR unico. Abre login do App Mecanico e registra o abastecimento.</div></div>`).join("")}</div></body></html>`;
 }
 
+function buildFuelReportPrintHtml(input: {
+  competencia: string;
+  filtroEmpresa: string;
+  filtroPosto: string;
+  totais: { qtd: number; litros: number; valor: number; media: number };
+  porEmpresa: Array<{ empresa: string; qtd: number; litros: number; valor: number; mecanicos: number; veiculos: number }>;
+  relatorio: any[];
+}) {
+  const titulo = `TOPAC RH PRO - RELATORIO DE ABASTECIMENTO - REF. ${formatCompetencia(input.competencia)}`;
+  const rows = input.relatorio.map((l) => `<tr>
+    <td>${escapeHtml(l.empresa)}</td>
+    <td>${escapeHtml(l.mecanico)}</td>
+    <td>${escapeHtml(l.placa)}</td>
+    <td class="num">${l.qtd || 0}</td>
+    <td class="num">${formatLitros(l.litros)}</td>
+    <td class="num">${formatMoney(l.valor)}</td>
+    <td class="num">${formatDecimalPrint(l.media_litro, 3)}</td>
+    <td class="num">${l.km_inicial ?? "-"}</td>
+    <td class="num">${l.km_final ?? "-"}</td>
+    <td class="num">${l.km_rodado || "-"}</td>
+    <td class="num">${l.custo_km > 0 ? formatDecimalPrint(l.custo_km, 3) : "-"}</td>
+    <td>${escapeHtml(l.postos || "-")}</td>
+  </tr>`).join("");
+  const empresaRows = input.porEmpresa.map((e) => `<tr>
+    <td>${escapeHtml(e.empresa)}</td>
+    <td class="num">${e.mecanicos}</td>
+    <td class="num">${e.veiculos}</td>
+    <td class="num">${e.qtd}</td>
+    <td class="num">${formatLitros(e.litros)}</td>
+    <td class="num">${formatMoney(e.valor)}</td>
+  </tr>`).join("");
+
+  return `<html><head><title>${escapeHtml(titulo)}</title><style>
+    @page{size:A4 landscape;margin:6mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:9px}
+    h1{font-size:14px;text-align:center;margin:0 0 6px}
+    .meta{display:flex;justify-content:space-between;border-top:2px solid #111;border-bottom:1px solid #111;padding:4px 0;margin-bottom:6px;font-size:9px}
+    .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px}
+    .card{border:1px solid #222;padding:4px}
+    .label{font-size:7px;text-transform:uppercase;color:#444}
+    .value{font-size:11px;font-weight:bold}
+    table{width:100%;border-collapse:collapse;table-layout:fixed}
+    th,td{border:1px solid #222;padding:2px 3px;vertical-align:top;word-break:break-word}
+    th{background:#e5e7eb;text-transform:uppercase;font-size:7px}
+    td{font-size:8px}
+    .num{text-align:right;white-space:nowrap}
+    .section{margin-top:6px;font-weight:bold;font-size:10px}
+    .small th,.small td{font-size:7.5px}
+    .main th:nth-child(1){width:13%}.main th:nth-child(2){width:14%}.main th:nth-child(3){width:7%}.main th:nth-child(4){width:4%}.main th:nth-child(5){width:7%}.main th:nth-child(6){width:8%}.main th:nth-child(7){width:6%}.main th:nth-child(8){width:6%}.main th:nth-child(9){width:6%}.main th:nth-child(10){width:6%}.main th:nth-child(11){width:6%}.main th:nth-child(12){width:17%}
+    .footer{margin-top:6px;border-top:1px solid #999;padding-top:3px;font-size:7px;color:#444}
+  </style></head><body>
+    <h1>${escapeHtml(titulo)}</h1>
+    <div class="meta"><div>Empresa: ${escapeHtml(input.filtroEmpresa === "todas" ? "Todas" : input.filtroEmpresa)}</div><div>Posto: ${escapeHtml(input.filtroPosto)}</div><div>Emissao: ${new Date().toLocaleString("pt-BR")}</div></div>
+    <div class="cards">
+      <div class="card"><div class="label">Abastecimentos</div><div class="value">${input.totais.qtd}</div></div>
+      <div class="card"><div class="label">Litros totais</div><div class="value">${formatLitros(input.totais.litros)}</div></div>
+      <div class="card"><div class="label">Valor total</div><div class="value">${formatMoney(input.totais.valor)}</div></div>
+      <div class="card"><div class="label">Media R$/L</div><div class="value">${formatDecimalPrint(input.totais.media, 3)}</div></div>
+    </div>
+    <div class="section">Resumo por empresa</div>
+    <table class="small"><thead><tr><th>Empresa</th><th>Mecanicos</th><th>Veiculos</th><th>Abast.</th><th>Litros</th><th>Valor</th></tr></thead><tbody>${empresaRows || '<tr><td colspan="6">Sem dados</td></tr>'}</tbody></table>
+    <div class="section">Detalhamento por mecanico e veiculo</div>
+    <table class="main"><thead><tr><th>Empresa</th><th>Mecanico</th><th>Placa</th><th>Qtd</th><th>Litros</th><th>Valor</th><th>R$/L</th><th>KM ini</th><th>KM fim</th><th>Rodado</th><th>R$/KM</th><th>Postos</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="footer">Documento para conferencia de abastecimentos. Usa os mesmos dados exibidos na tabela da tela.</div>
+  </body></html>`;
+}
+
 function escapeHtml(value: string) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function formatMoney(value: number) {
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatLitros(value: number) {
+  return Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDecimalPrint(value: number, digits: number) {
+  return Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function formatCompetencia(value: string) {
+  const [year, month] = String(value || "").split("-");
+  if (!year || !month) return String(value || "");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }).toUpperCase();
 }

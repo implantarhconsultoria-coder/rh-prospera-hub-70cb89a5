@@ -26,12 +26,24 @@ interface Posto {
   tipo_qr?: string | null;
 }
 
+interface VeiculoInfo {
+  ativo_id?: string | null;
+  placa: string;
+  descricao?: string | null;
+  renavam?: string | null;
+  chassi?: string | null;
+  ano_fabricacao?: string | null;
+  ano_modelo?: string | null;
+  documento_url?: string | null;
+}
+
 interface MecInfo {
   nome: string;
   empresa: string;
   filial: string;
   placa?: string | null;
   carros?: string[];
+  veiculos?: VeiculoInfo[];
   exige_selecao_carro?: boolean;
   ultimo_km?: number | null;
   registro_teste?: boolean;
@@ -88,6 +100,7 @@ export default function AbastecimentoPage() {
   const [combustivel, setCombustivel] = useState("Diesel S10");
   const [placa, setPlaca] = useState("");
   const [carros, setCarros] = useState<string[]>([]);
+  const [veiculos, setVeiculos] = useState<VeiculoInfo[]>([]);
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
@@ -109,6 +122,11 @@ export default function AbastecimentoPage() {
     const diff = atual - anterior;
     return diff >= 0 ? diff : null;
   }, [km, mecInfo?.ultimo_km]);
+  const veiculoSelecionado = useMemo(() => {
+    const atual = normalizePlate(placa);
+    if (!atual) return null;
+    return veiculos.find((v) => normalizePlate(v.placa) === atual) || null;
+  }, [placa, veiculos]);
 
   const updateValor = (value: string) => {
     setValor(value);
@@ -216,13 +234,19 @@ export default function AbastecimentoPage() {
       setScanError(msg);
       return toast.error(msg);
     }
-    const placas = (r.mecanico?.carros || []).map((item) => String(item).trim().toUpperCase()).filter(Boolean);
+    const veiculosInfo = (r.mecanico?.veiculos || [])
+      .map((item) => ({ ...item, placa: normalizePlate(item.placa) }))
+      .filter((item) => Boolean(item.placa));
+    const placas = (veiculosInfo.length ? veiculosInfo.map((item) => item.placa) : (r.mecanico?.carros || []))
+      .map((item) => normalizePlate(item))
+      .filter(Boolean);
     const placaInicial = r.mecanico?.placa || (!r.mecanico?.exige_selecao_carro && placas.length === 1 ? placas[0] : "");
     const options = (r.postos || []).filter(Boolean);
     setPostosOpcao(options);
     setPosto(options.length === 1 ? options[0] : r.posto);
     setMecInfo(r.mecanico || null);
     setCarros(placas);
+    setVeiculos(veiculosInfo);
     setPlaca((placaInicial || "").toUpperCase());
     setStep("vale");
   };
@@ -408,6 +432,7 @@ export default function AbastecimentoPage() {
     setPrecoLitro("");
     setPlaca("");
     setCarros([]);
+    setVeiculos([]);
     setKm("");
     setObs("");
     setReceipt(null);
@@ -472,6 +497,7 @@ export default function AbastecimentoPage() {
             {posto.endereco && <div className="text-xs text-muted-foreground">{posto.endereco}</div>}
             {posto.telefone && <div className="text-xs text-muted-foreground">Telefone/WhatsApp: {posto.telefone}</div>}
             {mecInfo?.placa && <div className="text-xs text-muted-foreground">Carro vinculado: {mecInfo.placa}</div>}
+            {veiculos.length > 0 && <div className="text-xs text-muted-foreground">Documento da frota vinculado para {veiculos.length} veiculo(s).</div>}
             {mecInfo?.exige_selecao_carro && <AlertBox text="Selecione o carro usado antes de finalizar o abastecimento." />}
             {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
           </div>
@@ -501,10 +527,29 @@ export default function AbastecimentoPage() {
               <Label className="text-xs">{mecInfo?.exige_selecao_carro ? "Carro" : "Placa"}</Label>
               {mecInfo?.exige_selecao_carro && carros.length > 0 ? (
                 <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())}>
-                  <option value="">Selecionar carro</option>{carros.map((item) => <option key={item} value={item}>{item}</option>)}
+                  <option value="">Selecionar carro</option>{carros.map((item) => {
+                    const veiculo = veiculos.find((v) => normalizePlate(v.placa) === normalizePlate(item));
+                    return <option key={item} value={item}>{veiculo?.descricao ? `${item} - ${veiculo.descricao}` : item}</option>;
+                  })}
                 </select>
               ) : <Input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} disabled={Boolean(placa && !mecInfo?.exige_selecao_carro)} />}
             </div>
+            {veiculoSelecionado && (
+              <div className="col-span-2 rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+                <div className="font-semibold">{veiculoSelecionado.descricao || veiculoSelecionado.placa}</div>
+                <div className="grid grid-cols-2 gap-1">
+                  <Info k="Placa" v={veiculoSelecionado.placa || "-"} />
+                  <Info k="Renavam" v={veiculoSelecionado.renavam || "-"} />
+                  <Info k="Chassi" v={veiculoSelecionado.chassi || "-"} />
+                  <Info k="Ano" v={veiculoSelecionado.ano_fabricacao || veiculoSelecionado.ano_modelo || "-"} />
+                </div>
+                {veiculoSelecionado.documento_url && (
+                  <Button type="button" size="sm" variant="outline" className="mt-2 w-full" onClick={() => window.open(veiculoSelecionado.documento_url || "", "_blank", "noopener,noreferrer")}>
+                    Visualizar PDF do documento
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="col-span-2"><Label className="text-xs">Posto</Label><Input value={posto?.nome || ""} disabled /></div>
             <div className="col-span-2"><Label className="text-xs">Observacao</Label><Input value={obs} onChange={(e) => setObs(e.target.value)} /></div>
           </div>
@@ -597,6 +642,10 @@ function sanitizeFile(value: string) {
     .replace(/[^A-Za-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .toUpperCase();
+}
+
+function normalizePlate(value: string | null | undefined) {
+  return String(value || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
 function buildReceiptHtml(info: ReceiptInfo) {
