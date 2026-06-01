@@ -4,8 +4,10 @@ export const sanitizePdfFileName = (value: string) =>
   (value || 'documento')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'documento';
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+\./g, '.')
+    .trim() || 'documento';
 
 export const pdfNamePart = (value?: string | number | null) =>
   sanitizePdfFileName(String(value ?? ''))

@@ -8,7 +8,7 @@ import { registrarAcao } from '@/lib/acoesLog';
 import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
 import { downloadEmailWithAttachment } from '@/lib/emailUtils';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
-import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
+import { downloadPdfBlob, sanitizePdfFileName } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -29,6 +29,26 @@ const defaultComissaoPct = (nomeEmp: string, nomeFunc: string): number => {
 
 const isEmpresaLoteContabilidade = (nomeEmpresa: string) =>
   /matriz|praia|lmt|alqui/i.test(nomeEmpresa || '') && !/goi[Ã¢a]nia/i.test(nomeEmpresa || '');
+
+const normalizePdfTitlePart = (value?: string | null) =>
+  String(value || 'EMPRESA')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+const buildApontamentoPdfName = (empresaNome: string, competencia: string) =>
+  `${normalizePdfTitlePart(empresaNome)} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}.pdf`;
+
+const buildApontamentoLotePdfName = (empresaNomes: string[], competencia: string) => {
+  const nomes = empresaNomes.map(normalizePdfTitlePart).filter(Boolean).join(' + ') || 'EMPRESAS';
+  return `${nomes} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}.pdf`;
+};
+
+const buildStoragePdfPathName = (fileName: string) =>
+  sanitizePdfFileName(fileName)
+    .replace(/\.pdf$/i, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 150);
 
 interface ItemRow {
   id?: string;
@@ -598,7 +618,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-    const titulo = `${company.name.toUpperCase().replace('TOPAC FILIAL ', 'TOPAC - ').replace('TOPAC ', 'TOPAC - ')} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
+    const titulo = buildApontamentoPdfName(company.name, competencia).replace(/\.pdf$/i, '');
     const rows = items.map((r) => {
       const heQtd = isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas;
       const heValor = isGO ? r.hora_extra_60 : r.hora_extra_50;
@@ -770,7 +790,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const widths = [46, 24, 21, 18, 18, 18, 22, 19, 22, 13, 21, 21, 22];
     const money = (v: number) => formatBRL(Number(v || 0));
     const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
-    const titulo = `${company.name.toUpperCase()} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
+    const titulo = buildApontamentoPdfName(company.name, competencia).replace(/\.pdf$/i, '');
     let y = margin;
 
     const drawHeader = () => {
@@ -861,7 +881,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const salvarPdfApontamento = async (pdfBlob?: Blob) => {
     if (!company) throw new Error('Selecione uma empresa');
     const blob = pdfBlob || gerarPdfBlob();
-    const baseName = buildPdfFileName('apontamento contabilidade', company.name, competenciaPdfPart(competencia)).replace(/\.pdf$/i, '');
+    const baseName = buildStoragePdfPathName(buildApontamentoPdfName(company.name, competencia));
     const fileName = `apontamentos-contabilidade/${competencia}/${baseName}_${Date.now()}.pdf`;
     const { error } = await supabase.storage
       .from('documentos-ativos')
@@ -879,7 +899,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
     }
     try {
       const blob = gerarPdfBlob();
-      downloadPdfBlob(blob, buildPdfFileName('apontamento contabilidade', company.name, competenciaPdfPart(competencia)));
+      downloadPdfBlob(blob, buildApontamentoPdfName(company.name, competencia));
       await salvarPdfApontamento(blob);
       toast.success('PDF salvo e arquivado na plataforma.');
     } catch (error: any) {
@@ -907,7 +927,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
       const heTitulo = grupoIsGO ? 'HE 60%' : 'HE 50%';
       const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
       const totalGrupo = round2(grupo.items.reduce((s, r) => s + Number(r.total || 0), 0));
-      const titulo = `${grupo.company.name.toUpperCase()} - APONTAMENTO - REF. ${formatCompetencia(competencia).toUpperCase()}`;
+      const titulo = buildApontamentoPdfName(grupo.company.name, competencia).replace(/\.pdf$/i, '');
 
       const drawHeader = () => {
         doc.setTextColor(0, 0, 0);
@@ -1002,8 +1022,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
   };
 
   const salvarPdfLote = async (blob: Blob, grupos: GrupoApontamento[]) => {
-    const nomes = grupos.map((g) => g.company.name).join('_');
-    const baseName = buildPdfFileName('apontamento contabilidade lote', nomes, competenciaPdfPart(competencia)).replace(/\.pdf$/i, '').slice(0, 150);
+    const nomes = grupos.map((g) => g.company.name);
+    const baseName = buildStoragePdfPathName(buildApontamentoLotePdfName(nomes, competencia));
     const fileName = `apontamentos-contabilidade/${competencia}/${baseName}_${Date.now()}.pdf`;
     const { error } = await supabase.storage
       .from('documentos-ativos')
@@ -1065,7 +1085,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n\n` +
         `Atenciosamente,\nRodrigo De Souza Sabino`,
         attachmentBlob: pdfBlob,
-        attachmentName: buildPdfFileName('apontamento contabilidade', company.name, competenciaPdfPart(competencia)),
+        attachmentName: buildApontamentoPdfName(company.name, competencia),
         fileName: `Email_Apontamento_${company.name}_${competencia}`,
       });
       toast.success('PDF salvo na plataforma e e-mail enviado com anexo.');
@@ -1131,7 +1151,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n\n` +
           `Atenciosamente,\nRodrigo De Souza Sabino`,
         attachmentBlob: blob,
-        attachmentName: buildPdfFileName('apontamento contabilidade lote', nomes, competenciaPdfPart(competencia)),
+        attachmentName: buildApontamentoLotePdfName(grupos.map((g) => g.company.name), competencia),
         fileName: `Email_Apontamento_Lote_${competencia}`,
       });
 
@@ -1241,7 +1261,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         <div className="text-center border-b-2 border-foreground pb-2 mb-4">
           <h2 className="font-bold text-base uppercase">
             {company
-              ? `${company.name.toUpperCase().replace('TOPAC FILIAL ', 'TOPAC - ').replace('TOPAC ', 'TOPAC - ')} - APONTAMENTO - Ref. ${formatCompetencia(competencia).toUpperCase()}`
+              ? buildApontamentoPdfName(company.name, competencia).replace(/\.pdf$/i, '')
               : 'APONTAMENTO'}
           </h2>
         </div>

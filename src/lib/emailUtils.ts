@@ -24,8 +24,10 @@ const safeFileName = (value: string) =>
   (value || 'email')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+\./g, '.')
+    .trim()
     .slice(0, 150);
 
 const ensurePdfBlob = (blob: Blob) =>
