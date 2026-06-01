@@ -136,8 +136,12 @@ const uploadAdmissionBlob = async (blob: Blob, prefix: string, fileName: string)
   throw new Error(errors.join(' | '));
 };
 
-const buildExameEmailBody = (r: Partial<PreCadastro>) => [
-  'Prezados, bom dia.', '', 'Solicito, por gentileza, o agendamento do exame admissional conforme guia ASO anexa.', '',
+const getTipoExameSolicitado = (r: Partial<PreCadastro>) => String(r.tipo_admissao || 'Admissional').trim() || 'Admissional';
+
+const buildExameEmailBody = (r: Partial<PreCadastro>) => {
+  const tipoExame = getTipoExameSolicitado(r).toLowerCase();
+  return [
+  'Prezados, bom dia.', '', `Solicito, por gentileza, o agendamento do exame ${tipoExame} conforme guia ASO anexa.`, '',
   `Nome: ${r.nome || ''}`,
   `CPF: ${r.cpf || ''}`,
   `RG: ${r.rg || ''}`,
@@ -148,10 +152,11 @@ const buildExameEmailBody = (r: Partial<PreCadastro>) => [
   `Setor/GHE: ${r.setor_ghe || ''}`,
   `Obra/Local: ${r.obra_local || ''}`,
   `Data de admissao/inicio: ${r.data_admissao || ''}`,
-  '', 'Escopo: exame admissional ocupacional para liberacao do colaborador no processo de pre-cadastro TOPAC.',
+  '', `Escopo: exame ${tipoExame} ocupacional para liberacao do colaborador no processo de pre-cadastro TOPAC.`,
   '', 'Por favor, confirmar recebimento, data e horario disponivel para atendimento.',
   '', 'Atenciosamente,', 'Rodrigo De Souza Sabino',
 ].join('\n');
+};
 const buildContabilidadeEmailBody = (r: Partial<PreCadastro>) => [
   'Prezados, bom dia.', '', 'Solicitamos, por gentileza, o registro do colaborador abaixo:', '',
   `Nome: ${r.nome || ''}`, `CPF: ${r.cpf || ''}`, `RG: ${r.rg || ''}`, `Data de nascimento: ${r.data_nascimento || ''}`, `Empresa: ${r.empresa_nome || ''}`, `CNPJ: ${r.cnpj || ''}`, `Funcao: ${r.funcao || ''}`, `Setor: ${r.setor_ghe || ''}`, `Salario: ${r.salario ? r.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}`, `Data de inicio: ${r.data_admissao || ''}`, `Tipo de admissao: ${r.tipo_admissao || ''}`, `Horario/Jornada: ${r.jornada || ''}`, `Beneficios: ${r.beneficios || ''}`, `Insalubridade, se aplicavel: ${r.insalubridade || ''}`,
@@ -359,7 +364,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
       dataNascimento: form.data_nascimento || '',
       setorGhe: form.setor_ghe || '',
       dataExame: new Date().toISOString().slice(0, 10),
-      tipoExame: 'Admissional',
+      tipoExame: form.tipo_admissao || 'Admissional',
       obraLocal: form.obra_local || '',
       trabalhoAltura: false,
       espacoConfinado: false,
@@ -414,10 +419,11 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
       });
       window.open(url, '_blank', 'noopener,noreferrer');
     }
+    const tipoExameSolicitado = getTipoExameSolicitado(form).toLowerCase();
     setEmailPdfDraft({
       to: ['agendamento@ponteaereaseguranca.com.br'],
       cc: ['robson@topac.com.br'],
-      subject: `Solicitacao de exame admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`,
+      subject: `Solicitacao de exame ${tipoExameSolicitado} - ${form.nome || ''} - ${form.empresa_nome || ''}`,
       body: buildExameEmailBody(form),
       attachmentBlob: pdf.blob,
       attachmentName: pdf.fileName,

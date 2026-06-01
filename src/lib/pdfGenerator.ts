@@ -57,6 +57,17 @@ export const makeDocumentFileName = (
   data?: string,
 ) => `${cleanFilePart(tipo)}_${cleanFilePart(empresa)}_${cleanFilePart(funcionario)}_${data || new Date().toISOString().slice(0, 10)}.pdf`;
 
+const getExamHighlightColor = (tipoExame: string): [number, number, number] => {
+  const normalized = cleanText(tipoExame || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+  if (normalized.includes('DEMISSIONAL')) return [255, 0, 0];
+  if (normalized.includes('ADMISSIONAL')) return [0, 255, 0];
+  return [255, 255, 0];
+};
+
 const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) => {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
@@ -252,7 +263,7 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   rect(examH);
   const examText = `EXAME ${tipoExame}`;
   const examTextWidth = doc.getTextWidth(examText) + 4;
-  doc.setFillColor(255, 0, 0);
+  doc.setFillColor(...getExamHighlightColor(tipoExame));
   doc.rect(centerX - examTextWidth / 2, y + 7, examTextWidth, 6, 'F');
   write(examText, centerX, y + 12, { size: 10.5, bold: true, align: 'center' });
   next(examH);
