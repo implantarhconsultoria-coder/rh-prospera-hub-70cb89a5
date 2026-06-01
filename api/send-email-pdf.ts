@@ -42,7 +42,14 @@ class EmailConfigError extends Error {
 }
 
 const env = (name: string) => String(process.env[name] || '').trim();
-const getEmailFrom = () => env('EMAIL_FROM') || env('MAIL_FROM');
+const DEFAULT_EMAIL_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
+
+const isResendSandboxFrom = (value: string) => /@resend\.dev/i.test(value);
+
+const getEmailFrom = () => {
+  const configured = env('EMAIL_FROM') || env('MAIL_FROM');
+  return configured && !isResendSandboxFrom(configured) ? configured : DEFAULT_EMAIL_FROM;
+};
 
 const parseEmailAddress = (value: string) => {
   const match = value.match(/<([^>]+)>/);
