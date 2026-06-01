@@ -52,6 +52,28 @@ const blobToBase64 = (blob: Blob) =>
     reader.readAsDataURL(ensurePdfBlob(blob));
   });
 
+const buildEmailApiErrorMessage = (data: any) => {
+  if (data?.error === 'missing_email_provider_env') {
+    const missing = Array.isArray(data?.missing) && data.missing.length
+      ? ` Variáveis ausentes: ${data.missing.join(', ')}.`
+      : '';
+    const alternatives = Array.isArray(data?.alternatives) && data.alternatives.length
+      ? ` Configure uma destas opções: ${data.alternatives.map((group: string[]) => group.join(' + ')).join(' ou ')}.`
+      : '';
+    return `${data?.message || 'Envio de e-mail não configurado no servidor.'}${missing}${alternatives}`;
+  }
+
+  if (data?.error === 'dados_invalidos') {
+    return data?.message || 'Preencha destinatário, assunto, mensagem e PDF antes de enviar.';
+  }
+
+  if (data?.error === 'email_provider_failed') {
+    return data?.message || 'Falha no provedor de e-mail configurado.';
+  }
+
+  return data?.message || data?.error || 'email_send_failed';
+};
+
 export const sendEmailWithPdfAttachment = async ({
   to,
   cc,
@@ -83,7 +105,7 @@ export const sendEmailWithPdfAttachment = async ({
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.ok === false) {
-    throw new Error(data?.error || 'email_send_failed');
+    throw new Error(buildEmailApiErrorMessage(data));
   }
   return data;
 };

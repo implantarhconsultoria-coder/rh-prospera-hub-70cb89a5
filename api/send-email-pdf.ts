@@ -1,3 +1,6 @@
+import * as net from 'node:net';
+import * as tls from 'node:tls';
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2), {
     status,
@@ -22,6 +25,61 @@ const cleanList = (value: unknown) =>
     : [];
 
 const PDF_CONTENT_TYPE = 'application/pdf';
+const EMAIL_TIMEOUT_MS = 30000;
+
+class EmailConfigError extends Error {
+  missing: string[];
+  alternatives: string[][];
+  provider?: string;
+
+  constructor(message: string, missing: string[], alternatives: string[][] = [], provider?: string) {
+    super(message);
+    this.name = 'EmailConfigError';
+    this.missing = missing;
+    this.alternatives = alternatives;
+    this.provider = provider;
+  }
+}
+
+const env = (name: string) => String(process.env[name] || '').trim();
+const getEmailFrom = () => env('EMAIL_FROM') || env('MAIL_FROM');
+
+const parseEmailAddress = (value: string) => {
+  const match = value.match(/<([^>]+)>/);
+  return (match?.[1] || value).trim();
+};
+
+const parseEmailName = (value: string) => {
+  const match = value.match(/^(.+?)\s*</);
+  return (match?.[1] || env('EMAIL_FROM_NAME') || env('MAIL_FROM_NAME') || 'TOPAC RH PRO')
+    .replace(/^"|"$/g, '')
+    .trim();
+};
+
+const getConfiguredProvider = () => {
+  if (env('RESEND_API_KEY')) return 'resend';
+  if (['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'].some(env)) return 'smtp';
+  if (env('SENDGRID_API_KEY')) return 'sendgrid';
+  return '';
+};
+
+const ensureFromConfigured = (provider: string) => {
+  const from = getEmailFrom();
+  if (!from) {
+    throw new EmailConfigError(
+      'Envio de e-mail sem remetente configurado. Configure EMAIL_FROM no ambiente de produção.',
+      ['EMAIL_FROM'],
+      [['RESEND_API_KEY', 'EMAIL_FROM'], ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM']],
+      provider,
+    );
+  }
+  return from;
+};
+
+const missingSmtpEnv = () =>
+  ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM'].filter((key) =>
+    key === 'EMAIL_FROM' ? !getEmailFrom() : !env(key),
+  );
 
 const normalizeAttachmentName = (value: unknown) => {
   const fileName = String(value || 'documento.pdf').trim() || 'documento.pdf';
@@ -33,9 +91,137 @@ const normalizeBase64 = (value: unknown) =>
     .trim()
     .replace(/^data:[^;]+;base64,/, '');
 
+const encodeHeader = (value: string) =>
+  `=?UTF-8?B?${Buffer.from(String(value || ''), 'utf8').toString('base64')}?=`;
+
+const wrapBase64 = (value: string) => value.replace(/.{1,76}/g, '$&\r\n').trim();
+
+const buildMimeMessage = (payload: any, from: string) => {
+  const boundary = `topac-pdf-${Date.now()}`;
+  const recipients = [...payload.to, ...payload.cc];
+  const headers = [
+    `From: ${from}`,
+    `To: ${payload.to.join(', ')}`,
+    ...(payload.cc.length ? [`Cc: ${payload.cc.join(', ')}`] : []),
+    `Subject: ${encodeHeader(payload.subject)}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+  ];
+
+  return {
+    recipients,
+    raw: [
+      ...headers,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      payload.body,
+      '',
+      `--${boundary}`,
+      `Content-Type: ${payload.attachmentContentType}; name="${payload.attachmentName}"`,
+      `Content-Disposition: attachment; filename="${payload.attachmentName}"`,
+      'Content-Transfer-Encoding: base64',
+      '',
+      wrapBase64(payload.attachmentBase64),
+      '',
+      `--${boundary}--`,
+      '',
+    ].join('\r\n'),
+  };
+};
+
+const waitForSmtpResponse = (socket: net.Socket | tls.TLSSocket) =>
+  new Promise<{ code: number; response: string }>((resolve, reject) => {
+    let buffer = '';
+    const cleanup = () => {
+      socket.off('data', onData);
+      socket.off('error', onError);
+      socket.off('timeout', onTimeout);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const onTimeout = () => {
+      cleanup();
+      reject(new Error('smtp_timeout'));
+    };
+    const onData = (chunk: Buffer) => {
+      buffer += chunk.toString('utf8');
+      const complete = buffer.match(/(?:^|\r?\n)(\d{3}) [^\r\n]*(?:\r?\n)?$/);
+      if (!complete) return;
+      cleanup();
+      resolve({ code: Number(complete[1]), response: buffer.trim() });
+    };
+    socket.on('data', onData);
+    socket.once('error', onError);
+    socket.once('timeout', onTimeout);
+  });
+
+const expectSmtp = async (
+  socket: net.Socket | tls.TLSSocket,
+  command: string,
+  expected: number[],
+) => {
+  socket.write(`${command}\r\n`);
+  const result = await waitForSmtpResponse(socket);
+  if (!expected.includes(result.code)) {
+    throw new Error(`smtp_failed_${result.code}: ${result.response}`);
+  }
+  return result;
+};
+
+const sendWithSmtpSocket = async (payload: any, from: string) => {
+  const port = Number(env('SMTP_PORT'));
+  const host = env('SMTP_HOST');
+  const secure = port === 465 || /^true$/i.test(env('SMTP_SECURE'));
+  const user = env('SMTP_USER');
+  const pass = env('SMTP_PASS');
+  const fromEmail = parseEmailAddress(from);
+  const mime = buildMimeMessage(payload, from);
+
+  let socket: net.Socket | tls.TLSSocket = secure
+    ? tls.connect({ host, port, servername: host })
+    : net.connect({ host, port });
+
+  socket.setTimeout(EMAIL_TIMEOUT_MS);
+
+  try {
+    await waitForSmtpResponse(socket);
+    await expectSmtp(socket, 'EHLO topacrh.pro', [250]);
+
+    if (!secure) {
+      await expectSmtp(socket, 'STARTTLS', [220]);
+      socket = tls.connect({ socket, servername: host });
+      socket.setTimeout(EMAIL_TIMEOUT_MS);
+      await expectSmtp(socket, 'EHLO topacrh.pro', [250]);
+    }
+
+    await expectSmtp(socket, 'AUTH LOGIN', [334]);
+    await expectSmtp(socket, Buffer.from(user, 'utf8').toString('base64'), [334]);
+    await expectSmtp(socket, Buffer.from(pass, 'utf8').toString('base64'), [235]);
+    await expectSmtp(socket, `MAIL FROM:<${fromEmail}>`, [250]);
+    for (const recipient of mime.recipients) {
+      await expectSmtp(socket, `RCPT TO:<${recipient}>`, [250, 251]);
+    }
+    await expectSmtp(socket, 'DATA', [354]);
+    socket.write(`${mime.raw.replace(/^\./gm, '..')}\r\n.\r\n`);
+    const dataResult = await waitForSmtpResponse(socket);
+    if (dataResult.code !== 250) {
+      throw new Error(`smtp_failed_${dataResult.code}: ${dataResult.response}`);
+    }
+    await expectSmtp(socket, 'QUIT', [221]);
+  } finally {
+    socket.destroy();
+  }
+};
+
 const sendWithResend = async (payload: any) => {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = env('RESEND_API_KEY');
   if (!apiKey) return null;
+  const from = ensureFromConfigured('resend');
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -44,7 +230,7 @@ const sendWithResend = async (payload: any) => {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      from: process.env.MAIL_FROM || process.env.EMAIL_FROM || 'TOPAC RH PRO <adm.matriz@topac.com.br>',
+      from,
       to: payload.to,
       cc: payload.cc,
       subject: payload.subject,
@@ -64,9 +250,27 @@ const sendWithResend = async (payload: any) => {
   return { provider: 'resend', data };
 };
 
+const sendWithSmtp = async (payload: any) => {
+  const hasSmtp = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'].some(env);
+  if (!hasSmtp) return null;
+  const missing = missingSmtpEnv();
+  if (missing.length) {
+    throw new EmailConfigError(
+      'Configuração SMTP incompleta no ambiente de produção.',
+      missing,
+      [['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM']],
+      'smtp',
+    );
+  }
+  const from = ensureFromConfigured('smtp');
+  await sendWithSmtpSocket(payload, from);
+  return { provider: 'smtp' };
+};
+
 const sendWithSendGrid = async (payload: any) => {
-  const apiKey = process.env.SENDGRID_API_KEY;
+  const apiKey = env('SENDGRID_API_KEY');
   if (!apiKey) return null;
+  const from = ensureFromConfigured('sendgrid');
 
   const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
@@ -83,8 +287,8 @@ const sendWithSendGrid = async (payload: any) => {
         },
       ],
       from: {
-        email: process.env.MAIL_FROM_EMAIL || process.env.EMAIL_FROM_EMAIL || 'adm.matriz@topac.com.br',
-        name: process.env.MAIL_FROM_NAME || process.env.EMAIL_FROM_NAME || 'TOPAC RH PRO',
+        email: env('MAIL_FROM_EMAIL') || env('EMAIL_FROM_EMAIL') || parseEmailAddress(from),
+        name: env('MAIL_FROM_NAME') || env('EMAIL_FROM_NAME') || parseEmailName(from),
       },
       content: [{ type: 'text/plain', value: payload.body }],
       attachments: [
@@ -129,21 +333,53 @@ export default async function handler(req: any, res?: any) {
   };
 
   if (!payload.to.length || !payload.subject || !payload.body || !payload.attachmentBase64) {
-    return send({ ok: false, error: 'dados_invalidos' }, 400);
+    return send({
+      ok: false,
+      error: 'dados_invalidos',
+      message: 'Informe destinatário, assunto, mensagem e PDF anexado antes de enviar.',
+    }, 400);
   }
 
   try {
-    const result = (await sendWithResend(payload)) || (await sendWithSendGrid(payload));
+    const provider = getConfiguredProvider();
+    const result = provider === 'resend'
+      ? await sendWithResend(payload)
+      : provider === 'smtp'
+        ? await sendWithSmtp(payload)
+        : provider === 'sendgrid'
+          ? await sendWithSendGrid(payload)
+          : null;
+
     if (!result) {
       return send({
         ok: false,
         error: 'missing_email_provider_env',
-        required: ['RESEND_API_KEY ou SENDGRID_API_KEY', 'MAIL_FROM/EMAIL_FROM opcional'],
+        message: 'Envio de e-mail não configurado no servidor. Configure Resend ou SMTP nas variáveis de ambiente da Vercel.',
+        missing: ['RESEND_API_KEY', 'EMAIL_FROM'],
+        alternatives: [
+          ['RESEND_API_KEY', 'EMAIL_FROM'],
+          ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM'],
+        ],
       }, 501);
     }
 
     return send({ ok: true, ...result });
   } catch (error: any) {
-    return send({ ok: false, error: error?.message || 'email_send_failed' }, 500);
+    if (error instanceof EmailConfigError) {
+      return send({
+        ok: false,
+        error: 'missing_email_provider_env',
+        message: error.message,
+        provider: error.provider,
+        missing: error.missing,
+        alternatives: error.alternatives,
+      }, 501);
+    }
+
+    return send({
+      ok: false,
+      error: 'email_provider_failed',
+      message: error?.message || 'Falha ao enviar e-mail pelo provedor configurado.',
+    }, 500);
   }
 }

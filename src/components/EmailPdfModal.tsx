@@ -83,7 +83,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       toast.success('E-mail enviado com PDF anexado.');
       onOpenChange(false);
     } catch (error: any) {
-      toast.error(`Erro ao enviar e-mail: ${error?.message || 'erro desconhecido'}`);
+      toast.error(error?.message || 'Não foi possível enviar o e-mail agora.');
     } finally {
       setSending(false);
     }
