@@ -229,7 +229,7 @@ export const gerarAvisoFeriasPdf = (d: AvisoFeriasData): { blob: Blob; fileName:
   doc.text(wrapped, 18, y + 15);
   y += 55;
   drawSignatures(doc, y + 35);
-  const fileName = makeDocumentFileName('FERIAS', d.empresa, d.nome, d.inicioFerias ? d.inicioFerias.slice(0, 4) : new Date().toISOString().slice(0, 10));
+  const fileName = makeDocumentFileName('FERIAS', d.empresa, d.nome, d.inicioFerias || new Date().toISOString().slice(0, 10));
   return { blob: doc.output('blob'), fileName };
 };
 
@@ -237,8 +237,9 @@ export const gerarAvisoFeriasPdf = (d: AvisoFeriasData): { blob: Blob; fileName:
 export const downloadPdf = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
+  const safeName = cleanFilePart(fileName.replace(/\.pdf$/i, ''));
   a.href = url;
-  a.download = fileName;
+  a.download = `${safeName}.pdf`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

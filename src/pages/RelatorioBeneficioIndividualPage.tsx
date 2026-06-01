@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { getFirstBusinessDayOfNextMonth, getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildIndividualBenefitData } from '@/lib/benefitReports';
-import { saveElementAsPdf } from '@/lib/savePdf';
+import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 const RelatorioBeneficioIndividualPage: React.FC = () => {
@@ -45,7 +45,7 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
     try {
       await saveElementAsPdf({
         element: document.getElementById('benefit-individual-print'),
-        fileName: `ficha_beneficios_${emp?.name || 'funcionario'}_${competencia}.pdf`,
+        fileName: buildPdfFileName('ficha beneficios vr vt', company?.name, emp?.name || 'funcionario', competenciaPdfPart(competencia)),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {

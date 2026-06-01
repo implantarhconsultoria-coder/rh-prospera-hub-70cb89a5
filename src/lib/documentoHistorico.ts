@@ -62,6 +62,8 @@ export const arquivarDocumentoFuncionario = async (doc: ArquivarDocumentoFuncion
       safeStorageName(doc.storageTipo || doc.tipoDocumento),
       doc.conteudo,
       doc.extensao || 'pdf',
+      doc.funcionarioNome,
+      doc.competencia,
     );
   }
 
@@ -119,12 +121,16 @@ export const uploadDocumentoPdf = async (
   tipoDocumento: string,
   conteudo: string | Blob,
   extensao: 'pdf' | 'html' = 'html',
+  funcionarioNome?: string,
+  competencia?: string,
 ): Promise<string> => {
   const blob = typeof conteudo === 'string'
     ? new Blob([conteudo], { type: 'text/html' })
     : conteudo;
   const contentType = extensao === 'pdf' ? 'application/pdf' : 'text/html';
-  const fileName = `${funcionarioId}/${tipoDocumento}_${Date.now()}.${extensao}`;
+  const nomeParte = safeStorageName(funcionarioNome || 'funcionario');
+  const competenciaParte = safeStorageName(competencia || new Date().toISOString().slice(0, 10));
+  const fileName = `${funcionarioId}/${tipoDocumento}_${nomeParte}_${competenciaParte}_${Date.now()}.${extensao}`;
 
   const { error } = await supabase.storage
     .from('documentos-funcionarios')

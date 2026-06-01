@@ -7,7 +7,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useFeriados } from '@/hooks/useFeriados';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
-import { saveElementAsPdf } from '@/lib/savePdf';
+import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -149,9 +149,10 @@ const RelatorioVRImpressaoPage: React.FC = () => {
 
   const handleSalvarPdf = async () => {
     try {
+      const empresaArquivo = blocks.length === 1 ? blocks[0].company.name : `${blocks.length}_empresas`;
       await saveElementAsPdf({
         element: document.getElementById('vr-print-area'),
-        fileName: `relatorio_vr_${competencia}.pdf`,
+        fileName: buildPdfFileName('relatorio vale refeicao', empresaArquivo, competenciaPdfPart(competencia)),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {

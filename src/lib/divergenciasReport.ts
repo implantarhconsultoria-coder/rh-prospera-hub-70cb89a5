@@ -4,6 +4,7 @@
  * cartões com batidas inconsistentes e cartões ignorados pelas regras especiais.
  */
 import { jsPDF } from 'jspdf';
+import { buildPdfFileName, competenciaPdfPart } from './savePdf';
 import type { ResultadoCruzamento } from '@/lib/pontoFechamento';
 
 interface ReportInput {
@@ -153,6 +154,6 @@ export const gerarRelatorioDivergencias = ({ empresaNome, competencia, resultado
     doc.text(`Página ${i} de ${pages}`, pageW - margin, pageH - 8, { align: 'right' });
   }
 
-  const fileName = `divergencias-${empresaNome.replace(/\s+/g, '_')}-${competencia}.pdf`;
+  const fileName = buildPdfFileName('divergencias fechamento', empresaNome, competenciaPdfPart(competencia));
   doc.save(fileName);
 };

@@ -8,7 +8,7 @@ import { registrarAcao } from '@/lib/acoesLog';
 import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
 import { downloadEmailWithAttachment } from '@/lib/emailUtils';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
-import { downloadPdfBlob } from '@/lib/savePdf';
+import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -861,8 +861,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const salvarPdfApontamento = async (pdfBlob?: Blob) => {
     if (!company) throw new Error('Selecione uma empresa');
     const blob = pdfBlob || gerarPdfBlob();
-    const safeCompany = company.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const fileName = `apontamentos-contabilidade/${competencia}/${safeCompany}_${Date.now()}.pdf`;
+    const baseName = buildPdfFileName('apontamento contabilidade', company.name, competenciaPdfPart(competencia)).replace(/\.pdf$/i, '');
+    const fileName = `apontamentos-contabilidade/${competencia}/${baseName}_${Date.now()}.pdf`;
     const { error } = await supabase.storage
       .from('documentos-ativos')
       .upload(fileName, blob, { contentType: 'application/pdf', upsert: true });
@@ -879,12 +879,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
     }
     try {
       const blob = gerarPdfBlob();
-      const safeCompany = company.name
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
-      downloadPdfBlob(blob, `apontamento_contabilidade_${safeCompany}_${competencia}.pdf`);
+      downloadPdfBlob(blob, buildPdfFileName('apontamento contabilidade', company.name, competenciaPdfPart(competencia)));
       await salvarPdfApontamento(blob);
       toast.success('PDF salvo e arquivado na plataforma.');
     } catch (error: any) {
@@ -1008,8 +1003,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
 
   const salvarPdfLote = async (blob: Blob, grupos: GrupoApontamento[]) => {
     const nomes = grupos.map((g) => g.company.name).join('_');
-    const safeName = nomes.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120);
-    const fileName = `apontamentos-contabilidade/${competencia}/LOTE_${safeName}_${Date.now()}.pdf`;
+    const baseName = buildPdfFileName('apontamento contabilidade lote', nomes, competenciaPdfPart(competencia)).replace(/\.pdf$/i, '').slice(0, 150);
+    const fileName = `apontamentos-contabilidade/${competencia}/${baseName}_${Date.now()}.pdf`;
     const { error } = await supabase.storage
       .from('documentos-ativos')
       .upload(fileName, blob, { contentType: 'application/pdf', upsert: true });
@@ -1070,7 +1065,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n\n` +
         `Atenciosamente,\nRodrigo De Souza Sabino`,
         attachmentBlob: pdfBlob,
-        attachmentName: `Apontamento_${company.name}_${competencia}.pdf`.replace(/[^a-zA-Z0-9._-]+/g, '_'),
+        attachmentName: buildPdfFileName('apontamento contabilidade', company.name, competenciaPdfPart(competencia)),
         fileName: `Email_Apontamento_${company.name}_${competencia}`,
       });
       toast.success('PDF salvo na plataforma e e-mail enviado com anexo.');
@@ -1136,7 +1131,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n\n` +
           `Atenciosamente,\nRodrigo De Souza Sabino`,
         attachmentBlob: blob,
-        attachmentName: `Apontamento_Lote_${competencia}.pdf`,
+        attachmentName: buildPdfFileName('apontamento contabilidade lote', nomes, competenciaPdfPart(competencia)),
         fileName: `Email_Apontamento_Lote_${competencia}`,
       });
 

@@ -9,7 +9,7 @@ import { buildVRReportRows, buildVTReportRows, type BenefitReportRow } from '@/l
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { downloadEmailWithAttachment } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
-import { downloadPdfBlob } from '@/lib/savePdf';
+import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 type Formato = 'vr' | 'vt' | 'ambos';
@@ -156,6 +156,14 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
 
   const formatoLabel = formato === 'vr' ? 'VR' : formato === 'vt' ? 'VT' : 'VR + VT';
 
+  const getRecibosPdfFileName = (items: ReciboItem[]) => {
+    const empresas = Array.from(new Set(items.map((item) => item.company?.name || '').filter(Boolean)));
+    const funcionarios = Array.from(new Set(items.map((item) => item.emp?.name || '').filter(Boolean)));
+    const empresaArquivo = empresas.length === 1 ? empresas[0] : `${empresas.length || empresaIds.length}_empresas`;
+    const funcionarioArquivo = funcionarios.length === 1 ? funcionarios[0] : `${funcionarios.length || items.length}_funcionarios`;
+    return buildPdfFileName('recibos', formatoLabel, empresaArquivo, funcionarioArquivo, competenciaPdfPart(competencia));
+  };
+
   const recibosComEmail = recibos.filter((r) => getEmailDestinoRecibo(r.company?.name || ''));
   const podeEnviarEmail = recibosComEmail.length > 0;
 
@@ -289,7 +297,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     setSavingPdf(true);
     try {
       const pdfBlob = gerarPdfRecibosBlob(recibos);
-      const fileName = `${sanitizeFileName(`recibos_${formatoLabel}_${competencia}`)}.pdf`;
+      const fileName = getRecibosPdfFileName(recibos);
       downloadPdfBlob(pdfBlob, fileName);
       await arquivarRecibosNoHistorico(recibos, 'download').catch((error) => {
         console.error('Erro ao arquivar recibos no historico:', error);
@@ -326,7 +334,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
           console.error('Erro ao arquivar recibos no historico:', error);
           toast.warning('E-mail gerado, mas alguns recibos nao foram salvos no historico.');
         });
-        const attachmentName = `${sanitizeFileName(`recibos_${formatoLabel}_${empresaNome}_${competencia}`)}.pdf`;
+        const attachmentName = getRecibosPdfFileName(items);
         await downloadEmailWithAttachment({
           to: destino.to,
           cc: destino.cc,

@@ -5,7 +5,7 @@ import { RESPONSIBILITY_TEXT, type Delivery } from '@/data/deliveries';
 import type { Company, Employee } from '@/types/database';
 import { formatDate } from '@/lib/calculations';
 import { registrarDocumento } from '@/lib/documentoHistorico';
-import { saveElementAsPdf } from '@/lib/savePdf';
+import { buildPdfFileName, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 type DeliveryPreview = Pick<Delivery, 'type' | 'date' | 'items'> & { responsavel?: string };
@@ -103,7 +103,7 @@ const EntregaImpressaoPage: React.FC = () => {
     try {
       await saveElementAsPdf({
         element: document.getElementById('entrega-print'),
-        fileName: `${isEpi ? 'ficha_epi' : 'ficha_uniforme'}_${emp.name}_${delivery.date}.pdf`,
+        fileName: buildPdfFileName(isEpi ? 'ficha entrega epi' : 'ficha entrega uniforme', company.name, emp.name, delivery.date),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {

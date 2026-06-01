@@ -6,7 +6,7 @@ import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/l
 import { getWorkingDays } from '@/lib/workingDays';
 import type { Employee, MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
-import { saveElementAsPdf } from '@/lib/savePdf';
+import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
 const money = (value: unknown) => formatCurrency(Number(value) || 0);
@@ -110,7 +110,7 @@ const RelatorioImpressaoPage: React.FC = () => {
     try {
       await saveElementAsPdf({
         element: document.getElementById('fech-print-area'),
-        fileName: `relatorio_fechamento_${company?.name || 'empresa'}_${competencia}.pdf`,
+        fileName: buildPdfFileName('relatorio fechamento', company?.name || 'empresa', competenciaPdfPart(competencia)),
         orientation: 'landscape',
         margin: 6,
       });
