@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, Loader2, Mail, RefreshCw, Save, Upload } from 'lucide-react';
 import { openEmailClient } from '@/lib/emailUtils';
-import { downloadPdf, gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
+import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel, isMotoboyRole } from '@/lib/employeeRoleRules';
 
@@ -169,6 +170,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [lastFichaFile, setLastFichaFile] = useState<File | null>(null);
   const [lastAsoGuide, setLastAsoGuide] = useState<GeneratedAsoGuide | null>(null);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -412,20 +414,21 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
       });
       window.open(url, '_blank', 'noopener,noreferrer');
     }
-    downloadPdf(pdf.blob, pdf.fileName);
-    openEmailClient({
+    setEmailPdfDraft({
       to: ['agendamento@ponteaereaseguranca.com.br'],
       cc: ['robson@topac.com.br'],
       subject: `Solicitacao de exame admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`,
       body: buildExameEmailBody(form),
+      attachmentBlob: pdf.blob,
+      attachmentName: pdf.fileName,
+      afterSend: async () => {
+        if (form.id && !existingGuide) await arquivarGuiaAso(pdf);
+        if (form.id) {
+          await (supabase as any).rpc('admin_pre_cadastro_marcar_exame_enviado', { p_id: form.id });
+          await carregar();
+        }
+      },
     });
-    try {
-      if (form.id && !existingGuide) await arquivarGuiaAso(pdf);
-      if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_marcar_exame_enviado', { p_id: form.id }); await carregar(); }
-      toast.success('Outlook aberto para enviar a Guia ASO. PDF aberto/baixado para anexar.');
-    } catch (e: any) {
-      toast.warning(`E-mail aberto, mas nao foi possivel atualizar o status: ${e.message || 'erro desconhecido'}`);
-    }
   };
 
   const uploadASO = async (file?: File | null) => {
@@ -450,6 +453,13 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
         <div className="flex flex-wrap gap-2"><Button onClick={salvar} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar conferencia'}</Button><Button onClick={gerarGuiaAso} variant="outline"><FileSearch className="w-4 h-4 mr-2" />Gerar Guia ASO</Button><Button onClick={enviarGuiaAso} variant="outline"><Mail className="w-4 h-4 mr-2" />Enviar guia ASO</Button><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Anexar documentos<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadDocumento('documentacao_admissional', e.target.files?.[0])} /></label><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer hover:bg-muted">Subir ASO<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadASO(e.target.files?.[0])} /></label><Button onClick={enviarContabilidade} variant="outline"><ArrowRight className="w-4 h-4 mr-2" />E-mail contabilidade</Button><Button onClick={aprovarOficial} className="gradient-accent text-accent-foreground"><CheckCircle2 className="w-4 h-4 mr-2" />Aprovar cadastro oficial</Button></div>
       </div>
     </div>
+    <EmailPdfModal
+      open={!!emailPdfDraft}
+      draft={emailPdfDraft}
+      onOpenChange={(open) => {
+        if (!open) setEmailPdfDraft(null);
+      }}
+    />
   </div>;
 };
 

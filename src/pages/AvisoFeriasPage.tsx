@@ -7,10 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { CalendarCheck, Printer, Save, ArrowLeft, AlertTriangle, Mail } from 'lucide-react';
 import { formatDate, feriasStatus } from '@/lib/calculations';
 import { toast } from 'sonner';
-import { openEmailClient, getDestinatariosFerias, CC_OBRIGATORIO } from '@/lib/emailUtils';
+import { getDestinatariosFerias, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import { gerarAvisoFeriasPdf, downloadPdf } from '@/lib/pdfGenerator';
 import { supabase } from '@/integrations/supabase/client';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 
 type FeriasAvisoRow = {
   id: string;
@@ -144,6 +145,7 @@ const AvisoFeriasPage: React.FC = () => {
   const [filterCompany, setFilterCompany] = useState('');
   const [feriasAvisos, setFeriasAvisos] = useState<FeriasAvisoRow[]>([]);
   const [savingFerias, setSavingFerias] = useState(false);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   const feriasByEmployee = useMemo(() => {
@@ -355,6 +357,48 @@ const AvisoFeriasPage: React.FC = () => {
     }
   };
 
+  const handleEnviarEmailFerias = async () => {
+    if (!emp || !inicioFerias) { toast.error('Preencha os dados'); return; }
+    const pdf = gerarPdfAtual();
+    if (!pdf) return;
+
+    const destinatarios = Array.from(getDestinatariosFerias(company?.name || ''));
+    const body = [
+      `Segue aviso de ferias do(a) colaborador(a) abaixo:`,
+      ``,
+      `Nome: ${emp.name}`,
+      `CPF: ${emp.cpf}`,
+      `Cargo: ${emp.cargo}`,
+      `Empresa: ${company?.name || ''}`,
+      `Inicio: ${new Date(inicioFerias).toLocaleDateString('pt-BR')}`,
+      `Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '-'}`,
+      `Dias: ${diasFerias}`,
+      ``,
+      `Segue aviso em anexo.`,
+      ``,
+      `Atenciosamente,`,
+      `Rodrigo De Souza Sabino`,
+    ].join('\n');
+
+    setEmailPdfDraft({
+      to: destinatarios,
+      cc: Array.from(CC_OBRIGATORIO),
+      subject: `Aviso de Ferias - ${emp.name} - ${company?.name || ''}`,
+      body,
+      attachmentBlob: pdf.blob,
+      attachmentName: pdf.fileName,
+      afterSend: async () => {
+        const registro = await arquivarAvisoFerias(pdf);
+        await salvarFeriasNoBanco({ silent: true, avisoPdfUrl: (registro as any)?.arquivo_url || '' });
+        const documentoId = (registro as any)?.id || lastDocId;
+        if (documentoId && session?.user) {
+          const nomeUsuario = await getNomeUsuarioAtual();
+          await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
+        }
+      },
+    });
+  };
+
   // Detail view
   if (selectedEmpId && emp) {
     const fer = buildFeriasInfo(
@@ -415,50 +459,18 @@ const AvisoFeriasPage: React.FC = () => {
             <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold">
               <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir Aviso
             </Button>
-            <Button onClick={async () => {
-              if (!emp || !inicioFerias) { toast.error('Preencha os dados'); return; }
-              // 1. Garante PDF baixado para o operador anexar
-              const pdf = gerarPdfAtual();
-              if (pdf) downloadPdf(pdf.blob, pdf.fileName);
-              const registro = pdf ? await arquivarAvisoFerias(pdf) : null;
-              await salvarFeriasNoBanco({ silent: true, avisoPdfUrl: (registro as any)?.arquivo_url || '' });
-
-              const destinatarios = getDestinatariosFerias(company?.name || '');
-              // 2. Texto humano e legível, sem "+", sem URL params quebrados
-              const body = [
-                `Segue aviso de férias do(a) colaborador(a) abaixo:`,
-                ``,
-                `Nome: ${emp.name}`,
-                `CPF: ${emp.cpf}`,
-                `Cargo: ${emp.cargo}`,
-                `Empresa: ${company?.name || ''}`,
-                `Início: ${new Date(inicioFerias).toLocaleDateString('pt-BR')}`,
-                `Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '—'}`,
-                `Dias: ${diasFerias}`,
-                ``,
-                `Segue aviso em anexo.`,
-                ``,
-                `Atenciosamente.`,
-              ].join('\n');
-
-              openEmailClient({
-                to: destinatarios,
-                cc: CC_OBRIGATORIO,
-                subject: `Aviso de Férias — ${emp.name} — ${company?.name || ''}`,
-                body,
-              });
-
-              const documentoId = (registro as any)?.id || lastDocId;
-              if (documentoId && session?.user) {
-                const nomeUsuario = await getNomeUsuarioAtual();
-                await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
-              }
-              toast.success('Outlook aberto — arraste o PDF baixado para anexar');
-            }} variant="outline" className="border-primary text-primary hover:bg-primary/10">
+            <Button onClick={handleEnviarEmailFerias} variant="outline" className="border-primary text-primary hover:bg-primary/10">
               <Mail className="w-4 h-4 mr-2" /> Enviar por E-mail
             </Button>
           </div>
         </div>
+        <EmailPdfModal
+          open={!!emailPdfDraft}
+          draft={emailPdfDraft}
+          onOpenChange={(open) => {
+            if (!open) setEmailPdfDraft(null);
+          }}
+        />
       </div>
     );
   }

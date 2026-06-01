@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatCompetencia } from '@/lib/workingDays';
 import { registrarAcao } from '@/lib/acoesLog';
 import { parseCurrencyBR, formatBRL } from '@/lib/currencyMask';
-import { downloadEmailWithAttachment } from '@/lib/emailUtils';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 import { downloadPdfBlob, sanitizePdfFileName } from '@/lib/savePdf';
 import { toast } from 'sonner';
@@ -189,6 +189,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [ultimoPdfUrl, setUltimoPdfUrl] = useState<string | null>(null);
   const [empresasLoteIds, setEmpresasLoteIds] = useState<string[]>([]);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
 
   const company = companies.find(c => c.id === companyId);
   const isGO = !!company && usaHE60(company.name);
@@ -1021,12 +1022,6 @@ const ApontamentoContabilidadePage: React.FC = () => {
     return doc.output('blob');
   };
 
-  const abrirPdfBlob = (blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-  };
-
   const salvarPdfLote = async (blob: Blob, grupos: GrupoApontamento[]) => {
     const nomes = grupos.map((g) => g.company.name);
     const baseName = buildStoragePdfPathName(buildApontamentoLotePdfName(nomes, competencia));
@@ -1058,9 +1053,6 @@ const ApontamentoContabilidadePage: React.FC = () => {
       ];
     }
 
-    // 1) abre o PDF/preview do apontamento direto, sem gerar CSV.
-    const pdfAberto = imprimir();
-    if (!pdfAberto) return;
     const pdfBlob = gerarPdfBlob();
     let pdfUrl = '';
     try {
@@ -1069,35 +1061,28 @@ const ApontamentoContabilidadePage: React.FC = () => {
       toast.error(`PDF nao foi salvo na plataforma: ${e.message || 'erro desconhecido'}`);
       return;
     }
-
-    // 2) registra no histórico
-    await registrarAcao({
-      modulo: 'contabilidade',
-      entidade: 'apontamento_contabilidade',
-      entidadeId: apontamentoId || undefined,
-      acao: 'enviou',
-      depois: { para, cc, total_geral: totalGeral, itens: items.length, competencia, empresa: company.name, pdf_url: pdfUrl },
-      arquivoUrl: pdfUrl,
-      observacao: `Envio do apontamento ${formatCompetencia(competencia)} para contabilidade`,
-    });
-
-    try {
-      await downloadEmailWithAttachment({
-        to: para,
-        cc,
-        subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
-        body:
+    setEmailPdfDraft({
+      to: para,
+      cc,
+      subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
+      body:
         `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n\n` +
         `Atenciosamente,\nRodrigo De Souza Sabino`,
-        attachmentBlob: pdfBlob,
-        attachmentName: buildApontamentoPdfName(company.name, competencia),
-        fileName: `Email_Apontamento_${company.name}_${competencia}`,
-      });
-      toast.success('PDF salvo na plataforma e e-mail enviado com anexo.');
-    } catch (e: any) {
-      toast.error(`PDF salvo, mas o e-mail com anexo falhou: ${e.message || 'erro desconhecido'}`);
-    }
+      attachmentBlob: pdfBlob,
+      attachmentName: buildApontamentoPdfName(company.name, competencia),
+      afterSend: async () => {
+        await registrarAcao({
+          modulo: 'contabilidade',
+          entidade: 'apontamento_contabilidade',
+          entidadeId: apontamentoId || undefined,
+          acao: 'enviou',
+          depois: { para, cc, total_geral: totalGeral, itens: items.length, competencia, empresa: company.name, pdf_url: pdfUrl },
+          arquivoUrl: pdfUrl,
+          observacao: `Envio do apontamento ${formatCompetencia(competencia)} para contabilidade`,
+        });
+      },
+    });
   };
 
   const enviarLoteContabilidade = async () => {
@@ -1117,7 +1102,6 @@ const ApontamentoContabilidadePage: React.FC = () => {
       }
 
       const blob = gerarPdfBlobLote(grupos);
-      abrirPdfBlob(blob);
       const pdfUrl = await salvarPdfLote(blob, grupos);
 
       const para = [
@@ -1130,25 +1114,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
       const totalLote = round2(grupos.reduce((s, g) => s + g.items.reduce((t, r) => t + Number(r.total || 0), 0), 0));
       const qtdFuncionarios = grupos.reduce((s, g) => s + g.items.length, 0);
 
-      await registrarAcao({
-        modulo: 'contabilidade',
-        entidade: 'apontamento_contabilidade',
-        entidadeId: grupos[0].apontamentoId || apontamentoId || undefined,
-        acao: 'enviou',
-        depois: {
-          para,
-          cc,
-          total_geral: totalLote,
-          itens: qtdFuncionarios,
-          competencia,
-          empresas: grupos.map((g) => g.company.name),
-          pdf_url: pdfUrl,
-        },
-        arquivoUrl: pdfUrl,
-        observacao: `Envio em lote do apontamento ${formatCompetencia(competencia)} para contabilidade`,
-      });
-
-      await downloadEmailWithAttachment({
+      setEmailPdfDraft({
         to: para,
         cc,
         subject: `Apontamento Contabilidade - ${formatCompetencia(competencia)} - Matriz/Praia/LMT/ALQUI`,
@@ -1158,10 +1124,28 @@ const ApontamentoContabilidadePage: React.FC = () => {
           `Atenciosamente,\nRodrigo De Souza Sabino`,
         attachmentBlob: blob,
         attachmentName: buildApontamentoLotePdfName(grupos.map((g) => g.company.name), competencia),
-        fileName: `Email_Apontamento_Lote_${competencia}`,
+        afterSend: async () => {
+          await registrarAcao({
+            modulo: 'contabilidade',
+            entidade: 'apontamento_contabilidade',
+            entidadeId: grupos[0].apontamentoId || apontamentoId || undefined,
+            acao: 'enviou',
+            depois: {
+              para,
+              cc,
+              total_geral: totalLote,
+              itens: qtdFuncionarios,
+              competencia,
+              empresas: grupos.map((g) => g.company.name),
+              pdf_url: pdfUrl,
+            },
+            arquivoUrl: pdfUrl,
+            observacao: `Envio em lote do apontamento ${formatCompetencia(competencia)} para contabilidade`,
+          });
+        },
       });
 
-      toast.success('PDF em lote salvo e e-mail enviado com anexo.');
+      toast.success('PDF em lote salvo. Confirme o envio na caixa de e-mail.');
     } catch (e: any) {
       toast.error(`Erro no envio em lote: ${e.message || 'erro desconhecido'}`);
     } finally {
@@ -1405,6 +1389,13 @@ const ApontamentoContabilidadePage: React.FC = () => {
           Total = Salário + Insalubridade + Periculosidade + Comissão Valor + HE {heLabelPct} + HE 100% − Assistência Médica − Desconto Falta − Desconto DSR − Adiantamento.
         </p>
       </div>
+      <EmailPdfModal
+        open={!!emailPdfDraft}
+        draft={emailPdfDraft}
+        onOpenChange={(open) => {
+          if (!open) setEmailPdfDraft(null);
+        }}
+      />
     </div>
   );
 };

@@ -52,7 +52,7 @@ const blobToBase64 = (blob: Blob) =>
     reader.readAsDataURL(ensurePdfBlob(blob));
   });
 
-const sendPdfByPlatform = async ({
+export const sendEmailWithPdfAttachment = async ({
   to,
   cc,
   subject,
@@ -63,6 +63,9 @@ const sendPdfByPlatform = async ({
   const pdfBlob = ensurePdfBlob(attachmentBlob);
   const attachmentBase64 = await blobToBase64(pdfBlob);
   if (!attachmentBase64) throw new Error('pdf_anexo_vazio');
+  const cleanAttachmentName = safeFileName(attachmentName).toLowerCase().endsWith('.pdf')
+    ? safeFileName(attachmentName)
+    : `${safeFileName(attachmentName)}.pdf`;
 
   const response = await fetch('/api/send-email-pdf', {
     method: 'POST',
@@ -72,7 +75,7 @@ const sendPdfByPlatform = async ({
       cc: cc || [],
       subject,
       body,
-      attachmentName,
+      attachmentName: cleanAttachmentName,
       attachmentBase64,
       attachmentContentType: PDF_CONTENT_TYPE,
       attachmentSize: pdfBlob.size,
@@ -102,7 +105,7 @@ export const downloadEmailWithAttachment = async ({
     : `${safeFileName(attachmentName)}.pdf`;
 
   try {
-    await sendPdfByPlatform({
+    await sendEmailWithPdfAttachment({
       to,
       cc,
       subject,

@@ -7,7 +7,7 @@ import { getWorkingDays, getFirstBusinessDayOfNextMonth } from '@/lib/workingDay
 import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, buildVTReportRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
-import { downloadEmailWithAttachment } from '@/lib/emailUtils';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
 import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
 import { toast } from 'sonner';
@@ -69,6 +69,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [sendingEmail, setSendingEmail] = useState(false);
   const [savingPdf, setSavingPdf] = useState(false);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
   const formato = (searchParams.get('formato') || searchParams.get('tipo') || 'vr') as Formato;
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
@@ -327,41 +328,44 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
         grupos.set(destino.key, atual);
       });
 
-      for (const { destino, items } of Array.from(grupos.values())) {
-        const empresaNome = items[0]?.company?.name || 'TOPAC';
-        const pdfBlob = gerarPdfRecibosBlob(items);
-        await arquivarRecibosNoHistorico(items, 'email').catch((error) => {
-          console.error('Erro ao arquivar recibos no historico:', error);
-          toast.warning('E-mail gerado, mas alguns recibos nao foram salvos no historico.');
-        });
-        const attachmentName = getRecibosPdfFileName(items);
-        await downloadEmailWithAttachment({
-          to: destino.to,
-          cc: destino.cc,
-          subject: `Recibos ${formatoLabel} - ${empresaNome} - ${competenciaLabel}`,
-          body: [
-            'Prezados,',
-            '',
-            `Segue em anexo o PDF com os recibos de ${formatoLabel} referente a ${competenciaLabel} da empresa ${empresaNome}.`,
-            '',
-            `Quantidade de recibos: ${items.length}`,
-            '',
-            'Atenciosamente,',
-            'Departamento Pessoal - TOPAC',
-          ].join('\n'),
-          attachmentBlob: pdfBlob,
-          attachmentName,
-          fileName: `email_recibos_${destino.key}_${competencia}`,
-        });
-      }
-      toast.success('E-mail dos recibos gerado com PDF em anexo.');
+      const gruposLista = Array.from(grupos.values());
+      const itemsEmail = gruposLista.flatMap((grupo) => grupo.items);
+      const to = Array.from(new Set(gruposLista.flatMap((grupo) => grupo.destino.to)));
+      const cc = Array.from(new Set(gruposLista.flatMap((grupo) => grupo.destino.cc)));
+      const empresas = Array.from(new Set(itemsEmail.map((item) => item.company?.name || 'TOPAC')));
+      const empresaNome = empresas.length === 1 ? empresas[0] : empresas.join(', ');
+      const pdfBlob = gerarPdfRecibosBlob(itemsEmail);
+      const attachmentName = getRecibosPdfFileName(itemsEmail);
+
+      setEmailPdfDraft({
+        to,
+        cc,
+        subject: `Recibos ${formatoLabel} - ${empresaNome} - ${competenciaLabel}`,
+        body: [
+          'Prezados,',
+          '',
+          `Segue em anexo o PDF com os recibos de ${formatoLabel} referente a ${competenciaLabel} da empresa ${empresaNome}.`,
+          '',
+          `Quantidade de recibos: ${itemsEmail.length}`,
+          '',
+          'Atenciosamente,',
+          'Rodrigo De Souza Sabino',
+        ].join('\n'),
+        attachmentBlob: pdfBlob,
+        attachmentName,
+        afterSend: async () => {
+          await arquivarRecibosNoHistorico(itemsEmail, 'email').catch((error) => {
+            console.error('Erro ao arquivar recibos no historico:', error);
+            toast.warning('E-mail enviado, mas alguns recibos nao foram salvos no historico.');
+          });
+        },
+      });
     } catch (error: any) {
-      toast.error(error?.message || 'Nao foi possivel gerar o e-mail dos recibos.');
+      toast.error(error?.message || 'Nao foi possivel preparar o e-mail dos recibos.');
     } finally {
       setSendingEmail(false);
     }
   };
-
   const renderBloco = (label: string, row: BenefitReportRow, sigla: 'VR' | 'VT') => (
     <table className="w-full text-sm mb-3 border border-black/40">
       <tbody>
@@ -490,6 +494,13 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
           })}
         </div>
       </div>
+      <EmailPdfModal
+        open={!!emailPdfDraft}
+        draft={emailPdfDraft}
+        onOpenChange={(open) => {
+          if (!open) setEmailPdfDraft(null);
+        }}
+      />
     </>
   );
 };

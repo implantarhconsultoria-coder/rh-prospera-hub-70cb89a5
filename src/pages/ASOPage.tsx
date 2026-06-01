@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Stethoscope, Printer, Search, ArrowLeft, Save, AlertTriangle, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { openEmailClient, DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
+import { DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import { gerarFichaASOPdf, downloadPdf } from '@/lib/pdfGenerator';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 
 const CLINICAS: Record<string, string> = {
   'TOPAC MATRIZ': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
@@ -38,6 +39,7 @@ const ASOPage: React.FC = () => {
   const [responsavelContato, setResponsavelContato] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastDocId, setLastDocId] = useState('');
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
 
   const getNomeUsuarioAtual = async () => {
     if (!session?.user) return '';
@@ -125,6 +127,43 @@ const ASOPage: React.FC = () => {
     } else {
       toast.success('PDF gerado e baixado!');
     }
+  };
+
+  const handleEnviarEmailAso = async () => {
+    if (!emp) { toast.error('Selecione um funcionario'); return; }
+    const pdf = gerarPdfAtual();
+    if (!pdf) return;
+
+    const linhas = [
+      `Solicitamos agendamento de exame ${tipoExame} para o(a) colaborador(a) abaixo:`,
+      ``,
+      `Nome: ${emp.name}`,
+      `CPF: ${emp.cpf}`,
+      `Funcao: ${emp.cargo}`,
+      `Empresa: ${company?.name || ''}`,
+      `Data sugerida: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'}`,
+      `Trabalho em Altura: ${trabalhoAltura ? 'Sim' : 'Nao'}`,
+      `Espaco Confinado: ${espacoConfinado ? 'Sim' : 'Nao'}`,
+    ];
+    if (clinica) linhas.push(`Clinica: ${clinica}`);
+    linhas.push('', 'Favor confirmar data e horario.', 'Segue ficha em anexo.', '', 'Atenciosamente,', 'Rodrigo De Souza Sabino');
+
+    setEmailPdfDraft({
+      to: Array.from(DESTINATARIOS_ASO),
+      cc: Array.from(CC_OBRIGATORIO),
+      subject: `Agendamento ASO - ${emp.name} - ${tipoExame} - ${company?.name || ''}`,
+      body: linhas.join('\n'),
+      attachmentBlob: pdf.blob,
+      attachmentName: pdf.fileName,
+      afterSend: async () => {
+        const registro = await arquivarFichaASO(pdf);
+        const documentoId = (registro as any)?.id || lastDocId;
+        if (documentoId && session?.user) {
+          const nomeUsuario = await getNomeUsuarioAtual();
+          await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...DESTINATARIOS_ASO, ...CC_OBRIGATORIO].join(', '));
+        }
+      },
+    });
   };
 
   const handleSave = async () => {
@@ -230,50 +269,18 @@ const ASOPage: React.FC = () => {
             <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold">
               <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir Ficha
             </Button>
-            <Button onClick={async () => {
-              if (!emp) { toast.error('Selecione um funcionário'); return; }
-              // 1. Garante PDF baixado para o operador anexar
-              const pdf = gerarPdfAtual();
-              if (pdf) downloadPdf(pdf.blob, pdf.fileName);
-
-              // 2. Texto humano e legível, sem "+", sem URL params quebrados
-              const linhas = [
-                `Solicitamos agendamento de exame ${tipoExame} para o(a) colaborador(a) abaixo:`,
-                ``,
-                `Nome: ${emp.name}`,
-                `CPF: ${emp.cpf}`,
-                `Função: ${emp.cargo}`,
-                `Empresa: ${company?.name || ''}`,
-                `Data sugerida: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'}`,
-                `Trabalho em Altura: ${trabalhoAltura ? 'Sim' : 'Não'}`,
-                `Espaço Confinado: ${espacoConfinado ? 'Sim' : 'Não'}`,
-              ];
-              if (clinica) linhas.push(`Clínica: ${clinica}`);
-              linhas.push('', 'Favor confirmar data e horário.', 'Segue ficha em anexo.', '', 'Atenciosamente.');
-
-              openEmailClient({
-                to: DESTINATARIOS_ASO,
-                cc: CC_OBRIGATORIO,
-                subject: `Agendamento ASO — ${emp.name} — ${tipoExame} — ${company?.name || ''}`,
-                body: linhas.join('\n'),
-              });
-
-              try {
-                const registro = pdf ? await arquivarFichaASO(pdf) : null;
-                const documentoId = (registro as any)?.id || lastDocId;
-                if (documentoId && session?.user) {
-                  const nomeUsuario = await getNomeUsuarioAtual();
-                  await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...DESTINATARIOS_ASO, ...CC_OBRIGATORIO].join(', '));
-                }
-              } catch (error: any) {
-                toast.warning(`E-mail aberto, mas nao foi possivel arquivar o ASO: ${error?.message || 'erro desconhecido'}`);
-              }
-              toast.success('Outlook aberto — arraste o PDF baixado para anexar');
-            }} variant="outline" className="border-primary text-primary hover:bg-primary/10">
+            <Button onClick={handleEnviarEmailAso} variant="outline" className="border-primary text-primary hover:bg-primary/10">
               <Mail className="w-4 h-4 mr-2" /> Enviar por E-mail
             </Button>
           </div>
         </div>
+        <EmailPdfModal
+          open={!!emailPdfDraft}
+          draft={emailPdfDraft}
+          onOpenChange={(open) => {
+            if (!open) setEmailPdfDraft(null);
+          }}
+        />
       </div>
     );
   }
