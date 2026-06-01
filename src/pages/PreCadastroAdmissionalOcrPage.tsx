@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, Loader2, Mail, RefreshCw, Save, Upload } from 'lucide-react';
-import { downloadEmailWithAttachment, openEmailClient } from '@/lib/emailUtils';
-import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
+import { openEmailClient } from '@/lib/emailUtils';
+import { downloadPdf, gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel, isMotoboyRole } from '@/lib/employeeRoleRules';
 
@@ -401,21 +401,30 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   };
 
   const enviarGuiaAso = async () => {
-    const pdf = lastAsoGuide || await gerarGuiaAso();
+    const existingGuide = lastAsoGuide;
+    const pdf = existingGuide || buildGuiaAsoPdf();
     if (!pdf) return;
-    try {
-      await downloadEmailWithAttachment({
-        to: ['agendamento@ponteaereaseguranca.com.br'],
-        cc: ['robson@topac.com.br'],
-        subject: `Solicitacao de exame admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`,
-        body: buildExameEmailBody(form),
-        attachmentBlob: pdf.blob,
-        attachmentName: pdf.fileName,
+    if (!existingGuide) {
+      const url = URL.createObjectURL(pdf.blob);
+      setLastAsoGuide(prev => {
+        if (prev?.url) URL.revokeObjectURL(prev.url);
+        return { ...pdf, url };
       });
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+    downloadPdf(pdf.blob, pdf.fileName);
+    openEmailClient({
+      to: ['agendamento@ponteaereaseguranca.com.br'],
+      cc: ['robson@topac.com.br'],
+      subject: `Solicitacao de exame admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`,
+      body: buildExameEmailBody(form),
+    });
+    try {
+      if (form.id && !existingGuide) await arquivarGuiaAso(pdf);
       if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_marcar_exame_enviado', { p_id: form.id }); await carregar(); }
-      toast.success('Guia ASO enviada para agendamento com PDF anexo.');
+      toast.success('Outlook aberto para enviar a Guia ASO. PDF aberto/baixado para anexar.');
     } catch (e: any) {
-      toast.error(`Nao foi possivel enviar a guia com anexo: ${e.message || 'erro desconhecido'}`);
+      toast.warning(`E-mail aberto, mas nao foi possivel atualizar o status: ${e.message || 'erro desconhecido'}`);
     }
   };
 

@@ -235,7 +235,6 @@ const ASOPage: React.FC = () => {
               // 1. Garante PDF baixado para o operador anexar
               const pdf = gerarPdfAtual();
               if (pdf) downloadPdf(pdf.blob, pdf.fileName);
-              const registro = pdf ? await arquivarFichaASO(pdf) : null;
 
               // 2. Texto humano e legível, sem "+", sem URL params quebrados
               const linhas = [
@@ -259,10 +258,15 @@ const ASOPage: React.FC = () => {
                 body: linhas.join('\n'),
               });
 
-              const documentoId = (registro as any)?.id || lastDocId;
-              if (documentoId && session?.user) {
-                const nomeUsuario = await getNomeUsuarioAtual();
-                await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...DESTINATARIOS_ASO, ...CC_OBRIGATORIO].join(', '));
+              try {
+                const registro = pdf ? await arquivarFichaASO(pdf) : null;
+                const documentoId = (registro as any)?.id || lastDocId;
+                if (documentoId && session?.user) {
+                  const nomeUsuario = await getNomeUsuarioAtual();
+                  await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...DESTINATARIOS_ASO, ...CC_OBRIGATORIO].join(', '));
+                }
+              } catch (error: any) {
+                toast.warning(`E-mail aberto, mas nao foi possivel arquivar o ASO: ${error?.message || 'erro desconhecido'}`);
               }
               toast.success('Outlook aberto — arraste o PDF baixado para anexar');
             }} variant="outline" className="border-primary text-primary hover:bg-primary/10">
