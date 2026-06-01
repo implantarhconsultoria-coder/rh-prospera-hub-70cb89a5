@@ -9,7 +9,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, Loader2, Mail, Ref
 import { openEmailClient } from '@/lib/emailUtils';
 import { downloadPdf, gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
-import { getPericulosidadeAplicavel, isMechanicRole, isMotoboyRole } from '@/lib/employeeRoleRules';
+import { employeeHasInsalubridade, getPericulosidadeAplicavel, isMotoboyRole } from '@/lib/employeeRoleRules';
 
 type PreCadastro = {
   id: string;
@@ -157,7 +157,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
         const existing = byRole.get(key);
         const salarioBase = Number(emp.salarioBase) || 0;
         const insalubridadeValor = Number(emp.insalubridadeValor || config.valorInsalubridade || 0);
-        const insalubridadeAtiva = isMechanicRole(emp.cargo);
+        const insalubridadeAtiva = employeeHasInsalubridade(emp);
         const periculosidadeAtiva = isMotoboyRole(emp.cargo);
         const periculosidadeValor = getPericulosidadeAplicavel(emp);
         if (!existing) {
@@ -188,7 +188,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const setCompany = (id: string) => { const c = companies.find(x => x.id === id); setForm(p => ({ ...p, empresa_id: id, empresa_nome: c?.name || '', cnpj: c?.cnpj || '' })); };
   const setFuncaoComPadroes = (funcao: string) => {
     const role = roleByName.get(normalizeRole(funcao));
-    const insalubridadeAtiva = isMechanicRole(funcao);
+    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
     const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
     const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
     setForm(p => {
@@ -209,7 +209,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     if (!funcao) return;
     const role = roleByName.get(normalizeRole(funcao));
     const shouldFillSalary = Boolean(role?.salarioBase && !Number(form.salario || 0));
-    const insalubridadeAtiva = isMechanicRole(funcao);
+    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
     const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
     const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
     const periculosidadeValor = Number(role?.periculosidadeValor || getPericulosidadeAplicavel({ cargo: funcao, salarioBase: role?.salarioBase || form.salario || 0 }));
