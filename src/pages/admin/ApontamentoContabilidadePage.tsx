@@ -89,6 +89,9 @@ const calcAdiantamentoAuto = (salario: number) => round2(Number(salario || 0) * 
 const calcComissaoValor = (base: number, pct: number) =>
   round2(Number(base || 0) * (Number(pct || 0) / 100));
 
+const formatPercentBR = (value: number) =>
+  `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}%`;
+
 const calcTotal = (r: ItemRow) =>
   round2(
     Number(r.salario || 0) +
@@ -630,6 +633,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           <td class="num">${money(r.salario)}</td>
           <td class="num">${money(r.insalubridade)}</td>
           <td class="num">${money(r.periculosidade)}</td>
+          <td class="num">${formatPercentBR(r.comissao_percentual)}</td>
           <td class="num">${money(r.comissao_valor)}</td>
           <td class="num">${hours(heQtd)}</td>
           <td class="num">${money(heValor)}</td>
@@ -708,7 +712,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
                   <th>Salário</th>
                   <th>Insalub.</th>
                   <th>Peric.</th>
-                  <th>Comissão</th>
+                  <th>Com. %</th>
+                  <th>Com. Valor</th>
                   <th>HE ${heLabelPct} Qtd</th>
                   <th>HE ${heLabelPct} Valor</th>
                   <th>HE 100% Qtd</th>
@@ -722,7 +727,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
               <tbody>${rows}</tbody>
               <tfoot>
                 <tr>
-                  <td colspan="13">TOTAL GERAL</td>
+                  <td colspan="14">TOTAL GERAL</td>
                   <td class="num">${money(totalGeral)}</td>
                 </tr>
               </tfoot>
@@ -789,8 +794,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const margin = 6;
     const rowH = 5;
     const heTitulo = isGO ? 'HE 60%' : 'HE 50%';
-    const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', 'Comissao', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
-    const widths = [42, 22, 20, 17, 16, 20, 17, 20, 18, 20, 12, 19, 20, 22];
+    const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', 'Com. %', 'Com. Valor', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+    const widths = [40, 22, 19, 17, 15, 15, 19, 17, 19, 18, 19, 12, 18, 19, 16];
     const money = (v: number) => formatBRL(Number(v || 0));
     const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
     const titulo = buildApontamentoPdfName(company.name, competencia).replace(/\.pdf$/i, '');
@@ -842,6 +847,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         money(r.salario),
         money(r.insalubridade),
         money(r.periculosidade),
+        formatPercentBR(r.comissao_percentual),
         money(r.comissao_valor),
         hours(heQtd),
         money(heValor),
@@ -923,14 +929,14 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const rowH = 5;
     const money = (v: number) => formatBRL(Number(v || 0));
     const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
-    const widths = [42, 22, 20, 17, 16, 20, 17, 20, 18, 20, 12, 19, 20, 22];
+    const widths = [40, 22, 19, 17, 15, 15, 19, 17, 19, 18, 19, 12, 18, 19, 16];
 
     grupos.forEach((grupo, grupoIdx) => {
       if (grupoIdx > 0) doc.addPage();
       let y = margin;
       const grupoIsGO = usaHE60(grupo.company.name);
       const heTitulo = grupoIsGO ? 'HE 60%' : 'HE 50%';
-      const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', 'Comissao', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+      const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', 'Com. %', 'Com. Valor', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
       const totalGrupo = round2(grupo.items.reduce((s, r) => s + Number(r.total || 0), 0));
       const titulo = buildApontamentoPdfName(grupo.company.name, competencia).replace(/\.pdf$/i, '');
 
@@ -980,6 +986,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           money(r.salario),
           money(r.insalubridade),
           money(r.periculosidade),
+          formatPercentBR(r.comissao_percentual),
           money(r.comissao_valor),
           hours(heQtd),
           money(heValor),
