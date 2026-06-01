@@ -83,6 +83,17 @@ type RoleOption = {
   periculosidadeValor: number;
 };
 
+const FIXED_ROLE_PRESETS: RoleOption[] = [
+  {
+    cargo: 'AJUDANTE DE OFICINA',
+    salarioBase: 2100,
+    insalubridadeAtiva: true,
+    insalubridadeValor: 648.40,
+    periculosidadeAtiva: false,
+    periculosidadeValor: 0,
+  },
+];
+
 const normalizeRole = (value?: string | null) =>
   String(value || '')
     .normalize('NFD')
@@ -150,6 +161,9 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const roleOptions = useMemo<RoleOption[]>(() => {
     if (!form.empresa_id) return [];
     const byRole = new Map<string, RoleOption>();
+    FIXED_ROLE_PRESETS.forEach(role => {
+      byRole.set(normalizeRole(role.cargo), { ...role });
+    });
     employees
       .filter(emp => emp.companyId === form.empresa_id && emp.categoria !== 'socio' && normalizeRole(emp.cargo))
       .forEach(emp => {
@@ -171,7 +185,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
           });
           return;
         }
-        if (!existing.salarioBase && salarioBase) existing.salarioBase = salarioBase;
+        if (salarioBase && !FIXED_ROLE_PRESETS.some(role => normalizeRole(role.cargo) === key)) existing.salarioBase = salarioBase;
         if (insalubridadeAtiva) {
           existing.insalubridadeAtiva = true;
           existing.insalubridadeValor = insalubridadeValor || existing.insalubridadeValor;

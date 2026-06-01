@@ -13,12 +13,21 @@ export const isMechanicRole = (cargo?: string | null) => normalizeCargo(cargo).i
 
 export const isWelderRole = (cargo?: string | null) => normalizeCargo(cargo).includes('SOLDADOR');
 
+export const isAjudanteOficinaRole = (cargo?: string | null) => {
+  const normalized = normalizeCargo(cargo);
+  return normalized.includes('AJUDANTE') && normalized.includes('OFICINA');
+};
+
 export const isLeonelInsalubridadeException = (name?: string | null) =>
   /^LEONEL\b/.test(normalizeCargo(name));
 
 export const employeeHasInsalubridade = (
   emp: { name?: string | null; nome?: string | null; cargo?: string | null },
-) => isMechanicRole(emp.cargo) || isWelderRole(emp.cargo) || isLeonelInsalubridadeException(emp.name || emp.nome);
+) =>
+  isMechanicRole(emp.cargo) ||
+  isWelderRole(emp.cargo) ||
+  isAjudanteOficinaRole(emp.cargo) ||
+  isLeonelInsalubridadeException(emp.name || emp.nome);
 
 export const isMotoboyRole = (cargo?: string | null) => {
   const normalized = normalizeCargo(cargo).replace(/[^A-Z0-9]/g, '');
