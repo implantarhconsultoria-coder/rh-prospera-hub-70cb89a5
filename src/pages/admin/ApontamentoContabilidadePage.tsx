@@ -629,6 +629,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           <td class="num">${money(r.salario)}</td>
           <td class="num">${money(r.insalubridade)}</td>
           <td class="num">${money(r.periculosidade)}</td>
+          <td class="num">${money(r.comissao_valor)}</td>
           <td class="num">${hours(heQtd)}</td>
           <td class="num">${money(heValor)}</td>
           <td class="num">${hours(r.hora_extra_100_horas)}</td>
@@ -706,6 +707,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
                   <th>Salário</th>
                   <th>Insalub.</th>
                   <th>Peric.</th>
+                  <th>Comissão</th>
                   <th>HE ${heLabelPct} Qtd</th>
                   <th>HE ${heLabelPct} Valor</th>
                   <th>HE 100% Qtd</th>
@@ -719,7 +721,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
               <tbody>${rows}</tbody>
               <tfoot>
                 <tr>
-                  <td colspan="12">TOTAL GERAL</td>
+                  <td colspan="13">TOTAL GERAL</td>
                   <td class="num">${money(totalGeral)}</td>
                 </tr>
               </tfoot>
@@ -786,8 +788,8 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const margin = 6;
     const rowH = 5;
     const heTitulo = isGO ? 'HE 60%' : 'HE 50%';
-    const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
-    const widths = [46, 24, 21, 18, 18, 18, 22, 19, 22, 13, 21, 21, 22];
+    const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', 'Comissao', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+    const widths = [42, 22, 20, 17, 16, 20, 17, 20, 18, 20, 12, 19, 20, 22];
     const money = (v: number) => formatBRL(Number(v || 0));
     const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
     const titulo = buildApontamentoPdfName(company.name, competencia).replace(/\.pdf$/i, '');
@@ -839,6 +841,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         money(r.salario),
         money(r.insalubridade),
         money(r.periculosidade),
+        money(r.comissao_valor),
         hours(heQtd),
         money(heValor),
         hours(r.hora_extra_100_horas),
@@ -866,10 +869,11 @@ const ApontamentoContabilidadePage: React.FC = () => {
       drawHeader();
     }
     doc.setFont('helvetica', 'bold');
-    doc.rect(margin, y, widths.slice(0, 12).reduce((s, w) => s + w, 0), rowH);
+    const totalLabelWidth = widths.slice(0, -1).reduce((s, w) => s + w, 0);
+    doc.rect(margin, y, totalLabelWidth, rowH);
     doc.text('TOTAL GERAL', margin + 1, y + 3.4);
-    const totalX = margin + widths.slice(0, 12).reduce((s, w) => s + w, 0);
-    doc.rect(totalX, y, widths[12], rowH);
+    const totalX = margin + totalLabelWidth;
+    doc.rect(totalX, y, widths[widths.length - 1], rowH);
     doc.text(money(totalGeral), totalX + 1, y + 3.4);
 
     doc.setFont('helvetica', 'normal');
@@ -918,14 +922,14 @@ const ApontamentoContabilidadePage: React.FC = () => {
     const rowH = 5;
     const money = (v: number) => formatBRL(Number(v || 0));
     const hours = (v: number) => `${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
-    const widths = [46, 24, 21, 18, 18, 18, 22, 19, 22, 13, 21, 21, 22];
+    const widths = [42, 22, 20, 17, 16, 20, 17, 20, 18, 20, 12, 19, 20, 22];
 
     grupos.forEach((grupo, grupoIdx) => {
       if (grupoIdx > 0) doc.addPage();
       let y = margin;
       const grupoIsGO = usaHE60(grupo.company.name);
       const heTitulo = grupoIsGO ? 'HE 60%' : 'HE 50%';
-      const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
+      const headers = ['Nome', 'CPF', 'Salario', 'Insalub.', 'Peric.', 'Comissao', `${heTitulo} Qtd`, `${heTitulo} Valor`, 'HE 100% Qtd', 'HE 100% Valor', 'Faltas', 'Desc. Falta', 'Adiant.', 'Total'];
       const totalGrupo = round2(grupo.items.reduce((s, r) => s + Number(r.total || 0), 0));
       const titulo = buildApontamentoPdfName(grupo.company.name, competencia).replace(/\.pdf$/i, '');
 
@@ -975,6 +979,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
           money(r.salario),
           money(r.insalubridade),
           money(r.periculosidade),
+          money(r.comissao_valor),
           hours(heQtd),
           money(heValor),
           hours(r.hora_extra_100_horas),
@@ -1002,10 +1007,11 @@ const ApontamentoContabilidadePage: React.FC = () => {
         drawHeader();
       }
       doc.setFont('helvetica', 'bold');
-      doc.rect(margin, y, widths.slice(0, 12).reduce((s, w) => s + w, 0), rowH);
+      const totalLabelWidth = widths.slice(0, -1).reduce((s, w) => s + w, 0);
+      doc.rect(margin, y, totalLabelWidth, rowH);
       doc.text('TOTAL GERAL', margin + 1, y + 3.4);
-      const totalX = margin + widths.slice(0, 12).reduce((s, w) => s + w, 0);
-      doc.rect(totalX, y, widths[12], rowH);
+      const totalX = margin + totalLabelWidth;
+      doc.rect(totalX, y, widths[widths.length - 1], rowH);
       doc.text(money(totalGrupo), totalX + 1, y + 3.4);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
