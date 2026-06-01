@@ -10,6 +10,7 @@ import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 import { downloadPdfBlob, sanitizePdfFileName } from '@/lib/savePdf';
 import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
+import { CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { toast } from 'sonner';
 
 /** Decide o percentual de hora extra extra padrão da empresa (50% ou 60%). */
@@ -1114,7 +1115,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
 
     const isGyn = /goi[âa]nia/i.test(company.name);
     let para: string[] = [];
-    let cc: string[] = ['robson@topac.com.br'];
+    let cc: string[] = Array.from(CC_OBRIGATORIO);
 
     if (isGyn) {
       para = ['gyn@topac.com.br', 'requisicao@incocontabilidade.com.br'];
@@ -1182,7 +1183,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
         'dp@aatconsultoria.com.br',
         'lucilene@aatconsultoria.com.br',
       ];
-      const cc = ['robson@topac.com.br'];
+      const cc = Array.from(CC_OBRIGATORIO);
       const nomes = grupos.map((g) => g.company.name).join(', ');
       const totalLote = round2(grupos.reduce((s, g) => s + g.items.reduce((t, r) => t + Number(r.total || 0), 0), 0));
       const qtdFuncionarios = grupos.reduce((s, g) => s + g.items.length, 0);

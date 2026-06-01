@@ -10,6 +10,7 @@ import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
 import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
+import { CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { toast } from 'sonner';
 
 type Formato = 'vr' | 'vt' | 'ambos';
@@ -56,10 +57,10 @@ const normalizeText = (value: string) =>
 const getEmailDestinoRecibo = (companyName: string) => {
   const nome = normalizeText(companyName);
   if (nome.includes('PRAIA')) {
-    return { key: 'praia', to: ['antonio.carlos@topac.com.br'], cc: ['robson@topac.com.br'] };
+    return { key: 'praia', to: ['antonio.carlos@topac.com.br'], cc: Array.from(CC_OBRIGATORIO) };
   }
   if (nome.includes('GOIANIA') || nome.includes('GOIANA') || nome.includes('GOIAN')) {
-    return { key: 'goiania', to: ['gyn@topac.com.br'], cc: ['robson@topac.com.br'] };
+    return { key: 'goiania', to: ['gyn@topac.com.br'], cc: Array.from(CC_OBRIGATORIO) };
   }
   return null;
 };

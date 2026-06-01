@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, Loader2, Mail, RefreshCw, Save, Upload } from 'lucide-react';
-import { openEmailClient } from '@/lib/emailUtils';
+import { CC_OBRIGATORIO, openEmailClient } from '@/lib/emailUtils';
 import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
@@ -431,7 +431,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     const tipoExameSolicitado = getTipoExameSolicitado(form).toLowerCase();
     setEmailPdfDraft({
       to: ['agendamento@ponteaereaseguranca.com.br'],
-      cc: ['robson@topac.com.br'],
+      cc: Array.from(CC_OBRIGATORIO),
       subject: `Solicitacao de exame ${tipoExameSolicitado} - ${form.nome || ''} - ${form.empresa_nome || ''}`,
       body: buildExameEmailBody(form),
       attachmentBlob: pdf.blob,
@@ -452,7 +452,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     catch (e: any) { toast.error(`Erro ao salvar ASO: ${e.message}`); }
   };
 
-  const enviarContabilidade = async () => { openEmailClient({ to: ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'], cc: ['robson@topac.com.br'], subject: `Solicitacao de Registro - ${form.nome || ''} - ${form.empresa_nome || ''}`, body: buildContabilidadeEmailBody(form) }); if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_preparar_contabilidade', { p_id: form.id }); await carregar(); } toast.success('E-mail para contabilidade aberto. Anexe a documentacao completa.'); };
+  const enviarContabilidade = async () => { openEmailClient({ to: ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'], cc: Array.from(CC_OBRIGATORIO), subject: `Solicitacao de Registro - ${form.nome || ''} - ${form.empresa_nome || ''}`, body: buildContabilidadeEmailBody(form) }); if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_preparar_contabilidade', { p_id: form.id }); await carregar(); } toast.success('E-mail para contabilidade aberto. Anexe a documentacao completa.'); };
 
   const migrarDocumentosPreCadastro = async (funcionarioId: string) => {
     if (!form.id || !funcionarioId || !form.empresa_id) return 0;
