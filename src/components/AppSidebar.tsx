@@ -48,10 +48,12 @@ const operationalItems: MenuItem[] = [
   { label: 'Historico', icon: History, path: '/admin/historico' },
 ];
 
-const adminItems: MenuItem[] = [];
+const adminItems: MenuItem[] = [
+  { label: 'Permissoes Diretor', icon: Shield, path: '/admin/permissoes-diretor' },
+];
 
 const directorReportItems: MenuItem[] = [
-  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin' },
+  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin/diretoria' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },

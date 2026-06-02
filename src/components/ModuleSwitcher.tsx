@@ -50,7 +50,7 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
     ? ADMIN_MODULES
     : isDirector
       ? [
-          { role: 'diretor_geral', label: 'Central TOPAC', path: '/admin' },
+          { role: 'diretor_geral', label: 'Central TOPAC', path: '/admin/diretoria' },
           { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
           { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
           { role: 'relatorios', label: 'Relatorios', path: '/admin/relatorio' },

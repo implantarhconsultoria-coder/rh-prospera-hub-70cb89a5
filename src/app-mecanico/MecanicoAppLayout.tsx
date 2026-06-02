@@ -4,6 +4,8 @@ import { LogOut, ArrowLeft, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 
+const normalizeLayoutMode = (value?: string | null) => (value === "original" || value === "padrao" ? "original" : "premium");
+
 const Header = () => {
   const { mecanico, sair } = useMecanicoApp();
   const navigate = useNavigate();
@@ -40,10 +42,10 @@ const Header = () => {
 };
 
 const MecanicoShell = () => {
-  const [layoutMode, setLayoutMode] = useState(() => localStorage.getItem("topac_layout_mode") || "premium");
+  const [layoutMode, setLayoutMode] = useState(() => normalizeLayoutMode(localStorage.getItem("topac_layout_mode")));
 
   useEffect(() => {
-    const onStorage = () => setLayoutMode(localStorage.getItem("topac_layout_mode") || "premium");
+    const onStorage = () => setLayoutMode(normalizeLayoutMode(localStorage.getItem("topac_layout_mode")));
     window.addEventListener("storage", onStorage);
     window.addEventListener("topac-layout-change", onStorage as EventListener);
     return () => {

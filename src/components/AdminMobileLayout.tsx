@@ -14,7 +14,8 @@ import VoiceCommandFab from '@/components/admin-mobile/VoiceCommandFab';
 import AssistenteFab from '@/components/assistente/AssistenteFab';
 import GlobalSearch, { SearchModule } from '@/components/admin-mobile/GlobalSearch';
 import DirectorBlocked from '@/components/DirectorBlocked';
-import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
+import { isDirectorRole } from '@/lib/directorPermissions';
+import LayoutModeToggle from '@/components/LayoutModeToggle';
 
 type Item = { label: string; icon: React.ElementType; path: string; group: string; tint?: string };
 
@@ -57,6 +58,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Conciliacao', icon: CheckSquare, path: '/admin/financeiro/conciliacao', group: 'Financeiro' },
   { label: 'Inadimplencia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia', group: 'Financeiro' },
   { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo', group: 'Financeiro' },
+  { label: 'Permissoes Diretor', icon: Shield, path: '/admin/permissoes-diretor', group: 'Administracao' },
 ];
 
 const HOME_QUICK: Item[] = [
@@ -69,7 +71,7 @@ const HOME_QUICK: Item[] = [
 ];
 
 const DIRECTOR_ITEMS: Item[] = [
-  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin', group: 'Diretoria' },
+  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin/diretoria', group: 'Diretoria' },
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Diretoria' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes', group: 'Diretoria' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos', group: 'Diretoria' },
@@ -90,7 +92,7 @@ const DIRECTOR_HOME_QUICK: Item[] = [
 ];
 
 const AdminMobileLayout: React.FC = () => {
-  const { logout, session, userRoles } = useApp();
+  const { logout, session, userRoles, directorCanAccessPath } = useApp();
   const nav = useNavigate();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -144,6 +146,9 @@ const AdminMobileLayout: React.FC = () => {
               </div>
               <Button size="icon" variant="ghost" onClick={() => setDrawerOpen(false)}><X className="w-5 h-5" /></Button>
             </div>
+            <div className="px-4 py-3 border-b border-border">
+              <LayoutModeToggle compact />
+            </div>
             <nav className="flex-1 overflow-y-auto p-3 space-y-5">
               {Object.entries(grouped).map(([group, items]) => (
                 <div key={group}>
@@ -190,7 +195,7 @@ const AdminMobileLayout: React.FC = () => {
             </div>
           </div>
         ) : (
-          isDirector && !isDirectorRouteAllowed(location.pathname) ? <DirectorBlocked /> : <Outlet />
+          isDirector && !directorCanAccessPath(location.pathname) ? <DirectorBlocked /> : <Outlet />
         )}
       </main>
 

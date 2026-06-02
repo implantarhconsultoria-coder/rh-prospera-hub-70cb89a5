@@ -13,6 +13,8 @@ type Card = {
   action?: () => void;
 };
 
+const normalizeLayoutMode = (value?: string | null) => (value === "original" || value === "padrao" ? "original" : "premium");
+
 export default function HomePage() {
   const { mecanico } = useMecanicoApp();
   const navigate = useNavigate();
@@ -22,7 +24,7 @@ export default function HomePage() {
     return nome.includes("rodrigo") && nome.includes("sabino");
   }, [mecanico.nome]);
   const [layoutMode, setLayoutMode] = useState(() => {
-    return localStorage.getItem("topac_mecanico_layout_mode") || localStorage.getItem("topac_layout_mode") || "premium";
+    return normalizeLayoutMode(localStorage.getItem("topac_mecanico_layout_mode") || localStorage.getItem("topac_layout_mode"));
   });
 
   useEffect(() => {
@@ -36,7 +38,7 @@ export default function HomePage() {
   const firstName = mecanico.nome.split(" ")[0];
 
   const setLayout = () => {
-    const next = layoutMode === "premium" ? "padrao" : "premium";
+    const next = layoutMode === "premium" ? "original" : "premium";
     localStorage.setItem("topac_mecanico_layout_mode", next);
     setLayoutMode(next);
     window.dispatchEvent(new Event("topac-layout-change"));
@@ -51,7 +53,7 @@ export default function HomePage() {
     { label: "Veiculo / KM", sub: "Registrar KM", icon: Car, to: `${base}/veiculo`, tint: "from-sky-500/20 to-violet-500/20" },
     { label: "Abastecer", sub: "QR + bomba", icon: Fuel, to: `${base}/abastecimento`, tint: "from-cyan-400/20 to-violet-500/20" },
     { label: "Historico", sub: "Meus registros", icon: History, to: `${base}/historico`, tint: "from-sky-500/20 to-violet-500/20" },
-    { label: "Config", sub: layoutMode === "premium" ? "Layout premium" : "Layout padrao", icon: Settings, tint: "from-sky-500/20 to-violet-500/20", action: setLayout },
+    { label: "Config", sub: layoutMode === "premium" ? "Layout premium" : "Layout original", icon: Settings, tint: "from-sky-500/20 to-violet-500/20", action: setLayout },
   ];
 
   if (layoutMode !== "premium") {

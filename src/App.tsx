@@ -25,6 +25,7 @@ import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
+import DirectorDashboardPage from "@/pages/DirectorDashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
@@ -68,6 +69,7 @@ import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
 import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
+import PermissoesDiretorPage from "@/pages/admin/PermissoesDiretorPage";
 import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
 import AppMecanicoAdminPage from "@/pages/admin/AppMecanicoAdminPage";
 import CombustivelQRAdminPage from "@/pages/admin/CombustivelQRAdminPage";
@@ -198,6 +200,8 @@ const RoleRedirect = () => {
 };
 
 const AdminHomeRoute = () => {
+  const { userRoles } = useApp();
+  if (userRoles.includes('diretor_geral') && !userRoles.includes('admin')) return <DirectorDashboardPage />;
   return <DashboardPage />;
 };
 
@@ -234,7 +238,7 @@ const AuthGate = () => {
         <Route path="/admin" element={<AdminHomeRoute />} />
         <Route path="/admin/implanta-central" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/implanta-central/*" element={<Navigate to="/admin" replace />} />
-        <Route path="/admin/diretoria" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/diretoria" element={<DirectorDashboardPage />} />
         <Route path="/admin/empresas" element={<EmpresasPage />} />
         <Route path="/admin/base-mestra" element={<BaseMestraPage />} />
         <Route path="/admin/funcionarios" element={<FuncionariosPage />} />
@@ -278,6 +282,7 @@ const AuthGate = () => {
         <Route path="/admin/combustivel-qr" element={<Navigate to="/admin/abastecimento-qrcode" replace />} />
         <Route path="/admin/abastecimento-qrcode" element={<CombustivelQRAdminPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
+        <Route path="/admin/permissoes-diretor" element={<PermissoesDiretorPage />} />
         <Route path="/admin/acessos-externos" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/assistente" element={<AssistentePage />} />
         {/* Faturamento */}

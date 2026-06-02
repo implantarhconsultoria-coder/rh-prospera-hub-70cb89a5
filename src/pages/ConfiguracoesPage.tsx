@@ -9,12 +9,11 @@ import { toast } from 'sonner';
 
 const ConfiguracoesPage: React.FC = () => {
   const navigate = useNavigate();
-  const { session } = useApp();
+  const { session, layoutMode, updateLayoutMode } = useApp();
   const adminEmail = session?.user?.email || 'admin';
-  const aplicarLayout = (modo: 'premium' | 'padrao') => {
-    localStorage.setItem('topac_layout_mode', modo);
-    window.dispatchEvent(new Event('topac-layout-change'));
-    toast.success(modo === 'premium' ? 'Layout premium aplicado.' : 'Layout padrao aplicado.');
+  const aplicarLayout = async (modo: 'premium' | 'original') => {
+    await updateLayoutMode(modo);
+    toast.success(modo === 'premium' ? 'Layout Premium aplicado.' : 'Layout Original aplicado.');
   };
 
   return (
@@ -106,15 +105,15 @@ const ConfiguracoesPage: React.FC = () => {
           <h2 className="text-lg font-bold font-display">Layout da plataforma</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Escolha entre o layout premium escuro/neon e o layout padrao anterior. A opcao vale para este navegador e tambem para o app dos mecanicos.
+          Escolha entre o Layout Premium e o Layout Original. A preferencia fica salva para este usuario e tambem orienta a experiencia mobile.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <button onClick={() => aplicarLayout('premium')} className="rounded-xl border border-primary/40 bg-primary/10 p-4 text-left hover:bg-primary/15">
-            <div className="font-bold">Layout premium</div>
+          <button onClick={() => aplicarLayout('premium')} className={`rounded-xl border p-4 text-left hover:bg-primary/15 ${layoutMode === 'premium' ? 'border-primary/60 bg-primary/10' : 'border-border bg-muted/20'}`}>
+            <div className="font-bold">Layout Premium</div>
             <div className="text-sm text-muted-foreground mt-1">Visual escuro, botoes grandes e acabamento moderno.</div>
           </button>
-          <button onClick={() => aplicarLayout('padrao')} className="rounded-xl border border-border bg-muted/20 p-4 text-left hover:bg-muted/30">
-            <div className="font-bold">Layout padrao</div>
+          <button onClick={() => aplicarLayout('original')} className={`rounded-xl border p-4 text-left hover:bg-muted/30 ${layoutMode === 'original' ? 'border-primary/60 bg-primary/10' : 'border-border bg-muted/20'}`}>
+            <div className="font-bold">Layout Original</div>
             <div className="text-sm text-muted-foreground mt-1">Visual classico anterior da plataforma.</div>
           </button>
         </div>

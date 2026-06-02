@@ -4,6 +4,21 @@ import type { Delivery, BenefitReport } from '@/data/deliveries';
 import type { Session } from '@supabase/supabase-js';
 import type { AppRole } from '@/hooks/useUserRole';
 
+export type LayoutMode = 'original' | 'premium';
+
+export interface DirectorTemporaryPermission {
+  id: string;
+  directorUserId: string;
+  modulo: string;
+  permissao: string;
+  expiraEm: string;
+  liberadoPor?: string | null;
+  liberadoPorNome?: string | null;
+  liberadoEm?: string | null;
+  motivo?: string | null;
+  ativo: boolean;
+}
+
 export interface AppConfig {
   platformName: string;
   pctAdiantamento: number;
@@ -18,6 +33,11 @@ export interface AppState {
   userRole: AppRole | null;
   userRoles: AppRole[];
   roleLoading: boolean;
+  layoutMode: LayoutMode;
+  updateLayoutMode: (mode: LayoutMode) => Promise<void>;
+  directorTemporaryPermissions: DirectorTemporaryPermission[];
+  refreshDirectorPermissions: () => Promise<void>;
+  directorCanAccessPath: (pathname: string) => boolean;
   logout: () => void;
   refreshData: () => Promise<void>;
   companies: Company[];

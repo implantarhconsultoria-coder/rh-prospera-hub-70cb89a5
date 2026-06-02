@@ -5,9 +5,10 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
-import { AppContext, defaultConfig, type AppConfig } from '@/context/AppContextValue';
+import { AppContext, defaultConfig, type AppConfig, type DirectorTemporaryPermission, type LayoutMode } from '@/context/AppContextValue';
 import { useApp } from '@/hooks/useApp';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
+import { isDirectorRouteAllowedWithTemporary } from '@/lib/directorPermissions';
 
 // Re-export para compatibilidade
 export { useApp };
@@ -41,10 +42,28 @@ const getFilialCompanyIds = (companies: Company[], role: string | null) => {
   return new Set(companies.filter((company) => company.codigo === code).map((company) => company.id));
 };
 
+const normalizeLayoutMode = (value?: string | null): LayoutMode =>
+  value === 'original' || value === 'padrao' ? 'original' : 'premium';
+
+const mapDirectorTemporaryPermission = (row: any): DirectorTemporaryPermission => ({
+  id: row.id,
+  directorUserId: row.director_user_id,
+  modulo: row.modulo || '',
+  permissao: row.permissao || 'editar',
+  expiraEm: row.expira_em,
+  liberadoPor: row.liberado_por || null,
+  liberadoPorNome: row.liberado_por_nome || null,
+  liberadoEm: row.liberado_em || null,
+  motivo: row.motivo || null,
+  ativo: row.ativo !== false,
+});
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const { role: userRole, roles: userRoles, roleLoading } = useUserRole(session);
+  const [layoutMode, setLayoutModeState] = useState<LayoutMode>(() => normalizeLayoutMode(localStorage.getItem('topac_layout_mode')));
+  const [directorTemporaryPermissions, setDirectorTemporaryPermissions] = useState<DirectorTemporaryPermission[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [entries, setEntries] = useState<MonthlyEntry[]>([]);
@@ -162,6 +181,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (session && !roleLoading) fetchData();
   }, [session, roleLoading, fetchData]);
+
+  const applyLayoutMode = useCallback((mode: LayoutMode) => {
+    setLayoutModeState(mode);
+    localStorage.setItem('topac_layout_mode', mode);
+    window.dispatchEvent(new Event('topac-layout-change'));
+  }, []);
+
+  const updateLayoutMode = useCallback(async (mode: LayoutMode) => {
+    applyLayoutMode(mode);
+    if (!session?.user?.id) return;
+
+    const { error } = await (supabase as any)
+      .from('user_visual_preferences')
+      .upsert({
+        user_id: session.user.id,
+        layout_mode: mode,
+        updated_by: session.user.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+    if (error && !isMissingSchema(error)) {
+      console.warn('Nao foi possivel salvar preferencia visual:', error.message);
+      toast.warning('Layout aplicado neste navegador, mas nao foi salvo no banco.');
+    }
+  }, [applyLayoutMode, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      applyLayoutMode(normalizeLayoutMode(localStorage.getItem('topac_layout_mode')));
+      return;
+    }
+
+    (supabase as any)
+      .from('user_visual_preferences')
+      .select('layout_mode')
+      .eq('user_id', session.user.id)
+      .maybeSingle()
+      .then(({ data, error }: any) => {
+        if (error && !isMissingSchema(error)) {
+          console.warn('Nao foi possivel carregar preferencia visual:', error.message);
+          return;
+        }
+        if (data?.layout_mode) applyLayoutMode(normalizeLayoutMode(data.layout_mode));
+      });
+  }, [applyLayoutMode, session?.user?.id]);
+
+  const refreshDirectorPermissions = useCallback(async () => {
+    if (!session?.user?.id || roleLoading) {
+      setDirectorTemporaryPermissions([]);
+      return;
+    }
+
+    const isAdmin = userRoles.includes('admin');
+    const isDirector = userRoles.some((role) => role === 'diretor_geral' || String(role) === 'diretor');
+    if (!isAdmin && !isDirector) {
+      setDirectorTemporaryPermissions([]);
+      return;
+    }
+
+    let query = (supabase as any)
+      .from('director_temporary_permissions')
+      .select('*')
+      .eq('ativo', true)
+      .gte('expira_em', new Date().toISOString())
+      .order('expira_em', { ascending: true });
+
+    if (!isAdmin) query = query.eq('director_user_id', session.user.id);
+
+    const { data, error } = await query;
+    if (error) {
+      if (!isMissingSchema(error)) console.warn('Nao foi possivel carregar permissoes temporarias do diretor:', error.message);
+      setDirectorTemporaryPermissions([]);
+      return;
+    }
+    setDirectorTemporaryPermissions((data || []).map(mapDirectorTemporaryPermission));
+  }, [roleLoading, session?.user?.id, userRoles]);
+
+  useEffect(() => {
+    refreshDirectorPermissions();
+  }, [refreshDirectorPermissions]);
+
+  const directorCanAccessPath = useCallback((pathname: string) => (
+    isDirectorRouteAllowedWithTemporary(pathname, directorTemporaryPermissions)
+  ), [directorTemporaryPermissions]);
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
@@ -521,7 +624,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      isAuthenticated: !!session, session, loading, userRole, userRoles, roleLoading, logout,
+      isAuthenticated: !!session, session, loading, userRole, userRoles, roleLoading,
+      layoutMode, updateLayoutMode,
+      directorTemporaryPermissions, refreshDirectorPermissions, directorCanAccessPath,
+      logout,
       refreshData: fetchData,
       companies, employees, updateEmployee,
       entries, setEntries, getOrCreateEntries, updateEntry,

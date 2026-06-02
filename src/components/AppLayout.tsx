@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import AppSidebar from '@/components/AppSidebar';
 import AdminMobileLayout from '@/components/AdminMobileLayout';
@@ -13,17 +13,17 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import StableLoading from '@/components/StableLoading';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
 import DirectorBlocked from '@/components/DirectorBlocked';
-import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
+import { isDirectorRole } from '@/lib/directorPermissions';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
+import LayoutModeToggle from '@/components/LayoutModeToggle';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const [layoutMode, setLayoutMode] = useState(() => localStorage.getItem('topac_layout_mode') || 'premium');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const { session, userRole, userRoles, roleLoading, companies, employees, refreshData, refreshEntries } = useApp();
+  const { session, userRole, userRoles, roleLoading, layoutMode, companies, employees, refreshData, refreshEntries, directorCanAccessPath } = useApp();
   const isMobile = useIsMobile();
   const location = useLocation();
   const navigate = useNavigate();
@@ -58,16 +58,6 @@ const AppLayout: React.FC = () => {
 
     return [...moduleResults, ...companyResults, ...employeeResults].slice(0, 20);
   }, [searchQuery, companies, employees]);
-
-  useEffect(() => {
-    const syncLayout = () => setLayoutMode(localStorage.getItem('topac_layout_mode') || 'premium');
-    window.addEventListener('storage', syncLayout);
-    window.addEventListener('topac-layout-change', syncLayout);
-    return () => {
-      window.removeEventListener('storage', syncLayout);
-      window.removeEventListener('topac-layout-change', syncLayout);
-    };
-  }, []);
 
   if (roleLoading) {
     return <StableLoading label="Carregando permissao do usuario..." />;
@@ -129,12 +119,13 @@ const AppLayout: React.FC = () => {
               <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               Atualizar
             </button>
+            <LayoutModeToggle />
             <ModuleSwitcher />
           </div>
         </header>
         <div className="p-7 max-w-[1600px] mx-auto">
           <ErrorBoundary>
-            {isDirector && !isDirectorRouteAllowed(location.pathname) ? <DirectorBlocked /> : <Outlet />}
+            {isDirector && !directorCanAccessPath(location.pathname) ? <DirectorBlocked /> : <Outlet />}
           </ErrorBoundary>
         </div>
       </main>
