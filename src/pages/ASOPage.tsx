@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
-import { gerarFichaASOPdf, downloadPdf } from '@/lib/pdfGenerator';
+import { gerarAutorizacaoExameAdmissionalPdf, downloadPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 
 const CLINICAS: Record<string, string> = {
@@ -25,6 +25,8 @@ const TIPOS_EXAME = [
   'Admissional', 'Demissional', 'Periódico', 'Mudança de Função',
   'Retorno ao Trabalho', 'Avaliação Médica', 'Outros',
 ];
+
+const TIPO_EXAME_PERIODICO = TIPOS_EXAME[2];
 
 type AsoPendente = {
   id: string;
@@ -79,6 +81,17 @@ const ASOPage: React.FC = () => {
       geradoPorUserId: session.user.id,
       geradoPorNome: nomeUsuario,
       unidade: company.name || '',
+      categoria: 'ASO',
+      origem: 'gerado_sistema',
+      observacao: `Solicitacao de agendamento ASO ${tipoExame}`,
+      nomeArquivo: pdf.fileName,
+      dataDocumento: new Date().toISOString(),
+      metadata: {
+        modulo: 'aso',
+        tipoExame,
+        dataExame: dataExame || null,
+        obraLocal: obraLocal || null,
+      },
     });
     setLastDocId(registro?.id || '');
     return registro;
@@ -136,9 +149,29 @@ const ASOPage: React.FC = () => {
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
   const clinica = company ? CLINICAS[company.name] || '' : '';
 
+  const abrirFichaPeriodica = (employeeId: string) => {
+    const selected = employees.find(e => e.id === employeeId);
+    const selectedCompany = selected ? companies.find(c => c.id === selected.companyId) : null;
+    setSelectedEmpId(employeeId);
+    setSearch('');
+    setDataExame('');
+    setTipoExame(TIPO_EXAME_PERIODICO);
+    setObraLocal(selectedCompany?.name || '');
+    setResponsavelContato('');
+    setTrabalhoAltura(false);
+    setEspacoConfinado(false);
+    setLastDocId('');
+  };
+
+  const validarDataManual = () => {
+    if (dataExame) return true;
+    toast.error('Informe manualmente a data do exame antes de salvar, gerar ou enviar.');
+    return false;
+  };
+
   const gerarPdfAtual = () => {
     if (!emp || !company) return null;
-    return gerarFichaASOPdf({
+    return gerarAutorizacaoExameAdmissionalPdf({
       empresa: company.name,
       cnpj: company.cnpj,
       nome: emp.name,
@@ -146,11 +179,14 @@ const ASOPage: React.FC = () => {
       rg: emp.rg,
       funcao: emp.cargo,
       dataAdmissao: emp.dataAdmissao,
+      dataNascimento: (emp as any).dataNascimento || '',
+      setorGhe: (emp as any).setorGhe || '',
       dataExame,
       tipoExame,
       obraLocal,
       trabalhoAltura,
       espacoConfinado,
+      toxicologico: false,
       responsavelContato,
       clinica,
     });
@@ -158,6 +194,7 @@ const ASOPage: React.FC = () => {
 
   const handlePrint = async () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
+    if (!validarDataManual()) return;
     const pdf = gerarPdfAtual();
     if (!pdf) return;
 
@@ -180,6 +217,7 @@ const ASOPage: React.FC = () => {
 
   const handleEnviarEmailAso = async () => {
     if (!emp) { toast.error('Selecione um funcionario'); return; }
+    if (!validarDataManual()) return;
     const pdf = gerarPdfAtual();
     if (!pdf) return;
 
@@ -217,6 +255,7 @@ const ASOPage: React.FC = () => {
 
   const handleSave = async () => {
     if (!emp || !session?.user?.id) return;
+    if (!validarDataManual()) return;
     setSaving(true);
     const { error } = await supabase.from('aso_agendamentos').insert({
       funcionario_nome: emp.name,
@@ -237,7 +276,14 @@ const ASOPage: React.FC = () => {
     });
     setSaving(false);
     if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
-    toast.success('Agendamento salvo no banco!');
+    try {
+      const pdf = gerarPdfAtual();
+      if (pdf) await arquivarFichaASO(pdf);
+      toast.success('Agendamento salvo e ficha ASO arquivada no funcionario!');
+    } catch (archiveError) {
+      console.error('Erro ao arquivar ficha ASO:', archiveError);
+      toast.warning('Agendamento salvo, mas a ficha nao foi arquivada no historico.');
+    }
   };
 
   const abrirAsoPendente = async (pendente: AsoPendente) => {
@@ -405,7 +451,7 @@ const ASOPage: React.FC = () => {
           <div className="flex flex-wrap gap-1">
             {alertas.slice(0, 5).map(e => (
               <Badge key={e.id} variant="outline" className="text-xs cursor-pointer hover:bg-muted/50"
-                onClick={() => setSelectedEmpId(e.id)}>
+                onClick={() => abrirFichaPeriodica(e.id)}>
                 {e.name} — {e.asoInfo.status === 'vencido' ? 'Vencido' : 'Atenção'}
               </Badge>
             ))}
@@ -486,7 +532,7 @@ const ASOPage: React.FC = () => {
               const co = companies.find(c => c.id === e.companyId);
               return (
                 <tr key={e.id} className="border-b hover:bg-muted/30 cursor-pointer transition-colors"
-                  onClick={() => { setSelectedEmpId(e.id); setSearch(''); }}>
+                  onClick={() => abrirFichaPeriodica(e.id)}>
                   <td className="px-3 py-2.5 font-medium">{e.name}</td>
                   {!isFilial && <td className="px-3 py-2.5 text-muted-foreground">{co?.name}</td>}
                   <td className="px-3 py-2.5">{e.cargo}</td>
