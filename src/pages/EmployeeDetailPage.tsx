@@ -5,9 +5,14 @@ import { formatCurrency, formatDate, feriasStatus, asoStatus } from '@/lib/calcu
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, FileText, Mail, Save } from 'lucide-react';
 import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
+import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
+import { CC_OBRIGATORIO, DESTINATARIOS_ASO } from '@/lib/emailUtils';
+import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import { toast } from 'sonner';
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
@@ -39,10 +44,11 @@ const ToggleRow: React.FC<ToggleProps> = React.memo(({ label, active, onToggle, 
 
 const EmployeeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { employees, companies, updateEmployee } = useApp();
+  const { employees, companies, updateEmployee, session } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(0);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
 
   const portalPrefix = location.pathname.startsWith('/filial') ? '/filial'
     : location.pathname.startsWith('/admin') ? '/admin' : '';
@@ -55,6 +61,7 @@ const EmployeeDetailPage: React.FC = () => {
   const aso = asoStatus(emp.dataExameMedico);
   const insalubridadeLiberada = employeeHasInsalubridade(emp);
   const periculosidade = getPericulosidadeAplicavel(emp);
+  const funcionarioDesligado = /deslig|inativ/i.test(String(emp.status || ''));
 
   const fieldFor = (field: keyof typeof emp, type: string = 'text') => ({
     value: (emp as any)[field] ?? '',
@@ -65,6 +72,115 @@ const EmployeeDetailPage: React.FC = () => {
     active: !!(emp as any)[field],
     onToggle: () => updateEmployee(emp.id, { [field]: !(emp as any)[field] } as any),
   });
+
+  const buildAsoDemissionalPdf = () => {
+    if (!company) {
+      toast.error('Empresa do funcionario nao encontrada.');
+      return null;
+    }
+    const dataExame = new Date().toISOString().slice(0, 10);
+    return gerarAutorizacaoExameAdmissionalPdf({
+      empresa: company.name || '',
+      cnpj: company.cnpj || '',
+      nome: emp.name || '',
+      cpf: emp.cpf || '',
+      rg: emp.rg || '',
+      funcao: emp.cargo || '',
+      dataAdmissao: emp.dataAdmissao || '',
+      dataNascimento: (emp as any).dataNascimento || '',
+      setorGhe: (emp as any).setorGhe || '',
+      dataExame,
+      tipoExame: 'Demissional',
+      obraLocal: company.name || '',
+      trabalhoAltura: false,
+      espacoConfinado: false,
+      toxicologico: false,
+      responsavelContato: 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385',
+    });
+  };
+
+  const abrirPdf = (pdf: { blob: Blob; fileName: string }) => {
+    const url = URL.createObjectURL(pdf.blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+  };
+
+  const arquivarAsoDemissional = async (pdf: { blob: Blob; fileName: string }) => {
+    if (!session?.user || !company) return null;
+    return arquivarDocumentoFuncionario({
+      funcionarioId: emp.id,
+      funcionarioNome: emp.name,
+      companyId: emp.companyId,
+      empresaNome: company.name || '',
+      tipoDocumento: 'ASO - Demissional',
+      descricao: `Guia ASO demissional gerada para ${emp.name}`,
+      conteudo: pdf.blob,
+      extensao: 'pdf',
+      storageTipo: 'aso-demissional',
+      geradoPorUserId: session.user.id,
+      geradoPorNome: 'Rodrigo De Souza Sabino',
+      unidade: company.name || '',
+      categoria: 'ASO',
+      origem: 'gerado_sistema',
+      observacao: 'Solicitacao de exame demissional',
+      nomeArquivo: pdf.fileName,
+      dataDocumento: new Date().toISOString(),
+    });
+  };
+
+  const gerarAsoDemissional = async () => {
+    const pdf = buildAsoDemissionalPdf();
+    if (!pdf) return;
+    abrirPdf(pdf);
+    try {
+      await arquivarAsoDemissional(pdf);
+      toast.success('Guia ASO demissional gerada e salva no historico documental.');
+    } catch (error: any) {
+      toast.warning(`Guia aberta, mas nao foi arquivada: ${error?.message || 'erro desconhecido'}`);
+    }
+  };
+
+  const enviarAsoDemissional = () => {
+    const pdf = buildAsoDemissionalPdf();
+    if (!pdf || !company) return;
+    setEmailPdfDraft({
+      to: Array.from(DESTINATARIOS_ASO),
+      cc: Array.from(CC_OBRIGATORIO),
+      subject: `Solicitacao de exame demissional - ${emp.name} - ${company.name || ''}`,
+      body: [
+        'Prezados, bom dia.',
+        '',
+        'Solicito, por gentileza, o agendamento do exame demissional conforme guia ASO anexa.',
+        '',
+        `Nome: ${emp.name}`,
+        `CPF: ${emp.cpf || ''}`,
+        `Funcao: ${emp.cargo || ''}`,
+        `Empresa: ${company.name || ''}`,
+        `Data de admissao: ${formatDate(emp.dataAdmissao)}`,
+        `Status: ${emp.status || 'desligado'}`,
+        '',
+        'Escopo: exame demissional ocupacional para processo de desligamento TOPAC.',
+        '',
+        'Favor confirmar recebimento e data/horario disponivel.',
+        '',
+        'Atenciosamente,',
+        'Rodrigo De Souza Sabino',
+      ].join('\n'),
+      attachmentBlob: pdf.blob,
+      attachmentName: pdf.fileName,
+      afterSend: async () => {
+        const registro = await arquivarAsoDemissional(pdf);
+        if ((registro as any)?.id && session?.user) {
+          await marcarComoEnviado(
+            (registro as any).id,
+            session.user.id,
+            'Rodrigo De Souza Sabino',
+            [...DESTINATARIOS_ASO, ...CC_OBRIGATORIO].join(', '),
+          );
+        }
+      },
+    });
+  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -101,7 +217,8 @@ const EmployeeDetailPage: React.FC = () => {
           </div>
         )}
         {activeTab === 1 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Field label="Empresa" value={company?.name || ''} />
             <Field label="CNPJ" value={company?.cnpj || ''} />
             <Field label="Nº Registro" value={emp.registro} />
@@ -119,6 +236,23 @@ const EmployeeDetailPage: React.FC = () => {
                 <option value="desligado">Desligado</option>
               </select>
             </div>
+            </div>
+            {funcionarioDesligado && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">ASO demissional</p>
+                  <p className="text-xs text-muted-foreground">Funcionario desligado/inativo. Gere a guia e envie a solicitacao do exame demissional.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={gerarAsoDemissional}>
+                    <FileText className="w-4 h-4 mr-2" /> Gerar ASO demissional
+                  </Button>
+                  <Button type="button" onClick={enviarAsoDemissional}>
+                    <Mail className="w-4 h-4 mr-2" /> Enviar exame demissional
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {activeTab === 2 && (
@@ -188,6 +322,13 @@ const EmployeeDetailPage: React.FC = () => {
           </div>
         )}
       </div>
+      <EmailPdfModal
+        open={!!emailPdfDraft}
+        draft={emailPdfDraft}
+        onOpenChange={(open) => {
+          if (!open) setEmailPdfDraft(null);
+        }}
+      />
     </div>
   );
 };
