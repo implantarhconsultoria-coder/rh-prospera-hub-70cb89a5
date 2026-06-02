@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PUMP_PROMPT = `Voce analisa FOTOS de bombas de combustivel em postos brasileiros.
+const PUMP_PROMPT = `Voce analisa FOTOS REAIS de bombas de combustivel em postos brasileiros.
 Devolva SOMENTE um JSON valido, sem markdown, neste formato:
 {
   "valor": numero,
@@ -18,11 +18,13 @@ Devolva SOMENTE um JSON valido, sem markdown, neste formato:
   "confianca": numero entre 0 e 1
 }
 Regras:
-- valor = total abastecido em reais, sem simbolo.
-- litros = quantidade abastecida.
-- valor_por_litro = preco unitario da bomba.
-- Procure principalmente campos como TOTAL, VALOR A PAGAR, LITROS, VOLUME, PRECO/LITRO, R$/L.
-- Nao confunda CNPJ, data, hora, numero da bomba ou codigo do bico com valor/litros/KM.
+- valor = TOTAL abastecido em reais, sem simbolo. Normalmente e o maior valor monetario da bomba.
+- litros = quantidade/volume abastecido. Normalmente aparece como L, LITROS, VOLUME ou QTD.
+- valor_por_litro = preco unitario da bomba. Normalmente aparece como PRECO/LITRO, R$/L, P.UNIT, UNITARIO.
+- combustivel = tipo do combustivel visivel na bomba/bico/visor: Gasolina, Etanol, Diesel, Diesel S10 ou GNV.
+- Leia os tres campos principais mesmo que estejam em ordem vertical: TOTAL R$, LITROS/VOLUME e PRECO POR LITRO.
+- Nao confunda CNPJ, data, hora, numero da bomba, codigo do bico, cupom, KM ou placa com valor/litros/preco.
+- Se dois campos forem claros e o terceiro puder ser calculado com seguranca, calcule.
 - Pode devolver numeros em formato brasileiro; o sistema normaliza depois.
 - Se nao conseguir ler um campo, devolva 0 ou "".
 - Nao invente. Apenas JSON puro.`;
@@ -35,7 +37,9 @@ Devolva SOMENTE um JSON valido, sem markdown, neste formato:
 }
 Regras:
 - km = quilometragem atual do hodometro, sem pontos de milhar.
-- Leia apenas odometro/quilometragem. Nao use temperatura, velocidade, hora ou autonomia.
+- Leia apenas ODO, KM total, hodometro ou quilometragem acumulada.
+- Nao use velocidade, temperatura, hora, consumo, autonomia, trip A, trip B ou marcador parcial.
+- Se houver mais de um numero, escolha o que representa a quilometragem total do veiculo.
 - Se nao conseguir ler, devolva 0.
 - Nao invente. Apenas JSON puro.`;
 
@@ -73,6 +77,81 @@ function parseKm(value: unknown): number {
 function round(value: number, digits: number): number {
   const factor = 10 ** digits;
   return Number.isFinite(value) ? Math.round(value * factor) / factor : 0;
+}
+
+function parseJsonContent(content: string): Record<string, unknown> {
+  const cleaned = String(content || "").replace(/```json|```/gi, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }
+}
+
+function normalizeFuel(value: unknown): string {
+  const raw = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (!raw) return "";
+  if (raw.includes("s10")) return "Diesel S10";
+  if (raw.includes("diesel")) return "Diesel";
+  if (raw.includes("gasolina") || raw.includes("gas")) return "Gasolina";
+  if (raw.includes("etanol") || raw.includes("alcool") || raw.includes("alcohol")) return "Etanol";
+  if (raw.includes("gnv")) return "GNV";
+  return "";
+}
+
+function reconcilePumpNumbers(input: { valor: number; litros: number; valorPorLitro: number }) {
+  let valor = input.valor;
+  let litros = input.litros;
+  let valorPorLitro = input.valorPorLitro;
+
+  if (valor > 0 && valor < 20 && valorPorLitro > 20) {
+    const originalValor = valor;
+    valor = valorPorLitro;
+    valorPorLitro = originalValor;
+  }
+
+  if (valor > 0 && litros > valor && valorPorLitro > 0) {
+    const precoCalculado = valor / litros;
+    const precoSeTrocar = litros / valor;
+    if (precoCalculado < 2 && precoSeTrocar >= 2 && precoSeTrocar <= 20) {
+      const originalValor = valor;
+      valor = litros;
+      litros = originalValor;
+    }
+  }
+
+  if (!valorPorLitro && valor > 0 && litros > 0) valorPorLitro = round(valor / litros, 3);
+  if (!valor && litros > 0 && valorPorLitro > 0) valor = round(litros * valorPorLitro, 2);
+  if (!litros && valor > 0 && valorPorLitro > 0) litros = round(valor / valorPorLitro, 3);
+
+  if (valor > 0 && litros > 0 && valorPorLitro > 0) {
+    const calculado = round(litros * valorPorLitro, 2);
+    const diferenca = Math.abs(calculado - valor);
+    if (diferenca > Math.max(2, valor * 0.08)) {
+      const precoPorTotal = round(valor / litros, 3);
+      if (precoPorTotal >= 2 && precoPorTotal <= 20) {
+        valorPorLitro = precoPorTotal;
+      }
+    }
+  }
+
+  return {
+    valor: round(valor, 2),
+    litros: round(litros, 3),
+    valorPorLitro: round(valorPorLitro, 3),
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -131,12 +210,7 @@ Deno.serve(async (req: Request) => {
 
     const result = await resp.json();
     const content = result?.choices?.[0]?.message?.content || "{}";
-    let parsed: Record<string, unknown> = {};
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      parsed = {};
-    }
+    const parsed = parseJsonContent(content);
 
     if (isPanel) {
       return new Response(JSON.stringify({
@@ -146,20 +220,17 @@ Deno.serve(async (req: Request) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const valor = parseBrNumber(parsed.valor ?? parsed.valor_total ?? parsed.total ?? parsed.total_pagar);
-    const litros = parseBrNumber(parsed.litros ?? parsed.quantidade_litros ?? parsed.volume);
-    let valorPorLitro = parseBrNumber(parsed.valor_por_litro ?? parsed.preco_litro ?? parsed.preco_por_litro ?? parsed.unitario);
-    let valorFinal = valor;
-
-    if (!valorPorLitro && valorFinal > 0 && litros > 0) valorPorLitro = round(valorFinal / litros, 3);
-    if (!valorFinal && litros > 0 && valorPorLitro > 0) valorFinal = round(litros * valorPorLitro, 2);
+    const valor = parseBrNumber(parsed.valor ?? parsed.valor_total ?? parsed.total ?? parsed.total_pagar ?? parsed.valor_a_pagar);
+    const litros = parseBrNumber(parsed.litros ?? parsed.quantidade_litros ?? parsed.volume ?? parsed.quantidade ?? parsed.qtd);
+    const valorPorLitro = parseBrNumber(parsed.valor_por_litro ?? parsed.preco_litro ?? parsed.preco_por_litro ?? parsed.preco_unitario ?? parsed.unitario ?? parsed.r_l);
+    const reconciled = reconcilePumpNumbers({ valor, litros, valorPorLitro });
 
     return new Response(JSON.stringify({
       ok: true,
-      valor: valorFinal,
-      litros,
-      valor_por_litro: valorPorLitro,
-      combustivel: String(parsed.combustivel || ""),
+      valor: reconciled.valor,
+      litros: reconciled.litros,
+      valor_por_litro: reconciled.valorPorLitro,
+      combustivel: normalizeFuel(parsed.combustivel ?? parsed.tipo_combustivel ?? parsed.produto),
       confianca: Number(parsed.confianca) || 0,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

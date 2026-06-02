@@ -74,6 +74,18 @@ interface ReceiptInfo {
   registroTeste?: boolean;
 }
 
+type OcrResult = {
+  ok?: boolean;
+  valor?: string | number;
+  litros?: string | number;
+  valor_por_litro?: string | number;
+  combustivel?: string;
+  km?: string | number;
+  km_atual?: string | number;
+  confianca?: number;
+  error?: string;
+};
+
 const CANONICAL_BASE_URL = "https://topacrh.pro";
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
@@ -253,12 +265,42 @@ export default function AbastecimentoPage() {
 
   const analisarFoto = async (blob: Blob, tipo?: "painel_km") => {
     try {
-      const dataUrl = await blobToDataUrl(blob);
-      const { data } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl, tipo } });
-      return data as { ok?: boolean; valor?: string | number; litros?: string | number; valor_por_litro?: string | number; combustivel?: string; km?: string | number; km_atual?: string | number } | null;
-    } catch {
+      const dataUrl = await blobToOptimizedDataUrl(blob);
+      const { data, error } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl, tipo: tipo || "bomba" } });
+      if (error) return { ok: false, error: error.message } as OcrResult;
+      return data as OcrResult | null;
+    } catch (e) {
+      console.error("Erro OCR abastecimento:", e);
       return null;
     }
+  };
+
+  const aplicarLeituraBomba = (r: OcrResult | null) => {
+    if (!r?.ok) return false;
+    const nValor = parseDecimal(r.valor);
+    const nLitros = parseDecimal(r.litros);
+    const nPreco = parseDecimal(r.valor_por_litro);
+    let valorFinal = Number.isFinite(nValor) && nValor > 0 ? nValor : NaN;
+    let litrosFinal = Number.isFinite(nLitros) && nLitros > 0 ? nLitros : NaN;
+    let precoFinal = Number.isFinite(nPreco) && nPreco > 0 ? nPreco : NaN;
+
+    if (!Number.isFinite(precoFinal) && Number.isFinite(valorFinal) && Number.isFinite(litrosFinal) && litrosFinal > 0) {
+      precoFinal = valorFinal / litrosFinal;
+    }
+    if (!Number.isFinite(valorFinal) && Number.isFinite(litrosFinal) && Number.isFinite(precoFinal)) {
+      valorFinal = litrosFinal * precoFinal;
+    }
+    if (!Number.isFinite(litrosFinal) && Number.isFinite(valorFinal) && Number.isFinite(precoFinal) && precoFinal > 0) {
+      litrosFinal = valorFinal / precoFinal;
+    }
+
+    let preenchidos = 0;
+    if (Number.isFinite(valorFinal) && valorFinal > 0) { setValor(formatDecimal(valorFinal, 2)); preenchidos++; }
+    if (Number.isFinite(litrosFinal) && litrosFinal > 0) { setLitros(formatDecimal(litrosFinal, 3)); preenchidos++; }
+    if (Number.isFinite(precoFinal) && precoFinal > 0) { setPrecoLitro(formatDecimal(precoFinal, 3)); preenchidos++; }
+    const combustivelLido = normalizeCombustivel(r.combustivel);
+    if (combustivelLido) { setCombustivel(combustivelLido); preenchidos++; }
+    return preenchidos >= 2;
   };
 
   const onCaptureBomba = async (blob: Blob) => {
@@ -267,14 +309,13 @@ export default function AbastecimentoPage() {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "bomba", blob);
       setFotoBombaUrl(url);
       const r = await analisarFoto(blob);
-      if (r?.ok) {
-        if (r.valor) setValor(String(r.valor));
-        if (r.litros) setLitros(String(r.litros));
-        if (r.valor_por_litro) setPrecoLitro(String(r.valor_por_litro));
-        if (r.combustivel) setCombustivel(r.combustivel);
-      }
+      const leituraAplicada = aplicarLeituraBomba(r);
       setStep("painel");
-      toast.success("Foto da bomba salva. Agora tire a foto do KM.");
+      if (leituraAplicada) {
+        toast.success("Bomba lida: valor, litros e preco foram preenchidos. Confira e tire a foto do KM.");
+      } else {
+        toast.warning("Foto da bomba salva, mas a leitura automatica precisa de conferencia manual.");
+      }
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload da bomba");
     } finally {
@@ -289,7 +330,13 @@ export default function AbastecimentoPage() {
       setFotoPainelUrl(url);
       const r = await analisarFoto(blob, "painel_km");
       const detectedKm = r?.km ?? r?.km_atual;
-      if (r?.ok && detectedKm) setKm(String(detectedKm));
+      const kmLido = parseDecimal(detectedKm);
+      if (r?.ok && Number.isFinite(kmLido) && kmLido > 0) {
+        setKm(String(Math.round(kmLido)));
+        toast.success("KM do painel preenchido automaticamente.");
+      } else {
+        toast.warning("Foto do painel salva, mas o KM precisa ser conferido manualmente.");
+      }
       setStep("form");
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload do KM");
@@ -581,8 +628,8 @@ export default function AbastecimentoPage() {
         </Card>
       )}
 
-      <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" title="Foto da bomba" hint="Mostre valor, litros e preco por litro" />
-      <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" title="Foto do painel/KM" hint="Mostre o hodometro/KM atual" />
+      <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" title="Foto da bomba" hint="Enquadre TOTAL R$, LITROS/VOLUME, PRECO/LITRO e combustivel" />
+      <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" title="Foto do painel/KM" hint="Enquadre o ODO/KM total do painel" />
     </div>
   );
 }
@@ -648,6 +695,20 @@ function normalizePlate(value: string | null | undefined) {
   return String(value || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
+function normalizeCombustivel(value: string | null | undefined) {
+  const raw = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (!raw) return "";
+  if (raw.includes("s10")) return "Diesel S10";
+  if (raw.includes("diesel")) return "Diesel";
+  if (raw.includes("gasolina") || raw.includes("gas")) return "Gasolina";
+  if (raw.includes("etanol") || raw.includes("alcool") || raw.includes("alcohol")) return "Etanol";
+  if (raw.includes("gnv")) return "GNV";
+  return "";
+}
+
 function buildReceiptHtml(info: ReceiptInfo) {
   const text = [
     ["Registro", info.id || "salvo"],
@@ -703,6 +764,26 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = reject;
     reader.readAsDataURL(blob);
+  });
+}
+
+async function blobToOptimizedDataUrl(blob: Blob): Promise<string> {
+  const original = await blobToDataUrl(blob);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const maxSide = 1600;
+      const ratio = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * ratio));
+      canvas.height = Math.max(1, Math.round(img.height * ratio));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(original);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.88));
+    };
+    img.onerror = () => resolve(original);
+    img.src = original;
   });
 }
 
