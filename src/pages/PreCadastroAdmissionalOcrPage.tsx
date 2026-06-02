@@ -89,7 +89,7 @@ type RoleOption = {
 
 const FIXED_ROLE_PRESETS: RoleOption[] = [
   {
-    cargo: 'AJUDANTE DE OFICINA',
+    cargo: 'AJUDANTE DE MECANICO',
     salarioBase: 2100,
     insalubridadeAtiva: true,
     insalubridadeValor: 648.40,
