@@ -83,6 +83,7 @@ type OcrResult = {
   km?: string | number;
   km_atual?: string | number;
   confianca?: number;
+  motivo?: string;
   error?: string;
   origem?: string;
   ocr_texto_bruto?: string;
@@ -275,15 +276,17 @@ export default function AbastecimentoPage() {
       console.error("Erro OCR abastecimento:", e);
     }
 
-    if (tipo === "painel_km" && hasKmData(remoto)) return remoto;
-    if (tipo === "bomba" && hasPumpData(remoto)) return remoto;
+    if (tipo === "painel_km" && isReliableKmResult(remoto)) return remoto;
+    if (tipo === "bomba" && isReliablePumpResult(remoto)) return remoto;
 
     const local = await analisarFotoLocal(dataUrl, tipo);
-    return mergeOcrResult(remoto, local, tipo);
+    const merged = mergeOcrResult(remoto, local, tipo);
+    if (tipo === "painel_km") return isReliableKmResult(merged) ? merged : { ...(merged || {}), ok: false, motivo: "Leitura do KM sem confianca suficiente." };
+    return isReliablePumpResult(merged) ? merged : { ...(merged || {}), ok: false, motivo: "Leitura da bomba sem confianca suficiente." };
   };
 
   const aplicarLeituraBomba = (r: OcrResult | null) => {
-    if (!r?.ok) return false;
+    if (!isReliablePumpResult(r)) return false;
     const nValor = parseDecimal(r.valor);
     const nLitros = parseDecimal(r.litros);
     const nPreco = parseDecimal(r.valor_por_litro);
@@ -319,9 +322,9 @@ export default function AbastecimentoPage() {
       const leituraAplicada = aplicarLeituraBomba(r);
       setStep("painel");
       if (leituraAplicada) {
-        toast.success("Bomba lida: valor, litros e preco foram preenchidos. Confira e tire a foto do KM.");
+        toast.success("Bomba lida com seguranca: valor, litros e preco preenchidos. Tire a foto do KM.");
       } else {
-        toast.warning("Foto da bomba salva, mas a leitura automatica precisa de conferencia manual.");
+        toast.warning(r?.motivo || "Foto da bomba salva, mas nao deu leitura segura. Tire uma foto mais enquadrada ou preencha manualmente.");
       }
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload da bomba");
@@ -338,11 +341,11 @@ export default function AbastecimentoPage() {
       const r = await analisarFoto(blob, "painel_km");
       const detectedKm = r?.km ?? r?.km_atual;
       const kmLido = parseDecimal(detectedKm);
-      if (r?.ok && Number.isFinite(kmLido) && kmLido > 0) {
+      if (isReliableKmResult(r) && Number.isFinite(kmLido) && kmLido > 0) {
         setKm(String(Math.round(kmLido)));
-        toast.success("KM do painel preenchido automaticamente.");
+        toast.success("KM do painel lido com seguranca e preenchido automaticamente.");
       } else {
-        toast.warning("Foto do painel salva, mas o KM precisa ser conferido manualmente.");
+        toast.warning(r?.motivo || "Foto do painel salva, mas nao deu leitura segura do KM. Tire nova foto ou preencha manualmente.");
       }
       setStep("form");
     } catch (e) {
@@ -730,6 +733,32 @@ function hasKmData(result: OcrResult | null) {
   return Number.isFinite(kmValue) && kmValue > 0;
 }
 
+function isReliablePumpResult(result: OcrResult | null) {
+  if (!hasPumpData(result)) return false;
+  const valor = parseDecimal(result?.valor);
+  const litros = parseDecimal(result?.litros);
+  const preco = parseDecimal(result?.valor_por_litro);
+  const confidence = Number(result?.confianca ?? 0);
+  if (!isPlausibleNumber(valor, "valor") || !isPlausibleNumber(litros, "litros")) return false;
+
+  const calculatedPrice = valor / litros;
+  const finalPrice = isPlausibleNumber(preco, "preco") ? preco : calculatedPrice;
+  if (!isPlausibleNumber(finalPrice, "preco")) return false;
+
+  const calculatedValue = roundValue(litros * finalPrice, 2);
+  const valueDiff = Math.abs(calculatedValue - valor);
+  const consistent = valueDiff <= Math.max(0.25, valor * 0.025);
+  const hasSafeConfidence = confidence >= 0.72;
+  return consistent && hasSafeConfidence;
+}
+
+function isReliableKmResult(result: OcrResult | null) {
+  if (!hasKmData(result)) return false;
+  const kmValue = parseDecimal(result?.km ?? result?.km_atual);
+  const confidence = Number(result?.confianca ?? 0);
+  return isPlausibleNumber(kmValue, "km") && confidence >= 0.72;
+}
+
 function firstPositiveValue(primary: string | number | undefined, fallback: string | number | undefined) {
   const primaryNumber = parseDecimal(primary);
   if (Number.isFinite(primaryNumber) && primaryNumber > 0) return primary;
@@ -747,7 +776,7 @@ function mergeOcrResult(primary: OcrResult | null, fallback: OcrResult | null, t
       origem: `${primary.origem || "supabase"}+${fallback.origem || "ocr-local"}`,
       ocr_texto_bruto: fallback.ocr_texto_bruto || primary.ocr_texto_bruto,
     };
-    return hasKmData(merged) ? merged : fallback;
+    return isReliableKmResult(merged) ? merged : fallback;
   }
   const merged = {
     ...primary,
@@ -758,7 +787,7 @@ function mergeOcrResult(primary: OcrResult | null, fallback: OcrResult | null, t
     origem: `${primary.origem || "supabase"}+${fallback.origem || "ocr-local"}`,
     ocr_texto_bruto: fallback.ocr_texto_bruto || primary.ocr_texto_bruto,
   };
-  return hasPumpData(merged) ? merged : fallback;
+  return isReliablePumpResult(merged) ? merged : fallback;
 }
 
 async function analisarFotoLocal(dataUrl: string, tipo: "bomba" | "painel_km"): Promise<OcrResult | null> {
@@ -806,13 +835,18 @@ function parseBombaText(text: string): OcrResult {
   litros = inferred.litros;
   preco = inferred.preco;
   const reconciled = reconcilePumpValues({ valor, litros, preco });
+  const labeledCount = [valor, litros, preco].filter((value) => Number.isFinite(value) && value > 0).length;
+  const consistent = reconciled.valor > 0 && reconciled.litros > 0 && reconciled.preco > 0
+    ? Math.abs(roundValue(reconciled.litros * reconciled.preco, 2) - reconciled.valor) <= Math.max(0.25, reconciled.valor * 0.025)
+    : false;
   const result = {
     ok: [reconciled.valor, reconciled.litros, reconciled.preco].filter((value) => Number.isFinite(value) && value > 0).length >= 2,
     valor: reconciled.valor || undefined,
     litros: reconciled.litros || undefined,
     valor_por_litro: reconciled.preco || undefined,
     combustivel: normalizeCombustivel(text),
-    confianca: 0.55,
+    confianca: consistent && labeledCount >= 2 ? 0.78 : 0.55,
+    motivo: consistent ? undefined : "Numeros da bomba nao fecharam com seguranca.",
   };
   return result;
 }
@@ -825,7 +859,8 @@ function parsePainelText(text: string): OcrResult {
   return {
     ok: km > 0,
     km,
-    confianca: km > 0 ? 0.55 : 0,
+    confianca: labeled && km > 0 ? 0.78 : km > 0 ? 0.58 : 0,
+    motivo: labeled ? undefined : "KM sem rotulo claro no OCR local.",
   };
 }
 
@@ -1035,15 +1070,17 @@ async function blobToOptimizedDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const maxSide = 1600;
+      const maxSide = 2200;
       const ratio = Math.min(1, maxSide / Math.max(img.width, img.height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(img.width * ratio));
       canvas.height = Math.max(1, Math.round(img.height * ratio));
       const ctx = canvas.getContext("2d");
       if (!ctx) return resolve(original);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.88));
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
     };
     img.onerror = () => resolve(original);
     img.src = original;

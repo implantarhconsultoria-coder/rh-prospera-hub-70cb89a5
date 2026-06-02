@@ -8,14 +8,16 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PUMP_PROMPT = `Voce analisa FOTOS REAIS de bombas de combustivel em postos brasileiros.
+const PUMP_PROMPT = `Voce analisa FOTOS REAIS de bombas de combustivel em postos brasileiros para preencher um recibo de abastecimento.
 Devolva SOMENTE um JSON valido, sem markdown, neste formato:
 {
+  "ok": boolean,
   "valor": numero,
   "litros": numero,
   "valor_por_litro": numero,
   "combustivel": "Gasolina" | "Etanol" | "Diesel" | "Diesel S10" | "GNV" | "",
-  "confianca": numero entre 0 e 1
+  "confianca": numero entre 0 e 1,
+  "motivo": "texto curto"
 }
 Regras:
 - valor = TOTAL abastecido em reais, sem simbolo. Normalmente e o maior valor monetario da bomba.
@@ -24,24 +26,30 @@ Regras:
 - combustivel = tipo do combustivel visivel na bomba/bico/visor: Gasolina, Etanol, Diesel, Diesel S10 ou GNV.
 - Leia os tres campos principais mesmo que estejam em ordem vertical: TOTAL R$, LITROS/VOLUME e PRECO POR LITRO.
 - Nao confunda CNPJ, data, hora, numero da bomba, codigo do bico, cupom, KM ou placa com valor/litros/preco.
-- Se dois campos forem claros e o terceiro puder ser calculado com seguranca, calcule.
+- Se total e litros forem claros, calcule valor_por_litro com precisao. Se litros e preco forem claros, calcule o total.
+- ok deve ser true somente se pelo menos valor e litros foram lidos com clareza e a conta valor ~= litros * valor_por_litro fecha.
+- Se a foto estiver cortada, tremida, refletida, escura ou algum numero principal nao estiver claro, ok=false e confianca abaixo de 0.70.
 - Pode devolver numeros em formato brasileiro; o sistema normaliza depois.
 - Se nao conseguir ler um campo, devolva 0 ou "".
-- Nao invente. Apenas JSON puro.`;
+- Nao invente. Nao estime. Apenas JSON puro.`;
 
 const PANEL_PROMPT = `Voce analisa FOTO de painel/odometro de veiculo.
 Devolva SOMENTE um JSON valido, sem markdown, neste formato:
 {
+  "ok": boolean,
   "km": numero,
-  "confianca": numero entre 0 e 1
+  "confianca": numero entre 0 e 1,
+  "motivo": "texto curto"
 }
 Regras:
 - km = quilometragem atual do hodometro, sem pontos de milhar.
 - Leia apenas ODO, KM total, hodometro ou quilometragem acumulada.
 - Nao use velocidade, temperatura, hora, consumo, autonomia, trip A, trip B ou marcador parcial.
 - Se houver mais de um numero, escolha o que representa a quilometragem total do veiculo.
+- ok deve ser true somente quando o numero de KM estiver visivel com clareza.
+- Se a foto estiver sem foco, cortada, refletida, ou mostrar apenas o velocimetro sem hodometro claro, ok=false e confianca abaixo de 0.70.
 - Se nao conseguir ler, devolva 0.
-- Nao invente. Apenas JSON puro.`;
+- Nao invente. Nao estime. Apenas JSON puro.`;
 
 function parseBrNumber(value: unknown): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -154,6 +162,100 @@ function reconcilePumpNumbers(input: { valor: number; litros: number; valorPorLi
   };
 }
 
+function isPlausible(value: number, kind: "valor" | "litros" | "preco" | "km"): boolean {
+  if (!Number.isFinite(value) || value <= 0) return false;
+  if (kind === "valor") return value >= 5 && value <= 10000;
+  if (kind === "litros") return value >= 1 && value <= 500;
+  if (kind === "preco") return value >= 1.5 && value <= 30;
+  return value >= 1000 && value <= 9999999;
+}
+
+function validatePumpResult(input: { valor: number; litros: number; valorPorLitro: number; confidence: number; aiOk: boolean }) {
+  let { valor, litros, valorPorLitro } = input;
+  if (isPlausible(valor, "valor") && isPlausible(litros, "litros") && !isPlausible(valorPorLitro, "preco")) {
+    valorPorLitro = round(valor / litros, 3);
+  }
+  if (isPlausible(litros, "litros") && isPlausible(valorPorLitro, "preco") && !isPlausible(valor, "valor")) {
+    valor = round(litros * valorPorLitro, 2);
+  }
+
+  const hasRequiredNumbers = isPlausible(valor, "valor") && isPlausible(litros, "litros") && isPlausible(valorPorLitro, "preco");
+  const calculated = round(litros * valorPorLitro, 2);
+  const diff = Math.abs(calculated - valor);
+  const consistent = hasRequiredNumbers && diff <= Math.max(0.25, valor * 0.025);
+  const ok = Boolean(input.aiOk) && input.confidence >= 0.7 && consistent;
+
+  return {
+    ok,
+    valor: ok ? round(valor, 2) : 0,
+    litros: ok ? round(litros, 3) : 0,
+    valorPorLitro: ok ? round(valorPorLitro, 3) : 0,
+    motivo: ok ? "" : "Nao foi possivel confirmar valor, litros e preco com seguranca.",
+  };
+}
+
+function validatePanelResult(input: { km: number; confidence: number; aiOk: boolean }) {
+  const ok = Boolean(input.aiOk) && input.confidence >= 0.7 && isPlausible(input.km, "km");
+  return {
+    ok,
+    km: ok ? Math.round(input.km) : 0,
+    motivo: ok ? "" : "Nao foi possivel confirmar o KM com seguranca.",
+  };
+}
+
+async function callVisionProvider(args: { imageUrl: string; isPanel: boolean }) {
+  const openAiKey = Deno.env.get("OPENAI_API_KEY");
+  if (openAiKey) {
+    const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini";
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${openAiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: args.isPanel ? PANEL_PROMPT : PUMP_PROMPT },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: args.isPanel ? "Leia o hodometro/KM total do painel." : "Leia os campos TOTAL, LITROS e PRECO/L da bomba." },
+              { type: "image_url", image_url: { url: args.imageUrl } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      }),
+    });
+    return { provider: "openai", resp };
+  }
+
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (lovableKey) {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: args.isPanel ? PANEL_PROMPT : PUMP_PROMPT },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: args.isPanel ? "Leia o hodometro/KM total do painel." : "Leia os campos TOTAL, LITROS e PRECO/L da bomba." },
+              { type: "image_url", image_url: { url: args.imageUrl } },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      }),
+    });
+    return { provider: "lovable", resp };
+  }
+
+  return { provider: "none", resp: null };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -170,39 +272,20 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const key = Deno.env.get("LOVABLE_API_KEY");
-    if (!key) {
-      return new Response(JSON.stringify({ error: "LOVABLE_API_KEY ausente" }), {
+    const imageUrl = dataUrl || fileUrl!;
+    const isPanel = tipo === "painel_km";
+    const { provider, resp } = await callVisionProvider({ imageUrl, isPanel });
+
+    if (!resp) {
+      return new Response(JSON.stringify({ ok: false, error: "OCR_PROVIDER_ENV_AUSENTE", motivo: "Configure OPENAI_API_KEY ou LOVABLE_API_KEY na Supabase Edge Function." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const imageUrl = dataUrl || fileUrl!;
-    const isPanel = tipo === "painel_km";
-
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: isPanel ? PANEL_PROMPT : PUMP_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: isPanel ? "Extraia o KM atual do hodometro/painel." : "Extraia os dados desta bomba." },
-              { type: "image_url", image_url: { url: imageUrl } },
-            ],
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
-
     if (!resp.ok) {
       const detail = await resp.text();
-      return new Response(JSON.stringify({ error: "ai_error", detail }), {
+      return new Response(JSON.stringify({ ok: false, error: "ai_error", provider, detail }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -213,10 +296,18 @@ Deno.serve(async (req: Request) => {
     const parsed = parseJsonContent(content);
 
     if (isPanel) {
-      return new Response(JSON.stringify({
-        ok: true,
+      const confidence = Math.max(0, Math.min(1, Number(parsed.confianca) || Number(parsed.confidence) || 0));
+      const validated = validatePanelResult({
         km: parseKm(parsed.km ?? parsed.km_atual ?? parsed.odometro ?? parsed.hodometro),
-        confianca: Number(parsed.confianca) || 0,
+        confidence,
+        aiOk: parsed.ok !== false,
+      });
+      return new Response(JSON.stringify({
+        ok: validated.ok,
+        km: validated.km,
+        confianca: confidence,
+        motivo: String(parsed.motivo || validated.motivo || ""),
+        provider,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -224,14 +315,24 @@ Deno.serve(async (req: Request) => {
     const litros = parseBrNumber(parsed.litros ?? parsed.quantidade_litros ?? parsed.volume ?? parsed.quantidade ?? parsed.qtd);
     const valorPorLitro = parseBrNumber(parsed.valor_por_litro ?? parsed.preco_litro ?? parsed.preco_por_litro ?? parsed.preco_unitario ?? parsed.unitario ?? parsed.r_l);
     const reconciled = reconcilePumpNumbers({ valor, litros, valorPorLitro });
-
-    return new Response(JSON.stringify({
-      ok: true,
+    const confidence = Math.max(0, Math.min(1, Number(parsed.confianca) || Number(parsed.confidence) || 0));
+    const validated = validatePumpResult({
       valor: reconciled.valor,
       litros: reconciled.litros,
-      valor_por_litro: reconciled.valorPorLitro,
+      valorPorLitro: reconciled.valorPorLitro,
+      confidence,
+      aiOk: parsed.ok !== false,
+    });
+
+    return new Response(JSON.stringify({
+      ok: validated.ok,
+      valor: validated.valor,
+      litros: validated.litros,
+      valor_por_litro: validated.valorPorLitro,
       combustivel: normalizeFuel(parsed.combustivel ?? parsed.tipo_combustivel ?? parsed.produto),
-      confianca: Number(parsed.confianca) || 0,
+      confianca: confidence,
+      motivo: String(parsed.motivo || validated.motivo || ""),
+      provider,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
