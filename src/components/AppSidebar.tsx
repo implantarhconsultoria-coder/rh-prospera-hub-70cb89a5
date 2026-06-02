@@ -77,6 +77,7 @@ const faturamentoItems: MenuItem[] = [
 
 const financeiroItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/financeiro' },
+  { label: 'Comprovantes Pagamento', icon: Receipt, path: '/admin/comprovantes-pagamento' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
   { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores' },

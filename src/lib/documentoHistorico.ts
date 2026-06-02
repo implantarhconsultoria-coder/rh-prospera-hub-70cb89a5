@@ -14,6 +14,7 @@ export const DOCUMENTO_CATEGORIAS_PADRAO = [
   'TERMOS',
   'APONTAMENTO CONTABILIDADE',
   'FECHAMENTO',
+  'COMPROVANTE DE PAGAMENTO',
   'OUTROS',
 ] as const;
 
@@ -22,6 +23,7 @@ export const DOCUMENTO_ORIGENS_PADRAO = [
   'upload_manual',
   'pre_cadastro',
   'email_clinica_soc',
+  'importacao_comprovante_pagamento',
 ] as const;
 
 export type DocumentoCategoria = typeof DOCUMENTO_CATEGORIAS_PADRAO[number] | string;
@@ -46,6 +48,14 @@ export interface DocumentoRegistro {
   dataDocumento?: string;
   storageBucket?: string;
   storagePath?: string;
+  pastaCompetencia?: string;
+  subcategoria?: string;
+  tipoPagamento?: string;
+  valorDocumento?: number;
+  dataPagamento?: string;
+  identificadorDocumento?: string;
+  origemImportacaoId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ArquivarDocumentoFuncionarioInput extends Omit<DocumentoRegistro, 'arquivoUrl'> {
@@ -65,7 +75,7 @@ const safeStorageName = (value: string) =>
 
 const isMissingEnhancedColumnError = (error: any) =>
   /could not find|schema cache|column/i.test(error?.message || '') &&
-  /categoria|origem|observacao|nome_arquivo|data_documento|storage_bucket|storage_path/i.test(error?.message || '');
+  /categoria|origem|observacao|nome_arquivo|data_documento|storage_bucket|storage_path|pasta_competencia|subcategoria|tipo_pagamento|valor_documento|data_pagamento|identificador_documento|origem_importacao_id|metadata/i.test(error?.message || '');
 
 const getFileExtension = (fileName: string, fallback = 'pdf') => {
   const match = String(fileName || '').match(/\.([a-z0-9]+)$/i);
@@ -106,6 +116,14 @@ export const registrarDocumento = async (doc: DocumentoRegistro) => {
     data_documento: doc.dataDocumento || new Date().toISOString(),
     storage_bucket: doc.storageBucket || (doc.arquivoUrl ? 'documentos-funcionarios' : ''),
     storage_path: doc.storagePath || doc.arquivoUrl || '',
+    pasta_competencia: doc.pastaCompetencia || '',
+    subcategoria: doc.subcategoria || '',
+    tipo_pagamento: doc.tipoPagamento || '',
+    valor_documento: Number(doc.valorDocumento) || 0,
+    data_pagamento: doc.dataPagamento || null,
+    identificador_documento: doc.identificadorDocumento || '',
+    origem_importacao_id: doc.origemImportacaoId || null,
+    metadata: doc.metadata || {},
   };
 
   let result = await supabase.from('documentos_funcionario').insert(enhancedPayload as any).select().single();
@@ -184,6 +202,14 @@ export const arquivarDocumentoFuncionario = async (doc: ArquivarDocumentoFuncion
     dataDocumento: doc.dataDocumento,
     storageBucket: doc.storageBucket || 'documentos-funcionarios',
     storagePath: doc.storagePath || arquivoUrl,
+    pastaCompetencia: doc.pastaCompetencia,
+    subcategoria: doc.subcategoria,
+    tipoPagamento: doc.tipoPagamento,
+    valorDocumento: doc.valorDocumento,
+    dataPagamento: doc.dataPagamento,
+    identificadorDocumento: doc.identificadorDocumento,
+    origemImportacaoId: doc.origemImportacaoId,
+    metadata: doc.metadata,
   });
 };
 

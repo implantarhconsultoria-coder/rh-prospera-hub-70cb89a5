@@ -18,6 +18,7 @@ import { useApp } from '@/context/AppContext';
 import { downloadDocument, getDocumentUrl, type DocumentSource } from '@/lib/documentUrl';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { CC_OBRIGATORIO, getDestinatariosRescisao } from '@/lib/emailUtils';
+import { formatBRL, formatCompetenciaFolder, tipoPagamentoLabel } from '@/lib/comprovantesPagamento';
 import { toast } from 'sonner';
 
 interface Props {
@@ -30,6 +31,8 @@ const ORIGEM_LABEL: Record<string, string> = {
   gerado_sistema: 'Gerado pelo sistema',
   upload_manual: 'Upload manual',
   pre_cadastro: 'Pre-cadastro',
+  email_clinica_soc: 'E-mail clinica/SOC',
+  importacao_comprovante_pagamento: 'Importacao comprovante pagamento',
 };
 
 const inferTipo = (tipoDocumento: string): string => {
@@ -52,6 +55,16 @@ const getMonthKey = (doc: any) => {
   const dateValue = getDocDateValue(doc);
   const match = dateValue.match(/^(\d{4})-(\d{2})/);
   return match ? `${match[1]}-${match[2]}` : new Date().toISOString().slice(0, 7);
+};
+
+const isComprovantePagamento = (doc: any) => {
+  const value = `${doc.categoria || ''} ${doc.tipo_documento || ''}`.toUpperCase();
+  return value.includes('COMPROVANTE DE PAGAMENTO') || value.includes('PAGAMENTO');
+};
+
+const getCompetenciaPagamento = (doc: any) => {
+  if (doc.competencia && /^\d{4}-\d{2}$/.test(String(doc.competencia))) return String(doc.competencia);
+  return getMonthKey(doc);
 };
 
 const formatMonthFolder = (key: string) => {
@@ -122,8 +135,43 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     [docs],
   );
 
+  const comprovantesPagamentoFiltrados = useMemo(
+    () => docsFiltrados.filter(isComprovantePagamento),
+    [docsFiltrados],
+  );
+
+  const docsGeraisFiltrados = useMemo(
+    () => docsFiltrados.filter((doc) => !isComprovantePagamento(doc)),
+    [docsFiltrados],
+  );
+
+  const pastasComprovantesPagamento = useMemo(() => {
+    const grouped = comprovantesPagamentoFiltrados.reduce<Record<string, Record<string, any[]>>>((acc, doc) => {
+      const competencia = getCompetenciaPagamento(doc);
+      const tipo = doc.subcategoria || tipoPagamentoLabel(doc.tipo_pagamento || 'outros');
+      acc[competencia] = acc[competencia] || {};
+      acc[competencia][tipo] = acc[competencia][tipo] || [];
+      acc[competencia][tipo].push(doc);
+      return acc;
+    }, {});
+
+    return Object.entries(grouped)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([competencia, grupos]) => ({
+        key: `pagamentos-${competencia}`,
+        competencia,
+        title: formatCompetenciaFolder(competencia),
+        grupos: Object.entries(grupos)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([tipo, documentos]) => ({
+            tipo,
+            documentos: documentos.sort((a, b) => getDocDateValue(b).localeCompare(getDocDateValue(a))),
+          })),
+      }));
+  }, [comprovantesPagamentoFiltrados]);
+
   const pastasDocumentais = useMemo(() => {
-    const grouped = docsFiltrados.reduce<Record<string, any[]>>((acc, doc) => {
+    const grouped = docsGeraisFiltrados.reduce<Record<string, any[]>>((acc, doc) => {
       const key = getMonthKey(doc);
       acc[key] = acc[key] || [];
       acc[key].push(doc);
@@ -138,7 +186,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         title: formatMonthFolder(key),
         documentos: documentos.sort((a, b) => getDocDateValue(b).localeCompare(getDocDateValue(a))),
       }));
-  }, [docsFiltrados]);
+  }, [docsGeraisFiltrados]);
 
   const pastaAberta = (key: string) => pastasAbertas[key] ?? key === mesAtualKey;
 
@@ -402,7 +450,45 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">{docsFiltrados.length} de {docs.length} documento(s) no historico</p>
-          {pastasDocumentais.length === 0 ? (
+          {pastasComprovantesPagamento.length > 0 && (
+            <div className="rounded-lg border border-primary/30 overflow-hidden">
+              <div className="px-3 py-3 border-b border-border bg-primary/5">
+                <div className="flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-primary" />
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Comprovantes de Pagamento</p>
+                    <p className="text-xs text-muted-foreground">Organizado por ano, mes, tipo de pagamento, empresa e arquivo PDF.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3 p-3">
+                {pastasComprovantesPagamento.map((pasta) => (
+                  <div key={pasta.key} className="rounded-lg border border-border overflow-hidden">
+                    <div className="px-3 py-2 bg-muted/20">
+                      <p className="text-sm font-semibold text-foreground">{pasta.title}</p>
+                      <p className="text-xs text-muted-foreground">{pasta.grupos.reduce((total, grupo) => total + grupo.documentos.length, 0)} comprovante(s)</p>
+                    </div>
+                    <div className="space-y-3 p-3">
+                      {pasta.grupos.map((grupo) => {
+                        const totalGrupo = grupo.documentos.reduce((sum, doc) => sum + (Number(doc.valor_documento) || 0), 0);
+                        return (
+                          <div key={`${pasta.key}-${grupo.tipo}`} className="rounded-lg border border-border p-3 space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-semibold uppercase text-muted-foreground">{grupo.tipo}</p>
+                              <Badge variant="outline">{grupo.documentos.length} arquivo(s) - {formatBRL(totalGrupo)}</Badge>
+                            </div>
+                            {grupo.documentos.map(renderDocumento)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {pastasDocumentais.length === 0 && pastasComprovantesPagamento.length === 0 ? (
             <div className="text-center py-6 text-sm text-muted-foreground">
               Nenhum documento encontrado com os filtros selecionados.
             </div>

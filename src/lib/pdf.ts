@@ -91,6 +91,28 @@ export const extractPdfLines = async (source: Uint8Array | string): Promise<stri
 export const extractPdfTextByLines = async (source: Uint8Array | string): Promise<string> =>
   (await extractPdfLines(source)).join('\n').trim();
 
+export const extractPdfPagesText = async (source: Uint8Array | string): Promise<Array<{ pageNumber: number; text: string }>> => {
+  const bytes = typeof source === 'string' ? await fetchPdfBytes(source) : source;
+  const pdf = await getDocument({ data: bytes }).promise;
+  const pages: Array<{ pageNumber: number; text: string }> = [];
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const pageLines = buildTextLinesFromItems(textContent.items as any[]);
+    const fallback = textContent.items
+      .map((item) => ('str' in item ? item.str : ''))
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const text = (pageLines.length ? pageLines.join('\n') : fallback).trim();
+    pages.push({ pageNumber, text });
+  }
+
+  return pages;
+};
+
 export const renderPdfPagesToDataUrls = async (
   source: Uint8Array | string,
   scale = 1.35,

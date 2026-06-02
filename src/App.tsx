@@ -70,6 +70,7 @@ import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
 import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
 import PermissoesDiretorPage from "@/pages/admin/PermissoesDiretorPage";
+import ComprovantesPagamentoPage from "@/pages/admin/ComprovantesPagamentoPage";
 import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
 import AppMecanicoAdminPage from "@/pages/admin/AppMecanicoAdminPage";
 import CombustivelQRAdminPage from "@/pages/admin/CombustivelQRAdminPage";
@@ -269,6 +270,7 @@ const AuthGate = () => {
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
         <Route path="/admin/compras" element={<ComprasPage />} />
         <Route path="/admin/emails-contabilidade" element={<EmailsContabilidadePage />} />
+        <Route path="/admin/comprovantes-pagamento" element={<ComprovantesPagamentoPage />} />
         <Route path="/admin/monitoramento" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/operacional" element={<DespacharChamadoPage />} />

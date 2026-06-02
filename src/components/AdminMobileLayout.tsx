@@ -50,6 +50,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes', group: 'Faturamento' },
   { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias', group: 'Faturamento' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: 'Financeiro' },
+  { label: 'Comprovantes Pagamento', icon: Receipt, path: '/admin/comprovantes-pagamento', group: 'Financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Financeiro' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: 'Financeiro' },
   { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores', group: 'Financeiro' },
