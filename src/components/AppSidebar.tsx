@@ -23,6 +23,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+  { label: 'Inteligencia Operacional', icon: Sparkles, path: '/admin/inteligencia-operacional' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
   { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
@@ -54,6 +55,7 @@ const adminItems: MenuItem[] = [
 
 const directorReportItems: MenuItem[] = [
   { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin/diretoria' },
+  { label: 'Inteligencia Operacional', icon: Sparkles, path: '/admin/inteligencia-operacional' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },

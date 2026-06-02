@@ -10,6 +10,7 @@ export type DirectorTemporaryLike = {
 
 const DIRECTOR_ALLOWED_ADMIN_PREFIXES = [
   '/admin/diretoria',
+  '/admin/inteligencia-operacional',
   '/admin/faturamento',
   '/admin/faturamento/migracao-dn4',
   '/admin/financeiro',
@@ -55,6 +56,7 @@ const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
 
 const DIRECTOR_MODULE_BY_PREFIX: Array<{ prefix: string; modulo: string }> = [
   { prefix: '/admin/empresas', modulo: 'rh' },
+  { prefix: '/admin/inteligencia-operacional', modulo: 'inteligencia_operacional' },
   { prefix: '/admin/base-mestra', modulo: 'rh' },
   { prefix: '/admin/funcionarios', modulo: 'rh' },
   { prefix: '/admin/lancamentos', modulo: 'fechamento' },

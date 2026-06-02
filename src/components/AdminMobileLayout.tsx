@@ -21,6 +21,7 @@ type Item = { label: string; icon: React.ElementType; path: string; group: strin
 
 const ALL_ITEMS: Item[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin', group: 'Principal' },
+  { label: 'Inteligencia Operacional', icon: Sparkles, path: '/admin/inteligencia-operacional', group: 'Principal' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas', group: 'Principal' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento', group: 'Principal' },
   { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade', group: 'Principal' },
@@ -63,6 +64,7 @@ const ALL_ITEMS: Item[] = [
 ];
 
 const HOME_QUICK: Item[] = [
+  { label: 'Inteligencia', icon: Sparkles, path: '/admin/inteligencia-operacional', group: '', tint: 'from-cyan-500/15 to-cyan-500/5 text-cyan-600 dark:text-cyan-400' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas', group: '', tint: 'from-violet-500/15 to-violet-500/5 text-violet-600 dark:text-violet-400' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento', group: '', tint: 'from-emerald-500/15 to-emerald-500/5 text-emerald-600 dark:text-emerald-400' },
   { label: 'EPI', icon: HardHat, path: '/admin/epi', group: '', tint: 'from-orange-500/15 to-orange-500/5 text-orange-600 dark:text-orange-400' },
@@ -73,6 +75,7 @@ const HOME_QUICK: Item[] = [
 
 const DIRECTOR_ITEMS: Item[] = [
   { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin/diretoria', group: 'Diretoria' },
+  { label: 'Inteligencia Operacional', icon: Sparkles, path: '/admin/inteligencia-operacional', group: 'Diretoria' },
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Diretoria' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes', group: 'Diretoria' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos', group: 'Diretoria' },
@@ -86,6 +89,7 @@ const DIRECTOR_ITEMS: Item[] = [
 ];
 
 const DIRECTOR_HOME_QUICK: Item[] = [
+  { label: 'Inteligencia', icon: Sparkles, path: '/admin/inteligencia-operacional', group: '', tint: 'from-violet-500/15 to-violet-500/5 text-violet-600 dark:text-violet-400' },
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: '', tint: 'from-green-500/15 to-green-500/5 text-green-600 dark:text-green-400' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: '', tint: 'from-cyan-500/15 to-cyan-500/5 text-cyan-600 dark:text-cyan-400' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: '', tint: 'from-orange-500/15 to-orange-500/5 text-orange-600 dark:text-orange-400' },

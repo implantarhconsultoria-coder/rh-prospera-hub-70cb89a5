@@ -71,6 +71,7 @@ import ComprasPage from "@/pages/ComprasPage";
 import EmailsContabilidadePage from "@/pages/admin/EmailsContabilidadePage";
 import PermissoesDiretorPage from "@/pages/admin/PermissoesDiretorPage";
 import ComprovantesPagamentoPage from "@/pages/admin/ComprovantesPagamentoPage";
+import CentralInteligenciaOperacionalPage from "@/pages/admin/CentralInteligenciaOperacionalPage";
 import AppMecanicoEmReconstrucaoPage from "@/pages/admin/AppMecanicoEmReconstrucaoPage";
 import AppMecanicoAdminPage from "@/pages/admin/AppMecanicoAdminPage";
 import CombustivelQRAdminPage from "@/pages/admin/CombustivelQRAdminPage";
@@ -240,6 +241,7 @@ const AuthGate = () => {
         <Route path="/admin/implanta-central" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/implanta-central/*" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/diretoria" element={<DirectorDashboardPage />} />
+        <Route path="/admin/inteligencia-operacional" element={<CentralInteligenciaOperacionalPage />} />
         <Route path="/admin/empresas" element={<EmpresasPage />} />
         <Route path="/admin/base-mestra" element={<BaseMestraPage />} />
         <Route path="/admin/funcionarios" element={<FuncionariosPage />} />
