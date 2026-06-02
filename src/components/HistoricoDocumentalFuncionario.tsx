@@ -4,6 +4,7 @@ import {
   DOCUMENTO_ORIGENS_PADRAO,
   buscarHistoricoFuncionario,
   excluirDocumentoFuncionario,
+  marcarComoEnviado,
   registrarDocumento,
   uploadDocumentoArquivo,
 } from '@/lib/documentoHistorico';
@@ -14,7 +15,9 @@ import { Archive, Building2, ChevronDown, ChevronRight, Clock, Download, Eye, Fi
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { useApp } from '@/context/AppContext';
-import { downloadDocument } from '@/lib/documentUrl';
+import { downloadDocument, getDocumentUrl, type DocumentSource } from '@/lib/documentUrl';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import { CC_OBRIGATORIO, getDestinatariosRescisao } from '@/lib/emailUtils';
 import { toast } from 'sonner';
 
 interface Props {
@@ -66,7 +69,8 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [viewing, setViewing] = useState<{ url: string; tipo: string; titulo: string } | null>(null);
+  const [viewing, setViewing] = useState<{ doc: any; source: DocumentSource; titulo: string; isAso: boolean } | null>(null);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
   const [categoria, setCategoria] = useState('DOCUMENTACAO ADMISSIONAL');
   const [origem, setOrigem] = useState('upload_manual');
   const [observacao, setObservacao] = useState('');
@@ -202,16 +206,82 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     }
   };
 
+  const baixarPdfComoBlob = async (source: DocumentSource) => {
+    const url = await getDocumentUrl(source);
+    if (!url) throw new Error('Documento indisponivel para anexar ao e-mail.');
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Nao foi possivel ler o PDF salvo no historico.');
+    const blob = await response.blob();
+    return blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+  };
+
+  const abrirEnvioRescisaoContabilidade = async () => {
+    if (!viewing || !funcionario || !company) return;
+
+    try {
+      const pdfBlob = await baixarPdfComoBlob(viewing.source);
+      const destinatarios = Array.from(getDestinatariosRescisao(company.name || ''));
+      const copias = Array.from(new Set(CC_OBRIGATORIO));
+      const nomeArquivo = safeFileName(
+        viewing.doc?.nome_arquivo ||
+        `${company.name} - ASO - ${funcionario.name}.pdf`,
+      );
+
+      setEmailPdfDraft({
+        to: destinatarios,
+        cc: copias,
+        subject: `ASO demissional - dar seguimento na rescisao - ${funcionario.name}`,
+        body: [
+          'Prezados, bom dia.',
+          '',
+          'Segue em anexo o ASO do funcionario abaixo para darem seguimento no processo de rescisao.',
+          '',
+          `Funcionario: ${funcionario.name}`,
+          `CPF: ${funcionario.cpf || '-'}`,
+          `Cargo: ${funcionario.cargo || '-'}`,
+          `Empresa: ${company.name || '-'}`,
+          `Status: ${funcionario.status || '-'}`,
+          '',
+          'Por gentileza, confirmar recebimento e continuidade do processo.',
+          '',
+          'Atenciosamente,',
+          'Rodrigo De Souza Sabino',
+        ].join('\n'),
+        attachmentBlob: pdfBlob,
+        attachmentName: nomeArquivo.toLowerCase().endsWith('.pdf') ? nomeArquivo : `${nomeArquivo}.pdf`,
+        senderUserId: session?.user?.id,
+        senderName: 'Rodrigo De Souza Sabino',
+        senderEmail: session?.user?.email,
+        moduleOrigin: 'historico_documental_rescisao',
+        documentId: viewing.doc?.id,
+        documentName: viewing.doc?.nome_arquivo || viewing.titulo,
+        afterSend: async () => {
+          if (!viewing.doc?.id || !session?.user?.id) return;
+          await marcarComoEnviado(
+            viewing.doc.id,
+            session.user.id,
+            'Rodrigo De Souza Sabino',
+            [...destinatarios, ...copias].join(', '),
+          );
+          await carregar();
+        },
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel preparar o envio para a contabilidade.');
+    }
+  };
+
   const renderDocumento = (doc: any) => {
     const categoriaDoc = doc.categoria || doc.tipo_documento || 'OUTROS';
     const origemDoc = doc.origem || (doc.status_envio === 'gerado' ? 'gerado_sistema' : doc.status_envio) || 'gerado_sistema';
     const titulo = `${categoriaDoc}${doc.competencia ? ' - ' + doc.competencia : ''}`;
-    const source = {
+    const source: DocumentSource = {
       arquivo_url: doc.arquivo_url,
       storage_path: doc.storage_path,
       bucket: doc.storage_bucket || 'documentos-funcionarios',
       tipo: inferTipo(categoriaDoc),
     };
+    const isAso = String(categoriaDoc).toUpperCase().includes('ASO') || String(doc.tipo_documento || '').toUpperCase().includes('ASO');
 
     return (
       <div key={doc.id} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
@@ -246,7 +316,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             <>
               <button
                 type="button"
-                onClick={() => setViewing({ url: doc.storage_path || doc.arquivo_url, tipo: inferTipo(categoriaDoc), titulo })}
+                onClick={() => setViewing({ doc, source, titulo, isAso })}
                 className="text-[11px] text-primary underline inline-flex items-center gap-1"
               >
                 <Eye className="w-3 h-3" /> Visualizar
@@ -384,13 +454,27 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             <DialogTitle className="text-base">{viewing?.titulo || 'Documento'}</DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6 pt-3">
+            {viewing?.isAso && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={abrirEnvioRescisaoContabilidade}>
+                  <Mail className="w-4 h-4 mr-2" /> Enviar para contabilidade - rescisao
+                </Button>
+              </div>
+            )}
             <PdfDocumentViewer
-              source={viewing ? { url: viewing.url, tipo: viewing.tipo } : undefined}
+              source={viewing?.source}
               title={viewing?.titulo || 'Documento'}
             />
           </div>
         </DialogContent>
       </Dialog>
+      <EmailPdfModal
+        open={!!emailPdfDraft}
+        draft={emailPdfDraft}
+        onOpenChange={(open) => {
+          if (!open) setEmailPdfDraft(null);
+        }}
+      />
     </div>
   );
 };
