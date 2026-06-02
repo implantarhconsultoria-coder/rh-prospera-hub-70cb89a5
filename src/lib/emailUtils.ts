@@ -200,6 +200,23 @@ export const getDestinatariosFerias = (unidade: string): readonly string[] => {
   ];
 };
 
+export const getDestinatariosAtestadoContabilidade = (unidade: string): readonly string[] => {
+  const u = (unidade || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+  if (u.includes('GOIANIA') || u.includes('GOIANA')) {
+    return ['gyn@topac.com.br', 'requisicao@incocontabilidade.com.br'];
+  }
+
+  return [
+    'marisa@aatconsultoria.com.br',
+    'lucilene@aatconsultoria.com.br',
+    'dp@aatconsultoria.com.br',
+  ];
+};
+
 export const getDestinatariosRescisao = (unidade: string): readonly string[] => {
   return getDestinatariosFerias(unidade);
 };

@@ -5,9 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, User, Calendar, FileQuestion } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, User, Calendar, FileQuestion, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { renderPdfPagesToDataUrls } from '@/lib/pdf';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import { buildPdfFileName, competenciaPdfPart } from '@/lib/savePdf';
+import { CC_OBRIGATORIO, getDestinatariosAtestadoContabilidade } from '@/lib/emailUtils';
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -20,6 +23,7 @@ const fileToDataUrl = (file: File): Promise<string> =>
 type StagingStatus = 'subindo' | 'processando' | 'ok' | 'manual' | 'erro';
 
 interface AtestadoStaging {
+  file?: File;
   fileName: string;
   fileUrl: string;
   fileSize: number;
@@ -46,12 +50,30 @@ interface AtestadoStaging {
 }
 
 const onlyDigits = (s: string) => (s || '').replace(/\D/g, '');
+
+const formatDateBR = (value?: string) => {
+  if (!value) return '-';
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return value;
+};
+
+const getCompetenciaAtestado = (row: Pick<AtestadoStaging, 'dataInicio'>) =>
+  (row.dataInicio || new Date().toISOString().slice(0, 10)).slice(0, 7);
+
+const competenciaEmailLabel = (competencia: string) =>
+  competenciaPdfPart(competencia).replace(/^REF\.\s*/i, '').toLowerCase();
+
+const isPdfFile = (fileName: string, blob?: Blob) =>
+  /\.pdf$/i.test(fileName || '') || blob?.type === 'application/pdf';
 const TIPOS_DOC = ['Atestado Médico', 'Comprovante Comum', 'Declaração', 'Recibo', 'Receita Médica', 'Outros'];
 
 const AtestadosImportPage: React.FC = () => {
   const { employees, companies, session } = useApp();
   const [staging, setStaging] = useState<AtestadoStaging[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [preparandoEmail, setPreparandoEmail] = useState<number | null>(null);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const matchFuncionario = (data: { funcionario_nome?: string; cpf?: string }) => {
@@ -92,7 +114,7 @@ const AtestadosImportPage: React.FC = () => {
       const path = `${userId}/${safeName}`;
 
       setStaging(prev => [...prev, {
-        fileName: file.name, fileUrl: '', fileSize: file.size,
+        file, fileName: file.name, fileUrl: '', fileSize: file.size,
         status: 'subindo', aplicarVR: true, aplicarVT: true,
         ehAtestado: true, tipoDocumento: 'Atestado Médico',
       }]);
@@ -171,6 +193,80 @@ const AtestadosImportPage: React.FC = () => {
   };
 
   const removeRow = (i: number) => setStaging(prev => prev.filter((_, idx) => idx !== i));
+
+  const getAtestadoPdfBlob = async (row: AtestadoStaging) => {
+    if (row.file && isPdfFile(row.fileName, row.file)) return row.file;
+    if (!row.fileUrl) throw new Error('Arquivo do atestado nao encontrado.');
+
+    const response = await fetch(row.fileUrl);
+    if (!response.ok) throw new Error('Nao foi possivel baixar o PDF do atestado.');
+
+    const blob = await response.blob();
+    if (!isPdfFile(row.fileName, blob)) {
+      throw new Error('O envio automatico para contabilidade precisa de um arquivo PDF.');
+    }
+
+    return new Blob([blob], { type: 'application/pdf' });
+  };
+
+  const prepararEmailContabilidade = async (index: number) => {
+    const row = staging[index];
+    if (!row) return;
+
+    if (!row.funcionarioId) {
+      toast.error('Vincule o funcionario antes de criar o e-mail.');
+      return;
+    }
+
+    const emp = employees.find(e => e.id === row.funcionarioId);
+    const company = emp ? companies.find(c => c.id === emp.companyId) : undefined;
+
+    if (!emp || !company) {
+      toast.error('Funcionario ou empresa nao encontrado.');
+      return;
+    }
+
+    setPreparandoEmail(index);
+    try {
+      const pdfBlob = await getAtestadoPdfBlob(row);
+      const competencia = getCompetenciaAtestado(row);
+      const attachmentName = buildPdfFileName(company.name, 'atestado medico', emp.name, competenciaPdfPart(competencia));
+      const periodo = row.dataFim && row.dataFim !== row.dataInicio
+        ? `${formatDateBR(row.dataInicio)} a ${formatDateBR(row.dataFim)}`
+        : formatDateBR(row.dataInicio);
+
+      setEmailPdfDraft({
+        to: Array.from(getDestinatariosAtestadoContabilidade(company.name || '')),
+        cc: Array.from(CC_OBRIGATORIO),
+        subject: `Atestado Medico - ${emp.name} - ${company.name} - ${competenciaEmailLabel(competencia)}`,
+        body: [
+          'Prezados,',
+          '',
+          'Segue em anexo o atestado medico para conferencia e lancamento.',
+          '',
+          `Funcionario: ${emp.name}`,
+          `CPF: ${emp.cpf || row.cpf || '-'}`,
+          `Empresa: ${company.name}`,
+          `Periodo: ${periodo}`,
+          `Dias cobertos: ${row.diasCobertos || 1}`,
+          row.cid ? `CID: ${row.cid}` : '',
+          row.medico ? `Medico: ${row.medico}` : '',
+          row.crm ? `CRM: ${row.crm}` : '',
+          '',
+          'Atenciosamente,',
+          'Rodrigo De Souza Sabino',
+        ].filter(Boolean).join('\n'),
+        attachmentBlob: pdfBlob,
+        attachmentName,
+        moduleOrigin: 'atestados',
+        documentName: attachmentName,
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel preparar o e-mail do atestado.');
+    } finally {
+      setPreparandoEmail(null);
+    }
+  };
 
   const salvarTudo = async () => {
     const validos = staging.filter(s => (s.status === 'ok' || s.status === 'manual') && s.funcionarioId);
@@ -257,7 +353,8 @@ const AtestadosImportPage: React.FC = () => {
   const manuais = staging.filter(s => s.status === 'manual').length;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <>
+      <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-3xl font-bold font-display text-foreground">Importar Atestados / Comprovantes</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -387,6 +484,22 @@ const AtestadosImportPage: React.FC = () => {
                     </>
                   )}
 
+                  {s.ehAtestado && (
+                    <div className="lg:col-span-4 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => prepararEmailContabilidade(i)}
+                        disabled={preparandoEmail === i || !s.funcionarioId}
+                      >
+                        {preparandoEmail === i
+                          ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          : <Mail className="w-4 h-4 mr-2" />}
+                        Criar e-mail para contabilidade
+                      </Button>
+                    </div>
+                  )}
+
                   {!s.ehAtestado && (
                     <div className="lg:col-span-4">
                       <label className="text-[10px] uppercase text-muted-foreground">Descrição</label>
@@ -408,7 +521,15 @@ const AtestadosImportPage: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+      <EmailPdfModal
+        open={!!emailPdfDraft}
+        draft={emailPdfDraft}
+        onOpenChange={(open) => {
+          if (!open) setEmailPdfDraft(null);
+        }}
+      />
+    </>
   );
 };
 
