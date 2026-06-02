@@ -43,7 +43,7 @@ const ROLE_LABELS: Record<AppRole, { label: string; color: string; portal: strin
   filial_matriz: { label: 'Filial Matriz', color: 'bg-cyan-500', portal: 'Portal RH Matriz', note: 'Somente dados da Matriz.' },
   filial_praia: { label: 'Filial Praia Grande', color: 'bg-blue-500', portal: 'Portal RH Praia Grande', note: 'Somente dados de Praia Grande.' },
   filial_goiania: { label: 'Filial Goiania', color: 'bg-emerald-500', portal: 'Portal RH Goiania', note: 'Somente dados de Goiania.' },
-  diretor_geral: { label: 'Diretor Geral', color: 'bg-rose-600', portal: 'Visao Executiva', note: 'Acesso executivo de leitura.' },
+  diretor_geral: { label: 'Diretor Executivo', color: 'bg-rose-600', portal: 'Visao Executiva', note: 'Acesso executivo de leitura.' },
   almoxarifado: { label: 'Almoxarifado', color: 'bg-amber-500', portal: 'Portal Almoxarifado', note: 'Estoque e movimentacoes.' },
   tecnico_campo: { label: 'Tecnico de Campo', color: 'bg-purple-500', portal: 'Portal Campo', note: 'Acesso tecnico restrito.' },
   operacional: { label: 'Mecanico', color: 'bg-teal-500', portal: 'App Mecanico', note: 'App tecnico operacional.' },

@@ -54,7 +54,7 @@ const adminItems: MenuItem[] = [
 ];
 
 const directorReportItems: MenuItem[] = [
-  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin/diretoria' },
+  { label: 'Diretor Executivo', icon: LayoutDashboard, path: '/admin/diretoria' },
   { label: 'Inteligencia Operacional', icon: Sparkles, path: '/admin/inteligencia-operacional' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },

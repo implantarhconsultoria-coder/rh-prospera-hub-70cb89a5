@@ -74,7 +74,7 @@ const HOME_QUICK: Item[] = [
 ];
 
 const DIRECTOR_ITEMS: Item[] = [
-  { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin/diretoria', group: 'Diretoria' },
+  { label: 'Diretor Executivo', icon: LayoutDashboard, path: '/admin/diretoria', group: 'Diretoria' },
   { label: 'Inteligencia Operacional', icon: Sparkles, path: '/admin/inteligencia-operacional', group: 'Diretoria' },
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Diretoria' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes', group: 'Diretoria' },
@@ -107,7 +107,7 @@ const AdminMobileLayout: React.FC = () => {
   const visibleItems = isDirector ? DIRECTOR_ITEMS : ALL_ITEMS;
   const quickItems = isDirector ? DIRECTOR_HOME_QUICK : HOME_QUICK;
   const searchModules: SearchModule[] = useMemo(() => visibleItems.map(i => ({ label: i.label, path: i.path })), [visibleItems]);
-  const profileLabel = isDirector ? 'Diretor Geral' : 'Admin';
+  const profileLabel = isDirector ? 'Diretor Executivo' : 'Admin';
   const displayName = (session?.user?.user_metadata?.name || session?.user?.user_metadata?.nome || session?.user?.email?.split('@')[0] || profileLabel).toString();
   const isHome = location.pathname === '/admin';
 

@@ -19,34 +19,23 @@ import {
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency } from '@/lib/calculations';
+import CorporateAssistantPanel from '@/components/assistente/CorporateAssistantPanel';
+import { buildCorporateSnapshot } from '@/lib/assistenteCorporativo';
 import {
   buildInternalAlerts,
   buildMorningLines,
+  fetchSupabaseIntelligenceCounts,
   fetchWeatherSnapshot,
   formatBRDate,
   formatCalendarDistance,
   getUpcomingCalendarEvents,
   resolveWeatherLocations,
-  toDateKey,
   type IntelligenceAlert,
   type SupabaseIntelligenceCounts,
   type WeatherSnapshot,
 } from '@/lib/inteligenciaOperacional';
 
 type LoadingState = 'idle' | 'loading' | 'done' | 'error';
-
-const addDays = (date: Date, days: number) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-};
-
-const safeRows = (data: any) => (Array.isArray(data) ? data : []);
-
-const isOpenStatus = (value: unknown) => {
-  const s = String(value || '').toLowerCase();
-  return ['aberto', 'em_aberto', 'enviada', 'prevista', 'parcial', 'vencida', 'pendente'].includes(s);
-};
 
 const severityClass: Record<string, string> = {
   critical: 'border-red-500/50 bg-red-500/10 text-red-100',
@@ -62,8 +51,6 @@ const severityIcon = (severity: string) => {
 };
 
 const cardClass = 'rounded-2xl border border-emerald-500/20 bg-slate-950/70 shadow-sm';
-
-const fromTable = (table: string) => supabase.from(table as any) as any;
 
 const CentralInteligenciaOperacionalPage: React.FC = () => {
   const { companies, employees, entries, session, userRoles } = useApp();
@@ -87,6 +74,10 @@ const CentralInteligenciaOperacionalPage: React.FC = () => {
     [activeCompanies, employees, entries, counts, now, weather],
   );
   const morningLines = useMemo(() => buildMorningLines(displayName, weather, intelligenceAlerts, now), [displayName, weather, intelligenceAlerts, now]);
+  const corporateSnapshot = useMemo(
+    () => buildCorporateSnapshot({ companies, employees, entries, counts, now }),
+    [companies, employees, entries, counts, now],
+  );
 
   const currentCompetencia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const payrollEntries = entries.filter((entry) => entry.competencia === currentCompetencia);
@@ -125,56 +116,9 @@ const CentralInteligenciaOperacionalPage: React.FC = () => {
 
   const loadCounts = async () => {
     setDataState('loading');
-    const today = toDateKey(new Date());
-    const in30 = toDateKey(addDays(new Date(), 30));
-    const monthStart = `${currentCompetencia}-01`;
-    const monthEnd = toDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-
     try {
-      const [
-        documentosRes,
-        feriasRes,
-        solicitacoesRes,
-        ativosRes,
-        faturasRes,
-        contasPagarRes,
-      ] = await Promise.all([
-        fromTable('documentos_funcionario').select('id,status_envio,status,categoria,created_at').limit(1000),
-        fromTable('ferias_avisos').select('id,status,periodo_gozo_inicio,periodo_gozo_fim').gte('periodo_gozo_fim', monthStart).lte('periodo_gozo_inicio', monthEnd).limit(500),
-        fromTable('operacional_solicitacoes').select('id,status,diretor_status,deleted_at').is('deleted_at', null).limit(1000),
-        fromTable('ativos').select('id,tipo,status,vencimento_ipva,vencimento_licenciamento').eq('tipo', 'veiculo').limit(1000),
-        fromTable('faturas').select('id,status,total,data_vencimento').limit(1000),
-        fromTable('titulos_pagar').select('id,status,saldo,data_vencimento').limit(1000),
-      ]);
-
-      const documentos = safeRows(documentosRes.data);
-      const ferias = safeRows(feriasRes.data);
-      const solicitacoes = safeRows(solicitacoesRes.data);
-      const ativos = safeRows(ativosRes.data);
-      const faturas = safeRows(faturasRes.data);
-      const contasPagar = safeRows(contasPagarRes.data);
-
-      const documentosPendentes = documentos.filter((d: any) => {
-        const status = String(d.status_envio || d.status || '').toLowerCase();
-        return ['pendente', 'gerado', 'erro', 'aguardando', 'nao_enviado'].includes(status);
-      }).length;
-
-      const veiculosDocumentosVencendo = ativos.filter((a: any) => {
-        const ipva = String(a.vencimento_ipva || '');
-        const lic = String(a.vencimento_licenciamento || '');
-        return (ipva >= today && ipva <= in30) || (lic >= today && lic <= in30);
-      }).length;
-
-      setCounts({
-        documentosPendentes,
-        feriasProgramadas: ferias.length,
-        solicitacoesPendentes: solicitacoes.filter((s: any) => String(s.status || '') === 'pendente').length,
-        solicitacoesDiretor: solicitacoes.filter((s: any) => String(s.diretor_status || '') === 'aguardando_diretor').length,
-        veiculosAtivos: ativos.filter((a: any) => String(a.status || '') === 'ativo').length,
-        veiculosDocumentosVencendo,
-        faturamentoAberto: faturas.filter((f: any) => isOpenStatus(f.status)).length,
-        contasPagarAberto: contasPagar.filter((c: any) => isOpenStatus(c.status)).length,
-      });
+      const nextCounts = await fetchSupabaseIntelligenceCounts(supabase, currentCompetencia, now);
+      setCounts(nextCounts);
       setDataState('done');
     } catch (error) {
       console.warn('Dados parciais na central de inteligencia:', error);
@@ -255,6 +199,15 @@ const CentralInteligenciaOperacionalPage: React.FC = () => {
           ))}
         </div>
       </section>
+
+      <CorporateAssistantPanel
+        variant={isDirector ? 'director' : 'central'}
+        displayName={displayName}
+        snapshot={corporateSnapshot}
+        alerts={intelligenceAlerts}
+        calendarEvents={calendarEvents}
+        weather={weather}
+      />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className={`${cardClass} p-5`}>

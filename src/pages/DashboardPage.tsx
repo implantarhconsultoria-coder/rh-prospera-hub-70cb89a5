@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -11,6 +11,14 @@ import { asoStatus, calcTotalFuncionario, feriasStatus, formatCurrency } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { isDirectorRole } from '@/lib/directorPermissions';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
+import CorporateAssistantPanel from '@/components/assistente/CorporateAssistantPanel';
+import { buildCorporateSnapshot } from '@/lib/assistenteCorporativo';
+import {
+  buildInternalAlerts,
+  fetchSupabaseIntelligenceCounts,
+  getUpcomingCalendarEvents,
+  type SupabaseIntelligenceCounts,
+} from '@/lib/inteligenciaOperacional';
 
 const DashboardPage: React.FC = () => {
   const { companies, employees, entries, session, userRoles } = useApp();
@@ -18,6 +26,7 @@ const DashboardPage: React.FC = () => {
   const comp = new Date().toISOString().slice(0, 7);
   const [fechStats, setFechStats] = useState({ fechadas: 0, abertas: 0, pendentes: 0 });
   const [liberarVisaoRhDiretor, setLiberarVisaoRhDiretor] = useState(false);
+  const [intelligenceCounts, setIntelligenceCounts] = useState<SupabaseIntelligenceCounts>({});
   const isDirector = isDirectorRole(userRoles);
 
   useEffect(() => {
@@ -40,6 +49,12 @@ const DashboardPage: React.FC = () => {
         setLiberarVisaoRhDiretor(Boolean((data as any)?.liberar_visao_rh_diretor));
       });
   }, [isDirector, session?.user?.id]);
+
+  useEffect(() => {
+    fetchSupabaseIntelligenceCounts(supabase, comp)
+      .then(setIntelligenceCounts)
+      .catch((error) => console.warn('Dashboard: leitura parcial da inteligencia operacional:', error));
+  }, [comp]);
 
   const h = new Date().getHours();
   const adminName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
@@ -81,6 +96,15 @@ const DashboardPage: React.FC = () => {
   const totalFuncionarios = employees.filter(e => e.status === 'ativo' && e.categoria === 'operacional').length;
   const rhVisivel = !isDirector || liberarVisaoRhDiretor;
   const cardAnim = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } };
+  const corporateSnapshot = useMemo(
+    () => buildCorporateSnapshot({ companies, employees, entries, counts: intelligenceCounts }),
+    [companies, employees, entries, intelligenceCounts],
+  );
+  const intelligenceAlerts = useMemo(
+    () => buildInternalAlerts(companies, employees, entries, intelligenceCounts),
+    [companies, employees, entries, intelligenceCounts],
+  );
+  const calendarEvents = useMemo(() => getUpcomingCalendarEvents(companies, new Date(), 30), [companies]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -109,6 +133,15 @@ const DashboardPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      <CorporateAssistantPanel
+        variant={isDirector ? 'director' : 'admin'}
+        displayName={adminName || 'Rodrigo'}
+        snapshot={corporateSnapshot}
+        alerts={intelligenceAlerts}
+        calendarEvents={calendarEvents}
+        compact
+      />
 
       {isDirector && !liberarVisaoRhDiretor && (
         <div className="card-premium p-4 border-amber-500/40 bg-amber-500/5 text-sm text-amber-100">

@@ -6,6 +6,14 @@ import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { calcPayrollBreakdown, formatCurrency } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
+import CorporateAssistantPanel from '@/components/assistente/CorporateAssistantPanel';
+import { buildCorporateSnapshot } from '@/lib/assistenteCorporativo';
+import {
+  buildInternalAlerts,
+  fetchSupabaseIntelligenceCounts,
+  getUpcomingCalendarEvents,
+  type SupabaseIntelligenceCounts,
+} from '@/lib/inteligenciaOperacional';
 
 type PeriodPreset = 'diario' | 'semanal' | 'quinzenal' | 'mensal' | 'personalizado';
 
@@ -109,7 +117,7 @@ const isIgnorableSupabaseError = (message?: string) => {
 };
 
 const DirectorDashboardPage: React.FC = () => {
-  const { companies, employees, entries } = useApp();
+  const { companies, employees, entries, session } = useApp();
   const [preset, setPreset] = useState<PeriodPreset>('mensal');
   const [companyFilter, setCompanyFilter] = useState<string>('geral');
   const [startDate, setStartDate] = useState<string>(presetRange('mensal').start);
@@ -117,6 +125,7 @@ const DirectorDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [generatedAt, setGeneratedAt] = useState<string>('');
+  const [intelligenceCounts, setIntelligenceCounts] = useState<SupabaseIntelligenceCounts>({});
 
   const [report, setReport] = useState<ExecutiveData>({
     financeiro: {
@@ -158,6 +167,14 @@ const DirectorDashboardPage: React.FC = () => {
     setStartDate(range.start);
     setEndDate(range.end);
   }, [preset]);
+
+  useEffect(() => {
+    const today = new Date();
+    const competencia = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}`;
+    fetchSupabaseIntelligenceCounts(supabase, competencia, today)
+      .then(setIntelligenceCounts)
+      .catch((err) => console.warn('Dashboard diretor: leitura parcial da inteligencia operacional:', err));
+  }, []);
 
   const runReport = async () => {
     if (!startDate || !endDate) return;
@@ -418,6 +435,29 @@ const DirectorDashboardPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const directorName = String(
+    session?.user?.user_metadata?.nome_completo ||
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.email?.split('@')[0] ||
+    'Robson',
+  );
+  const corporateSnapshot = useMemo(
+    () => buildCorporateSnapshot({
+      companies: targetCompanies,
+      employees,
+      entries,
+      counts: intelligenceCounts,
+      finance: report.financeiro,
+      fleet: report.frota,
+    }),
+    [targetCompanies, employees, entries, intelligenceCounts, report],
+  );
+  const intelligenceAlerts = useMemo(
+    () => buildInternalAlerts(targetCompanies, employees, entries, intelligenceCounts),
+    [targetCompanies, employees, entries, intelligenceCounts],
+  );
+  const calendarEvents = useMemo(() => getUpcomingCalendarEvents(targetCompanies, new Date(), 30), [targetCompanies]);
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -439,6 +479,14 @@ const DirectorDashboardPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      <CorporateAssistantPanel
+        variant="director"
+        displayName={directorName}
+        snapshot={corporateSnapshot}
+        alerts={intelligenceAlerts}
+        calendarEvents={calendarEvents}
+      />
 
       <div className="card-premium p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
         <div>

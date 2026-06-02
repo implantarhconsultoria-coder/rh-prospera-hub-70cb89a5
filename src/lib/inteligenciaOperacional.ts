@@ -59,6 +59,91 @@ export type SupabaseIntelligenceCounts = {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
+const safeRows = (data: any) => (Array.isArray(data) ? data : []);
+
+const isOpenStatus = (value: unknown) => {
+  const s = String(value || '').toLowerCase();
+  return ['aberto', 'em_aberto', 'enviada', 'prevista', 'parcial', 'vencida', 'pendente'].includes(s);
+};
+
+const readTable = async (
+  supabaseClient: any,
+  table: string,
+  columns: string,
+  limit = 1000,
+) => {
+  try {
+    const { data, error } = await supabaseClient.from(table).select(columns).limit(limit);
+    if (error) {
+      console.warn(`Central de inteligencia: leitura parcial em ${table}:`, error.message);
+      return [];
+    }
+    return safeRows(data);
+  } catch (error: any) {
+    console.warn(`Central de inteligencia: tabela ${table} indisponivel:`, error?.message || error);
+    return [];
+  }
+};
+
+export const fetchSupabaseIntelligenceCounts = async (
+  supabaseClient: any,
+  currentCompetencia: string,
+  now = new Date(),
+): Promise<SupabaseIntelligenceCounts> => {
+  const today = toDateKey(now);
+  const in30 = toDateKey(addDays(now, 30));
+  const monthStart = `${currentCompetencia}-01`;
+  const monthEnd = toDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+
+  const [
+    documentos,
+    feriasRows,
+    solicitacoesRows,
+    ativos,
+    faturas,
+    contasPagar,
+  ] = await Promise.all([
+    readTable(supabaseClient, 'documentos_funcionario', 'id,status_envio,status,categoria,created_at'),
+    readTable(supabaseClient, 'ferias_avisos', 'id,status,periodo_gozo_inicio,periodo_gozo_fim', 500),
+    readTable(supabaseClient, 'operacional_solicitacoes', 'id,status,diretor_status,deleted_at'),
+    readTable(supabaseClient, 'ativos', 'id,tipo,status,vencimento_ipva,vencimento_licenciamento'),
+    readTable(supabaseClient, 'faturas', 'id,status,total,data_vencimento'),
+    readTable(supabaseClient, 'titulos_pagar', 'id,status,saldo,data_vencimento'),
+  ]);
+
+  const ferias = feriasRows.filter((f: any) => {
+    const inicio = String(f.periodo_gozo_inicio || '');
+    const fim = String(f.periodo_gozo_fim || '');
+    return (!fim || fim >= monthStart) && (!inicio || inicio <= monthEnd);
+  });
+
+  const solicitacoes = solicitacoesRows.filter((s: any) => !s.deleted_at);
+
+  const documentosPendentes = documentos.filter((d: any) => {
+    const status = String(d.status_envio || d.status || '').toLowerCase();
+    return ['pendente', 'gerado', 'erro', 'aguardando', 'nao_enviado'].includes(status);
+  }).length;
+
+  const veiculosDocumentosVencendo = ativos.filter((a: any) => {
+    const tipo = String(a.tipo || '').toLowerCase();
+    if (tipo && tipo !== 'veiculo') return false;
+    const ipva = String(a.vencimento_ipva || '');
+    const lic = String(a.vencimento_licenciamento || '');
+    return (ipva >= today && ipva <= in30) || (lic >= today && lic <= in30);
+  }).length;
+
+  return {
+    documentosPendentes,
+    feriasProgramadas: ferias.length,
+    solicitacoesPendentes: solicitacoes.filter((s: any) => String(s.status || '') === 'pendente').length,
+    solicitacoesDiretor: solicitacoes.filter((s: any) => String(s.diretor_status || '') === 'aguardando_diretor' || String(s.status || '') === 'aguardando_diretor').length,
+    veiculosAtivos: ativos.filter((a: any) => String(a.status || '') === 'ativo').length,
+    veiculosDocumentosVencendo,
+    faturamentoAberto: faturas.filter((f: any) => isOpenStatus(f.status)).length,
+    contasPagarAberto: contasPagar.filter((c: any) => isOpenStatus(c.status)).length,
+  };
+};
+
 export const toDateKey = (date: Date) =>
   `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
