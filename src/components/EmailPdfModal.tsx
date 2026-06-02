@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Mail } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -14,8 +14,22 @@ export type EmailPdfDraft = {
   cc?: string[];
   subject: string;
   body: string;
-  attachmentBlob: Blob;
-  attachmentName: string;
+  attachmentBlob?: Blob;
+  attachmentName?: string;
+  attachments?: {
+    attachmentBlob: Blob;
+    attachmentName: string;
+    documentId?: string;
+    documentName?: string;
+    label?: string;
+  }[];
+  checklistItems?: {
+    label: string;
+    found: boolean;
+    required?: boolean;
+    detail?: string;
+  }[];
+  missingWarnings?: string[];
   senderUserId?: string;
   senderName?: string;
   senderEmail?: string;
@@ -23,6 +37,7 @@ export type EmailPdfDraft = {
   documentId?: string;
   documentName?: string;
   afterSend?: () => Promise<void> | void;
+  onOpenMissingDocuments?: () => void;
 };
 
 type EmailPdfModalProps = {
@@ -57,6 +72,11 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     if (!draft) return;
     const toList = parseEmails(to);
     const ccList = parseEmails(cc);
+    const attachments = draft.attachments?.length
+      ? draft.attachments
+      : draft.attachmentBlob && draft.attachmentName
+        ? [{ attachmentBlob: draft.attachmentBlob, attachmentName: draft.attachmentName, documentId: draft.documentId, documentName: draft.documentName }]
+        : [];
     if (toList.length === 0) {
       toast.error('Informe ao menos um destinatario.');
       return;
@@ -67,6 +87,10 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     }
     if (!body.trim()) {
       toast.error('Informe a mensagem do e-mail.');
+      return;
+    }
+    if (!attachments.length) {
+      toast.error('Nenhum PDF foi localizado para anexar ao e-mail.');
       return;
     }
 
@@ -80,8 +104,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
         cc: ccList,
         subject: subject.trim(),
         body: body.trim(),
-        attachmentBlob: draft.attachmentBlob,
-        attachmentName: draft.attachmentName,
+        attachments,
         senderUserId: draft.senderUserId || authUser?.id,
         senderName: draft.senderName || String(authUser?.user_metadata?.nome_completo || authUser?.email || ''),
         senderEmail: draft.senderEmail || authUser?.email,
@@ -131,11 +154,56 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
             <Label>Mensagem</Label>
             <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={9} />
           </div>
+          {draft?.checklistItems?.length ? (
+            <div className="rounded-md border border-border bg-muted/20 px-3 py-3 text-sm">
+              <p className="mb-2 font-medium">Documentos que serao enviados:</p>
+              <div className="space-y-1">
+                {draft.checklistItems.map((item) => (
+                  <div key={item.label} className={item.found ? 'flex items-start gap-2 text-foreground' : 'flex items-start gap-2 text-amber-700'}>
+                    {item.found ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />}
+                    <div>
+                      <span>{item.found ? 'OK' : 'Atencao'} {item.label}</span>
+                      {item.detail && <p className="text-xs text-muted-foreground">{item.detail}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {draft.missingWarnings?.length ? (
+                <div className="mt-3 space-y-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {draft.missingWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+                </div>
+              ) : null}
+              {draft.onOpenMissingDocuments && draft.missingWarnings?.length ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={draft.onOpenMissingDocuments}
+                  disabled={sending}
+                >
+                  Abrir documentos faltantes
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           {draft?.attachmentName && (
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
               Anexo: <span className="font-medium">{draft.attachmentName}</span>
             </div>
           )}
+          {draft?.attachments?.length ? (
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <p className="mb-1 font-medium">Anexos ({draft.attachments.length}):</p>
+              <ul className="space-y-1">
+                {draft.attachments.map((attachment) => (
+                  <li key={`${attachment.attachmentName}-${attachment.documentId || attachment.label || ''}`} className="text-xs text-muted-foreground">
+                    {attachment.label ? `${attachment.label}: ` : ''}<span className="font-medium text-foreground">{attachment.attachmentName}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>

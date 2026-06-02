@@ -62,6 +62,77 @@ const isComprovantePagamento = (doc: any) => {
   return value.includes('COMPROVANTE DE PAGAMENTO') || value.includes('PAGAMENTO');
 };
 
+const normalizeDocText = (value: unknown) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+
+const getDocumentText = (doc: any) => normalizeDocText([
+  doc?.categoria,
+  doc?.tipo_documento,
+  doc?.nome_arquivo,
+  doc?.descricao,
+  doc?.observacao,
+  doc?.subcategoria,
+  doc?.status_envio,
+].filter(Boolean).join(' '));
+
+const docHasFile = (doc: any) => Boolean(doc?.arquivo_url || doc?.storage_path);
+
+const isDocumentoAso = (doc: any) => {
+  const text = getDocumentText(doc);
+  return text.includes('ASO') || text.includes('ATESTADO DE SAUDE OCUPACIONAL');
+};
+
+const isAsoDemissional = (doc: any) => {
+  const text = getDocumentText(doc);
+  return isDocumentoAso(doc) && (
+    text.includes('DEMISSIONAL') ||
+    text.includes('DEMISSAO') ||
+    text.includes('DESLIGAMENTO') ||
+    text.includes('RESCISAO')
+  );
+};
+
+const isAvisoPrevio = (doc: any) => {
+  const text = getDocumentText(doc);
+  return text.includes('AVISO') && text.includes('PREVIO');
+};
+
+const isTermoRescisao = (doc: any) => {
+  const text = getDocumentText(doc);
+  return text.includes('TRCT') || (text.includes('TERMO') && text.includes('RESCISAO'));
+};
+
+const isDocumentoRescisao = (doc: any) => {
+  const text = getDocumentText(doc);
+  return (text.includes('RESCISAO') || text.includes('RESCISOES') || text.includes('TRCT')) &&
+    !isDocumentoAso(doc) &&
+    !isAvisoPrevio(doc);
+};
+
+const isDocumentoDesligamento = (doc: any) => {
+  const text = getDocumentText(doc);
+  return isDocumentoRescisao(doc) ||
+    isAsoDemissional(doc) ||
+    isAvisoPrevio(doc) ||
+    isTermoRescisao(doc) ||
+    text.includes('DESLIGAMENTO') ||
+    text.includes('DEMISSIONAL') ||
+    text.includes('DEMISSAO');
+};
+
+const getDocumentSource = (doc: any): DocumentSource => {
+  const categoriaDoc = doc?.categoria || doc?.tipo_documento || 'OUTROS';
+  return {
+    arquivo_url: doc?.arquivo_url,
+    storage_path: doc?.storage_path,
+    bucket: doc?.storage_bucket || 'documentos-funcionarios',
+    tipo: inferTipo(categoriaDoc),
+  };
+};
+
 const getCompetenciaPagamento = (doc: any) => {
   if (doc.competencia && /^\d{4}-\d{2}$/.test(String(doc.competencia))) return String(doc.competencia);
   return getMonthKey(doc);
@@ -267,50 +338,113 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     if (!viewing || !funcionario || !company) return;
 
     try {
-      const pdfBlob = await baixarPdfComoBlob(viewing.source);
+      const docsComArquivo = docs.filter(docHasFile);
+      const rescisaoDoc = docsComArquivo.find(isDocumentoRescisao) || (isDocumentoRescisao(viewing.doc) ? viewing.doc : null);
+      const asoDoc = docsComArquivo.find(isAsoDemissional) || docsComArquivo.find(isDocumentoAso) || (isDocumentoAso(viewing.doc) ? viewing.doc : null);
+      const avisoDoc = docsComArquivo.find(isAvisoPrevio) || (isAvisoPrevio(viewing.doc) ? viewing.doc : null);
+      const termoDoc = docsComArquivo.find(isTermoRescisao) || (isTermoRescisao(viewing.doc) ? viewing.doc : null);
+      const documentosSelecionados: { doc: any; label: string }[] = [];
+      const selectedIds = new Set<string>();
+
+      const addDoc = (doc: any, label: string) => {
+        if (!doc || !docHasFile(doc)) return;
+        const key = String(doc.id || doc.nome_arquivo || label);
+        if (selectedIds.has(key)) return;
+        selectedIds.add(key);
+        documentosSelecionados.push({ doc, label });
+      };
+
+      addDoc(rescisaoDoc, 'Rescisão');
+      addDoc(asoDoc, 'ASO Demissional');
+      addDoc(avisoDoc, 'Aviso Prévio');
+      addDoc(termoDoc, 'Termo de Rescisão');
+
+      docsComArquivo
+        .filter((doc) => isDocumentoDesligamento(doc) && !selectedIds.has(String(doc.id || doc.nome_arquivo || '')))
+        .forEach((doc) => addDoc(doc, 'Documento complementar'));
+
+      if (!documentosSelecionados.length) {
+        toast.error('Nenhum documento de desligamento com PDF foi encontrado no historico.');
+        return;
+      }
+
+      const attachments = await Promise.all(documentosSelecionados.map(async ({ doc, label }) => {
+        const source = getDocumentSource(doc);
+        const pdfBlob = await baixarPdfComoBlob(source);
+        const rawName = doc.nome_arquivo || `${company.name} - ${label} - ${funcionario.name}.pdf`;
+        const nomeArquivo = safeFileName(rawName);
+        return {
+          attachmentBlob: pdfBlob,
+          attachmentName: nomeArquivo.toLowerCase().endsWith('.pdf') ? nomeArquivo : `${nomeArquivo}.pdf`,
+          documentId: doc.id,
+          documentName: doc.nome_arquivo || label,
+          label,
+        };
+      }));
+
       const destinatarios = Array.from(getDestinatariosRescisao(company.name || ''));
       const copias = Array.from(new Set(CC_OBRIGATORIO));
-      const nomeArquivo = safeFileName(
-        viewing.doc?.nome_arquivo ||
-        `${company.name} - ASO - ${funcionario.name}.pdf`,
-      );
+      const missingWarnings = [
+        !rescisaoDoc ? 'Atenção: não foi encontrado PDF da Rescisão.' : '',
+        !asoDoc ? 'Atenção: não foi encontrado ASO Demissional.' : '',
+        !avisoDoc ? 'Atenção: não foi encontrado Aviso Prévio assinado.' : '',
+      ].filter(Boolean);
+      const complementaresCount = documentosSelecionados.filter((item) => item.label === 'Documento complementar').length;
+      const missingTarget = !rescisaoDoc ? 'RESCISOES' : !asoDoc ? 'ASO' : !avisoDoc ? 'TERMOS' : 'OUTROS';
 
       setEmailPdfDraft({
         to: destinatarios,
         cc: copias,
-        subject: `ASO demissional - dar seguimento na rescisao - ${funcionario.name}`,
+        subject: `Documentação de Desligamento - ${funcionario.name}`,
         body: [
-          'Prezados, bom dia.',
+          'Prezados,',
           '',
-          'Segue em anexo o ASO do funcionario abaixo para darem seguimento no processo de rescisao.',
+          `Segue em anexo toda a documentação referente ao desligamento do colaborador ${funcionario.name}.`,
           '',
-          `Funcionario: ${funcionario.name}`,
-          `CPF: ${funcionario.cpf || '-'}`,
-          `Cargo: ${funcionario.cargo || '-'}`,
-          `Empresa: ${company.name || '-'}`,
-          `Status: ${funcionario.status || '-'}`,
-          '',
-          'Por gentileza, confirmar recebimento e continuidade do processo.',
+          'Documentos anexados:',
+          '- Rescisão;',
+          '- ASO Demissional;',
+          '- Aviso Prévio;',
+          '- Documentos complementares.',
           '',
           'Atenciosamente,',
-          'Rodrigo De Souza Sabino',
+          'TOPAC RH PRO',
         ].join('\n'),
-        attachmentBlob: pdfBlob,
-        attachmentName: nomeArquivo.toLowerCase().endsWith('.pdf') ? nomeArquivo : `${nomeArquivo}.pdf`,
+        attachments,
+        checklistItems: [
+          { label: 'Rescisão', found: Boolean(rescisaoDoc), required: true },
+          { label: 'ASO Demissional', found: Boolean(asoDoc), required: true },
+          { label: 'Aviso Prévio', found: Boolean(avisoDoc), required: true },
+          ...(termoDoc ? [{ label: 'Termo de Rescisão assinado', found: true }] : []),
+          {
+            label: 'Outros documentos encontrados',
+            found: complementaresCount > 0,
+            detail: complementaresCount > 0 ? `${complementaresCount} documento(s) complementar(es).` : 'Nenhum complementar localizado.',
+          },
+        ],
+        missingWarnings,
         senderUserId: session?.user?.id,
         senderName: 'Rodrigo De Souza Sabino',
         senderEmail: session?.user?.email,
         moduleOrigin: 'historico_documental_rescisao',
-        documentId: viewing.doc?.id,
-        documentName: viewing.doc?.nome_arquivo || viewing.titulo,
+        documentId: documentosSelecionados[0]?.doc?.id,
+        documentName: documentosSelecionados.map((item) => item.doc?.nome_arquivo || item.label).join('; '),
+        onOpenMissingDocuments: () => {
+          setCategoria(missingTarget);
+          setEmailPdfDraft(null);
+          setViewing(null);
+          toast.info('Anexe ou selecione os documentos faltantes no Historico Documental do funcionario.');
+        },
         afterSend: async () => {
-          if (!viewing.doc?.id || !session?.user?.id) return;
-          await marcarComoEnviado(
-            viewing.doc.id,
-            session.user.id,
-            'Rodrigo De Souza Sabino',
-            [...destinatarios, ...copias].join(', '),
-          );
+          if (!session?.user?.id) return;
+          await Promise.all(documentosSelecionados
+            .filter((item) => item.doc?.id)
+            .map((item) => marcarComoEnviado(
+              item.doc.id,
+              session.user.id,
+              'Rodrigo De Souza Sabino',
+              [...destinatarios, ...copias].join(', '),
+            )));
           await carregar();
         },
       });
@@ -323,13 +457,8 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     const categoriaDoc = doc.categoria || doc.tipo_documento || 'OUTROS';
     const origemDoc = doc.origem || (doc.status_envio === 'gerado' ? 'gerado_sistema' : doc.status_envio) || 'gerado_sistema';
     const titulo = `${categoriaDoc}${doc.competencia ? ' - ' + doc.competencia : ''}`;
-    const source: DocumentSource = {
-      arquivo_url: doc.arquivo_url,
-      storage_path: doc.storage_path,
-      bucket: doc.storage_bucket || 'documentos-funcionarios',
-      tipo: inferTipo(categoriaDoc),
-    };
-    const isAso = String(categoriaDoc).toUpperCase().includes('ASO') || String(doc.tipo_documento || '').toUpperCase().includes('ASO');
+    const source = getDocumentSource(doc);
+    const isAso = isDocumentoAso(doc);
 
     return (
       <div key={doc.id} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
@@ -540,10 +669,10 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             <DialogTitle className="text-base">{viewing?.titulo || 'Documento'}</DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6 pt-3">
-            {viewing?.isAso && (
+            {viewing && (viewing.isAso || isDocumentoDesligamento(viewing.doc)) && (
               <div className="mb-3 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={abrirEnvioRescisaoContabilidade}>
-                  <Mail className="w-4 h-4 mr-2" /> Enviar para contabilidade - rescisao
+                  <Mail className="w-4 h-4 mr-2" /> Enviar documentação de desligamento
                 </Button>
               </div>
             )}

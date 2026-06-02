@@ -262,6 +262,31 @@ const normalizeBase64 = (value: unknown) =>
     .trim()
     .replace(/^data:[^;]+;base64,/, '');
 
+const normalizeAttachments = (body: any) => {
+  const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
+  const fromArray = rawAttachments.map((item: any) => ({
+    attachmentName: normalizeAttachmentName(item?.attachmentName || item?.filename || item?.name),
+    attachmentBase64: normalizeBase64(item?.attachmentBase64 || item?.attachment || item?.content || item?.base64),
+    attachmentContentType: PDF_CONTENT_TYPE,
+    attachmentSize: Number(item?.attachmentSize || item?.size || 0),
+    documentId: uuidOrNull(item?.documentId || item?.documentoId),
+    documentName: String(item?.documentName || item?.documentoNome || item?.attachmentName || item?.filename || '').trim(),
+  })).filter((item: any) => item.attachmentBase64);
+
+  if (fromArray.length) return fromArray;
+
+  const single = {
+    attachmentName: normalizeAttachmentName(body.attachmentName),
+    attachmentBase64: normalizeBase64(body.attachmentBase64 || body.attachment || body.content),
+    attachmentContentType: PDF_CONTENT_TYPE,
+    attachmentSize: Number(body.attachmentSize || 0),
+    documentId: uuidOrNull(body.documentId || body.documentoId),
+    documentName: String(body.documentName || body.documentoNome || body.attachmentName || '').trim(),
+  };
+
+  return single.attachmentBase64 ? [single] : [];
+};
+
 const encodeHeader = (value: string) =>
   `=?UTF-8?B?${Buffer.from(String(value || ''), 'utf8').toString('base64')}?=`;
 
@@ -271,6 +296,15 @@ const buildMimeMessage = (payload: any, from: string) => {
   const boundary = `topac-pdf-${Date.now()}`;
   const recipients = [...payload.to, ...payload.cc];
   const replyTo = payload.replyTo || getEmailReplyTo();
+  const attachmentParts = (payload.attachments || []).flatMap((attachment: any) => [
+    `--${boundary}`,
+    `Content-Type: ${attachment.attachmentContentType || PDF_CONTENT_TYPE}; name="${attachment.attachmentName}"`,
+    `Content-Disposition: attachment; filename="${attachment.attachmentName}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrapBase64(attachment.attachmentBase64),
+    '',
+  ]);
   const headers = [
     `From: ${from}`,
     ...(replyTo ? [`Reply-To: ${replyTo}`] : []),
@@ -292,13 +326,7 @@ const buildMimeMessage = (payload: any, from: string) => {
       '',
       payload.body,
       '',
-      `--${boundary}`,
-      `Content-Type: ${payload.attachmentContentType}; name="${payload.attachmentName}"`,
-      `Content-Disposition: attachment; filename="${payload.attachmentName}"`,
-      'Content-Transfer-Encoding: base64',
-      '',
-      wrapBase64(payload.attachmentBase64),
-      '',
+      ...attachmentParts,
       `--${boundary}--`,
       '',
     ].join('\r\n'),
@@ -409,13 +437,11 @@ const sendWithResend = async (payload: any) => {
       cc: payload.cc,
       subject: payload.subject,
       text: payload.body,
-      attachments: [
-        {
-          filename: payload.attachmentName,
-          content: payload.attachmentBase64,
-          content_type: payload.attachmentContentType,
-        },
-      ],
+      attachments: (payload.attachments || []).map((attachment: any) => ({
+        filename: attachment.attachmentName,
+        content: attachment.attachmentBase64,
+        content_type: attachment.attachmentContentType || PDF_CONTENT_TYPE,
+      })),
     }),
   });
 
@@ -472,14 +498,12 @@ const sendWithSendGrid = async (payload: any) => {
         email: parseEmailAddress(payload.replyTo || getEmailReplyTo()),
       },
       content: [{ type: 'text/plain', value: payload.body }],
-      attachments: [
-        {
-          content: payload.attachmentBase64,
-          filename: payload.attachmentName,
-          type: payload.attachmentContentType,
-          disposition: 'attachment',
-        },
-      ],
+      attachments: (payload.attachments || []).map((attachment: any) => ({
+        content: attachment.attachmentBase64,
+        filename: attachment.attachmentName,
+        type: attachment.attachmentContentType || PDF_CONTENT_TYPE,
+        disposition: 'attachment',
+      })),
     }),
   });
 
@@ -508,7 +532,7 @@ const recordEmailLog = async (
       provider: provider || null,
       modulo_origem: payload.moduleOrigin || null,
       documento_id: payload.documentId || null,
-      documento_nome: payload.documentName || payload.attachmentName || null,
+      documento_nome: payload.documentName || payload.attachmentNames || payload.attachmentName || null,
       destinatarios: payload.to.join('; '),
       cc: payload.cc.join('; '),
       assunto: payload.subject,
@@ -548,19 +572,26 @@ export default async function handler(req: any, res?: any) {
       supabaseServer,
     );
   }
+  const attachments = normalizeAttachments(body);
+  const firstAttachment = (attachments[0] || {}) as any;
+  const attachmentNames = attachments.map((attachment: any) => attachment.attachmentName).join('; ');
   const payload = {
+    ...senderContext,
     to: cleanList(body.to),
     cc: cleanList(body.cc),
     subject: String(body.subject || '').trim(),
     body: String(body.body || '').trim(),
-    attachmentName: normalizeAttachmentName(body.attachmentName),
-    attachmentBase64: normalizeBase64(body.attachmentBase64 || body.attachment || body.content),
-    attachmentContentType: PDF_CONTENT_TYPE,
-    attachmentSize: Number(body.attachmentSize || 0),
-    ...senderContext,
+    attachments,
+    attachmentNames,
+    attachmentName: firstAttachment.attachmentName || normalizeAttachmentName(body.attachmentName),
+    attachmentBase64: firstAttachment.attachmentBase64 || '',
+    attachmentContentType: firstAttachment.attachmentContentType || PDF_CONTENT_TYPE,
+    attachmentSize: Number(firstAttachment.attachmentSize || 0),
+    documentId: senderContext.documentId || firstAttachment.documentId || null,
+    documentName: String(body.documentName || body.documentoNome || senderContext.documentName || firstAttachment.documentName || attachmentNames || '').trim(),
   };
 
-  if (!payload.to.length || !payload.subject || !payload.body || !payload.attachmentBase64) {
+  if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length) {
     return send({
       ok: false,
       error: 'dados_invalidos',
