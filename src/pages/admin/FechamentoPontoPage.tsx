@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Lock, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Employee, MonthlyEntry } from '@/types/database';
+import { mapEntry, type Employee, type MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
 import {
   calcularResumoColaborador,
@@ -61,11 +61,6 @@ const normalize = (value: unknown) =>
 
 const roundHours = (minutos: number) => Math.round((minutos / 60) * 100) / 100;
 
-const isMecanico = (employee: Employee) => {
-  const haystack = normalize([employee.cargo, employee.setorGhe, employee.observacoes].join(' '));
-  return haystack.includes('mecan');
-};
-
 const contarTipos = (registros: RegistroPonto[], tipos: string[]) =>
   registros.filter((r) => tipos.includes(String(r.tipo))).length;
 
@@ -99,26 +94,19 @@ const FechamentoPontoPage: React.FC = () => {
     return m;
   }, [employees]);
 
-  const employeeByCpf = useMemo(() => {
-    const m = new Map<string, Employee>();
-    employees.forEach((e) => {
-      const cpf = onlyDigits(e.cpf);
-      if (cpf) m.set(cpf, e);
-    });
-    return m;
-  }, [employees]);
-
   const resolveEmployee = useCallback((acesso: AcessoMecanico, candidatos: Employee[]) => {
-    if (acesso.funcionario_id && employeeById.has(acesso.funcionario_id)) {
-      return employeeById.get(acesso.funcionario_id);
+    if (acesso.funcionario_id) {
+      const porId = candidatos.find((e) => e.id === acesso.funcionario_id);
+      if (porId) return porId;
     }
 
-    const porCpf = employeeByCpf.get(onlyDigits(acesso.cpf_clean || acesso.cpf));
+    const cpf = onlyDigits(acesso.cpf_clean || acesso.cpf);
+    const porCpf = cpf ? candidatos.find((e) => onlyDigits(e.cpf) === cpf) : undefined;
     if (porCpf) return porCpf;
 
     const nome = normalize(acesso.nome);
     return candidatos.find((e) => normalize(e.name) === nome || normalize(e.name).includes(nome));
-  }, [employeeByCpf, employeeById]);
+  }, []);
 
   const companyMatchesAccess = useCallback((acesso: AcessoMecanico, employee?: Employee) => {
     if (selectedCompany === 'todas') return true;
@@ -165,17 +153,7 @@ const FechamentoPontoPage: React.FC = () => {
       .map((acesso) => ({ acesso, employee: resolveEmployee(acesso, empsAlvo) }))
       .filter(({ acesso, employee }) => companyMatchesAccess(acesso, employee));
 
-    const mecanicosPorEmployee = new Set(
-      acessosResolvidos
-        .map(({ employee }) => employee?.id)
-        .filter(Boolean) as string[],
-    );
-
-    const mecanicosFallback = empsAlvo
-      .filter((e) => isMecanico(e) && !mecanicosPorEmployee.has(e.id))
-      .map((employee) => ({ acesso: null as AcessoMecanico | null, employee }));
-
-    const mecanicos = [...acessosResolvidos, ...mecanicosFallback];
+    const mecanicos = acessosResolvidos;
 
     let pontosRes = await (supabase as any)
       .from('registros_ponto')
@@ -254,18 +232,50 @@ const FechamentoPontoPage: React.FC = () => {
   }, [competencia, companyMatchesAccess, employees, empresasMap, resolveEmployee, selectedCompany]);
 
   const persistirFechamento = useCallback(async (resumos: LinhaResumo[]) => {
-    const linhasComVinculo = resumos.filter((l) => l.employeeId && l.empresaId);
+    const scoreLinha = (linha: LinhaResumo) =>
+      linha.diasTrabalhados * 10 +
+      linha.entradaCount +
+      linha.almocoInicioCount +
+      linha.almocoFimCount +
+      linha.saidaCount -
+      linha.inconsistencias;
+
+    const linhasUnicas = new Map<string, LinhaResumo>();
+    resumos
+      .filter((l) => l.employeeId && l.empresaId)
+      .forEach((linha) => {
+        const key = linha.employeeId!;
+        const atual = linhasUnicas.get(key);
+        if (!atual || scoreLinha(linha) > scoreLinha(atual)) {
+          linhasUnicas.set(key, linha);
+        }
+      });
+
+    const linhasComVinculo = Array.from(linhasUnicas.values());
+    const semVinculo = resumos.filter((l) => !l.employeeId || !l.empresaId).length;
 
     if (linhasComVinculo.length === 0) {
       toast.warning('Nenhum mecânico vinculado a funcionário para alimentar o fechamento geral.');
       return;
     }
 
+    const employeeIds = linhasComVinculo.map((linha) => linha.employeeId!);
+    const { data: existentesRows, error: existentesError } = await (supabase as any)
+      .from('lancamentos_mensais')
+      .select('*')
+      .eq('competencia', competencia)
+      .in('funcionario_id', employeeIds)
+      .is('apagado_em', null);
+
+    if (existentesError) throw existentesError;
+
+    const entriesBanco = ((existentesRows || []) as any[]).map(mapEntry);
+
     const payloads = linhasComVinculo.map((linha) => {
       const emp = employeeById.get(linha.employeeId!);
-      const existente = entries.find(
-        (entry) => entry.employeeId === linha.employeeId && entry.competencia === competencia,
-      );
+      const existente =
+        entriesBanco.find((entry) => entry.employeeId === linha.employeeId && entry.competencia === competencia) ||
+        entries.find((entry) => entry.employeeId === linha.employeeId && entry.competencia === competencia);
 
       const base: Partial<MonthlyEntry> = {
         adiantamento: existente?.adiantamento ?? (emp ? Math.round(emp.salarioBase * 0.4 * 100) / 100 : 0),
@@ -284,6 +294,10 @@ const FechamentoPontoPage: React.FC = () => {
         faltas_dias: linha.faltas,
         atrasos: roundHours(linha.atrasoTotalMin),
         he50: roundHours(linha.horasExtrasMin),
+        he100: existente?.he100 ?? 0,
+        adicionais: existente?.adicionais ?? 0,
+        descontos_diversos: existente?.descontosDiversos ?? 0,
+        comissao_base: existente?.comissaoBase ?? 0,
         adiantamento: base.adiantamento,
         vr_aplicado: base.vrAplicado,
         vr_dias: base.vrDias,
@@ -291,7 +305,7 @@ const FechamentoPontoPage: React.FC = () => {
         vt_aplicado: base.vtAplicado,
         vt_desconto: base.vtDesconto,
         insalubridade_aplicada: base.insalubridadeAplicada,
-        status_conferencia: linha.inconsistencias > 0 ? 'divergente' : 'pendente',
+        status_conferencia: linha.pendencias.length > 0 || linha.inconsistencias > 0 ? 'divergente' : 'conferido',
         observacoes: buildObservacoesPonto(linha, existente?.observacoes),
         origem: 'consolidado',
         updated_at: new Date().toISOString(),
@@ -305,7 +319,10 @@ const FechamentoPontoPage: React.FC = () => {
     if (error) throw error;
 
     await refreshEntries();
-    toast.success(`Fechamento dos mecânicos gravado no fechamento geral: ${payloads.length} funcionário(s).`);
+    if (semVinculo > 0) {
+      toast.warning(`${semVinculo} mecanico(s) do app ficaram pendentes de vinculo com funcionario e nao foram enviados para a folha.`);
+    }
+    toast.success(`Fechamento dos mecânicos enviado para a folha: ${payloads.length} funcionário(s).`);
   }, [competencia, employeeById, entries, refreshEntries]);
 
   const carregarMecanicos = useCallback(async (persistir = false, silencioso = false) => {
@@ -366,7 +383,7 @@ const FechamentoPontoPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Ponto dos Mecânicos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Selecione empresa e competência para listar automaticamente os mecânicos vinculados. O botão de fechamento grava faltas, atrasos e HE no fechamento geral.
+            Selecione empresa e competência para listar os mecânicos ativos do app. O fechamento grava faltas, atrasos e HE no fechamento real da folha.
           </p>
         </div>
       </div>
@@ -406,7 +423,7 @@ const FechamentoPontoPage: React.FC = () => {
           ) : (
             <Lock className="w-4 h-4 mr-2" />
           )}
-          {carregando ? 'Processando...' : 'FECHAR O MÊS'}
+          {carregando ? 'Processando...' : 'FECHAR E ENVIAR À FOLHA'}
         </Button>
         {executado && (
           <Button onClick={() => carregarMecanicos(false)} variant="outline" size="icon" title="Recarregar">
