@@ -1,5 +1,7 @@
 import * as net from 'node:net';
 import * as tls from 'node:tls';
+import { createDecipheriv, createHash } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -45,6 +47,7 @@ class EmailConfigError extends Error {
 const env = (name: string) => String(process.env[name] || '').trim();
 const DEFAULT_EMAIL_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
 const DEFAULT_EMAIL_REPLY_TO = 'adm.matriz@topac.com.br';
+const TOPAC_DOMAIN_FALLBACK = 'topacrh.pro';
 
 const isResendSandboxFrom = (value: string) => /@resend\.dev/i.test(value);
 
@@ -54,6 +57,43 @@ const getEmailFrom = () => {
 };
 
 const getEmailReplyTo = () => env('EMAIL_REPLY_TO') || env('REPLY_TO') || DEFAULT_EMAIL_REPLY_TO;
+
+const getSupabaseServer = () => {
+  const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
+  const key = env('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+};
+
+const getHeader = (req: any, name: string) => {
+  if (typeof req?.headers?.get === 'function') return req.headers.get(name);
+  return req?.headers?.[name] || req?.headers?.[name.toLowerCase()] || '';
+};
+
+const getBearerToken = (req: any) => {
+  const auth = String(getHeader(req, 'authorization') || '');
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] || '';
+};
+
+const getEncryptionSecret = () => env('EMAIL_SETTINGS_SECRET') || env('SUPABASE_SERVICE_ROLE_KEY');
+
+const decryptPassword = (encrypted: string) => {
+  if (!encrypted) return '';
+  const [version, ivText, tagText, cipherText] = encrypted.split(':');
+  if (version !== 'v1' || !ivText || !tagText || !cipherText) return '';
+  const secret = getEncryptionSecret();
+  if (!secret) return '';
+  const key = createHash('sha256').update(secret).digest();
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivText, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagText, 'base64'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(cipherText, 'base64')),
+    decipher.final(),
+  ]).toString('utf8');
+};
 
 const parseEmailAddress = (value: string) => {
   const match = value.match(/<([^>]+)>/);
@@ -65,6 +105,126 @@ const parseEmailName = (value: string) => {
   return (match?.[1] || env('EMAIL_FROM_NAME') || env('MAIL_FROM_NAME') || 'TOPAC RH PRO')
     .replace(/^"|"$/g, '')
     .trim();
+};
+
+const domainOf = (value: string) => {
+  const email = parseEmailAddress(value).toLowerCase();
+  return email.includes('@') ? email.split('@').pop() || '' : '';
+};
+
+const cleanName = (value: unknown) =>
+  String(value || '')
+    .replace(/[<>\r\n"]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const formatFrom = (name: string, email: string) => {
+  const safeName = cleanName(name) || 'TOPAC RH PRO';
+  return `${safeName} <${parseEmailAddress(email)}>`;
+};
+
+const uuidOrNull = (value: unknown) => {
+  const text = String(value || '').trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+    ? text
+    : null;
+};
+
+const getModuleInstitutionalEmail = (moduleOrigin: string) => {
+  const moduleKey = moduleOrigin
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (moduleKey.includes('aso') || moduleKey.includes('rh') || moduleKey.includes('admiss')) return 'adm.matriz@topac.com.br';
+  if (moduleKey.includes('finance') || moduleKey.includes('fatur')) return env('EMAIL_FINANCEIRO_FROM') || 'financeiro@topac.com.br';
+  return '';
+};
+
+const canUseCorporateFromWithResend = (corporateEmail: string, configuredFrom: string) => {
+  if (/^true$/i.test(env('RESEND_ALLOW_CORPORATE_FROM'))) return true;
+  const corporateDomain = domainOf(corporateEmail);
+  const fromDomain = domainOf(configuredFrom);
+  return Boolean(corporateDomain && fromDomain && corporateDomain === fromDomain);
+};
+
+const getAuthenticatedUserId = async (req: any, supabase: ReturnType<typeof createClient> | null) => {
+  const token = getBearerToken(req);
+  if (!token || !supabase) return '';
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user?.id) return '';
+  return data.user.id;
+};
+
+const resolveSenderContext = async (body: any, provider: string, supabase: ReturnType<typeof createClient> | null) => {
+  const defaultFrom = getEmailFrom();
+  const defaultFromEmail = parseEmailAddress(defaultFrom);
+  const userId = uuidOrNull(body.senderUserId);
+  const moduleOrigin = String(body.moduleOrigin || body.moduloOrigem || 'documentos').trim() || 'documentos';
+  let senderName = cleanName(body.senderName || body.usuarioNome);
+  let corporateEmail = cleanList(body.senderEmail || body.emailCorporativo || body.email_corporativo)[0] || '';
+  let providerType = 'global';
+
+  if (supabase && userId) {
+    const [{ data: profile }, { data: settings }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('nome_completo,email,email_corporativo')
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('user_email_settings')
+        .select('email_corporativo,provider_type,smtp_user,smtp_pass_configured,smtp_pass_encrypted')
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ]);
+
+    senderName = senderName || cleanName((profile as any)?.nome_completo);
+    corporateEmail = cleanList(
+      (settings as any)?.email_corporativo ||
+      (profile as any)?.email_corporativo ||
+      corporateEmail ||
+      (profile as any)?.email,
+    )[0] || corporateEmail;
+    providerType = String((settings as any)?.provider_type || 'global');
+    if (
+      providerType === 'smtp_individual' &&
+      (settings as any)?.smtp_user &&
+      (settings as any)?.smtp_pass_encrypted
+    ) {
+      const smtpPass = decryptPassword((settings as any).smtp_pass_encrypted);
+      if (smtpPass) {
+        (body as any).smtpUserResolved = String((settings as any).smtp_user);
+        (body as any).smtpPassResolved = smtpPass;
+      }
+    }
+  }
+
+  corporateEmail = corporateEmail || getModuleInstitutionalEmail(moduleOrigin);
+  const replyTo = corporateEmail || getEmailReplyTo();
+  const fromName = senderName || parseEmailName(defaultFrom);
+  let from = defaultFrom;
+
+  if (corporateEmail) {
+    if (provider === 'smtp' || provider === 'sendgrid' || canUseCorporateFromWithResend(corporateEmail, defaultFrom)) {
+      from = formatFrom(fromName, corporateEmail);
+    } else {
+      from = formatFrom(fromName, defaultFromEmail || `${fromName.replace(/\s+/g, '.').toLowerCase()}@${TOPAC_DOMAIN_FALLBACK}`);
+    }
+  }
+
+  return {
+    senderUserId: userId,
+    senderName: fromName,
+    senderCorporateEmail: corporateEmail,
+    providerType,
+    moduleOrigin,
+    documentId: uuidOrNull(body.documentId || body.documentoId),
+    documentName: String(body.documentName || body.documentoNome || body.attachmentName || '').trim(),
+    from,
+    replyTo,
+    smtpUser: (body as any).smtpUserResolved || '',
+    smtpPass: (body as any).smtpPassResolved || '',
+  };
 };
 
 const getConfiguredProvider = () => {
@@ -110,7 +270,7 @@ const wrapBase64 = (value: string) => value.replace(/.{1,76}/g, '$&\r\n').trim()
 const buildMimeMessage = (payload: any, from: string) => {
   const boundary = `topac-pdf-${Date.now()}`;
   const recipients = [...payload.to, ...payload.cc];
-  const replyTo = getEmailReplyTo();
+  const replyTo = payload.replyTo || getEmailReplyTo();
   const headers = [
     `From: ${from}`,
     ...(replyTo ? [`Reply-To: ${replyTo}`] : []),
@@ -190,8 +350,8 @@ const sendWithSmtpSocket = async (payload: any, from: string) => {
   const port = Number(env('SMTP_PORT'));
   const host = env('SMTP_HOST');
   const secure = port === 465 || /^true$/i.test(env('SMTP_SECURE'));
-  const user = env('SMTP_USER');
-  const pass = env('SMTP_PASS');
+  const user = payload.smtpUser || env('SMTP_USER');
+  const pass = payload.smtpPass || env('SMTP_PASS');
   const fromEmail = parseEmailAddress(from);
   const mime = buildMimeMessage(payload, from);
 
@@ -234,7 +394,7 @@ const sendWithSmtpSocket = async (payload: any, from: string) => {
 const sendWithResend = async (payload: any) => {
   const apiKey = env('RESEND_API_KEY');
   if (!apiKey) return null;
-  const from = ensureFromConfigured('resend');
+  const from = payload.from || ensureFromConfigured('resend');
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -244,7 +404,7 @@ const sendWithResend = async (payload: any) => {
     },
     body: JSON.stringify({
       from,
-      reply_to: getEmailReplyTo(),
+      reply_to: payload.replyTo || getEmailReplyTo(),
       to: payload.to,
       cc: payload.cc,
       subject: payload.subject,
@@ -267,7 +427,11 @@ const sendWithResend = async (payload: any) => {
 const sendWithSmtp = async (payload: any) => {
   const hasSmtp = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'].some(env);
   if (!hasSmtp) return null;
-  const missing = missingSmtpEnv();
+  const missing = missingSmtpEnv().filter((key) => {
+    if (key === 'SMTP_USER') return !payload.smtpUser;
+    if (key === 'SMTP_PASS') return !payload.smtpPass;
+    return true;
+  });
   if (missing.length) {
     throw new EmailConfigError(
       'Configuração SMTP incompleta no ambiente de produção.',
@@ -276,7 +440,7 @@ const sendWithSmtp = async (payload: any) => {
       'smtp',
     );
   }
-  const from = ensureFromConfigured('smtp');
+  const from = payload.from || ensureFromConfigured('smtp');
   await sendWithSmtpSocket(payload, from);
   return { provider: 'smtp' };
 };
@@ -284,7 +448,7 @@ const sendWithSmtp = async (payload: any) => {
 const sendWithSendGrid = async (payload: any) => {
   const apiKey = env('SENDGRID_API_KEY');
   if (!apiKey) return null;
-  const from = ensureFromConfigured('sendgrid');
+  const from = payload.from || ensureFromConfigured('sendgrid');
 
   const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
@@ -305,7 +469,7 @@ const sendWithSendGrid = async (payload: any) => {
         name: env('MAIL_FROM_NAME') || env('EMAIL_FROM_NAME') || parseEmailName(from),
       },
       reply_to: {
-        email: parseEmailAddress(getEmailReplyTo()),
+        email: parseEmailAddress(payload.replyTo || getEmailReplyTo()),
       },
       content: [{ type: 'text/plain', value: payload.body }],
       attachments: [
@@ -326,6 +490,36 @@ const sendWithSendGrid = async (payload: any) => {
   return { provider: 'sendgrid' };
 };
 
+const recordEmailLog = async (
+  supabase: ReturnType<typeof createClient> | null,
+  payload: any,
+  status: 'enviado' | 'erro',
+  provider: string,
+  error?: string,
+) => {
+  if (!supabase) return;
+  try {
+    await supabase.from('email_envios_log').insert({
+      user_id: payload.senderUserId || null,
+      usuario_nome: payload.senderName || null,
+      email_corporativo_usado: payload.senderCorporateEmail || null,
+      email_remetente: payload.from || null,
+      reply_to: payload.replyTo || null,
+      provider: provider || null,
+      modulo_origem: payload.moduleOrigin || null,
+      documento_id: payload.documentId || null,
+      documento_nome: payload.documentName || payload.attachmentName || null,
+      destinatarios: payload.to.join('; '),
+      cc: payload.cc.join('; '),
+      assunto: payload.subject,
+      status,
+      erro: error || null,
+    });
+  } catch (logError) {
+    console.error('Erro ao registrar log de envio de e-mail:', logError);
+  }
+};
+
 export default async function handler(req: any, res?: any) {
   const method = req?.method || 'GET';
   const send = (body: unknown, status = 200) => {
@@ -338,6 +532,22 @@ export default async function handler(req: any, res?: any) {
   }
 
   const body = parseBody(req);
+  const supabaseServer = getSupabaseServer();
+  const authenticatedUserId = await getAuthenticatedUserId(req, supabaseServer);
+  let provider = getConfiguredProvider();
+  let senderContext = await resolveSenderContext(
+    { ...body, senderUserId: authenticatedUserId || body.senderUserId },
+    provider,
+    supabaseServer,
+  );
+  if (senderContext.providerType === 'smtp_individual' && env('SMTP_HOST') && env('SMTP_PORT')) {
+    provider = 'smtp';
+    senderContext = await resolveSenderContext(
+      { ...body, senderUserId: authenticatedUserId || body.senderUserId },
+      provider,
+      supabaseServer,
+    );
+  }
   const payload = {
     to: cleanList(body.to),
     cc: cleanList(body.cc),
@@ -347,6 +557,7 @@ export default async function handler(req: any, res?: any) {
     attachmentBase64: normalizeBase64(body.attachmentBase64 || body.attachment || body.content),
     attachmentContentType: PDF_CONTENT_TYPE,
     attachmentSize: Number(body.attachmentSize || 0),
+    ...senderContext,
   };
 
   if (!payload.to.length || !payload.subject || !payload.body || !payload.attachmentBase64) {
@@ -358,7 +569,6 @@ export default async function handler(req: any, res?: any) {
   }
 
   try {
-    const provider = getConfiguredProvider();
     const result = provider === 'resend'
       ? await sendWithResend(payload)
       : provider === 'smtp'
@@ -368,6 +578,7 @@ export default async function handler(req: any, res?: any) {
           : null;
 
     if (!result) {
+      await recordEmailLog(supabaseServer, payload, 'erro', 'sem_provider', 'missing_email_provider_env');
       return send({
         ok: false,
         error: 'missing_email_provider_env',
@@ -380,8 +591,10 @@ export default async function handler(req: any, res?: any) {
       }, 501);
     }
 
+    await recordEmailLog(supabaseServer, payload, 'enviado', result.provider);
     return send({ ok: true, ...result });
   } catch (error: any) {
+    await recordEmailLog(supabaseServer, payload, 'erro', provider || 'desconhecido', error?.message || 'email_provider_failed');
     if (error instanceof EmailConfigError) {
       return send({
         ok: false,

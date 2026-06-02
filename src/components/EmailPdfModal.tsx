@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { sendEmailWithPdfAttachment } from '@/lib/emailUtils';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export type EmailPdfDraft = {
@@ -15,6 +16,12 @@ export type EmailPdfDraft = {
   body: string;
   attachmentBlob: Blob;
   attachmentName: string;
+  senderUserId?: string;
+  senderName?: string;
+  senderEmail?: string;
+  moduleOrigin?: string;
+  documentId?: string;
+  documentName?: string;
   afterSend?: () => Promise<void> | void;
 };
 
@@ -65,6 +72,9 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
 
     setSending(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      const authUser = session?.user;
       await sendEmailWithPdfAttachment({
         to: toList,
         cc: ccList,
@@ -72,6 +82,13 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
         body: body.trim(),
         attachmentBlob: draft.attachmentBlob,
         attachmentName: draft.attachmentName,
+        senderUserId: draft.senderUserId || authUser?.id,
+        senderName: draft.senderName || String(authUser?.user_metadata?.nome_completo || authUser?.email || ''),
+        senderEmail: draft.senderEmail || authUser?.email,
+        moduleOrigin: draft.moduleOrigin || 'documentos',
+        documentId: draft.documentId,
+        documentName: draft.documentName || draft.attachmentName,
+        authToken: session?.access_token,
       });
       try {
         await draft.afterSend?.();

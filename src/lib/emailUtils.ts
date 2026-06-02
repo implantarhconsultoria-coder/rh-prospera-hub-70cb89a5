@@ -6,6 +6,13 @@ export interface EmailParams {
   cc?: readonly string[];
   subject: string;
   body: string;
+  senderUserId?: string;
+  senderName?: string;
+  senderEmail?: string;
+  moduleOrigin?: string;
+  documentId?: string;
+  documentName?: string;
+  authToken?: string;
 }
 
 export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
@@ -81,6 +88,13 @@ export const sendEmailWithPdfAttachment = async ({
   body,
   attachmentBlob,
   attachmentName,
+  senderUserId,
+  senderName,
+  senderEmail,
+  moduleOrigin,
+  documentId,
+  documentName,
+  authToken,
 }: EmailParams & { attachmentBlob: Blob; attachmentName: string }) => {
   const pdfBlob = ensurePdfBlob(attachmentBlob);
   const attachmentBase64 = await blobToBase64(pdfBlob);
@@ -91,7 +105,10 @@ export const sendEmailWithPdfAttachment = async ({
 
   const response = await fetch('/api/send-email-pdf', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+    },
     body: JSON.stringify({
       to,
       cc: cc || [],
@@ -101,6 +118,12 @@ export const sendEmailWithPdfAttachment = async ({
       attachmentBase64,
       attachmentContentType: PDF_CONTENT_TYPE,
       attachmentSize: pdfBlob.size,
+      senderUserId,
+      senderName,
+      senderEmail,
+      moduleOrigin,
+      documentId,
+      documentName: documentName || cleanAttachmentName,
     }),
   });
   const data = await response.json().catch(() => ({}));
@@ -117,6 +140,13 @@ export const downloadEmailWithAttachment = async ({
   body,
   attachmentBlob,
   attachmentName,
+  senderUserId,
+  senderName,
+  senderEmail,
+  moduleOrigin,
+  documentId,
+  documentName,
+  authToken,
 }: EmailParams & {
   attachmentBlob: Blob;
   attachmentName: string;
@@ -134,6 +164,13 @@ export const downloadEmailWithAttachment = async ({
       body,
       attachmentBlob,
       attachmentName: cleanAttachmentName,
+      senderUserId,
+      senderName,
+      senderEmail,
+      moduleOrigin,
+      documentId,
+      documentName,
+      authToken,
     });
     return { ok: true, mode: 'platform_email' };
   } catch (error: any) {

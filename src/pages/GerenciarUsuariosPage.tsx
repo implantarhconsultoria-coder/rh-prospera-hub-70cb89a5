@@ -22,6 +22,11 @@ interface UserWithRole {
   empresa?: string | null;
   filial?: string | null;
   cargo?: string | null;
+  email_corporativo?: string | null;
+  email_provider_type?: string | null;
+  email_smtp_user?: string | null;
+  email_smtp_pass_configured?: boolean;
+  email_smtp_app_password?: string;
   created_at: string;
   email_confirmed?: boolean;
   email_confirmed_manual?: boolean;
@@ -76,6 +81,9 @@ const isRateLimitError = (message?: string) => {
   return normalized.includes('rate limit') || normalized.includes('email rate') || normalized.includes('too many');
 };
 
+const isUuid = (value?: string | null) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+
 const GerenciarUsuariosPage: React.FC = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,6 +103,11 @@ const GerenciarUsuariosPage: React.FC = () => {
       empresa: u.empresa || null,
       filial: u.filial || null,
       cargo: u.cargo || null,
+      email_corporativo: u.email_corporativo || null,
+      email_provider_type: u.email_provider_type || 'global',
+      email_smtp_user: u.email_smtp_user || '',
+      email_smtp_pass_configured: Boolean(u.email_smtp_pass_configured),
+      email_smtp_app_password: '',
       created_at: u.created_at,
       email_confirmed: Boolean(u.email_confirmed),
       email_confirmed_manual: Boolean(u.email_confirmed_manual),
@@ -107,13 +120,42 @@ const GerenciarUsuariosPage: React.FC = () => {
     };
   };
 
+  const mergeEmailSettings = async (baseUsers: UserWithRole[]) => {
+    const userIds = Array.from(new Set(baseUsers.map((u) => u.user_id).filter(Boolean)));
+    if (!userIds.length) return baseUsers;
+
+    const [{ data: settings }, { data: profiles }] = await Promise.all([
+      (supabase as any)
+        .from('user_email_settings')
+        .select('user_id,email_corporativo,provider_type,smtp_user,smtp_pass_configured')
+        .in('user_id', userIds),
+      (supabase as any)
+        .from('profiles')
+        .select('user_id,email_corporativo')
+        .in('user_id', userIds),
+    ]);
+
+    return baseUsers.map((user) => {
+      const setting = (settings || []).find((row: any) => row.user_id === user.user_id);
+      const profile = (profiles || []).find((row: any) => row.user_id === user.user_id);
+      return {
+        ...user,
+        email_corporativo: setting?.email_corporativo || profile?.email_corporativo || user.email_corporativo || '',
+        email_provider_type: setting?.provider_type || user.email_provider_type || 'global',
+        email_smtp_user: setting?.smtp_user || user.email_smtp_user || '',
+        email_smtp_pass_configured: Boolean(setting?.smtp_pass_configured || user.email_smtp_pass_configured),
+        email_smtp_app_password: '',
+      };
+    });
+  };
+
   const fetchUsers = async () => {
     setLoading(true);
     const { data: adminUsersV2, error: adminV2Err } = await (supabase as any)
       .rpc('admin_listar_usuarios_v2');
 
     if (!adminV2Err && Array.isArray(adminUsersV2)) {
-      setUsers(adminUsersV2.map(mapAdminUser));
+      setUsers(await mergeEmailSettings(adminUsersV2.map(mapAdminUser)));
       setLoading(false);
       return;
     }
@@ -126,7 +168,7 @@ const GerenciarUsuariosPage: React.FC = () => {
         .from('user_roles')
         .select('id, user_id, role');
 
-      setUsers(adminUsers.map((u: any) => {
+      const mapped = adminUsers.map((u: any) => {
         const allRoles = normalizeRoles((rolesData || [])
           .filter((r: any) => r.user_id === u.user_id)
           .map((r: any) => r.role));
@@ -137,7 +179,8 @@ const GerenciarUsuariosPage: React.FC = () => {
           role: rolePriority(roles),
           role_id: u.role_id || null,
         };
-      }));
+      });
+      setUsers(await mergeEmailSettings(mapped));
       setLoading(false);
       return;
     }
@@ -175,7 +218,7 @@ const GerenciarUsuariosPage: React.FC = () => {
       };
     });
 
-    setUsers(merged);
+    setUsers(await mergeEmailSettings(merged));
     setLoading(false);
   };
 
@@ -226,6 +269,72 @@ const GerenciarUsuariosPage: React.FC = () => {
     }
   };
 
+  const saveEmailSettings = async (user: UserWithRole) => {
+    const emailCorporativo = (user.email_corporativo || '').trim();
+    if (!emailCorporativo) return;
+    if (!isUuid(user.user_id)) return;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) throw new Error('Faca login novamente para salvar o e-mail corporativo.');
+
+    const response = await fetch('/api/user-email-settings', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        action: 'save',
+        userId: user.user_id,
+        emailCorporativo,
+        providerType: user.email_provider_type || 'global',
+        smtpUser: user.email_smtp_user || emailCorporativo,
+        smtpAppPassword: user.email_smtp_app_password || '',
+        smtpPassConfigured: user.email_smtp_pass_configured,
+        modulos: user.roles,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.ok === false) {
+      throw new Error(data?.message || data?.error || 'Nao foi possivel salvar o e-mail corporativo.');
+    }
+
+    updateUserLocal(user.user_id, {
+      email_corporativo: data.email_corporativo || emailCorporativo,
+      email_smtp_pass_configured: Boolean(data.smtp_pass_configured || user.email_smtp_pass_configured),
+      email_smtp_app_password: '',
+    });
+  };
+
+  const testEmailSettings = async (user: UserWithRole) => {
+    setSaving(getActionKey(user));
+    try {
+      await saveEmailSettings(user);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const response = await fetch('/api/user-email-settings', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ action: 'test', userId: user.user_id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok === false) {
+        throw new Error(data?.message || data?.error || 'Teste de e-mail falhou.');
+      }
+      toast.success(data?.message || 'Conexao de e-mail validada.');
+      await fetchUsers();
+    } catch (error: any) {
+      toast.error(error?.message || 'Nao foi possivel testar o e-mail.');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const approvePendingUser = async (user: UserWithRole) => {
     if (!user.pending_id) {
       await saveAuthUser(user);
@@ -259,6 +368,7 @@ const GerenciarUsuariosPage: React.FC = () => {
       } else {
         await saveAuthUser(user);
       }
+      await saveEmailSettings(user);
       toast.success('Usuario e modulos salvos');
       await fetchUsers();
     } catch (err: any) {
@@ -272,6 +382,7 @@ const GerenciarUsuariosPage: React.FC = () => {
     setSaving(getActionKey(user));
     try {
       await approvePendingUser(user);
+      await saveEmailSettings(user);
       toast.success('Usuario aprovado e liberado conforme modulos selecionados');
       await fetchUsers();
     } catch (error: any) {
@@ -448,6 +559,41 @@ const GerenciarUsuariosPage: React.FC = () => {
                             <Input value={user.cargo || ''} onChange={(e) => updateUserLocal(user.user_id, { cargo: e.target.value })} placeholder="Funcao" />
                             <Input value={user.empresa || ''} onChange={(e) => updateUserLocal(user.user_id, { empresa: e.target.value })} placeholder="Empresa" />
                             <Input value={user.filial || ''} onChange={(e) => updateUserLocal(user.user_id, { filial: e.target.value })} placeholder="Filial" />
+                            <Input
+                              className="col-span-2"
+                              value={user.email_corporativo || ''}
+                              onChange={(e) => updateUserLocal(user.user_id, { email_corporativo: e.target.value })}
+                              placeholder="E-mail corporativo vinculado"
+                            />
+                            <Select
+                              value={user.email_provider_type || 'global'}
+                              onValueChange={(val) => updateUserLocal(user.user_id, { email_provider_type: val })}
+                              disabled={isSaving}
+                            >
+                              <SelectTrigger className="col-span-2"><SelectValue placeholder="Config e-mail..." /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="global">Servidor global TOPAC</SelectItem>
+                                <SelectItem value="smtp_individual">SMTP individual</SelectItem>
+                                <SelectItem value="oauth_microsoft">OAuth Microsoft</SelectItem>
+                                <SelectItem value="oauth_google">OAuth Google</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {user.email_provider_type === 'smtp_individual' ? (
+                              <>
+                                <Input
+                                  value={user.email_smtp_user || ''}
+                                  onChange={(e) => updateUserLocal(user.user_id, { email_smtp_user: e.target.value })}
+                                  placeholder="Usuario SMTP"
+                                />
+                                <Input
+                                  type="password"
+                                  value={user.email_smtp_app_password || ''}
+                                  onChange={(e) => updateUserLocal(user.user_id, { email_smtp_app_password: e.target.value })}
+                                  placeholder={user.email_smtp_pass_configured ? 'Senha salva - nova senha opcional' : 'Senha/app password'}
+                                  autoComplete="new-password"
+                                />
+                              </>
+                            ) : null}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -490,6 +636,9 @@ const GerenciarUsuariosPage: React.FC = () => {
                             </Button>
                             <Button size="sm" variant="outline" onClick={() => handleConfirmEmail(user)} disabled={isSaving}>
                               Confirmar email
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => testEmailSettings(user)} disabled={isSaving || !user.email_corporativo || !isUuid(user.user_id)}>
+                              Testar conexao de e-mail
                             </Button>
                             <Button size="sm" variant={user.blocked ? 'outline' : 'destructive'} onClick={() => handleBlock(user, !user.blocked)} disabled={isSaving}>
                               {user.blocked ? 'Desbloquear' : 'Bloquear'}
