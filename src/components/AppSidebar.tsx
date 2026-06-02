@@ -37,7 +37,6 @@ const operationalItems: MenuItem[] = [
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Combustivel (Galoes)', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
-  { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
   { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
