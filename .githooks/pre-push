@@ -1,0 +1,19 @@
+#!/bin/sh
+current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+
+if [ "$current_branch" = "main" ]; then
+  echo "ERRO: push direto da main bloqueado."
+  echo "Use uma branch de trabalho e envie para revisao."
+  exit 1
+fi
+
+while read local_ref local_sha remote_ref remote_sha
+do
+  if [ "$remote_ref" = "refs/heads/main" ]; then
+    echo "ERRO: push para origin/main bloqueado."
+    echo "Use uma branch de trabalho e envie para revisao."
+    exit 1
+  fi
+done
+
+exit 0

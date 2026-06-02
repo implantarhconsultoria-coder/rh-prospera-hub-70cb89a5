@@ -1,0 +1,10 @@
+#!/bin/sh
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+
+if [ "$branch" = "main" ]; then
+  echo "ERRO: commit direto na main bloqueado."
+  echo "Use uma branch de trabalho, por exemplo: git switch codex/mobile-work"
+  exit 1
+fi
+
+exit 0
