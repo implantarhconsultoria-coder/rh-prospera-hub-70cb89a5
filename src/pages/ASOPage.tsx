@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { asoStatus, formatDate } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Stethoscope, Printer, Search, ArrowLeft, Save, AlertTriangle, Mail } from 'lucide-react';
+import { Stethoscope, Printer, Search, ArrowLeft, Save, AlertTriangle, Mail, FileText, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
@@ -26,6 +26,18 @@ const TIPOS_EXAME = [
   'Retorno ao Trabalho', 'Avaliação Médica', 'Outros',
 ];
 
+type AsoPendente = {
+  id: string;
+  email_from?: string | null;
+  email_subject?: string | null;
+  received_at?: string | null;
+  nome_arquivo?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  cpf_detectado?: string | null;
+  nome_detectado?: string | null;
+};
+
 const ASOPage: React.FC = () => {
   const { companies, employees, session } = useApp();
   const { isFilial, filialCompanyId } = useFilialFilter();
@@ -40,6 +52,10 @@ const ASOPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [lastDocId, setLastDocId] = useState('');
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
+  const [pendentesAso, setPendentesAso] = useState<AsoPendente[]>([]);
+  const [loadingPendentes, setLoadingPendentes] = useState(false);
+  const [vinculosPendentes, setVinculosPendentes] = useState<Record<string, string>>({});
+  const [vinculandoPendente, setVinculandoPendente] = useState('');
 
   const getNomeUsuarioAtual = async () => {
     if (!session?.user) return '';
@@ -82,6 +98,39 @@ const ASOPage: React.FC = () => {
   });
 
   const alertas = filteredEmps.filter(e => e.asoInfo.status !== 'ok');
+
+  const funcionariosParaVinculo = useMemo(() => {
+    return employees
+      .filter(e => e.status !== 'excluido')
+      .filter(e => !isFilial || e.companyId === filialCompanyId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [employees, filialCompanyId, isFilial]);
+
+  useEffect(() => {
+    let active = true;
+    const loadPendentes = async () => {
+      setLoadingPendentes(true);
+      const { data, error } = await supabase
+        .from('aso_documentos_pendentes' as any)
+        .select('*')
+        .eq('status', 'pendente')
+        .order('received_at', { ascending: false });
+
+      if (!active) return;
+      setLoadingPendentes(false);
+      if (error) {
+        if (!/schema cache|could not find|does not exist/i.test(error.message || '')) {
+          console.error('Erro ao carregar ASOs pendentes:', error);
+        }
+        setPendentesAso([]);
+        return;
+      }
+      setPendentesAso((data || []) as unknown as AsoPendente[]);
+    };
+
+    loadPendentes();
+    return () => { active = false; };
+  }, []);
 
   const emp = employees.find(e => e.id === selectedEmpId);
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
@@ -189,6 +238,53 @@ const ASOPage: React.FC = () => {
     setSaving(false);
     if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
     toast.success('Agendamento salvo no banco!');
+  };
+
+  const abrirAsoPendente = async (pendente: AsoPendente) => {
+    const path = pendente.storage_path || '';
+    if (!path) {
+      toast.error('Documento pendente sem arquivo vinculado.');
+      return;
+    }
+    const bucket = pendente.storage_bucket || 'documentos-funcionarios';
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error('Erro ao abrir PDF pendente.');
+      console.error('Erro signed URL ASO pendente:', error);
+      return;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const vincularAsoPendente = async (pendente: AsoPendente) => {
+    const funcionarioId = vinculosPendentes[pendente.id] || '';
+    if (!funcionarioId) {
+      toast.error('Selecione o funcionario para vincular o ASO.');
+      return;
+    }
+    setVinculandoPendente(pendente.id);
+    try {
+      const nomeUsuario = await getNomeUsuarioAtual();
+      const { error } = await supabase.rpc('vincular_aso_pendente' as any, {
+        p_pendente_id: pendente.id,
+        p_funcionario_id: funcionarioId,
+        p_user_id: session?.user?.id || null,
+        p_user_nome: nomeUsuario || 'RH TOPAC',
+      });
+      if (error) throw error;
+      setPendentesAso(prev => prev.filter(item => item.id !== pendente.id));
+      setVinculosPendentes(prev => {
+        const next = { ...prev };
+        delete next[pendente.id];
+        return next;
+      });
+      toast.success('ASO vinculado ao historico documental do funcionario.');
+    } catch (error: any) {
+      console.error('Erro ao vincular ASO pendente:', error);
+      toast.error('Erro ao vincular ASO: ' + (error?.message || 'falha no banco'));
+    } finally {
+      setVinculandoPendente('');
+    }
   };
 
   // Detail view
@@ -314,6 +410,54 @@ const ASOPage: React.FC = () => {
               </Badge>
             ))}
             {alertas.length > 5 && <Badge variant="outline" className="text-xs">+{alertas.length - 5} mais</Badge>}
+          </div>
+        </div>
+      )}
+
+      {(loadingPendentes || pendentesAso.length > 0) && (
+        <div className="card-premium p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" />
+            <span className="text-sm font-bold text-foreground">ASOs recebidos por e-mail sem vinculo</span>
+            {loadingPendentes && <span className="text-xs text-muted-foreground">Carregando...</span>}
+          </div>
+          <div className="space-y-2">
+            {pendentesAso.map((pendente) => (
+              <div key={pendente.id} className="grid grid-cols-1 lg:grid-cols-[1.4fr_1.2fr_auto] gap-2 rounded-lg border border-border/70 p-3 bg-background/40">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">{pendente.nome_arquivo || 'ASO_RECEBIDO.pdf'}</div>
+                  <div className="text-xs text-muted-foreground truncate">{pendente.email_subject || 'Sem assunto'}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {pendente.received_at ? new Date(pendente.received_at).toLocaleString('pt-BR') : 'Data nao informada'}
+                    {pendente.cpf_detectado ? ` - CPF: ${pendente.cpf_detectado}` : ''}
+                    {pendente.nome_detectado ? ` - Nome: ${pendente.nome_detectado}` : ''}
+                  </div>
+                </div>
+                <select
+                  value={vinculosPendentes[pendente.id] || ''}
+                  onChange={e => setVinculosPendentes(prev => ({ ...prev, [pendente.id]: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
+                >
+                  <option value="">Selecionar funcionario...</option>
+                  {funcionariosParaVinculo.map(funcionario => {
+                    const empresa = companies.find(c => c.id === funcionario.companyId);
+                    return (
+                      <option key={funcionario.id} value={funcionario.id}>
+                        {funcionario.name} - {empresa?.name || ''} - {funcionario.cpf || 'CPF pendente'}
+                      </option>
+                    );
+                  })}
+                </select>
+                <div className="flex items-center gap-2 justify-end">
+                  <Button size="sm" variant="outline" onClick={() => abrirAsoPendente(pendente)}>
+                    <FileText className="w-3 h-3 mr-1" /> Ver
+                  </Button>
+                  <Button size="sm" onClick={() => vincularAsoPendente(pendente)} disabled={vinculandoPendente === pendente.id}>
+                    <Link2 className="w-3 h-3 mr-1" /> {vinculandoPendente === pendente.id ? 'Vinculando...' : 'Vincular'}
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

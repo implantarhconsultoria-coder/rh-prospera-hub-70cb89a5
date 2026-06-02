@@ -21,6 +21,7 @@ export const DOCUMENTO_ORIGENS_PADRAO = [
   'gerado_sistema',
   'upload_manual',
   'pre_cadastro',
+  'email_clinica_soc',
 ] as const;
 
 export type DocumentoCategoria = typeof DOCUMENTO_CATEGORIAS_PADRAO[number] | string;
