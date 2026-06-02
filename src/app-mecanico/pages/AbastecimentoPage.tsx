@@ -84,6 +84,8 @@ type OcrResult = {
   km_atual?: string | number;
   confianca?: number;
   error?: string;
+  origem?: string;
+  ocr_texto_bruto?: string;
 };
 
 const CANONICAL_BASE_URL = "https://topacrh.pro";
@@ -263,16 +265,21 @@ export default function AbastecimentoPage() {
     setStep("vale");
   };
 
-  const analisarFoto = async (blob: Blob, tipo?: "painel_km") => {
+  const analisarFoto = async (blob: Blob, tipo: "bomba" | "painel_km" = "bomba") => {
+    const dataUrl = await blobToOptimizedDataUrl(blob);
+    let remoto: OcrResult | null = null;
     try {
-      const dataUrl = await blobToOptimizedDataUrl(blob);
-      const { data, error } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl, tipo: tipo || "bomba" } });
-      if (error) return { ok: false, error: error.message } as OcrResult;
-      return data as OcrResult | null;
+      const { data, error } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl, tipo } });
+      remoto = error ? ({ ok: false, error: error.message, origem: "supabase" } as OcrResult) : ((data as OcrResult | null) || null);
     } catch (e) {
       console.error("Erro OCR abastecimento:", e);
-      return null;
     }
+
+    if (tipo === "painel_km" && hasKmData(remoto)) return remoto;
+    if (tipo === "bomba" && hasPumpData(remoto)) return remoto;
+
+    const local = await analisarFotoLocal(dataUrl, tipo);
+    return mergeOcrResult(remoto, local, tipo);
   };
 
   const aplicarLeituraBomba = (r: OcrResult | null) => {
@@ -707,6 +714,262 @@ function normalizeCombustivel(value: string | null | undefined) {
   if (raw.includes("etanol") || raw.includes("alcool") || raw.includes("alcohol")) return "Etanol";
   if (raw.includes("gnv")) return "GNV";
   return "";
+}
+
+function hasPumpData(result: OcrResult | null) {
+  if (!result?.ok) return false;
+  const fields = [result.valor, result.litros, result.valor_por_litro]
+    .map((value) => parseDecimal(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return fields.length >= 2;
+}
+
+function hasKmData(result: OcrResult | null) {
+  if (!result?.ok) return false;
+  const kmValue = parseDecimal(result.km ?? result.km_atual);
+  return Number.isFinite(kmValue) && kmValue > 0;
+}
+
+function firstPositiveValue(primary: string | number | undefined, fallback: string | number | undefined) {
+  const primaryNumber = parseDecimal(primary);
+  if (Number.isFinite(primaryNumber) && primaryNumber > 0) return primary;
+  const fallbackNumber = parseDecimal(fallback);
+  return Number.isFinite(fallbackNumber) && fallbackNumber > 0 ? fallback : primary;
+}
+
+function mergeOcrResult(primary: OcrResult | null, fallback: OcrResult | null, tipo: "bomba" | "painel_km"): OcrResult | null {
+  if (!fallback?.ok) return primary;
+  if (!primary?.ok) return fallback;
+  if (tipo === "painel_km") {
+    const merged = {
+      ...primary,
+      km: firstPositiveValue(primary.km ?? primary.km_atual, fallback.km ?? fallback.km_atual),
+      origem: `${primary.origem || "supabase"}+${fallback.origem || "ocr-local"}`,
+      ocr_texto_bruto: fallback.ocr_texto_bruto || primary.ocr_texto_bruto,
+    };
+    return hasKmData(merged) ? merged : fallback;
+  }
+  const merged = {
+    ...primary,
+    valor: firstPositiveValue(primary.valor, fallback.valor),
+    litros: firstPositiveValue(primary.litros, fallback.litros),
+    valor_por_litro: firstPositiveValue(primary.valor_por_litro, fallback.valor_por_litro),
+    combustivel: normalizeCombustivel(primary.combustivel) || normalizeCombustivel(fallback.combustivel),
+    origem: `${primary.origem || "supabase"}+${fallback.origem || "ocr-local"}`,
+    ocr_texto_bruto: fallback.ocr_texto_bruto || primary.ocr_texto_bruto,
+  };
+  return hasPumpData(merged) ? merged : fallback;
+}
+
+async function analisarFotoLocal(dataUrl: string, tipo: "bomba" | "painel_km"): Promise<OcrResult | null> {
+  try {
+    const text = await readImageText(dataUrl);
+    if (!text.trim()) return null;
+    const parsed = tipo === "painel_km" ? parsePainelText(text) : parseBombaText(text);
+    return { ...parsed, origem: "ocr-local", ocr_texto_bruto: text };
+  } catch (error) {
+    console.error("Erro OCR local abastecimento:", error);
+    return null;
+  }
+}
+
+async function readImageText(dataUrl: string): Promise<string> {
+  const mod: any = await import("tesseract.js");
+  if (!mod?.createWorker) throw new Error("OCR indisponivel");
+  let worker: any;
+  try {
+    worker = await mod.createWorker("por+eng");
+  } catch {
+    worker = await mod.createWorker();
+    if (typeof worker.loadLanguage === "function") await worker.loadLanguage("por+eng");
+    if (typeof worker.initialize === "function") await worker.initialize("por+eng");
+  }
+  try {
+    if (typeof worker.setParameters === "function") {
+      await worker.setParameters({ preserve_interword_spaces: "1" });
+    }
+    const result = await worker.recognize(dataUrl);
+    return String(result?.data?.text || "");
+  } finally {
+    await worker.terminate?.();
+  }
+}
+
+function parseBombaText(text: string): OcrResult {
+  const lines = getOcrLines(text);
+  let valor = pickNumberNearLabel(lines, /(TOTAL\s*(A\s*)?PAGAR|VALOR\s*(TOTAL)?|A\s*PAGAR)/i, "valor");
+  let litros = pickNumberNearLabel(lines, /(LITROS?|VOLUME|VOL\.?|QUANTIDADE|QTD)/i, "litros");
+  let preco = pickNumberNearLabel(lines, /(PRECO|PREÇO|POR\s*LITRO|R\s*\/\s*L|P\.?\s*UNIT|UNITARIO)/i, "preco");
+
+  const inferred = inferPumpValues(collectFuelNumbers(lines), { valor, litros, preco });
+  valor = inferred.valor;
+  litros = inferred.litros;
+  preco = inferred.preco;
+  const reconciled = reconcilePumpValues({ valor, litros, preco });
+  const result = {
+    ok: [reconciled.valor, reconciled.litros, reconciled.preco].filter((value) => Number.isFinite(value) && value > 0).length >= 2,
+    valor: reconciled.valor || undefined,
+    litros: reconciled.litros || undefined,
+    valor_por_litro: reconciled.preco || undefined,
+    combustivel: normalizeCombustivel(text),
+    confianca: 0.55,
+  };
+  return result;
+}
+
+function parsePainelText(text: string): OcrResult {
+  const lines = getOcrLines(text);
+  const labeled = pickNumberNearLabel(lines, /(ODO|ODOMETRO|HODOMETRO|HODOMETRO|QUILOMETR|KM\b)/i, "km");
+  const candidates = collectKmNumbers(text);
+  const km = labeled && isPlausibleNumber(labeled, "km") ? labeled : candidates[0] || 0;
+  return {
+    ok: km > 0,
+    km,
+    confianca: km > 0 ? 0.55 : 0,
+  };
+}
+
+function getOcrLines(text: string) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function pickNumberNearLabel(lines: string[], label: RegExp, kind: "valor" | "litros" | "preco" | "km") {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!label.test(line)) continue;
+    const nearby = [line.replace(label, " "), lines[index + 1] || "", lines[index + 2] || "", lines[index + 3] || ""];
+    for (const piece of nearby) {
+      const number = extractFuelNumbers(piece, kind).find((value) => isPlausibleNumber(value, kind));
+      if (number) return number;
+    }
+  }
+  return 0;
+}
+
+function collectFuelNumbers(lines: string[]) {
+  const values = lines.flatMap((line) => extractFuelNumbers(line)).filter((value) => value > 0 && value < 10000);
+  return Array.from(new Set(values.map((value) => roundValue(value, 3))));
+}
+
+function extractFuelNumbers(text: string, kind?: "valor" | "litros" | "preco" | "km") {
+  const matches = String(text || "").match(/(?:R\$?\s*)?-?\d{1,6}(?:[.,]\d{1,3})?|\b\d{2,7}\b/g) || [];
+  return matches
+    .map((token) => parseOcrNumberToken(token, kind))
+    .filter((value) => Number.isFinite(value) && value > 0);
+}
+
+function parseOcrNumberToken(token: string, kind?: "valor" | "litros" | "preco" | "km") {
+  const clean = String(token || "").replace(/[^\d,.-]/g, "");
+  if (!clean) return NaN;
+  const hasSeparator = /[.,]/.test(clean);
+  if (hasSeparator) return parseDecimal(clean);
+  const digits = clean.replace(/\D/g, "");
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return NaN;
+  if (kind === "km") return n;
+  if (kind === "preco" && digits.length >= 3) return n / 100;
+  if (kind === "litros" && digits.length >= 3) return n / 100;
+  if (kind === "valor") {
+    if (digits.length === 3) return n / 10;
+    if (digits.length >= 4) return n / 100;
+  }
+  return n;
+}
+
+function isPlausibleNumber(value: number, kind: "valor" | "litros" | "preco" | "km") {
+  if (!Number.isFinite(value) || value <= 0) return false;
+  if (kind === "valor") return value >= 5 && value <= 10000;
+  if (kind === "litros") return value >= 1 && value <= 500;
+  if (kind === "preco") return value >= 1.5 && value <= 30;
+  return value >= 1000 && value <= 9999999;
+}
+
+function inferPumpValues(
+  candidates: number[],
+  current: { valor: number; litros: number; preco: number },
+) {
+  let { valor, litros, preco } = current;
+  if (!preco && valor > 0 && litros > 0) preco = valor / litros;
+  if (!valor && litros > 0 && preco > 0) valor = litros * preco;
+  if (!litros && valor > 0 && preco > 0) litros = valor / preco;
+
+  if (hasTwoPumpNumbers({ valor, litros, preco })) return { valor, litros, preco };
+
+  let best: { valor: number; litros: number; preco: number; score: number } | null = null;
+  const values = candidates.filter((value) => value >= 5);
+  const liters = candidates.filter((value) => value >= 1 && value <= 500);
+  const prices = candidates.filter((value) => value >= 1.5 && value <= 30);
+
+  for (const v of values) {
+    for (const l of liters) {
+      if (Math.abs(v - l) < 0.001) continue;
+      const p = v / l;
+      if (p < 1.5 || p > 30) continue;
+      const score = Math.abs(p - 5);
+      if (!best || score < best.score) best = { valor: v, litros: l, preco: p, score };
+    }
+  }
+
+  if (!best) {
+    for (const l of liters) {
+      for (const p of prices) {
+        if (Math.abs(l - p) < 0.001) continue;
+        const v = l * p;
+        if (v < 5 || v > 10000) continue;
+        const score = Math.abs(p - 5);
+        if (!best || score < best.score) best = { valor: v, litros: l, preco: p, score };
+      }
+    }
+  }
+
+  if (best) {
+    valor = valor || best.valor;
+    litros = litros || best.litros;
+    preco = preco || best.preco;
+  }
+
+  return { valor, litros, preco };
+}
+
+function hasTwoPumpNumbers(values: { valor: number; litros: number; preco: number }) {
+  return [values.valor, values.litros, values.preco].filter((value) => Number.isFinite(value) && value > 0).length >= 2;
+}
+
+function reconcilePumpValues(values: { valor: number; litros: number; preco: number }) {
+  let { valor, litros, preco } = values;
+  if (valor > 0 && litros > 0 && (!preco || preco < 1.5 || preco > 30)) preco = valor / litros;
+  if (litros > 0 && preco > 0 && !valor) valor = litros * preco;
+  if (valor > 0 && preco > 0 && !litros) litros = valor / preco;
+  if (valor > 0 && litros > 0 && preco > 0) {
+    const calculated = litros * preco;
+    if (Math.abs(calculated - valor) > Math.max(2, valor * 0.1)) {
+      const recalculatedPrice = valor / litros;
+      if (recalculatedPrice >= 1.5 && recalculatedPrice <= 30) preco = recalculatedPrice;
+    }
+  }
+  return {
+    valor: isPlausibleNumber(valor, "valor") ? roundValue(valor, 2) : 0,
+    litros: isPlausibleNumber(litros, "litros") ? roundValue(litros, 3) : 0,
+    preco: isPlausibleNumber(preco, "preco") ? roundValue(preco, 3) : 0,
+  };
+}
+
+function collectKmNumbers(text: string) {
+  const grouped = Array.from(String(text || "").matchAll(/\b\d{1,3}(?:[.,]\d{3}){1,2}\b/g))
+    .map((match) => Number(match[0].replace(/\D/g, "")));
+  const plain = Array.from(String(text || "").matchAll(/\b\d{4,7}\b/g))
+    .map((match) => Number(match[0]));
+  return Array.from(new Set([...grouped, ...plain]))
+    .filter((value) => value >= 1000 && value <= 9999999 && (value < 1900 || value > 2099))
+    .sort((a, b) => b - a);
+}
+
+function roundValue(value: number, digits: number) {
+  const factor = 10 ** digits;
+  return Number.isFinite(value) ? Math.round(value * factor) / factor : 0;
 }
 
 function buildReceiptHtml(info: ReceiptInfo) {
