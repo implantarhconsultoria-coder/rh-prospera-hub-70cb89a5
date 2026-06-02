@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { extractPdfText, extractPdfTextByLines, renderPdfPagesToDataUrls } from '@/lib/pdf';
-import { Car, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle, Wrench, Paperclip } from 'lucide-react';
+import { CalendarClock, Car, ClipboardList, Upload, Trash2, Search, Eye, Sparkles, Loader2, Printer, Edit2, Save, X, AlertTriangle, Wrench, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
+import { STATUS_SOLICITACAO, brDateTime, type SolicitacaoOperacional } from '@/lib/operacionalSolicitacoes';
 
 interface Ativo {
   id: string;
@@ -44,6 +45,25 @@ interface Manutencao {
   arquivo_nome: string | null;
   origem: string | null;
   observacao: string | null;
+}
+
+interface AgendamentoExterno {
+  id: string;
+  solicitacao_id: string | null;
+  ativo_id: string | null;
+  veiculo_descricao: string | null;
+  placa: string | null;
+  empresa: string | null;
+  km: number | null;
+  tipo_revisao: string | null;
+  concessionaria: string | null;
+  contato_whatsapp: string | null;
+  preferencia_data: string | null;
+  data_confirmada: string | null;
+  hora_confirmada: string | null;
+  status: string;
+  mensagem_recebida: string | null;
+  created_at: string;
 }
 
 type FilterType = 'todos' | 'ipva_vencer' | 'ipva_vencido' | 'lic_vencer' | 'lic_vencido';
@@ -233,6 +253,8 @@ const DocumentosVeiculosPage: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Ativo>>({});
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([]);
+  const [solicitacoesFrota, setSolicitacoesFrota] = useState<SolicitacaoOperacional[]>([]);
+  const [agendamentosFrota, setAgendamentosFrota] = useState<AgendamentoExterno[]>([]);
   const [manutencaoErro, setManutencaoErro] = useState('');
   const [ativosErro, setAtivosErro] = useState('');
   const [manutFile, setManutFile] = useState<File | null>(null);
@@ -281,7 +303,27 @@ const DocumentosVeiculosPage: React.FC = () => {
     setManutencoes((((data as any) || []) as Manutencao[]));
   };
 
-  useEffect(() => { fetchAtivos(); fetchManutencoes(); }, []);
+  const fetchSolicitacoesFrota = async () => {
+    const [solRes, agRes] = await Promise.all([
+      supabase
+        .from('operacional_solicitacoes' as any)
+        .select('*')
+        .eq('tipo', 'manutencao_veiculo')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(300),
+      supabase
+        .from('veiculo_agendamentos_externos' as any)
+        .select('*')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(300),
+    ]);
+    if (!solRes.error) setSolicitacoesFrota(((solRes.data || []) as any) as SolicitacaoOperacional[]);
+    if (!agRes.error) setAgendamentosFrota(((agRes.data || []) as any) as AgendamentoExterno[]);
+  };
+
+  useEffect(() => { fetchAtivos(); fetchManutencoes(); fetchSolicitacoesFrota(); }, []);
 
   const moeda = (v: number | string | null | undefined) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const parseNumero = (value: string) => {
@@ -536,6 +578,32 @@ const DocumentosVeiculosPage: React.FC = () => {
     return list;
   }, [ativos, search, filterType]);
 
+  const timelineFrota = useMemo(() => {
+    const items: Array<{ id: string; data: string; tipo: string; veiculo: string; placa: string; status: string; detalhe: string }> = [];
+    solicitacoesFrota.forEach((s) => items.push({
+      id: `sol-${s.id}`,
+      data: s.created_at,
+      tipo: 'Solicitacao',
+      veiculo: s.veiculo_descricao || '',
+      placa: s.placa || '',
+      status: STATUS_SOLICITACAO[s.status] || s.status,
+      detalhe: [s.manutencao_tipo, s.descricao, s.oficina].filter(Boolean).join(' - '),
+    }));
+    agendamentosFrota.forEach((a) => items.push({
+      id: `ag-${a.id}`,
+      data: a.created_at,
+      tipo: 'Agendamento externo',
+      veiculo: a.veiculo_descricao || '',
+      placa: a.placa || '',
+      status: a.status,
+      detalhe: [a.tipo_revisao, a.concessionaria, a.data_confirmada, a.mensagem_recebida].filter(Boolean).join(' - '),
+    }));
+    return items
+      .filter((item) => !search || `${item.veiculo} ${item.placa} ${item.detalhe}`.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+      .slice(0, 80);
+  }, [solicitacoesFrota, agendamentosFrota, search]);
+
   const alertCounts = useMemo(() => ({
     ipvaVencer: ativos.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer').length,
     ipvaVencido: ativos.filter(a => getAlertStatus(a.vencimento_ipva) === 'vencido').length,
@@ -728,6 +796,46 @@ const DocumentosVeiculosPage: React.FC = () => {
                 </tr>
               ))}
               {manutencoesFiltradas.length === 0 && <tr><td colSpan={6} className="text-center py-6 text-sm text-muted-foreground">Nenhuma manutencao registrada</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card-premium p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-primary" />
+            <div>
+              <h2 className="text-lg font-bold">Timeline de solicitacoes e agendamentos</h2>
+              <p className="text-xs text-muted-foreground">Solicitacoes do app mecanico, aprovacoes, Fiat/concessionaria e retorno manual ficam vinculados ao veiculo.</p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" onClick={fetchSolicitacoesFrota}>
+            <CalendarClock className="w-4 h-4 mr-1" /> Atualizar
+          </Button>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b bg-muted/50">
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Data</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Tipo</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Veiculo</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Placa</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Status</th>
+              <th className="px-3 py-2 text-left text-xs uppercase text-muted-foreground">Detalhe</th>
+            </tr></thead>
+            <tbody>
+              {timelineFrota.map((item) => (
+                <tr key={item.id} className="border-b hover:bg-muted/20">
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">{brDateTime(item.data)}</td>
+                  <td className="px-3 py-2 text-xs">{item.tipo}</td>
+                  <td className="px-3 py-2 text-xs">{item.veiculo || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{item.placa || '-'}</td>
+                  <td className="px-3 py-2 text-xs">{item.status || '-'}</td>
+                  <td className="px-3 py-2 text-xs max-w-[520px]">{item.detalhe || '-'}</td>
+                </tr>
+              ))}
+              {timelineFrota.length === 0 && <tr><td colSpan={6} className="text-center py-6 text-sm text-muted-foreground">Nenhuma solicitacao/agendamento registrado</td></tr>}
             </tbody>
           </table>
         </div>

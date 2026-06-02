@@ -31,6 +31,7 @@ const menuItems: MenuItem[] = [
 
 const operationalItems: MenuItem[] = [
   { label: 'Operacional', icon: ClipboardList, path: '/admin/operacional' },
+  { label: 'Solicitacoes Operacionais', icon: AlertTriangle, path: '/admin/solicitacoes-operacionais' },
   { label: 'App Mecanico', icon: Wrench, path: '/admin/app-mecanico' },
   { label: 'Ponto dos Mecanicos', icon: Clock, path: '/admin/fechamento-ponto' },
   { label: 'Abastecimento QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode' },

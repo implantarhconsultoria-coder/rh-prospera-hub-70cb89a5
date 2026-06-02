@@ -25,6 +25,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade', group: 'Principal' },
   { label: 'Rescisoes', icon: FileX, path: '/admin/rescisoes', group: 'Principal' },
   { label: 'App Mecanico', icon: Wrench, path: '/admin/app-mecanico', group: 'Operacional' },
+  { label: 'Solicitacoes Operacionais', icon: AlertTriangle, path: '/admin/solicitacoes-operacionais', group: 'Operacional' },
   { label: 'Ponto dos Mecanicos', icon: Clock, path: '/admin/fechamento-ponto', group: 'Operacional' },
   { label: 'Abastecimento QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode', group: 'Operacional' },
   { label: 'Chamados Operacionais', icon: ClipboardList, path: '/admin/chamados', group: 'Operacional' },

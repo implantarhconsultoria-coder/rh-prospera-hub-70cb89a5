@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Droplet, Search, Printer, History as HistoryIcon, Save, Plus, Minus } from 'lucide-react';
+import { AlertTriangle, Droplet, Search, Printer, History as HistoryIcon, Save, Plus, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +36,7 @@ const LITROS_POR_GALAO_DEFAULT = 20;
 
 const CombustivelPage: React.FC = () => {
   const { companies, employees, session } = useApp();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [selectedEmpId, setSelectedEmpId] = useState('');
   const [tipoCombustivel, setTipoCombustivel] = useState('gasolina');
@@ -43,6 +45,7 @@ const CombustivelPage: React.FC = () => {
   const [observacoes, setObservacoes] = useState('');
   const [dataRetirada, setDataRetirada] = useState(new Date().toISOString().slice(0, 10));
   const [historico, setHistorico] = useState<GaloesRow[]>([]);
+  const [pendentes, setPendentes] = useState(0);
   const [filtroComp, setFiltroComp] = useState(new Date().toISOString().slice(0, 7));
   const [salvando, setSalvando] = useState(false);
 
@@ -59,13 +62,22 @@ const CombustivelPage: React.FC = () => {
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
 
   const carregar = async () => {
-    const { data } = await supabase
+    const [{ data }, pendentesRes] = await Promise.all([
+      supabase
       .from('combustivel_galoes')
       .select('*')
       .like('competencia', `${filtroComp}%`)
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(200),
+      supabase
+        .from('operacional_solicitacoes' as any)
+        .select('id', { count: 'exact', head: true })
+        .eq('tipo', 'galao')
+        .eq('status', 'pendente')
+        .is('deleted_at', null),
+    ]);
     setHistorico((data as GaloesRow[]) || []);
+    setPendentes(pendentesRes.count || 0);
   };
 
   useEffect(() => { carregar(); }, [filtroComp]);
@@ -169,6 +181,18 @@ const CombustivelPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {pendentes > 0 && (
+        <div className="card-premium p-4 border-l-4 border-warning bg-warning/5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-warning" />
+            <span className="text-sm font-bold">{pendentes} solicitacao(oes) de galao aguardando aprovacao.</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => navigate('/admin/solicitacoes-operacionais')}>
+            Revisar solicitacoes
+          </Button>
+        </div>
+      )}
 
       <div className="card-premium p-5 space-y-4">
         <h2 className="text-sm font-bold text-foreground">Nova retirada</h2>
