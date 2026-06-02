@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { cleanText } from './textClean';
 import { ponteAereaLogoDataUrl } from '@/assets/ponteAereaLogoData';
+import { buildPdfFileName, downloadPdfBlob } from './savePdf';
 
 export interface FichaASOData {
   empresa: string;
@@ -43,19 +44,19 @@ const fmtBR = (iso?: string) => {
   return new Date(iso).toLocaleDateString('pt-BR');
 };
 
-const cleanFilePart = (value?: string) => cleanText(value || 'SEM_INFORMACAO')
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^a-zA-Z0-9]+/g, '_')
-  .replace(/^_+|_+$/g, '')
-  .toUpperCase() || 'SEM_INFORMACAO';
+const datePdfPart = (value?: string) => {
+  const date = value || new Date().toISOString().slice(0, 10);
+  const match = String(date).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `DATA ${match[3]}-${match[2]}-${match[1]}`;
+  return date;
+};
 
 export const makeDocumentFileName = (
   tipo: string,
   empresa?: string,
   funcionario?: string,
   data?: string,
-) => `${cleanFilePart(tipo)}_${cleanFilePart(empresa)}_${cleanFilePart(funcionario)}_${data || new Date().toISOString().slice(0, 10)}.pdf`;
+) => buildPdfFileName(empresa, tipo, funcionario, datePdfPart(data));
 
 const getExamHighlightColor = (tipoExame: string): [number, number, number] => {
   const normalized = cleanText(tipoExame || '')
@@ -172,7 +173,7 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
     y += 27;
   }
   drawSignatures(doc, y + 35);
-  const fileName = makeDocumentFileName('ASO', d.empresa, d.nome, d.dataExame || new Date().toISOString().slice(0, 10));
+  const fileName = makeDocumentFileName(`ASO - EXAME ${d.tipoExame || ''}`, d.empresa, d.nome, d.dataExame || new Date().toISOString().slice(0, 10));
   return { blob: doc.output('blob'), fileName };
 };
 
@@ -302,7 +303,13 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   write('Nome do Responsável / Contato (OBRIGATÓRIO):', x + 3, y + 9, { size: 9.5, bold: true });
   write(responsavel, x + 83, y + 9, { size: 9.5, bold: true, maxWidth: 86 });
 
-  const fileName = `GUIA ASO AUDIOLIFE - ${cleanFilePart(d.nome).replace(/_/g, ' ')} - ${dataExame}.pdf`;
+  const fileName = buildPdfFileName(
+    d.empresa,
+    'GUIA ASO AUDIOLIFE',
+    d.nome,
+    `EXAME ${tipoExame}`,
+    datePdfPart(dataExame),
+  );
   return { blob: doc.output('blob'), fileName };
 };
 
@@ -328,19 +335,11 @@ export const gerarAvisoFeriasPdf = (d: AvisoFeriasData): { blob: Blob; fileName:
   doc.text(wrapped, 18, y + 15);
   y += 55;
   drawSignatures(doc, y + 35);
-  const fileName = makeDocumentFileName('FERIAS', d.empresa, d.nome, d.inicioFerias || new Date().toISOString().slice(0, 10));
+  const fileName = makeDocumentFileName('AVISO DE FERIAS', d.empresa, d.nome, d.inicioFerias || new Date().toISOString().slice(0, 10));
   return { blob: doc.output('blob'), fileName };
 };
 
 /** Faz download local do PDF e retorna o blob para upload */
 export const downloadPdf = (blob: Blob, fileName: string) => {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const safeName = cleanFilePart(fileName.replace(/\.pdf$/i, ''));
-  a.href = url;
-  a.download = `${safeName}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadPdfBlob(blob, fileName);
 };

@@ -152,7 +152,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
       const empresaArquivo = blocks.length === 1 ? blocks[0].company.name : `${blocks.length}_empresas`;
       await saveElementAsPdf({
         element: document.getElementById('vr-print-area'),
-        fileName: buildPdfFileName('relatorio vale refeicao', empresaArquivo, competenciaPdfPart(competencia)),
+        fileName: buildPdfFileName(empresaArquivo, 'relatorio vale refeicao', competenciaPdfPart(competencia)),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {

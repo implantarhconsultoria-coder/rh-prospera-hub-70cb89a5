@@ -143,7 +143,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
       const empresaArquivo = blocks.length === 1 ? blocks[0].company.name : `${blocks.length}_empresas`;
       await saveElementAsPdf({
         element: document.getElementById('vt-print-area'),
-        fileName: buildPdfFileName('relatorio vale transporte', empresaArquivo, competenciaPdfPart(competencia)),
+        fileName: buildPdfFileName(empresaArquivo, 'relatorio vale transporte', competenciaPdfPart(competencia)),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {

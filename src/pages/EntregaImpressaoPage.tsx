@@ -103,7 +103,7 @@ const EntregaImpressaoPage: React.FC = () => {
     try {
       await saveElementAsPdf({
         element: document.getElementById('entrega-print'),
-        fileName: buildPdfFileName(isEpi ? 'ficha entrega epi' : 'ficha entrega uniforme', company.name, emp.name, delivery.date),
+        fileName: buildPdfFileName(company.name, isEpi ? 'ficha entrega epi' : 'ficha entrega uniforme', emp.name, delivery.date),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {

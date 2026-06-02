@@ -110,7 +110,7 @@ const RelatorioImpressaoPage: React.FC = () => {
     try {
       await saveElementAsPdf({
         element: document.getElementById('fech-print-area'),
-        fileName: buildPdfFileName('relatorio fechamento', company?.name || 'empresa', competenciaPdfPart(competencia)),
+        fileName: buildPdfFileName(company?.name || 'empresa', 'relatorio fechamento', competenciaPdfPart(competencia)),
         orientation: 'landscape',
         margin: 6,
       });

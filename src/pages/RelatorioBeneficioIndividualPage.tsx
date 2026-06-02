@@ -45,7 +45,7 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
     try {
       await saveElementAsPdf({
         element: document.getElementById('benefit-individual-print'),
-        fileName: buildPdfFileName('ficha beneficios vr vt', company?.name, emp?.name || 'funcionario', competenciaPdfPart(competencia)),
+        fileName: buildPdfFileName(company?.name, 'ficha beneficios vr vt', emp?.name || 'funcionario', competenciaPdfPart(competencia)),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {

@@ -1,5 +1,20 @@
 import { jsPDF } from 'jspdf';
 
+const MONTHS_PT = [
+  'JANEIRO',
+  'FEVEREIRO',
+  'MARCO',
+  'ABRIL',
+  'MAIO',
+  'JUNHO',
+  'JULHO',
+  'AGOSTO',
+  'SETEMBRO',
+  'OUTUBRO',
+  'NOVEMBRO',
+  'DEZEMBRO',
+];
+
 export const sanitizePdfFileName = (value: string) =>
   (value || 'documento')
     .normalize('NFD')
@@ -9,15 +24,25 @@ export const sanitizePdfFileName = (value: string) =>
     .replace(/\s+\./g, '.')
     .trim() || 'documento';
 
-export const pdfNamePart = (value?: string | number | null) =>
-  sanitizePdfFileName(String(value ?? ''))
+export const pdfNamePart = (value?: string | number | null) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  return sanitizePdfFileName(raw)
     .replace(/\.pdf$/i, '')
-    .slice(0, 80);
+    .replace(/_+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase()
+    .slice(0, 100);
+};
 
 export const competenciaPdfPart = (competencia?: string | null) => {
   const value = String(competencia || '').trim();
   const match = value.match(/^(\d{4})-(\d{2})/);
-  if (match) return `${match[1]}-${match[2]}`;
+  if (match) {
+    const month = MONTHS_PT[Number(match[2]) - 1] || match[2];
+    return `REF. ${month} DE ${match[1]}`;
+  }
   return pdfNamePart(value);
 };
 
@@ -26,8 +51,8 @@ export const buildPdfFileName = (...parts: Array<string | number | null | undefi
     .filter((part) => part !== false && part !== null && part !== undefined && String(part).trim() !== '')
     .map((part) => pdfNamePart(part as string | number))
     .filter(Boolean)
-    .join('_');
-  return `${base || 'documento'}.pdf`;
+    .join(' - ');
+  return `${base || 'DOCUMENTO'}.pdf`;
 };
 
 export const downloadPdfBlob = (blob: Blob, fileName: string) => {

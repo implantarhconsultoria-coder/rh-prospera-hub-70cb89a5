@@ -161,9 +161,10 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const getRecibosPdfFileName = (items: ReciboItem[]) => {
     const empresas = Array.from(new Set(items.map((item) => item.company?.name || '').filter(Boolean)));
     const funcionarios = Array.from(new Set(items.map((item) => item.emp?.name || '').filter(Boolean)));
-    const empresaArquivo = empresas.length === 1 ? empresas[0] : `${empresas.length || empresaIds.length}_empresas`;
-    const funcionarioArquivo = funcionarios.length === 1 ? funcionarios[0] : `${funcionarios.length || items.length}_funcionarios`;
-    return buildPdfFileName('recibos', formatoLabel, empresaArquivo, funcionarioArquivo, competenciaPdfPart(competencia));
+    const empresaArquivo = empresas.length === 1 ? empresas[0] : `${empresas.length || empresaIds.length} empresas`;
+    const tipoDocumento = funcionarios.length === 1 ? `recibo ${formatoLabel}` : `recibos ${formatoLabel}`;
+    const funcionarioArquivo = funcionarios.length === 1 ? funcionarios[0] : `${funcionarios.length || items.length} funcionarios`;
+    return buildPdfFileName(empresaArquivo, tipoDocumento, funcionarioArquivo, competenciaPdfPart(competencia));
   };
 
   const recibosComEmail = recibos.filter((r) => getEmailDestinoRecibo(r.company?.name || ''));
