@@ -222,7 +222,7 @@ const RescisaoPage: React.FC = () => {
     }
     const unidade = [r.empresa_nome, r.empresa_municipio, r.empresa_uf].filter(Boolean).join(' ');
     const destinatarios = getDestinatariosRescisao(unidade);
-    openEmailClient({
+    await openEmailClient({
       to: destinatarios,
       cc: CC_OBRIGATORIO,
       subject: `Rescisao - ${r.funcionario_nome || ''} - ${r.empresa_nome || ''}`,

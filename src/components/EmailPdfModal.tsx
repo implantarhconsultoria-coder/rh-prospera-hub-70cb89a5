@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { sendEmailWithPdfAttachment } from '@/lib/emailUtils';
+import { getLoggedUserSignature, replaceEmailSignature } from '@/lib/userSignature';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -62,10 +63,21 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
 
   useEffect(() => {
     if (!draft || !open) return;
+    let active = true;
     setTo(formatEmails(draft.to));
     setCc(formatEmails(draft.cc));
     setSubject(draft.subject || '');
     setBody(draft.body || '');
+    getLoggedUserSignature()
+      .then((signature) => {
+        if (active) setBody(replaceEmailSignature(draft.body || '', signature.text));
+      })
+      .catch((error) => {
+        console.warn('Nao foi possivel aplicar assinatura do usuario logado:', error);
+      });
+    return () => {
+      active = false;
+    };
   }, [draft, open]);
 
   const handleSend = async () => {
@@ -99,15 +111,17 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData.session;
       const authUser = session?.user;
+      const signature = await getLoggedUserSignature();
+      const signedBody = replaceEmailSignature(body.trim(), signature.text);
       await sendEmailWithPdfAttachment({
         to: toList,
         cc: ccList,
         subject: subject.trim(),
-        body: body.trim(),
+        body: signedBody,
         attachments,
         senderUserId: draft.senderUserId || authUser?.id,
-        senderName: draft.senderName || String(authUser?.user_metadata?.nome_completo || authUser?.email || ''),
-        senderEmail: draft.senderEmail || authUser?.email,
+        senderName: signature.name || String(authUser?.user_metadata?.nome_completo || authUser?.email || ''),
+        senderEmail: draft.senderEmail || signature.email || authUser?.email,
         moduleOrigin: draft.moduleOrigin || 'documentos',
         documentId: draft.documentId,
         documentName: draft.documentName || draft.attachmentName,

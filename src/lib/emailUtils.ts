@@ -1,6 +1,8 @@
 /**
  * Abre o cliente de e-mail padrao (Outlook etc.) com campos preenchidos.
  */
+import { applyLoggedUserSignatureToBody } from '@/lib/userSignature';
+
 export interface EmailParams {
   to: readonly string[];
   cc?: readonly string[];
@@ -22,12 +24,13 @@ export interface EmailAttachmentInput {
   documentName?: string;
 }
 
-export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
+export const openEmailClient = async ({ to, cc, subject, body }: EmailParams) => {
+  const signedBody = await applyLoggedUserSignatureToBody(body);
   const enc = encodeURIComponent;
   const params: string[] = [];
   if (cc?.length) params.push(`cc=${cc.map(enc).join(',')}`);
   params.push(`subject=${enc(subject)}`);
-  params.push(`body=${enc(body)}`);
+  params.push(`body=${enc(signedBody)}`);
   const mailto = `mailto:${to.map(enc).join(',')}?${params.join('&')}`;
   window.location.href = mailto;
 };

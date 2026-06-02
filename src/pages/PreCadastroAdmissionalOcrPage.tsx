@@ -452,7 +452,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     catch (e: any) { toast.error(`Erro ao salvar ASO: ${e.message}`); }
   };
 
-  const enviarContabilidade = async () => { openEmailClient({ to: ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'], cc: Array.from(CC_OBRIGATORIO), subject: `Solicitacao de Registro - ${form.nome || ''} - ${form.empresa_nome || ''}`, body: buildContabilidadeEmailBody(form) }); if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_preparar_contabilidade', { p_id: form.id }); await carregar(); } toast.success('E-mail para contabilidade aberto. Anexe a documentacao completa.'); };
+  const enviarContabilidade = async () => { await openEmailClient({ to: ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'], cc: Array.from(CC_OBRIGATORIO), subject: `Solicitacao de Registro - ${form.nome || ''} - ${form.empresa_nome || ''}`, body: buildContabilidadeEmailBody(form) }); if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_preparar_contabilidade', { p_id: form.id }); await carregar(); } toast.success('E-mail para contabilidade aberto. Anexe a documentacao completa.'); };
 
   const migrarDocumentosPreCadastro = async (funcionarioId: string) => {
     if (!form.id || !funcionarioId || !form.empresa_id) return 0;
