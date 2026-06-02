@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Copy, ExternalLink, Lock, Unlock, Wrench, History, MapPin, Loader2, Plus, Fuel } from "lucide-react";
+import { Copy, ExternalLink, Lock, Unlock, Wrench, History, MapPin, Loader2, Plus, Fuel, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatarDataHoraBrasil } from "@/lib/brTime";
 import EmployeeCombobox from "@/components/EmployeeCombobox";
@@ -45,6 +45,7 @@ export default function AppMecanicoAdminPage() {
   const [loading, setLoading] = useState(true);
   const [histAberto, setHistAberto] = useState<Acesso | null>(null);
   const [histLoading, setHistLoading] = useState(false);
+  const [histDeleting, setHistDeleting] = useState<string | null>(null);
   const [hist, setHist] = useState<{ pontos: any[]; abastecimentos: any[] }>({ pontos: [], abastecimentos: [] });
 
   const [cadastroAberto, setCadastroAberto] = useState(false);
@@ -121,6 +122,48 @@ export default function AppMecanicoAdminPage() {
       }
     }
     setHistLoading(false);
+  };
+
+  const excluirPontoHistorico = async (ponto: any) => {
+    if (!histAberto) return;
+    const horario = formatarDataHoraBrasil(ponto.data, ponto.hora);
+    if (!window.confirm(`Excluir esta batida de ponto?\n\n${histAberto.nome}\n${horario} - ${TIPO_LABEL[ponto.tipo] || ponto.tipo}`)) return;
+
+    setHistDeleting(ponto.id);
+    const { data, error } = await supabase.rpc("admin_app_mecanico_excluir_ponto" as any, {
+      p_acesso_id: histAberto.id,
+      p_ponto_id: ponto.id,
+    });
+    setHistDeleting(null);
+
+    if (error || !(data as any)?.ok) {
+      toast.error((data as any)?.error || error?.message || "Nao foi possivel excluir o ponto.");
+      return;
+    }
+
+    setHist((prev) => ({ ...prev, pontos: prev.pontos.filter((item) => item.id !== ponto.id) }));
+    toast.success("Ponto excluido.");
+  };
+
+  const excluirAbastecimentoHistorico = async (abastecimento: any) => {
+    if (!histAberto) return;
+    const horario = formatarDataHoraBrasil(abastecimento.data, abastecimento.hora);
+    if (!window.confirm(`Excluir este abastecimento?\n\n${histAberto.nome}\n${horario}\n${abastecimento.placa || "-"}`)) return;
+
+    setHistDeleting(abastecimento.id);
+    const { data, error } = await supabase.rpc("admin_app_mecanico_excluir_abastecimento" as any, {
+      p_acesso_id: histAberto.id,
+      p_abastecimento_id: abastecimento.id,
+    });
+    setHistDeleting(null);
+
+    if (error || !(data as any)?.ok) {
+      toast.error((data as any)?.error || error?.message || "Nao foi possivel excluir o abastecimento.");
+      return;
+    }
+
+    setHist((prev) => ({ ...prev, abastecimentos: prev.abastecimentos.filter((item) => item.id !== abastecimento.id) }));
+    toast.success("Abastecimento excluido.");
   };
 
   const resetForm = () => {
@@ -448,6 +491,7 @@ export default function AppMecanicoAdminPage() {
                         <TableHead>Tipo</TableHead>
                         <TableHead>GPS</TableHead>
                         <TableHead>Selfie</TableHead>
+                        <TableHead className="text-right">Acoes</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -483,6 +527,21 @@ export default function AppMecanicoAdminPage() {
                               "-"
                             )}
                           </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => excluirPontoHistorico(p)}
+                              disabled={histDeleting === p.id}
+                              title="Excluir ponto"
+                            >
+                              {histDeleting === p.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              )}
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -501,6 +560,7 @@ export default function AppMecanicoAdminPage() {
                         <TableHead>Placa</TableHead>
                         <TableHead>Valor</TableHead>
                         <TableHead>Fotos</TableHead>
+                        <TableHead className="text-right">Acoes</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -530,6 +590,21 @@ export default function AppMecanicoAdminPage() {
                                 </a>
                               ) : null}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => excluirAbastecimentoHistorico(a)}
+                              disabled={histDeleting === a.id}
+                              title="Excluir abastecimento"
+                            >
+                              {histDeleting === a.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              )}
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
