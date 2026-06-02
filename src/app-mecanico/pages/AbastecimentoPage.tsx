@@ -68,6 +68,7 @@ interface ReceiptInfo {
   km: string;
   kmRodado: number | null;
   observacao: string;
+  fotoPlacaUrl: string;
   fotoBombaUrl: string;
   fotoPainelUrl: string;
   createdAt: Date;
@@ -105,8 +106,10 @@ export default function AbastecimentoPage() {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
+  const [camPlaca, setCamPlaca] = useState(false);
   const [camBomba, setCamBomba] = useState(false);
   const [camPainel, setCamPainel] = useState(false);
+  const [fotoPlacaUrl, setFotoPlacaUrl] = useState("");
   const [fotoBombaUrl, setFotoBombaUrl] = useState("");
   const [fotoPainelUrl, setFotoPainelUrl] = useState("");
   const [valor, setValor] = useState("");
@@ -333,6 +336,19 @@ export default function AbastecimentoPage() {
     }
   };
 
+  const onCapturePlaca = async (blob: Blob) => {
+    setLoading(true);
+    try {
+      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "placa", blob);
+      setFotoPlacaUrl(url);
+      toast.success("Foto da frente do veiculo salva. Agora tire a foto da bomba.");
+    } catch (e) {
+      toast.error(getErrorMessage(e) || "Erro no upload da foto da placa");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onCapturePainel = async (blob: Blob) => {
     setLoading(true);
     try {
@@ -358,9 +374,11 @@ export default function AbastecimentoPage() {
   const finalizar = async () => {
     if (!posto) return;
     if (postosOpcao.length > 1 && posto.tipo_qr === "unidade") return toast.error("Selecione o posto de Goiania");
-    if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("Fotos obrigatorias");
+    if (!fotoPlacaUrl) return toast.error("Foto obrigatoria: frente do veiculo com a placa visivel.");
+    if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("Fotos obrigatorias: bomba e KM/painel.");
     if (!valor || !litros) return toast.error("Informe valor e litros");
     if (mecInfo?.exige_selecao_carro && !placa) return toast.error("Selecione o carro");
+    if (!km) return toast.error("Informe o KM atual");
     setLoading(true);
     const { latitude, longitude } = await getBrowserLocation();
     const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
@@ -374,13 +392,14 @@ export default function AbastecimentoPage() {
       p_observacao: obs || null,
       p_foto_bomba_url: fotoBombaUrl,
       p_foto_painel_url: fotoPainelUrl,
+      p_foto_placa_url: fotoPlacaUrl,
       p_latitude: latitude,
       p_longitude: longitude,
       p_endereco: null,
     });
     setLoading(false);
     const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null; registro_teste?: boolean } | null;
-    if (error || !r?.ok) return toast.error(r?.error || error?.message || "Erro ao salvar");
+    if (error || !r?.ok) return toast.error(fuelSaveErrorMessage(r?.error || error?.message));
     setReceipt({
       id: r.id || "",
       codigo: posto.codigo,
@@ -399,6 +418,7 @@ export default function AbastecimentoPage() {
       km,
       kmRodado: r.km_rodado ?? kmRodado,
       observacao: obs,
+      fotoPlacaUrl,
       fotoBombaUrl,
       fotoPainelUrl,
       createdAt: new Date(),
@@ -434,6 +454,7 @@ export default function AbastecimentoPage() {
       info.kmRodado !== null ? `KM rodado desde o ultimo registro: ${fmtNumber(String(info.kmRodado), 0)} km` : "",
       info.observacao ? `Obs.: ${info.observacao}` : "",
       "",
+      `Foto da frente do veiculo/placa: ${info.fotoPlacaUrl}`,
       `Foto da bomba: ${info.fotoBombaUrl}`,
       `Foto do KM/painel: ${info.fotoPainelUrl}`,
     ].filter(Boolean).join("\n");
@@ -482,6 +503,7 @@ export default function AbastecimentoPage() {
     setPostosOpcao([]);
     setMecInfo(null);
     setCodigo("");
+    setFotoPlacaUrl("");
     setFotoBombaUrl("");
     setFotoPainelUrl("");
     setValor("");
@@ -502,7 +524,7 @@ export default function AbastecimentoPage() {
       <Card className="p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600"><Fuel className="h-5 w-5" /></div>
-          <div><h1 className="text-base font-bold">Abastecimento</h1><p className="text-xs text-muted-foreground">QR Code + foto da bomba + foto do painel</p></div>
+          <div><h1 className="text-base font-bold">Abastecimento</h1><p className="text-xs text-muted-foreground">QR Code + placa + bomba + painel</p></div>
         </div>
       </Card>
 
@@ -556,9 +578,15 @@ export default function AbastecimentoPage() {
             {mecInfo?.placa && <div className="text-xs text-muted-foreground">Carro vinculado: {mecInfo.placa}</div>}
             {veiculos.length > 0 && <div className="text-xs text-muted-foreground">Documento da frota vinculado para {veiculos.length} veiculo(s).</div>}
             {mecInfo?.exige_selecao_carro && <AlertBox text="Selecione o carro usado antes de finalizar o abastecimento." />}
+            <AlertBox text="Foto obrigatoria: frente do veiculo com a placa visivel." />
+            {fotoPlacaUrl && <img src={fotoPlacaUrl} className="w-full rounded-lg" alt="Frente do veiculo com placa" />}
             {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
           </div>
-          <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
+          {!fotoPlacaUrl ? (
+            <Button className="w-full" onClick={() => setCamPlaca(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> Tirar foto da frente do veiculo</Button>
+          ) : (
+            <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
+          )}
           <Button className="w-full" variant="outline" onClick={reset}><RotateCcw className="mr-2 h-4 w-4" /> Cancelar</Button>
         </Card>
       )}
@@ -573,7 +601,7 @@ export default function AbastecimentoPage() {
       {step === "form" && (
         <Card className="space-y-3 p-4">
           <div className="text-sm font-semibold">Confirme os dados</div>
-          <div className="grid grid-cols-2 gap-2">{fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}{fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}</div>
+          <div className="grid grid-cols-3 gap-2">{fotoPlacaUrl && <img src={fotoPlacaUrl} className="w-full rounded-lg" alt="Frente do veiculo" />}{fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}{fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}</div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Valor (R$)" value={valor} setValue={updateValor} type="number" />
             <Field label="Litros" value={litros} setValue={updateLitros} type="number" />
@@ -624,7 +652,7 @@ export default function AbastecimentoPage() {
               <Info k="Litros" v={`${fmtNumber(receipt.litros)} L`} /><Info k="Preco/L" v={fmtMoney(receipt.precoLitro)} /><Info k="Valor" v={fmtMoney(receipt.valor)} />
               {receipt.kmRodado !== null && <Info k="KM rodado" v={`${fmtNumber(String(receipt.kmRodado), 0)} km`} />}
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2"><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
+            <div className="mt-3 grid grid-cols-3 gap-2"><img src={receipt.fotoPlacaUrl} className="h-28 w-full rounded-lg object-cover" alt="Frente do veiculo" /><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
           </div>
           <Button onClick={shareReceipt} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha</Button>
           <div className="grid grid-cols-2 gap-2">
@@ -638,6 +666,7 @@ export default function AbastecimentoPage() {
         </Card>
       )}
 
+      <CameraCapture open={camPlaca} onClose={() => setCamPlaca(false)} onCapture={onCapturePlaca} facing="environment" title="Foto da frente do veiculo" hint="Foto obrigatoria: frente do veiculo com a placa visivel." />
       <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" title="Foto da bomba" hint="Enquadre TOTAL R$, LITROS/VOLUME, PRECO/LITRO e combustivel" />
       <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" title="Foto do painel/KM" hint="Enquadre o ODO/KM total do painel" />
     </div>
@@ -717,6 +746,23 @@ function normalizeCombustivel(value: string | null | undefined) {
   if (raw.includes("etanol") || raw.includes("alcool") || raw.includes("alcohol")) return "Etanol";
   if (raw.includes("gnv")) return "GNV";
   return "";
+}
+
+function fuelSaveErrorMessage(error?: string) {
+  const key = String(error || "");
+  const messages: Record<string, string> = {
+    foto_placa_obrigatoria: "Foto obrigatoria: frente do veiculo com a placa visivel.",
+    foto_bomba_obrigatoria: "Foto da bomba obrigatoria.",
+    foto_painel_obrigatoria: "Foto do KM/painel obrigatoria.",
+    km_obrigatorio: "Informe o KM atual.",
+    placa_obrigatoria: "Selecione o veiculo.",
+    veiculo_fora_goiania: "Veiculo nao liberado para TOPAC Goiania.",
+    km_menor_que_anterior: "KM menor que o ultimo registro desse veiculo. Confira antes de salvar.",
+    preco_litro_fora_padrao: "Valor por litro fora do padrao. Confira valor e litros.",
+    acesso_nao_autorizado: "Acesso nao autorizado.",
+    qr_invalido: "QR Code do posto invalido.",
+  };
+  return messages[key] || key || "Erro ao salvar abastecimento.";
 }
 
 function hasPumpData(result: OcrResult | null) {
@@ -1034,7 +1080,7 @@ function buildReceiptHtml(info: ReceiptInfo) {
     table{width:100%;border-collapse:collapse;font-size:12px}
     td{border:1px solid #ddd;padding:7px;vertical-align:top}
     td:first-child{font-weight:bold;width:160px;background:#f7f7f7}
-    .photos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+    .photos{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px}
     img{width:100%;max-height:300px;object-fit:contain;border:1px solid #ddd}
   </style></head><body>
     <h1>TOPAC RH PRO - Recibo de Abastecimento</h1>
@@ -1042,6 +1088,7 @@ function buildReceiptHtml(info: ReceiptInfo) {
     <div class="muted">Comprovante interno gerado pelo app do mecanico.</div>
     <table>${text.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
     <div class="photos">
+      <div><strong>Foto da frente do veiculo/placa</strong><br><img src="${escapeHtml(info.fotoPlacaUrl)}"></div>
       <div><strong>Foto da bomba</strong><br><img src="${escapeHtml(info.fotoBombaUrl)}"></div>
       <div><strong>Foto do painel/KM</strong><br><img src="${escapeHtml(info.fotoPainelUrl)}"></div>
     </div>

@@ -577,15 +577,20 @@ export default function AppMecanicoAdminPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
+                              {a.foto_placa_url ? (
+                                <a href={a.foto_placa_url} target="_blank" rel="noreferrer" title="Foto da placa">
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              ) : null}
                               {a.foto_bomba_url ? (
-                                <a href={a.foto_bomba_url} target="_blank" rel="noreferrer">
+                                <a href={a.foto_bomba_url} target="_blank" rel="noreferrer" title="Foto da bomba">
                                   <Fuel className="w-4 h-4" />
                                 </a>
                               ) : (
                                 "-"
                               )}
                               {a.foto_painel_url ? (
-                                <a href={a.foto_painel_url} target="_blank" rel="noreferrer">
+                                <a href={a.foto_painel_url} target="_blank" rel="noreferrer" title="Foto do KM">
                                   <ExternalLink className="w-4 h-4" />
                                 </a>
                               ) : null}
