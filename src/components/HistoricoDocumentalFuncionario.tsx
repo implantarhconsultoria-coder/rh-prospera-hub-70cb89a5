@@ -10,7 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileText, Mail, Clock, User, Building2, Eye, Download, Trash2, Upload } from 'lucide-react';
+import { Archive, Building2, ChevronDown, ChevronRight, Clock, Download, Eye, FileText, Folder, FolderOpen, Mail, Trash2, Upload, User } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { useApp } from '@/context/AppContext';
@@ -43,6 +43,22 @@ const safeFileName = (value: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\w.-]+/g, '_');
 
+const getDocDateValue = (doc: any) => String(doc.data_documento || doc.created_at || new Date().toISOString());
+
+const getMonthKey = (doc: any) => {
+  const dateValue = getDocDateValue(doc);
+  const match = dateValue.match(/^(\d{4})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}` : new Date().toISOString().slice(0, 7);
+};
+
+const formatMonthFolder = (key: string) => {
+  const [year, month] = key.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, 1).toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+  });
+};
+
 const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const { employees, companies, session } = useApp();
   const funcionario = employees.find((e) => e.id === funcionarioId);
@@ -59,6 +75,10 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [filtroOrigem, setFiltroOrigem] = useState('');
   const [filtroData, setFiltroData] = useState('');
   const [filtroEmpresa, setFiltroEmpresa] = useState('');
+  const [pastasAbertas, setPastasAbertas] = useState<Record<string, boolean>>({});
+
+  const mesAtualKey = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const anoAtual = mesAtualKey.slice(0, 4);
 
   const carregar = async () => {
     setLoading(true);
@@ -97,6 +117,30 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     () => Array.from(new Set(docs.map((doc) => doc.empresa_nome).filter(Boolean))).sort(),
     [docs],
   );
+
+  const pastasDocumentais = useMemo(() => {
+    const grouped = docsFiltrados.reduce<Record<string, any[]>>((acc, doc) => {
+      const key = getMonthKey(doc);
+      acc[key] = acc[key] || [];
+      acc[key].push(doc);
+      return acc;
+    }, {});
+
+    return Object.entries(grouped)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, documentos]) => ({
+        key,
+        year: key.slice(0, 4),
+        title: formatMonthFolder(key),
+        documentos: documentos.sort((a, b) => getDocDateValue(b).localeCompare(getDocDateValue(a))),
+      }));
+  }, [docsFiltrados]);
+
+  const pastaAberta = (key: string) => pastasAbertas[key] ?? key === mesAtualKey;
+
+  const togglePasta = (key: string) => {
+    setPastasAbertas((current) => ({ ...current, [key]: !pastaAberta(key) }));
+  };
 
   const anexarDocumento = async () => {
     if (!funcionario || !company) {
@@ -156,6 +200,76 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     } catch (error: any) {
       toast.error(error?.message || 'Nao foi possivel excluir o documento.');
     }
+  };
+
+  const renderDocumento = (doc: any) => {
+    const categoriaDoc = doc.categoria || doc.tipo_documento || 'OUTROS';
+    const origemDoc = doc.origem || (doc.status_envio === 'gerado' ? 'gerado_sistema' : doc.status_envio) || 'gerado_sistema';
+    const titulo = `${categoriaDoc}${doc.competencia ? ' - ' + doc.competencia : ''}`;
+    const source = {
+      arquivo_url: doc.arquivo_url,
+      storage_path: doc.storage_path,
+      bucket: doc.storage_bucket || 'documentos-funcionarios',
+      tipo: inferTipo(categoriaDoc),
+    };
+
+    return (
+      <div key={doc.id} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary shrink-0" />
+            <div>
+              <span className="text-sm font-medium text-foreground">{categoriaDoc}</span>
+              {doc.nome_arquivo && <span className="text-xs text-muted-foreground ml-2">{doc.nome_arquivo}</span>}
+              {doc.competencia && <span className="text-xs text-muted-foreground ml-2">({doc.competencia})</span>}
+            </div>
+          </div>
+          <Badge className={doc.status_envio === 'enviado' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}>
+            {doc.status_envio === 'enviado' ? 'Enviado' : ORIGEM_LABEL[origemDoc] || origemDoc}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">{doc.observacao || doc.descricao}</p>
+        <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(doc.data_documento || doc.created_at).toLocaleString('pt-BR')}</span>
+          <span className="flex items-center gap-1"><User className="w-3 h-3" />{doc.funcionario_nome || funcionario?.name}</span>
+          <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{doc.empresa_nome}</span>
+        </div>
+        {doc.status_envio === 'enviado' && doc.enviado_em && (
+          <div className="flex items-center gap-1 mt-1 text-[10px] text-success">
+            <Mail className="w-3 h-3" />
+            Enviado em {new Date(doc.enviado_em).toLocaleString('pt-BR')} por {doc.enviado_por_nome}
+            {doc.destinatarios && <span className="ml-1">para {doc.destinatarios}</span>}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3 mt-2">
+          {(doc.arquivo_url || doc.storage_path) && (
+            <>
+              <button
+                type="button"
+                onClick={() => setViewing({ url: doc.storage_path || doc.arquivo_url, tipo: inferTipo(categoriaDoc), titulo })}
+                className="text-[11px] text-primary underline inline-flex items-center gap-1"
+              >
+                <Eye className="w-3 h-3" /> Visualizar
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadDocument(source, safeFileName(doc.nome_arquivo || `${titulo}.pdf`))}
+                className="text-[11px] text-primary underline inline-flex items-center gap-1"
+              >
+                <Download className="w-3 h-3" /> Baixar
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => excluir(doc)}
+            className="text-[11px] text-destructive underline inline-flex items-center gap-1"
+          >
+            <Trash2 className="w-3 h-3" /> Excluir
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) return <p className="text-sm text-muted-foreground py-4">Carregando historico...</p>;
@@ -218,74 +332,49 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">{docsFiltrados.length} de {docs.length} documento(s) no historico</p>
-          {docsFiltrados.map((doc: any) => {
-            const categoriaDoc = doc.categoria || doc.tipo_documento || 'OUTROS';
-            const origemDoc = doc.origem || (doc.status_envio === 'gerado' ? 'gerado_sistema' : doc.status_envio) || 'gerado_sistema';
-            const titulo = `${categoriaDoc}${doc.competencia ? ' - ' + doc.competencia : ''}`;
-            const source = {
-              arquivo_url: doc.arquivo_url,
-              storage_path: doc.storage_path,
-              bucket: doc.storage_bucket || 'documentos-funcionarios',
-              tipo: inferTipo(categoriaDoc),
-            };
-            return (
-              <div key={doc.id} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-primary shrink-0" />
-                    <div>
-                      <span className="text-sm font-medium text-foreground">{categoriaDoc}</span>
-                      {doc.nome_arquivo && <span className="text-xs text-muted-foreground ml-2">{doc.nome_arquivo}</span>}
-                      {doc.competencia && <span className="text-xs text-muted-foreground ml-2">({doc.competencia})</span>}
-                    </div>
-                  </div>
-                  <Badge className={doc.status_envio === 'enviado' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}>
-                    {doc.status_envio === 'enviado' ? 'Enviado' : ORIGEM_LABEL[origemDoc] || origemDoc}
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{doc.observacao || doc.descricao}</p>
-                <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-muted-foreground">
-                  <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(doc.data_documento || doc.created_at).toLocaleString('pt-BR')}</span>
-                  <span className="flex items-center gap-1"><User className="w-3 h-3" />{doc.funcionario_nome || funcionario?.name}</span>
-                  <span className="flex items-center gap-1"><Building2 className="w-3 h-3" />{doc.empresa_nome}</span>
-                </div>
-                {doc.status_envio === 'enviado' && doc.enviado_em && (
-                  <div className="flex items-center gap-1 mt-1 text-[10px] text-success">
-                    <Mail className="w-3 h-3" />
-                    Enviado em {new Date(doc.enviado_em).toLocaleString('pt-BR')} por {doc.enviado_por_nome}
-                    {doc.destinatarios && <span className="ml-1">para {doc.destinatarios}</span>}
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-3 mt-2">
-                  {(doc.arquivo_url || doc.storage_path) && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setViewing({ url: doc.storage_path || doc.arquivo_url, tipo: inferTipo(categoriaDoc), titulo })}
-                        className="text-[11px] text-primary underline inline-flex items-center gap-1"
-                      >
-                        <Eye className="w-3 h-3" /> Visualizar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => downloadDocument(source, safeFileName(doc.nome_arquivo || `${titulo}.pdf`))}
-                        className="text-[11px] text-primary underline inline-flex items-center gap-1"
-                      >
-                        <Download className="w-3 h-3" /> Baixar
-                      </button>
-                    </>
-                  )}
+          {pastasDocumentais.length === 0 ? (
+            <div className="text-center py-6 text-sm text-muted-foreground">
+              Nenhum documento encontrado com os filtros selecionados.
+            </div>
+          ) : (
+            pastasDocumentais.map((pasta) => {
+              const aberta = pastaAberta(pasta.key);
+              const arquivadaAnoAnterior = pasta.year !== anoAtual;
+              return (
+                <div key={pasta.key} className="rounded-lg border border-border overflow-hidden">
                   <button
                     type="button"
-                    onClick={() => excluir(doc)}
-                    className="text-[11px] text-destructive underline inline-flex items-center gap-1"
+                    onClick={() => togglePasta(pasta.key)}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-3 text-left hover:bg-muted/20 transition-colors"
                   >
-                    <Trash2 className="w-3 h-3" /> Excluir
+                    <div className="flex items-center gap-3 min-w-0">
+                      {aberta ? <FolderOpen className="w-5 h-5 text-primary shrink-0" /> : <Folder className="w-5 h-5 text-primary shrink-0" />}
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground uppercase truncate">{pasta.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {pasta.documentos.length} documento(s)
+                          {pasta.key === mesAtualKey ? ' - pasta atual' : arquivadaAnoAnterior ? ` - arquivo anual ${pasta.year}` : ' - arquivo mensal'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge className={pasta.key === mesAtualKey ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}>
+                        {pasta.key === mesAtualKey ? 'Aberta' : arquivadaAnoAnterior ? (
+                          <span className="inline-flex items-center gap-1"><Archive className="w-3 h-3" /> Ano arquivado</span>
+                        ) : 'Mes arquivado'}
+                      </Badge>
+                      {aberta ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                    </div>
                   </button>
+                  {aberta && (
+                    <div className="space-y-3 border-t border-border p-3">
+                      {pasta.documentos.map(renderDocumento)}
+                    </div>
+                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       )}
 
