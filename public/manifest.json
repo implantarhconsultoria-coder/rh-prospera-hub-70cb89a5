@@ -2,7 +2,7 @@
   "name": "TOPAC RH PRO",
   "short_name": "TOPAC RH",
   "description": "Plataforma RH do Grupo TOPAC",
-  "start_url": "/",
+  "start_url": "/acesso-mecanico",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
