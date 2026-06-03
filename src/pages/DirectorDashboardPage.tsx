@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Building2, CalendarDays, Car, Download, RefreshCw, Users, Wallet } from 'lucide-react';
+import {
+  BarChart3,
+  Building2,
+  CalendarDays,
+  Car,
+  Download,
+  FileText,
+  RefreshCw,
+  ShieldCheck,
+  TrendingUp,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useApp } from '@/context/AppContext';
@@ -21,6 +33,9 @@ type CompanyRow = {
   companyId: string;
   companyName: string;
   ativos: number;
+  folhaCusto: number;
+  folhaProventos: number;
+  folhaDescontos: number;
   folhaLiquida: number;
   aReceber: number;
   aPagar: number;
@@ -42,6 +57,9 @@ type ExecutiveData = {
     ativos: number;
     operacionais: number;
     socios: number;
+    folhaCusto: number;
+    proventos: number;
+    descontos: number;
     folhaBruta: number;
     folhaLiquida: number;
     inss: number;
@@ -141,6 +159,9 @@ const DirectorDashboardPage: React.FC = () => {
       ativos: 0,
       operacionais: 0,
       socios: 0,
+      folhaCusto: 0,
+      proventos: 0,
+      descontos: 0,
       folhaBruta: 0,
       folhaLiquida: 0,
       inss: 0,
@@ -210,6 +231,9 @@ const DirectorDashboardPage: React.FC = () => {
         (e) => companyIds.has(e.companyId) && competenciaRange.has(e.competencia),
       );
 
+      let folhaCusto = 0;
+      let folhaProventos = 0;
+      let folhaDescontos = 0;
       let folhaBruta = 0;
       let folhaLiquida = 0;
       let folhaInss = 0;
@@ -222,10 +246,14 @@ const DirectorDashboardPage: React.FC = () => {
         const comissaoPct = company?.codigo === 'topac-gyn' ? 0.02 : 0.01;
         const diasUteis = getWorkingDays(entry.competencia);
         const payroll = calcPayrollBreakdown(emp, entry, { diasUteis, comissaoPct });
+        const descontos = payroll.descontosLegais + payroll.descontosOperacionais + payroll.adiantamento + payroll.descontosDiversos;
+        folhaProventos += payroll.proventos;
+        folhaDescontos += descontos;
         folhaBruta += payroll.bruto;
         folhaLiquida += payroll.liquido;
         folhaInss += payroll.inss;
         folhaFgts += payroll.fgts;
+        folhaCusto += payroll.proventos + payroll.fgts;
       }
 
       const [titulosReceberRes, titulosPagarRes, recebimentosRes, pagamentosRes, veiculosRes, abastecimentosRes] =
@@ -307,13 +335,21 @@ const DirectorDashboardPage: React.FC = () => {
       const porEmpresa: CompanyRow[] = targetCompanies.map((company) => {
         const emps = activeEmployees.filter((e) => e.companyId === company.id).length;
         const entriesCompany = filteredEntries.filter((e) => e.companyId === company.id);
+        let custoCompany = 0;
+        let proventosCompany = 0;
+        let descontosCompany = 0;
         let liquidoCompany = 0;
         for (const entry of entriesCompany) {
           const emp = filteredEmployees.find((e) => e.id === entry.employeeId);
           if (!emp) continue;
           const comissaoPct = company.codigo === 'topac-gyn' ? 0.02 : 0.01;
           const diasUteis = getWorkingDays(entry.competencia);
-          liquidoCompany += calcPayrollBreakdown(emp, entry, { diasUteis, comissaoPct }).liquido;
+          const payroll = calcPayrollBreakdown(emp, entry, { diasUteis, comissaoPct });
+          const descontos = payroll.descontosLegais + payroll.descontosOperacionais + payroll.adiantamento + payroll.descontosDiversos;
+          proventosCompany += payroll.proventos;
+          descontosCompany += descontos;
+          liquidoCompany += payroll.liquido;
+          custoCompany += payroll.proventos + payroll.fgts;
         }
 
         const recCompany = titulosReceber
@@ -330,6 +366,9 @@ const DirectorDashboardPage: React.FC = () => {
           companyId: company.id,
           companyName: company.name,
           ativos: emps,
+          folhaCusto: custoCompany,
+          folhaProventos: proventosCompany,
+          folhaDescontos: descontosCompany,
           folhaLiquida: liquidoCompany,
           aReceber: recCompany,
           aPagar: pagCompany,
@@ -352,6 +391,9 @@ const DirectorDashboardPage: React.FC = () => {
           ativos: activeEmployees.length,
           operacionais: operacionais.length,
           socios: socios.length,
+          folhaCusto,
+          proventos: folhaProventos,
+          descontos: folhaDescontos,
           folhaBruta,
           folhaLiquida,
           inss: folhaInss,
@@ -398,6 +440,9 @@ const DirectorDashboardPage: React.FC = () => {
       ['Funcionarios ativos', report.rh.ativos],
       ['Operacionais', report.rh.operacionais],
       ['Socios', report.rh.socios],
+      ['Custo estimado da folha', report.rh.folhaCusto],
+      ['Proventos estimados', report.rh.proventos],
+      ['Descontos estimados', report.rh.descontos],
       ['Folha bruta', report.rh.folhaBruta],
       ['Folha liquida', report.rh.folhaLiquida],
       ['INSS', report.rh.inss],
@@ -411,10 +456,13 @@ const DirectorDashboardPage: React.FC = () => {
       ['KM medio', report.frota.kmMedio],
       [],
       ['POR EMPRESA'],
-      ['Empresa', 'Ativos', 'Folha liquida', 'A receber', 'A pagar', 'Abastecimentos', 'Valor abastecido'],
+      ['Empresa', 'Ativos', 'Custo folha', 'Proventos', 'Descontos', 'Folha liquida', 'A receber', 'A pagar', 'Abastecimentos', 'Valor abastecido'],
       ...report.porEmpresa.map((r) => [
         r.companyName,
         r.ativos,
+        r.folhaCusto,
+        r.folhaProventos,
+        r.folhaDescontos,
         r.folhaLiquida,
         r.aReceber,
         r.aPagar,
@@ -457,28 +505,89 @@ const DirectorDashboardPage: React.FC = () => {
     [targetCompanies, employees, entries, intelligenceCounts],
   );
   const calendarEvents = useMemo(() => getUpcomingCalendarEvents(targetCompanies, new Date(), 30), [targetCompanies]);
+  const totalEmpresas = report.porEmpresa.length || targetCompanies.length;
+  const margemFinanceira = report.financeiro.recebidoPeriodo - report.financeiro.pagoPeriodo;
+  const pendenciasCriticas =
+    Number(intelligenceCounts.documentosPendentes || 0) +
+    Number(intelligenceCounts.solicitacoesPendentes || 0) +
+    Number(corporateSnapshot.asoAlertas || 0);
+
+  const executiveCards = [
+    {
+      label: 'Empresas do grupo',
+      value: String(totalEmpresas),
+      detail: companyFilter === 'geral' ? 'visao consolidada' : 'empresa filtrada',
+      icon: Building2,
+      tone: 'text-cyan-300',
+    },
+    {
+      label: 'Funcionarios ativos',
+      value: String(report.rh.ativos),
+      detail: `${report.rh.operacionais} operacionais / ${report.rh.socios} socios`,
+      icon: Users,
+      tone: 'text-emerald-300',
+    },
+    {
+      label: 'Custo estimado da folha',
+      value: formatCurrency(report.rh.folhaCusto),
+      detail: 'proventos + FGTS informativo',
+      icon: Wallet,
+      tone: 'text-violet-300',
+    },
+    {
+      label: 'Valor liquido estimado',
+      value: formatCurrency(report.rh.folhaLiquida),
+      detail: 'baseado nos lancamentos do periodo',
+      icon: TrendingUp,
+      tone: 'text-lime-300',
+    },
+  ];
+
+  const strategicIndicators = [
+    { label: 'Proventos estimados', value: formatCurrency(report.rh.proventos) },
+    { label: 'Descontos estimados', value: formatCurrency(report.rh.descontos) },
+    { label: 'INSS estimado', value: formatCurrency(report.rh.inss) },
+    { label: 'FGTS informativo', value: formatCurrency(report.rh.fgts) },
+    { label: 'A receber disponivel', value: formatCurrency(report.financeiro.aReceber) },
+    { label: 'A pagar disponivel', value: formatCurrency(report.financeiro.aPagar) },
+    { label: 'Saldo projetado', value: formatCurrency(report.financeiro.saldoProjetado) },
+    { label: 'Margem do periodo', value: formatCurrency(margemFinanceira) },
+  ];
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard Diretor</h1>
-          <p className="text-sm text-muted-foreground">
-            Visao geral executiva com foco financeiro, equipe e frota.
-          </p>
-          {generatedAt && <p className="text-xs text-muted-foreground mt-1">Atualizado em {generatedAt}</p>}
+      <section className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-5 md:p-6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent" />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Diretor Geral - somente leitura
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">Painel Executivo</h1>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Visao consolidada do grupo para acompanhamento gerencial, sem rotinas operacionais de RH.
+              </p>
+            </div>
+            {generatedAt && <p className="text-xs text-muted-foreground">Atualizado em {generatedAt}</p>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={exportarCsv}>
+              <Download className="w-4 h-4 mr-2" />
+              Exportar CSV
+            </Button>
+            <Button variant="outline" onClick={exportarCsv}>
+              <FileText className="w-4 h-4 mr-2" />
+              Solicitar relatorio consolidado
+            </Button>
+            <Button onClick={runReport} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Atualizar indicadores
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportarCsv}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar CSV
-          </Button>
-          <Button onClick={runReport} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Gerar relatorio
-          </Button>
-        </div>
-      </div>
+      </section>
 
       <CorporateAssistantPanel
         variant="director"
@@ -550,52 +659,80 @@ const DirectorDashboardPage: React.FC = () => {
 
       {error && <div className="card-premium p-3 text-sm text-destructive">{error}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card-premium p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Wallet className="w-4 h-4 text-primary" />
-            Financeiro
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {executiveCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div key={card.label} className="card-premium p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {card.label}
+                  </p>
+                  <p className="text-2xl font-bold text-foreground">{card.value}</p>
+                  <p className="text-xs text-muted-foreground">{card.detail}</p>
+                </div>
+                <div className={`rounded-xl bg-white/5 p-2 ${card.tone}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="card-premium p-4 lg:col-span-2">
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Indicadores consolidados</h2>
           </div>
-          <p className="text-xs text-muted-foreground">A receber: <strong>{formatCurrency(report.financeiro.aReceber)}</strong></p>
-          <p className="text-xs text-muted-foreground">A pagar: <strong>{formatCurrency(report.financeiro.aPagar)}</strong></p>
-          <p className="text-xs text-muted-foreground">Vencido receber: <strong>{formatCurrency(report.financeiro.vencidoReceber)}</strong></p>
-          <p className="text-xs text-muted-foreground">Vencido pagar: <strong>{formatCurrency(report.financeiro.vencidoPagar)}</strong></p>
-          <p className="text-xs text-muted-foreground">Recebido no periodo: <strong>{formatCurrency(report.financeiro.recebidoPeriodo)}</strong></p>
-          <p className="text-xs text-muted-foreground">Pago no periodo: <strong>{formatCurrency(report.financeiro.pagoPeriodo)}</strong></p>
-          <p className="text-sm font-bold text-foreground">Saldo projetado: {formatCurrency(report.financeiro.saldoProjetado)}</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {strategicIndicators.map((indicator) => (
+              <div key={indicator.label} className="rounded-lg border border-border/60 bg-background/40 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{indicator.label}</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{indicator.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="card-premium p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Users className="w-4 h-4 text-primary" />
-            Funcionarios
+        <div className="card-premium p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Car className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Resumo operacional</h2>
           </div>
-          <p className="text-xs text-muted-foreground">Ativos: <strong>{report.rh.ativos}</strong></p>
-          <p className="text-xs text-muted-foreground">Operacionais: <strong>{report.rh.operacionais}</strong></p>
-          <p className="text-xs text-muted-foreground">Socios: <strong>{report.rh.socios}</strong></p>
-          <p className="text-xs text-muted-foreground">Folha bruta: <strong>{formatCurrency(report.rh.folhaBruta)}</strong></p>
-          <p className="text-xs text-muted-foreground">Folha liquida: <strong>{formatCurrency(report.rh.folhaLiquida)}</strong></p>
-          <p className="text-xs text-muted-foreground">INSS: <strong>{formatCurrency(report.rh.inss)}</strong></p>
-          <p className="text-xs text-muted-foreground">FGTS: <strong>{formatCurrency(report.rh.fgts)}</strong></p>
-        </div>
-
-        <div className="card-premium p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Car className="w-4 h-4 text-primary" />
-            Frota
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Veiculos ativos</span>
+              <strong>{report.frota.veiculosAtivos}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Abastecimentos</span>
+              <strong>{report.frota.abastecimentos}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Litros no periodo</span>
+              <strong>{report.frota.litros.toFixed(2)}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Custo abastecido</span>
+              <strong>{formatCurrency(report.frota.valorAbastecido)}</strong>
+            </div>
+            <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">
+              Pendencias gerenciais: <strong>{pendenciasCriticas}</strong>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">Veiculos ativos: <strong>{report.frota.veiculosAtivos}</strong></p>
-          <p className="text-xs text-muted-foreground">Abastecimentos: <strong>{report.frota.abastecimentos}</strong></p>
-          <p className="text-xs text-muted-foreground">Litros: <strong>{report.frota.litros.toFixed(2)}</strong></p>
-          <p className="text-xs text-muted-foreground">Valor abastecido: <strong>{formatCurrency(report.frota.valorAbastecido)}</strong></p>
-          <p className="text-xs text-muted-foreground">KM medio: <strong>{report.frota.kmMedio.toFixed(0)}</strong></p>
         </div>
       </div>
 
       <div className="card-premium p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Building2 className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Consolidado por empresa</h2>
+        <div className="flex flex-col gap-1 mb-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Empresas do grupo</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">Leitura executiva. Sem acesso a edicao de funcionarios ou rotinas de RH.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -603,6 +740,9 @@ const DirectorDashboardPage: React.FC = () => {
               <tr className="border-b border-border text-xs uppercase text-muted-foreground">
                 <th className="text-left py-2 pr-3">Empresa</th>
                 <th className="text-right py-2 px-2">Ativos</th>
+                <th className="text-right py-2 px-2">Custo folha</th>
+                <th className="text-right py-2 px-2">Proventos</th>
+                <th className="text-right py-2 px-2">Descontos</th>
                 <th className="text-right py-2 px-2">Folha liquida</th>
                 <th className="text-right py-2 px-2">A receber</th>
                 <th className="text-right py-2 px-2">A pagar</th>
@@ -615,6 +755,9 @@ const DirectorDashboardPage: React.FC = () => {
                 <tr key={r.companyId} className="border-b border-border/60">
                   <td className="py-2 pr-3">{r.companyName}</td>
                   <td className="py-2 px-2 text-right">{r.ativos}</td>
+                  <td className="py-2 px-2 text-right">{formatCurrency(r.folhaCusto)}</td>
+                  <td className="py-2 px-2 text-right">{formatCurrency(r.folhaProventos)}</td>
+                  <td className="py-2 px-2 text-right">{formatCurrency(r.folhaDescontos)}</td>
                   <td className="py-2 px-2 text-right">{formatCurrency(r.folhaLiquida)}</td>
                   <td className="py-2 px-2 text-right">{formatCurrency(r.aReceber)}</td>
                   <td className="py-2 px-2 text-right">{formatCurrency(r.aPagar)}</td>
@@ -624,7 +767,7 @@ const DirectorDashboardPage: React.FC = () => {
               ))}
               {report.porEmpresa.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                  <td colSpan={10} className="py-6 text-center text-muted-foreground">
                     Sem dados para o filtro atual.
                   </td>
                 </tr>
