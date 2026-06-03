@@ -62,6 +62,7 @@ type CompanyRow = {
   valorAbastecido: number;
   chamadosAbertos: number;
   chamadosConcluidos: number;
+  faturamento: number;
 };
 
 type ExecutiveData = {
@@ -501,6 +502,9 @@ const DirectorDashboardPage: React.FC = () => {
         const recCompany = titulosReceber
           .filter((t: any) => t.empresa_id === company.id && statusOpen.has(String(t.status)))
           .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
+        const faturamentoCompany = recebimentos
+          .filter((r: any) => r.titulos_receber?.empresa_id === company.id && dateInRange(r.data, startDate, endDate))
+          .reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
         const pagCompany = titulosPagar
           .filter((t: any) => t.empresa_id === company.id && statusOpen.has(String(t.status)))
           .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
@@ -524,6 +528,7 @@ const DirectorDashboardPage: React.FC = () => {
           valorAbastecido: valorAbastCompany,
           chamadosAbertos: chamadosCompany.filter((c: any) => statusOpen.has(normalize(c.status))).length,
           chamadosConcluidos: chamadosCompany.filter((c: any) => statusDone.has(normalize(c.status))).length,
+          faturamento: faturamentoCompany,
         };
       });
 
@@ -652,11 +657,12 @@ const DirectorDashboardPage: React.FC = () => {
       ['Valor a pagar', report.financeiro.aPagar],
       [],
       ['POR EMPRESA'],
-      ['Empresa', 'Ativos', 'Custo folha', 'Proventos', 'Descontos', 'Folha liquida', 'A receber', 'A pagar', 'Chamados abertos', 'Chamados concluidos'],
+      ['Empresa', 'Ativos', 'Custo folha', 'Faturamento', 'Proventos', 'Descontos', 'Folha liquida', 'A receber', 'A pagar', 'Chamados abertos', 'Chamados concluidos'],
       ...report.porEmpresa.map((r) => [
         r.companyName,
         r.ativos,
         r.folhaCusto,
+        r.faturamento,
         r.folhaProventos,
         r.folhaDescontos,
         r.folhaLiquida,
@@ -705,6 +711,15 @@ const DirectorDashboardPage: React.FC = () => {
   const selectedPoint = mapPoints.find((point) => point.id === selectedPointId) || mapPoints[0];
   const operationalCost = report.financeiro.pagoPeriodo + report.frota.valorAbastecido;
   const margin = report.financeiro.recebidoPeriodo - operationalCost - report.rh.folhaCusto;
+  const totalOverviewCards = [
+    { label: 'Funcionarios ativos', value: report.rh.ativos.toLocaleString('pt-BR') },
+    { label: 'Custo de folha', value: formatCurrency(report.rh.folhaCusto) },
+    { label: 'Faturamento', value: formatCurrency(report.financeiro.recebidoPeriodo) },
+    { label: 'Contas a receber', value: formatCurrency(report.financeiro.aReceber) },
+    { label: 'Contas a pagar', value: formatCurrency(report.financeiro.aPagar) },
+    { label: 'Chamados abertos', value: report.operacional.chamadosAbertos.toLocaleString('pt-BR') },
+    { label: 'Chamados concluidos', value: report.operacional.chamadosConcluidos.toLocaleString('pt-BR') },
+  ];
 
   const executiveCards = [
     {
@@ -806,36 +821,37 @@ const DirectorDashboardPage: React.FC = () => {
 
   const companyComparisonData = report.porEmpresa.map((company) => ({
     empresa: company.companyName.replace('TOPAC FILIAL ', '').replace('TOPAC ', ''),
+    faturamento: company.faturamento,
     folhaCusto: company.folhaCusto,
     aReceber: company.aReceber,
     aPagar: company.aPagar,
   }));
 
   return (
-    <div className="animate-fade-in rounded-lg bg-slate-50 p-4 text-slate-950 shadow-[0_24px_80px_rgba(15,23,42,0.16)] md:p-6">
+    <div className="animate-fade-in rounded-lg bg-slate-50 p-3 text-slate-950 shadow-[0_24px_80px_rgba(15,23,42,0.16)] sm:p-4 md:p-6">
       <section className="mb-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
+          <div className="min-w-0">
             <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
               <ShieldCheck className="h-4 w-4 text-slate-700" />
               Diretor Geral - somente leitura
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Dashboard Executivo TOPAC</h1>
+            <h1 className="break-words text-2xl font-black tracking-tight text-slate-950 sm:text-3xl md:text-4xl">Dashboard Executivo TOPAC</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">
               Painel gerencial consolidado para acompanhar saude da empresa, tendencias, custos, faturamento, RH e operacao sem acesso a edicao.
             </p>
             {generatedAt && <p className="mt-2 text-xs text-slate-500">Atualizado em {generatedAt}</p>}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={exportarCsv} className="border-slate-300 bg-white text-slate-800 hover:bg-slate-100">
+          <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
+            <Button variant="outline" onClick={exportarCsv} className="h-11 w-full border-slate-300 bg-white text-slate-800 hover:bg-slate-100">
               <Download className="mr-2 h-4 w-4" />
               Exportar CSV
             </Button>
-            <Button variant="outline" onClick={exportarCsv} className="border-slate-300 bg-white text-slate-800 hover:bg-slate-100">
+            <Button variant="outline" onClick={exportarCsv} className="h-11 w-full border-slate-300 bg-white text-slate-800 hover:bg-slate-100">
               <FileText className="mr-2 h-4 w-4" />
               Solicitar relatorio
             </Button>
-            <Button onClick={runReport} disabled={loading} className="bg-slate-950 text-white hover:bg-slate-800">
+            <Button onClick={runReport} disabled={loading} className="h-11 w-full bg-slate-950 text-white hover:bg-slate-800">
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Atualizar painel
             </Button>
@@ -843,7 +859,7 @@ const DirectorDashboardPage: React.FC = () => {
         </div>
       </section>
 
-      <section className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-5">
+      <section className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5">
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Periodo</label>
           <select
@@ -897,8 +913,8 @@ const DirectorDashboardPage: React.FC = () => {
             className="border-slate-300 bg-white text-slate-900"
           />
         </div>
-        <div className="flex items-end text-sm text-slate-500">
-          <div className="flex items-center gap-2">
+        <div className="flex items-end text-sm text-slate-500 sm:col-span-2 xl:col-span-1">
+          <div className="flex min-h-10 items-center gap-2 break-words">
             <CalendarDays className="h-4 w-4" />
             {startDate} ate {endDate}
           </div>
@@ -941,6 +957,48 @@ const DirectorDashboardPage: React.FC = () => {
             </div>
           );
         })}
+      </section>
+
+      <section className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-[.85fr_1.15fr]">
+        <div className="rounded-lg border border-slate-200 bg-slate-950 p-4 text-white shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">Total geral consolidado</p>
+          <h2 className="mt-2 text-2xl font-black">Visao geral executiva</h2>
+          <p className="mt-1 text-sm text-slate-300">Consolidado das empresas do grupo para leitura rapida da diretoria.</p>
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {totalOverviewCards.map((item) => (
+              <div key={item.label} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-slate-400">{item.label}</p>
+                <p className="mt-2 break-words text-lg font-black text-white">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">Visao por empresa</h2>
+              <p className="text-sm text-slate-500">Resumo individual de Matriz, filiais e empresas do grupo.</p>
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">{report.porEmpresa.length} empresa(s)</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {report.porEmpresa.map((company) => (
+              <article key={company.companyId} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <h3 className="break-words text-sm font-black text-slate-950">{company.companyName}</h3>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between gap-3"><span className="text-slate-500">Ativos</span><strong>{company.ativos}</strong></div>
+                  <div className="flex justify-between gap-3"><span className="text-slate-500">Folha</span><strong>{formatCurrency(company.folhaCusto)}</strong></div>
+                  <div className="flex justify-between gap-3"><span className="text-slate-500">Faturamento</span><strong>{formatCurrency(company.faturamento)}</strong></div>
+                  <div className="flex justify-between gap-3"><span className="text-slate-500">A receber</span><strong>{formatCurrency(company.aReceber)}</strong></div>
+                  <div className="flex justify-between gap-3"><span className="text-slate-500">A pagar</span><strong>{formatCurrency(company.aPagar)}</strong></div>
+                  <div className="flex justify-between gap-3"><span className="text-slate-500">Chamados</span><strong>{company.chamadosAbertos}/{company.chamadosConcluidos}</strong></div>
+                </div>
+              </article>
+            ))}
+            {report.porEmpresa.length === 0 && <p className="text-sm text-slate-500">Sem empresas para o filtro atual.</p>}
+          </div>
+        </div>
       </section>
 
       <section className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_.75fr]">
@@ -1001,7 +1059,8 @@ const DirectorDashboardPage: React.FC = () => {
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-1 text-lg font-bold text-slate-950">Evolucao mensal</h2>
           <p className="mb-4 text-sm text-slate-500">Faturamento, custos e folha em linha gerencial.</p>
-          <div className="h-72">
+          <div className="h-72 overflow-x-auto">
+            <div className="h-full min-w-[640px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData}>
                 <defs>
@@ -1019,13 +1078,15 @@ const DirectorDashboardPage: React.FC = () => {
                 <Line type="monotone" dataKey="folha" name="folha" stroke="#7c3aed" strokeWidth={2.5} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-1 text-lg font-bold text-slate-950">Evolucao de chamados</h2>
           <p className="mb-4 text-sm text-slate-500">Chamados concluidos por mes, para leitura operacional consolidada.</p>
-          <div className="h-72">
+          <div className="h-72 overflow-x-auto">
+            <div className="h-full min-w-[520px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={trendData}>
                 <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
@@ -1039,6 +1100,7 @@ const DirectorDashboardPage: React.FC = () => {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </div>
         </div>
       </section>
@@ -1047,18 +1109,21 @@ const DirectorDashboardPage: React.FC = () => {
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-1 text-lg font-bold text-slate-950">Comparativo entre empresas</h2>
           <p className="mb-4 text-sm text-slate-500">Matriz, filiais e empresas do grupo com leitura consolidada.</p>
-          <div className="h-80">
+          <div className="h-80 overflow-x-auto">
+            <div className="h-full min-w-[620px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={companyComparisonData} layout="vertical" margin={{ left: 18 }}>
                 <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
                 <XAxis type="number" stroke="#64748b" tickLine={false} tickFormatter={(v) => shortCurrency(Number(v)).replace('R$ ', '')} />
                 <YAxis type="category" dataKey="empresa" stroke="#64748b" tickLine={false} width={115} />
                 <Tooltip formatter={chartTooltip} />
+                <Bar dataKey="faturamento" name="faturamento" fill="#16a34a" radius={[0, 4, 4, 0]} />
                 <Bar dataKey="folhaCusto" name="folha" fill="#7c3aed" radius={[0, 4, 4, 0]} />
                 <Bar dataKey="aReceber" name="aReceber" fill="#2563eb" radius={[0, 4, 4, 0]} />
                 <Bar dataKey="aPagar" name="aPagar" fill="#f97316" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
@@ -1137,13 +1202,29 @@ const DirectorDashboardPage: React.FC = () => {
           </div>
           <p className="text-xs text-slate-500">Somente leitura. Sem cadastro, lancamento ou alteracao operacional.</p>
         </div>
-        <div className="overflow-x-auto">
+        <div className="grid grid-cols-1 gap-3 md:hidden">
+          {report.porEmpresa.map((r) => (
+            <article key={r.companyId} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <h3 className="break-words text-sm font-black text-slate-950">{r.companyName}</h3>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div><span className="block text-slate-500">Ativos</span><strong>{r.ativos}</strong></div>
+                <div><span className="block text-slate-500">Faturamento</span><strong>{formatCurrency(r.faturamento)}</strong></div>
+                <div><span className="block text-slate-500">Custo folha</span><strong>{formatCurrency(r.folhaCusto)}</strong></div>
+                <div><span className="block text-slate-500">A receber</span><strong>{formatCurrency(r.aReceber)}</strong></div>
+                <div><span className="block text-slate-500">A pagar</span><strong>{formatCurrency(r.aPagar)}</strong></div>
+                <div><span className="block text-slate-500">Chamados</span><strong>{r.chamadosAbertos}/{r.chamadosConcluidos}</strong></div>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
                 <th className="py-2 pr-3 text-left">Empresa</th>
                 <th className="px-2 py-2 text-right">Ativos</th>
                 <th className="px-2 py-2 text-right">Custo folha</th>
+                <th className="px-2 py-2 text-right">Faturamento</th>
                 <th className="px-2 py-2 text-right">A receber</th>
                 <th className="px-2 py-2 text-right">A pagar</th>
                 <th className="px-2 py-2 text-right">Chamados abertos</th>
@@ -1157,6 +1238,7 @@ const DirectorDashboardPage: React.FC = () => {
                   <td className="py-3 pr-3 font-semibold text-slate-900">{r.companyName}</td>
                   <td className="px-2 py-3 text-right">{r.ativos}</td>
                   <td className="px-2 py-3 text-right">{formatCurrency(r.folhaCusto)}</td>
+                  <td className="px-2 py-3 text-right">{formatCurrency(r.faturamento)}</td>
                   <td className="px-2 py-3 text-right">{formatCurrency(r.aReceber)}</td>
                   <td className="px-2 py-3 text-right">{formatCurrency(r.aPagar)}</td>
                   <td className="px-2 py-3 text-right">{r.chamadosAbertos}</td>
@@ -1166,7 +1248,7 @@ const DirectorDashboardPage: React.FC = () => {
               ))}
               {report.porEmpresa.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-slate-500">
+                  <td colSpan={9} className="py-6 text-center text-slate-500">
                     Sem dados para o filtro atual.
                   </td>
                 </tr>

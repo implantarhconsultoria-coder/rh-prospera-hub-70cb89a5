@@ -59,8 +59,6 @@ const directorReportItems: MenuItem[] = [
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
   { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio' },
-  { label: 'Relatorio VR', icon: Receipt, path: '/admin/relatorio-vr' },
-  { label: 'Relatorio VT', icon: Receipt, path: '/admin/relatorio-vt' },
 ];
 
 const faturamentoItems: MenuItem[] = [

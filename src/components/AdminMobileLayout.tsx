@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Users, FileCheck, FileText, Settings, LogOut, Menu, X, ArrowLeft, Search,
-  HardHat, Shirt, UtensilsCrossed, Bus, History, Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
+  HardHat, Shirt, History, Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
   ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch,
   ShoppingCart, Sparkles, ChevronRight,
@@ -77,8 +77,6 @@ const DIRECTOR_ITEMS: Item[] = [
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Diretoria' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: 'Diretoria' },
   { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio', group: 'Relatorios' },
-  { label: 'Relatorio VR', icon: UtensilsCrossed, path: '/admin/relatorio-vr', group: 'Relatorios' },
-  { label: 'Relatorio VT', icon: Bus, path: '/admin/relatorio-vt', group: 'Relatorios' },
 ];
 
 const DIRECTOR_HOME_QUICK: Item[] = [
