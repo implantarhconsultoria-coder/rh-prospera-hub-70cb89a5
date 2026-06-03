@@ -116,6 +116,7 @@ import GlobalErrorCatcher from "@/components/GlobalErrorCatcher";
 import StableLoading from "@/components/StableLoading";
 import ExternoLayout from "@/components/ExternoLayout";
 import AguardandoAcesso from "@/components/AguardandoAcesso";
+import { isDirectorRole } from "@/lib/directorPermissions";
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, Building, Landmark, TrendingDown, AlertTriangle, Layers, GitMerge,
   FileText, Users, FileSignature, Receipt, TrendingUp, ClipboardCheck,
@@ -190,7 +191,7 @@ const RoleRedirect = () => {
   }
 
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
-  if (userRoles.includes('diretor_geral')) return <Navigate to="/admin" replace />;
+  if (isDirectorRole(userRoles)) return <Navigate to="/admin" replace />;
   if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
   if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
   if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
@@ -203,7 +204,7 @@ const RoleRedirect = () => {
 
 const AdminHomeRoute = () => {
   const { userRoles } = useApp();
-  if (userRoles.includes('diretor_geral') && !userRoles.includes('admin')) return <DirectorDashboardPage />;
+  if (isDirectorRole(userRoles) && !userRoles.includes('admin')) return <DirectorDashboardPage />;
   return <DashboardPage />;
 };
 

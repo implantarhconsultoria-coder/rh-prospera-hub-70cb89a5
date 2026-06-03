@@ -3,7 +3,7 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-const MOBILE_BUILD_TAG = "20260602-plataforma-dominio-1";
+const MOBILE_BUILD_TAG = "20260602-plataforma-login-diretor-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 
 async function clearLegacyMobileCache() {

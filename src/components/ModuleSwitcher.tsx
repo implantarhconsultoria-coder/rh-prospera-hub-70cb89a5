@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { isDirectorRole } from '@/lib/directorPermissions';
 
 interface ModuleDef {
   role: string;
@@ -45,7 +46,7 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const navigate = useNavigate();
 
   const isAdmin = userRoles.includes('admin');
-  const isDirector = userRoles.includes('diretor_geral') && !userRoles.includes('admin');
+  const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
   const available = isAdmin
     ? ADMIN_MODULES
     : isDirector

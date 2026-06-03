@@ -32,7 +32,6 @@ const MODULO_REDIRECT: Record<string, (id: string) => string> = {
   almoxarifado: (id) => `/almoxarifado-ext/${id}`,
   operacional: (id) => `/operacional-ext/${id}`,
   campo: (id) => `/campo-ext/${id}`,
-  mecanico: (id) => `/app-mecanico/${id}`,
 };
 
 type UsuarioCpf = {
@@ -62,8 +61,7 @@ const LoginPage: React.FC = () => {
 
     const portal = usuario.portais[0];
     if (portal.modulo === 'mecanico') {
-      localStorage.setItem('app_mecanico_acesso_id', portal.acesso_id);
-      window.location.assign(MODULO_REDIRECT.mecanico(portal.acesso_id));
+      toast.info('App dos mecanicos: use o link proprio /acesso-mecanico.');
       return;
     }
 
@@ -87,12 +85,9 @@ const LoginPage: React.FC = () => {
   };
 
   const handleCpfPinLogin = async (pin: string) => {
-    const [{ data: portData, error: portError }, { data: mecData, error: mecError }] = await Promise.all([
-      supabase.rpc('acesso_externo_listar_portais' as any, { p_pin: pin }),
-      supabase.rpc('acesso_externo_validar_pin' as any, { p_pin: pin, p_modulo: 'mecanico' }),
-    ]);
+    const { data: portData, error: portError } = await supabase.rpc('acesso_externo_listar_portais' as any, { p_pin: pin });
 
-    if (portError && mecError) {
+    if (portError) {
       toast.error('Erro ao validar CPF. Tente novamente.');
       return;
     }
@@ -105,7 +100,8 @@ const LoginPage: React.FC = () => {
         nome: u.nome || 'Usuario TOPAC',
         portais: [],
       };
-      atual.portais.push(...((u.portais || []) as PortalExterno[]));
+      const portaisPlataforma = ((u.portais || []) as PortalExterno[]).filter((portal) => portal.modulo !== 'mecanico');
+      atual.portais.push(...portaisPlataforma);
       usuarios.set(key, atual);
     };
 
@@ -113,25 +109,10 @@ const LoginPage: React.FC = () => {
       ((portData as any).usuarios || []).forEach(addUsuario);
     }
 
-    if ((mecData as any)?.ok) {
-      ((mecData as any).usuarios || []).forEach((m: any) => addUsuario({
-        cpf_clean: `pin:${pin}:${m.id}`,
-        nome: m.nome,
-        portais: [{
-          acesso_id: m.id,
-          modulo: 'mecanico',
-          perfil_acesso: m.perfil_acesso || 'mecanico',
-          empresa: m.empresa || '',
-          filial: m.filial || '',
-          funcao: m.funcao || '',
-        }],
-      }));
-    }
-
     const lista = Array.from(usuarios.values()).filter((u) => u.portais.length > 0);
     if (lista.length === 0) {
-      const bloqueado = (portData as any)?.error === 'bloqueado' || (mecData as any)?.error === 'bloqueado';
-      toast.error(bloqueado ? 'Acesso bloqueado pelo administrador.' : 'CPF/PIN nao encontrado ou sem modulo liberado.');
+      const bloqueado = (portData as any)?.error === 'bloqueado';
+      toast.error(bloqueado ? 'Acesso bloqueado pelo administrador.' : 'CPF/PIN nao encontrado na plataforma. Para mecanicos, use o link do App Mecanico.');
       return;
     }
 
