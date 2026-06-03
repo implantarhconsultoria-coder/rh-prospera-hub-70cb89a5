@@ -7,12 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { lovable } from '@/integrations/lovable/index';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  createExternalSession,
-  saveExternalSession,
-  saveLastExternalUser,
-  type PortalExterno,
-} from '@/lib/acessoExternoAuth';
 
 const LOGIN_ALIASES: Record<string, string> = {
   fat: 'fat@topac.local',
@@ -25,118 +19,19 @@ const OPERATIONAL_STATS = [
   { label: 'STATUS', value: 'OK' },
 ];
 
-const MODULO_REDIRECT: Record<string, (id: string) => string> = {
-  filial: (id) => `/filial-ext/${id}`,
-  financeiro: (id) => `/financeiro-ext/${id}`,
-  faturamento: (id) => `/faturamento-ext/${id}`,
-  almoxarifado: (id) => `/almoxarifado-ext/${id}`,
-  operacional: (id) => `/operacional-ext/${id}`,
-  campo: (id) => `/campo-ext/${id}`,
-};
-
-type UsuarioCpf = {
-  cpf_clean: string;
-  nome: string;
-  portais: PortalExterno[];
-};
-
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const abrirPortalCpf = async (usuario: UsuarioCpf) => {
-    const sessao = createExternalSession({
-      cpf_clean: usuario.cpf_clean,
-      nome: usuario.nome,
-      portais: usuario.portais,
-    });
-    saveExternalSession(sessao);
-    saveLastExternalUser({ nome: usuario.nome, cpf_clean: usuario.cpf_clean });
-
-    if (usuario.portais.length !== 1) {
-      window.location.assign('/portais');
-      return;
-    }
-
-    const portal = usuario.portais[0];
-    if (portal.modulo === 'mecanico') {
-      toast.info('App dos mecanicos: use o link proprio /acesso-mecanico.');
-      return;
-    }
-
-    const { data, error } = await supabase.rpc('acesso_externo_obter' as any, {
-      p_id: portal.acesso_id,
-      p_modulo: portal.modulo,
-    });
-
-    if (error || !(data as any)?.ok) {
-      toast.error('Acesso nao liberado para este modulo.');
-      return;
-    }
-
-    localStorage.setItem('acesso_externo', JSON.stringify({ ...(data as any).acesso, ts: Date.now() }));
-    const redirect = MODULO_REDIRECT[portal.modulo];
-    if (!redirect) {
-      toast.error('Modulo sem rota liberada.');
-      return;
-    }
-    window.location.assign(redirect((data as any).acesso.id));
-  };
-
-  const handleCpfPinLogin = async (pin: string) => {
-    const { data: portData, error: portError } = await supabase.rpc('acesso_externo_listar_portais' as any, { p_pin: pin });
-
-    if (portError) {
-      toast.error('Erro ao validar CPF. Tente novamente.');
-      return;
-    }
-
-    const usuarios = new Map<string, UsuarioCpf>();
-    const addUsuario = (u: any) => {
-      const key = `${u.cpf_clean || ''}:${u.nome || ''}`;
-      const atual = usuarios.get(key) || {
-        cpf_clean: u.cpf_clean || `pin:${pin}`,
-        nome: u.nome || 'Usuario TOPAC',
-        portais: [],
-      };
-      const portaisPlataforma = ((u.portais || []) as PortalExterno[]).filter((portal) => portal.modulo !== 'mecanico');
-      atual.portais.push(...portaisPlataforma);
-      usuarios.set(key, atual);
-    };
-
-    if ((portData as any)?.ok) {
-      ((portData as any).usuarios || []).forEach(addUsuario);
-    }
-
-    const lista = Array.from(usuarios.values()).filter((u) => u.portais.length > 0);
-    if (lista.length === 0) {
-      const bloqueado = (portData as any)?.error === 'bloqueado';
-      toast.error(bloqueado ? 'Acesso bloqueado pelo administrador.' : 'CPF/PIN nao encontrado na plataforma. Para mecanicos, use o link do App Mecanico.');
-      return;
-    }
-
-    if (lista.length === 1) {
-      await abrirPortalCpf(lista[0]);
-      return;
-    }
-
-    const sessao = createExternalSession({
-      cpf_clean: `pin:${pin}`,
-      nome: 'Usuario TOPAC',
-      portais: lista.flatMap((u) => u.portais),
-    });
-    saveExternalSession(sessao);
-    window.location.assign('/portais');
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     const raw = email.trim().toLowerCase();
     const pin = raw.replace(/\D/g, '');
-    if ((pin.length === 4 || pin.length === 11) && !password.trim()) {
-      await handleCpfPinLogin(pin.slice(-4));
+    const isCpfOrPinAttempt = /^[\d.\-\s]+$/.test(raw) && (pin.length === 4 || pin.length === 11) && !password.trim();
+    if (isCpfOrPinAttempt) {
+      toast.info('CPF/PIN e exclusivo do App dos Mecanicos. Use o link /acesso-mecanico.');
       setLoading(false);
       return;
     }
@@ -262,7 +157,7 @@ const LoginPage: React.FC = () => {
                     className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500"
                   />
                 </div>
-                <p className="text-[11px] text-slate-500">Para CPF/PIN de campo, digite o CPF ou os 4 ultimos numeros e deixe a senha em branco.</p>
+                <p className="text-[11px] text-slate-500">Acesso web por e-mail e senha. CPF/PIN de campo fica somente no link /acesso-mecanico.</p>
               </div>
 
               <Button

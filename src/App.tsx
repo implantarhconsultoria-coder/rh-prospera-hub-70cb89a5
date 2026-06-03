@@ -208,6 +208,20 @@ const AdminHomeRoute = () => {
   return <DashboardPage />;
 };
 
+const MecanicoRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, loading } = useApp();
+
+  if (loading) {
+    return <StableLoading label="Verificando acesso..." />;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
 const AuthGate = () => {
   const { isAuthenticated, loading } = useApp();
 
@@ -419,10 +433,10 @@ const App = () => (
               <Route path="/acesso-faturamento" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-rh" element={<Navigate to="/modulos" replace />} />
               {/* App Mecanico (novo) - login por PIN */}
-              <Route path="/acesso-mecanico" element={<ErrorBoundary><AcessoMecanicoPage /></ErrorBoundary>} />
+              <Route path="/acesso-mecanico" element={<MecanicoRouteGuard><ErrorBoundary><AcessoMecanicoPage /></ErrorBoundary></MecanicoRouteGuard>} />
 
               {/* App Mecanico (novo) - portal isolado */}
-              <Route path="/app-mecanico/:acessoId" element={<ErrorBoundary><MecanicoAppLayout /></ErrorBoundary>}>
+              <Route path="/app-mecanico/:acessoId" element={<MecanicoRouteGuard><ErrorBoundary><MecanicoAppLayout /></ErrorBoundary></MecanicoRouteGuard>}>
                 <Route index element={<MecHomePage />} />
                 <Route path="ponto" element={<MecPontoPage />} />
                 <Route path="chamados" element={<MecChamadosPage />} />
