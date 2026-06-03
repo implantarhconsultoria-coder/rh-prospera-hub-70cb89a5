@@ -1,4 +1,4 @@
-const TOPAC_CACHE_CLEANUP = "topac-cache-cleanup-20260525";
+const TOPAC_CACHE_CLEANUP = "topac-cache-cleanup-20260603-login-web-2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
