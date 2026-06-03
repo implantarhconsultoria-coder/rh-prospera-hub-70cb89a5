@@ -25,6 +25,7 @@ import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
 import DashboardPage from "@/pages/DashboardPage";
+import DirectorDashboardPage from "@/pages/DirectorDashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
@@ -109,6 +110,7 @@ import AssistentePage from "@/pages/admin/AssistentePage";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import GlobalErrorCatcher from "@/components/GlobalErrorCatcher";
 import StableLoading from "@/components/StableLoading";
+import { isDirectorRole } from "@/lib/directorPermissions";
 import ExternoLayout from "@/components/ExternoLayout";
 import AguardandoAcesso from "@/components/AguardandoAcesso";
 import {
@@ -197,6 +199,8 @@ const RoleRedirect = () => {
 };
 
 const AdminHomeRoute = () => {
+  const { userRoles } = useApp();
+  if (isDirectorRole(userRoles) && !userRoles.includes('admin')) return <DirectorDashboardPage />;
   return <DashboardPage />;
 };
 
@@ -233,7 +237,7 @@ const AuthGate = () => {
         <Route path="/admin" element={<AdminHomeRoute />} />
         <Route path="/admin/implanta-central" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/implanta-central/*" element={<Navigate to="/admin" replace />} />
-        <Route path="/admin/diretoria" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/diretoria" element={<DirectorDashboardPage />} />
         <Route path="/admin/empresas" element={<EmpresasPage />} />
         <Route path="/admin/base-mestra" element={<BaseMestraPage />} />
         <Route path="/admin/funcionarios" element={<FuncionariosPage />} />
