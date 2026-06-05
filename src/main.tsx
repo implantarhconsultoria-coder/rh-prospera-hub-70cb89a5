@@ -3,25 +3,8 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-const MOBILE_BUILD_TAG = "20260602-mecanico-pwa-1";
+const MOBILE_BUILD_TAG = "20260605-plataforma-web-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
-
-function redirectInstalledMechanicApp() {
-  if (typeof window === "undefined") return false;
-
-  const isStandalone =
-    window.matchMedia?.("(display-mode: standalone)").matches ||
-    (window.navigator as any).standalone === true;
-
-  if (!isStandalone) return false;
-
-  const url = new URL(window.location.href);
-  if (url.pathname !== "/" && url.pathname !== "/login") return false;
-
-  url.pathname = "/acesso-mecanico";
-  window.location.replace(url.toString());
-  return true;
-}
 
 async function clearLegacyMobileCache() {
   if (typeof window === "undefined") return;
@@ -50,9 +33,7 @@ async function clearLegacyMobileCache() {
   }
 }
 
-if (!redirectInstalledMechanicApp()) {
-  void clearLegacyMobileCache();
-}
+void clearLegacyMobileCache();
 
 window.addEventListener('error', (e) => {
   fetch('https://hook.implantarh.dev/erros', {
