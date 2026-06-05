@@ -1,24 +1,43 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowDownRight,
+  ArrowUpRight,
   BarChart3,
   Building2,
   CalendarDays,
-  Car,
+  CheckCircle2,
+  CircleDollarSign,
+  ClipboardList,
+  CreditCard,
   Download,
   FileText,
+  MapPin,
   RefreshCw,
   ShieldCheck,
   TrendingUp,
   Users,
   Wallet,
 } from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { calcPayrollBreakdown, formatCurrency } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
-import CorporateAssistantPanel from '@/components/assistente/CorporateAssistantPanel';
 import { buildCorporateSnapshot } from '@/lib/assistenteCorporativo';
 import {
   buildInternalAlerts,
@@ -41,6 +60,8 @@ type CompanyRow = {
   aPagar: number;
   abastecimentos: number;
   valorAbastecido: number;
+  chamadosAbertos: number;
+  chamadosConcluidos: number;
 };
 
 type ExecutiveData = {
@@ -72,7 +93,78 @@ type ExecutiveData = {
     valorAbastecido: number;
     kmMedio: number;
   };
+  operacional: {
+    chamadosAbertos: number;
+    chamadosConcluidos: number;
+    clientesMapeados: number;
+    equipamentosMapeados: number;
+  };
   porEmpresa: CompanyRow[];
+};
+
+type TrendRow = {
+  mes: string;
+  competencia: string;
+  faturamento: number;
+  custos: number;
+  folha: number;
+  chamados: number;
+};
+
+type ComparisonData = {
+  faturamento: number;
+  custos: number;
+  folha: number;
+  chamadosConcluidos: number;
+};
+
+type OperationalPoint = {
+  id: string;
+  cliente: string;
+  cidade: string;
+  uf: string;
+  chamadosRealizados: number;
+  equipamentos: number;
+  valorFaturado: number;
+  ultimasVisitas: string;
+};
+
+const INITIAL_REPORT: ExecutiveData = {
+  financeiro: {
+    aReceber: 0,
+    aPagar: 0,
+    vencidoReceber: 0,
+    vencidoPagar: 0,
+    recebidoPeriodo: 0,
+    pagoPeriodo: 0,
+    saldoProjetado: 0,
+  },
+  rh: {
+    ativos: 0,
+    operacionais: 0,
+    socios: 0,
+    folhaCusto: 0,
+    proventos: 0,
+    descontos: 0,
+    folhaBruta: 0,
+    folhaLiquida: 0,
+    inss: 0,
+    fgts: 0,
+  },
+  frota: {
+    veiculosAtivos: 0,
+    abastecimentos: 0,
+    litros: 0,
+    valorAbastecido: 0,
+    kmMedio: 0,
+  },
+  operacional: {
+    chamadosAbertos: 0,
+    chamadosConcluidos: 0,
+    clientesMapeados: 0,
+    equipamentosMapeados: 0,
+  },
+  porEmpresa: [],
 };
 
 const normalize = (value: string) =>
@@ -84,10 +176,21 @@ const normalize = (value: string) =>
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const toDateOnly = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+const monthKey = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+const monthLabel = (competencia: string) => {
+  const [year, month] = competencia.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+};
 
 const addDays = (date: Date, days: number) => {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
+  return d;
+};
+
+const addMonths = (date: Date, months: number) => {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
   return d;
 };
 
@@ -107,10 +210,19 @@ const buildCompetenciasInRange = (startDate: string, endDate: string) => {
   const cur = new Date(start.getFullYear(), start.getMonth(), 1);
   const stop = new Date(end.getFullYear(), end.getMonth(), 1);
   while (cur <= stop) {
-    out.add(`${cur.getFullYear()}-${pad2(cur.getMonth() + 1)}`);
+    out.add(monthKey(cur));
     cur.setMonth(cur.getMonth() + 1);
   }
   return out;
+};
+
+const buildTrendMonths = (endDate: string, count = 6) => {
+  const end = monthStart(new Date(`${endDate}T00:00:00`));
+  return Array.from({ length: count }, (_, idx) => {
+    const d = addMonths(end, idx - count + 1);
+    const competencia = monthKey(d);
+    return { competencia, mes: monthLabel(competencia), date: d };
+  });
 };
 
 const presetRange = (preset: PeriodPreset) => {
@@ -123,7 +235,39 @@ const presetRange = (preset: PeriodPreset) => {
   return { start: end, end };
 };
 
-const statusOpen = new Set(['aberto', 'parcial', 'vencido']);
+const previousRange = (startDate: string, endDate: string) => {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+  return {
+    start: toDateOnly(addMonths(start, -1)),
+    end: toDateOnly(addMonths(end, -1)),
+  };
+};
+
+const dateInRange = (date: string | null | undefined, start: string, end: string) => {
+  const value = String(date || '').slice(0, 10);
+  return value >= start && value <= end;
+};
+
+const valueByRange = (rows: any[], start: string, end: string, getter: (row: any) => number) =>
+  rows.filter((row) => dateInRange(row.data || row.created_at, start, end)).reduce((sum, row) => sum + getter(row), 0);
+
+const variation = (current: number, previous: number) => {
+  if (!previous && !current) return 0;
+  if (!previous) return 100;
+  return ((current - previous) / Math.abs(previous)) * 100;
+};
+
+const shortCurrency = (value: number) => {
+  const abs = Math.abs(value);
+  if (abs >= 1000000) return `R$ ${(value / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
+  if (abs >= 1000) return `R$ ${(value / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} mil`;
+  return formatCurrency(value);
+};
+
+const statusOpen = new Set(['aberto', 'parcial', 'vencido', 'pendente', 'em_aberto', 'em andamento', 'em_andamento', 'novo']);
+const statusDone = new Set(['concluido', 'concluido com sucesso', 'finalizado', 'encerrado', 'resolvido']);
+
 const isIgnorableSupabaseError = (message?: string) => {
   const text = String(message || '').toLowerCase();
   return (
@@ -132,6 +276,14 @@ const isIgnorableSupabaseError = (message?: string) => {
     text.includes('does not exist') ||
     text.includes('permission denied')
   );
+};
+
+const safeRows = <T,>(data: T[] | null | undefined): T[] => (Array.isArray(data) ? data : []);
+
+const chartTooltip = (value: unknown, name: string) => {
+  const numeric = Number(value || 0);
+  const moneyLabels = ['faturamento', 'custos', 'folha', 'aReceber', 'aPagar', 'folhaCusto'];
+  return [moneyLabels.includes(name) ? formatCurrency(numeric) : numeric.toLocaleString('pt-BR'), name];
 };
 
 const DirectorDashboardPage: React.FC = () => {
@@ -144,38 +296,11 @@ const DirectorDashboardPage: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [generatedAt, setGeneratedAt] = useState<string>('');
   const [intelligenceCounts, setIntelligenceCounts] = useState<SupabaseIntelligenceCounts>({});
-
-  const [report, setReport] = useState<ExecutiveData>({
-    financeiro: {
-      aReceber: 0,
-      aPagar: 0,
-      vencidoReceber: 0,
-      vencidoPagar: 0,
-      recebidoPeriodo: 0,
-      pagoPeriodo: 0,
-      saldoProjetado: 0,
-    },
-    rh: {
-      ativos: 0,
-      operacionais: 0,
-      socios: 0,
-      folhaCusto: 0,
-      proventos: 0,
-      descontos: 0,
-      folhaBruta: 0,
-      folhaLiquida: 0,
-      inss: 0,
-      fgts: 0,
-    },
-    frota: {
-      veiculosAtivos: 0,
-      abastecimentos: 0,
-      litros: 0,
-      valorAbastecido: 0,
-      kmMedio: 0,
-    },
-    porEmpresa: [],
-  });
+  const [report, setReport] = useState<ExecutiveData>(INITIAL_REPORT);
+  const [previous, setPrevious] = useState<ComparisonData>({ faturamento: 0, custos: 0, folha: 0, chamadosConcluidos: 0 });
+  const [trendData, setTrendData] = useState<TrendRow[]>([]);
+  const [mapPoints, setMapPoints] = useState<OperationalPoint[]>([]);
+  const [selectedPointId, setSelectedPointId] = useState<string>('');
 
   const targetCompanies = useMemo(
     () => (companyFilter === 'geral' ? companies : companies.filter((c) => c.id === companyFilter)),
@@ -191,7 +316,7 @@ const DirectorDashboardPage: React.FC = () => {
 
   useEffect(() => {
     const today = new Date();
-    const competencia = `${today.getFullYear()}-${pad2(today.getMonth() + 1)}`;
+    const competencia = monthKey(today);
     fetchSupabaseIntelligenceCounts(supabase, competencia, today)
       .then(setIntelligenceCounts)
       .catch((err) => console.warn('Dashboard diretor: leitura parcial da inteligencia operacional:', err));
@@ -211,9 +336,11 @@ const DirectorDashboardPage: React.FC = () => {
       const companyIds = new Set(targetCompanies.map((c) => c.id));
       const companyById = new Map(companies.map((c) => [c.id, c]));
       const competenciaRange = buildCompetenciasInRange(startDate, endDate);
+      const trendMonths = buildTrendMonths(endDate);
+      const trendStart = toDateOnly(trendMonths[0].date);
+      const prevRange = previousRange(startDate, endDate);
       const today = toDateOnly(new Date());
 
-      const selectedCompany = targetCompanies[0];
       const matchAbastCompany = (empresa: string, companyId: string) => {
         const company = companyById.get(companyId);
         if (!company) return false;
@@ -226,57 +353,84 @@ const DirectorDashboardPage: React.FC = () => {
       const activeEmployees = filteredEmployees.filter((e) => e.status === 'ativo');
       const operacionais = activeEmployees.filter((e) => e.categoria === 'operacional');
       const socios = activeEmployees.filter((e) => e.categoria === 'socio');
+      const filteredEntries = entries.filter((e) => companyIds.has(e.companyId) && competenciaRange.has(e.competencia));
 
-      const filteredEntries = entries.filter(
-        (e) => companyIds.has(e.companyId) && competenciaRange.has(e.competencia),
-      );
+      const calcFolhaForEntries = (entryList: typeof entries) => {
+        let custo = 0;
+        let proventos = 0;
+        let descontos = 0;
+        let bruto = 0;
+        let liquido = 0;
+        let inss = 0;
+        let fgts = 0;
 
-      let folhaCusto = 0;
-      let folhaProventos = 0;
-      let folhaDescontos = 0;
-      let folhaBruta = 0;
-      let folhaLiquida = 0;
-      let folhaInss = 0;
-      let folhaFgts = 0;
+        for (const entry of entryList) {
+          const emp = filteredEmployees.find((e) => e.id === entry.employeeId);
+          if (!emp) continue;
+          const company = companyById.get(entry.companyId);
+          const comissaoPct = company?.codigo === 'topac-gyn' ? 0.02 : 0.01;
+          const diasUteis = getWorkingDays(entry.competencia);
+          const payroll = calcPayrollBreakdown(emp, entry, { diasUteis, comissaoPct });
+          const descontosEntry =
+            payroll.descontosLegais + payroll.descontosOperacionais + payroll.adiantamento + payroll.descontosDiversos;
+          proventos += payroll.proventos;
+          descontos += descontosEntry;
+          bruto += payroll.bruto;
+          liquido += payroll.liquido;
+          inss += payroll.inss;
+          fgts += payroll.fgts;
+          custo += payroll.proventos + payroll.fgts;
+        }
 
-      for (const entry of filteredEntries) {
-        const emp = filteredEmployees.find((e) => e.id === entry.employeeId);
-        if (!emp) continue;
-        const company = companyById.get(entry.companyId);
-        const comissaoPct = company?.codigo === 'topac-gyn' ? 0.02 : 0.01;
-        const diasUteis = getWorkingDays(entry.competencia);
-        const payroll = calcPayrollBreakdown(emp, entry, { diasUteis, comissaoPct });
-        const descontos = payroll.descontosLegais + payroll.descontosOperacionais + payroll.adiantamento + payroll.descontosDiversos;
-        folhaProventos += payroll.proventos;
-        folhaDescontos += descontos;
-        folhaBruta += payroll.bruto;
-        folhaLiquida += payroll.liquido;
-        folhaInss += payroll.inss;
-        folhaFgts += payroll.fgts;
-        folhaCusto += payroll.proventos + payroll.fgts;
-      }
+        return { custo, proventos, descontos, bruto, liquido, inss, fgts };
+      };
 
-      const [titulosReceberRes, titulosPagarRes, recebimentosRes, pagamentosRes, veiculosRes, abastecimentosRes] =
-        await Promise.all([
-          supabase.from('titulos_receber').select('saldo,status,data_vencimento,empresa_id'),
-          supabase.from('titulos_pagar').select('saldo,status,data_vencimento,empresa_id'),
-          supabase
-            .from('recebimentos')
-            .select('valor,data,titulos_receber!inner(empresa_id)')
-            .gte('data', startDate)
-            .lte('data', endDate),
-          supabase
-            .from('pagamentos')
-            .select('valor,data,titulos_pagar!inner(empresa_id)')
-            .gte('data', startDate)
-            .lte('data', endDate),
-          supabase.from('veiculos').select('id,status,placa'),
-          supabase
-            .from('abastecimentos')
-            .select('empresa,data,litros,valor,km_atual,status,excluido')
-            .gte('data', startDate)
-            .lte('data', endDate),
-        ]);
+      const payrollTotals = calcFolhaForEntries(filteredEntries);
+      const previousCompetencias = buildCompetenciasInRange(prevRange.start, prevRange.end);
+      const previousEntries = entries.filter((e) => companyIds.has(e.companyId) && previousCompetencias.has(e.competencia));
+      const previousPayroll = calcFolhaForEntries(previousEntries);
+
+      const [
+        titulosReceberRes,
+        titulosPagarRes,
+        recebimentosRes,
+        pagamentosRes,
+        veiculosRes,
+        abastecimentosRes,
+        chamadosRes,
+        clientesRes,
+        equipamentosRes,
+      ] = await Promise.all([
+        supabase.from('titulos_receber').select('saldo,status,data_vencimento,empresa_id'),
+        supabase.from('titulos_pagar').select('saldo,status,data_vencimento,empresa_id'),
+        supabase
+          .from('recebimentos')
+          .select('valor,data,titulos_receber!inner(empresa_id)')
+          .gte('data', trendStart)
+          .lte('data', endDate),
+        supabase
+          .from('pagamentos')
+          .select('valor,data,titulos_pagar!inner(empresa_id)')
+          .gte('data', trendStart)
+          .lte('data', endDate),
+        supabase.from('veiculos').select('id,status,placa'),
+        supabase
+          .from('abastecimentos')
+          .select('empresa,data,litros,valor,km_atual,status,excluido')
+          .gte('data', trendStart)
+          .lte('data', endDate),
+        supabase
+          .from('chamados' as any)
+          .select('id,status,created_at,empresa_id,cliente_id,equipamento_id')
+          .gte('created_at', `${trendStart}T00:00:00`)
+          .lte('created_at', `${endDate}T23:59:59`)
+          .limit(2000),
+        supabase
+          .from('clientes_fat' as any)
+          .select('id,razao_social,nome_fantasia,cidade,uf,empresa_id')
+          .limit(1000),
+        supabase.from('equipamentos' as any).select('id,cliente_id').limit(2000),
+      ]);
 
       const queryErrors = [
         titulosReceberRes.error,
@@ -285,97 +439,142 @@ const DirectorDashboardPage: React.FC = () => {
         pagamentosRes.error,
         veiculosRes.error,
         abastecimentosRes.error,
+        chamadosRes.error,
+        clientesRes.error,
+        equipamentosRes.error,
       ].filter(Boolean);
 
       const fatalQueryError = queryErrors.find((err) => !isIgnorableSupabaseError(err?.message));
-      if (fatalQueryError) {
-        throw new Error(fatalQueryError.message);
-      }
+      if (fatalQueryError) throw new Error(fatalQueryError.message);
 
-      const titulosReceber = (titulosReceberRes.data || []).filter((t) => companyIds.has(t.empresa_id));
-      const titulosPagar = (titulosPagarRes.data || []).filter((t) => companyIds.has(t.empresa_id));
-      const recebimentos = (recebimentosRes.data || []).filter((r: any) =>
-        companyIds.has(r.titulos_receber?.empresa_id),
-      );
-      const pagamentos = (pagamentosRes.data || []).filter((p: any) =>
-        companyIds.has(p.titulos_pagar?.empresa_id),
-      );
+      const titulosReceber = safeRows(titulosReceberRes.data).filter((t: any) => companyIds.has(t.empresa_id));
+      const titulosPagar = safeRows(titulosPagarRes.data).filter((t: any) => companyIds.has(t.empresa_id));
+      const recebimentos = safeRows(recebimentosRes.data).filter((r: any) => companyIds.has(r.titulos_receber?.empresa_id));
+      const pagamentos = safeRows(pagamentosRes.data).filter((p: any) => companyIds.has(p.titulos_pagar?.empresa_id));
+      const chamados = safeRows(chamadosRes.data).filter((c: any) => !c.empresa_id || companyIds.has(c.empresa_id));
+      const clientes = safeRows(clientesRes.data).filter((c: any) => !c.empresa_id || companyIds.has(c.empresa_id));
+      const equipamentos = safeRows(equipamentosRes.data);
 
       const aReceber = titulosReceber
-        .filter((t) => statusOpen.has(String(t.status)))
-        .reduce((s, t) => s + Number(t.saldo || 0), 0);
+        .filter((t: any) => statusOpen.has(String(t.status)))
+        .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
       const aPagar = titulosPagar
-        .filter((t) => statusOpen.has(String(t.status)))
-        .reduce((s, t) => s + Number(t.saldo || 0), 0);
-
+        .filter((t: any) => statusOpen.has(String(t.status)))
+        .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
       const vencidoReceber = titulosReceber
-        .filter((t) => statusOpen.has(String(t.status)) && String(t.data_vencimento || '') < today)
-        .reduce((s, t) => s + Number(t.saldo || 0), 0);
+        .filter((t: any) => statusOpen.has(String(t.status)) && String(t.data_vencimento || '') < today)
+        .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
       const vencidoPagar = titulosPagar
-        .filter((t) => statusOpen.has(String(t.status)) && String(t.data_vencimento || '') < today)
-        .reduce((s, t) => s + Number(t.saldo || 0), 0);
+        .filter((t: any) => statusOpen.has(String(t.status)) && String(t.data_vencimento || '') < today)
+        .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
 
-      const recebidoPeriodo = recebimentos.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-      const pagoPeriodo = pagamentos.reduce((s: number, p: any) => s + Number(p.valor || 0), 0);
+      const recebidoPeriodo = valueByRange(recebimentos, startDate, endDate, (r) => Number(r.valor || 0));
+      const pagoPeriodo = valueByRange(pagamentos, startDate, endDate, (p) => Number(p.valor || 0));
+      const recebidoAnterior = valueByRange(recebimentos, prevRange.start, prevRange.end, (r) => Number(r.valor || 0));
+      const pagoAnterior = valueByRange(pagamentos, prevRange.start, prevRange.end, (p) => Number(p.valor || 0));
 
-      const abastBase = (abastecimentosRes.data || []).filter((a) => !a.excluido && a.status !== 'cancelado');
-      const selectedCompanyId = selectedCompany?.id;
+      const abastBase = safeRows(abastecimentosRes.data).filter((a: any) => !a.excluido && a.status !== 'cancelado');
+      const selectedCompanyId = companyFilter === 'geral' ? '' : targetCompanies[0]?.id;
       const abastFiltrados = companyFilter === 'geral'
         ? abastBase
         : selectedCompanyId
-          ? abastBase.filter((a) => matchAbastCompany(a.empresa || '', selectedCompanyId))
+          ? abastBase.filter((a: any) => matchAbastCompany(a.empresa || '', selectedCompanyId))
           : [];
-
-      const frotaVeiculosAtivos = (veiculosRes.data || []).filter((v) => String(v.status).toLowerCase() === 'ativo').length;
-      const frotaLitros = abastFiltrados.reduce((s, a) => s + Number(a.litros || 0), 0);
-      const frotaValor = abastFiltrados.reduce((s, a) => s + Number(a.valor || 0), 0);
-      const kmComValor = abastFiltrados.map((a) => Number(a.km_atual)).filter((v) => Number.isFinite(v) && v > 0);
+      const abastPeriodo = abastFiltrados.filter((a: any) => dateInRange(a.data, startDate, endDate));
+      const frotaVeiculosAtivos = safeRows(veiculosRes.data).filter((v: any) => String(v.status).toLowerCase() === 'ativo').length;
+      const frotaLitros = abastPeriodo.reduce((s: number, a: any) => s + Number(a.litros || 0), 0);
+      const frotaValor = abastPeriodo.reduce((s: number, a: any) => s + Number(a.valor || 0), 0);
+      const kmComValor = abastPeriodo.map((a: any) => Number(a.km_atual)).filter((v) => Number.isFinite(v) && v > 0);
       const kmMedio = kmComValor.length ? kmComValor.reduce((s, v) => s + v, 0) / kmComValor.length : 0;
+
+      const chamadosPeriodo = chamados.filter((c: any) => dateInRange(c.created_at, startDate, endDate));
+      const chamadosAbertos = chamadosPeriodo.filter((c: any) => statusOpen.has(normalize(c.status))).length;
+      const chamadosConcluidos = chamadosPeriodo.filter((c: any) => statusDone.has(normalize(c.status))).length;
+      const chamadosConcluidosAnterior = chamados
+        .filter((c: any) => dateInRange(c.created_at, prevRange.start, prevRange.end) && statusDone.has(normalize(c.status)))
+        .length;
 
       const porEmpresa: CompanyRow[] = targetCompanies.map((company) => {
         const emps = activeEmployees.filter((e) => e.companyId === company.id).length;
         const entriesCompany = filteredEntries.filter((e) => e.companyId === company.id);
-        let custoCompany = 0;
-        let proventosCompany = 0;
-        let descontosCompany = 0;
-        let liquidoCompany = 0;
-        for (const entry of entriesCompany) {
-          const emp = filteredEmployees.find((e) => e.id === entry.employeeId);
-          if (!emp) continue;
-          const comissaoPct = company.codigo === 'topac-gyn' ? 0.02 : 0.01;
-          const diasUteis = getWorkingDays(entry.competencia);
-          const payroll = calcPayrollBreakdown(emp, entry, { diasUteis, comissaoPct });
-          const descontos = payroll.descontosLegais + payroll.descontosOperacionais + payroll.adiantamento + payroll.descontosDiversos;
-          proventosCompany += payroll.proventos;
-          descontosCompany += descontos;
-          liquidoCompany += payroll.liquido;
-          custoCompany += payroll.proventos + payroll.fgts;
-        }
-
+        const totalsCompany = calcFolhaForEntries(entriesCompany);
         const recCompany = titulosReceber
-          .filter((t) => t.empresa_id === company.id && statusOpen.has(String(t.status)))
-          .reduce((s, t) => s + Number(t.saldo || 0), 0);
+          .filter((t: any) => t.empresa_id === company.id && statusOpen.has(String(t.status)))
+          .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
         const pagCompany = titulosPagar
-          .filter((t) => t.empresa_id === company.id && statusOpen.has(String(t.status)))
-          .reduce((s, t) => s + Number(t.saldo || 0), 0);
-
-        const abastCompany = abastBase.filter((a) => matchAbastCompany(a.empresa || '', company.id));
-        const valorAbastCompany = abastCompany.reduce((s, a) => s + Number(a.valor || 0), 0);
+          .filter((t: any) => t.empresa_id === company.id && statusOpen.has(String(t.status)))
+          .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
+        const abastCompany = abastBase.filter((a: any) => matchAbastCompany(a.empresa || '', company.id));
+        const valorAbastCompany = abastCompany
+          .filter((a: any) => dateInRange(a.data, startDate, endDate))
+          .reduce((s: number, a: any) => s + Number(a.valor || 0), 0);
+        const chamadosCompany = chamadosPeriodo.filter((c: any) => c.empresa_id === company.id);
 
         return {
           companyId: company.id,
           companyName: company.name,
           ativos: emps,
-          folhaCusto: custoCompany,
-          folhaProventos: proventosCompany,
-          folhaDescontos: descontosCompany,
-          folhaLiquida: liquidoCompany,
+          folhaCusto: totalsCompany.custo,
+          folhaProventos: totalsCompany.proventos,
+          folhaDescontos: totalsCompany.descontos,
+          folhaLiquida: totalsCompany.liquido,
           aReceber: recCompany,
           aPagar: pagCompany,
           abastecimentos: abastCompany.length,
           valorAbastecido: valorAbastCompany,
+          chamadosAbertos: chamadosCompany.filter((c: any) => statusOpen.has(normalize(c.status))).length,
+          chamadosConcluidos: chamadosCompany.filter((c: any) => statusDone.has(normalize(c.status))).length,
         };
       });
+
+      const trends: TrendRow[] = trendMonths.map(({ competencia, mes }) => {
+        const monthEntries = entries.filter((e) => companyIds.has(e.companyId) && e.competencia === competencia);
+        const monthPayroll = calcFolhaForEntries(monthEntries);
+        const monthRecebimentos = recebimentos
+          .filter((r: any) => monthKey(new Date(`${String(r.data).slice(0, 10)}T00:00:00`)) === competencia)
+          .reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
+        const monthPagamentos = pagamentos
+          .filter((p: any) => monthKey(new Date(`${String(p.data).slice(0, 10)}T00:00:00`)) === competencia)
+          .reduce((s: number, p: any) => s + Number(p.valor || 0), 0);
+        const monthChamados = chamados
+          .filter((c: any) => monthKey(new Date(String(c.created_at || '').slice(0, 10))) === competencia)
+          .filter((c: any) => statusDone.has(normalize(c.status))).length;
+        return {
+          mes,
+          competencia,
+          faturamento: monthRecebimentos,
+          custos: monthPagamentos,
+          folha: monthPayroll.custo,
+          chamados: monthChamados,
+        };
+      });
+
+      const points: OperationalPoint[] = clientes
+        .filter((cliente: any) => cliente.cidade || cliente.uf)
+        .slice(0, 12)
+        .map((cliente: any) => {
+          const clienteChamados = chamados.filter((c: any) => c.cliente_id === cliente.id);
+          const clienteEquipamentos = equipamentos.filter((e: any) => e.cliente_id === cliente.id).length;
+          const clienteReceber = titulosReceber
+            .filter((t: any) => t.cliente_id === cliente.id)
+            .reduce((s: number, t: any) => s + Number(t.saldo || 0), 0);
+          const lastVisit = clienteChamados
+            .map((c: any) => String(c.created_at || '').slice(0, 10))
+            .filter(Boolean)
+            .sort()
+            .pop();
+
+          return {
+            id: cliente.id,
+            cliente: cliente.razao_social || cliente.nome_fantasia || 'Cliente sem nome',
+            cidade: cliente.cidade || '-',
+            uf: cliente.uf || '',
+            chamadosRealizados: clienteChamados.length,
+            equipamentos: clienteEquipamentos,
+            valorFaturado: clienteReceber,
+            ultimasVisitas: lastVisit ? new Date(`${lastVisit}T00:00:00`).toLocaleDateString('pt-BR') : 'Sem registro',
+          };
+        });
 
       setReport({
         financeiro: {
@@ -391,23 +590,38 @@ const DirectorDashboardPage: React.FC = () => {
           ativos: activeEmployees.length,
           operacionais: operacionais.length,
           socios: socios.length,
-          folhaCusto,
-          proventos: folhaProventos,
-          descontos: folhaDescontos,
-          folhaBruta,
-          folhaLiquida,
-          inss: folhaInss,
-          fgts: folhaFgts,
+          folhaCusto: payrollTotals.custo,
+          proventos: payrollTotals.proventos,
+          descontos: payrollTotals.descontos,
+          folhaBruta: payrollTotals.bruto,
+          folhaLiquida: payrollTotals.liquido,
+          inss: payrollTotals.inss,
+          fgts: payrollTotals.fgts,
         },
         frota: {
           veiculosAtivos: frotaVeiculosAtivos,
-          abastecimentos: abastFiltrados.length,
+          abastecimentos: abastPeriodo.length,
           litros: frotaLitros,
           valorAbastecido: frotaValor,
           kmMedio,
         },
+        operacional: {
+          chamadosAbertos,
+          chamadosConcluidos,
+          clientesMapeados: clientes.length,
+          equipamentosMapeados: equipamentos.length,
+        },
         porEmpresa,
       });
+      setPrevious({
+        faturamento: recebidoAnterior,
+        custos: pagoAnterior,
+        folha: previousPayroll.custo,
+        chamadosConcluidos: chamadosConcluidosAnterior,
+      });
+      setTrendData(trends);
+      setMapPoints(points);
+      setSelectedPointId((current) => current || points[0]?.id || '');
       setGeneratedAt(new Date().toLocaleString('pt-BR'));
     } catch (err: any) {
       setError(err?.message || 'Falha ao gerar dashboard executivo.');
@@ -427,36 +641,18 @@ const DirectorDashboardPage: React.FC = () => {
       ['PERIODO', `${startDate} ate ${endDate}`],
       ['EMPRESA', companyFilter === 'geral' ? 'GERAL' : (targetCompanies[0]?.name || '')],
       [],
-      ['RESUMO FINANCEIRO'],
-      ['A Receber', report.financeiro.aReceber],
-      ['A Pagar', report.financeiro.aPagar],
-      ['Vencido Receber', report.financeiro.vencidoReceber],
-      ['Vencido Pagar', report.financeiro.vencidoPagar],
-      ['Recebido no periodo', report.financeiro.recebidoPeriodo],
-      ['Pago no periodo', report.financeiro.pagoPeriodo],
-      ['Saldo projetado', report.financeiro.saldoProjetado],
-      [],
-      ['RESUMO RH'],
+      ['RESUMO EXECUTIVO'],
+      ['Faturamento total', report.financeiro.recebidoPeriodo],
+      ['Custos operacionais', report.financeiro.pagoPeriodo + report.frota.valorAbastecido],
+      ['Custos de folha', report.rh.folhaCusto],
       ['Funcionarios ativos', report.rh.ativos],
-      ['Operacionais', report.rh.operacionais],
-      ['Socios', report.rh.socios],
-      ['Custo estimado da folha', report.rh.folhaCusto],
-      ['Proventos estimados', report.rh.proventos],
-      ['Descontos estimados', report.rh.descontos],
-      ['Folha bruta', report.rh.folhaBruta],
-      ['Folha liquida', report.rh.folhaLiquida],
-      ['INSS', report.rh.inss],
-      ['FGTS', report.rh.fgts],
-      [],
-      ['RESUMO FROTA'],
-      ['Veiculos ativos', report.frota.veiculosAtivos],
-      ['Abastecimentos', report.frota.abastecimentos],
-      ['Litros', report.frota.litros],
-      ['Valor abastecido', report.frota.valorAbastecido],
-      ['KM medio', report.frota.kmMedio],
+      ['Chamados abertos', report.operacional.chamadosAbertos],
+      ['Chamados concluidos', report.operacional.chamadosConcluidos],
+      ['Valor a receber', report.financeiro.aReceber],
+      ['Valor a pagar', report.financeiro.aPagar],
       [],
       ['POR EMPRESA'],
-      ['Empresa', 'Ativos', 'Custo folha', 'Proventos', 'Descontos', 'Folha liquida', 'A receber', 'A pagar', 'Abastecimentos', 'Valor abastecido'],
+      ['Empresa', 'Ativos', 'Custo folha', 'Proventos', 'Descontos', 'Folha liquida', 'A receber', 'A pagar', 'Chamados abertos', 'Chamados concluidos'],
       ...report.porEmpresa.map((r) => [
         r.companyName,
         r.ativos,
@@ -466,8 +662,8 @@ const DirectorDashboardPage: React.FC = () => {
         r.folhaLiquida,
         r.aReceber,
         r.aPagar,
-        r.abastecimentos,
-        r.valorAbastecido,
+        r.chamadosAbertos,
+        r.chamadosConcluidos,
       ]),
     ];
 
@@ -487,8 +683,9 @@ const DirectorDashboardPage: React.FC = () => {
     session?.user?.user_metadata?.nome_completo ||
     session?.user?.user_metadata?.full_name ||
     session?.user?.email?.split('@')[0] ||
-    'Robson',
+    'Diretor',
   );
+
   const corporateSnapshot = useMemo(
     () => buildCorporateSnapshot({
       companies: targetCompanies,
@@ -505,105 +702,154 @@ const DirectorDashboardPage: React.FC = () => {
     [targetCompanies, employees, entries, intelligenceCounts],
   );
   const calendarEvents = useMemo(() => getUpcomingCalendarEvents(targetCompanies, new Date(), 30), [targetCompanies]);
-  const totalEmpresas = report.porEmpresa.length || targetCompanies.length;
-  const margemFinanceira = report.financeiro.recebidoPeriodo - report.financeiro.pagoPeriodo;
-  const pendenciasCriticas =
-    Number(intelligenceCounts.documentosPendentes || 0) +
-    Number(intelligenceCounts.solicitacoesPendentes || 0) +
-    Number(corporateSnapshot.asoAlertas || 0);
+  const selectedPoint = mapPoints.find((point) => point.id === selectedPointId) || mapPoints[0];
+  const operationalCost = report.financeiro.pagoPeriodo + report.frota.valorAbastecido;
+  const margin = report.financeiro.recebidoPeriodo - operationalCost - report.rh.folhaCusto;
 
   const executiveCards = [
     {
-      label: 'Empresas do grupo',
-      value: String(totalEmpresas),
-      detail: companyFilter === 'geral' ? 'visao consolidada' : 'empresa filtrada',
-      icon: Building2,
-      tone: 'text-cyan-300',
+      label: 'Faturamento Total',
+      value: shortCurrency(report.financeiro.recebidoPeriodo),
+      rawValue: report.financeiro.recebidoPeriodo,
+      previousValue: previous.faturamento,
+      helper: 'Recebimentos no periodo',
+      icon: CircleDollarSign,
+      color: '#2563eb',
     },
     {
-      label: 'Funcionarios ativos',
-      value: String(report.rh.ativos),
-      detail: `${report.rh.operacionais} operacionais / ${report.rh.socios} socios`,
-      icon: Users,
-      tone: 'text-emerald-300',
+      label: 'Custos Operacionais',
+      value: shortCurrency(operationalCost),
+      rawValue: operationalCost,
+      previousValue: previous.custos,
+      helper: 'Pagamentos + abastecimento',
+      icon: CreditCard,
+      color: '#f97316',
     },
     {
-      label: 'Custo estimado da folha',
-      value: formatCurrency(report.rh.folhaCusto),
-      detail: 'proventos + FGTS informativo',
+      label: 'Custos de Folha',
+      value: shortCurrency(report.rh.folhaCusto),
+      rawValue: report.rh.folhaCusto,
+      previousValue: previous.folha,
+      helper: 'Proventos + FGTS',
       icon: Wallet,
-      tone: 'text-violet-300',
+      color: '#7c3aed',
     },
     {
-      label: 'Valor liquido estimado',
-      value: formatCurrency(report.rh.folhaLiquida),
-      detail: 'baseado nos lancamentos do periodo',
+      label: 'Funcionarios Ativos',
+      value: String(report.rh.ativos),
+      rawValue: report.rh.ativos,
+      previousValue: report.rh.ativos,
+      helper: `${report.rh.operacionais} operacionais`,
+      icon: Users,
+      color: '#059669',
+    },
+    {
+      label: 'Chamados Abertos',
+      value: String(report.operacional.chamadosAbertos),
+      rawValue: report.operacional.chamadosAbertos,
+      previousValue: 0,
+      helper: 'Pendencias operacionais',
+      icon: ClipboardList,
+      color: '#dc2626',
+    },
+    {
+      label: 'Chamados Concluidos',
+      value: String(report.operacional.chamadosConcluidos),
+      rawValue: report.operacional.chamadosConcluidos,
+      previousValue: previous.chamadosConcluidos,
+      helper: 'Entrega no periodo',
+      icon: CheckCircle2,
+      color: '#16a34a',
+    },
+    {
+      label: 'Valor a Receber',
+      value: shortCurrency(report.financeiro.aReceber),
+      rawValue: report.financeiro.aReceber,
+      previousValue: 0,
+      helper: `${formatCurrency(report.financeiro.vencidoReceber)} vencido`,
       icon: TrendingUp,
-      tone: 'text-lime-300',
+      color: '#0891b2',
+    },
+    {
+      label: 'Valor a Pagar',
+      value: shortCurrency(report.financeiro.aPagar),
+      rawValue: report.financeiro.aPagar,
+      previousValue: 0,
+      helper: `${formatCurrency(report.financeiro.vencidoPagar)} vencido`,
+      icon: FileText,
+      color: '#be123c',
     },
   ];
 
-  const strategicIndicators = [
-    { label: 'Proventos estimados', value: formatCurrency(report.rh.proventos) },
-    { label: 'Descontos estimados', value: formatCurrency(report.rh.descontos) },
-    { label: 'INSS estimado', value: formatCurrency(report.rh.inss) },
-    { label: 'FGTS informativo', value: formatCurrency(report.rh.fgts) },
-    { label: 'A receber disponivel', value: formatCurrency(report.financeiro.aReceber) },
-    { label: 'A pagar disponivel', value: formatCurrency(report.financeiro.aPagar) },
-    { label: 'Saldo projetado', value: formatCurrency(report.financeiro.saldoProjetado) },
-    { label: 'Margem do periodo', value: formatCurrency(margemFinanceira) },
+  const comparisonNarratives = [
+    {
+      label: 'Faturamento',
+      value: variation(report.financeiro.recebidoPeriodo, previous.faturamento),
+      text: 'em relacao ao mes anterior',
+    },
+    {
+      label: 'Custos operacionais',
+      value: variation(operationalCost, previous.custos),
+      text: 'comparado ao periodo anterior',
+    },
+    {
+      label: 'Folha salarial',
+      value: variation(report.rh.folhaCusto, previous.folha),
+      text: 'na comparacao mensal',
+    },
+    {
+      label: 'Chamados concluidos',
+      value: variation(report.operacional.chamadosConcluidos, previous.chamadosConcluidos),
+      text: 'de produtividade operacional',
+    },
   ];
+
+  const companyComparisonData = report.porEmpresa.map((company) => ({
+    empresa: company.companyName.replace('TOPAC FILIAL ', '').replace('TOPAC ', ''),
+    folhaCusto: company.folhaCusto,
+    aReceber: company.aReceber,
+    aPagar: company.aPagar,
+  }));
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      <section className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-950/70 p-5 md:p-6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-transparent" />
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
-              <ShieldCheck className="h-3.5 w-3.5" />
+    <div className="animate-fade-in rounded-lg bg-slate-50 p-4 text-slate-950 shadow-[0_24px_80px_rgba(15,23,42,0.16)] md:p-6">
+      <section className="mb-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+              <ShieldCheck className="h-4 w-4 text-slate-700" />
               Diretor Geral - somente leitura
             </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">Painel Executivo</h1>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Visao consolidada do grupo para acompanhamento gerencial, sem rotinas operacionais de RH.
-              </p>
-            </div>
-            {generatedAt && <p className="text-xs text-muted-foreground">Atualizado em {generatedAt}</p>}
+            <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">Dashboard Executivo TOPAC</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              Painel gerencial consolidado para acompanhar saude da empresa, tendencias, custos, faturamento, RH e operacao sem acesso a edicao.
+            </p>
+            {generatedAt && <p className="mt-2 text-xs text-slate-500">Atualizado em {generatedAt}</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={exportarCsv}>
-              <Download className="w-4 h-4 mr-2" />
+            <Button variant="outline" onClick={exportarCsv} className="border-slate-300 bg-white text-slate-800 hover:bg-slate-100">
+              <Download className="mr-2 h-4 w-4" />
               Exportar CSV
             </Button>
-            <Button variant="outline" onClick={exportarCsv}>
-              <FileText className="w-4 h-4 mr-2" />
-              Solicitar relatorio consolidado
+            <Button variant="outline" onClick={exportarCsv} className="border-slate-300 bg-white text-slate-800 hover:bg-slate-100">
+              <FileText className="mr-2 h-4 w-4" />
+              Solicitar relatorio
             </Button>
-            <Button onClick={runReport} disabled={loading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Atualizar indicadores
+            <Button onClick={runReport} disabled={loading} className="bg-slate-950 text-white hover:bg-slate-800">
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Atualizar painel
             </Button>
           </div>
         </div>
       </section>
 
-      <CorporateAssistantPanel
-        variant="director"
-        displayName={directorName}
-        snapshot={corporateSnapshot}
-        alerts={intelligenceAlerts}
-        calendarEvents={calendarEvents}
-      />
-
-      <div className="card-premium p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
+      <section className="mb-5 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-5">
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Periodo</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Periodo</label>
           <select
             value={preset}
             onChange={(e) => setPreset(e.target.value as PeriodPreset)}
-            className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
           >
             <option value="diario">Diario</option>
             <option value="semanal">Semanal</option>
@@ -613,13 +859,13 @@ const DirectorDashboardPage: React.FC = () => {
           </select>
         </div>
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Empresa</label>
           <select
             value={companyFilter}
             onChange={(e) => setCompanyFilter(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground"
+            className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
           >
-            <option value="geral">Geral</option>
+            <option value="geral">Geral consolidado</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -628,7 +874,7 @@ const DirectorDashboardPage: React.FC = () => {
           </select>
         </div>
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Data inicial</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Data inicial</label>
           <Input
             type="date"
             value={startDate}
@@ -636,10 +882,11 @@ const DirectorDashboardPage: React.FC = () => {
               setPreset('personalizado');
               setStartDate(e.target.value);
             }}
+            className="border-slate-300 bg-white text-slate-900"
           />
         </div>
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Data final</label>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Data final</label>
           <Input
             type="date"
             value={endDate}
@@ -647,127 +894,279 @@ const DirectorDashboardPage: React.FC = () => {
               setPreset('personalizado');
               setEndDate(e.target.value);
             }}
+            className="border-slate-300 bg-white text-slate-900"
           />
         </div>
-        <div className="flex items-end">
-          <div className="text-xs text-muted-foreground flex items-center gap-2">
-            <CalendarDays className="w-4 h-4" />
+        <div className="flex items-end text-sm text-slate-500">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4" />
             {startDate} ate {endDate}
           </div>
         </div>
-      </div>
+      </section>
 
-      {error && <div className="card-premium p-3 text-sm text-destructive">{error}</div>}
+      {error && <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {executiveCards.map((card) => {
           const Icon = card.icon;
+          const delta = variation(card.rawValue, card.previousValue);
+          const showDelta = card.previousValue > 0 || card.rawValue > 0;
+          const positive = delta >= 0;
           return (
-            <div key={card.label} className="card-premium p-4">
+            <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    {card.label}
-                  </p>
-                  <p className="text-2xl font-bold text-foreground">{card.value}</p>
-                  <p className="text-xs text-muted-foreground">{card.detail}</p>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{card.label}</p>
+                  <p className="mt-2 text-2xl font-black text-slate-950">{card.value}</p>
+                  <p className="mt-1 text-xs text-slate-500">{card.helper}</p>
                 </div>
-                <div className={`rounded-xl bg-white/5 p-2 ${card.tone}`}>
+                <div className="rounded-md p-2 text-white" style={{ backgroundColor: card.color }}>
                   <Icon className="h-5 w-5" />
                 </div>
+              </div>
+              <div className="mt-4 flex items-center gap-2 text-xs">
+                {showDelta ? (
+                  <>
+                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 font-semibold ${positive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                      {positive ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                      {Math.abs(delta).toFixed(1)}%
+                    </span>
+                    <span className="text-slate-500">mes anterior</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">Sem base anterior</span>
+                )}
               </div>
             </div>
           );
         })}
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="card-premium p-4 lg:col-span-2">
-          <div className="mb-3 flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Indicadores consolidados</h2>
+      <section className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_.75fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">Comparativo inteligente</h2>
+              <p className="text-sm text-slate-500">Leitura automatica do mes atual contra o mes anterior.</p>
+            </div>
+            <BarChart3 className="h-5 w-5 text-slate-500" />
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {strategicIndicators.map((indicator) => (
-              <div key={indicator.label} className="rounded-lg border border-border/60 bg-background/40 px-3 py-2">
-                <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{indicator.label}</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{indicator.value}</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {comparisonNarratives.map((item) => {
+              const positive = item.value >= 0;
+              return (
+                <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-slate-900">{item.label}</p>
+                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold ${positive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                      {positive ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+                      {Math.abs(item.value).toFixed(1)}%
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {item.label} {positive ? 'aumentou' : 'reduziu'} {Math.abs(item.value).toFixed(1)}% {item.text}.
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-950 p-4 text-white shadow-sm">
+          <h2 className="text-lg font-bold">Saude executiva</h2>
+          <p className="mt-1 text-sm text-slate-300">Indicadores consolidados sem edicao operacional.</p>
+          <div className="mt-5 space-y-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <span className="text-slate-300">Margem projetada</span>
+              <strong className={margin >= 0 ? 'text-emerald-300' : 'text-red-300'}>{formatCurrency(margin)}</strong>
+            </div>
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <span className="text-slate-300">Documentos pendentes</span>
+              <strong>{Number(intelligenceCounts.documentosPendentes || 0)}</strong>
+            </div>
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <span className="text-slate-300">Solicitacoes pendentes</span>
+              <strong>{Number(intelligenceCounts.solicitacoesPendentes || 0)}</strong>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-300">ASOs em alerta</span>
+              <strong>{Number(corporateSnapshot.asoAlertas || 0)}</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-1 text-lg font-bold text-slate-950">Evolucao mensal</h2>
+          <p className="mb-4 text-sm text-slate-500">Faturamento, custos e folha em linha gerencial.</p>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData}>
+                <defs>
+                  <linearGradient id="directorRevenue" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.03} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
+                <XAxis dataKey="mes" stroke="#64748b" tickLine={false} />
+                <YAxis stroke="#64748b" tickLine={false} tickFormatter={(v) => shortCurrency(Number(v)).replace('R$ ', '')} width={64} />
+                <Tooltip formatter={chartTooltip} />
+                <Area type="monotone" dataKey="faturamento" name="faturamento" stroke="#2563eb" fill="url(#directorRevenue)" strokeWidth={3} />
+                <Line type="monotone" dataKey="custos" name="custos" stroke="#f97316" strokeWidth={2.5} dot={false} />
+                <Line type="monotone" dataKey="folha" name="folha" stroke="#7c3aed" strokeWidth={2.5} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-1 text-lg font-bold text-slate-950">Evolucao de chamados</h2>
+          <p className="mb-4 text-sm text-slate-500">Chamados concluidos por mes, para leitura operacional consolidada.</p>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendData}>
+                <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
+                <XAxis dataKey="mes" stroke="#64748b" tickLine={false} />
+                <YAxis stroke="#64748b" tickLine={false} width={36} />
+                <Tooltip formatter={chartTooltip} />
+                <Bar dataKey="chamados" name="chamados" radius={[4, 4, 0, 0]}>
+                  {trendData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#22c55e' : '#0891b2'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-[1fr_.9fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-1 text-lg font-bold text-slate-950">Comparativo entre empresas</h2>
+          <p className="mb-4 text-sm text-slate-500">Matriz, filiais e empresas do grupo com leitura consolidada.</p>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={companyComparisonData} layout="vertical" margin={{ left: 18 }}>
+                <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
+                <XAxis type="number" stroke="#64748b" tickLine={false} tickFormatter={(v) => shortCurrency(Number(v)).replace('R$ ', '')} />
+                <YAxis type="category" dataKey="empresa" stroke="#64748b" tickLine={false} width={115} />
+                <Tooltip formatter={chartTooltip} />
+                <Bar dataKey="folhaCusto" name="folha" fill="#7c3aed" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="aReceber" name="aReceber" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="aPagar" name="aPagar" fill="#f97316" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-950">Mapa operacional</h2>
+              <p className="text-sm text-slate-500">Clientes e operacoes carregados da base real.</p>
+            </div>
+            <MapPin className="h-5 w-5 text-slate-500" />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[.85fr_1fr]">
+            <div className="relative min-h-72 overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
+              <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,.18)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,.18)_1px,transparent_1px)] bg-[size:28px_28px]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_28%,rgba(37,99,235,.35),transparent_28%),radial-gradient(circle_at_74%_70%,rgba(34,197,94,.24),transparent_26%)]" />
+              <div className="relative grid h-full min-h-72 grid-cols-3 grid-rows-4 gap-4 p-5">
+                {mapPoints.slice(0, 12).map((point, idx) => (
+                  <button
+                    key={point.id}
+                    type="button"
+                    onClick={() => setSelectedPointId(point.id)}
+                    className={`self-center justify-self-center rounded-full border-2 p-1 transition ${selectedPoint?.id === point.id ? 'scale-125 border-white bg-blue-500' : 'border-white/70 bg-emerald-400 hover:scale-110'}`}
+                    title={`${point.cliente} - ${point.cidade}/${point.uf}`}
+                    style={{ gridColumn: (idx % 3) + 1, gridRow: Math.floor(idx / 3) + 1 }}
+                  >
+                    <span className="block h-3 w-3 rounded-full bg-white" />
+                  </button>
+                ))}
+                {mapPoints.length === 0 && (
+                  <div className="col-span-3 row-span-4 flex items-center justify-center text-center text-sm text-slate-300">
+                    Nenhum cliente com cidade/UF carregado para montar pontos operacionais.
+                  </div>
+                )}
               </div>
-            ))}
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              {selectedPoint ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Ponto selecionado</p>
+                  <h3 className="mt-2 text-xl font-bold text-slate-950">{selectedPoint.cliente}</h3>
+                  <p className="text-sm text-slate-600">{selectedPoint.cidade}/{selectedPoint.uf}</p>
+                  <div className="mt-4 space-y-3 text-sm">
+                    <div className="flex justify-between gap-3 border-b border-slate-200 pb-2">
+                      <span className="text-slate-500">Chamados realizados</span>
+                      <strong>{selectedPoint.chamadosRealizados}</strong>
+                    </div>
+                    <div className="flex justify-between gap-3 border-b border-slate-200 pb-2">
+                      <span className="text-slate-500">Equipamentos vinculados</span>
+                      <strong>{selectedPoint.equipamentos}</strong>
+                    </div>
+                    <div className="flex justify-between gap-3 border-b border-slate-200 pb-2">
+                      <span className="text-slate-500">Valor faturado/aberto</span>
+                      <strong>{formatCurrency(selectedPoint.valorFaturado)}</strong>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-500">Ultimas visitas</span>
+                      <strong>{selectedPoint.ultimasVisitas}</strong>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Estrutura pronta para receber clientes com localizacao real.</p>
+              )}
+            </div>
           </div>
         </div>
+      </section>
 
-        <div className="card-premium p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Car className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Resumo operacional</h2>
-          </div>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Veiculos ativos</span>
-              <strong>{report.frota.veiculosAtivos}</strong>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Abastecimentos</span>
-              <strong>{report.frota.abastecimentos}</strong>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Litros no periodo</span>
-              <strong>{report.frota.litros.toFixed(2)}</strong>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Custo abastecido</span>
-              <strong>{formatCurrency(report.frota.valorAbastecido)}</strong>
-            </div>
-            <div className="rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">
-              Pendencias gerenciais: <strong>{pendenciasCriticas}</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="card-premium p-4">
-        <div className="flex flex-col gap-1 mb-3 md:flex-row md:items-center md:justify-between">
+      <section className="mb-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Empresas do grupo</h2>
+            <Building2 className="h-5 w-5 text-slate-500" />
+            <h2 className="text-lg font-bold text-slate-950">Empresas do grupo</h2>
           </div>
-          <p className="text-xs text-muted-foreground">Leitura executiva. Sem acesso a edicao de funcionarios ou rotinas de RH.</p>
+          <p className="text-xs text-slate-500">Somente leitura. Sem cadastro, lancamento ou alteracao operacional.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-xs uppercase text-muted-foreground">
-                <th className="text-left py-2 pr-3">Empresa</th>
-                <th className="text-right py-2 px-2">Ativos</th>
-                <th className="text-right py-2 px-2">Custo folha</th>
-                <th className="text-right py-2 px-2">Proventos</th>
-                <th className="text-right py-2 px-2">Descontos</th>
-                <th className="text-right py-2 px-2">Folha liquida</th>
-                <th className="text-right py-2 px-2">A receber</th>
-                <th className="text-right py-2 px-2">A pagar</th>
-                <th className="text-right py-2 px-2">Abastecimentos</th>
-                <th className="text-right py-2 pl-2">Valor abastecido</th>
+              <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
+                <th className="py-2 pr-3 text-left">Empresa</th>
+                <th className="px-2 py-2 text-right">Ativos</th>
+                <th className="px-2 py-2 text-right">Custo folha</th>
+                <th className="px-2 py-2 text-right">A receber</th>
+                <th className="px-2 py-2 text-right">A pagar</th>
+                <th className="px-2 py-2 text-right">Chamados abertos</th>
+                <th className="px-2 py-2 text-right">Chamados concluidos</th>
+                <th className="py-2 pl-2 text-right">Abastecimento</th>
               </tr>
             </thead>
             <tbody>
               {report.porEmpresa.map((r) => (
-                <tr key={r.companyId} className="border-b border-border/60">
-                  <td className="py-2 pr-3">{r.companyName}</td>
-                  <td className="py-2 px-2 text-right">{r.ativos}</td>
-                  <td className="py-2 px-2 text-right">{formatCurrency(r.folhaCusto)}</td>
-                  <td className="py-2 px-2 text-right">{formatCurrency(r.folhaProventos)}</td>
-                  <td className="py-2 px-2 text-right">{formatCurrency(r.folhaDescontos)}</td>
-                  <td className="py-2 px-2 text-right">{formatCurrency(r.folhaLiquida)}</td>
-                  <td className="py-2 px-2 text-right">{formatCurrency(r.aReceber)}</td>
-                  <td className="py-2 px-2 text-right">{formatCurrency(r.aPagar)}</td>
-                  <td className="py-2 px-2 text-right">{r.abastecimentos}</td>
-                  <td className="py-2 pl-2 text-right">{formatCurrency(r.valorAbastecido)}</td>
+                <tr key={r.companyId} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="py-3 pr-3 font-semibold text-slate-900">{r.companyName}</td>
+                  <td className="px-2 py-3 text-right">{r.ativos}</td>
+                  <td className="px-2 py-3 text-right">{formatCurrency(r.folhaCusto)}</td>
+                  <td className="px-2 py-3 text-right">{formatCurrency(r.aReceber)}</td>
+                  <td className="px-2 py-3 text-right">{formatCurrency(r.aPagar)}</td>
+                  <td className="px-2 py-3 text-right">{r.chamadosAbertos}</td>
+                  <td className="px-2 py-3 text-right">{r.chamadosConcluidos}</td>
+                  <td className="py-3 pl-2 text-right">{formatCurrency(r.valorAbastecido)}</td>
                 </tr>
               ))}
               {report.porEmpresa.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-6 text-center text-muted-foreground">
+                  <td colSpan={8} className="py-6 text-center text-slate-500">
                     Sem dados para o filtro atual.
                   </td>
                 </tr>
@@ -775,7 +1174,40 @@ const DirectorDashboardPage: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Alertas executivos</h2>
+          <div className="mt-3 space-y-2">
+            {intelligenceAlerts.slice(0, 4).map((alert) => (
+              <div key={alert.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="font-semibold text-slate-900">{alert.title}</p>
+                <p className="mt-1 text-sm text-slate-600">{alert.message}</p>
+              </div>
+            ))}
+            {intelligenceAlerts.length === 0 && <p className="text-sm text-slate-500">Nenhum alerta critico encontrado nos dados carregados.</p>}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Calendario corporativo</h2>
+          <div className="mt-3 space-y-2">
+            {calendarEvents.slice(0, 4).map((event) => (
+              <div key={event.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div>
+                  <p className="font-semibold text-slate-900">{event.title}</p>
+                  <p className="mt-1 text-sm text-slate-600">{event.message}</p>
+                </div>
+                <span className="whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs font-bold text-white">
+                  {event.daysUntil} dia(s)
+                </span>
+              </div>
+            ))}
+            {calendarEvents.length === 0 && <p className="text-sm text-slate-500">Sem eventos relevantes nos proximos 30 dias.</p>}
+          </div>
+        </div>
+      </section>
     </div>
   );
 };
