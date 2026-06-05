@@ -44,7 +44,8 @@ const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
   '/admin/assistente',
 ];
 
-export const isDirectorRole = (roles: string[] = []) => roles.includes('diretor_geral');
+export const isDirectorRole = (roles: string[] = []) =>
+  roles.includes('diretor_geral') && !roles.includes('admin');
 
 export const isDirectorRouteAllowed = (pathname: string) => {
   if (pathname === '/admin') return true;

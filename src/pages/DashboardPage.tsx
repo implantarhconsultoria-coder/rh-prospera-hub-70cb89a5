@@ -18,7 +18,8 @@ const DashboardPage: React.FC = () => {
   const comp = new Date().toISOString().slice(0, 7);
   const [fechStats, setFechStats] = useState({ fechadas: 0, abertas: 0, pendentes: 0 });
   const [liberarVisaoRhDiretor, setLiberarVisaoRhDiretor] = useState(false);
-  const isDirector = isDirectorRole(userRoles);
+  const isAdmin = userRoles.includes('admin');
+  const isDirector = isDirectorRole(userRoles) && !isAdmin;
 
   useEffect(() => {
     supabase.from('fechamentos_filial').select('status').eq('competencia', comp).then(({ data }) => {
