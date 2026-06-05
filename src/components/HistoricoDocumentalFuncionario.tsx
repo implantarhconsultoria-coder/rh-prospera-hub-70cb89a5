@@ -4,6 +4,7 @@ import {
   DOCUMENTO_ORIGENS_PADRAO,
   buscarHistoricoFuncionario,
   excluirDocumentoFuncionario,
+  marcarComoEnviado,
   registrarDocumento,
   uploadDocumentoArquivo,
 } from '@/lib/documentoHistorico';
@@ -14,7 +15,9 @@ import { FileText, Mail, Clock, User, Building2, Eye, Download, Trash2, Upload }
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { useApp } from '@/context/AppContext';
-import { downloadDocument } from '@/lib/documentUrl';
+import { downloadDocument, getDocumentUrl } from '@/lib/documentUrl';
+import { CC_OBRIGATORIO, DESTINATARIOS_CONTABILIDADE } from '@/lib/emailUtils';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
 
 interface Props {
@@ -59,6 +62,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [filtroOrigem, setFiltroOrigem] = useState('');
   const [filtroData, setFiltroData] = useState('');
   const [filtroEmpresa, setFiltroEmpresa] = useState('');
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -156,6 +160,81 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     } catch (error: any) {
       toast.error(error?.message || 'Nao foi possivel excluir o documento.');
     }
+  };
+
+  const isDocumentoContabilidade = (doc: any) => {
+    const text = `${doc.categoria || ''} ${doc.tipo_documento || ''} ${doc.descricao || ''} ${doc.nome_arquivo || ''}`
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    return [
+      'rescis',
+      'aviso previo',
+      'aso',
+      'admissional',
+      'desligamento',
+      'demissional',
+      'contrato',
+    ].some((term) => text.includes(term));
+  };
+
+  const enviarParaContabilidade = async (doc: any, source: any, titulo: string) => {
+    if (!session?.user) {
+      toast.error('Entre na plataforma para enviar documentos.');
+      return;
+    }
+    if (!funcionario || !company) {
+      toast.error('Funcionario ou empresa nao localizados.');
+      return;
+    }
+    const fileName = safeFileName(doc.nome_arquivo || `${company.name} - ${titulo} - ${funcionario.name}.pdf`);
+    if (!fileName.toLowerCase().endsWith('.pdf')) {
+      toast.error('Este documento ainda nao esta salvo como PDF. Gere o PDF novamente antes de enviar.');
+      return;
+    }
+    const url = await getDocumentUrl(source);
+    if (!url) {
+      toast.error('Nao foi possivel localizar o arquivo para anexar.');
+      return;
+    }
+    const response = await fetch(url);
+    if (!response.ok) {
+      toast.error('Nao foi possivel baixar o arquivo para anexar.');
+      return;
+    }
+    const originalBlob = await response.blob();
+    const attachmentBlob = originalBlob.type === 'application/pdf'
+      ? originalBlob
+      : new Blob([originalBlob], { type: 'application/pdf' });
+    const senderName = String(session.user.user_metadata?.nome_completo || session.user.email || 'TOPAC RH PRO');
+    setEmailPdfDraft({
+      to: [...DESTINATARIOS_CONTABILIDADE],
+      cc: [...CC_OBRIGATORIO],
+      subject: `${titulo} - ${funcionario.name}`,
+      body: [
+        'Prezados,',
+        '',
+        `Segue em anexo o documento ${titulo} referente ao colaborador ${funcionario.name}.`,
+        '',
+        `Empresa: ${company.name}`,
+        doc.competencia ? `Competencia: ${doc.competencia}` : '',
+        '',
+        'Atenciosamente,',
+        senderName,
+      ].filter(Boolean).join('\n'),
+      attachmentBlob,
+      attachmentName: fileName,
+      senderUserId: session.user.id,
+      senderName,
+      senderEmail: session.user.email,
+      moduleOrigin: 'historico_documental',
+      documentId: doc.id,
+      documentName: titulo,
+      afterSend: async () => {
+        await marcarComoEnviado(doc.id, session.user.id, senderName, [...DESTINATARIOS_CONTABILIDADE, ...CC_OBRIGATORIO].join(', '));
+        await carregar();
+      },
+    });
   };
 
   if (loading) return <p className="text-sm text-muted-foreground py-4">Carregando historico...</p>;
@@ -273,6 +352,15 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                       >
                         <Download className="w-3 h-3" /> Baixar
                       </button>
+                      {isDocumentoContabilidade(doc) && (
+                        <button
+                          type="button"
+                          onClick={() => enviarParaContabilidade(doc, source, titulo)}
+                          className="text-[11px] text-primary underline inline-flex items-center gap-1"
+                        >
+                          <Mail className="w-3 h-3" /> Enviar para contabilidade
+                        </button>
+                      )}
                     </>
                   )}
                   <button
@@ -302,6 +390,13 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
           </div>
         </DialogContent>
       </Dialog>
+      <EmailPdfModal
+        open={!!emailPdfDraft}
+        draft={emailPdfDraft}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEmailPdfDraft(null);
+        }}
+      />
     </div>
   );
 };

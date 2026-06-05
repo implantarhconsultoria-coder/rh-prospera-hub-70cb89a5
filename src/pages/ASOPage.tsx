@@ -396,6 +396,26 @@ const ASOPage: React.FC = () => {
         </div>
       </div>
 
+      <div className="card-premium p-4 border border-primary/20">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+              <FileText className="w-4 h-4 text-primary" />
+              Integracao ASO
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Estrutura pronta para receber ASOs por e-mail/clinica, vincular ao funcionario e arquivar no Historico Documental.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 text-xs md:grid-cols-4 md:text-right">
+            <div><span className="text-muted-foreground">Fornecedor</span><br /><strong>Clinica/SOC via e-mail</strong></div>
+            <div><span className="text-muted-foreground">Recebimento</span><br /><strong>adm.matriz@topac.com.br</strong></div>
+            <div><span className="text-muted-foreground">Webhook/API</span><br /><strong>/api/aso-email-inbound</strong></div>
+            <div><span className="text-muted-foreground">Pendentes</span><br /><strong>{pendentesAso.length}</strong></div>
+          </div>
+        </div>
+      </div>
+
       {alertas.length > 0 && (
         <div className="card-premium p-4 border-l-4 border-warning bg-warning/5">
           <div className="flex items-center gap-2 mb-2">

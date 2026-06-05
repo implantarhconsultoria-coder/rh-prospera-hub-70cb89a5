@@ -181,6 +181,12 @@ export const downloadEmailWithAttachment = async ({
 
 export const CC_OBRIGATORIO = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
 
+export const DESTINATARIOS_CONTABILIDADE = [
+  'marisa@aatconsultoria.com.br',
+  'lucilene@aatconsultoria.com.br',
+  'dp@aatconsultoria.com.br',
+] as const;
+
 export const DESTINATARIOS_ASO = ['agendamento@ponteaereaseguranca.com.br'] as const;
 
 export const getDestinatariosFerias = (unidade: string): readonly string[] => {
@@ -194,9 +200,7 @@ export const getDestinatariosFerias = (unidade: string): readonly string[] => {
   }
 
   return [
-    'marisa@aatconsultoria.com.br',
-    'lucilene@aatconsultoria.com.br',
-    'dp@aatconsultoria.com.br',
+    ...DESTINATARIOS_CONTABILIDADE,
   ];
 };
 

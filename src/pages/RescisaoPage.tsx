@@ -12,14 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, FileX, Printer, Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { calcularRescisao, tipoRescisaoLabel, type TipoRescisao, type AvisoPrevio } from '@/lib/rescisaoCalc';
-import { buildRescisaoHtml } from '@/lib/rescisaoPdf';
-import { printDocumentInPage } from '@/lib/printInPage';
+import { gerarRescisaoPdf } from '@/lib/rescisaoPdf';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
-import { openEmailClient, getDestinatariosRescisao, CC_OBRIGATORIO } from '@/lib/emailUtils';
-import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
+import { DESTINATARIOS_CONTABILIDADE, CC_OBRIGATORIO } from '@/lib/emailUtils';
+import { registrarDocumento, uploadDocumentoArquivo, marcarComoEnviado } from '@/lib/documentoHistorico';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 
 const isMissingRescisaoSchema = (error: any) => {
   const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`.toLowerCase();
@@ -36,6 +36,7 @@ const RescisaoPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
 
   const [empId, setEmpId] = useState('');
   const [dataDesligamento, setDataDesligamento] = useState(new Date().toISOString().slice(0, 10));
@@ -134,7 +135,7 @@ const RescisaoPage: React.FC = () => {
     detalhe: {},
   });
 
-  const rowToDocumento = (r: any) => buildRescisaoHtml({
+  const rowToPdfData = (r: any) => ({
     empresa: r.empresa_nome,
     funcionario: r.funcionario_nome,
     cargo: r.cargo,
@@ -147,6 +148,8 @@ const RescisaoPage: React.FC = () => {
     observacoes: r.observacoes,
     resultado: resultadoFromRow(r) as any,
   });
+
+  const gerarPdfFichaRescisao = (r: any) => gerarRescisaoPdf(rowToPdfData(r) as any);
 
   const buildEmailBody = (r: any) => [
     'Solicito providencias para rescisao/desligamento do colaborador abaixo:',
@@ -189,23 +192,84 @@ const RescisaoPage: React.FC = () => {
     return data?.nome_completo || session.user.email || '';
   };
 
-  const arquivarRescisaoDocumento = async (r: any, html?: string) => {
+  const arquivarRescisaoDocumento = async (r: any, pdf?: { blob: Blob; fileName: string }) => {
     if (!session?.user) return null;
     const funcionarioId = r.funcionario_id || emp?.id;
     const funcionarioNome = r.funcionario_nome || emp?.name || '';
     if (!funcionarioId || !funcionarioNome) return null;
     const nomeUsuario = await getNomeUsuarioAtual();
-    return arquivarDocumentoFuncionario({
+    const competencia = String(r.data_desligamento || dataDesligamento || '').slice(0, 7);
+    const ficha = pdf || gerarPdfFichaRescisao(r);
+    const arquivoUrl = await uploadDocumentoArquivo(
+      funcionarioId,
+      'rescisao',
+      ficha.blob,
+      ficha.fileName,
+      funcionarioNome,
+      competencia,
+    );
+    const descricao = `Rescisao - ${tipoRescisaoLabel(r.tipo_rescisao)} - Desligamento: ${r.data_desligamento || dataDesligamento} - Liquido: ${formatCurrency(Number(r.liquido) || 0)}`;
+
+    const { data: existente } = await supabase
+      .from('documentos_funcionario')
+      .select('*')
+      .eq('funcionario_id', funcionarioId)
+      .eq('tipo_documento', 'Ficha de Rescisao')
+      .eq('competencia', competencia)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existente?.id) {
+      const basePayload = {
+        descricao,
+        arquivo_url: arquivoUrl,
+        status_envio: existente.status_envio === 'enviado' ? 'enviado' : 'gerado',
+      };
+      const payload = {
+        ...basePayload,
+        storage_bucket: 'documentos-funcionarios',
+        storage_path: arquivoUrl,
+        nome_arquivo: ficha.fileName,
+        categoria: 'RECIBOS',
+        origem: 'gerado_sistema',
+        observacao: descricao,
+        data_documento: new Date().toISOString(),
+      };
+      let updateResult = await supabase
+        .from('documentos_funcionario')
+        .update(payload as any)
+        .eq('id', existente.id)
+        .select()
+        .single();
+      if (updateResult.error) {
+        updateResult = await supabase
+          .from('documentos_funcionario')
+          .update(basePayload as any)
+          .eq('id', existente.id)
+          .select()
+          .single();
+      }
+      if (updateResult.error) throw updateResult.error;
+      return updateResult.data;
+    }
+
+    return registrarDocumento({
       funcionarioId,
       funcionarioNome,
       companyId: r.company_id || emp?.companyId || '',
       empresaNome: r.empresa_nome || empresa?.name || '',
       tipoDocumento: 'Ficha de Rescisao',
-      competencia: String(r.data_desligamento || dataDesligamento || '').slice(0, 7),
-      descricao: `Rescisao - ${tipoRescisaoLabel(r.tipo_rescisao)} - Desligamento: ${r.data_desligamento || dataDesligamento} - Liquido: ${formatCurrency(Number(r.liquido) || 0)}`,
-      conteudo: html || rowToDocumento(r),
-      extensao: 'html',
-      storageTipo: 'rescisao',
+      categoria: 'RECIBOS',
+      origem: 'gerado_sistema',
+      competencia,
+      descricao,
+      observacao: descricao,
+      arquivoUrl,
+      storageBucket: 'documentos-funcionarios',
+      storagePath: arquivoUrl,
+      nomeArquivo: ficha.fileName,
+      dataDocumento: new Date().toISOString(),
       geradoPorUserId: session.user.id,
       geradoPorNome: nomeUsuario,
       unidade: r.empresa_nome || empresa?.name || '',
@@ -213,26 +277,41 @@ const RescisaoPage: React.FC = () => {
   };
 
   const enviarEmailRescisao = async (r: any, options: { arquivar?: boolean } = {}) => {
+    const pdf = gerarPdfFichaRescisao(r);
     let registro: any = null;
     if (options.arquivar !== false) {
-      registro = await arquivarRescisaoDocumento(r).catch((error) => {
+      registro = await arquivarRescisaoDocumento(r, pdf).catch((error) => {
         console.error('Erro ao arquivar rescisao no historico:', error);
         return null;
       });
     }
-    const unidade = [r.empresa_nome, r.empresa_municipio, r.empresa_uf].filter(Boolean).join(' ');
-    const destinatarios = getDestinatariosRescisao(unidade);
-    openEmailClient({
-      to: destinatarios,
-      cc: CC_OBRIGATORIO,
-      subject: `Rescisao - ${r.funcionario_nome || ''} - ${r.empresa_nome || ''}`,
+    const nomeUsuario = await getNomeUsuarioAtual();
+    setEmailPdfDraft({
+      to: [...DESTINATARIOS_CONTABILIDADE],
+      cc: [...CC_OBRIGATORIO],
+      subject: `Documentacao de Desligamento - ${r.funcionario_nome || ''}`,
       body: buildEmailBody(r),
+      attachmentBlob: pdf.blob,
+      attachmentName: pdf.fileName,
+      senderUserId: session?.user?.id,
+      senderName: nomeUsuario,
+      senderEmail: session?.user?.email,
+      moduleOrigin: 'rescisoes',
+      documentId: registro?.id,
+      documentName: 'Ficha de Rescisao',
+      afterSend: async () => {
+        if (registro?.id && session?.user) {
+          await marcarComoEnviado(
+            registro.id,
+            session.user.id,
+            nomeUsuario,
+            [...DESTINATARIOS_CONTABILIDADE, ...CC_OBRIGATORIO].join(', '),
+          );
+          await fetchList();
+        }
+      },
     });
-    if (registro?.id && session?.user) {
-      const nomeUsuario = await getNomeUsuarioAtual();
-      await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
-    }
-    toast.success('E-mail de rescisao aberto com a ficha preenchida.');
+    toast.success('Ficha de rescisao pronta para envio a contabilidade.');
   };
 
   const resetForm = () => {
@@ -340,11 +419,14 @@ const RescisaoPage: React.FC = () => {
   };
 
   const imprimir = async (r: any) => {
-    const html = rowToDocumento(r);
-    await arquivarRescisaoDocumento(r, html).catch((error) => {
+    const pdf = gerarPdfFichaRescisao(r);
+    await arquivarRescisaoDocumento(r, pdf).catch((error) => {
       console.error('Erro ao arquivar rescisao no historico:', error);
     });
-    printDocumentInPage(html);
+    const url = URL.createObjectURL(pdf.blob);
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) toast.warning('PDF gerado, mas o navegador bloqueou a nova aba.');
+    window.setTimeout(() => URL.revokeObjectURL(url), 120000);
   };
 
   return (
@@ -482,7 +564,7 @@ const RescisaoPage: React.FC = () => {
                     <Button size="sm" variant="ghost" onClick={() => imprimir(r)} title="Imprimir ficha">
                       <Printer className="w-4 h-4" />
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => enviarEmailRescisao(r)} title="Enviar por e-mail">
+                    <Button size="sm" variant="ghost" onClick={() => enviarEmailRescisao(r)} title="Enviar para contabilidade">
                       <Mail className="w-4 h-4" />
                     </Button>
                   </td>
@@ -495,6 +577,14 @@ const RescisaoPage: React.FC = () => {
           </table>
         )}
       </Card>
+
+      <EmailPdfModal
+        open={!!emailPdfDraft}
+        draft={emailPdfDraft}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEmailPdfDraft(null);
+        }}
+      />
     </div>
   );
 };
