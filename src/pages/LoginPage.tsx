@@ -38,13 +38,17 @@ const LoginPage: React.FC = () => {
     const finalEmail = LOGIN_ALIASES[raw] || raw;
     const { error } = await supabase.auth.signInWithPassword({ email: finalEmail, password });
     setLoading(false);
-    if (error) toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha invalidos' : error.message);
+    if (error) {
+      toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha invalidos' : error.message);
+      return;
+    }
+    window.location.assign('/admin');
   };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/admin`,
     });
     if (result.error) {
       toast.error('Erro ao entrar com Google');

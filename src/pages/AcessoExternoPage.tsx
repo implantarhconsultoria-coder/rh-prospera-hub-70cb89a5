@@ -186,6 +186,16 @@ const mapLegacyRowsToUsuarios = (rows: LegacyAcessoRow[]): Usuario[] => {
 const isOnlyMecanicoRows = (rows: LegacyAcessoRow[]) =>
   rows.length > 0 && rows.every((row) => String(row.modulo || "").toLowerCase() === "mecanico");
 
+const MECANICO_LINK_MESSAGE = "App dos Mecanicos usa somente o link /acesso-mecanico.";
+
+const withoutMecanicoPortals = (usuarios: Usuario[]) =>
+  usuarios
+    .map((u) => ({
+      ...u,
+      portais: (u.portais || []).filter((p) => String(p.modulo || "").toLowerCase() !== "mecanico"),
+    }))
+    .filter((u) => u.portais.length > 0);
+
 const mergeUsuariosLegacy = (adminUsuarios: Usuario[], mecanicos: any[], pin: string): Usuario[] => {
   const usuarios = [...adminUsuarios];
 
@@ -260,9 +270,9 @@ export default function AcessoExternoPage() {
     setLoading(true);
 
     if (p.modulo === "mecanico") {
-      localStorage.setItem("app_mecanico_acesso_id", p.acesso_id);
       setLoading(false);
-      navigate(MODULO_REDIRECT.mecanico(p.acesso_id));
+      toast.info(MECANICO_LINK_MESSAGE);
+      navigate("/acesso-mecanico");
       return;
     }
 
@@ -290,27 +300,24 @@ export default function AcessoExternoPage() {
   };
 
   const validarLegacyPin = async (pinAcesso: string) => {
-    const [{ data: portData, error: portError }, { data: mecData, error: mecError }] = await Promise.all([
-      supabase.rpc("acesso_externo_listar_portais" as any, { p_pin: pinAcesso }),
-      supabase.rpc("acesso_externo_validar_pin" as any, { p_pin: pinAcesso, p_modulo: "mecanico" }),
-    ]);
+    const { data: portData, error: portError } = await supabase.rpc("acesso_externo_listar_portais" as any, {
+      p_pin: pinAcesso,
+    });
 
-    if (portError && mecError) {
+    if (portError) {
       setErro("Erro ao validar acesso. Tente novamente.");
       return;
     }
 
     const portRes = portData as any;
-    const mecRes = mecData as any;
-    const adminUsuarios: Usuario[] = portRes?.ok ? portRes.usuarios || [] : [];
-    const mecanicos = mecRes?.ok && Array.isArray(mecRes.usuarios) ? mecRes.usuarios : [];
-    const lista = mergeUsuariosLegacy(adminUsuarios, mecanicos, pinAcesso);
+    const adminUsuarios: Usuario[] = withoutMecanicoPortals(portRes?.ok ? portRes.usuarios || [] : []);
+    const lista = adminUsuarios;
 
     if (lista.length === 0) {
-      if (portRes?.error === "bloqueado" || mecRes?.error === "bloqueado") {
+      if (portRes?.error === "bloqueado") {
         setErro("Acesso bloqueado pelo administrador.");
       } else {
-        setErro("Acesso nao liberado.");
+        setErro(MECANICO_LINK_MESSAGE);
       }
       return;
     }
@@ -351,17 +358,13 @@ export default function AcessoExternoPage() {
     }
 
     if (isOnlyMecanicoRows(ativos)) {
-      const listaMecanico = mapLegacyRowsToUsuarios(ativos);
-      if (!listaMecanico.length) {
-        setErro("Nenhum modulo liberado para este CPF.");
-        return;
-      }
-      if (listaMecanico.length === 1) escolherUsuario(listaMecanico[0]);
-      else setUsuarios(listaMecanico);
+      setErro(MECANICO_LINK_MESSAGE);
       return;
     }
 
-    const lista = mapLegacyRowsToUsuarios(ativos);
+    const lista = mapLegacyRowsToUsuarios(
+      ativos.filter((row) => String(row.modulo || "").toLowerCase() !== "mecanico"),
+    );
     if (!lista.length) {
       setErro("Nenhum modulo liberado para este CPF.");
       return;
@@ -505,14 +508,11 @@ export default function AcessoExternoPage() {
 
     setLoading(true);
     try {
-      // Compatibilidade temporaria para quem ainda usar PIN antigo.
+      // PIN de mecanico fica isolado em /acesso-mecanico.
       if (cpfDigits.length === 4) {
         await validarLegacyPin(cpfDigits);
         return;
       }
-
-      const mecanicoDireto = await tentarAcessoDiretoMecanico(cpfDigits);
-      if (mecanicoDireto) return;
 
       await validarCpfLegacy(cpfDigits);
     } finally {

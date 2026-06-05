@@ -43,16 +43,22 @@ export default function PortaisPage() {
       navigate("/modulos", { replace: true });
       return;
     }
-    setSessao(s);
+    const portaisWeb = s.portais.filter((p) => String(p.modulo || "").toLowerCase() !== "mecanico");
+    if (!portaisWeb.length) {
+      clearExternalSession();
+      navigate("/acesso-mecanico", { replace: true });
+      return;
+    }
+    setSessao({ ...s, portais: portaisWeb });
   }, [navigate]);
 
   const entrarPortal = async (p: Portal) => {
     setLoading(true);
 
     if (p.modulo === "mecanico") {
-      localStorage.setItem("app_mecanico_acesso_id", p.acesso_id);
       setLoading(false);
-      navigate(MODULO_REDIRECT.mecanico(p.acesso_id));
+      toast.info("App dos Mecanicos usa somente o link /acesso-mecanico.");
+      navigate("/acesso-mecanico");
       return;
     }
 
