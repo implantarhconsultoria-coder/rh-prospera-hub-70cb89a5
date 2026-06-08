@@ -69,6 +69,7 @@ const directorReportItems: MenuItem[] = [
 
 const faturamentoItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/faturamento' },
+  { label: 'Importacao DN4', icon: DatabaseBackup, path: '/admin/faturamento/migracao-dn4' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
   { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas' },
@@ -79,6 +80,7 @@ const faturamentoItems: MenuItem[] = [
 
 const financeiroItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/financeiro' },
+  { label: 'Importacao DN4', icon: DatabaseBackup, path: '/admin/financeiro/importacao-dn4' },
   { label: 'Comprovantes Pagamento', icon: Receipt, path: '/admin/comprovantes-pagamento' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },

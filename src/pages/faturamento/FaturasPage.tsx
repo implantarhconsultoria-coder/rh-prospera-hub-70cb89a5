@@ -40,7 +40,11 @@ const FaturasPage: React.FC = () => {
 
   const [form, setForm] = useState({
     contrato_id: '', competencia: new Date().toISOString().slice(0, 7),
-    data_vencimento: '', subtotal: 0, descontos: 0, acrescimos: 0, observacoes: '',
+    data_vencimento: '', subtotal: 0, descontos: 0, acrescimos: 0,
+    servico_produto: '', cnpj_emissor: '', cnpj_cliente: '',
+    nota_numero: '', nota_data_emissao: '', nota_valor: 0,
+    nota_pdf_url: '', nota_xml_url: '', integracao_nf_observacao: '',
+    observacoes: '',
   });
 
   const carregar = async () => {
@@ -76,6 +80,7 @@ const FaturasPage: React.FC = () => {
 
     const subtotal = Number(form.subtotal) || Number(contrato.valor_mensal) || 0;
     const total = subtotal + Number(form.acrescimos) - Number(form.descontos);
+    const cliente = clientes.find(c => c.id === contrato.cliente_id);
 
     const { data, error } = await supabase.from('faturas').insert({
       numero: proximoNumero(),
@@ -85,9 +90,19 @@ const FaturasPage: React.FC = () => {
       competencia: form.competencia,
       data_vencimento: form.data_vencimento,
       subtotal, descontos: form.descontos, acrescimos: form.acrescimos, total,
+      servico_produto: form.servico_produto,
+      cnpj_emissor: form.cnpj_emissor,
+      cnpj_cliente: form.cnpj_cliente,
+      nota_numero: form.nota_numero,
+      nota_data_emissao: form.nota_data_emissao || null,
+      nota_valor: form.nota_valor || total,
+      nota_pdf_url: form.nota_pdf_url,
+      nota_xml_url: form.nota_xml_url,
+      integracao_nf_status: form.nota_numero ? 'registrada' : 'manual',
+      integracao_nf_observacao: form.integracao_nf_observacao,
       observacoes: form.observacoes,
       status: 'em_aberto',
-    }).select().single();
+    } as any).select().single();
 
     if (error) return toast.error(error.message);
 
@@ -102,13 +117,61 @@ const FaturasPage: React.FC = () => {
       data_vencimento: form.data_vencimento,
       valor_original: total,
       saldo: total,
+      forma_recebimento_prevista: 'boleto',
+      observacoes: cliente?.razao_social ? `Fatura ${data.numero} - ${cliente.razao_social}` : `Fatura ${data.numero}`,
       status: 'aberto',
-    });
+    } as any);
 
     toast.success('Fatura gerada e título a receber criado');
     setShowForm(false);
-    setForm({ contrato_id: '', competencia: new Date().toISOString().slice(0, 7), data_vencimento: '', subtotal: 0, descontos: 0, acrescimos: 0, observacoes: '' });
+    setForm({
+      contrato_id: '', competencia: new Date().toISOString().slice(0, 7),
+      data_vencimento: '', subtotal: 0, descontos: 0, acrescimos: 0,
+      servico_produto: '', cnpj_emissor: '', cnpj_cliente: '',
+      nota_numero: '', nota_data_emissao: '', nota_valor: 0,
+      nota_pdf_url: '', nota_xml_url: '', integracao_nf_observacao: '',
+      observacoes: '',
+    });
     carregar();
+  };
+
+  const gerarPdfFatura = (f: any) => {
+    const empresa = f.empresas?.nome || 'Empresa';
+    const cliente = f.clientes_fat?.razao_social || 'Cliente';
+    const html = `<!doctype html><html><head><meta charset="utf-8" />
+      <title>${f.numero} - ${cliente}</title>
+      <style>
+        @page { size: A4; margin: 12mm; }
+        body { font-family: Arial, sans-serif; color: #111; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        .muted { color: #555; font-size: 12px; }
+        .box { border: 1px solid #111; padding: 10px; margin-top: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12px; }
+        td, th { border: 1px solid #999; padding: 7px; text-align: left; }
+        th { background: #eee; }
+        .total { font-weight: 700; font-size: 16px; text-align: right; }
+      </style></head><body>
+      <h1>FATURA / COBRANÇA - ${f.numero}</h1>
+      <div class="muted">${empresa} | Competência ${f.competencia || '-'}</div>
+      <div class="box">
+        <p><strong>Cliente:</strong> ${cliente}</p>
+        <p><strong>Contrato:</strong> ${f.contratos?.numero || '-'}</p>
+        <p><strong>Vencimento:</strong> ${fmtDate(f.data_vencimento)}</p>
+        <p><strong>Status:</strong> ${STATUS_LABELS[f.status] || f.status}</p>
+      </div>
+      <table><thead><tr><th>Serviço / Produto</th><th>Observação</th><th>Total</th></tr></thead>
+      <tbody><tr><td>${f.servico_produto || 'Serviços conforme contrato'}</td><td>${f.observacoes || '-'}</td><td>${fmtBRL(f.total)}</td></tr></tbody></table>
+      <p class="total">Total: ${fmtBRL(f.total)}</p>
+      <div class="box muted">
+        <strong>Nota fiscal:</strong> ${f.nota_numero || 'pendente/manual'}<br/>
+        <strong>Integração futura:</strong> prefeitura/API emissora será conectada neste fluxo quando liberada.
+      </div>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) return toast.error('Permita pop-ups para gerar o PDF');
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 300);
   };
 
   const marcarPaga = async (id: string) => {
@@ -174,6 +237,7 @@ const FaturasPage: React.FC = () => {
                     <span className={`text-[10px] px-2 py-1 rounded-full ${STATUS_COLORS[f.status]}`}>{STATUS_LABELS[f.status]}</span>
                   </td>
                   <td className="p-3 text-center space-x-1">
+                    <button onClick={() => gerarPdfFatura(f)} title="Gerar PDF" className="p-1 hover:bg-primary/20 rounded text-primary"><FileText className="w-4 h-4" /></button>
                     {f.status !== 'paga' && f.status !== 'cancelada' && (
                       <button onClick={() => marcarPaga(f.id)} title="Marcar como paga" className="p-1 hover:bg-success/20 rounded text-success"><CheckCircle2 className="w-4 h-4" /></button>
                     )}
@@ -238,6 +302,53 @@ const FaturasPage: React.FC = () => {
                   <input type="number" step="0.01" value={form.acrescimos} onChange={e => setForm({ ...form, acrescimos: Number(e.target.value) })}
                     className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Serviço / produto</label>
+                <input value={form.servico_produto} onChange={e => setForm({ ...form, servico_produto: e.target.value })}
+                  placeholder="Descrição do serviço, locação ou produto faturado"
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+              </div>
+              <div className="border border-border rounded-lg p-3 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase">Nota fiscal manual / futura integração</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">CNPJ emissor</label>
+                    <input value={form.cnpj_emissor} onChange={e => setForm({ ...form, cnpj_emissor: e.target.value })}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">CNPJ/CPF cliente</label>
+                    <input value={form.cnpj_cliente} onChange={e => setForm({ ...form, cnpj_cliente: e.target.value })}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Número da nota</label>
+                    <input value={form.nota_numero} onChange={e => setForm({ ...form, nota_numero: e.target.value })}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Data de emissão</label>
+                    <input type="date" value={form.nota_data_emissao} onChange={e => setForm({ ...form, nota_data_emissao: e.target.value })}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Valor da nota</label>
+                    <input type="number" step="0.01" value={form.nota_valor} onChange={e => setForm({ ...form, nota_valor: Number(e.target.value) })}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input value={form.nota_pdf_url} onChange={e => setForm({ ...form, nota_pdf_url: e.target.value })} placeholder="URL do PDF da nota"
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                  <input value={form.nota_xml_url} onChange={e => setForm({ ...form, nota_xml_url: e.target.value })} placeholder="URL do XML da nota"
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                </div>
+                <textarea value={form.integracao_nf_observacao} onChange={e => setForm({ ...form, integracao_nf_observacao: e.target.value })} rows={2}
+                  placeholder="Observação para futura integração com prefeitura/API emissora"
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
               </div>
               <div className="bg-muted/30 p-3 rounded-md text-right">
                 <p className="text-xs text-muted-foreground">Total</p>

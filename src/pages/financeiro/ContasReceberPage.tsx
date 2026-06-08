@@ -25,7 +25,7 @@ const ContasReceberPage: React.FC = () => {
   const [showBaixa, setShowBaixa] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [baixa, setBaixa] = useState({ valor: 0, data: new Date().toISOString().slice(0, 10), forma: 'pix', conta_bancaria_id: '', observacoes: '' });
+  const [baixa, setBaixa] = useState({ valor: 0, data: new Date().toISOString().slice(0, 10), forma: 'pix', conta_bancaria_id: '', comprovante_url: '', observacoes: '' });
 
   const carregar = async () => {
     setLoading(true);
@@ -49,7 +49,7 @@ const ContasReceberPage: React.FC = () => {
 
   const abrirBaixa = (t: any) => {
     setShowBaixa(t);
-    setBaixa({ valor: Number(t.saldo), data: new Date().toISOString().slice(0, 10), forma: 'pix', conta_bancaria_id: contas[0]?.id || '', observacoes: '' });
+    setBaixa({ valor: Number(t.saldo), data: new Date().toISOString().slice(0, 10), forma: t.forma_recebimento_prevista || 'pix', conta_bancaria_id: contas[0]?.id || '', comprovante_url: t.comprovante_url || '', observacoes: '' });
   };
 
   const confirmarBaixa = async () => {
@@ -64,10 +64,11 @@ const ContasReceberPage: React.FC = () => {
       valor: Number(baixa.valor),
       forma_pagamento: baixa.forma,
       conta_bancaria_id: baixa.conta_bancaria_id || null,
+      comprovante_url: baixa.comprovante_url,
       observacoes: baixa.observacoes,
       user_id: user?.id,
       usuario_nome: prof?.nome_completo || '',
-    });
+    } as any);
     if (error) return toast.error(error.message);
     toast.success('Baixa registrada');
     setShowBaixa(null);
@@ -184,6 +185,12 @@ const ContasReceberPage: React.FC = () => {
                   <option value="">— sem vincular —</option>
                   {contas.map(c => <option key={c.id} value={c.id}>{c.nome} ({c.banco})</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Comprovante (URL)</label>
+                <input value={baixa.comprovante_url} onChange={e => setBaixa({ ...baixa, comprovante_url: e.target.value })}
+                  placeholder="Cole o link do comprovante recebido"
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted-foreground">Observações</label>

@@ -11,6 +11,7 @@ import ModuleSwitcher from '@/components/ModuleSwitcher';
 const ITEMS = [
   { to: '/faturamento', label: 'Dashboard', icon: TrendingUp, end: true },
   { to: '/faturamento/clientes', label: 'Clientes', icon: Users },
+  { to: '/faturamento/importacao-dados', label: 'Importacao DN4', icon: FileUp },
   { to: '/faturamento/contratos', label: 'Contratos', icon: FileSignature },
   { to: '/faturamento/medicoes', label: 'Medições', icon: FileText },
   { to: '/faturamento/conferencia', label: 'Conferência', icon: ClipboardCheck },

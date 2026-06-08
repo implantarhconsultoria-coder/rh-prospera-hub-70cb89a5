@@ -5,7 +5,7 @@ import {
   HardHat, Shirt, UtensilsCrossed, Bus, History, Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
   Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
   ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch,
-  ShoppingCart, Sparkles, ChevronRight,
+  ShoppingCart, Sparkles, ChevronRight, DatabaseBackup,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -44,6 +44,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras', group: 'Operacional' },
   { label: 'Historico', icon: History, path: '/admin/historico', group: 'Operacional' },
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Faturamento' },
+  { label: 'Importacao DN4', icon: DatabaseBackup, path: '/admin/faturamento/migracao-dn4', group: 'Faturamento' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes', group: 'Faturamento' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos', group: 'Faturamento' },
   { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas', group: 'Faturamento' },
@@ -51,6 +52,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes', group: 'Faturamento' },
   { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias', group: 'Faturamento' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: 'Financeiro' },
+  { label: 'Importacao DN4', icon: DatabaseBackup, path: '/admin/financeiro/importacao-dn4', group: 'Financeiro' },
   { label: 'Comprovantes Pagamento', icon: Receipt, path: '/admin/comprovantes-pagamento', group: 'Financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Financeiro' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: 'Financeiro' },

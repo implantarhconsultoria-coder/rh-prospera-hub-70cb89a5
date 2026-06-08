@@ -11,6 +11,7 @@ const ITEMS = [
   { to: '/financeiro', label: 'Dashboard', icon: Wallet, end: true },
   { to: '/financeiro/contas-receber', label: 'Contas a Receber', icon: ArrowDownCircle },
   { to: '/financeiro/contas-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle },
+  { to: '/financeiro/importacao-dados', label: 'Importacao DN4', icon: FileUp },
   { to: '/financeiro/fornecedores', label: 'Fornecedores', icon: Building },
   { to: '/financeiro/bancos', label: 'Bancos', icon: Landmark },
   { to: '/financeiro/fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingDown },

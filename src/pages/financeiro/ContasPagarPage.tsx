@@ -32,10 +32,11 @@ const ContasPagarPage: React.FC = () => {
   const [form, setForm] = useState({
     fornecedor_id: '', empresa_id: '', categoria_id: '', centro_custo_id: '',
     descricao: '', competencia: new Date().toISOString().slice(0, 7),
-    data_vencimento: '', valor_previsto: 0, observacoes: '',
+    numero: '', data_emissao: '', data_vencimento: '', valor_previsto: 0,
+    forma_pagamento_prevista: '', anexo_url: '', observacoes: '',
   });
 
-  const [baixa, setBaixa] = useState({ valor: 0, data: new Date().toISOString().slice(0, 10), forma: 'pix', conta_bancaria_id: '', observacoes: '' });
+  const [baixa, setBaixa] = useState({ valor: 0, data: new Date().toISOString().slice(0, 10), forma: 'pix', conta_bancaria_id: '', comprovante_url: '', observacoes: '' });
 
   const carregar = async () => {
     setLoading(true);
@@ -78,19 +79,29 @@ const ContasPagarPage: React.FC = () => {
       empresa_id: form.empresa_id,
       categoria_id: form.categoria_id || null,
       centro_custo_id: form.centro_custo_id || null,
+      numero: form.numero || null,
       descricao: form.descricao,
       competencia: form.competencia,
+      data_emissao: form.data_emissao || new Date().toISOString().slice(0, 10),
       data_vencimento: form.data_vencimento,
       valor_previsto: form.valor_previsto,
       saldo: form.valor_previsto,
       observacoes: form.observacoes,
+      forma_pagamento_prevista: form.forma_pagamento_prevista,
+      anexo_url: form.anexo_url,
+      comprovante_url: form.anexo_url,
       requer_aprovacao: requer,
       status: 'aberto',
-    });
+    } as any);
     if (error) return toast.error(error.message);
     toast.success(`Título criado${requer ? ' — exige aprovação para pagamento' : ''}`);
     setShowForm(false);
-    setForm({ fornecedor_id: '', empresa_id: '', categoria_id: '', centro_custo_id: '', descricao: '', competencia: new Date().toISOString().slice(0, 7), data_vencimento: '', valor_previsto: 0, observacoes: '' });
+    setForm({
+      fornecedor_id: '', empresa_id: '', categoria_id: '', centro_custo_id: '',
+      descricao: '', competencia: new Date().toISOString().slice(0, 7),
+      numero: '', data_emissao: '', data_vencimento: '', valor_previsto: 0,
+      forma_pagamento_prevista: '', anexo_url: '', observacoes: '',
+    });
     carregar();
   };
 
@@ -104,7 +115,7 @@ const ContasPagarPage: React.FC = () => {
   const abrirBaixa = (t: any) => {
     if (t.requer_aprovacao && !t.aprovado_por) return toast.error('Este título exige aprovação antes do pagamento');
     setShowBaixa(t);
-    setBaixa({ valor: Number(t.saldo), data: new Date().toISOString().slice(0, 10), forma: 'pix', conta_bancaria_id: contas[0]?.id || '', observacoes: '' });
+    setBaixa({ valor: Number(t.saldo), data: new Date().toISOString().slice(0, 10), forma: t.forma_pagamento_prevista || 'pix', conta_bancaria_id: contas[0]?.id || '', comprovante_url: t.comprovante_url || '', observacoes: '' });
   };
 
   const confirmarBaixa = async () => {
@@ -115,8 +126,9 @@ const ContasPagarPage: React.FC = () => {
     const { error } = await supabase.from('pagamentos').insert({
       titulo_id: showBaixa.id, data: baixa.data, valor: Number(baixa.valor),
       forma_pagamento: baixa.forma, conta_bancaria_id: baixa.conta_bancaria_id || null,
+      comprovante_url: baixa.comprovante_url,
       observacoes: baixa.observacoes, user_id: user?.id, usuario_nome: prof?.nome_completo || '',
-    });
+    } as any);
     if (error) return toast.error(error.message);
     toast.success('Pagamento registrado');
     setShowBaixa(null);
@@ -220,6 +232,25 @@ const ContasPagarPage: React.FC = () => {
                 <input value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })}
                   className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
               </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground">Número / NF / Pedido</label>
+                  <input value={form.numero} onChange={e => setForm({ ...form, numero: e.target.value })}
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Data de emissão</label>
+                  <input type="date" value={form.data_emissao} onChange={e => setForm({ ...form, data_emissao: e.target.value })}
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Forma prevista</label>
+                  <select value={form.forma_pagamento_prevista} onChange={e => setForm({ ...form, forma_pagamento_prevista: e.target.value })}
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm">
+                    <option value="">—</option><option value="pix">PIX</option><option value="boleto">Boleto</option><option value="ted">TED</option><option value="dinheiro">Dinheiro</option>
+                  </select>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground">Categoria</label>
@@ -260,6 +291,17 @@ const ContasPagarPage: React.FC = () => {
                   <Lock className="w-4 h-4" /> Acima de {fmtBRL(valorMinimo)} — exigirá aprovação antes do pagamento.
                 </div>
               )}
+              <div>
+                <label className="text-xs text-muted-foreground">Anexo/comprovante (URL)</label>
+                <input value={form.anexo_url} onChange={e => setForm({ ...form, anexo_url: e.target.value })}
+                  placeholder="Cole o link do boleto, nota ou comprovante"
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Observações</label>
+                <textarea value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} rows={2}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button onClick={() => setShowForm(false)} className="btn-secondary">Cancelar</button>
                 <button onClick={handleCreate} className="btn-primary">Criar</button>
@@ -297,6 +339,9 @@ const ContasPagarPage: React.FC = () => {
                 <option value="">— sem conta —</option>
                 {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
+              <input value={baixa.comprovante_url} onChange={e => setBaixa({ ...baixa, comprovante_url: e.target.value })}
+                placeholder="URL do comprovante de pagamento"
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
               <textarea value={baixa.observacoes} onChange={e => setBaixa({ ...baixa, observacoes: e.target.value })} rows={2}
                 placeholder="Observações" className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
               <div className="flex justify-end gap-2 pt-2">

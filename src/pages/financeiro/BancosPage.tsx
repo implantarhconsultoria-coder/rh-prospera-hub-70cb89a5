@@ -18,7 +18,8 @@ const BancosPage: React.FC = () => {
 
   const [form, setForm] = useState({
     empresa_id: '', nome: '', banco: '', agencia: '', conta: '',
-    tipo: 'corrente', saldo_inicial: 0,
+    tipo: 'corrente', tipo_conta: 'corrente', codigo_banco: '',
+    chave_pix: '', saldo_inicial: 0, observacoes: '',
   });
 
   const carregar = async () => {
@@ -45,11 +46,15 @@ const BancosPage: React.FC = () => {
     if (!form.nome || !form.empresa_id) return toast.error('Preencha nome e empresa');
     const { error } = await supabase.from('contas_bancarias').insert({
       ...form, saldo_atual: form.saldo_inicial,
-    });
+    } as any);
     if (error) return toast.error(error.message);
     toast.success('Conta criada');
     setShowForm(false);
-    setForm({ empresa_id: '', nome: '', banco: '', agencia: '', conta: '', tipo: 'corrente', saldo_inicial: 0 });
+    setForm({
+      empresa_id: '', nome: '', banco: '', agencia: '', conta: '',
+      tipo: 'corrente', tipo_conta: 'corrente', codigo_banco: '',
+      chave_pix: '', saldo_inicial: 0, observacoes: '',
+    });
     carregar();
   };
 
@@ -72,6 +77,7 @@ const BancosPage: React.FC = () => {
                   <p className="text-xs text-muted-foreground">{c.empresas?.nome}</p>
                   <h3 className="font-bold font-display">{c.nome}</h3>
                   <p className="text-xs">{c.banco} · Ag {c.agencia} · CC {c.conta}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">Pix: {c.chave_pix || 'nao cadastrado'}</p>
                 </div>
                 <button onClick={() => verExtrato(c)} className="p-1.5 hover:bg-primary/20 rounded text-primary"><Eye className="w-4 h-4" /></button>
               </div>
@@ -98,14 +104,19 @@ const BancosPage: React.FC = () => {
                 {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
               </select>
               <input placeholder="Nome da conta *" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
+                <input placeholder="Código" value={form.codigo_banco} onChange={e => setForm({ ...form, codigo_banco: e.target.value })} className="bg-background border border-border rounded-md px-3 py-2 text-sm" />
                 <input placeholder="Banco" value={form.banco} onChange={e => setForm({ ...form, banco: e.target.value })} className="bg-background border border-border rounded-md px-3 py-2 text-sm" />
                 <input placeholder="Agência" value={form.agencia} onChange={e => setForm({ ...form, agencia: e.target.value })} className="bg-background border border-border rounded-md px-3 py-2 text-sm" />
                 <input placeholder="Conta" value={form.conta} onChange={e => setForm({ ...form, conta: e.target.value })} className="bg-background border border-border rounded-md px-3 py-2 text-sm" />
               </div>
-              <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm">
-                <option value="corrente">Conta Corrente</option><option value="poupanca">Poupança</option><option value="caixa">Caixa</option>
-              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value, tipo_conta: e.target.value })} className="bg-background border border-border rounded-md px-3 py-2 text-sm">
+                  <option value="corrente">Conta Corrente</option><option value="poupanca">Poupança</option><option value="caixa">Caixa</option>
+                </select>
+                <input placeholder="Chave Pix" value={form.chave_pix} onChange={e => setForm({ ...form, chave_pix: e.target.value })} className="bg-background border border-border rounded-md px-3 py-2 text-sm" />
+              </div>
+              <textarea placeholder="Observações da conta" value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} rows={2} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />
               <div>
                 <label className="text-xs text-muted-foreground">Saldo inicial</label>
                 <input type="number" step="0.01" value={form.saldo_inicial} onChange={e => setForm({ ...form, saldo_inicial: Number(e.target.value) })} className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm" />

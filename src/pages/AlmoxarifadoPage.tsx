@@ -15,17 +15,20 @@ type Tab = 'estoque' | 'entrada' | 'saida' | 'carregamento' | 'carga' | 'fechame
 interface Item {
   id: string; nome: string; categoria: string; codigo_sku: string; unidade: string;
   quantidade: number; valor_unitario: number; descricao: string; localizacao: string;
+  empresa_id?: string; codigo?: string; estoque_minimo?: number; fornecedor?: string; observacoes?: string;
 }
 
 interface Entrada {
   id: string; item_id: string; quantidade: number; fornecedor: string;
   valor_unitario: number; valor_total: number; nota_fiscal_url: string;
   observacao: string; created_at: string;
+  empresa_id?: string; tipo_documento?: string; numero_documento?: string;
 }
 
 interface Saida {
   id: string; item_id: string; quantidade: number; funcionario_nome: string;
   motivo: string; observacao: string; created_at: string;
+  empresa_id?: string; funcionario_id?: string; veiculo_id?: string; veiculo?: string; obra?: string; filial?: string; carregamento?: string;
 }
 
 const AlmoxarifadoPage: React.FC = () => {
@@ -34,6 +37,8 @@ const AlmoxarifadoPage: React.FC = () => {
   const [itens, setItens] = useState<Item[]>([]);
   const [entradas, setEntradas] = useState<Entrada[]>([]);
   const [saidas, setSaidas] = useState<Saida[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [veiculos, setVeiculos] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [showNewItem, setShowNewItem] = useState(false);
@@ -50,12 +55,20 @@ const AlmoxarifadoPage: React.FC = () => {
 
   // New item form
   const [nomeItem, setNomeItem] = useState('');
+  const [empresaItemId, setEmpresaItemId] = useState('');
+  const [codigoItem, setCodigoItem] = useState('');
   const [categoriaItem, setCategoriaItem] = useState('');
   const [unidadeItem, setUnidadeItem] = useState('un');
   const [localizacaoItem, setLocalizacaoItem] = useState('');
+  const [estoqueMinimoItem, setEstoqueMinimoItem] = useState(0);
+  const [fornecedorItem, setFornecedorItem] = useState('');
+  const [observacoesItem, setObservacoesItem] = useState('');
 
   // Entrada form
   const [entItemId, setEntItemId] = useState('');
+  const [entEmpresaId, setEntEmpresaId] = useState('');
+  const [entTipoDocumento, setEntTipoDocumento] = useState('manual');
+  const [entNumeroDocumento, setEntNumeroDocumento] = useState('');
   const [entQtd, setEntQtd] = useState(0);
   const [entFornecedor, setEntFornecedor] = useState('');
   const [entValorUnit, setEntValorUnit] = useState(0);
@@ -64,11 +77,17 @@ const AlmoxarifadoPage: React.FC = () => {
 
   // Saida form
   const [saiItemId, setSaiItemId] = useState('');
+  const [saiEmpresaId, setSaiEmpresaId] = useState('');
   const [saiQtd, setSaiQtd] = useState(0);
+  const [saiFuncionarioId, setSaiFuncionarioId] = useState('');
   const [saiFuncionario, setSaiFuncionario] = useState('');
   const [saiFuncionarioSearch, setSaiFuncionarioSearch] = useState('');
   const [showFuncSuggestions, setShowFuncSuggestions] = useState(false);
   const [saiMotivo, setSaiMotivo] = useState('');
+  const [saiVeiculoId, setSaiVeiculoId] = useState('');
+  const [saiObra, setSaiObra] = useState('');
+  const [saiFilial, setSaiFilial] = useState('');
+  const [saiCarregamento, setSaiCarregamento] = useState('');
   const [saiObs, setSaiObs] = useState('');
   const funcSearchRef = useRef<HTMLDivElement>(null);
 
@@ -114,14 +133,18 @@ const AlmoxarifadoPage: React.FC = () => {
   }, []);
 
   const fetchAll = async () => {
-    const [r1, r2, r3] = await Promise.all([
+    const [r1, r2, r3, r4, r5] = await Promise.all([
       supabase.from('almoxarifado_itens').select('*').order('nome'),
       supabase.from('almoxarifado_entradas').select('*').order('created_at', { ascending: false }),
       supabase.from('almoxarifado_saidas').select('*').order('created_at', { ascending: false }),
+      supabase.from('empresas').select('id, nome, cnpj').order('nome'),
+      supabase.from('ativos').select('id, descricao, placa, empresa, status').eq('tipo', 'veiculo').order('descricao'),
     ]);
     if (r1.data) setItens(r1.data as unknown as Item[]);
     if (r2.data) setEntradas(r2.data as unknown as Entrada[]);
     if (r3.data) setSaidas(r3.data as unknown as Saida[]);
+    if (r4.data) setEmpresas(r4.data || []);
+    if (r5.data) setVeiculos(r5.data || []);
   };
 
   useEffect(() => { fetchAll(); }, []);
@@ -161,10 +184,17 @@ const AlmoxarifadoPage: React.FC = () => {
     const { error } = await supabase.from('almoxarifado_itens').insert({
       user_id: uid, nome: nomeItem, categoria: categoriaItem, unidade: unidadeItem,
       localizacao: localizacaoItem, quantidade: 0,
+      empresa_id: empresaItemId || null,
+      codigo: codigoItem,
+      codigo_sku: codigoItem,
+      estoque_minimo: estoqueMinimoItem,
+      fornecedor: fornecedorItem,
+      observacoes: observacoesItem,
     } as any);
     if (error) { toast.error(error.message); return; }
     toast.success('Item cadastrado!');
-    setNomeItem(''); setCategoriaItem(''); setLocalizacaoItem('');
+    setNomeItem(''); setEmpresaItemId(''); setCodigoItem(''); setCategoriaItem(''); setUnidadeItem('un');
+    setLocalizacaoItem(''); setEstoqueMinimoItem(0); setFornecedorItem(''); setObservacoesItem('');
     setShowNewItem(false);
     fetchAll();
   };
@@ -183,6 +213,9 @@ const AlmoxarifadoPage: React.FC = () => {
       const qtdIdx = header.findIndex(h => h.includes('qtd') || h.includes('quant'));
       const valIdx = header.findIndex(h => h.includes('valor') || h.includes('preco') || h.includes('preço'));
       const locIdx = header.findIndex(h => h.includes('local'));
+      const codIdx = header.findIndex(h => h.includes('codigo') || h.includes('código') || h.includes('sku'));
+      const minIdx = header.findIndex(h => h.includes('minimo') || h.includes('mínimo'));
+      const fornIdx = header.findIndex(h => h.includes('fornecedor'));
 
       let imported = 0;
       for (let i = 1; i < lines.length; i++) {
@@ -196,6 +229,10 @@ const AlmoxarifadoPage: React.FC = () => {
           quantidade: qtdIdx >= 0 ? Number(cols[qtdIdx]) || 0 : 0,
           valor_unitario: valIdx >= 0 ? Number(cols[valIdx]?.replace(',', '.')) || 0 : 0,
           localizacao: locIdx >= 0 ? cols[locIdx] || '' : '',
+          codigo: codIdx >= 0 ? cols[codIdx] || '' : '',
+          codigo_sku: codIdx >= 0 ? cols[codIdx] || '' : '',
+          estoque_minimo: minIdx >= 0 ? Number(cols[minIdx]?.replace(',', '.')) || 0 : 0,
+          fornecedor: fornIdx >= 0 ? cols[fornIdx] || '' : '',
         } as any);
         imported++;
       }
@@ -226,6 +263,9 @@ const AlmoxarifadoPage: React.FC = () => {
       user_id: uid, item_id: entItemId, quantidade: entQtd, fornecedor: entFornecedor,
       valor_unitario: entValorUnit, valor_total: entQtd * entValorUnit,
       nota_fiscal_url: nfUrl, observacao: entObs,
+      empresa_id: entEmpresaId || null,
+      tipo_documento: entTipoDocumento,
+      numero_documento: entNumeroDocumento,
     } as any);
     if (error) { toast.error(error.message); setLoading(false); return; }
     const item = itens.find(i => i.id === entItemId);
@@ -235,7 +275,8 @@ const AlmoxarifadoPage: React.FC = () => {
       } as any).eq('id', entItemId);
     }
     toast.success('Entrada registrada!');
-    setEntItemId(''); setEntQtd(0); setEntFornecedor(''); setEntValorUnit(0); setEntObs(''); setEntNfFile(null);
+    setEntItemId(''); setEntEmpresaId(''); setEntTipoDocumento('manual'); setEntNumeroDocumento('');
+    setEntQtd(0); setEntFornecedor(''); setEntValorUnit(0); setEntObs(''); setEntNfFile(null);
     setLoading(false);
     fetchAll();
   };
@@ -292,9 +333,17 @@ const AlmoxarifadoPage: React.FC = () => {
     const item = itens.find(i => i.id === saiItemId);
     if (item && saiQtd > item.quantidade) { toast.error('Estoque insuficiente!'); return; }
     setLoading(true);
+    const veiculoSelecionado = veiculos.find(v => v.id === saiVeiculoId);
     const { error } = await supabase.from('almoxarifado_saidas').insert({
       user_id: uid, item_id: saiItemId, quantidade: saiQtd,
       funcionario_nome: saiFuncionario, motivo: saiMotivo, observacao: saiObs,
+      empresa_id: saiEmpresaId || null,
+      funcionario_id: saiFuncionarioId || null,
+      veiculo_id: saiVeiculoId || null,
+      veiculo: veiculoSelecionado ? `${veiculoSelecionado.descricao || ''} ${veiculoSelecionado.placa || ''}`.trim() : '',
+      obra: saiObra,
+      filial: saiFilial,
+      carregamento: saiCarregamento,
     } as any);
     if (error) { toast.error(error.message); setLoading(false); return; }
     if (item) {
@@ -303,7 +352,8 @@ const AlmoxarifadoPage: React.FC = () => {
       } as any).eq('id', saiItemId);
     }
     toast.success('Saída registrada!');
-    setSaiItemId(''); setSaiQtd(0); setSaiFuncionario(''); setSaiFuncionarioSearch(''); setSaiMotivo(''); setSaiObs('');
+    setSaiItemId(''); setSaiEmpresaId(''); setSaiQtd(0); setSaiFuncionarioId(''); setSaiFuncionario('');
+    setSaiFuncionarioSearch(''); setSaiMotivo(''); setSaiVeiculoId(''); setSaiObra(''); setSaiFilial(''); setSaiCarregamento(''); setSaiObs('');
     setLoading(false);
     fetchAll();
   };
@@ -320,6 +370,8 @@ const AlmoxarifadoPage: React.FC = () => {
       await supabase.from('almoxarifado_saidas').insert({
         user_id: uid, item_id: ci.item_id, quantidade: ci.qtd,
         funcionario_nome: carEquipe, motivo: `Carregamento - ${carVeiculo}`, observacao: `Veículo: ${carVeiculo}`,
+        veiculo: carVeiculo,
+        carregamento: carEquipe,
       } as any);
       await supabase.from('almoxarifado_itens').update({
         quantidade: Math.max(0, item.quantidade - ci.qtd),
@@ -414,7 +466,10 @@ const AlmoxarifadoPage: React.FC = () => {
         return true;
       })
     : itens;
-  const filteredItens = itensVisiveis.filter(i => i.nome.toLowerCase().includes(search.toLowerCase()));
+  const filteredItens = itensVisiveis.filter(i => {
+    const q = search.toLowerCase();
+    return !q || `${i.nome} ${i.codigo || ''} ${i.codigo_sku || ''} ${i.categoria || ''} ${i.fornecedor || ''}`.toLowerCase().includes(q);
+  });
 
   const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
     { key: 'estoque', label: 'Estoque', icon: Package },
@@ -574,21 +629,35 @@ const AlmoxarifadoPage: React.FC = () => {
 
             {showImport && (
               <div className="border rounded-lg p-4 bg-muted/20">
-                <p className="text-xs text-muted-foreground mb-2">Envie um CSV/TXT com colunas: Nome, Categoria, Unidade, Quantidade, Valor, Localização</p>
+                <p className="text-xs text-muted-foreground mb-2">Envie um CSV/TXT com colunas: Código, Nome, Categoria, Unidade, Quantidade, Valor, Localização, Estoque mínimo, Fornecedor</p>
                 <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleImport} className="text-xs" />
               </div>
             )}
 
             {showNewItem && (
               <div className="border rounded-lg p-4 bg-muted/20 grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div><label className="text-xs text-muted-foreground block mb-1">Empresa/CNPJ</label>
+                  <select value={empresaItemId} onChange={e => setEmpresaItemId(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+                    <option value="">Todas / não vinculado</option>
+                    {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                  </select></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Código</label>
+                  <Input value={codigoItem} onChange={e => setCodigoItem(e.target.value)} /></div>
                 <div><label className="text-xs text-muted-foreground block mb-1">Nome *</label>
                   <Input value={nomeItem} onChange={e => setNomeItem(e.target.value)} /></div>
                 <div><label className="text-xs text-muted-foreground block mb-1">Categoria</label>
                   <Input value={categoriaItem} onChange={e => setCategoriaItem(e.target.value)} /></div>
                 <div><label className="text-xs text-muted-foreground block mb-1">Unidade</label>
                   <Input value={unidadeItem} onChange={e => setUnidadeItem(e.target.value)} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Estoque mínimo</label>
+                  <Input type="number" value={estoqueMinimoItem} onChange={e => setEstoqueMinimoItem(Number(e.target.value))} /></div>
+                <div><label className="text-xs text-muted-foreground block mb-1">Fornecedor</label>
+                  <Input value={fornecedorItem} onChange={e => setFornecedorItem(e.target.value)} /></div>
                 <div><label className="text-xs text-muted-foreground block mb-1">Localização</label>
                   <Input value={localizacaoItem} onChange={e => setLocalizacaoItem(e.target.value)} /></div>
+                <div className="md:col-span-4"><label className="text-xs text-muted-foreground block mb-1">Observações</label>
+                  <Input value={observacoesItem} onChange={e => setObservacoesItem(e.target.value)} /></div>
                 <Button onClick={handleNewItem} className="md:col-span-4 w-fit">Cadastrar Item</Button>
               </div>
             )}
@@ -606,12 +675,15 @@ const AlmoxarifadoPage: React.FC = () => {
                       />
                     </th>
                   )}
+                  <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Código</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Nome</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Categoria</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Unid.</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Qtd.</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Mín.</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Valor Un.</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Local</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Alerta</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Ações</th>
                 </tr></thead>
                 <tbody>
@@ -627,6 +699,7 @@ const AlmoxarifadoPage: React.FC = () => {
                           />
                         </td>
                       )}
+                      <td className="px-3 py-2 text-xs">{item.codigo || item.codigo_sku || '—'}</td>
                       <td className="px-3 py-2 text-xs font-medium">{item.nome}</td>
                       <td className="px-3 py-2 text-xs">{item.categoria || '—'}</td>
                       <td className="px-3 py-2 text-xs">{item.unidade}</td>
@@ -635,8 +708,14 @@ const AlmoxarifadoPage: React.FC = () => {
                           {item.quantidade}
                         </Badge>
                       </td>
+                      <td className="px-3 py-2 text-xs">{item.estoque_minimo || 0}</td>
                       <td className="px-3 py-2 text-xs">R$ {(item.valor_unitario || 0).toFixed(2)}</td>
                       <td className="px-3 py-2 text-xs">{item.localizacao || '—'}</td>
+                      <td className="px-3 py-2 text-xs">
+                        {Number(item.estoque_minimo || 0) > 0 && item.quantidade <= Number(item.estoque_minimo || 0)
+                          ? <Badge variant="destructive">Baixo</Badge>
+                          : <Badge variant="outline">OK</Badge>}
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1">
                           <Button variant="outline" size="icon" className="h-7 w-7 text-green-600" title="Entrada rápida"
@@ -667,7 +746,7 @@ const AlmoxarifadoPage: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                  {filteredItens.length === 0 && <tr><td colSpan={isAdmin ? 8 : 7} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
+                  {filteredItens.length === 0 && <tr><td colSpan={isAdmin ? 11 : 10} className="text-center py-8 text-muted-foreground text-sm">Nenhum item</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -680,6 +759,12 @@ const AlmoxarifadoPage: React.FC = () => {
             <h2 className="text-sm font-bold text-foreground">Registrar Entrada</h2>
             {isDayBlocked && <p className="text-xs text-destructive font-medium">⚠ Almoxarifado fechado. {diaFechado ? 'Reabra o dia para registrar.' : 'Ative hora extra para continuar.'}</p>}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div><label className="text-xs text-muted-foreground block mb-1">Empresa/CNPJ</label>
+                <select value={entEmpresaId} onChange={e => setEntEmpresaId(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+                  <option value="">Não vincular</option>
+                  {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                </select></div>
               <div><label className="text-xs text-muted-foreground block mb-1">Item *</label>
                 <select value={entItemId} onChange={e => setEntItemId(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
@@ -690,6 +775,13 @@ const AlmoxarifadoPage: React.FC = () => {
                 <Input type="number" value={entQtd} onChange={e => setEntQtd(Number(e.target.value))} /></div>
               <div><label className="text-xs text-muted-foreground block mb-1">Fornecedor</label>
                 <Input value={entFornecedor} onChange={e => setEntFornecedor(e.target.value)} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Tipo documento</label>
+                <select value={entTipoDocumento} onChange={e => setEntTipoDocumento(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+                  <option value="manual">Manual</option><option value="nota">Nota fiscal</option><option value="pedido">Pedido</option>
+                </select></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Número documento</label>
+                <Input value={entNumeroDocumento} onChange={e => setEntNumeroDocumento(e.target.value)} /></div>
               <div><label className="text-xs text-muted-foreground block mb-1">Valor Unitário</label>
                 <Input type="number" step="0.01" value={entValorUnit} onChange={e => setEntValorUnit(Number(e.target.value))} /></div>
               <div><label className="text-xs text-muted-foreground block mb-1">Observação</label>
@@ -708,6 +800,7 @@ const AlmoxarifadoPage: React.FC = () => {
                 <thead className="sticky top-0 z-10 bg-background"><tr className="border-b bg-muted/50">
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Data</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Item</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Documento</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Qtd</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Fornecedor</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Valor Total</th>
@@ -718,6 +811,7 @@ const AlmoxarifadoPage: React.FC = () => {
                     <tr key={e.id} className="border-b hover:bg-muted/20">
                       <td className="px-3 py-2 text-xs">{new Date(e.created_at).toLocaleString('pt-BR')}</td>
                       <td className="px-3 py-2 text-xs font-medium">{getItemName(e.item_id)}</td>
+                      <td className="px-3 py-2 text-xs">{e.numero_documento || e.tipo_documento || '—'}</td>
                       <td className="px-3 py-2 text-xs">{e.quantidade}</td>
                       <td className="px-3 py-2 text-xs">{e.fornecedor || '—'}</td>
                       <td className="px-3 py-2 text-xs">R$ {(e.valor_total || 0).toFixed(2)}</td>
@@ -745,6 +839,12 @@ const AlmoxarifadoPage: React.FC = () => {
             </div>
             {isDayBlocked && <p className="text-xs text-destructive font-medium">⚠ {diaFechado ? 'Dia fechado. Reabra para registrar.' : 'Almoxarifado fechado. Ative hora extra.'}</p>}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div><label className="text-xs text-muted-foreground block mb-1">Empresa/CNPJ</label>
+                <select value={saiEmpresaId} onChange={e => setSaiEmpresaId(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+                  <option value="">Não vincular</option>
+                  {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                </select></div>
               <div><label className="text-xs text-muted-foreground block mb-1">Item *</label>
                 <select value={saiItemId} onChange={e => setSaiItemId(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
@@ -760,6 +860,7 @@ const AlmoxarifadoPage: React.FC = () => {
                   onChange={e => {
                     setSaiFuncionarioSearch(e.target.value);
                     setSaiFuncionario('');
+                    setSaiFuncionarioId('');
                     setShowFuncSuggestions(true);
                   }}
                   onFocus={() => saiFuncionarioSearch.length >= 2 && setShowFuncSuggestions(true)}
@@ -767,7 +868,7 @@ const AlmoxarifadoPage: React.FC = () => {
                   className={saiFuncionario ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : ''}
                 />
                 {saiFuncionario && (
-                  <button onClick={() => { setSaiFuncionario(''); setSaiFuncionarioSearch(''); }}
+                  <button onClick={() => { setSaiFuncionario(''); setSaiFuncionarioId(''); setSaiFuncionarioSearch(''); }}
                     className="absolute right-2 top-7 text-muted-foreground hover:text-foreground">
                     <X className="w-4 h-4" />
                   </button>
@@ -778,6 +879,7 @@ const AlmoxarifadoPage: React.FC = () => {
                       <button key={emp.id} className="w-full px-3 py-2 text-left text-xs hover:bg-muted flex items-center justify-between"
                         onClick={() => {
                           setSaiFuncionario(emp.name);
+                          setSaiFuncionarioId(emp.id);
                           setSaiFuncionarioSearch(emp.name);
                           setShowFuncSuggestions(false);
                         }}>
@@ -793,6 +895,18 @@ const AlmoxarifadoPage: React.FC = () => {
                   </div>
                 )}
               </div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Veículo</label>
+                <select value={saiVeiculoId} onChange={e => setSaiVeiculoId(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+                  <option value="">Sem veículo</option>
+                  {veiculos.map(v => <option key={v.id} value={v.id}>{v.descricao || 'Veículo'} {v.placa ? `- ${v.placa}` : ''}</option>)}
+                </select></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Obra</label>
+                <Input value={saiObra} onChange={e => setSaiObra(e.target.value)} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Filial</label>
+                <Input value={saiFilial} onChange={e => setSaiFilial(e.target.value)} /></div>
+              <div><label className="text-xs text-muted-foreground block mb-1">Carregamento</label>
+                <Input value={saiCarregamento} onChange={e => setSaiCarregamento(e.target.value)} /></div>
               <div><label className="text-xs text-muted-foreground block mb-1">Motivo</label>
                 <Input value={saiMotivo} onChange={e => setSaiMotivo(e.target.value)} /></div>
               <div><label className="text-xs text-muted-foreground block mb-1">Observação</label>
@@ -814,6 +928,7 @@ const AlmoxarifadoPage: React.FC = () => {
                       <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Item</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Qtd</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Funcionário</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Veículo/Obra</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Motivo</th>
                     </tr></thead>
                     <tbody>
@@ -823,6 +938,7 @@ const AlmoxarifadoPage: React.FC = () => {
                           <td className="px-3 py-2 text-xs font-medium">{getItemName(s.item_id)}</td>
                           <td className="px-3 py-2 text-xs">{s.quantidade}</td>
                           <td className="px-3 py-2 text-xs">{s.funcionario_nome}</td>
+                          <td className="px-3 py-2 text-xs">{s.veiculo || s.obra || s.filial || '—'}</td>
                           <td className="px-3 py-2 text-xs">{s.motivo || '—'}</td>
                         </tr>
                       ))}
@@ -840,6 +956,7 @@ const AlmoxarifadoPage: React.FC = () => {
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Item</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Qtd</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Funcionário</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Veículo/Obra</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Motivo</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Obs</th>
                 </tr></thead>
@@ -850,6 +967,7 @@ const AlmoxarifadoPage: React.FC = () => {
                       <td className="px-3 py-2 text-xs font-medium">{getItemName(s.item_id)}</td>
                       <td className="px-3 py-2 text-xs">{s.quantidade}</td>
                       <td className="px-3 py-2 text-xs">{s.funcionario_nome}</td>
+                      <td className="px-3 py-2 text-xs">{s.veiculo || s.obra || s.filial || '—'}</td>
                       <td className="px-3 py-2 text-xs">{s.motivo || '—'}</td>
                       <td className="px-3 py-2 text-xs">{s.observacao || '—'}</td>
                     </tr>
@@ -995,11 +1113,15 @@ const AlmoxarifadoPage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-background"><tr className="border-b bg-muted/50">
+                  {isAdmin && <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase w-10"></th>}
+                  <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Código</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Item</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Estoque Atual</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Estoque Mín.</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Total Entradas</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Total Saídas</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Valor Estoque</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Alerta</th>
                 </tr></thead>
                 <tbody>
                   {itens.map(item => {
@@ -1017,13 +1139,18 @@ const AlmoxarifadoPage: React.FC = () => {
                           />
                         </td>
                       )}
+                      <td className="px-3 py-2 text-xs">{item.codigo || item.codigo_sku || '—'}</td>
                       <td className="px-3 py-2 text-xs font-medium">{item.nome}</td>
                         <td className="px-3 py-2 text-xs">
                           <Badge variant={item.quantidade <= 0 ? 'destructive' : 'default'}>{item.quantidade} {item.unidade}</Badge>
                         </td>
+                        <td className="px-3 py-2 text-xs">{item.estoque_minimo || 0}</td>
                         <td className="px-3 py-2 text-xs text-green-600">+{tEntradas}</td>
                         <td className="px-3 py-2 text-xs text-red-600">-{tSaidas}</td>
                         <td className="px-3 py-2 text-xs">R$ {(item.quantidade * (item.valor_unitario || 0)).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-xs">
+                          {Number(item.estoque_minimo || 0) > 0 && item.quantidade <= Number(item.estoque_minimo || 0) ? 'Estoque baixo' : 'OK'}
+                        </td>
                       </tr>
                     );
                   })}

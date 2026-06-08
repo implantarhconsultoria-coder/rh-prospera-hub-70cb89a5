@@ -106,6 +106,7 @@ import FluxoCaixaPage from "@/pages/financeiro/FluxoCaixaPage";
 import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
 import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
+import MigracaoDN4Page from "@/pages/admin/MigracaoDN4Page";
 import NotFound from "@/pages/NotFound";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
 import AcessoDiretoPage from "@/pages/AcessoDiretoPage";
@@ -316,12 +317,12 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/admin/faturamento/conferencia" element={<ConferenciaPage />} />
         {/* Base de Faturamento (importacao) */}
-        <Route path="/admin/faturamento/importacao-dados" element={<Navigate to="/admin/faturamento" replace />} />
-        <Route path="/admin/faturamento/migracao-dn4" element={<Navigate to="/admin/faturamento" replace />} />
-        <Route path="/admin/faturamento/importacao/*" element={<Navigate to="/admin/faturamento" replace />} />
+        <Route path="/admin/faturamento/importacao-dados" element={<MigracaoDN4Page />} />
+        <Route path="/admin/faturamento/migracao-dn4" element={<MigracaoDN4Page />} />
+        <Route path="/admin/faturamento/importacao/*" element={<MigracaoDN4Page />} />
         {/* Redirecionamentos legados (rota interna antiga) */}
-        <Route path="/admin/faturamento/dn4" element={<Navigate to="/admin/faturamento" replace />} />
-        <Route path="/admin/faturamento/dn4/*" element={<Navigate to="/admin/faturamento" replace />} />
+        <Route path="/admin/faturamento/dn4" element={<MigracaoDN4Page />} />
+        <Route path="/admin/faturamento/dn4/*" element={<MigracaoDN4Page />} />
         {/* Financeiro */}
         <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
         <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />
@@ -332,6 +333,8 @@ const AuthGate = () => {
         <Route path="/admin/financeiro/inadimplencia" element={<InadimplenciaPage />} />
         <Route path="/admin/financeiro/centros-custo" element={<CentrosCustoPage />} />
         <Route path="/admin/financeiro/conciliacao" element={<ConciliacaoPage />} />
+        <Route path="/admin/financeiro/importacao-dn4" element={<MigracaoDN4Page />} />
+        <Route path="/admin/financeiro/importacao-dados" element={<MigracaoDN4Page />} />
       </Route>
 
       {/* ========== FILIAL PORTAL ========== */}
@@ -384,8 +387,8 @@ const AuthGate = () => {
         <Route path="/faturamento/reajustes" element={<ReajustesPage />} />
         <Route path="/faturamento/pendencias" element={<PendenciasPage />} />
         <Route path="/faturamento/conferencia" element={<ConferenciaPage />} />
-        <Route path="/faturamento/importacao-dados" element={<Navigate to="/faturamento" replace />} />
-        <Route path="/faturamento/importacoes-dn4" element={<Navigate to="/faturamento" replace />} />
+        <Route path="/faturamento/importacao-dados" element={<MigracaoDN4Page />} />
+        <Route path="/faturamento/importacoes-dn4" element={<MigracaoDN4Page />} />
       </Route>
 
       {/* ========== FINANCEIRO PORTAL (acesso teste FIN) ========== */}
@@ -399,7 +402,7 @@ const AuthGate = () => {
         <Route path="/financeiro/inadimplencia" element={<InadimplenciaPage />} />
         <Route path="/financeiro/centros-custo" element={<CentrosCustoPage />} />
         <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
-        <Route path="/financeiro/importacao-dados" element={<Navigate to="/financeiro" replace />} />
+        <Route path="/financeiro/importacao-dados" element={<MigracaoDN4Page />} />
       </Route>
 
       {/* Catch-all */}
