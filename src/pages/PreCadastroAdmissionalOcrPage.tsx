@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, Loader2, Mail, RefreshCw, Save, Upload } from 'lucide-react';
-import { CC_OBRIGATORIO, openEmailClient } from '@/lib/emailUtils';
+import { CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
@@ -49,6 +49,14 @@ type PreCadastro = {
 type OcrField = { valor?: string | number | null; confianca?: number; observacao?: string };
 type OcrResult = { ok?: boolean; confianca_geral?: number; texto_bruto?: string; campos?: Record<string, OcrField>; pendencias?: string[]; log?: string[]; error?: string };
 type GeneratedAsoGuide = { blob: Blob; fileName: string; url: string };
+type PreCadastroDocumento = {
+  id?: string;
+  pre_cadastro_id?: string;
+  tipo_documento?: string | null;
+  nome_arquivo?: string | null;
+  arquivo_url?: string | null;
+  created_at?: string | null;
+};
 
 const statusLabel: Record<string, string> = {
   aguardando_validacao: 'Aguardando validacao',
@@ -167,10 +175,37 @@ const buildExameEmailBody = (r: Partial<PreCadastro>) => {
 ].join('\n');
 };
 const buildContabilidadeEmailBody = (r: Partial<PreCadastro>) => [
-  'Prezados, bom dia.', '', 'Solicitamos, por gentileza, o registro do colaborador abaixo:', '',
-  `Nome: ${r.nome || ''}`, `CPF: ${r.cpf || ''}`, `RG: ${r.rg || ''}`, `Data de nascimento: ${r.data_nascimento || ''}`, `Empresa: ${r.empresa_nome || ''}`, `CNPJ: ${r.cnpj || ''}`, `Funcao: ${r.funcao || ''}`, `Setor: ${r.setor_ghe || ''}`, `Salario: ${r.salario ? r.salario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : ''}`, `Data de inicio: ${r.data_admissao || ''}`, `Tipo de admissao: ${r.tipo_admissao || ''}`, `Horario/Jornada: ${r.jornada || ''}`, `Beneficios: ${r.beneficios || ''}`, `Insalubridade, se aplicavel: ${r.insalubridade || ''}`,
-  '', 'Segue em anexo a documentacao admissional completa, incluindo ASO.', '', 'Pedimos a gentileza de confirmar o recebimento e dar andamento ao registro.', '', 'Atenciosamente,', 'TOPAC RH PRO',
-].join('\n');
+  'Prezados,',
+  '',
+  `Segue documentação admissional do colaborador ${r.nome || ''}, CPF ${r.cpf || ''}, para admissão pela empresa ${r.empresa_nome || ''}, função ${r.funcao || ''}.`,
+  r.data_admissao ? `Data de admissão/início: ${r.data_admissao}.` : '',
+  '',
+  'Documentos anexados conforme pré-cadastro.',
+  '',
+  'Atenciosamente,',
+].filter((line) => line !== null && line !== undefined).join('\n');
+
+const CONTABILIDADE_DESTINATARIOS = ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'];
+
+const mimeFromFileName = (fileName: string) => {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.doc')) return 'application/msword';
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  return 'application/pdf';
+};
+
+const fileNameFromUrl = (url: string, fallback: string) => {
+  try {
+    const pathname = new URL(url).pathname;
+    const fileName = decodeURIComponent(pathname.split('/').pop() || '').trim();
+    return fileName || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const { companies, employees, refreshData, session, config } = useApp();
@@ -452,7 +487,85 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     catch (e: any) { toast.error(`Erro ao salvar ASO: ${e.message}`); }
   };
 
-  const enviarContabilidade = async () => { openEmailClient({ to: ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'], cc: Array.from(CC_OBRIGATORIO), subject: `Solicitacao de Registro - ${form.nome || ''} - ${form.empresa_nome || ''}`, body: buildContabilidadeEmailBody(form) }); if (form.id) { await (supabase as any).rpc('admin_pre_cadastro_preparar_contabilidade', { p_id: form.id }); await carregar(); } toast.success('E-mail para contabilidade aberto. Anexe a documentacao completa.'); };
+  const carregarDocumentosContabilidade = async () => {
+    const documentos: PreCadastroDocumento[] = [];
+    const urlsAdicionadas = new Set<string>();
+    const adicionarDocumento = (documento: PreCadastroDocumento) => {
+      const url = documento.arquivo_url || '';
+      if (!url || urlsAdicionadas.has(url)) return;
+      urlsAdicionadas.add(url);
+      documentos.push(documento);
+    };
+
+    if (form.id) {
+      const { data, error } = await (supabase as any)
+        .from('pre_cadastro_documentos')
+        .select('id, pre_cadastro_id, tipo_documento, nome_arquivo, arquivo_url, created_at')
+        .eq('pre_cadastro_id', form.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      (data || []).forEach(adicionarDocumento);
+    }
+
+    adicionarDocumento({
+      tipo_documento: 'ficha_solicitacao_emprego',
+      nome_arquivo: `Ficha de solicitacao de emprego - ${form.nome || 'pre-cadastro'}.pdf`,
+      arquivo_url: form.arquivo_ficha_url || '',
+    });
+    adicionarDocumento({
+      tipo_documento: 'aso',
+      nome_arquivo: `ASO - ${form.nome || 'pre-cadastro'}.pdf`,
+      arquivo_url: form.arquivo_aso_url || '',
+    });
+
+    return Promise.all(documentos.map(async (documento) => {
+      const url = documento.arquivo_url || '';
+      const fallbackName = `${categoriaPreCadastro(documento.tipo_documento)} - ${form.nome || 'pre-cadastro'}.pdf`;
+      const attachmentName = documento.nome_arquivo || fileNameFromUrl(url, fallbackName);
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Nao foi possivel baixar o anexo ${attachmentName}`);
+      }
+      const attachmentBlob = await response.blob();
+      const attachmentContentType = attachmentBlob.type || mimeFromFileName(attachmentName);
+      return {
+        attachmentBlob,
+        attachmentName,
+        attachmentContentType,
+        documentId: documento.id,
+        documentName: attachmentName,
+        label: categoriaPreCadastro(documento.tipo_documento),
+      };
+    }));
+  };
+
+  const enviarContabilidade = async () => {
+    try {
+      const attachments = await carregarDocumentosContabilidade();
+      if (!attachments.length) {
+        toast.error('Não há documentos anexados neste pré-cadastro.');
+        return;
+      }
+
+      setEmailPdfDraft({
+        to: CONTABILIDADE_DESTINATARIOS,
+        cc: Array.from(CC_OBRIGATORIO),
+        subject: `Documentação admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`,
+        body: buildContabilidadeEmailBody(form),
+        attachments,
+        moduleOrigin: 'pre-cadastro admissional',
+        documentName: `Documentação admissional - ${form.nome || ''}`,
+        afterSend: async () => {
+          if (!form.id) return;
+          const { error } = await (supabase as any).rpc('admin_pre_cadastro_preparar_contabilidade', { p_id: form.id });
+          if (error) throw error;
+          await carregar();
+        },
+      });
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao preparar e-mail para contabilidade.');
+    }
+  };
 
   const migrarDocumentosPreCadastro = async (funcionarioId: string) => {
     if (!form.id || !funcionarioId || !form.empresa_id) return 0;

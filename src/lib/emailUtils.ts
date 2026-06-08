@@ -15,6 +15,14 @@ export interface EmailParams {
   authToken?: string;
 }
 
+export interface EmailAttachmentInput {
+  attachmentBlob: Blob;
+  attachmentName: string;
+  attachmentContentType?: string;
+  documentId?: string;
+  documentName?: string;
+}
+
 export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
   const enc = encodeURIComponent;
   const params: string[] = [];
@@ -40,6 +48,22 @@ const safeFileName = (value: string) =>
 const ensurePdfBlob = (blob: Blob) =>
   blob.type === PDF_CONTENT_TYPE ? blob : new Blob([blob], { type: PDF_CONTENT_TYPE });
 
+const contentTypeToExtension = (contentType: string) => {
+  const type = contentType.toLowerCase();
+  if (type.includes('pdf')) return 'pdf';
+  if (type.includes('png')) return 'png';
+  if (type.includes('webp')) return 'webp';
+  if (type.includes('jpeg') || type.includes('jpg')) return 'jpg';
+  if (type.includes('wordprocessingml.document')) return 'docx';
+  if (type.includes('msword')) return 'doc';
+  return 'pdf';
+};
+
+const hasFileExtension = (value: string) => /\.[a-z0-9]{2,8}$/i.test(value);
+
+const ensureAttachmentBlob = (blob: Blob, contentType: string) =>
+  blob.type === contentType ? blob : new Blob([blob], { type: contentType });
+
 const openPdfPreview = (blob: Blob, fileName: string) => {
   const pdf = ensurePdfBlob(blob);
   const url = URL.createObjectURL(pdf);
@@ -48,7 +72,7 @@ const openPdfPreview = (blob: Blob, fileName: string) => {
   return { opened: Boolean(win), fileName };
 };
 
-const blobToBase64 = (blob: Blob) =>
+const blobToBase64 = (blob: Blob, contentType = blob.type || PDF_CONTENT_TYPE) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -56,7 +80,7 @@ const blobToBase64 = (blob: Blob) =>
       resolve(result.includes(',') ? result.split(',')[1] || '' : result);
     };
     reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(ensurePdfBlob(blob));
+    reader.readAsDataURL(ensureAttachmentBlob(blob, contentType));
   });
 
 const buildEmailApiErrorMessage = (data: any) => {
@@ -88,6 +112,7 @@ export const sendEmailWithPdfAttachment = async ({
   body,
   attachmentBlob,
   attachmentName,
+  attachments,
   senderUserId,
   senderName,
   senderEmail,
@@ -95,13 +120,40 @@ export const sendEmailWithPdfAttachment = async ({
   documentId,
   documentName,
   authToken,
-}: EmailParams & { attachmentBlob: Blob; attachmentName: string }) => {
-  const pdfBlob = ensurePdfBlob(attachmentBlob);
-  const attachmentBase64 = await blobToBase64(pdfBlob);
-  if (!attachmentBase64) throw new Error('pdf_anexo_vazio');
-  const cleanAttachmentName = safeFileName(attachmentName).toLowerCase().endsWith('.pdf')
-    ? safeFileName(attachmentName)
-    : `${safeFileName(attachmentName)}.pdf`;
+}: EmailParams & {
+  attachmentBlob?: Blob;
+  attachmentName?: string;
+  attachments?: EmailAttachmentInput[];
+}) => {
+  const rawAttachments = attachments?.length
+    ? attachments
+    : attachmentBlob && attachmentName
+      ? [{ attachmentBlob, attachmentName, documentId, documentName }]
+      : [];
+
+  if (!rawAttachments.length) throw new Error('pdf_anexo_vazio');
+
+  const normalizedAttachments = await Promise.all(rawAttachments.map(async (attachment) => {
+    const attachmentContentType = attachment.attachmentContentType || attachment.attachmentBlob.type || PDF_CONTENT_TYPE;
+    const normalizedBlob = ensureAttachmentBlob(attachment.attachmentBlob, attachmentContentType);
+    const attachmentBase64 = await blobToBase64(normalizedBlob, attachmentContentType);
+    if (!attachmentBase64) throw new Error('pdf_anexo_vazio');
+    const safeName = safeFileName(attachment.attachmentName);
+    const cleanAttachmentName = hasFileExtension(safeName)
+      ? safeName
+      : `${safeName}.${contentTypeToExtension(attachmentContentType)}`;
+    return {
+      attachmentName: cleanAttachmentName,
+      attachmentBase64,
+      attachmentContentType,
+      attachmentSize: normalizedBlob.size,
+      documentId: attachment.documentId,
+      documentName: attachment.documentName || cleanAttachmentName,
+    };
+  }));
+
+  const firstAttachment = normalizedAttachments[0];
+  const documentNames = normalizedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
 
   const response = await fetch('/api/send-email-pdf', {
     method: 'POST',
@@ -114,16 +166,17 @@ export const sendEmailWithPdfAttachment = async ({
       cc: cc || [],
       subject,
       body,
-      attachmentName: cleanAttachmentName,
-      attachmentBase64,
-      attachmentContentType: PDF_CONTENT_TYPE,
-      attachmentSize: pdfBlob.size,
+      attachments: normalizedAttachments,
+      attachmentName: firstAttachment.attachmentName,
+      attachmentBase64: firstAttachment.attachmentBase64,
+      attachmentContentType: firstAttachment.attachmentContentType,
+      attachmentSize: firstAttachment.attachmentSize,
       senderUserId,
       senderName,
       senderEmail,
       moduleOrigin,
-      documentId,
-      documentName: documentName || cleanAttachmentName,
+      documentId: documentId || firstAttachment.documentId,
+      documentName: documentName || documentNames,
     }),
   });
   const data = await response.json().catch(() => ({}));

@@ -14,8 +14,23 @@ export type EmailPdfDraft = {
   cc?: string[];
   subject: string;
   body: string;
-  attachmentBlob: Blob;
-  attachmentName: string;
+  attachmentBlob?: Blob;
+  attachmentName?: string;
+  attachments?: {
+    attachmentBlob: Blob;
+    attachmentName: string;
+    attachmentContentType?: string;
+    documentId?: string;
+    documentName?: string;
+    label?: string;
+  }[];
+  checklistItems?: {
+    label: string;
+    found: boolean;
+    required?: boolean;
+    detail?: string;
+  }[];
+  missingWarnings?: string[];
   senderUserId?: string;
   senderName?: string;
   senderEmail?: string;
@@ -57,6 +72,11 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     if (!draft) return;
     const toList = parseEmails(to);
     const ccList = parseEmails(cc);
+    const attachments = draft.attachments?.length
+      ? draft.attachments
+      : draft.attachmentBlob && draft.attachmentName
+        ? [{ attachmentBlob: draft.attachmentBlob, attachmentName: draft.attachmentName, documentId: draft.documentId, documentName: draft.documentName }]
+        : [];
     if (toList.length === 0) {
       toast.error('Informe ao menos um destinatario.');
       return;
@@ -67,6 +87,10 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     }
     if (!body.trim()) {
       toast.error('Informe a mensagem do e-mail.');
+      return;
+    }
+    if (!attachments.length) {
+      toast.error('Nenhum anexo foi localizado para o e-mail.');
       return;
     }
 
@@ -80,14 +104,13 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
         cc: ccList,
         subject: subject.trim(),
         body: body.trim(),
-        attachmentBlob: draft.attachmentBlob,
-        attachmentName: draft.attachmentName,
+        attachments,
         senderUserId: draft.senderUserId || authUser?.id,
         senderName: draft.senderName || String(authUser?.user_metadata?.nome_completo || authUser?.email || ''),
         senderEmail: draft.senderEmail || authUser?.email,
         moduleOrigin: draft.moduleOrigin || 'documentos',
         documentId: draft.documentId,
-        documentName: draft.documentName || draft.attachmentName,
+        documentName: draft.documentName || draft.attachmentName || attachments.map((item) => item.documentName || item.attachmentName).join('; '),
         authToken: session?.access_token,
       });
       try {
@@ -136,6 +159,18 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
               Anexo: <span className="font-medium">{draft.attachmentName}</span>
             </div>
           )}
+          {draft?.attachments?.length ? (
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <p className="mb-1 font-medium">Anexos ({draft.attachments.length}):</p>
+              <ul className="space-y-1">
+                {draft.attachments.map((attachment) => (
+                  <li key={`${attachment.attachmentName}-${attachment.documentId || attachment.label || ''}`} className="text-xs text-muted-foreground">
+                    {attachment.label ? `${attachment.label}: ` : ''}<span className="font-medium text-foreground">{attachment.attachmentName}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>
