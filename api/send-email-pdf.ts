@@ -252,9 +252,25 @@ const missingSmtpEnv = () =>
     key === 'EMAIL_FROM' ? !getEmailFrom() : !env(key),
   );
 
-const normalizeAttachmentName = (value: unknown) => {
-  const fileName = String(value || 'documento.pdf').trim() || 'documento.pdf';
-  return fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+const contentTypeToExtension = (contentType: string) => {
+  const type = contentType.toLowerCase();
+  if (type.includes('pdf')) return 'pdf';
+  if (type.includes('png')) return 'png';
+  if (type.includes('webp')) return 'webp';
+  if (type.includes('jpeg') || type.includes('jpg')) return 'jpg';
+  if (type.includes('wordprocessingml.document')) return 'docx';
+  if (type.includes('msword')) return 'doc';
+  return 'pdf';
+};
+
+const normalizeAttachmentContentType = (value: unknown) =>
+  String(value || PDF_CONTENT_TYPE).trim() || PDF_CONTENT_TYPE;
+
+const normalizeAttachmentName = (value: unknown, contentType = PDF_CONTENT_TYPE) => {
+  const fileName = String(value || 'documento').trim() || 'documento';
+  return /\.[a-z0-9]{2,8}$/i.test(fileName)
+    ? fileName
+    : `${fileName}.${contentTypeToExtension(contentType)}`;
 };
 
 const normalizeBase64 = (value: unknown) =>
@@ -264,21 +280,25 @@ const normalizeBase64 = (value: unknown) =>
 
 const normalizeAttachments = (body: any) => {
   const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
-  const fromArray = rawAttachments.map((item: any) => ({
-    attachmentName: normalizeAttachmentName(item?.attachmentName || item?.filename || item?.name),
-    attachmentBase64: normalizeBase64(item?.attachmentBase64 || item?.attachment || item?.content || item?.base64),
-    attachmentContentType: PDF_CONTENT_TYPE,
-    attachmentSize: Number(item?.attachmentSize || item?.size || 0),
-    documentId: uuidOrNull(item?.documentId || item?.documentoId),
-    documentName: String(item?.documentName || item?.documentoNome || item?.attachmentName || item?.filename || '').trim(),
-  })).filter((item: any) => item.attachmentBase64);
+  const fromArray = rawAttachments.map((item: any) => {
+    const attachmentContentType = normalizeAttachmentContentType(item?.attachmentContentType || item?.contentType || item?.type);
+    return {
+      attachmentName: normalizeAttachmentName(item?.attachmentName || item?.filename || item?.name, attachmentContentType),
+      attachmentBase64: normalizeBase64(item?.attachmentBase64 || item?.attachment || item?.content || item?.base64),
+      attachmentContentType,
+      attachmentSize: Number(item?.attachmentSize || item?.size || 0),
+      documentId: uuidOrNull(item?.documentId || item?.documentoId),
+      documentName: String(item?.documentName || item?.documentoNome || item?.attachmentName || item?.filename || '').trim(),
+    };
+  }).filter((item: any) => item.attachmentBase64);
 
   if (fromArray.length) return fromArray;
 
+  const singleContentType = normalizeAttachmentContentType(body.attachmentContentType || body.contentType || body.type);
   const single = {
-    attachmentName: normalizeAttachmentName(body.attachmentName),
+    attachmentName: normalizeAttachmentName(body.attachmentName, singleContentType),
     attachmentBase64: normalizeBase64(body.attachmentBase64 || body.attachment || body.content),
-    attachmentContentType: PDF_CONTENT_TYPE,
+    attachmentContentType: singleContentType,
     attachmentSize: Number(body.attachmentSize || 0),
     documentId: uuidOrNull(body.documentId || body.documentoId),
     documentName: String(body.documentName || body.documentoNome || body.attachmentName || '').trim(),

@@ -20,6 +20,7 @@ export type EmailPdfDraft = {
   attachments?: {
     attachmentBlob: Blob;
     attachmentName: string;
+    attachmentContentType?: string;
     documentId?: string;
     documentName?: string;
     label?: string;
