@@ -227,6 +227,7 @@ const ProtocoloPage: React.FC = () => {
   const extractLocalProtocolData = (rawText: string) => {
     const text = (rawText || '').replace(/\r/g, '').trim();
     const flat = text.replace(/\s+/g, ' ');
+    const normalizedFlat = normalizePlainText(flat);
     const pick = (patterns: RegExp[]) => {
       for (const pattern of patterns) {
         const match = flat.match(pattern) || text.match(pattern);
@@ -234,10 +235,20 @@ const ProtocoloPage: React.FC = () => {
       }
       return '';
     };
-    const placaValue = pick([/\bplaca\s*[:\-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i]);
+    const pickNormalized = (patterns: RegExp[]) => {
+      for (const pattern of patterns) {
+        const match = normalizedFlat.match(pattern);
+        if (match?.[1]) return match[1].trim();
+      }
+      return '';
+    };
+    const placaValue = formatPlacaValue(pick([/\bplaca\s*[:\-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i]) || pickNormalized([/\bPLACA\s*[:\-]?\s*([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/]));
     const patrimonioValue = pick([
       /\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:\-]?\s*([A-Z0-9./-]{2,30})\b/i,
       /(?:^|\n|\s)([A-Z]{1,4}\d{1,4}(?:[./-]\d{1,6})?)\s*(?:[-–—]\s*)?(?:placa|ve[ií]culo|compressor)\b/i,
+    ]) || pickNormalized([
+      /\bPATRIMONIO\s*(?:N[Oº.]*)?\s*[:\-]?\s*([A-Z0-9./-]{2,30})\b/,
+      /\b(?:COMPRESSOR|VEICULO|EQUIPAMENTO|MAQUINA)\s+(?:DE\s+)?PATRIMONIO\s*([A-Z0-9./-]{2,30})\b/,
     ]);
     const destinoMatch = flat.match(/encaminhad[ao]s?\s+(?:a|à)\s+empresa\s+(.+?)(?:\s+aos cuidados de\s+|\s+a\/c\s+|[.,;\n]|$)/i);
     let empresaDestino = '';
@@ -449,6 +460,85 @@ const ProtocoloPage: React.FC = () => {
     return hydratedAtivo;
   };
 
+  const findAtivoFromExtraction = (extracted: VehicleDocumentExtraction) => {
+    const normalizedPlaca = sanitize(extracted.placa || '');
+    const normalizedPatrimonio = sanitize(extracted.patrimonio || patrimonio || '');
+    const normalizedRenavam = String(extracted.renavam || '').trim();
+    const normalizedChassi = String(extracted.chassi || '').trim().toLowerCase();
+
+    return ativosCache.find((ativo) => {
+      if (normalizedPlaca && hasValue(ativo.placa) && sanitize(ativo.placa) === normalizedPlaca) return true;
+      if (normalizedPatrimonio && hasValue(ativo.patrimonio) && sanitize(ativo.patrimonio) === normalizedPatrimonio) return true;
+      if (normalizedRenavam && hasValue(ativo.renavam) && ativo.renavam === normalizedRenavam) return true;
+      if (normalizedChassi && hasValue(ativo.chassi) && ativo.chassi.toLowerCase() === normalizedChassi) return true;
+      return false;
+    }) || null;
+  };
+
+  const buildAtivoObservationFromExtraction = (extracted: VehicleDocumentExtraction, base = '') => {
+    const lines = [
+      base,
+      extracted.exercicio && `Exercicio: ${extracted.exercicio}`,
+      extracted.proprietario_empresa && `Proprietario / Empresa: ${extracted.proprietario_empresa}`,
+      extracted.municipio_uf && `Municipio/UF: ${extracted.municipio_uf}`,
+      extracted.especie_tipo && `Especie/Tipo: ${extracted.especie_tipo}`,
+      extracted.marca_modelo && `Marca/Modelo: ${extracted.marca_modelo}`,
+    ].filter(Boolean);
+    return lines.join('\n');
+  };
+
+  const linkUploadedPdfToAtivo = async (extracted: VehicleDocumentExtraction, arquivoUrl: string, fileName: string) => {
+    const existing = matchedAtivo || findAtivoFromExtraction(extracted);
+
+    if (existing) {
+      const updates: Record<string, string> = {};
+      if (!hasValue(existing.arquivo_url)) updates.arquivo_url = arquivoUrl;
+      if (!hasValue(existing.placa) && hasValue(extracted.placa)) updates.placa = extracted.placa!;
+      if (!hasValue(existing.patrimonio) && hasValue(extracted.patrimonio || patrimonio)) updates.patrimonio = (extracted.patrimonio || patrimonio).trim();
+      if (!hasValue(existing.renavam) && hasValue(extracted.renavam)) updates.renavam = extracted.renavam!;
+      if (!hasValue(existing.chassi) && hasValue(extracted.chassi)) updates.chassi = extracted.chassi!;
+      if (!hasValue(existing.ano_fabricacao) && hasValue(extracted.ano_fabricacao)) updates.ano_fabricacao = extracted.ano_fabricacao!;
+      if (!hasValue(existing.ano_modelo) && hasValue(extracted.ano_modelo)) updates.ano_modelo = extracted.ano_modelo!;
+      if (!hasValue(existing.descricao) && hasValue(extracted.descricao || descricaoEquipamento)) updates.descricao = (extracted.descricao || descricaoEquipamento).trim();
+      if (!hasValue(existing.empresa) && hasValue(extracted.empresa || extracted.proprietario_empresa)) updates.empresa = (extracted.empresa || extracted.proprietario_empresa || '').trim();
+      const observation = buildAtivoObservationFromExtraction(extracted, existing.observacao || '');
+      if (observation && observation !== existing.observacao) updates.observacao = observation;
+
+      if (Object.keys(updates).length) {
+        const { error } = await supabase.from('ativos').update(updates as any).eq('id', existing.id);
+        if (error) throw error;
+        const hydrated = { ...existing, ...updates } as AtivoDoc;
+        setAtivosCache((current) => current.map((item) => item.id === existing.id ? hydrated : item));
+        setMatchedAtivo(hydrated);
+        return hydrated;
+      }
+
+      setMatchedAtivo(existing);
+      return existing;
+    }
+
+    const payload = {
+      tipo: 'veiculo',
+      descricao: extracted.descricao || descricaoEquipamento || fileName.replace(/\.[^/.]+$/, ''),
+      placa: extracted.placa || placa || '',
+      patrimonio: extracted.patrimonio || patrimonio || '',
+      empresa: extracted.empresa || extracted.proprietario_empresa || empresaDestinataria || 'TOPAC MATRIZ',
+      observacao: buildAtivoObservationFromExtraction(extracted, 'Documento vinculado automaticamente pelo Protocolo.'),
+      arquivo_url: arquivoUrl,
+      renavam: extracted.renavam || '',
+      chassi: extracted.chassi || '',
+      ano_fabricacao: extracted.ano_fabricacao || '',
+      ano_modelo: extracted.ano_modelo || '',
+      status: 'ativo',
+    };
+    const { data, error } = await supabase.from('ativos').insert(payload as any).select('*').single();
+    if (error) throw error;
+    const created = data as unknown as AtivoDoc;
+    setAtivosCache((current) => [created, ...current]);
+    setMatchedAtivo(created);
+    return created;
+  };
+
   const applyMatchedAtivo = (ativo: AtivoDoc) => {
     if (hasValue(ativo.placa)) setPlaca(ativo.placa);
     if (hasValue(ativo.patrimonio)) setPatrimonio(ativo.patrimonio);
@@ -523,7 +613,7 @@ const ProtocoloPage: React.FC = () => {
 
   // Auto-match when key fields change — auto-fill ALL vehicle fields
   useEffect(() => {
-    if (!placa && !patrimonio && !renavam && !chassi) {
+    if (!placa && !patrimonio && !renavam && !chassi && !descricaoEquipamento) {
       setMatchedAtivo(null);
       lastMatchedIdRef.current = null;
       return;
@@ -533,6 +623,9 @@ const ProtocoloPage: React.FC = () => {
     const normalizedPatrimonio = sanitize(patrimonio);
     const normalizedRenavam = renavam.trim();
     const normalizedChassi = chassi.trim().toLowerCase();
+    const descriptionTokens = normalizePlainText(descricaoEquipamento)
+      .split(' ')
+      .filter((token) => token.length >= 4 && !['PATRIMONIO', 'PLACA', 'DOCUMENTO', 'ATIVO', 'EQUIPAMENTO'].includes(token));
 
     const plateMatch = normalizedPlaca
       ? ativosCache.find((a) => hasValue(a.placa) && sanitize(a.placa) === normalizedPlaca)
@@ -542,6 +635,10 @@ const ProtocoloPage: React.FC = () => {
       if (normalizedPatrimonio && hasValue(a.patrimonio) && sanitize(a.patrimonio) === normalizedPatrimonio) return true;
       if (normalizedRenavam && hasValue(a.renavam) && a.renavam === normalizedRenavam) return true;
       if (normalizedChassi && hasValue(a.chassi) && a.chassi.toLowerCase() === normalizedChassi) return true;
+      if (descriptionTokens.length >= 2) {
+        const haystack = normalizePlainText(`${a.descricao || ''} ${a.observacao || ''}`);
+        if (descriptionTokens.every((token) => haystack.includes(token))) return true;
+      }
       return false;
     });
 
@@ -559,7 +656,7 @@ const ProtocoloPage: React.FC = () => {
       setMatchedAtivo(null);
       lastMatchedIdRef.current = null;
     }
-  }, [placa, patrimonio, renavam, chassi, ativosCache]);
+  }, [placa, patrimonio, renavam, chassi, descricaoEquipamento, ativosCache]);
 
   const filteredAtivos = useMemo(() => {
     if (!ativoSearch || ativoSearch.length < 2) return [];
@@ -637,7 +734,13 @@ const ProtocoloPage: React.FC = () => {
     const { data: urlData } = supabase.storage.from('documentos-ativos').getPublicUrl(fileName);
     setPdfUrl(urlData.publicUrl);
     toast.success('PDF anexado. Lendo dados do documento...');
-    await readAndApplyVehicleDocument({ source: file, fileLabel: file.name });
+    const extracted = await readAndApplyVehicleDocument({ source: file, fileLabel: file.name });
+    if (extracted) {
+      await linkUploadedPdfToAtivo(extracted, urlData.publicUrl, file.name).catch((error) => {
+        console.warn('[protocolo] falha ao vincular PDF anexado ao cadastro de frota', error);
+        toast.warning('PDF lido, mas nao consegui salvar o vinculo na Frota. Os campos foram preenchidos para este protocolo.');
+      });
+    }
   };
 
   const titulo = 'PROTOCOLO DE LIBERAÇÃO DE DOCUMENTO';
@@ -889,7 +992,7 @@ const ProtocoloPage: React.FC = () => {
 
         {!matchedAtivo && !pdfUrl && (placa || patrimonio || renavam || chassi) && (
           <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-sm">
-            <span className="text-warning font-medium">Nenhum documento correspondente encontrado automaticamente.</span>
+            <span className="text-warning font-medium">Documento não encontrado automaticamente. Selecione o PDF do ativo.</span>
             <Button variant="link" size="sm" className="text-primary ml-2" onClick={() => setShowManualSelect(true)}>
               Selecionar manualmente
             </Button>
@@ -956,7 +1059,7 @@ const ProtocoloPage: React.FC = () => {
                 className="mt-2"
               >
                 {loadingPdf ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Ler dados do documento
+                LER DOCUMENTO E PREENCHER
               </Button>
             )}
             {pdfUrl && (

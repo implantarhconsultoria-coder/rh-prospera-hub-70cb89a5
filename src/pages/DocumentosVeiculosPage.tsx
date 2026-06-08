@@ -28,6 +28,33 @@ interface Ativo {
   ano_modelo: string;
   vencimento_ipva: string | null;
   vencimento_licenciamento: string | null;
+  exercicio?: string;
+  especie_tipo?: string;
+  marca_modelo?: string;
+  cor?: string;
+  proprietario_empresa?: string;
+  cnpj?: string;
+  municipio_uf?: string;
+}
+
+interface VehicleExtraction {
+  placa?: string;
+  renavam?: string;
+  chassi?: string;
+  ano_fabricacao?: string;
+  ano_modelo?: string;
+  exercicio?: string;
+  especie_tipo?: string;
+  marca_modelo?: string;
+  cor?: string;
+  proprietario_empresa?: string;
+  cnpj?: string;
+  municipio_uf?: string;
+  patrimonio?: string;
+  descricao?: string;
+  empresa?: string;
+  observacao?: string;
+  sourceText?: string;
 }
 
 interface Manutencao {
@@ -144,6 +171,14 @@ const formatChassi = (value: string) => {
   return match?.[0] || '';
 };
 
+const formatCnpj = (value: string) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  const match = digits.match(/\d{14}/);
+  if (!match) return '';
+  const d = match[0];
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+};
+
 const isPlateLike = (value: string) => !!formatPlaca(value) && normalizePlainText(value).replace(/[^A-Z0-9]/g, '').length <= 8;
 
 const findInLabelWindow = (lines: string[], label: RegExp, value: RegExp, fallbackText = '') => {
@@ -156,6 +191,53 @@ const findInLabelWindow = (lines: string[], label: RegExp, value: RegExp, fallba
   }
   const fallback = normalizePlainText(fallbackText).match(value);
   return fallback?.[1] || fallback?.[0] || '';
+};
+
+const cleanDocumentValue = (value: string) =>
+  normalizePlainText(value)
+    .replace(/\b(PLACA|RENAVAM|CHASSI|VIN|ANO|FABRICACAO|FAB|MODELO|MOD|EXERCICIO|PROPRIETARIO|NOME|RAZAO|SOCIAL|CNPJ|CPF|MUNICIPIO|CIDADE|UF|ESPECIE|TIPO|MARCA|VERSAO|COR|PREDOMINANTE)\b/g, ' ')
+    .replace(/[|:;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const findFreeTextAfterLabel = (lines: string[], label: RegExp, blocked: RegExp) => {
+  for (let index = 0; index < lines.length; index += 1) {
+    const normalized = normalizePlainText(lines[index]);
+    if (!label.test(normalized)) continue;
+
+    const sameLine = cleanDocumentValue(lines[index]);
+    if (sameLine && !label.test(sameLine) && !blocked.test(sameLine)) return sameLine;
+
+    for (let next = index + 1; next <= index + 5 && next < lines.length; next += 1) {
+      const candidate = cleanDocumentValue(lines[next]);
+      if (candidate && !blocked.test(candidate)) return candidate;
+    }
+  }
+  return '';
+};
+
+const extractStoredVehicleExtra = (ativo: Partial<Ativo>, label: string) => {
+  const text = String(ativo.observacao || '');
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = text.match(new RegExp(`${escaped}\\s*:\\s*([^\\n]+)`, 'i'));
+  return match?.[1]?.trim() || '';
+};
+
+const buildVehicleObservation = (extracted: VehicleExtraction, current = '') => {
+  const cleanedCurrent = String(current || '')
+    .replace(/Dados extraidos do documento:[\s\S]*$/i, '')
+    .trim();
+  const lines = [
+    extracted.exercicio && `Exercicio: ${extracted.exercicio}`,
+    extracted.proprietario_empresa && `Proprietario / Empresa: ${extracted.proprietario_empresa}`,
+    extracted.cnpj && `CNPJ: ${extracted.cnpj}`,
+    extracted.municipio_uf && `Municipio/UF: ${extracted.municipio_uf}`,
+    extracted.especie_tipo && `Especie/Tipo: ${extracted.especie_tipo}`,
+    extracted.marca_modelo && `Marca/Modelo: ${extracted.marca_modelo}`,
+    extracted.cor && `Cor: ${extracted.cor}`,
+  ].filter(Boolean);
+  const extractedBlock = lines.length ? `Dados extraidos do documento:\n${lines.join('\n')}` : '';
+  return [cleanedCurrent, extracted.observacao, extractedBlock].filter(Boolean).join('\n\n').trim();
 };
 
 const cleanModelText = (value: string) => {
@@ -192,11 +274,12 @@ const inferDescricaoTipo = (text: string, model = '') => {
   return modelo ? `${tipo} - ${modelo}` : tipo;
 };
 
-const normalizeVehicleExtraction = (aiData: any, localData: any, fileName: string) => {
+const normalizeVehicleExtraction = (aiData: any, localData: VehicleExtraction, fileName: string): VehicleExtraction => {
   const rawDescricao = String(aiData?.descricao || localData?.descricao || '');
   const marcaModelo = cleanModelText(aiData?.marca_modelo || aiData?.modelo || localData?.marca_modelo || rawDescricao);
-  const context = `${rawDescricao} ${marcaModelo} ${localData?.sourceText || ''}`;
-  const descricao = inferDescricaoTipo(context, isPlateLike(rawDescricao) ? marcaModelo : rawDescricao || marcaModelo);
+  const especieTipo = cleanDocumentValue(aiData?.especie_tipo || aiData?.tipo || localData?.especie_tipo || '');
+  const context = `${rawDescricao} ${especieTipo} ${marcaModelo} ${localData?.sourceText || ''}`;
+  const descricao = [especieTipo, marcaModelo].filter(Boolean).join(' - ') || inferDescricaoTipo(context, isPlateLike(rawDescricao) ? marcaModelo : rawDescricao || marcaModelo);
 
   return {
     placa: formatPlaca(localData?.placa || aiData?.placa || fileName),
@@ -204,18 +287,33 @@ const normalizeVehicleExtraction = (aiData: any, localData: any, fileName: strin
     chassi: formatChassi(localData?.chassi || aiData?.chassi || ''),
     ano_fabricacao: String(localData?.ano_fabricacao || aiData?.ano_fabricacao || '').replace(/\D/g, '').slice(0, 4),
     ano_modelo: String(localData?.ano_modelo || aiData?.ano_modelo || '').replace(/\D/g, '').slice(0, 4),
+    exercicio: String(localData?.exercicio || aiData?.exercicio || '').replace(/\D/g, '').slice(0, 4),
+    especie_tipo: especieTipo,
+    marca_modelo: marcaModelo,
+    cor: cleanDocumentValue(localData?.cor || aiData?.cor || ''),
+    proprietario_empresa: cleanDocumentValue(localData?.proprietario_empresa || aiData?.proprietario_empresa || aiData?.proprietario || aiData?.empresa || ''),
+    cnpj: formatCnpj(localData?.cnpj || aiData?.cnpj || ''),
+    municipio_uf: cleanDocumentValue(localData?.municipio_uf || aiData?.municipio_uf || aiData?.municipio || ''),
     patrimonio: String(aiData?.patrimonio || localData?.patrimonio || '').trim(),
     descricao,
-    empresa: String(aiData?.empresa || localData?.empresa || 'TOPAC MATRIZ').trim(),
+    empresa: String(aiData?.empresa || localData?.empresa || localData?.proprietario_empresa || 'TOPAC MATRIZ').trim(),
     observacao: String(aiData?.observacao || localData?.observacao || '').trim(),
   };
 };
 
-const parseVehicleTextLocally = (text: string, fileName: string) => {
+const parseVehicleTextLocally = (text: string, fileName: string): VehicleExtraction => {
   const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const all = `${fileName}\n${text}`;
   const normalizedAll = normalizePlainText(all);
   const anoPair = normalizedAll.match(/\b((?:19|20)\d{2})\s*\/\s*((?:19|20)\d{2})\b/);
+  const municipio = findFreeTextAfterLabel(lines, /\b(MUNICIPIO|LOCALIDADE|CIDADE)\b/, /\b(PLACA|CHASSI|RENAVAM|CPF|CNPJ|EXERCICIO|PROPRIETARIO|MARCA|MODELO|ANO|COR|ESPECIE|TIPO)\b/);
+  const uf =
+    findInLabelWindow(lines, /\bUF\b/, /\b([A-Z]{2})\b/, all) ||
+    (municipio.match(/\b([A-Z]{2})$/)?.[1] || '');
+  const proprietario = findFreeTextAfterLabel(lines, /\b(PROPRIETARIO|NOME|RAZAO SOCIAL|RAZAO)\b/, /\b(PLACA|CHASSI|RENAVAM|CPF|CNPJ|EXERCICIO|MARCA|MODELO|ANO|MUNICIPIO|COR|ESPECIE|TIPO)\b/);
+  const especieTipo = findFreeTextAfterLabel(lines, /\b(ESPECIE\s*\/?\s*TIPO|ESPECIE|TIPO)\b/, /\b(PLACA|CHASSI|RENAVAM|CPF|CNPJ|EXERCICIO|MARCA|MODELO|ANO|MUNICIPIO|COR|PROPRIETARIO)\b/);
+  const marcaModelo = findModelText(lines);
+  const cor = findFreeTextAfterLabel(lines, /\b(COR\s+PREDOMINANTE|COR)\b/, /\b(PLACA|CHASSI|RENAVAM|CPF|CNPJ|EXERCICIO|MARCA|MODELO|ANO|MUNICIPIO|ESPECIE|TIPO|PROPRIETARIO)\b/);
 
   return {
     placa: formatPlaca(findInLabelWindow(lines, /\bPLACA\b/, /([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})/, all) || fileName),
@@ -223,8 +321,15 @@ const parseVehicleTextLocally = (text: string, fileName: string) => {
     chassi: formatChassi(findInLabelWindow(lines, /\b(CHASSI|VIN)\b/, /([A-HJ-NPR-Z0-9]{17})/, all)),
     ano_fabricacao: findInLabelWindow(lines, /\b(FABRICACAO|ANO FAB|FAB\/MOD)\b/, /((?:19|20)\d{2})/, all) || anoPair?.[1] || '',
     ano_modelo: findInLabelWindow(lines, /\b(MODELO|ANO MOD|FAB\/MOD)\b/, /(?:19|20)\d{2}\s*\/\s*((?:19|20)\d{2})/, all) || anoPair?.[2] || '',
-    marca_modelo: findModelText(lines),
-    descricao: inferDescricaoTipo(all, findModelText(lines)),
+    exercicio: findInLabelWindow(lines, /\bEXERCICIO\b/, /((?:19|20)\d{2})/, all),
+    cnpj: formatCnpj(findInLabelWindow(lines, /\bCNPJ\b/, /(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/, all)),
+    proprietario_empresa: proprietario,
+    municipio_uf: [municipio, uf].filter(Boolean).join('/'),
+    especie_tipo: especieTipo,
+    marca_modelo: marcaModelo,
+    cor,
+    empresa: proprietario,
+    descricao: [especieTipo, marcaModelo].filter(Boolean).join(' - ') || inferDescricaoTipo(all, marcaModelo),
     sourceText: normalizedAll,
   };
 };
@@ -240,6 +345,13 @@ const normalizeAtivoForDisplay = (ativo: Ativo): Ativo => {
       : ativo.descricao,
     renavam: formatRenavam(ativo.renavam || ''),
     chassi: formatChassi(ativo.chassi || ''),
+    exercicio: ativo.exercicio || extractStoredVehicleExtra(ativo, 'Exercicio'),
+    especie_tipo: ativo.especie_tipo || extractStoredVehicleExtra(ativo, 'Especie/Tipo'),
+    marca_modelo: ativo.marca_modelo || extractStoredVehicleExtra(ativo, 'Marca/Modelo'),
+    cor: ativo.cor || extractStoredVehicleExtra(ativo, 'Cor'),
+    proprietario_empresa: ativo.proprietario_empresa || extractStoredVehicleExtra(ativo, 'Proprietario / Empresa'),
+    cnpj: ativo.cnpj || extractStoredVehicleExtra(ativo, 'CNPJ'),
+    municipio_uf: ativo.municipio_uf || extractStoredVehicleExtra(ativo, 'Municipio/UF'),
   };
 };
 
@@ -332,7 +444,7 @@ const DocumentosVeiculosPage: React.FC = () => {
     return Number.isFinite(n) ? n : 0;
   };
 
-  const analyzeVehiclePdf = async (source: File | Uint8Array, fileName: string) => {
+  const analyzeVehiclePdf = async (source: File | Uint8Array | string, fileName: string) => {
     const bytes = source instanceof File ? new Uint8Array(await source.arrayBuffer()) : source;
     const extractedText = await extractPdfTextByLines(bytes)
       .catch(() => extractPdfText(bytes))
@@ -394,6 +506,7 @@ const DocumentosVeiculosPage: React.FC = () => {
       try {
         extracted = await analyzeVehiclePdf(file, file.name);
       } catch {}
+      const observacao = buildVehicleObservation(extracted, extracted.observacao || '');
 
       const { error } = await supabase.from('ativos').insert({
         user_id: session.user.id,
@@ -402,7 +515,7 @@ const DocumentosVeiculosPage: React.FC = () => {
         placa: extracted.placa || '',
         patrimonio: extracted.patrimonio || '',
         empresa: extracted.empresa || 'TOPAC MATRIZ',
-        observacao: extracted.observacao || '',
+        observacao,
         arquivo_url,
         renavam: extracted.renavam || '',
         chassi: extracted.chassi || '',
@@ -420,7 +533,7 @@ const DocumentosVeiculosPage: React.FC = () => {
           patrimonio: extracted.patrimonio || '',
           empresa: extracted.empresa || 'TOPAC MATRIZ',
           arquivo_url,
-          observacao: extracted.observacao || 'Salvo localmente. Aplicar base Frota no Supabase para persistir oficialmente.',
+          observacao: observacao || 'Salvo localmente. Aplicar base Frota no Supabase para persistir oficialmente.',
           status: 'ativo',
           renavam: extracted.renavam || '',
           chassi: extracted.chassi || '',
@@ -482,6 +595,80 @@ const DocumentosVeiculosPage: React.FC = () => {
       setEditingId(null);
       fetchAtivos();
     } else toast.error('Erro ao salvar');
+  };
+
+  const applyVehicleExtractionToAtivo = async (ativo: Ativo, extracted: VehicleExtraction) => {
+    const hasText = (value?: string | null) => !!String(value || '').trim() && String(value || '').trim() !== '-';
+    const updates: Partial<Ativo> = {};
+    const nextObservation = buildVehicleObservation(extracted, ativo.observacao || '');
+
+    const fillMissing = (field: keyof Ativo, value?: string) => {
+      if (!hasText(value)) return;
+      const current = String((ativo as any)[field] || '');
+      if (!hasText(current)) (updates as any)[field] = value?.trim();
+    };
+
+    fillMissing('placa', extracted.placa);
+    fillMissing('patrimonio', extracted.patrimonio);
+    fillMissing('renavam', extracted.renavam);
+    fillMissing('chassi', extracted.chassi);
+    fillMissing('ano_fabricacao', extracted.ano_fabricacao);
+    fillMissing('ano_modelo', extracted.ano_modelo);
+
+    const currentDescription = normalizePlainText(ativo.descricao || '');
+    if (hasText(extracted.descricao) && (!hasText(ativo.descricao) || isPlateLike(ativo.descricao) || currentDescription === 'CARRO' || currentDescription === 'CARROCERIA')) {
+      updates.descricao = extracted.descricao?.trim();
+    }
+
+    if (hasText(extracted.empresa || extracted.proprietario_empresa)) {
+      const currentEmpresa = normalizePlainText(ativo.empresa || '');
+      if (!hasText(ativo.empresa) || currentEmpresa === 'TOPAC MATRIZ') {
+        updates.empresa = (extracted.empresa || extracted.proprietario_empresa || '').trim();
+      }
+    }
+
+    if (nextObservation && nextObservation !== ativo.observacao) {
+      updates.observacao = nextObservation;
+    }
+
+    if (!Object.keys(updates).length) return ativo;
+
+    if (ativo.id.startsWith('local-') || readLocalList<Ativo>(VEICULOS_LOCAL_KEY).some(a => a.id === ativo.id)) {
+      const updated = readLocalList<Ativo>(VEICULOS_LOCAL_KEY).map(a => a.id === ativo.id ? { ...a, ...updates } : a);
+      writeLocalList(VEICULOS_LOCAL_KEY, updated);
+      return { ...ativo, ...updates } as Ativo;
+    }
+
+    const { error } = await supabase.from('ativos').update(updates as any).eq('id', ativo.id);
+    if (error) throw error;
+    return { ...ativo, ...updates } as Ativo;
+  };
+
+  const handleReadAtivoDocument = async (ativo: Ativo) => {
+    if (!ativo.arquivo_url) {
+      toast.error('Este ativo nao tem PDF vinculado para leitura.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const extracted = await analyzeVehiclePdf(ativo.arquivo_url, ativo.descricao || ativo.placa || 'Documento do veiculo');
+      const updated = await applyVehicleExtractionToAtivo(ativo, extracted);
+      const summary = [
+        updated.placa && `placa ${updated.placa}`,
+        updated.renavam && `RENAVAM ${updated.renavam}`,
+        updated.chassi && `chassi ${updated.chassi}`,
+        updated.ano_fabricacao && `ano ${updated.ano_fabricacao}`,
+        updated.exercicio && `exercicio ${updated.exercicio}`,
+      ].filter(Boolean).join(', ');
+      toast.success(summary ? `Documento lido e Frota atualizada: ${summary}.` : 'Documento lido. Revise os campos do ativo.');
+      fetchAtivos();
+    } catch (error) {
+      console.error('[frota] erro ao reler documento do veiculo', error);
+      toast.error('Nao foi possivel ler o PDF deste ativo.');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const selectedAtivo = ativos.find(a => a.id === manutForm.ativo_id);
@@ -568,7 +755,12 @@ const DocumentosVeiculosPage: React.FC = () => {
         (a.placa || '').toLowerCase().includes(q) ||
           (a.patrimonio || '').toLowerCase().includes(q) ||
           (a.renavam || '').toLowerCase().includes(q) ||
-          (a.chassi || '').toLowerCase().includes(q)
+          (a.chassi || '').toLowerCase().includes(q) ||
+          (a.exercicio || '').toLowerCase().includes(q) ||
+          (a.proprietario_empresa || '').toLowerCase().includes(q) ||
+          (a.cnpj || '').toLowerCase().includes(q) ||
+          (a.especie_tipo || '').toLowerCase().includes(q) ||
+          (a.marca_modelo || '').toLowerCase().includes(q)
       );
     }
     if (filterType === 'ipva_vencer') list = list.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer');
@@ -619,10 +811,10 @@ const DocumentosVeiculosPage: React.FC = () => {
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.patrimonio || '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.renavam || '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.chassi || '-'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${[a.ano_fabricacao, a.ano_modelo].filter(Boolean).join('/') || '-'}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${[a.ano_fabricacao, a.ano_modelo].filter(Boolean).join('/') || '-'}${a.exercicio ? ` / Ex. ${a.exercicio}` : ''}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_ipva ? new Date(a.vencimento_ipva).toLocaleDateString('pt-BR') : '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.vencimento_licenciamento ? new Date(a.vencimento_licenciamento).toLocaleDateString('pt-BR') : '-'}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.empresa}</td>
+      <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.proprietario_empresa || a.empresa}</td>
     </tr>`).join('');
 
     const filterLabel = filterType === 'todos' ? 'Todos os Veiculos' :
@@ -893,14 +1085,24 @@ const DocumentosVeiculosPage: React.FC = () => {
                 <td className="px-3 py-2 text-xs">{a.patrimonio || '-'}</td>
                 <td className="px-3 py-2 text-xs">{a.renavam || '-'}</td>
                 <td className="px-3 py-2 text-xs">{a.chassi || '-'}</td>
-                <td className="px-3 py-2 text-xs">{[a.ano_fabricacao, a.ano_modelo].filter(Boolean).join('/') || '-'}</td>
+                <td className="px-3 py-2 text-xs">{[a.ano_fabricacao, a.ano_modelo].filter(Boolean).join('/') || '-'}{a.exercicio ? ` / Ex. ${a.exercicio}` : ''}</td>
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_ipva))}</td>
                 <td className="px-3 py-2">{statusBadge(getAlertStatus(a.vencimento_licenciamento))}</td>
-                <td className="px-3 py-2 text-xs">{a.empresa}</td>
+                <td className="px-3 py-2 text-xs">{a.proprietario_empresa || a.empresa}</td>
                 <td className="px-3 py-2 text-xs">
                   {a.arquivo_url ? <button onClick={() => setViewingPdf({ url: a.arquivo_url, descricao: a.descricao })} className="text-primary hover:underline flex items-center gap-1 text-xs"><Eye className="w-3 h-3" />Ver</button> : '-'}
                 </td>
                 <td className="px-3 py-2 flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-primary"
+                    title="Ler PDF e preencher"
+                    disabled={uploading || !a.arquivo_url}
+                    onClick={() => handleReadAtivoDocument(a)}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(a)}>
                     <Edit2 className="w-3.5 h-3.5" />
                   </Button>
