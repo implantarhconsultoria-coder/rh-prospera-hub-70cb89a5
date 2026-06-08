@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Check, Copy, Download, Fuel, Gauge, Loader2, MessageCircle, Printer, QrCode, RotateCcw, Share2 } from "lucide-react";
+import { AlertTriangle, Camera, Check, Fuel, Loader2, QrCode, Share2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import QrScanner from "qr-scanner";
+import { jsPDF } from "jspdf";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +14,7 @@ import CameraCapture from "../components/CameraCapture";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { uploadFoto } from "../lib/upload";
 
-type Step = "scan" | "vale" | "painel" | "form" | "ok";
+type Step = "scan" | "form" | "ok";
 
 interface Posto {
   id: string;
@@ -59,6 +60,7 @@ interface ReceiptInfo {
   postoTelefone: string;
   mecanicoNome: string;
   empresa: string;
+  empresaCnpj: string;
   filial: string;
   placa: string;
   combustivel: string;
@@ -68,7 +70,7 @@ interface ReceiptInfo {
   km: string;
   kmRodado: number | null;
   observacao: string;
-  fotoPlacaUrl: string;
+  fotoQrUrl: string;
   fotoBombaUrl: string;
   fotoPainelUrl: string;
   createdAt: Date;
@@ -91,6 +93,7 @@ type OcrResult = {
 };
 
 const CANONICAL_BASE_URL = "https://topacrh.pro";
+const UNKNOWN = "Nao identificado";
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
 };
@@ -106,22 +109,24 @@ export default function AbastecimentoPage() {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
-  const [camPlaca, setCamPlaca] = useState(false);
+  const [camQr, setCamQr] = useState(false);
   const [camBomba, setCamBomba] = useState(false);
   const [camPainel, setCamPainel] = useState(false);
-  const [fotoPlacaUrl, setFotoPlacaUrl] = useState("");
+  const [fotoQrUrl, setFotoQrUrl] = useState("");
   const [fotoBombaUrl, setFotoBombaUrl] = useState("");
   const [fotoPainelUrl, setFotoPainelUrl] = useState("");
   const [valor, setValor] = useState("");
   const [litros, setLitros] = useState("");
   const [precoLitro, setPrecoLitro] = useState("");
-  const [combustivel, setCombustivel] = useState("Diesel S10");
+  const [combustivel, setCombustivel] = useState("");
   const [placa, setPlaca] = useState("");
   const [carros, setCarros] = useState<string[]>([]);
   const [veiculos, setVeiculos] = useState<VeiculoInfo[]>([]);
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
+  const [receiptPdf, setReceiptPdf] = useState<{ blob: Blob; fileName: string } | null>(null);
+  const [dataHoraAtual, setDataHoraAtual] = useState(() => new Date());
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,6 +150,12 @@ export default function AbastecimentoPage() {
     if (!atual) return null;
     return veiculos.find((v) => normalizePlate(v.placa) === atual) || null;
   }, [placa, veiculos]);
+  const empresaCnpj = (mecInfo as { cnpj?: string } | null)?.cnpj || (mecanico as unknown as { cnpj?: string }).cnpj || "";
+
+  useEffect(() => {
+    const id = window.setInterval(() => setDataHoraAtual(new Date()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const updateValor = (value: string) => {
     setValor(value);
@@ -194,6 +205,28 @@ export default function AbastecimentoPage() {
     setScanning(false);
   };
 
+  const abrirFluxoComDadosDisponiveis = (cod?: string) => {
+    const normalized = extractQrCode(cod || codigo) || "QR-NAO-LIDO";
+    setCodigo(normalized);
+    setScanError("");
+    setPostosOpcao([]);
+    setPosto({
+      id: "posto-nao-identificado",
+      codigo: normalized,
+      nome: UNKNOWN,
+      unidade: mecanico.filial || mecanico.empresa || "",
+      cnpj: null,
+      endereco: null,
+      telefone: null,
+      tipo_qr: "posto",
+    });
+    setMecInfo(null);
+    setCarros([]);
+    setVeiculos([]);
+    setPlaca("");
+    setStep("form");
+  };
+
   const iniciarScanner = async () => {
     setScanError("");
     if (typeof window !== "undefined" && window.location.hostname !== "localhost" && !isCanonicalHost) {
@@ -227,19 +260,57 @@ export default function AbastecimentoPage() {
 
   const lerArquivoQr = async (file: File) => {
     try {
-      const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true, alsoTryWithoutScanRegion: true });
-      const decoded = typeof result === "string" ? result : result.data;
-      const normalized = extractQrCode(decoded);
-      setCodigo(normalized);
-      validarQr(normalized);
+      const uploadBlob = await optimizeImageBlob(file, 1400, 0.78);
+      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "qr", uploadBlob);
+      setFotoQrUrl(url);
+      try {
+        const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true, alsoTryWithoutScanRegion: true });
+        const decoded = typeof result === "string" ? result : result.data;
+        const normalized = extractQrCode(decoded);
+        setCodigo(normalized);
+        const ok = await validarQr(normalized);
+        if (!ok) abrirFluxoComDadosDisponiveis(normalized);
+      } catch {
+        abrirFluxoComDadosDisponiveis("QR-NAO-LIDO");
+        toast.warning("Foto do QR Code salva. O recibo sera gerado com os dados disponiveis.");
+      }
     } catch {
       setScanError("Nao foi possivel ler o QR da imagem. Tente outra foto ou digite o codigo.");
     }
   };
 
+  const onCaptureQr = async (blob: Blob) => {
+    setLoading(true);
+    try {
+      const uploadBlob = await optimizeImageBlob(blob, 1400, 0.78);
+      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "qr", uploadBlob);
+      setFotoQrUrl(url);
+      try {
+        const qrFile = new File([blob], "qr-code.jpg", { type: blob.type || "image/jpeg" });
+        const result = await QrScanner.scanImage(qrFile, { returnDetailedScanResult: true, alsoTryWithoutScanRegion: true });
+        const decoded = typeof result === "string" ? result : result.data;
+        const normalized = extractQrCode(decoded);
+        setCodigo(normalized);
+        const ok = await validarQr(normalized);
+        if (ok) toast.success("QR Code lido e foto anexada.");
+        else abrirFluxoComDadosDisponiveis(normalized);
+      } catch {
+        abrirFluxoComDadosDisponiveis("QR-NAO-LIDO");
+        toast.warning("Foto do QR Code salva. O recibo sera gerado com os dados disponiveis.");
+      }
+    } catch (e) {
+      toast.error(getErrorMessage(e) || "Erro no upload da foto do QR Code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const validarQr = async (cod: string) => {
     const normalized = extractQrCode(cod);
-    if (!normalized.trim()) return toast.error("Informe o codigo do QR");
+    if (!normalized.trim()) {
+      toast.error("Informe o codigo do QR");
+      return false;
+    }
     setLoading(true);
     const { data, error } = await supabaseRpc.rpc("app_mecanico_validar_qr_posto", {
       p_acesso_id: mecanico.acesso_id,
@@ -250,7 +321,8 @@ export default function AbastecimentoPage() {
     if (error || !r?.ok || !r.posto) {
       const msg = r?.error === "qr_nao_encontrado" ? "QR Code do posto nao encontrado." : "Erro ao validar QR Code.";
       setScanError(msg);
-      return toast.error(msg);
+      toast.error(msg);
+      return false;
     }
     const veiculosInfo = (r.mecanico?.veiculos || [])
       .map((item) => ({ ...item, placa: normalizePlate(item.placa) }))
@@ -266,11 +338,13 @@ export default function AbastecimentoPage() {
     setCarros(placas);
     setVeiculos(veiculosInfo);
     setPlaca((placaInicial || "").toUpperCase());
-    setStep("vale");
+    setStep("form");
+    return true;
   };
 
   const analisarFoto = async (blob: Blob, tipo: "bomba" | "painel_km" = "bomba") => {
-    const dataUrl = await blobToOptimizedDataUrl(blob);
+    const dataUrls = tipo === "painel_km" ? await buildPanelOcrDataUrls(blob) : [await blobToOptimizedDataUrl(blob)];
+    const dataUrl = dataUrls[0];
     let remoto: OcrResult | null = null;
     try {
       const { data, error } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl, tipo } });
@@ -282,7 +356,7 @@ export default function AbastecimentoPage() {
     if (tipo === "painel_km" && isReliableKmResult(remoto)) return remoto;
     if (tipo === "bomba" && isReliablePumpResult(remoto)) return remoto;
 
-    const local = await analisarFotoLocal(dataUrl, tipo);
+    const local = await analisarFotoLocal(dataUrls, tipo);
     const merged = mergeOcrResult(remoto, local, tipo);
     if (tipo === "painel_km") return isReliableKmResult(merged) ? merged : { ...(merged || {}), ok: false, motivo: "Leitura do KM sem confianca suficiente." };
     return isReliablePumpResult(merged) ? merged : { ...(merged || {}), ok: false, motivo: "Leitura da bomba sem confianca suficiente." };
@@ -319,15 +393,15 @@ export default function AbastecimentoPage() {
   const onCaptureBomba = async (blob: Blob) => {
     setLoading(true);
     try {
-      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "bomba", blob);
+      const uploadBlob = await optimizeImageBlob(blob, 1600, 0.8);
+      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "bomba", uploadBlob);
       setFotoBombaUrl(url);
-      const r = await analisarFoto(blob);
+      const r = await analisarFoto(uploadBlob);
       const leituraAplicada = aplicarLeituraBomba(r);
-      setStep("painel");
       if (leituraAplicada) {
-        toast.success("Bomba lida com seguranca: valor, litros e preco preenchidos. Tire a foto do KM.");
+        toast.success("Bomba lida com seguranca: valor, litros e preco preenchidos.");
       } else {
-        toast.warning(r?.motivo || "Foto da bomba salva, mas nao deu leitura segura. Tire uma foto mais enquadrada ou preencha manualmente.");
+        toast.warning(r?.motivo || "Foto da bomba salva. O recibo sera gerado com os dados disponiveis.");
       }
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload da bomba");
@@ -336,34 +410,21 @@ export default function AbastecimentoPage() {
     }
   };
 
-  const onCapturePlaca = async (blob: Blob) => {
-    setLoading(true);
-    try {
-      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "placa", blob);
-      setFotoPlacaUrl(url);
-      toast.success("Foto da frente do veiculo salva. Agora tire a foto da bomba.");
-    } catch (e) {
-      toast.error(getErrorMessage(e) || "Erro no upload da foto da placa");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const onCapturePainel = async (blob: Blob) => {
     setLoading(true);
     try {
-      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", blob);
+      const uploadBlob = await optimizeImageBlob(blob, 1600, 0.82);
+      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", uploadBlob);
       setFotoPainelUrl(url);
-      const r = await analisarFoto(blob, "painel_km");
+      const r = await analisarFoto(uploadBlob, "painel_km");
       const detectedKm = r?.km ?? r?.km_atual;
       const kmLido = parseDecimal(detectedKm);
       if (isReliableKmResult(r) && Number.isFinite(kmLido) && kmLido > 0) {
         setKm(String(Math.round(kmLido)));
         toast.success("KM do painel lido com seguranca e preenchido automaticamente.");
       } else {
-        toast.warning(r?.motivo || "Foto do painel salva, mas nao deu leitura segura do KM. Tire nova foto ou preencha manualmente.");
+        toast.warning(r?.motivo || "Foto do painel salva. O recibo sera gerado com os dados disponiveis.");
       }
-      setStep("form");
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload do KM");
     } finally {
@@ -372,102 +433,137 @@ export default function AbastecimentoPage() {
   };
 
   const finalizar = async () => {
-    if (!posto) return;
-    if (postosOpcao.length > 1 && posto.tipo_qr === "unidade") return toast.error("Selecione o posto de Goiania");
-    if (!fotoPlacaUrl) return toast.error("Foto obrigatoria: frente do veiculo com a placa visivel.");
+    if (!fotoQrUrl) return toast.error("Foto do QR Code obrigatoria.");
     if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("Fotos obrigatorias: bomba e KM/painel.");
-    if (!valor || !litros) return toast.error("Informe valor e litros");
-    if (mecInfo?.exige_selecao_carro && !placa) return toast.error("Selecione o carro");
-    if (!km) return toast.error("Informe o KM atual");
     setLoading(true);
-    const { latitude, longitude } = await getBrowserLocation();
-    const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
-      p_acesso_id: mecanico.acesso_id,
-      p_posto_codigo: posto.codigo,
-      p_valor: parseDecimal(valor),
-      p_litros: parseDecimal(litros),
-      p_combustivel: combustivel,
-      p_km: km ? parseDecimal(km) : null,
-      p_placa: placa || null,
-      p_observacao: obs || null,
-      p_foto_bomba_url: fotoBombaUrl,
-      p_foto_painel_url: fotoPainelUrl,
-      p_foto_placa_url: fotoPlacaUrl,
-      p_latitude: latitude,
-      p_longitude: longitude,
-      p_endereco: null,
-    });
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    try {
+      const loc = await getBrowserLocation();
+      latitude = loc.latitude;
+      longitude = loc.longitude;
+    } catch {
+      latitude = null;
+      longitude = null;
+    }
+
+    const postoFinal = posto || {
+      id: "posto-nao-identificado",
+      codigo: codigo || "QR-NAO-LIDO",
+      nome: UNKNOWN,
+      cnpj: null,
+      endereco: null,
+      telefone: null,
+      tipo_qr: "posto",
+    };
+    const valorNumero = parseDecimal(valor);
+    const litrosNumero = parseDecimal(litros);
+    const kmNumero = parseDecimal(km);
+    const observacaoFinal = [
+      !Number.isFinite(valorNumero) || valorNumero <= 0 ? "Valor nao identificado automaticamente." : "",
+      !Number.isFinite(litrosNumero) || litrosNumero <= 0 ? "Litros nao identificados automaticamente." : "",
+      !Number.isFinite(kmNumero) || kmNumero <= 0 ? "KM nao identificado automaticamente." : "",
+      obs,
+    ].filter(Boolean).join("\n");
+
+    let saveResult: { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null; registro_teste?: boolean } | null = null;
+    const podePersistir =
+      postoFinal.nome !== UNKNOWN &&
+      postoFinal.tipo_qr !== "unidade" &&
+      Number.isFinite(valorNumero) && valorNumero > 0 &&
+      Number.isFinite(litrosNumero) && litrosNumero > 0 &&
+      Number.isFinite(kmNumero) && kmNumero > 0 &&
+      (!mecInfo?.exige_selecao_carro || Boolean(placa));
+
+    if (podePersistir) {
+      const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
+        p_acesso_id: mecanico.acesso_id,
+        p_posto_codigo: postoFinal.codigo,
+        p_valor: valorNumero,
+        p_litros: litrosNumero,
+        p_combustivel: combustivel || UNKNOWN,
+        p_km: kmNumero,
+        p_placa: placa || null,
+        p_observacao: observacaoFinal || null,
+        p_foto_bomba_url: fotoBombaUrl,
+        p_foto_painel_url: fotoPainelUrl,
+        p_foto_placa_url: fotoQrUrl,
+        p_latitude: latitude,
+        p_longitude: longitude,
+        p_endereco: null,
+      });
+      const r = (data ?? null) as typeof saveResult;
+      if (!error && r?.ok) {
+        saveResult = r;
+      } else {
+        console.warn("Recibo gerado sem persistencia oficial do abastecimento:", r?.error || error?.message);
+      }
+    }
     setLoading(false);
-    const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null; registro_teste?: boolean } | null;
-    if (error || !r?.ok) return toast.error(fuelSaveErrorMessage(r?.error || error?.message));
-    setReceipt({
-      id: r.id || "",
-      codigo: posto.codigo,
-      postoNome: posto.nome,
-      postoCnpj: posto.cnpj || "",
-      postoEndereco: posto.endereco || "",
-      postoTelefone: posto.telefone || "",
-      mecanicoNome: mecInfo?.nome || mecanico.nome || "",
-      empresa: mecInfo?.empresa || mecanico.empresa || "",
+
+    const nextReceipt: ReceiptInfo = {
+      id: saveResult?.id || `RECIBO-${Date.now()}`,
+      codigo: postoFinal.codigo || codigo || UNKNOWN,
+      postoNome: postoFinal.nome || UNKNOWN,
+      postoCnpj: postoFinal.cnpj || "",
+      postoEndereco: postoFinal.endereco || "",
+      postoTelefone: postoFinal.telefone || "",
+      mecanicoNome: mecInfo?.nome || mecanico.nome || UNKNOWN,
+      empresa: mecInfo?.empresa || mecanico.empresa || UNKNOWN,
+      empresaCnpj,
       filial: mecInfo?.filial || mecanico.filial || "",
-      placa,
-      combustivel,
-      valor,
-      litros,
-      precoLitro: String(r.preco_litro ?? r.valor_por_litro ?? precoLitro),
-      km,
-      kmRodado: r.km_rodado ?? kmRodado,
-      observacao: obs,
-      fotoPlacaUrl,
+      placa: placa || UNKNOWN,
+      combustivel: combustivel || UNKNOWN,
+      valor: Number.isFinite(valorNumero) && valorNumero > 0 ? valor : UNKNOWN,
+      litros: Number.isFinite(litrosNumero) && litrosNumero > 0 ? litros : UNKNOWN,
+      precoLitro: String(saveResult?.preco_litro ?? saveResult?.valor_por_litro ?? (precoLitro || UNKNOWN)),
+      km: Number.isFinite(kmNumero) && kmNumero > 0 ? km : UNKNOWN,
+      kmRodado: saveResult?.km_rodado ?? kmRodado,
+      observacao: observacaoFinal,
+      fotoQrUrl,
       fotoBombaUrl,
       fotoPainelUrl,
       createdAt: new Date(),
-      registroTeste: Boolean(r.registro_teste || mecInfo?.registro_teste || mecanico.registro_teste),
-    });
+      registroTeste: Boolean(saveResult?.registro_teste || mecInfo?.registro_teste || mecanico.registro_teste),
+    };
+    setReceipt(nextReceipt);
+    try {
+      setReceiptPdf(await buildReceiptPdf(nextReceipt));
+    } catch (e) {
+      console.error("Erro ao gerar PDF do recibo de abastecimento:", e);
+      toast.warning("Abastecimento salvo, mas o PDF sera gerado ao compartilhar ou baixar.");
+    }
     setStep("ok");
-    toast.success("Abastecimento registrado!");
+    toast.success("Recibo de abastecimento gerado!");
   };
 
-  const buildReceiptText = (info: ReceiptInfo) =>
-    [
-      "*TOPAC RH PRO - Abastecimento*",
-      info.registroTeste ? "*REGISTRO DE TESTE - nao entra em relatorios oficiais*" : "",
-      `Registro: ${info.id || "salvo"}`,
-      `Data/Hora: ${info.createdAt.toLocaleString("pt-BR")}`,
-      "",
-      `Mecanico: ${info.mecanicoNome}`,
-      `Empresa: ${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`,
-      `Carro/placa: ${info.placa || "nao informado"}`,
-      `Validado por: ${info.mecanicoNome}`,
-      "",
-      `Posto: ${info.postoNome}`,
-      info.postoCnpj ? `CNPJ: ${info.postoCnpj}` : "",
-      info.postoEndereco ? `Endereco: ${info.postoEndereco}` : "",
-      info.postoTelefone ? `Telefone: ${info.postoTelefone}` : "",
-      `QR: ${info.codigo}`,
-      "",
-      `Combustivel: ${info.combustivel}`,
-      `Litros: ${fmtNumber(info.litros)} L`,
-      `Preco/L: ${fmtMoney(info.precoLitro)}`,
-      `Valor: ${fmtMoney(info.valor)}`,
-      `KM: ${info.km || "nao informado"}`,
-      info.kmRodado !== null ? `KM rodado desde o ultimo registro: ${fmtNumber(String(info.kmRodado), 0)} km` : "",
-      info.observacao ? `Obs.: ${info.observacao}` : "",
-      "",
-      `Foto da frente do veiculo/placa: ${info.fotoPlacaUrl}`,
-      `Foto da bomba: ${info.fotoBombaUrl}`,
-      `Foto do KM/painel: ${info.fotoPainelUrl}`,
-    ].filter(Boolean).join("\n");
+  const getReceiptPdf = async () => {
+    if (!receipt) return null;
+    if (receiptPdf) return receiptPdf;
+    const pdf = await buildReceiptPdf(receipt);
+    setReceiptPdf(pdf);
+    return pdf;
+  };
 
   const shareReceipt = async () => {
     if (!receipt) return;
-    const text = buildReceiptText(receipt);
-    if (navigator.share) {
-      await navigator.share({ title: "Abastecimento TOPAC", text });
-      return;
+    try {
+      const pdf = await getReceiptPdf();
+      if (pdf) {
+        const file = new File([pdf.blob], pdf.fileName, { type: "application/pdf" });
+        if (navigator.share && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: "Recibo de Abastecimento TOPAC", files: [file] });
+          return;
+        }
+        downloadBlob(pdf.blob, pdf.fileName);
+        toast.info("PDF baixado. Compartilhe o arquivo pelo aplicativo do celular.");
+        return;
+      }
+      toast.error("Nao foi possivel gerar o PDF do recibo.");
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return;
+      toast.error(getErrorMessage(e) || "Nao foi possivel compartilhar o recibo.");
     }
-    await navigator.clipboard.writeText(text);
-    toast.success("Notinha copiada");
   };
 
   const printReceipt = () => {
@@ -480,21 +576,14 @@ export default function AbastecimentoPage() {
     setTimeout(() => w.print(), 300);
   };
 
-  const downloadReceipt = () => {
+  const downloadReceipt = async () => {
     if (!receipt) return;
-    const blob = new Blob([buildReceiptText(receipt)], { type: "text/plain;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `ABASTECIMENTO_${sanitizeFile(receipt.empresa)}_${sanitizeFile(receipt.mecanicoNome)}_${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  const openWhatsapp = (phone?: string) => {
-    if (!receipt) return;
-    const clean = (phone || "").replace(/\D/g, "");
-    const target = clean ? `55${clean.replace(/^55/, "")}` : "";
-    window.open(`${target ? `https://wa.me/${target}` : "https://wa.me/"}?text=${encodeURIComponent(buildReceiptText(receipt))}`, "_blank", "noopener,noreferrer");
+    try {
+      const pdf = await getReceiptPdf();
+      if (pdf) downloadBlob(pdf.blob, pdf.fileName);
+    } catch (e) {
+      toast.error(getErrorMessage(e) || "Nao foi possivel baixar o PDF.");
+    }
   };
 
   const reset = () => {
@@ -503,18 +592,20 @@ export default function AbastecimentoPage() {
     setPostosOpcao([]);
     setMecInfo(null);
     setCodigo("");
-    setFotoPlacaUrl("");
+    setFotoQrUrl("");
     setFotoBombaUrl("");
     setFotoPainelUrl("");
     setValor("");
     setLitros("");
     setPrecoLitro("");
+    setCombustivel("");
     setPlaca("");
     setCarros([]);
     setVeiculos([]);
     setKm("");
     setObs("");
     setReceipt(null);
+    setReceiptPdf(null);
     setScanError("");
     setStep("scan");
   };
@@ -524,149 +615,97 @@ export default function AbastecimentoPage() {
       <Card className="p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600"><Fuel className="h-5 w-5" /></div>
-          <div><h1 className="text-base font-bold">Abastecimento</h1><p className="text-xs text-muted-foreground">QR Code + placa + bomba + painel</p></div>
+          <div><h1 className="text-base font-bold">Abastecimento</h1><p className="text-xs text-muted-foreground">Checklist rapido: QR Code + bomba + KM</p></div>
         </div>
       </Card>
 
       {step === "scan" && (
         <Card className="space-y-3 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold"><QrCode className="h-4 w-4" /> Ler QR Code do posto</div>
+          <AlertBox text="Fluxo simples: anexe QR Code, bomba e KM/painel. O recibo sai direto; dados nao lidos ficam como Nao identificado." />
           <div className={`overflow-hidden rounded-xl border bg-muted ${scanning ? "block aspect-square" : "hidden"}`}><video ref={videoRef} className="h-full w-full object-cover" muted playsInline autoPlay /></div>
           <Button className="w-full" onClick={scanning ? stopScanner : iniciarScanner} disabled={loading}>
             <Camera className="mr-2 h-4 w-4" /> {scanning ? "Parar camera" : "Abrir camera para ler QR"}
           </Button>
+          <Button variant="outline" className="w-full" onClick={() => setCamQr(true)} disabled={loading}>
+            <Camera className="mr-2 h-4 w-4" /> Tirar foto obrigatoria do QR Code
+          </Button>
+          {fotoQrUrl && <img src={fotoQrUrl} className="max-h-44 w-full rounded-lg object-cover" alt="Foto do QR Code" />}
           {scanError && <AlertBox text={scanError} />}
           <div className="border-t pt-3 space-y-2">
-            <Label className="text-xs">Enviar foto do QR (galeria)</Label>
+            <Label className="text-xs">Enviar foto do QR Code pela galeria</Label>
             <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) lerArquivoQr(f); e.target.value = ""; }} />
             <Button variant="secondary" className="w-full" onClick={() => fileInputRef.current?.click()}>Enviar imagem do QR</Button>
           </div>
-          <div className="border-t pt-3 space-y-2">
-            <Label className="text-xs">Ou digite o codigo manualmente</Label>
-            <div className="flex gap-2"><Input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="COMB-SP-001" /><Button onClick={() => validarQr(codigo)} disabled={loading || !codigo}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "OK"}</Button></div>
-          </div>
-        </Card>
-      )}
-
-      {step === "vale" && posto && (
-        <Card className="space-y-3 p-4">
-          <div className="text-xs font-semibold uppercase text-muted-foreground">QR validado</div>
-          <div className="space-y-1 text-sm">
-            <div><b>Mecanico:</b> {mecInfo?.nome}</div>
-            <div><b>Empresa:</b> {mecInfo?.empresa || "-"} {mecInfo?.filial ? `- ${mecInfo.filial}` : ""}</div>
-            {mecInfo?.registro_teste && <AlertBox text={`Modo teste ativo${mecInfo.veiculo_teste ? ` - ${mecInfo.veiculo_teste}` : ""}. Este abastecimento nao entra em custo oficial.`} />}
-            {postosOpcao.length > 1 ? (
-              <div className="space-y-1">
-                <Label className="text-xs">Posto de Goiania</Label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"
-                  value={posto.tipo_qr === "unidade" ? "" : posto.codigo}
-                  onChange={(e) => {
-                    const selected = postosOpcao.find((p) => p.codigo === e.target.value);
-                    if (selected) setPosto(selected);
-                  }}
-                >
-                  <option value="">Selecionar posto</option>
-                  {postosOpcao.map((p) => <option key={p.codigo} value={p.codigo}>{p.nome}</option>)}
-                </select>
-              </div>
-            ) : <div><b>Posto:</b> {posto.nome}</div>}
-            {posto.unidade && <div className="text-xs text-muted-foreground">Unidade: {posto.unidade}</div>}
-            {posto.cnpj && <div className="text-xs text-muted-foreground">CNPJ: {posto.cnpj}</div>}
-            {posto.endereco && <div className="text-xs text-muted-foreground">{posto.endereco}</div>}
-            {posto.telefone && <div className="text-xs text-muted-foreground">Telefone/WhatsApp: {posto.telefone}</div>}
-            {mecInfo?.placa && <div className="text-xs text-muted-foreground">Carro vinculado: {mecInfo.placa}</div>}
-            {veiculos.length > 0 && <div className="text-xs text-muted-foreground">Documento da frota vinculado para {veiculos.length} veiculo(s).</div>}
-            {mecInfo?.exige_selecao_carro && <AlertBox text="Selecione o carro usado antes de finalizar o abastecimento." />}
-            <AlertBox text="Foto obrigatoria: frente do veiculo com a placa visivel." />
-            {fotoPlacaUrl && <img src={fotoPlacaUrl} className="w-full rounded-lg" alt="Frente do veiculo com placa" />}
-            {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
-          </div>
-          {!fotoPlacaUrl ? (
-            <Button className="w-full" onClick={() => setCamPlaca(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> Tirar foto da frente do veiculo</Button>
-          ) : (
-            <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
-          )}
-          <Button className="w-full" variant="outline" onClick={reset}><RotateCcw className="mr-2 h-4 w-4" /> Cancelar</Button>
-        </Card>
-      )}
-
-      {step === "painel" && (
-        <Card className="space-y-3 p-4">
-          {fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}
-          <Button className="w-full" onClick={() => setCamPainel(true)}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
         </Card>
       )}
 
       {step === "form" && (
         <Card className="space-y-3 p-4">
-          <div className="text-sm font-semibold">Confirme os dados</div>
-          <div className="grid grid-cols-3 gap-2">{fotoPlacaUrl && <img src={fotoPlacaUrl} className="w-full rounded-lg" alt="Frente do veiculo" />}{fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}{fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}</div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Valor (R$)" value={valor} setValue={updateValor} type="number" />
-            <Field label="Litros" value={litros} setValue={updateLitros} type="number" />
-            <Field label="Preco/L" value={precoLitro} setValue={updatePrecoLitro} type="number" />
-            <div><Label className="text-xs">Combustivel</Label><select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(e) => setCombustivel(e.target.value)}><option>Diesel S10</option><option>Diesel</option><option>Gasolina</option><option>Etanol</option><option>GNV</option></select></div>
-            <div><Field label="KM" value={km} setValue={setKm} type="number" />{kmRodado !== null && <div className="mt-1 text-[11px] text-muted-foreground">Rodou {fmtNumber(String(kmRodado), 0)} km desde o ultimo registro.</div>}</div>
-            <div className="col-span-2">
-              <Label className="text-xs">{mecInfo?.exige_selecao_carro ? "Carro" : "Placa"}</Label>
-              {mecInfo?.exige_selecao_carro && carros.length > 0 ? (
-                <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())}>
-                  <option value="">Selecionar carro</option>{carros.map((item) => {
-                    const veiculo = veiculos.find((v) => normalizePlate(v.placa) === normalizePlate(item));
-                    return <option key={item} value={item}>{veiculo?.descricao ? `${item} - ${veiculo.descricao}` : item}</option>;
-                  })}
-                </select>
-              ) : <Input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} disabled={Boolean(placa && !mecInfo?.exige_selecao_carro)} />}
-            </div>
-            {veiculoSelecionado && (
-              <div className="col-span-2 rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
-                <div className="font-semibold">{veiculoSelecionado.descricao || veiculoSelecionado.placa}</div>
-                <div className="grid grid-cols-2 gap-1">
-                  <Info k="Placa" v={veiculoSelecionado.placa || "-"} />
-                  <Info k="Renavam" v={veiculoSelecionado.renavam || "-"} />
-                  <Info k="Chassi" v={veiculoSelecionado.chassi || "-"} />
-                  <Info k="Ano" v={veiculoSelecionado.ano_fabricacao || veiculoSelecionado.ano_modelo || "-"} />
-                </div>
-                {veiculoSelecionado.documento_url && (
-                  <Button type="button" size="sm" variant="outline" className="mt-2 w-full" onClick={() => window.open(veiculoSelecionado.documento_url || "", "_blank", "noopener,noreferrer")}>
-                    Visualizar PDF do documento
-                  </Button>
-                )}
-              </div>
-            )}
-            <div className="col-span-2"><Label className="text-xs">Posto</Label><Input value={posto?.nome || ""} disabled /></div>
-            <div className="col-span-2"><Label className="text-xs">Observacao</Label><Input value={obs} onChange={(e) => setObs(e.target.value)} /></div>
+          <div className="space-y-1">
+            <div className="text-sm font-semibold">Checklist do abastecimento</div>
+            <p className="text-xs text-muted-foreground">Anexe as 3 fotos e gere o recibo direto. O que nao for reconhecido sai como Nao identificado.</p>
           </div>
-          <Button className="w-full" onClick={finalizar} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} Finalizar abastecimento</Button>
+
+          <div className="rounded-xl border bg-muted/30 p-3 text-xs">
+            <div className="grid grid-cols-2 gap-2">
+              <Info k="Funcionario" v={mecInfo?.nome || mecanico.nome || "-"} wide />
+              <Info k="Empresa" v={mecInfo?.empresa || mecanico.empresa || "-"} />
+              <Info k="CNPJ" v={empresaCnpj || "Nao informado"} />
+              <Info k="Filial" v={mecInfo?.filial || mecanico.filial || "-"} />
+              <Info k="Posto" v={posto?.nome || UNKNOWN} />
+              <Info k="Veiculo" v={placa || UNKNOWN} />
+              <Info k="Data/Hora" v={dataHoraAtual.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} />
+            </div>
+          </div>
+
+          {mecInfo?.registro_teste && <AlertBox text={`Modo teste ativo${mecInfo.veiculo_teste ? ` - ${mecInfo.veiculo_teste}` : ""}. Este abastecimento nao entra em custo oficial.`} />}
+
+          <div className="space-y-2 rounded-xl border bg-muted/20 p-3">
+            <div className="text-sm font-semibold">Fotos obrigatorias</div>
+            <PhotoChecklist
+              label="Foto do QR Code"
+              url={fotoQrUrl}
+              onClick={() => setCamQr(true)}
+              loading={loading}
+            />
+            <PhotoChecklist
+              label="Foto da bomba"
+              url={fotoBombaUrl}
+              onClick={() => setCamBomba(true)}
+              loading={loading}
+            />
+            <PhotoChecklist
+              label="Foto do KM/painel"
+              url={fotoPainelUrl}
+              onClick={() => setCamPainel(true)}
+              loading={loading}
+            />
+          </div>
+
+          <Button className="w-full h-12 text-base font-bold" onClick={finalizar} disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} GERAR RECIBO
+          </Button>
         </Card>
       )}
 
       {step === "ok" && receipt && (
         <Card className="space-y-4 p-4">
-          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Compartilhe a notinha no grupo e no WhatsApp do posto.</p></div>
+          <div className="text-center"><div className="text-lg font-bold">Recibo gerado</div><p className="text-sm text-muted-foreground">Compartilhe somente o PDF pelo aplicativo do celular.</p></div>
           <div className="rounded-xl border bg-muted/30 p-3 text-sm">
             <div className="font-bold">{receipt.postoNome}</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               <Info k="Mecanico" v={receipt.mecanicoNome} wide /><Info k="Carro" v={receipt.placa || "-"} /><Info k="KM" v={receipt.km || "-"} />
-              <Info k="Litros" v={`${fmtNumber(receipt.litros)} L`} /><Info k="Preco/L" v={fmtMoney(receipt.precoLitro)} /><Info k="Valor" v={fmtMoney(receipt.valor)} />
+              <Info k="Litros" v={fmtLitros(receipt.litros)} /><Info k="Preco/L" v={fmtMoney(receipt.precoLitro)} /><Info k="Valor" v={fmtMoney(receipt.valor)} />
               {receipt.kmRodado !== null && <Info k="KM rodado" v={`${fmtNumber(String(receipt.kmRodado), 0)} km`} />}
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2"><img src={receipt.fotoPlacaUrl} className="h-28 w-full rounded-lg object-cover" alt="Frente do veiculo" /><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
+            <div className="mt-3 grid grid-cols-3 gap-2"><img src={receipt.fotoQrUrl} className="h-28 w-full rounded-lg object-cover" alt="QR Code" /><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
           </div>
-          <Button onClick={shareReceipt} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha</Button>
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={printReceipt} variant="outline" className="w-full"><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
-            <Button onClick={downloadReceipt} variant="outline" className="w-full"><Download className="mr-2 h-4 w-4" /> Baixar</Button>
-          </div>
-          <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> Enviar no WhatsApp</Button>
-          {receipt.postoTelefone && <Button onClick={() => openWhatsapp(receipt.postoTelefone)} variant="outline" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp do posto</Button>}
-          <Button onClick={() => navigator.clipboard.writeText(buildReceiptText(receipt)).then(() => toast.success("Notinha copiada"))} variant="outline" className="w-full"><Copy className="mr-2 h-4 w-4" /> Copiar texto</Button>
-          <Button onClick={reset} variant="ghost" className="w-full">Novo abastecimento</Button>
+          <Button onClick={shareReceipt} className="w-full h-12 text-base font-bold"><Share2 className="mr-2 h-4 w-4" /> COMPARTILHAR RECIBO</Button>
         </Card>
       )}
 
-      <CameraCapture open={camPlaca} onClose={() => setCamPlaca(false)} onCapture={onCapturePlaca} facing="environment" title="Foto da frente do veiculo" hint="Foto obrigatoria: frente do veiculo com a placa visivel." />
+      <CameraCapture open={camQr} onClose={() => setCamQr(false)} onCapture={onCaptureQr} facing="environment" title="Foto do QR Code" hint="Foto obrigatoria: QR Code do abastecimento." />
       <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" title="Foto da bomba" hint="Enquadre TOTAL R$, LITROS/VOLUME, PRECO/LITRO e combustivel" />
       <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" title="Foto do painel/KM" hint="Enquadre o ODO/KM total do painel" />
     </div>
@@ -681,18 +720,40 @@ function Info({ k, v, wide }: { k: string; v: string; wide?: boolean }) {
   return <div className={wide ? "col-span-2" : ""}><span className="text-muted-foreground">{k}</span><br />{v}</div>;
 }
 
+function PhotoChecklist({ label, url, onClick, loading }: { label: string; url: string; onClick: () => void; loading?: boolean }) {
+  return (
+    <div className="rounded-lg border bg-background/70 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold">{label}</div>
+          <div className={`text-[11px] ${url ? "text-emerald-600" : "text-amber-600"}`}>{url ? "Anexada" : "Obrigatoria"}</div>
+        </div>
+        <Button type="button" size="sm" variant={url ? "outline" : "secondary"} onClick={onClick} disabled={loading}>
+          <Camera className="mr-2 h-4 w-4" /> {url ? "Refazer" : "Tirar foto"}
+        </Button>
+      </div>
+      {url && <img src={url} className="mt-2 max-h-36 w-full rounded-md object-cover" alt={label} />}
+    </div>
+  );
+}
+
 function AlertBox({ text }: { text: string }) {
   return <div className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700"><AlertTriangle className="h-4 w-4" />{text}</div>;
 }
 
 function fmtMoney(value: string) {
   const n = parseDecimal(value);
-  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : value || "R$ 0,00";
+  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : value || UNKNOWN;
 }
 
 function fmtNumber(value: string, digits = 3) {
   const n = parseDecimal(value);
-  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { maximumFractionDigits: digits }) : value || "0";
+  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { maximumFractionDigits: digits }) : value || UNKNOWN;
+}
+
+function fmtLitros(value: string) {
+  const n = parseDecimal(value);
+  return Number.isFinite(n) ? `${n.toLocaleString("pt-BR", { maximumFractionDigits: 3 })} L` : value || UNKNOWN;
 }
 
 function parseDecimal(value: string | number | null | undefined) {
@@ -751,7 +812,7 @@ function normalizeCombustivel(value: string | null | undefined) {
 function fuelSaveErrorMessage(error?: string) {
   const key = String(error || "");
   const messages: Record<string, string> = {
-    foto_placa_obrigatoria: "Foto obrigatoria: frente do veiculo com a placa visivel.",
+    foto_placa_obrigatoria: "Foto do QR Code obrigatoria.",
     foto_bomba_obrigatoria: "Foto da bomba obrigatoria.",
     foto_painel_obrigatoria: "Foto do KM/painel obrigatoria.",
     km_obrigatorio: "Informe o KM atual.",
@@ -836,19 +897,26 @@ function mergeOcrResult(primary: OcrResult | null, fallback: OcrResult | null, t
   return isReliablePumpResult(merged) ? merged : fallback;
 }
 
-async function analisarFotoLocal(dataUrl: string, tipo: "bomba" | "painel_km"): Promise<OcrResult | null> {
-  try {
-    const text = await readImageText(dataUrl);
-    if (!text.trim()) return null;
-    const parsed = tipo === "painel_km" ? parsePainelText(text) : parseBombaText(text);
-    return { ...parsed, origem: "ocr-local", ocr_texto_bruto: text };
-  } catch (error) {
-    console.error("Erro OCR local abastecimento:", error);
-    return null;
+async function analisarFotoLocal(dataUrls: string | string[], tipo: "bomba" | "painel_km"): Promise<OcrResult | null> {
+  const sources = Array.isArray(dataUrls) ? dataUrls : [dataUrls];
+  let best: OcrResult | null = null;
+  for (const dataUrl of sources) {
+    try {
+      const text = await readImageText(dataUrl, tipo === "painel_km");
+      if (!text.trim()) continue;
+      const parsed = tipo === "painel_km" ? parsePainelText(text) : parseBombaText(text);
+      const current = { ...parsed, origem: "ocr-local", ocr_texto_bruto: text };
+      if (tipo === "painel_km" && isReliableKmResult(current)) return current;
+      if (tipo === "bomba" && isReliablePumpResult(current)) return current;
+      if (!best || Number(current.confianca ?? 0) > Number(best.confianca ?? 0)) best = current;
+    } catch (error) {
+      console.error("Erro OCR local abastecimento:", error);
+    }
   }
+  return best;
 }
 
-async function readImageText(dataUrl: string): Promise<string> {
+async function readImageText(dataUrl: string, numericOnly = false): Promise<string> {
   const mod: any = await import("tesseract.js");
   if (!mod?.createWorker) throw new Error("OCR indisponivel");
   let worker: any;
@@ -861,7 +929,10 @@ async function readImageText(dataUrl: string): Promise<string> {
   }
   try {
     if (typeof worker.setParameters === "function") {
-      await worker.setParameters({ preserve_interword_spaces: "1" });
+      await worker.setParameters({
+        preserve_interword_spaces: "1",
+        ...(numericOnly ? { tessedit_char_whitelist: "0123456789., " } : {}),
+      });
     }
     const result = await worker.recognize(dataUrl);
     return String(result?.data?.text || "");
@@ -901,12 +972,13 @@ function parsePainelText(text: string): OcrResult {
   const lines = getOcrLines(text);
   const labeled = pickNumberNearLabel(lines, /(ODO|ODOMETRO|HODOMETRO|HODOMETRO|QUILOMETR|KM\b)/i, "km");
   const candidates = collectKmNumbers(text);
-  const km = labeled && isPlausibleNumber(labeled, "km") ? labeled : candidates[0] || 0;
+  const hasLabeledKm = labeled && isPlausibleNumber(labeled, "km");
+  const km = hasLabeledKm ? labeled : candidates[0] || 0;
   return {
     ok: km > 0,
     km,
-    confianca: labeled && km > 0 ? 0.78 : km > 0 ? 0.58 : 0,
-    motivo: labeled ? undefined : "KM sem rotulo claro no OCR local.",
+    confianca: hasLabeledKm ? 0.9 : km > 0 ? 0.82 : 0,
+    motivo: km > 0 ? undefined : "KM nao identificado no recorte central do painel.",
   };
 }
 
@@ -1053,19 +1125,136 @@ function roundValue(value: number, digits: number) {
   return Number.isFinite(value) ? Math.round(value * factor) / factor : 0;
 }
 
+async function buildReceiptPdf(info: ReceiptInfo): Promise<{ blob: Blob; fileName: string }> {
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const margin = 12;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const usableWidth = pageWidth - margin * 2;
+  let y = margin;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text("TOPAC RH PRO", margin, y);
+  doc.setFontSize(12);
+  doc.text("RECIBO DE ABASTECIMENTO", pageWidth - margin, y, { align: "right" });
+  y += 8;
+  doc.setDrawColor(20, 20, 20);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 8;
+
+  doc.setFontSize(9);
+  const rows: [string, string][] = [
+    ["Numero", info.id || "salvo"],
+    ["Data/Hora", info.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })],
+    ["Funcionario", info.mecanicoNome],
+    ["Empresa", `${info.empresa}${info.empresaCnpj ? ` - ${info.empresaCnpj}` : ""}`],
+    ["Veiculo", info.placa || "nao identificado"],
+    ["KM", info.km || "nao identificado"],
+    ["Posto", info.postoNome || "-"],
+    ["Combustivel", info.combustivel || "nao identificado"],
+    ["Litros", fmtLitros(info.litros)],
+    ["Valor total", fmtMoney(info.valor)],
+  ];
+
+  for (const [label, value] of rows) {
+    doc.setFont("helvetica", "bold");
+    doc.text(label, margin, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(String(value || "-"), margin + 42, y, { maxWidth: usableWidth - 42 });
+    y += 6;
+  }
+
+  y += 3;
+  doc.setFont("helvetica", "bold");
+  doc.text("Fotos de comprovacao", margin, y);
+  y += 5;
+
+  const photoWidth = (usableWidth - 6) / 2;
+  const photoHeight = 82;
+  await addReceiptImage(doc, info.fotoBombaUrl, "Foto da bomba", margin, y, photoWidth, photoHeight);
+  await addReceiptImage(doc, info.fotoPainelUrl, "Foto do painel", margin + photoWidth + 6, y, photoWidth, photoHeight);
+  y += photoHeight + 15;
+
+  if (y > pageHeight - 35) {
+    doc.addPage();
+    y = margin;
+  }
+  doc.setDrawColor(80, 80, 80);
+  doc.line(margin + 30, y, pageWidth - margin - 30, y);
+  y += 5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text("Assinatura / identificacao do usuario logado", pageWidth / 2, y, { align: "center" });
+  doc.text(info.mecanicoNome, pageWidth / 2, y + 5, { align: "center" });
+
+  return { blob: doc.output("blob"), fileName: getReceiptPdfFileName(info) };
+}
+
+async function addReceiptImage(doc: jsPDF, url: string, label: string, x: number, y: number, width: number, height: number) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text(label, x, y);
+  doc.setDrawColor(180, 180, 180);
+  doc.rect(x, y + 2, width, height);
+  if (!url) {
+    doc.setFont("helvetica", "normal");
+    doc.text("Foto nao anexada", x + 3, y + 12);
+    return;
+  }
+  try {
+    const dataUrl = await imageUrlToDataUrl(url);
+    const props = doc.getImageProperties(dataUrl);
+    const ratio = Math.min((width - 4) / props.width, (height - 4) / props.height);
+    const imgWidth = props.width * ratio;
+    const imgHeight = props.height * ratio;
+    const imgX = x + (width - imgWidth) / 2;
+    const imgY = y + 2 + (height - imgHeight) / 2;
+    doc.addImage(dataUrl, getImageFormat(dataUrl), imgX, imgY, imgWidth, imgHeight);
+  } catch {
+    doc.setFont("helvetica", "normal");
+    doc.text("Foto registrada, mas nao carregou no PDF.", x + 3, y + 12, { maxWidth: width - 6 });
+  }
+}
+
+async function imageUrlToDataUrl(url: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Nao foi possivel carregar a foto do recibo.");
+  return blobToDataUrl(await response.blob());
+}
+
+function getImageFormat(dataUrl: string): "PNG" | "JPEG" {
+  return dataUrl.toLowerCase().startsWith("data:image/png") ? "PNG" : "JPEG";
+}
+
+function getReceiptPdfFileName(info: ReceiptInfo) {
+  const date = info.createdAt.toISOString().slice(0, 10);
+  return `${sanitizeFile(info.empresa || "TOPAC")} - RECIBO ABASTECIMENTO - ${sanitizeFile(info.mecanicoNome || "FUNCIONARIO")} - ${date}.pdf`;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function buildReceiptHtml(info: ReceiptInfo) {
   const text = [
     ["Registro", info.id || "salvo"],
-    ["Data/Hora", info.createdAt.toLocaleString("pt-BR")],
+    ["Data/Hora", info.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })],
     ["Funcionario", info.mecanicoNome],
     ["Unidade", `${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`],
+    ["CNPJ da empresa", info.empresaCnpj || "Nao informado"],
     ["Veiculo", info.placa || "-"],
     ["Posto", info.postoNome],
     ["CNPJ", info.postoCnpj || "-"],
     ["Endereco", info.postoEndereco || "-"],
     ["Telefone", info.postoTelefone || "-"],
     ["Combustivel", info.combustivel],
-    ["Litros", `${fmtNumber(info.litros)} L`],
+    ["Litros", fmtLitros(info.litros)],
     ["Preco/L", fmtMoney(info.precoLitro)],
     ["Valor total", fmtMoney(info.valor)],
     ["KM", info.km || "-"],
@@ -1088,7 +1277,7 @@ function buildReceiptHtml(info: ReceiptInfo) {
     <div class="muted">Comprovante interno gerado pelo app do mecanico.</div>
     <table>${text.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
     <div class="photos">
-      <div><strong>Foto da frente do veiculo/placa</strong><br><img src="${escapeHtml(info.fotoPlacaUrl)}"></div>
+      <div><strong>Foto do QR Code</strong><br><img src="${escapeHtml(info.fotoQrUrl)}"></div>
       <div><strong>Foto da bomba</strong><br><img src="${escapeHtml(info.fotoBombaUrl)}"></div>
       <div><strong>Foto do painel/KM</strong><br><img src="${escapeHtml(info.fotoPainelUrl)}"></div>
     </div>
@@ -1112,26 +1301,69 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+async function optimizeImageBlob(blob: Blob, maxSide = 1600, quality = 0.8): Promise<Blob> {
+  const dataUrl = await renderImageDataUrl(blob, { maxSide, quality });
+  if (!dataUrl) return blob;
+  return dataUrlToBlob(dataUrl);
+}
+
 async function blobToOptimizedDataUrl(blob: Blob): Promise<string> {
+  return renderImageDataUrl(blob, { maxSide: 1800, quality: 0.86 });
+}
+
+async function buildPanelOcrDataUrls(blob: Blob): Promise<string[]> {
   const original = await blobToDataUrl(blob);
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const maxSide = 2200;
-      const ratio = Math.min(1, maxSide / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(img.width * ratio));
-      canvas.height = Math.max(1, Math.round(img.height * ratio));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return resolve(original);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.92));
+      const crop = {
+        x: Math.round(img.width * 0.12),
+        y: Math.round(img.height * 0.2),
+        width: Math.round(img.width * 0.76),
+        height: Math.round(img.height * 0.58),
+      };
+      const central = imageToDataUrl(img, { maxSide: 1700, quality: 0.92, crop, filter: "grayscale(1) contrast(1.45)" });
+      const full = imageToDataUrl(img, { maxSide: 1500, quality: 0.82, filter: "grayscale(1) contrast(1.25)" });
+      resolve([central || original, full || original]);
+    };
+    img.onerror = () => resolve([original]);
+    img.src = original;
+  });
+}
+
+async function renderImageDataUrl(blob: Blob, options: { maxSide: number; quality: number; filter?: string }): Promise<string> {
+  const original = await blobToDataUrl(blob);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve(imageToDataUrl(img, options) || original);
     };
     img.onerror = () => resolve(original);
     img.src = original;
   });
+}
+
+function imageToDataUrl(
+  img: HTMLImageElement,
+  options: { maxSide: number; quality: number; crop?: { x: number; y: number; width: number; height: number }; filter?: string },
+) {
+  const source = options.crop || { x: 0, y: 0, width: img.width, height: img.height };
+  const ratio = Math.min(1, options.maxSide / Math.max(source.width, source.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(source.width * ratio));
+  canvas.height = Math.max(1, Math.round(source.height * ratio));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  if (options.filter) ctx.filter = options.filter;
+  ctx.drawImage(img, source.x, source.y, source.width, source.height, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", options.quality);
+}
+
+async function dataUrlToBlob(dataUrl: string) {
+  const response = await fetch(dataUrl);
+  return response.blob();
 }
 
 function getErrorMessage(error: unknown) {
