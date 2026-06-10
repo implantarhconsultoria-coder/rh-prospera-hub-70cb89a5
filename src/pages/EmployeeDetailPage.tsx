@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, FileText, Mail, Save } from 'lucide-react';
 import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
+import AsoAgendamentosFuncionario from '@/components/AsoAgendamentosFuncionario';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import { CC_OBRIGATORIO, DESTINATARIOS_ASO } from '@/lib/emailUtils';
@@ -300,6 +301,7 @@ const EmployeeDetailPage: React.FC = () => {
                 <p className="text-sm"><span className="text-muted-foreground">Próximo ASO:</span> {formatDate(aso.proximoASO.toISOString())}</p>
                 <p className="text-sm"><span className="text-muted-foreground">Dias Restantes:</span> {aso.diasRestantes}</p>
                 <Field label="Data Exame Médico" {...fieldFor('dataExameMedico', 'date')} />
+                <AsoAgendamentosFuncionario funcionarioId={emp.id} companyId={emp.companyId} />
               </div>
             </div>
           </div>

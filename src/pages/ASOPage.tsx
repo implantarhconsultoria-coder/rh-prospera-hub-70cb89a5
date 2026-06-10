@@ -12,6 +12,7 @@ import { DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import { gerarFichaASOPdf, downloadPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import { buildAsoAgendamentoInsert } from '@/lib/asoAgendamento';
 
 const CLINICAS: Record<string, string> = {
   'TOPAC MATRIZ': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
@@ -218,23 +219,18 @@ const ASOPage: React.FC = () => {
   const handleSave = async () => {
     if (!emp || !session?.user?.id) return;
     setSaving(true);
-    const { error } = await supabase.from('aso_agendamentos').insert({
-      funcionario_nome: emp.name,
-      empresa: company?.name || '',
-      funcao: emp.cargo,
-      data_exame: dataExame || null,
-      tipo_exame: tipoExame.toLowerCase(),
-      obra_local: obraLocal,
-      trabalho_altura: trabalhoAltura,
-      espaco_confinado: espacoConfinado,
-      responsavel_contato: responsavelContato,
-      clinica_endereco: clinica,
-      cpf: emp.cpf,
-      rg: emp.rg,
-      data_admissao: emp.dataAdmissao || null,
-      user_id: session.user.id,
-      status: 'pendente',
-    });
+    const { error } = await supabase.from('aso_agendamentos').insert(buildAsoAgendamentoInsert({
+      employee: emp,
+      companyName: company?.name || '',
+      dataExame,
+      tipoExame,
+      obraLocal,
+      trabalhoAltura,
+      espacoConfinado,
+      responsavelContato,
+      clinicaEndereco: clinica,
+      userId: session.user.id,
+    }));
     setSaving(false);
     if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
     toast.success('Agendamento salvo no banco!');
