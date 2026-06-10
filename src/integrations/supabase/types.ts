@@ -1131,6 +1131,7 @@ export type Database = {
       aso_agendamentos: {
         Row: {
           clinica_endereco: string | null
+          company_id: string | null
           cpf: string | null
           created_at: string
           ctps: string | null
@@ -1140,6 +1141,7 @@ export type Database = {
           empresa: string
           espaco_confinado: boolean | null
           funcao: string | null
+          funcionario_id: string | null
           funcionario_nome: string
           id: string
           obra_local: string | null
@@ -1155,6 +1157,7 @@ export type Database = {
         }
         Insert: {
           clinica_endereco?: string | null
+          company_id?: string | null
           cpf?: string | null
           created_at?: string
           ctps?: string | null
@@ -1164,6 +1167,7 @@ export type Database = {
           empresa: string
           espaco_confinado?: boolean | null
           funcao?: string | null
+          funcionario_id?: string | null
           funcionario_nome: string
           id?: string
           obra_local?: string | null
@@ -1179,6 +1183,7 @@ export type Database = {
         }
         Update: {
           clinica_endereco?: string | null
+          company_id?: string | null
           cpf?: string | null
           created_at?: string
           ctps?: string | null
@@ -1188,6 +1193,7 @@ export type Database = {
           empresa?: string
           espaco_confinado?: boolean | null
           funcao?: string | null
+          funcionario_id?: string | null
           funcionario_nome?: string
           id?: string
           obra_local?: string | null
@@ -1201,7 +1207,22 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "aso_agendamentos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aso_agendamentos_funcionario_id_fkey"
+            columns: ["funcionario_id"]
+            isOneToOne: false
+            referencedRelation: "funcionarios"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       assistente_conversas: {
         Row: {
