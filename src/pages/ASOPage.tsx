@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
-import { gerarFichaASOPdf, downloadPdf } from '@/lib/pdfGenerator';
+import { gerarAutorizacaoExameAdmissionalPdf, downloadPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { buildAsoAgendamentoInsert } from '@/lib/asoAgendamento';
 
@@ -49,6 +49,7 @@ const ASOPage: React.FC = () => {
   const [tipoExame, setTipoExame] = useState('Periódico');
   const [trabalhoAltura, setTrabalhoAltura] = useState(false);
   const [espacoConfinado, setEspacoConfinado] = useState(false);
+  const [toxicologico, setToxicologico] = useState(false);
   const [responsavelContato, setResponsavelContato] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastDocId, setLastDocId] = useState('');
@@ -139,7 +140,7 @@ const ASOPage: React.FC = () => {
 
   const gerarPdfAtual = () => {
     if (!emp || !company) return null;
-    return gerarFichaASOPdf({
+    return gerarAutorizacaoExameAdmissionalPdf({
       empresa: company.name,
       cnpj: company.cnpj,
       nome: emp.name,
@@ -147,11 +148,14 @@ const ASOPage: React.FC = () => {
       rg: emp.rg,
       funcao: emp.cargo,
       dataAdmissao: emp.dataAdmissao,
+      dataNascimento: emp.dataNascimento,
+      setorGhe: emp.setorGhe,
       dataExame,
       tipoExame,
       obraLocal,
       trabalhoAltura,
       espacoConfinado,
+      toxicologico,
       responsavelContato,
       clinica,
     });
@@ -345,6 +349,9 @@ const ASOPage: React.FC = () => {
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={espacoConfinado} onChange={e => setEspacoConfinado(e.target.checked)} className="rounded border-border" /> Espaço Confinado
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={toxicologico} onChange={e => setToxicologico(e.target.checked)} className="rounded border-border" /> Toxicológico
               </label>
             </div>
           </div>
