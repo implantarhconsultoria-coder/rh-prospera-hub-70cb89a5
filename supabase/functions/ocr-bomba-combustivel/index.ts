@@ -171,7 +171,8 @@ function isPlausible(value: number, kind: "valor" | "litros" | "preco" | "km"): 
 }
 
 function validatePumpResult(input: { valor: number; litros: number; valorPorLitro: number; confidence: number; aiOk: boolean }) {
-  let { valor, litros, valorPorLitro } = input;
+  let { valor, valorPorLitro } = input;
+  const { litros } = input;
   if (isPlausible(valor, "valor") && isPlausible(litros, "litros") && !isPlausible(valorPorLitro, "preco")) {
     valorPorLitro = round(valor / litros, 3);
   }
@@ -187,9 +188,9 @@ function validatePumpResult(input: { valor: number; litros: number; valorPorLitr
 
   return {
     ok,
-    valor: ok ? round(valor, 2) : 0,
-    litros: ok ? round(litros, 3) : 0,
-    valorPorLitro: ok ? round(valorPorLitro, 3) : 0,
+    valor: isPlausible(valor, "valor") ? round(valor, 2) : 0,
+    litros: isPlausible(litros, "litros") ? round(litros, 3) : 0,
+    valorPorLitro: isPlausible(valorPorLitro, "preco") ? round(valorPorLitro, 3) : 0,
     motivo: ok ? "" : "Nao foi possivel confirmar valor, litros e preco com seguranca.",
   };
 }
@@ -198,7 +199,7 @@ function validatePanelResult(input: { km: number; confidence: number; aiOk: bool
   const ok = Boolean(input.aiOk) && input.confidence >= 0.7 && isPlausible(input.km, "km");
   return {
     ok,
-    km: ok ? Math.round(input.km) : 0,
+    km: isPlausible(input.km, "km") ? Math.round(input.km) : 0,
     motivo: ok ? "" : "Nao foi possivel confirmar o KM com seguranca.",
   };
 }
