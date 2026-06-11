@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { formatCurrency, formatDate, feriasStatus, asoStatus } from '@/lib/calculations';
@@ -13,6 +13,7 @@ import { CC_OBRIGATORIO, DESTINATARIOS_ASO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
+import { prepareDocumentTextForSave } from '@/lib/documentoHistoricoTexto';
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
@@ -50,10 +51,17 @@ const EmployeeDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
 
+  const emp = employees.find(e => e.id === id);
+  const [observacoesGerais, setObservacoesGerais] = useState(emp?.observacoes || '');
+  const [salvandoObservacoes, setSalvandoObservacoes] = useState(false);
+
+  useEffect(() => {
+    setObservacoesGerais(emp?.observacoes || '');
+  }, [emp?.id, emp?.observacoes]);
+
   const portalPrefix = location.pathname.startsWith('/filial') ? '/filial'
     : location.pathname.startsWith('/admin') ? '/admin' : '';
 
-  const emp = employees.find(e => e.id === id);
   if (!emp) return <div className="p-8 text-center text-muted-foreground">Funcionário não encontrado</div>;
 
   const company = companies.find(c => c.id === emp.companyId);
@@ -137,6 +145,18 @@ const EmployeeDetailPage: React.FC = () => {
       toast.success('Guia ASO demissional gerada e salva no historico documental.');
     } catch (error: any) {
       toast.warning(`Guia aberta, mas nao foi arquivada: ${error?.message || 'erro desconhecido'}`);
+    }
+  };
+
+  const salvarObservacoesGerais = async () => {
+    setSalvandoObservacoes(true);
+    try {
+      await updateEmployee(emp.id, {
+        observacoes: prepareDocumentTextForSave(observacoesGerais),
+      });
+      toast.success('Observações gerais salvas.');
+    } finally {
+      setSalvandoObservacoes(false);
     }
   };
 
@@ -315,9 +335,18 @@ const EmployeeDetailPage: React.FC = () => {
             <HistoricoDocumentalFuncionario funcionarioId={emp.id} />
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Observações Gerais</label>
-              <textarea value={emp.observacoes} onChange={e => updateEmployee(emp.id, { observacoes: e.target.value })}
+              <textarea
+                value={observacoesGerais}
+                onChange={(e) => setObservacoesGerais(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[120px]"
-                placeholder="Observações adicionais do funcionário..." />
+                placeholder="Observações adicionais do funcionário..."
+              />
+              <div className="flex justify-end mt-2">
+                <Button type="button" onClick={salvarObservacoesGerais} disabled={salvandoObservacoes}>
+                  <Save className="w-4 h-4 mr-2" />
+                  {salvandoObservacoes ? 'Salvando...' : 'Salvar observações'}
+                </Button>
+              </div>
             </div>
           </div>
         )}
