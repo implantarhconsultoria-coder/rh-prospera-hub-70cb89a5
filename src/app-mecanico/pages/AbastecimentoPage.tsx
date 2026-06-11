@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Check, Copy, Download, Fuel, Gauge, Loader2, MessageCircle, Printer, QrCode, RotateCcw, Share2 } from "lucide-react";
+import { AlertTriangle, Camera, Check, Download, Fuel, Gauge, Loader2, MessageCircle, Printer, QrCode, RotateCcw, Share2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import QrScanner from "qr-scanner";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { getBrowserLocation } from "@/lib/browserGeo";
 import CameraCapture from "../components/CameraCapture";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { uploadFoto } from "../lib/upload";
+import { gerarReciboAbastecimentoPdf } from "../lib/abastecimentoReceiptPdf";
+import { normalizeKmOcrField, normalizePumpOcrFields } from "../lib/abastecimentoOcr";
 
 type Step = "scan" | "vale" | "painel" | "form" | "ok";
 
@@ -119,6 +121,8 @@ export default function AbastecimentoPage() {
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
+  const [ocrWarning, setOcrWarning] = useState("");
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -286,31 +290,15 @@ export default function AbastecimentoPage() {
   };
 
   const aplicarLeituraBomba = (r: OcrResult | null) => {
-    if (!isReliablePumpResult(r)) return false;
-    const nValor = parseDecimal(r.valor);
-    const nLitros = parseDecimal(r.litros);
-    const nPreco = parseDecimal(r.valor_por_litro);
-    let valorFinal = Number.isFinite(nValor) && nValor > 0 ? nValor : NaN;
-    let litrosFinal = Number.isFinite(nLitros) && nLitros > 0 ? nLitros : NaN;
-    let precoFinal = Number.isFinite(nPreco) && nPreco > 0 ? nPreco : NaN;
-
-    if (!Number.isFinite(precoFinal) && Number.isFinite(valorFinal) && Number.isFinite(litrosFinal) && litrosFinal > 0) {
-      precoFinal = valorFinal / litrosFinal;
-    }
-    if (!Number.isFinite(valorFinal) && Number.isFinite(litrosFinal) && Number.isFinite(precoFinal)) {
-      valorFinal = litrosFinal * precoFinal;
-    }
-    if (!Number.isFinite(litrosFinal) && Number.isFinite(valorFinal) && Number.isFinite(precoFinal) && precoFinal > 0) {
-      litrosFinal = valorFinal / precoFinal;
-    }
-
-    let preenchidos = 0;
-    if (Number.isFinite(valorFinal) && valorFinal > 0) { setValor(formatDecimal(valorFinal, 2)); preenchidos++; }
-    if (Number.isFinite(litrosFinal) && litrosFinal > 0) { setLitros(formatDecimal(litrosFinal, 3)); preenchidos++; }
-    if (Number.isFinite(precoFinal) && precoFinal > 0) { setPrecoLitro(formatDecimal(precoFinal, 3)); preenchidos++; }
+    if (!r) return false;
+    const fields = normalizePumpOcrFields(r);
+    let numerosPreenchidos = 0;
+    if (fields.valor !== null) { setValor(formatDecimal(fields.valor, 2)); numerosPreenchidos++; }
+    if (fields.litros !== null) { setLitros(formatDecimal(fields.litros, 3)); numerosPreenchidos++; }
+    if (fields.precoLitro !== null) { setPrecoLitro(formatDecimal(fields.precoLitro, 3)); numerosPreenchidos++; }
     const combustivelLido = normalizeCombustivel(r.combustivel);
-    if (combustivelLido) { setCombustivel(combustivelLido); preenchidos++; }
-    return preenchidos >= 2;
+    if (combustivelLido) setCombustivel(combustivelLido);
+    return numerosPreenchidos >= 2;
   };
 
   const onCaptureBomba = async (blob: Blob) => {
@@ -321,10 +309,13 @@ export default function AbastecimentoPage() {
       const r = await analisarFoto(blob);
       const leituraAplicada = aplicarLeituraBomba(r);
       setStep("painel");
-      if (leituraAplicada) {
-        toast.success("Bomba lida com seguranca: valor, litros e preco preenchidos. Tire a foto do KM.");
+      if (leituraAplicada && isReliablePumpResult(r)) {
+        setOcrWarning("");
+        toast.success("Bomba reconhecida: valor, litros e preço preenchidos automaticamente. Tire a foto do KM.");
       } else {
-        toast.warning(r?.motivo || "Foto da bomba salva, mas nao deu leitura segura. Tire uma foto mais enquadrada ou preencha manualmente.");
+        const warning = "Não foi possível reconhecer automaticamente, revise os campos";
+        setOcrWarning(warning);
+        toast.warning(warning);
       }
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload da bomba");
@@ -339,13 +330,20 @@ export default function AbastecimentoPage() {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", blob);
       setFotoPainelUrl(url);
       const r = await analisarFoto(blob, "painel_km");
-      const detectedKm = r?.km ?? r?.km_atual;
-      const kmLido = parseDecimal(detectedKm);
-      if (isReliableKmResult(r) && Number.isFinite(kmLido) && kmLido > 0) {
-        setKm(String(Math.round(kmLido)));
-        toast.success("KM do painel lido com seguranca e preenchido automaticamente.");
+      const kmLido = normalizeKmOcrField(r);
+      if (kmLido !== null) {
+        setKm(String(kmLido));
+        if (isReliableKmResult(r)) {
+          toast.success("KM reconhecido e preenchido automaticamente.");
+        } else {
+          const warning = "Não foi possível reconhecer automaticamente, revise os campos";
+          setOcrWarning(warning);
+          toast.warning(warning);
+        }
       } else {
-        toast.warning(r?.motivo || "Foto do painel salva, mas nao deu leitura segura do KM. Tire nova foto ou preencha manualmente.");
+        const warning = "Não foi possível reconhecer automaticamente, revise os campos";
+        setOcrWarning(warning);
+        toast.warning(warning);
       }
       setStep("form");
     } catch (e) {
@@ -438,35 +436,58 @@ export default function AbastecimentoPage() {
       `Foto do KM/painel: ${info.fotoPainelUrl}`,
     ].filter(Boolean).join("\n");
 
+  const getReceiptPdf = async () => {
+    if (!receipt) throw new Error("Recibo não encontrado");
+    return gerarReciboAbastecimentoPdf(receipt);
+  };
+
   const shareReceipt = async () => {
-    if (!receipt) return;
-    const text = buildReceiptText(receipt);
-    if (navigator.share) {
-      await navigator.share({ title: "Abastecimento TOPAC", text });
-      return;
+    if (!receipt || generatingPdf) return;
+    setGeneratingPdf(true);
+    try {
+      const { blob, fileName } = await getReceiptPdf();
+      const file = new File([blob], fileName, { type: "application/pdf" });
+      if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+        await navigator.share({ title: "Recibo de abastecimento TOPAC", files: [file] });
+        return;
+      }
+      downloadPdf(blob, fileName);
+      toast.success("PDF gerado. Compartilhe o arquivo baixado.");
+    } catch (error) {
+      if (getErrorMessage(error).includes("AbortError")) return;
+      toast.error(getErrorMessage(error) || "Erro ao compartilhar PDF");
+    } finally {
+      setGeneratingPdf(false);
     }
-    await navigator.clipboard.writeText(text);
-    toast.success("Notinha copiada");
   };
 
-  const printReceipt = () => {
-    if (!receipt) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(buildReceiptHtml(receipt));
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 300);
+  const viewReceiptPdf = async () => {
+    if (!receipt || generatingPdf) return;
+    setGeneratingPdf(true);
+    try {
+      const { blob } = await getReceiptPdf();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (error) {
+      toast.error(getErrorMessage(error) || "Erro ao visualizar PDF");
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
-  const downloadReceipt = () => {
-    if (!receipt) return;
-    const blob = new Blob([buildReceiptText(receipt)], { type: "text/plain;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `ABASTECIMENTO_${sanitizeFile(receipt.empresa)}_${sanitizeFile(receipt.mecanicoNome)}_${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  const downloadReceipt = async () => {
+    if (!receipt || generatingPdf) return;
+    setGeneratingPdf(true);
+    try {
+      const { blob, fileName } = await getReceiptPdf();
+      downloadPdf(blob, fileName);
+      toast.success("Recibo PDF gerado.");
+    } catch (error) {
+      toast.error(getErrorMessage(error) || "Erro ao gerar PDF");
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
   const openWhatsapp = (phone?: string) => {
@@ -474,6 +495,18 @@ export default function AbastecimentoPage() {
     const clean = (phone || "").replace(/\D/g, "");
     const target = clean ? `55${clean.replace(/^55/, "")}` : "";
     window.open(`${target ? `https://wa.me/${target}` : "https://wa.me/"}?text=${encodeURIComponent(buildReceiptText(receipt))}`, "_blank", "noopener,noreferrer");
+  };
+
+
+  const downloadPdf = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   };
 
   const reset = () => {
@@ -493,6 +526,7 @@ export default function AbastecimentoPage() {
     setKm("");
     setObs("");
     setReceipt(null);
+    setOcrWarning("");
     setScanError("");
     setStep("scan");
   };
@@ -574,6 +608,11 @@ export default function AbastecimentoPage() {
         <Card className="space-y-3 p-4">
           <div className="text-sm font-semibold">Confirme os dados</div>
           <div className="grid grid-cols-2 gap-2">{fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}{fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}</div>
+          {ocrWarning && (
+            <div className="rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm font-medium text-warning">
+              <AlertTriangle className="mr-2 inline h-4 w-4" />{ocrWarning}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Valor (R$)" value={valor} setValue={updateValor} type="number" />
             <Field label="Litros" value={litros} setValue={updateLitros} type="number" />
@@ -616,7 +655,7 @@ export default function AbastecimentoPage() {
 
       {step === "ok" && receipt && (
         <Card className="space-y-4 p-4">
-          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Compartilhe a notinha no grupo e no WhatsApp do posto.</p></div>
+          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Gere, visualize ou compartilhe o recibo em PDF.</p></div>
           <div className="rounded-xl border bg-muted/30 p-3 text-sm">
             <div className="font-bold">{receipt.postoNome}</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
@@ -626,14 +665,12 @@ export default function AbastecimentoPage() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2"><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
           </div>
-          <Button onClick={shareReceipt} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha</Button>
+          <Button onClick={downloadReceipt} disabled={generatingPdf} className="w-full"><Download className="mr-2 h-4 w-4" /> Gerar recibo PDF</Button>
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={printReceipt} variant="outline" className="w-full"><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
-            <Button onClick={downloadReceipt} variant="outline" className="w-full"><Download className="mr-2 h-4 w-4" /> Baixar</Button>
+            <Button onClick={viewReceiptPdf} disabled={generatingPdf} variant="outline" className="w-full"><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button>
+            <Button onClick={shareReceipt} disabled={generatingPdf} variant="outline" className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar PDF</Button>
           </div>
-          <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> Enviar no WhatsApp</Button>
           {receipt.postoTelefone && <Button onClick={() => openWhatsapp(receipt.postoTelefone)} variant="outline" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp do posto</Button>}
-          <Button onClick={() => navigator.clipboard.writeText(buildReceiptText(receipt)).then(() => toast.success("Notinha copiada"))} variant="outline" className="w-full"><Copy className="mr-2 h-4 w-4" /> Copiar texto</Button>
           <Button onClick={reset} variant="ghost" className="w-full">Novo abastecimento</Button>
         </Card>
       )}
@@ -690,15 +727,6 @@ function extractQrCode(value: string) {
     const match = raw.match(/(?:qr|codigo)=([^&]+)/i);
     return decodeURIComponent(match?.[1] || raw).trim().toUpperCase();
   }
-}
-
-function sanitizeFile(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toUpperCase();
 }
 
 function normalizePlate(value: string | null | undefined) {
@@ -1005,55 +1033,6 @@ function collectKmNumbers(text: string) {
 function roundValue(value: number, digits: number) {
   const factor = 10 ** digits;
   return Number.isFinite(value) ? Math.round(value * factor) / factor : 0;
-}
-
-function buildReceiptHtml(info: ReceiptInfo) {
-  const text = [
-    ["Registro", info.id || "salvo"],
-    ["Data/Hora", info.createdAt.toLocaleString("pt-BR")],
-    ["Funcionario", info.mecanicoNome],
-    ["Unidade", `${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`],
-    ["Veiculo", info.placa || "-"],
-    ["Posto", info.postoNome],
-    ["CNPJ", info.postoCnpj || "-"],
-    ["Endereco", info.postoEndereco || "-"],
-    ["Telefone", info.postoTelefone || "-"],
-    ["Combustivel", info.combustivel],
-    ["Litros", `${fmtNumber(info.litros)} L`],
-    ["Preco/L", fmtMoney(info.precoLitro)],
-    ["Valor total", fmtMoney(info.valor)],
-    ["KM", info.km || "-"],
-    ["KM rodado", info.kmRodado !== null ? `${fmtNumber(String(info.kmRodado), 0)} km` : "-"],
-    ["Validado por", info.mecanicoNome],
-  ];
-
-  return `<html><head><title>Recibo abastecimento</title><style>
-    body{font-family:Arial,sans-serif;margin:24px;color:#111}
-    h1{font-size:18px;margin:0 0 4px}
-    .muted{color:#555;font-size:12px;margin-bottom:16px}
-    table{width:100%;border-collapse:collapse;font-size:12px}
-    td{border:1px solid #ddd;padding:7px;vertical-align:top}
-    td:first-child{font-weight:bold;width:160px;background:#f7f7f7}
-    .photos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
-    img{width:100%;max-height:300px;object-fit:contain;border:1px solid #ddd}
-  </style></head><body>
-    <h1>TOPAC RH PRO - Recibo de Abastecimento</h1>
-    ${info.registroTeste ? '<div class="muted"><strong>REGISTRO DE TESTE</strong> - nao impacta relatorios oficiais.</div>' : ''}
-    <div class="muted">Comprovante interno gerado pelo app do mecanico.</div>
-    <table>${text.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
-    <div class="photos">
-      <div><strong>Foto da bomba</strong><br><img src="${escapeHtml(info.fotoBombaUrl)}"></div>
-      <div><strong>Foto do painel/KM</strong><br><img src="${escapeHtml(info.fotoPainelUrl)}"></div>
-    </div>
-  </body></html>`;
-}
-
-function escapeHtml(value: string) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
