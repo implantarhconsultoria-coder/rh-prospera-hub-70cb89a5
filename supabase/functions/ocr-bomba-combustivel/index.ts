@@ -45,7 +45,7 @@ Regras:
 - km = quilometragem atual do hodometro, sem pontos de milhar.
 - Leia apenas ODO, KM total, hodometro ou quilometragem acumulada.
 - Nao use velocidade, temperatura, hora, consumo, autonomia, trip A, trip B ou marcador parcial.
-- Se houver mais de um numero, escolha o que representa a quilometragem total do veiculo.
+- Se houver mais de um numero compatível com odômetro, escolha o MAIOR número visível; ignore relógio, autonomia, velocidade e TRIP.
 - ok deve ser true somente quando o numero de KM estiver visivel com clareza.
 - Se a foto estiver sem foco, cortada, refletida, ou mostrar apenas o velocimetro sem hodometro claro, ok=false e confianca abaixo de 0.70.
 - Se nao conseguir ler, devolva 0.
@@ -66,7 +66,8 @@ function parseBrNumber(value: unknown): number {
     normalized = raw.replace(/\./g, "").replace(",", ".");
   } else if (lastDot > lastComma) {
     const decimalLen = raw.length - lastDot - 1;
-    normalized = decimalLen === 3 && !raw.includes(",") ? raw.replace(/\./g, "") : raw.replace(/,/g, "");
+    const integerPart = raw.slice(0, lastDot).replace(/\D/g, "");
+    normalized = decimalLen === 3 && !raw.includes(",") && integerPart.length > 2 ? raw.replace(/\./g, "") : raw.replace(/,/g, "");
   } else {
     normalized = raw.replace(",", ".");
   }
@@ -171,7 +172,8 @@ function isPlausible(value: number, kind: "valor" | "litros" | "preco" | "km"): 
 }
 
 function validatePumpResult(input: { valor: number; litros: number; valorPorLitro: number; confidence: number; aiOk: boolean }) {
-  let { valor, litros, valorPorLitro } = input;
+  let { valor, valorPorLitro } = input;
+  const { litros } = input;
   if (isPlausible(valor, "valor") && isPlausible(litros, "litros") && !isPlausible(valorPorLitro, "preco")) {
     valorPorLitro = round(valor / litros, 3);
   }
@@ -187,9 +189,9 @@ function validatePumpResult(input: { valor: number; litros: number; valorPorLitr
 
   return {
     ok,
-    valor: ok ? round(valor, 2) : 0,
-    litros: ok ? round(litros, 3) : 0,
-    valorPorLitro: ok ? round(valorPorLitro, 3) : 0,
+    valor: isPlausible(valor, "valor") ? round(valor, 2) : 0,
+    litros: isPlausible(litros, "litros") ? round(litros, 3) : 0,
+    valorPorLitro: isPlausible(valorPorLitro, "preco") ? round(valorPorLitro, 3) : 0,
     motivo: ok ? "" : "Nao foi possivel confirmar valor, litros e preco com seguranca.",
   };
 }
@@ -198,7 +200,7 @@ function validatePanelResult(input: { km: number; confidence: number; aiOk: bool
   const ok = Boolean(input.aiOk) && input.confidence >= 0.7 && isPlausible(input.km, "km");
   return {
     ok,
-    km: ok ? Math.round(input.km) : 0,
+    km: isPlausible(input.km, "km") ? Math.round(input.km) : 0,
     motivo: ok ? "" : "Nao foi possivel confirmar o KM com seguranca.",
   };
 }
