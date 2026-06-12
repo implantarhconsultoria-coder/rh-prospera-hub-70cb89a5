@@ -15,7 +15,7 @@ import { uploadFoto } from "../lib/upload";
 import { normalizeOdometerOcrResult, normalizePumpOcrResult, parseOdometerOcrText, parsePumpOcrText } from "../lib/abastecimentoRules";
 import { gerarCupomAbastecimentoPdf } from "../lib/abastecimentoPdf";
 
-type Step = "scan" | "vale" | "painel" | "form" | "ok";
+type Step = "scan" | "painel" | "bomba" | "form" | "ok";
 
 interface Posto {
   id: string;
@@ -74,6 +74,7 @@ interface ReceiptInfo {
   fotoPainelUrl: string;
   createdAt: Date;
   registroTeste?: boolean;
+  reciboPdfUrl?: string;
 }
 
 type OcrResult = {
@@ -124,6 +125,7 @@ export default function AbastecimentoPage() {
   const [showCorrection, setShowCorrection] = useState(false);
   const [ocrError, setOcrError] = useState("");
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [capturedLocation, setCapturedLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -247,7 +249,6 @@ export default function AbastecimentoPage() {
       p_acesso_id: mecanico.acesso_id,
       p_codigo: normalized,
     });
-    setLoading(false);
     const r = (data ?? null) as { ok?: boolean; error?: string; posto?: Posto; postos?: Posto[]; mecanico?: MecInfo } | null;
     if (error || !r?.ok || !r.posto) {
       const msg = r?.error === "qr_nao_encontrado" ? "QR Code do posto nao encontrado." : "Erro ao validar QR Code.";
@@ -268,7 +269,8 @@ export default function AbastecimentoPage() {
     setCarros(placas);
     setVeiculos(veiculosInfo);
     setPlaca((placaInicial || "").toUpperCase());
-    setStep("vale");
+    setStep("painel");
+    void getBrowserLocation().then(setCapturedLocation);
   };
 
   const analisarFoto = async (blob: Blob, tipo: "bomba" | "painel_km" = "bomba") => {
@@ -310,12 +312,12 @@ export default function AbastecimentoPage() {
       const leituraAplicada = aplicarLeituraBomba(r);
       if (leituraAplicada) {
         setOcrError("");
-        setStep("painel");
+        setStep("form");
         toast.success("Valor, litros e preço por litro reconhecidos automaticamente.");
       } else {
         const message = "Não foi possível reconhecer a bomba. Refaça a foto enquadrando TOTAL, LITROS e PREÇO/L.";
         setOcrError(message);
-        setStep("vale");
+        setStep("bomba");
         toast.error(message);
       }
     } catch (e) {
@@ -335,8 +337,8 @@ export default function AbastecimentoPage() {
       if (kmLido) {
         setKm(String(kmLido));
         setOcrError("");
-        setStep("form");
-        toast.success("KM reconhecido automaticamente.");
+        setStep("bomba");
+        toast.success("KM reconhecido automaticamente. Agora fotografe a bomba.");
       } else {
         const message = "Não foi possível reconhecer o KM. Refaça a foto com o odômetro visível.";
         setOcrError(message);
@@ -350,6 +352,21 @@ export default function AbastecimentoPage() {
     }
   };
 
+  const vincularReciboPdf = async (info: ReceiptInfo, pdf: { blob: Blob; fileName: string }) => {
+    if (info.reciboPdfUrl) return info.reciboPdfUrl;
+    const reciboPdfUrl = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `recibo-${info.id}`, pdf.blob);
+    const linked = await supabaseRpc.rpc("app_mecanico_vincular_recibo_pdf", {
+      p_acesso_id: mecanico.acesso_id,
+      p_abastecimento_id: info.id,
+      p_recibo_pdf_url: reciboPdfUrl,
+    });
+    const linkedResult = linked.data as { ok?: boolean; error?: string } | null;
+    if (linked.error || !linkedResult?.ok) throw new Error(linkedResult?.error || linked.error?.message || "Erro ao vincular recibo PDF");
+    info.reciboPdfUrl = reciboPdfUrl;
+    setReceipt({ ...info });
+    return reciboPdfUrl;
+  };
+
   const finalizar = async () => {
     if (!posto) return;
     if (postosOpcao.length > 1 && posto.tipo_qr === "unidade") return toast.error("Selecione o posto de Goiania");
@@ -357,7 +374,10 @@ export default function AbastecimentoPage() {
     if (!valor || !litros || !precoLitro || !km) return toast.error("Leitura automática incompleta. Refaça as fotos antes de confirmar.");
     if (mecInfo?.exige_selecao_carro && !placa) return toast.error("Selecione o carro");
     setLoading(true);
-    const { latitude, longitude } = await getBrowserLocation();
+    const location = capturedLocation.latitude !== null || capturedLocation.longitude !== null
+      ? capturedLocation
+      : await getBrowserLocation();
+    const { latitude, longitude } = location;
     const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
       p_acesso_id: mecanico.acesso_id,
       p_posto_codigo: posto.codigo,
@@ -373,9 +393,11 @@ export default function AbastecimentoPage() {
       p_longitude: longitude,
       p_endereco: null,
     });
-    setLoading(false);
     const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null; registro_teste?: boolean } | null;
-    if (error || !r?.ok) return toast.error(r?.error || error?.message || "Erro ao salvar");
+    if (error || !r?.ok) {
+      setLoading(false);
+      return toast.error(r?.error || error?.message || "Erro ao salvar");
+    }
     const receiptInfo: ReceiptInfo = {
       id: r.id || "",
       codigo: posto.codigo,
@@ -399,10 +421,21 @@ export default function AbastecimentoPage() {
       createdAt: new Date(),
       registroTeste: Boolean(r.registro_teste || mecInfo?.registro_teste || mecanico.registro_teste),
     };
-    setReceipt(receiptInfo);
-    setStep("ok");
-    toast.success("Abastecimento registrado. Gerando recibo em PDF...");
-    await downloadReceiptPdf(receiptInfo);
+    toast.success("Abastecimento salvo. Gerando e vinculando o recibo PDF...");
+    try {
+      const pdf = await gerarCupomAbastecimentoPdf(buildPdfData(receiptInfo));
+      await vincularReciboPdf(receiptInfo, pdf);
+      setReceipt(receiptInfo);
+      setStep("ok");
+      downloadPdfBlob(pdf);
+      toast.success("Abastecimento e recibo PDF salvos com sucesso.");
+    } catch (error) {
+      setReceipt(receiptInfo);
+      setStep("ok");
+      toast.error(`Abastecimento salvo, mas o recibo PDF não foi vinculado: ${getErrorMessage(error)}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const buildPdfData = (info: ReceiptInfo) => ({
@@ -429,21 +462,26 @@ export default function AbastecimentoPage() {
   const createReceiptPdf = async (info: ReceiptInfo) => {
     setGeneratingPdf(true);
     try {
-      return await gerarCupomAbastecimentoPdf(buildPdfData(info));
+      const pdf = await gerarCupomAbastecimentoPdf(buildPdfData(info));
+      if (info.id && !info.reciboPdfUrl) await vincularReciboPdf(info, pdf);
+      return pdf;
     } finally {
       setGeneratingPdf(false);
     }
   };
 
-  const downloadReceiptPdf = async (info = receipt) => {
-    if (!info) return;
-    const pdf = await createReceiptPdf(info);
+  const downloadPdfBlob = (pdf: { blob: Blob; fileName: string }) => {
     const url = URL.createObjectURL(pdf.blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = pdf.fileName;
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const downloadReceiptPdf = async (info = receipt) => {
+    if (!info) return;
+    downloadPdfBlob(await createReceiptPdf(info));
   };
 
   const viewReceiptPdf = async () => {
@@ -486,6 +524,7 @@ export default function AbastecimentoPage() {
     setScanError("");
     setOcrError("");
     setShowCorrection(false);
+    setCapturedLocation({ latitude: null, longitude: null });
     setStep("scan");
   };
 
@@ -518,7 +557,7 @@ export default function AbastecimentoPage() {
         </Card>
       )}
 
-      {step === "vale" && posto && (
+      {step === "painel" && posto && (
         <Card className="space-y-3 p-4">
           <div className="text-xs font-semibold uppercase text-muted-foreground">QR validado</div>
           <div className="space-y-1 text-sm">
@@ -551,16 +590,17 @@ export default function AbastecimentoPage() {
             {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
           </div>
           {ocrError && <AlertBox text={ocrError} />}
-          <Button className="w-full" onClick={() => { setOcrError(""); setCamBomba(true); }}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
+          <Button className="w-full" onClick={() => { setOcrError(""); setCamPainel(true); }}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
           <Button className="w-full" variant="outline" onClick={reset}><RotateCcw className="mr-2 h-4 w-4" /> Cancelar</Button>
         </Card>
       )}
 
-      {step === "painel" && (
+      {step === "bomba" && (
         <Card className="space-y-3 p-4">
           {ocrError && <AlertBox text={ocrError} />}
-          {fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}
-          <Button className="w-full" onClick={() => setCamPainel(true)}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
+          {fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}
+          <ReadingCard label="KM reconhecido" value={km || "Não reconhecido"} />
+          <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
         </Card>
       )}
 
@@ -611,7 +651,7 @@ export default function AbastecimentoPage() {
             </div>
           )}
           <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" onClick={() => { setFotoBombaUrl(""); setValor(""); setLitros(""); setPrecoLitro(""); setOcrError(""); setStep("vale"); setCamBomba(true); }}><Camera className="mr-2 h-4 w-4" /> Refazer bomba</Button>
+            <Button type="button" variant="outline" onClick={() => { setFotoBombaUrl(""); setValor(""); setLitros(""); setPrecoLitro(""); setOcrError(""); setStep("bomba"); setCamBomba(true); }}><Camera className="mr-2 h-4 w-4" /> Refazer bomba</Button>
             <Button type="button" variant="outline" onClick={() => { setFotoPainelUrl(""); setKm(""); setOcrError(""); setStep("painel"); setCamPainel(true); }}><Gauge className="mr-2 h-4 w-4" /> Refazer painel</Button>
           </div>
           <Button className="w-full" onClick={finalizar} disabled={loading || !valor || !litros || !precoLitro || !km}>
@@ -631,6 +671,7 @@ export default function AbastecimentoPage() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2"><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
           </div>
+          {!receipt.reciboPdfUrl && <AlertBox text="O abastecimento foi salvo. Ao visualizar, compartilhar ou baixar, o sistema tentará vincular o PDF novamente." />}
           <Button onClick={shareReceiptPdf} disabled={generatingPdf} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar PDF</Button>
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={viewReceiptPdf} disabled={generatingPdf} variant="outline"><Eye className="mr-2 h-4 w-4" /> Visualizar PDF</Button>
