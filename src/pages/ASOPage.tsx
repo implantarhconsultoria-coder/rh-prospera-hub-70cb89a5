@@ -10,9 +10,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { DESTINATARIOS_ASO, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
-import { gerarAutorizacaoExameAdmissionalPdf, downloadPdf } from '@/lib/pdfGenerator';
+import { gerarFichaASOPdf, downloadPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
-import { buildAsoAgendamentoInsert } from '@/lib/asoAgendamento';
 
 const CLINICAS: Record<string, string> = {
   'TOPAC MATRIZ': 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP',
@@ -49,7 +48,6 @@ const ASOPage: React.FC = () => {
   const [tipoExame, setTipoExame] = useState('Periódico');
   const [trabalhoAltura, setTrabalhoAltura] = useState(false);
   const [espacoConfinado, setEspacoConfinado] = useState(false);
-  const [toxicologico, setToxicologico] = useState(false);
   const [responsavelContato, setResponsavelContato] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastDocId, setLastDocId] = useState('');
@@ -140,7 +138,7 @@ const ASOPage: React.FC = () => {
 
   const gerarPdfAtual = () => {
     if (!emp || !company) return null;
-    return gerarAutorizacaoExameAdmissionalPdf({
+    return gerarFichaASOPdf({
       empresa: company.name,
       cnpj: company.cnpj,
       nome: emp.name,
@@ -148,14 +146,11 @@ const ASOPage: React.FC = () => {
       rg: emp.rg,
       funcao: emp.cargo,
       dataAdmissao: emp.dataAdmissao,
-      dataNascimento: emp.dataNascimento,
-      setorGhe: emp.setorGhe,
       dataExame,
       tipoExame,
       obraLocal,
       trabalhoAltura,
       espacoConfinado,
-      toxicologico,
       responsavelContato,
       clinica,
     });
@@ -223,18 +218,23 @@ const ASOPage: React.FC = () => {
   const handleSave = async () => {
     if (!emp || !session?.user?.id) return;
     setSaving(true);
-    const { error } = await supabase.from('aso_agendamentos').insert(buildAsoAgendamentoInsert({
-      employee: emp,
-      companyName: company?.name || '',
-      dataExame,
-      tipoExame,
-      obraLocal,
-      trabalhoAltura,
-      espacoConfinado,
-      responsavelContato,
-      clinicaEndereco: clinica,
-      userId: session.user.id,
-    }));
+    const { error } = await supabase.from('aso_agendamentos').insert({
+      funcionario_nome: emp.name,
+      empresa: company?.name || '',
+      funcao: emp.cargo,
+      data_exame: dataExame || null,
+      tipo_exame: tipoExame.toLowerCase(),
+      obra_local: obraLocal,
+      trabalho_altura: trabalhoAltura,
+      espaco_confinado: espacoConfinado,
+      responsavel_contato: responsavelContato,
+      clinica_endereco: clinica,
+      cpf: emp.cpf,
+      rg: emp.rg,
+      data_admissao: emp.dataAdmissao || null,
+      user_id: session.user.id,
+      status: 'pendente',
+    });
     setSaving(false);
     if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
     toast.success('Agendamento salvo no banco!');
@@ -349,9 +349,6 @@ const ASOPage: React.FC = () => {
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={espacoConfinado} onChange={e => setEspacoConfinado(e.target.checked)} className="rounded border-border" /> Espaço Confinado
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={toxicologico} onChange={e => setToxicologico(e.target.checked)} className="rounded border-border" /> Toxicológico
               </label>
             </div>
           </div>

@@ -217,27 +217,21 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   doc.setLineWidth(0.25);
   doc.rect(x, y, 65, headerH);
   doc.rect(x + 65, y, w - 65, headerH);
-  try {
-    doc.addImage(ponteAereaLogoDataUrl, 'PNG', x + 4, y + 2.5, 47, 18);
-  } catch {
-    // A identificação textual permanece disponível caso o logo não possa ser renderizado.
-  }
+  try { doc.addImage(ponteAereaLogoDataUrl, 'PNG', x + 4, y + 2.5, 47, 18); } catch {}
   write('AUTORIZAÇÃO DE EXAMES', x + 65 + (w - 65) / 2, y + 14, { size: 14, align: 'center' });
   next(headerH);
 
   const atendimentoH = 52;
   rect(atendimentoH);
   const centerX = x + w / 2;
-  const localAtendimento = cleanText(d.clinica || 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP');
-  const localLines = doc.splitTextToSize(localAtendimento.toUpperCase(), 160).slice(0, 2);
   write('LOCAL DE ATENDIMENTO:', centerX, y + 7, { size: 13, bold: true, align: 'center' });
-  localLines.forEach((line: string, index: number) => {
-    write(line, centerX, y + 14 + index * 6, { size: 11.5, align: 'center' });
-  });
-  write('HORÁRIO DE ATENDIMENTO:', centerX, y + 30, { size: 12.5, bold: true, align: 'center' });
-  write('DE SEGUNDA A SEXTA DAS 07h30 ÀS 15h00.', centerX, y + 36, { size: 11, align: 'center' });
-  write('PARA RAIO-X: ATENDIMENTO ATÉ AS 12h00', centerX, y + 42, { size: 10.5, bold: true, align: 'center' });
-  write('(atendimento por ordem de chegada)', centerX, y + 48, { size: 10, align: 'center' });
+  write('AVENIDA SÃO JOÃO, 313, 1 º ANDAR', centerX, y + 14, { size: 12, align: 'center' });
+  write('OBS: PRÓXIMO AO LARGO PAISSANDU E METRO SÃO BENTO', centerX, y + 21, { size: 12, align: 'center' });
+  write('CENTRO - SÃO PAULO.', centerX, y + 28, { size: 12, align: 'center' });
+  write('HORÁRIO DE ATENDIMENTO:', centerX, y + 35, { size: 13, bold: true, align: 'center' });
+  write('DE SEGUNDA A SEXTA DAS 07h30HS AS 15:00HS.', centerX, y + 41, { size: 11.5, align: 'center' });
+  write('PARA RAIO-X (ATÉ AS 12:00)', centerX, y + 46, { size: 10.5, bold: true, align: 'center' });
+  write('(por ordem de chegada)', centerX, y + 50, { size: 10.5, align: 'center' });
   next(atendimentoH);
 
   const empresaH = 21;
