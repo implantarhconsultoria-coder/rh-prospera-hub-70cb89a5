@@ -810,9 +810,9 @@ async function analisarFotoLocal(dataUrl: string, tipo: "bomba" | "painel_km"): 
 }
 
 async function readImageText(dataUrl: string): Promise<string> {
-  const mod: any = await import("tesseract.js");
-  if (!mod?.createWorker) throw new Error("OCR indisponivel");
-  let worker: any;
+  const mod = await import("tesseract.js");
+  if (!mod.createWorker) throw new Error("OCR indisponivel");
+  let worker: Awaited<ReturnType<typeof mod.createWorker>>;
   try {
     worker = await mod.createWorker("por+eng");
   } catch {
