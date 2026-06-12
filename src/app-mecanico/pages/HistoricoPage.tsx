@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -7,6 +7,56 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2, Clock, MapPin, Camera, Fuel, Pencil, Trash2, Save, X } from "lucide-react";
 import { formatarDataHoraBrasil } from "@/lib/brTime";
+
+
+interface PontoHistorico {
+  id: string;
+  tipo: string;
+  data?: string | null;
+  hora?: string | null;
+  registro_teste?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  selfie_url?: string | null;
+  selfie?: string | null;
+}
+
+interface AbastecimentoHistorico {
+  id: string;
+  placa?: string | null;
+  posto_nome?: string | null;
+  registro_teste?: boolean;
+  combustivel?: string | null;
+  litros?: string | number | null;
+  valor?: string | number | null;
+  valor_por_litro?: string | number | null;
+  km_atual?: string | number | null;
+  observacao?: string | null;
+  empresa?: string | null;
+  data?: string | null;
+  hora?: string | null;
+}
+
+interface HistoricoResult {
+  ok?: boolean;
+  error?: string;
+  pontos?: PontoHistorico[];
+  abastecimentos?: AbastecimentoHistorico[];
+}
+
+interface ActionResult { ok?: boolean; error?: string; }
+
+const historicoRpc = supabase as unknown as {
+  rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+};
+
+const parseDecimal = (value: string | number | null | undefined) => {
+  if (typeof value === "number") return value;
+  const raw = String(value ?? "").trim().replace(/[^\d,.-]/g, "");
+  return Number(raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw);
+};
 
 const TIPO_LABEL: Record<string, string> = {
   entrada: "Entrada",
@@ -19,34 +69,41 @@ const TIPO_LABEL: Record<string, string> = {
 
 export default function HistoricoPage() {
   const { mecanico } = useMecanicoApp();
-  const [pontos, setPontos] = useState<any[]>([]);
-  const [abastecimentos, setAbastecimentos] = useState<any[]>([]);
-  const [edit, setEdit] = useState<any | null>(null);
+  const [pontos, setPontos] = useState<PontoHistorico[]>([]);
+  const [abastecimentos, setAbastecimentos] = useState<AbastecimentoHistorico[]>([]);
+  const [edit, setEdit] = useState<AbastecimentoHistorico | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const carregar = async () => {
-    const { data } = await supabase.rpc("app_mecanico_listar_historico" as any, { p_acesso_id: mecanico.acesso_id });
-    const d = data as any;
-    setPontos(d?.pontos || []);
-    setAbastecimentos(d?.abastecimentos || []);
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await historicoRpc.rpc("app_mecanico_listar_historico", { p_acesso_id: mecanico.acesso_id });
+    const result = data as HistoricoResult | null;
+    if (error || !result?.ok) {
+      toast.error(result?.error || error?.message || "Erro ao carregar histórico");
+      setPontos([]);
+      setAbastecimentos([]);
+    } else {
+      setPontos(result.pontos || []);
+      setAbastecimentos(result.abastecimentos || []);
+    }
     setLoading(false);
-  };
+  }, [mecanico.acesso_id]);
 
-  useEffect(() => { carregar(); }, [mecanico.acesso_id]);
+  useEffect(() => { void carregar(); }, [carregar]);
 
   const salvarAbastecimento = async () => {
     if (!edit) return;
-    const { data, error } = await supabase.rpc("app_mecanico_atualizar_abastecimento" as any, {
+    const { data, error } = await historicoRpc.rpc("app_mecanico_atualizar_abastecimento", {
       p_acesso_id: mecanico.acesso_id,
       p_abastecimento_id: edit.id,
-      p_valor: Number(edit.valor) || 0,
-      p_litros: Number(edit.litros) || 0,
-      p_valor_por_litro: Number(edit.valor_por_litro) || 0,
-      p_km_atual: edit.km_atual ? Number(edit.km_atual) : null,
+      p_valor: parseDecimal(edit.valor) || 0,
+      p_litros: parseDecimal(edit.litros) || 0,
+      p_valor_por_litro: parseDecimal(edit.valor_por_litro) || 0,
+      p_km_atual: edit.km_atual ? parseDecimal(edit.km_atual) : null,
       p_combustivel: edit.combustivel || null,
       p_observacao: edit.observacao || null,
     });
-    const r = data as any;
+    const r = data as ActionResult | null;
     if (error || !r?.ok) {
       toast.error(r?.error || error?.message || "Erro ao salvar abastecimento");
       return;
@@ -56,15 +113,15 @@ export default function HistoricoPage() {
     await carregar();
   };
 
-  const excluirAbastecimento = async (a: any) => {
+  const excluirAbastecimento = async (a: AbastecimentoHistorico) => {
     const motivo = window.prompt("Motivo da exclusao/cancelamento:");
     if (!motivo) return;
-    const { data, error } = await supabase.rpc("app_mecanico_excluir_abastecimento" as any, {
+    const { data, error } = await historicoRpc.rpc("app_mecanico_excluir_abastecimento", {
       p_acesso_id: mecanico.acesso_id,
       p_abastecimento_id: a.id,
       p_motivo: motivo,
     });
-    const r = data as any;
+    const r = data as ActionResult | null;
     if (error || !r?.ok) {
       toast.error(r?.error || error?.message || "Erro ao excluir abastecimento");
       return;
@@ -91,12 +148,12 @@ export default function HistoricoPage() {
                 {edit?.id === a.id ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 gap-2">
-                      <Input value={edit.valor ?? ""} onChange={e => setEdit((p: any) => ({ ...p, valor: e.target.value }))} placeholder="Valor" inputMode="decimal" />
-                      <Input value={edit.litros ?? ""} onChange={e => setEdit((p: any) => ({ ...p, litros: e.target.value }))} placeholder="Litros" inputMode="decimal" />
-                      <Input value={edit.valor_por_litro ?? ""} onChange={e => setEdit((p: any) => ({ ...p, valor_por_litro: e.target.value }))} placeholder="R$/L" inputMode="decimal" />
-                      <Input value={edit.km_atual ?? ""} onChange={e => setEdit((p: any) => ({ ...p, km_atual: e.target.value }))} placeholder="KM" inputMode="numeric" />
+                      <Input value={edit.valor ?? ""} onChange={e => setEdit((current) => current ? ({ ...current, valor: e.target.value }) : current)} placeholder="Valor" inputMode="decimal" />
+                      <Input value={edit.litros ?? ""} onChange={e => setEdit((current) => current ? ({ ...current, litros: e.target.value }) : current)} placeholder="Litros" inputMode="decimal" />
+                      <Input value={edit.valor_por_litro ?? ""} onChange={e => setEdit((current) => current ? ({ ...current, valor_por_litro: e.target.value }) : current)} placeholder="R$/L" inputMode="decimal" />
+                      <Input value={edit.km_atual ?? ""} onChange={e => setEdit((current) => current ? ({ ...current, km_atual: e.target.value }) : current)} placeholder="KM" inputMode="numeric" />
                     </div>
-                    <Input value={edit.observacao ?? ""} onChange={e => setEdit((p: any) => ({ ...p, observacao: e.target.value }))} placeholder="Observacao" />
+                    <Input value={edit.observacao ?? ""} onChange={e => setEdit((current) => current ? ({ ...current, observacao: e.target.value }) : current)} placeholder="Observacao" />
                     <div className="flex gap-2">
                       <Button size="sm" onClick={salvarAbastecimento}><Save className="w-3 h-3 mr-1" /> Salvar</Button>
                       <Button size="sm" variant="outline" onClick={() => setEdit(null)}><X className="w-3 h-3 mr-1" /> Cancelar</Button>

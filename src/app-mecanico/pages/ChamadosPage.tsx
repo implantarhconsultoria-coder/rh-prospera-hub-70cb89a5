@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -7,6 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+interface RpcResult<T> { ok?: boolean; error?: string; chamados?: T[]; }
+const chamadosRpc = supabase as unknown as {
+  rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+};
 
 interface Chamado {
   id: string;
@@ -26,27 +31,34 @@ export default function ChamadosPage() {
   const [obs, setObs] = useState("");
   const [acting, setActing] = useState(false);
 
-  const carregar = async () => {
+  const carregar = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.rpc("app_mecanico_listar_chamados" as any, { p_acesso_id: mecanico.acesso_id });
-    setLista((data as any)?.chamados || []);
+    const { data, error } = await chamadosRpc.rpc("app_mecanico_listar_chamados", { p_acesso_id: mecanico.acesso_id });
+    const result = data as RpcResult<Chamado> | null;
+    if (error || !result?.ok) {
+      toast.error(result?.error || error?.message || "Erro ao carregar chamados");
+      setLista([]);
+    } else {
+      setLista(result.chamados || []);
+    }
     setLoading(false);
-  };
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, []);
+  }, [mecanico.acesso_id]);
+  useEffect(() => { void carregar(); }, [carregar]);
 
   const acao = async (chamadoId: string, acao: "iniciar" | "finalizar") => {
     setActing(true);
-    const { data, error } = await supabase.rpc("app_mecanico_atualizar_chamado" as any, {
+    const { data, error } = await chamadosRpc.rpc("app_mecanico_atualizar_chamado", {
       p_acesso_id: mecanico.acesso_id,
       p_chamado_id: chamadoId,
       p_acao: acao,
       p_observacao: obs || null,
     });
     setActing(false);
-    if (error || !(data as any)?.ok) { toast.error("Erro ao atualizar chamado"); return; }
+    const result = data as RpcResult<Chamado> | null;
+    if (error || !result?.ok) { toast.error(result?.error || error?.message || "Erro ao atualizar chamado"); return; }
     toast.success(acao === "iniciar" ? "Atendimento iniciado" : "Chamado finalizado");
     setAberto(null); setObs("");
-    carregar();
+    void carregar();
   };
 
   if (loading) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" /></div>;

@@ -8,3 +8,5 @@ verify_jwt = false
 
 [functions.provision-portal-users]
 verify_jwt = false
+[functions.ocr-bomba-combustivel]
+verify_jwt = false
