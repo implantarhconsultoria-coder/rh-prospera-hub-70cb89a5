@@ -18,6 +18,8 @@ const parseNumber = (value: unknown): number => {
 
 const plausible = (value: number, min: number, max: number) => Number.isFinite(value) && value >= min && value <= max;
 const round = (value: number, digits: number) => Number(value.toFixed(digits));
+const consistentPumpReading = (valor: number, litros: number, precoLitro: number) =>
+  Math.abs(valor - litros * precoLitro) <= Math.max(0.25, valor * 0.005);
 
 const labeledNumber = (text: string, labels: RegExp, maxDecimals: number) => {
   const match = text.match(new RegExp(`(?:${labels.source})[^\\d]{0,30}(\\d{1,6}(?:[.,]\\d{1,${maxDecimals}})?)`, 'i'));
@@ -40,7 +42,10 @@ export const parsePumpOcrText = (text: string): PumpReading => {
     litros = valor / precoLitro;
   }
 
-  const complete = plausible(valor, 5, 10000) && plausible(litros, 1, 500) && plausible(precoLitro, 1.5, 30);
+  const complete = plausible(valor, 5, 10000)
+    && plausible(litros, 1, 500)
+    && plausible(precoLitro, 1.5, 30)
+    && consistentPumpReading(valor, litros, precoLitro);
   return {
     valor: complete ? round(valor, 2) : 0,
     litros: complete ? round(litros, 3) : 0,
@@ -68,7 +73,10 @@ export const normalizePumpOcrResult = (result: {
   if (!plausible(valor, 5, 10000) && plausible(litros, 1, 500) && plausible(precoLitro, 1.5, 30)) valor = litros * precoLitro;
   if (!plausible(litros, 1, 500) && plausible(valor, 5, 10000) && plausible(precoLitro, 1.5, 30)) litros = valor / precoLitro;
 
-  const complete = plausible(valor, 5, 10000) && plausible(litros, 1, 500) && plausible(precoLitro, 1.5, 30);
+  const complete = plausible(valor, 5, 10000)
+    && plausible(litros, 1, 500)
+    && plausible(precoLitro, 1.5, 30)
+    && consistentPumpReading(valor, litros, precoLitro);
   return {
     valor: complete ? round(valor, 2) : 0,
     litros: complete ? round(litros, 3) : 0,

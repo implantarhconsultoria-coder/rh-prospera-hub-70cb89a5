@@ -12,6 +12,16 @@ describe('OCR do abastecimento', () => {
     expect(reading).toEqual({ valor: 205.3, litros: 29.37, precoLitro: 6.99, complete: true });
   });
 
+  it('rejeita leitura em que total não corresponde a litros vezes preço', () => {
+    const reading = parsePumpOcrText(`
+      TOTAL A PAGAR R$ 205,30
+      LITROS 29,37
+      PREÇO POR LITRO 5,000
+    `);
+
+    expect(reading.complete).toBe(false);
+  });
+
   it('usa o maior número compatível com odômetro visível', () => {
     expect(parseOdometerOcrText('TRIP A 845,2 KM ODO 123.456 AUTONOMIA 410')).toBe(123456);
   });
