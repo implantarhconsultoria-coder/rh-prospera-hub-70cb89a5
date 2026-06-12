@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Check, Copy, Download, Fuel, Gauge, Loader2, MessageCircle, Printer, QrCode, RotateCcw, Share2 } from "lucide-react";
+import { AlertTriangle, Camera, Check, ChevronDown, Eye, FileDown, Fuel, Gauge, Loader2, QrCode, RotateCcw, Share2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import QrScanner from "qr-scanner";
 import { toast } from "sonner";
@@ -12,8 +12,10 @@ import { getBrowserLocation } from "@/lib/browserGeo";
 import CameraCapture from "../components/CameraCapture";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { uploadFoto } from "../lib/upload";
+import { normalizeOdometerOcrResult, normalizePumpOcrResult, parseOdometerOcrText, parsePumpOcrText } from "../lib/abastecimentoRules";
+import { gerarCupomAbastecimentoPdf } from "../lib/abastecimentoPdf";
 
-type Step = "scan" | "vale" | "painel" | "form" | "ok";
+type Step = "scan" | "painel" | "bomba" | "form" | "ok";
 
 interface Posto {
   id: string;
@@ -72,6 +74,7 @@ interface ReceiptInfo {
   fotoPainelUrl: string;
   createdAt: Date;
   registroTeste?: boolean;
+  reciboPdfUrl?: string;
 }
 
 type OcrResult = {
@@ -119,9 +122,15 @@ export default function AbastecimentoPage() {
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [ocrError, setOcrError] = useState("");
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [capturedLocation, setCapturedLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const painelTestInputRef = useRef<HTMLInputElement>(null);
+  const bombaTestInputRef = useRef<HTMLInputElement>(null);
   const autoQrRef = useRef("");
 
   const isSecure = typeof window !== "undefined" && (window.isSecureContext || window.location.hostname === "localhost");
@@ -242,7 +251,6 @@ export default function AbastecimentoPage() {
       p_acesso_id: mecanico.acesso_id,
       p_codigo: normalized,
     });
-    setLoading(false);
     const r = (data ?? null) as { ok?: boolean; error?: string; posto?: Posto; postos?: Posto[]; mecanico?: MecInfo } | null;
     if (error || !r?.ok || !r.posto) {
       const msg = r?.error === "qr_nao_encontrado" ? "QR Code do posto nao encontrado." : "Erro ao validar QR Code.";
@@ -263,7 +271,8 @@ export default function AbastecimentoPage() {
     setCarros(placas);
     setVeiculos(veiculosInfo);
     setPlaca((placaInicial || "").toUpperCase());
-    setStep("vale");
+    setStep("painel");
+    void getBrowserLocation().then(setCapturedLocation);
   };
 
   const analisarFoto = async (blob: Blob, tipo: "bomba" | "painel_km" = "bomba") => {
@@ -286,31 +295,14 @@ export default function AbastecimentoPage() {
   };
 
   const aplicarLeituraBomba = (r: OcrResult | null) => {
-    if (!isReliablePumpResult(r)) return false;
-    const nValor = parseDecimal(r.valor);
-    const nLitros = parseDecimal(r.litros);
-    const nPreco = parseDecimal(r.valor_por_litro);
-    let valorFinal = Number.isFinite(nValor) && nValor > 0 ? nValor : NaN;
-    let litrosFinal = Number.isFinite(nLitros) && nLitros > 0 ? nLitros : NaN;
-    let precoFinal = Number.isFinite(nPreco) && nPreco > 0 ? nPreco : NaN;
-
-    if (!Number.isFinite(precoFinal) && Number.isFinite(valorFinal) && Number.isFinite(litrosFinal) && litrosFinal > 0) {
-      precoFinal = valorFinal / litrosFinal;
-    }
-    if (!Number.isFinite(valorFinal) && Number.isFinite(litrosFinal) && Number.isFinite(precoFinal)) {
-      valorFinal = litrosFinal * precoFinal;
-    }
-    if (!Number.isFinite(litrosFinal) && Number.isFinite(valorFinal) && Number.isFinite(precoFinal) && precoFinal > 0) {
-      litrosFinal = valorFinal / precoFinal;
-    }
-
-    let preenchidos = 0;
-    if (Number.isFinite(valorFinal) && valorFinal > 0) { setValor(formatDecimal(valorFinal, 2)); preenchidos++; }
-    if (Number.isFinite(litrosFinal) && litrosFinal > 0) { setLitros(formatDecimal(litrosFinal, 3)); preenchidos++; }
-    if (Number.isFinite(precoFinal) && precoFinal > 0) { setPrecoLitro(formatDecimal(precoFinal, 3)); preenchidos++; }
-    const combustivelLido = normalizeCombustivel(r.combustivel);
-    if (combustivelLido) { setCombustivel(combustivelLido); preenchidos++; }
-    return preenchidos >= 2;
+    const reading = normalizePumpOcrResult(r);
+    if (!reading.complete) return false;
+    setValor(formatDecimal(reading.valor, 2));
+    setLitros(formatDecimal(reading.litros, 3));
+    setPrecoLitro(formatDecimal(reading.precoLitro, 3));
+    const combustivelLido = normalizeCombustivel(r?.combustivel);
+    if (combustivelLido) setCombustivel(combustivelLido);
+    return true;
   };
 
   const onCaptureBomba = async (blob: Blob) => {
@@ -320,11 +312,15 @@ export default function AbastecimentoPage() {
       setFotoBombaUrl(url);
       const r = await analisarFoto(blob);
       const leituraAplicada = aplicarLeituraBomba(r);
-      setStep("painel");
       if (leituraAplicada) {
-        toast.success("Bomba lida com seguranca: valor, litros e preco preenchidos. Tire a foto do KM.");
+        setOcrError("");
+        setStep("form");
+        toast.success("Valor, litros e preço por litro reconhecidos automaticamente.");
       } else {
-        toast.warning(r?.motivo || "Foto da bomba salva, mas nao deu leitura segura. Tire uma foto mais enquadrada ou preencha manualmente.");
+        const message = "Não foi possível reconhecer a bomba. Refaça a foto enquadrando TOTAL, LITROS e PREÇO/L.";
+        setOcrError(message);
+        setStep("bomba");
+        toast.error(message);
       }
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload da bomba");
@@ -333,21 +329,34 @@ export default function AbastecimentoPage() {
     }
   };
 
+  const processarImagemTeste = async (file: File | undefined, tipo: "painel" | "bomba") => {
+    if (!file) return;
+    if (!mecInfo?.registro_teste) {
+      toast.error("Seleção pela galeria disponível somente no modo de teste interno.");
+      return;
+    }
+    if (tipo === "painel") await onCapturePainel(file);
+    else await onCaptureBomba(file);
+  };
+
   const onCapturePainel = async (blob: Blob) => {
     setLoading(true);
     try {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", blob);
       setFotoPainelUrl(url);
       const r = await analisarFoto(blob, "painel_km");
-      const detectedKm = r?.km ?? r?.km_atual;
-      const kmLido = parseDecimal(detectedKm);
-      if (isReliableKmResult(r) && Number.isFinite(kmLido) && kmLido > 0) {
-        setKm(String(Math.round(kmLido)));
-        toast.success("KM do painel lido com seguranca e preenchido automaticamente.");
+      const kmLido = normalizeOdometerOcrResult(r);
+      if (kmLido) {
+        setKm(String(kmLido));
+        setOcrError("");
+        setStep("bomba");
+        toast.success("KM reconhecido automaticamente. Agora fotografe a bomba.");
       } else {
-        toast.warning(r?.motivo || "Foto do painel salva, mas nao deu leitura segura do KM. Tire nova foto ou preencha manualmente.");
+        const message = "Não foi possível reconhecer o KM. Refaça a foto com o odômetro visível.";
+        setOcrError(message);
+        setStep("painel");
+        toast.error(message);
       }
-      setStep("form");
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload do KM");
     } finally {
@@ -355,14 +364,32 @@ export default function AbastecimentoPage() {
     }
   };
 
+  const vincularReciboPdf = async (info: ReceiptInfo, pdf: { blob: Blob; fileName: string }) => {
+    if (info.reciboPdfUrl) return info.reciboPdfUrl;
+    const reciboPdfUrl = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `recibo-${info.id}`, pdf.blob);
+    const linked = await supabaseRpc.rpc("app_mecanico_vincular_recibo_pdf", {
+      p_acesso_id: mecanico.acesso_id,
+      p_abastecimento_id: info.id,
+      p_recibo_pdf_url: reciboPdfUrl,
+    });
+    const linkedResult = linked.data as { ok?: boolean; error?: string } | null;
+    if (linked.error || !linkedResult?.ok) throw new Error(linkedResult?.error || linked.error?.message || "Erro ao vincular recibo PDF");
+    info.reciboPdfUrl = reciboPdfUrl;
+    setReceipt({ ...info });
+    return reciboPdfUrl;
+  };
+
   const finalizar = async () => {
     if (!posto) return;
     if (postosOpcao.length > 1 && posto.tipo_qr === "unidade") return toast.error("Selecione o posto de Goiania");
     if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("Fotos obrigatorias");
-    if (!valor || !litros) return toast.error("Informe valor e litros");
+    if (!valor || !litros || !precoLitro || !km) return toast.error("Leitura automática incompleta. Refaça as fotos antes de confirmar.");
     if (mecInfo?.exige_selecao_carro && !placa) return toast.error("Selecione o carro");
     setLoading(true);
-    const { latitude, longitude } = await getBrowserLocation();
+    const location = capturedLocation.latitude !== null || capturedLocation.longitude !== null
+      ? capturedLocation
+      : await getBrowserLocation();
+    const { latitude, longitude } = location;
     const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
       p_acesso_id: mecanico.acesso_id,
       p_posto_codigo: posto.codigo,
@@ -378,10 +405,12 @@ export default function AbastecimentoPage() {
       p_longitude: longitude,
       p_endereco: null,
     });
-    setLoading(false);
     const r = (data ?? null) as { ok?: boolean; error?: string; id?: string; preco_litro?: string | number; valor_por_litro?: string | number; km_rodado?: number | null; registro_teste?: boolean } | null;
-    if (error || !r?.ok) return toast.error(r?.error || error?.message || "Erro ao salvar");
-    setReceipt({
+    if (error || !r?.ok) {
+      setLoading(false);
+      return toast.error(r?.error || error?.message || "Erro ao salvar");
+    }
+    const receiptInfo: ReceiptInfo = {
       id: r.id || "",
       codigo: posto.codigo,
       postoNome: posto.nome,
@@ -403,77 +432,88 @@ export default function AbastecimentoPage() {
       fotoPainelUrl,
       createdAt: new Date(),
       registroTeste: Boolean(r.registro_teste || mecInfo?.registro_teste || mecanico.registro_teste),
-    });
-    setStep("ok");
-    toast.success("Abastecimento registrado!");
+    };
+    toast.success("Abastecimento salvo. Gerando e vinculando o recibo PDF...");
+    try {
+      const pdf = await gerarCupomAbastecimentoPdf(buildPdfData(receiptInfo));
+      await vincularReciboPdf(receiptInfo, pdf);
+      setReceipt(receiptInfo);
+      setStep("ok");
+      downloadPdfBlob(pdf);
+      toast.success("Abastecimento e recibo PDF salvos com sucesso.");
+    } catch (error) {
+      setReceipt(receiptInfo);
+      setStep("ok");
+      toast.error(`Abastecimento salvo, mas o recibo PDF não foi vinculado: ${getErrorMessage(error)}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const buildReceiptText = (info: ReceiptInfo) =>
-    [
-      "*TOPAC RH PRO - Abastecimento*",
-      info.registroTeste ? "*REGISTRO DE TESTE - nao entra em relatorios oficiais*" : "",
-      `Registro: ${info.id || "salvo"}`,
-      `Data/Hora: ${info.createdAt.toLocaleString("pt-BR")}`,
-      "",
-      `Mecanico: ${info.mecanicoNome}`,
-      `Empresa: ${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`,
-      `Carro/placa: ${info.placa || "nao informado"}`,
-      `Validado por: ${info.mecanicoNome}`,
-      "",
-      `Posto: ${info.postoNome}`,
-      info.postoCnpj ? `CNPJ: ${info.postoCnpj}` : "",
-      info.postoEndereco ? `Endereco: ${info.postoEndereco}` : "",
-      info.postoTelefone ? `Telefone: ${info.postoTelefone}` : "",
-      `QR: ${info.codigo}`,
-      "",
-      `Combustivel: ${info.combustivel}`,
-      `Litros: ${fmtNumber(info.litros)} L`,
-      `Preco/L: ${fmtMoney(info.precoLitro)}`,
-      `Valor: ${fmtMoney(info.valor)}`,
-      `KM: ${info.km || "nao informado"}`,
-      info.kmRodado !== null ? `KM rodado desde o ultimo registro: ${fmtNumber(String(info.kmRodado), 0)} km` : "",
-      info.observacao ? `Obs.: ${info.observacao}` : "",
-      "",
-      `Foto da bomba: ${info.fotoBombaUrl}`,
-      `Foto do KM/painel: ${info.fotoPainelUrl}`,
-    ].filter(Boolean).join("\n");
+  const buildPdfData = (info: ReceiptInfo) => ({
+    id: info.id,
+    codigo: info.codigo,
+    postoNome: info.postoNome,
+    postoCnpj: info.postoCnpj,
+    mecanicoNome: info.mecanicoNome,
+    empresa: info.empresa,
+    filial: info.filial,
+    placa: info.placa,
+    veiculo: veiculoSelecionado?.descricao || "",
+    combustivel: info.combustivel,
+    valor: info.valor,
+    litros: info.litros,
+    precoLitro: info.precoLitro,
+    km: info.km,
+    observacao: info.observacao,
+    fotoBombaUrl: info.fotoBombaUrl,
+    fotoPainelUrl: info.fotoPainelUrl,
+    createdAt: info.createdAt,
+  });
 
-  const shareReceipt = async () => {
+  const createReceiptPdf = async (info: ReceiptInfo) => {
+    setGeneratingPdf(true);
+    try {
+      const pdf = await gerarCupomAbastecimentoPdf(buildPdfData(info));
+      if (info.id && !info.reciboPdfUrl) await vincularReciboPdf(info, pdf);
+      return pdf;
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const downloadPdfBlob = (pdf: { blob: Blob; fileName: string }) => {
+    const url = URL.createObjectURL(pdf.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = pdf.fileName;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const downloadReceiptPdf = async (info = receipt) => {
+    if (!info) return;
+    downloadPdfBlob(await createReceiptPdf(info));
+  };
+
+  const viewReceiptPdf = async () => {
     if (!receipt) return;
-    const text = buildReceiptText(receipt);
-    if (navigator.share) {
-      await navigator.share({ title: "Abastecimento TOPAC", text });
+    const pdf = await createReceiptPdf(receipt);
+    const url = URL.createObjectURL(pdf.blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+  };
+
+  const shareReceiptPdf = async () => {
+    if (!receipt) return;
+    const pdf = await createReceiptPdf(receipt);
+    const file = new File([pdf.blob], pdf.fileName, { type: "application/pdf" });
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      await navigator.share({ title: "Recibo de abastecimento TOPAC", files: [file] });
       return;
     }
-    await navigator.clipboard.writeText(text);
-    toast.success("Notinha copiada");
-  };
-
-  const printReceipt = () => {
-    if (!receipt) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(buildReceiptHtml(receipt));
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 300);
-  };
-
-  const downloadReceipt = () => {
-    if (!receipt) return;
-    const blob = new Blob([buildReceiptText(receipt)], { type: "text/plain;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `ABASTECIMENTO_${sanitizeFile(receipt.empresa)}_${sanitizeFile(receipt.mecanicoNome)}_${new Date().toISOString().slice(0, 10)}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
-  const openWhatsapp = (phone?: string) => {
-    if (!receipt) return;
-    const clean = (phone || "").replace(/\D/g, "");
-    const target = clean ? `55${clean.replace(/^55/, "")}` : "";
-    window.open(`${target ? `https://wa.me/${target}` : "https://wa.me/"}?text=${encodeURIComponent(buildReceiptText(receipt))}`, "_blank", "noopener,noreferrer");
+    await downloadReceiptPdf(receipt);
+    toast.info("O compartilhamento de arquivos não está disponível; o PDF foi baixado.");
   };
 
   const reset = () => {
@@ -494,6 +534,9 @@ export default function AbastecimentoPage() {
     setObs("");
     setReceipt(null);
     setScanError("");
+    setOcrError("");
+    setShowCorrection(false);
+    setCapturedLocation({ latitude: null, longitude: null });
     setStep("scan");
   };
 
@@ -516,7 +559,7 @@ export default function AbastecimentoPage() {
           {scanError && <AlertBox text={scanError} />}
           <div className="border-t pt-3 space-y-2">
             <Label className="text-xs">Enviar foto do QR (galeria)</Label>
-            <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) lerArquivoQr(f); e.target.value = ""; }} />
+            <input ref={fileInputRef} data-testid="qr-galeria-input" type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) lerArquivoQr(f); e.target.value = ""; }} />
             <Button variant="secondary" className="w-full" onClick={() => fileInputRef.current?.click()}>Enviar imagem do QR</Button>
           </div>
           <div className="border-t pt-3 space-y-2">
@@ -526,7 +569,7 @@ export default function AbastecimentoPage() {
         </Card>
       )}
 
-      {step === "vale" && posto && (
+      {step === "painel" && posto && (
         <Card className="space-y-3 p-4">
           <div className="text-xs font-semibold uppercase text-muted-foreground">QR validado</div>
           <div className="space-y-1 text-sm">
@@ -558,29 +601,54 @@ export default function AbastecimentoPage() {
             {mecInfo?.exige_selecao_carro && <AlertBox text="Selecione o carro usado antes de finalizar o abastecimento." />}
             {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
           </div>
-          <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
+          {ocrError && <AlertBox text={ocrError} />}
+          <Button className="w-full" onClick={() => { setOcrError(""); setCamPainel(true); }}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
+          {mecInfo?.registro_teste && (
+            <>
+              <input ref={painelTestInputRef} data-testid="painel-teste-input" type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; void processarImagemTeste(file, "painel"); event.target.value = ""; }} />
+              <Button type="button" className="w-full" variant="secondary" onClick={() => painelTestInputRef.current?.click()}>Selecionar foto do painel (teste)</Button>
+            </>
+          )}
           <Button className="w-full" variant="outline" onClick={reset}><RotateCcw className="mr-2 h-4 w-4" /> Cancelar</Button>
         </Card>
       )}
 
-      {step === "painel" && (
+      {step === "bomba" && (
         <Card className="space-y-3 p-4">
-          {fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}
-          <Button className="w-full" onClick={() => setCamPainel(true)}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
+          {ocrError && <AlertBox text={ocrError} />}
+          {fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}
+          <ReadingCard label="KM reconhecido" value={km || "Não reconhecido"} />
+          <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
+          {mecInfo?.registro_teste && (
+            <>
+              <input ref={bombaTestInputRef} data-testid="bomba-teste-input" type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; void processarImagemTeste(file, "bomba"); event.target.value = ""; }} />
+              <Button type="button" className="w-full" variant="secondary" onClick={() => bombaTestInputRef.current?.click()}>Selecionar foto da bomba (teste)</Button>
+            </>
+          )}
         </Card>
       )}
 
       {step === "form" && (
-        <Card className="space-y-3 p-4">
-          <div className="text-sm font-semibold">Confirme os dados</div>
-          <div className="grid grid-cols-2 gap-2">{fotoBombaUrl && <img src={fotoBombaUrl} className="w-full rounded-lg" alt="Bomba" />}{fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}</div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Valor (R$)" value={valor} setValue={updateValor} type="number" />
-            <Field label="Litros" value={litros} setValue={updateLitros} type="number" />
-            <Field label="Preco/L" value={precoLitro} setValue={updatePrecoLitro} type="number" />
-            <div><Label className="text-xs">Combustivel</Label><select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(e) => setCombustivel(e.target.value)}><option>Diesel S10</option><option>Diesel</option><option>Gasolina</option><option>Etanol</option><option>GNV</option></select></div>
-            <div><Field label="KM" value={km} setValue={setKm} type="number" />{kmRodado !== null && <div className="mt-1 text-[11px] text-muted-foreground">Rodou {fmtNumber(String(kmRodado), 0)} km desde o ultimo registro.</div>}</div>
-            <div className="col-span-2">
+        <Card className="space-y-4 p-4">
+          <div>
+            <div className="text-sm font-semibold">Leitura automática concluída</div>
+            <p className="text-xs text-muted-foreground">Revise os valores reconhecidos e confirme o abastecimento.</p>
+          </div>
+          {ocrError && <AlertBox text={ocrError} />}
+          <div className="grid grid-cols-2 gap-2">
+            {fotoBombaUrl && <img src={fotoBombaUrl} className="h-32 w-full rounded-lg object-cover" alt="Bomba" />}
+            {fotoPainelUrl && <img src={fotoPainelUrl} className="h-32 w-full rounded-lg object-cover" alt="Painel" />}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <ReadingCard label="Valor reconhecido" value={valor ? fmtMoney(valor) : "Não reconhecido"} />
+            <ReadingCard label="Litros reconhecidos" value={litros ? `${fmtNumber(litros)} L` : "Não reconhecido"} />
+            <ReadingCard label="Preço/L reconhecido" value={precoLitro ? fmtMoney(precoLitro) : "Não reconhecido"} />
+            <ReadingCard label="KM reconhecido" value={km || "Não reconhecido"} />
+          </div>
+
+          <div className="space-y-3">
+            <div><Label className="text-xs">Combustível</Label><select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(e) => setCombustivel(e.target.value)}><option>Diesel S10</option><option>Diesel</option><option>Gasolina</option><option>Etanol</option><option>GNV</option></select></div>
+            <div>
               <Label className="text-xs">{mecInfo?.exige_selecao_carro ? "Carro" : "Placa"}</Label>
               {mecInfo?.exige_selecao_carro && carros.length > 0 ? (
                 <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())}>
@@ -591,49 +659,48 @@ export default function AbastecimentoPage() {
                 </select>
               ) : <Input value={placa} onChange={(e) => setPlaca(e.target.value.toUpperCase())} disabled={Boolean(placa && !mecInfo?.exige_selecao_carro)} />}
             </div>
-            {veiculoSelecionado && (
-              <div className="col-span-2 rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
-                <div className="font-semibold">{veiculoSelecionado.descricao || veiculoSelecionado.placa}</div>
-                <div className="grid grid-cols-2 gap-1">
-                  <Info k="Placa" v={veiculoSelecionado.placa || "-"} />
-                  <Info k="Renavam" v={veiculoSelecionado.renavam || "-"} />
-                  <Info k="Chassi" v={veiculoSelecionado.chassi || "-"} />
-                  <Info k="Ano" v={veiculoSelecionado.ano_fabricacao || veiculoSelecionado.ano_modelo || "-"} />
-                </div>
-                {veiculoSelecionado.documento_url && (
-                  <Button type="button" size="sm" variant="outline" className="mt-2 w-full" onClick={() => window.open(veiculoSelecionado.documento_url || "", "_blank", "noopener,noreferrer")}>
-                    Visualizar PDF do documento
-                  </Button>
-                )}
-              </div>
-            )}
-            <div className="col-span-2"><Label className="text-xs">Posto</Label><Input value={posto?.nome || ""} disabled /></div>
-            <div className="col-span-2"><Label className="text-xs">Observacao</Label><Input value={obs} onChange={(e) => setObs(e.target.value)} /></div>
+            {veiculoSelecionado && <div className="rounded-lg border bg-muted/30 p-3 text-xs font-medium">{veiculoSelecionado.descricao || veiculoSelecionado.placa} — {veiculoSelecionado.placa}</div>}
+            <div><Label className="text-xs">Observação</Label><Input value={obs} onChange={(e) => setObs(e.target.value)} /></div>
           </div>
-          <Button className="w-full" onClick={finalizar} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} Finalizar abastecimento</Button>
+
+          <Button type="button" variant="outline" className="w-full" onClick={() => setShowCorrection((current) => !current)}>
+            <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${showCorrection ? "rotate-180" : ""}`} /> Corrigir leitura
+          </Button>
+          {showCorrection && (
+            <div className="grid grid-cols-2 gap-3 rounded-lg border border-dashed p-3">
+              <Field label="Valor (R$)" value={valor} setValue={updateValor} type="number" />
+              <Field label="Litros" value={litros} setValue={updateLitros} type="number" />
+              <Field label="Preço/L" value={precoLitro} setValue={updatePrecoLitro} type="number" />
+              <div><Field label="KM" value={km} setValue={setKm} type="number" />{kmRodado !== null && <div className="mt-1 text-[11px] text-muted-foreground">Rodou {fmtNumber(String(kmRodado), 0)} km.</div>}</div>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="outline" onClick={() => { setFotoBombaUrl(""); setValor(""); setLitros(""); setPrecoLitro(""); setOcrError(""); setStep("bomba"); setCamBomba(true); }}><Camera className="mr-2 h-4 w-4" /> Refazer bomba</Button>
+            <Button type="button" variant="outline" onClick={() => { setFotoPainelUrl(""); setKm(""); setOcrError(""); setStep("painel"); setCamPainel(true); }}><Gauge className="mr-2 h-4 w-4" /> Refazer painel</Button>
+          </div>
+          <Button className="w-full" onClick={finalizar} disabled={loading || !valor || !litros || !precoLitro || !km}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} Confirmar e gerar recibo
+          </Button>
         </Card>
       )}
 
       {step === "ok" && receipt && (
         <Card className="space-y-4 p-4">
-          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Compartilhe a notinha no grupo e no WhatsApp do posto.</p></div>
+          <div className="text-center"><div className="text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Recibo vertical em PDF gerado com as fotos.</p></div>
           <div className="rounded-xl border bg-muted/30 p-3 text-sm">
             <div className="font-bold">{receipt.postoNome}</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <Info k="Mecanico" v={receipt.mecanicoNome} wide /><Info k="Carro" v={receipt.placa || "-"} /><Info k="KM" v={receipt.km || "-"} />
-              <Info k="Litros" v={`${fmtNumber(receipt.litros)} L`} /><Info k="Preco/L" v={fmtMoney(receipt.precoLitro)} /><Info k="Valor" v={fmtMoney(receipt.valor)} />
-              {receipt.kmRodado !== null && <Info k="KM rodado" v={`${fmtNumber(String(receipt.kmRodado), 0)} km`} />}
+              <Info k="Funcionário" v={receipt.mecanicoNome} wide /><Info k="Veículo" v={receipt.placa || "-"} /><Info k="KM" v={receipt.km || "-"} />
+              <Info k="Litros" v={`${fmtNumber(receipt.litros)} L`} /><Info k="Preço/L" v={fmtMoney(receipt.precoLitro)} /><Info k="Valor" v={fmtMoney(receipt.valor)} />
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2"><img src={receipt.fotoBombaUrl} className="h-28 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-28 w-full rounded-lg object-cover" alt="Painel" /></div>
           </div>
-          <Button onClick={shareReceipt} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar notinha</Button>
+          {!receipt.reciboPdfUrl && <AlertBox text="O abastecimento foi salvo. Ao visualizar, compartilhar ou baixar, o sistema tentará vincular o PDF novamente." />}
+          <Button onClick={shareReceiptPdf} disabled={generatingPdf} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar PDF</Button>
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={printReceipt} variant="outline" className="w-full"><Printer className="mr-2 h-4 w-4" /> Imprimir</Button>
-            <Button onClick={downloadReceipt} variant="outline" className="w-full"><Download className="mr-2 h-4 w-4" /> Baixar</Button>
+            <Button onClick={viewReceiptPdf} disabled={generatingPdf} variant="outline"><Eye className="mr-2 h-4 w-4" /> Visualizar PDF</Button>
+            <Button onClick={() => downloadReceiptPdf()} disabled={generatingPdf} variant="outline"><FileDown className="mr-2 h-4 w-4" /> Baixar PDF</Button>
           </div>
-          <Button onClick={() => openWhatsapp()} variant="secondary" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> Enviar no WhatsApp</Button>
-          {receipt.postoTelefone && <Button onClick={() => openWhatsapp(receipt.postoTelefone)} variant="outline" className="w-full"><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp do posto</Button>}
-          <Button onClick={() => navigator.clipboard.writeText(buildReceiptText(receipt)).then(() => toast.success("Notinha copiada"))} variant="outline" className="w-full"><Copy className="mr-2 h-4 w-4" /> Copiar texto</Button>
           <Button onClick={reset} variant="ghost" className="w-full">Novo abastecimento</Button>
         </Card>
       )}
@@ -642,6 +709,10 @@ export default function AbastecimentoPage() {
       <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" title="Foto do painel/KM" hint="Enquadre o ODO/KM total do painel" />
     </div>
   );
+}
+
+function ReadingCard({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-lg border bg-emerald-500/5 p-3"><div className="text-[11px] text-muted-foreground">{label}</div><div className="mt-1 text-sm font-bold text-foreground">{value}</div></div>;
 }
 
 function Field({ label, value, setValue, type = "text" }: { label: string; value: string; setValue: (v: string) => void; type?: string }) {
@@ -692,15 +763,6 @@ function extractQrCode(value: string) {
   }
 }
 
-function sanitizeFile(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toUpperCase();
-}
-
 function normalizePlate(value: string | null | undefined) {
   return String(value || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
@@ -719,44 +781,13 @@ function normalizeCombustivel(value: string | null | undefined) {
   return "";
 }
 
-function hasPumpData(result: OcrResult | null) {
-  if (!result?.ok) return false;
-  const fields = [result.valor, result.litros, result.valor_por_litro]
-    .map((value) => parseDecimal(value))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  return fields.length >= 2;
-}
-
-function hasKmData(result: OcrResult | null) {
-  if (!result?.ok) return false;
-  const kmValue = parseDecimal(result.km ?? result.km_atual);
-  return Number.isFinite(kmValue) && kmValue > 0;
-}
-
 function isReliablePumpResult(result: OcrResult | null) {
-  if (!hasPumpData(result)) return false;
-  const valor = parseDecimal(result?.valor);
-  const litros = parseDecimal(result?.litros);
-  const preco = parseDecimal(result?.valor_por_litro);
-  const confidence = Number(result?.confianca ?? 0);
-  if (!isPlausibleNumber(valor, "valor") || !isPlausibleNumber(litros, "litros")) return false;
-
-  const calculatedPrice = valor / litros;
-  const finalPrice = isPlausibleNumber(preco, "preco") ? preco : calculatedPrice;
-  if (!isPlausibleNumber(finalPrice, "preco")) return false;
-
-  const calculatedValue = roundValue(litros * finalPrice, 2);
-  const valueDiff = Math.abs(calculatedValue - valor);
-  const consistent = valueDiff <= Math.max(0.25, valor * 0.025);
-  const hasSafeConfidence = confidence >= 0.72;
-  return consistent && hasSafeConfidence;
+  const reading = normalizePumpOcrResult(result);
+  return reading.complete && Number(result?.confianca ?? 0) >= 0.7;
 }
 
 function isReliableKmResult(result: OcrResult | null) {
-  if (!hasKmData(result)) return false;
-  const kmValue = parseDecimal(result?.km ?? result?.km_atual);
-  const confidence = Number(result?.confianca ?? 0);
-  return isPlausibleNumber(kmValue, "km") && confidence >= 0.72;
+  return Boolean(normalizeOdometerOcrResult(result)) && Number(result?.confianca ?? 0) >= 0.7;
 }
 
 function firstPositiveValue(primary: string | number | undefined, fallback: string | number | undefined) {
@@ -803,9 +834,9 @@ async function analisarFotoLocal(dataUrl: string, tipo: "bomba" | "painel_km"): 
 }
 
 async function readImageText(dataUrl: string): Promise<string> {
-  const mod: any = await import("tesseract.js");
-  if (!mod?.createWorker) throw new Error("OCR indisponivel");
-  let worker: any;
+  const mod = await import("tesseract.js");
+  if (!mod.createWorker) throw new Error("OCR indisponivel");
+  let worker: Awaited<ReturnType<typeof mod.createWorker>>;
   try {
     worker = await mod.createWorker("por+eng");
   } catch {
@@ -825,236 +856,28 @@ async function readImageText(dataUrl: string): Promise<string> {
 }
 
 function parseBombaText(text: string): OcrResult {
-  const lines = getOcrLines(text);
-  let valor = pickNumberNearLabel(lines, /(TOTAL\s*(A\s*)?PAGAR|VALOR\s*(TOTAL)?|A\s*PAGAR)/i, "valor");
-  let litros = pickNumberNearLabel(lines, /(LITROS?|VOLUME|VOL\.?|QUANTIDADE|QTD)/i, "litros");
-  let preco = pickNumberNearLabel(lines, /(PRECO|PREÇO|POR\s*LITRO|R\s*\/\s*L|P\.?\s*UNIT|UNITARIO)/i, "preco");
-
-  const inferred = inferPumpValues(collectFuelNumbers(lines), { valor, litros, preco });
-  valor = inferred.valor;
-  litros = inferred.litros;
-  preco = inferred.preco;
-  const reconciled = reconcilePumpValues({ valor, litros, preco });
-  const labeledCount = [valor, litros, preco].filter((value) => Number.isFinite(value) && value > 0).length;
-  const consistent = reconciled.valor > 0 && reconciled.litros > 0 && reconciled.preco > 0
-    ? Math.abs(roundValue(reconciled.litros * reconciled.preco, 2) - reconciled.valor) <= Math.max(0.25, reconciled.valor * 0.025)
-    : false;
-  const result = {
-    ok: [reconciled.valor, reconciled.litros, reconciled.preco].filter((value) => Number.isFinite(value) && value > 0).length >= 2,
-    valor: reconciled.valor || undefined,
-    litros: reconciled.litros || undefined,
-    valor_por_litro: reconciled.preco || undefined,
+  const reading = parsePumpOcrText(text);
+  return {
+    ok: reading.complete,
+    valor: reading.valor || undefined,
+    litros: reading.litros || undefined,
+    valor_por_litro: reading.precoLitro || undefined,
     combustivel: normalizeCombustivel(text),
-    confianca: consistent && labeledCount >= 2 ? 0.78 : 0.55,
-    motivo: consistent ? undefined : "Numeros da bomba nao fecharam com seguranca.",
+    confianca: reading.complete ? 0.8 : 0,
+    motivo: reading.complete ? undefined : "Não foi possível identificar TOTAL, LITROS e PREÇO/L.",
   };
-  return result;
 }
 
 function parsePainelText(text: string): OcrResult {
-  const lines = getOcrLines(text);
-  const labeled = pickNumberNearLabel(lines, /(ODO|ODOMETRO|HODOMETRO|HODOMETRO|QUILOMETR|KM\b)/i, "km");
-  const candidates = collectKmNumbers(text);
-  const km = labeled && isPlausibleNumber(labeled, "km") ? labeled : candidates[0] || 0;
+  const km = parseOdometerOcrText(text);
   return {
-    ok: km > 0,
-    km,
-    confianca: labeled && km > 0 ? 0.78 : km > 0 ? 0.58 : 0,
-    motivo: labeled ? undefined : "KM sem rotulo claro no OCR local.",
+    ok: Boolean(km),
+    km: km || undefined,
+    confianca: km ? 0.8 : 0,
+    motivo: km ? undefined : "Não foi possível identificar o odômetro.",
   };
 }
 
-function getOcrLines(text: string) {
-  return String(text || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function pickNumberNearLabel(lines: string[], label: RegExp, kind: "valor" | "litros" | "preco" | "km") {
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (!label.test(line)) continue;
-    const nearby = [line.replace(label, " "), lines[index + 1] || "", lines[index + 2] || "", lines[index + 3] || ""];
-    for (const piece of nearby) {
-      const number = extractFuelNumbers(piece, kind).find((value) => isPlausibleNumber(value, kind));
-      if (number) return number;
-    }
-  }
-  return 0;
-}
-
-function collectFuelNumbers(lines: string[]) {
-  const values = lines.flatMap((line) => extractFuelNumbers(line)).filter((value) => value > 0 && value < 10000);
-  return Array.from(new Set(values.map((value) => roundValue(value, 3))));
-}
-
-function extractFuelNumbers(text: string, kind?: "valor" | "litros" | "preco" | "km") {
-  const matches = String(text || "").match(/(?:R\$?\s*)?-?\d{1,6}(?:[.,]\d{1,3})?|\b\d{2,7}\b/g) || [];
-  return matches
-    .map((token) => parseOcrNumberToken(token, kind))
-    .filter((value) => Number.isFinite(value) && value > 0);
-}
-
-function parseOcrNumberToken(token: string, kind?: "valor" | "litros" | "preco" | "km") {
-  const clean = String(token || "").replace(/[^\d,.-]/g, "");
-  if (!clean) return NaN;
-  const hasSeparator = /[.,]/.test(clean);
-  if (hasSeparator) return parseDecimal(clean);
-  const digits = clean.replace(/\D/g, "");
-  const n = Number(digits);
-  if (!Number.isFinite(n)) return NaN;
-  if (kind === "km") return n;
-  if (kind === "preco" && digits.length >= 3) return n / 100;
-  if (kind === "litros" && digits.length >= 3) return n / 100;
-  if (kind === "valor") {
-    if (digits.length === 3) return n / 10;
-    if (digits.length >= 4) return n / 100;
-  }
-  return n;
-}
-
-function isPlausibleNumber(value: number, kind: "valor" | "litros" | "preco" | "km") {
-  if (!Number.isFinite(value) || value <= 0) return false;
-  if (kind === "valor") return value >= 5 && value <= 10000;
-  if (kind === "litros") return value >= 1 && value <= 500;
-  if (kind === "preco") return value >= 1.5 && value <= 30;
-  return value >= 1000 && value <= 9999999;
-}
-
-function inferPumpValues(
-  candidates: number[],
-  current: { valor: number; litros: number; preco: number },
-) {
-  let { valor, litros, preco } = current;
-  if (!preco && valor > 0 && litros > 0) preco = valor / litros;
-  if (!valor && litros > 0 && preco > 0) valor = litros * preco;
-  if (!litros && valor > 0 && preco > 0) litros = valor / preco;
-
-  if (hasTwoPumpNumbers({ valor, litros, preco })) return { valor, litros, preco };
-
-  let best: { valor: number; litros: number; preco: number; score: number } | null = null;
-  const values = candidates.filter((value) => value >= 5);
-  const liters = candidates.filter((value) => value >= 1 && value <= 500);
-  const prices = candidates.filter((value) => value >= 1.5 && value <= 30);
-
-  for (const v of values) {
-    for (const l of liters) {
-      if (Math.abs(v - l) < 0.001) continue;
-      const p = v / l;
-      if (p < 1.5 || p > 30) continue;
-      const score = Math.abs(p - 5);
-      if (!best || score < best.score) best = { valor: v, litros: l, preco: p, score };
-    }
-  }
-
-  if (!best) {
-    for (const l of liters) {
-      for (const p of prices) {
-        if (Math.abs(l - p) < 0.001) continue;
-        const v = l * p;
-        if (v < 5 || v > 10000) continue;
-        const score = Math.abs(p - 5);
-        if (!best || score < best.score) best = { valor: v, litros: l, preco: p, score };
-      }
-    }
-  }
-
-  if (best) {
-    valor = valor || best.valor;
-    litros = litros || best.litros;
-    preco = preco || best.preco;
-  }
-
-  return { valor, litros, preco };
-}
-
-function hasTwoPumpNumbers(values: { valor: number; litros: number; preco: number }) {
-  return [values.valor, values.litros, values.preco].filter((value) => Number.isFinite(value) && value > 0).length >= 2;
-}
-
-function reconcilePumpValues(values: { valor: number; litros: number; preco: number }) {
-  let { valor, litros, preco } = values;
-  if (valor > 0 && litros > 0 && (!preco || preco < 1.5 || preco > 30)) preco = valor / litros;
-  if (litros > 0 && preco > 0 && !valor) valor = litros * preco;
-  if (valor > 0 && preco > 0 && !litros) litros = valor / preco;
-  if (valor > 0 && litros > 0 && preco > 0) {
-    const calculated = litros * preco;
-    if (Math.abs(calculated - valor) > Math.max(2, valor * 0.1)) {
-      const recalculatedPrice = valor / litros;
-      if (recalculatedPrice >= 1.5 && recalculatedPrice <= 30) preco = recalculatedPrice;
-    }
-  }
-  return {
-    valor: isPlausibleNumber(valor, "valor") ? roundValue(valor, 2) : 0,
-    litros: isPlausibleNumber(litros, "litros") ? roundValue(litros, 3) : 0,
-    preco: isPlausibleNumber(preco, "preco") ? roundValue(preco, 3) : 0,
-  };
-}
-
-function collectKmNumbers(text: string) {
-  const grouped = Array.from(String(text || "").matchAll(/\b\d{1,3}(?:[.,]\d{3}){1,2}\b/g))
-    .map((match) => Number(match[0].replace(/\D/g, "")));
-  const plain = Array.from(String(text || "").matchAll(/\b\d{4,7}\b/g))
-    .map((match) => Number(match[0]));
-  return Array.from(new Set([...grouped, ...plain]))
-    .filter((value) => value >= 1000 && value <= 9999999 && (value < 1900 || value > 2099))
-    .sort((a, b) => b - a);
-}
-
-function roundValue(value: number, digits: number) {
-  const factor = 10 ** digits;
-  return Number.isFinite(value) ? Math.round(value * factor) / factor : 0;
-}
-
-function buildReceiptHtml(info: ReceiptInfo) {
-  const text = [
-    ["Registro", info.id || "salvo"],
-    ["Data/Hora", info.createdAt.toLocaleString("pt-BR")],
-    ["Funcionario", info.mecanicoNome],
-    ["Unidade", `${info.empresa}${info.filial ? ` - ${info.filial}` : ""}`],
-    ["Veiculo", info.placa || "-"],
-    ["Posto", info.postoNome],
-    ["CNPJ", info.postoCnpj || "-"],
-    ["Endereco", info.postoEndereco || "-"],
-    ["Telefone", info.postoTelefone || "-"],
-    ["Combustivel", info.combustivel],
-    ["Litros", `${fmtNumber(info.litros)} L`],
-    ["Preco/L", fmtMoney(info.precoLitro)],
-    ["Valor total", fmtMoney(info.valor)],
-    ["KM", info.km || "-"],
-    ["KM rodado", info.kmRodado !== null ? `${fmtNumber(String(info.kmRodado), 0)} km` : "-"],
-    ["Validado por", info.mecanicoNome],
-  ];
-
-  return `<html><head><title>Recibo abastecimento</title><style>
-    body{font-family:Arial,sans-serif;margin:24px;color:#111}
-    h1{font-size:18px;margin:0 0 4px}
-    .muted{color:#555;font-size:12px;margin-bottom:16px}
-    table{width:100%;border-collapse:collapse;font-size:12px}
-    td{border:1px solid #ddd;padding:7px;vertical-align:top}
-    td:first-child{font-weight:bold;width:160px;background:#f7f7f7}
-    .photos{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
-    img{width:100%;max-height:300px;object-fit:contain;border:1px solid #ddd}
-  </style></head><body>
-    <h1>TOPAC RH PRO - Recibo de Abastecimento</h1>
-    ${info.registroTeste ? '<div class="muted"><strong>REGISTRO DE TESTE</strong> - nao impacta relatorios oficiais.</div>' : ''}
-    <div class="muted">Comprovante interno gerado pelo app do mecanico.</div>
-    <table>${text.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v)}</td></tr>`).join("")}</table>
-    <div class="photos">
-      <div><strong>Foto da bomba</strong><br><img src="${escapeHtml(info.fotoBombaUrl)}"></div>
-      <div><strong>Foto do painel/KM</strong><br><img src="${escapeHtml(info.fotoPainelUrl)}"></div>
-    </div>
-  </body></html>`;
-}
-
-function escapeHtml(value: string) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

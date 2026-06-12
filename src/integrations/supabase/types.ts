@@ -48,6 +48,7 @@ export type Database = {
           posto_telefone: string | null
           preenchimento: string | null
           qr_codigo: string | null
+          recibo_pdf_url: string | null
           status: string
           updated_at: string
           vale_codigo: string | null
@@ -88,6 +89,7 @@ export type Database = {
           posto_telefone?: string | null
           preenchimento?: string | null
           qr_codigo?: string | null
+          recibo_pdf_url?: string | null
           status?: string
           updated_at?: string
           vale_codigo?: string | null
@@ -128,6 +130,7 @@ export type Database = {
           posto_telefone?: string | null
           preenchimento?: string | null
           qr_codigo?: string | null
+          recibo_pdf_url?: string | null
           status?: string
           updated_at?: string
           vale_codigo?: string | null

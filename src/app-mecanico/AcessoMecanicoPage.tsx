@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Wrench, AlertCircle } from "lucide-react";
 
 interface Opcao { id: string; nome: string; empresa: string; filial: string; funcao: string; }
+interface PinValidationResult { ok?: boolean; error?: string; count?: number; usuarios?: Opcao[]; }
+
+const acessoRpc = supabase as unknown as {
+  rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+};
 
 export default function AcessoMecanicoPage() {
   const navigate = useNavigate();
@@ -21,20 +26,21 @@ export default function AcessoMecanicoPage() {
     setErro(null);
     if (pin.length !== 4) { setErro("Digite os 4 últimos números do CPF."); return; }
     setLoading(true);
-    const { data, error } = await supabase.rpc("acesso_externo_validar_pin" as any, {
+    const { data, error } = await acessoRpc.rpc("acesso_externo_validar_pin", {
       p_pin: pin, p_modulo: "mecanico",
     });
     setLoading(false);
     if (error) { setErro("Erro ao validar. Tente novamente."); return; }
-    const res = data as any;
+    const res = data as PinValidationResult | null;
     if (!res?.ok) {
       if (res?.error === "bloqueado") setErro("Acesso bloqueado pelo administrador.");
       else if (res?.error === "pin_nao_encontrado") setErro("PIN não encontrado. Procure o administrador.");
       else setErro("PIN inválido.");
       return;
     }
-    if (res.count === 1) entrar(res.usuarios[0]);
-    else setOpcoes(res.usuarios);
+    const usuarios = res.usuarios || [];
+    if (res.count === 1 && usuarios[0]) entrar(usuarios[0]);
+    else setOpcoes(usuarios);
   };
 
   const entrar = (u: Opcao) => {
