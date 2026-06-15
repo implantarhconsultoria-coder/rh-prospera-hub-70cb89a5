@@ -21,6 +21,7 @@ import { CC_OBRIGATORIO, DESTINATARIOS_CONTABILIDADE } from '@/lib/emailUtils';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
 import { prepareDocumentTextForSave } from '@/lib/documentoHistoricoTexto';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   funcionarioId: string;
@@ -182,6 +183,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       'desligamento',
       'demissional',
       'contrato',
+      'atestado',
     ].some((term) => text.includes(term));
   };
 
@@ -195,7 +197,36 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       return;
     }
     const fileName = safeFileName(doc.nome_arquivo || `${company.name} - ${titulo} - ${funcionario.name}.pdf`);
-    if (!fileName.toLowerCase().endsWith('.pdf')) {
+    const isAtestado = inferTipo(doc.categoria || doc.tipo_documento || '') === 'atestado';
+    let to = [...DESTINATARIOS_CONTABILIDADE] as string[];
+    let cc = [...CC_OBRIGATORIO] as string[];
+    if (isAtestado) {
+      const { data: emailConfig, error: emailConfigError } = await supabase
+        .from('config_emails_contabilidade' as any)
+        .select('email_marisa,email_robson,emails_copia')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (emailConfigError) {
+        toast.error('Nao foi possivel carregar os e-mails cadastrados da contabilidade.');
+        return;
+      }
+      const config = emailConfig as any;
+      to = Array.from(new Set(
+        [config?.email_marisa, config?.email_robson]
+          .flatMap((value) => String(value || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [])
+          .map((email) => email.toLowerCase()),
+      ));
+      cc = Array.from(new Set(
+        (String(config?.emails_copia || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [])
+          .map((email) => email.toLowerCase())
+          .filter((email) => !to.includes(email)),
+      ));
+      if (!to.length) {
+        toast.error('Nenhum e-mail da contabilidade esta cadastrado.');
+        return;
+      }
+    } else if (!fileName.toLowerCase().endsWith('.pdf')) {
       toast.error('Este documento ainda nao esta salvo como PDF. Gere o PDF novamente antes de enviar.');
       return;
     }
@@ -214,23 +245,49 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       ? originalBlob
       : new Blob([originalBlob], { type: 'application/pdf' });
     const senderName = String(session.user.user_metadata?.nome_completo || session.user.email || 'TOPAC RH PRO');
+    const dataDocumento = new Date(doc.data_documento || doc.created_at).toLocaleDateString('pt-BR');
+    const detalheDocumento = [doc.descricao, doc.observacao].filter(Boolean).join(' | ') || 'Sem observacao/descricao.';
     setEmailPdfDraft({
-      to: [...DESTINATARIOS_CONTABILIDADE],
-      cc: [...CC_OBRIGATORIO],
-      subject: `${titulo} - ${funcionario.name}`,
-      body: [
-        'Prezados,',
-        '',
-        `Segue em anexo o documento ${titulo} referente ao colaborador ${funcionario.name}.`,
-        '',
-        `Empresa: ${company.name}`,
-        doc.competencia ? `Competencia: ${doc.competencia}` : '',
-        '',
-        'Atenciosamente,',
-        senderName,
-      ].filter(Boolean).join('\n'),
-      attachmentBlob,
-      attachmentName: fileName,
+      to,
+      cc,
+      subject: isAtestado ? `ATESTADO - ${funcionario.name}` : `${titulo} - ${funcionario.name}`,
+      body: isAtestado
+        ? [
+          'Prezados,',
+          '',
+          `Funcionario: ${funcionario.name}`,
+          `Empresa: ${company.name}`,
+          'Tipo do documento: ATESTADO',
+          `Data do documento: ${dataDocumento}`,
+          `Observacao/descricao: ${detalheDocumento}`,
+          '',
+          'O PDF/arquivo enviado segue em anexo.',
+          '',
+          'Atenciosamente,',
+          senderName,
+        ].filter(Boolean).join('\n')
+        : [
+          'Prezados,',
+          '',
+          `Segue em anexo o documento ${titulo} referente ao colaborador ${funcionario.name}.`,
+          '',
+          `Empresa: ${company.name}`,
+          doc.competencia ? `Competencia: ${doc.competencia}` : '',
+          '',
+          'Atenciosamente,',
+          senderName,
+        ].filter(Boolean).join('\n'),
+      ...(isAtestado
+        ? {
+          attachments: [{
+            attachmentBlob: originalBlob,
+            attachmentName: fileName,
+            attachmentContentType: originalBlob.type || 'application/octet-stream',
+            documentId: doc.id,
+            documentName: titulo,
+          }],
+        }
+        : { attachmentBlob, attachmentName: fileName }),
       senderUserId: session.user.id,
       senderName,
       senderEmail: session.user.email,
@@ -238,7 +295,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       documentId: doc.id,
       documentName: titulo,
       afterSend: async () => {
-        await marcarComoEnviado(doc.id, session.user.id, senderName, [...DESTINATARIOS_CONTABILIDADE, ...CC_OBRIGATORIO].join(', '));
+        await marcarComoEnviado(doc.id, session.user.id, senderName, [...to, ...cc].join(', '));
         await carregar();
       },
     });
