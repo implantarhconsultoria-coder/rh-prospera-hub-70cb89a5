@@ -79,9 +79,10 @@ Devolva SOMENTE um JSON valido, sem markdown, neste formato:
 Regras:
 - km = quilometragem atual do hodometro, sem pontos de milhar.
 - Leia apenas ODO, KM total, hodometro ou quilometragem acumulada.
-- Nao use velocidade, temperatura, hora, consumo, autonomia, trip A, trip B ou marcador parcial.
-- Priorize o numero grande proximo de "km". Sem rotulo legivel, use o numero grande inferior do painel.
-- Ignore textos pequenos, relogio, autonomia, velocidade e TRIP; nao escolha apenas pelo maior valor.
+- Primeiro procure explicitamente um numero seguido de "km" e use esse numero.
+- Ignore hora no formato HH:MM, temperatura em °C, velocidade, consumo, autonomia, trip A, trip B e marcador parcial.
+- Sem um numero seguido de "km", priorize o numero inteiro grande no visor inferior do painel.
+- Se ainda houver varios candidatos, use o maior numero inteiro com quatro ou mais digitos.
 - ok deve ser true somente quando o numero de KM estiver visivel com clareza.
 - Se a foto estiver sem foco, cortada, refletida, ou mostrar apenas o velocimetro sem hodometro claro, ok=false e confianca abaixo de 0.70.
 - Se nao conseguir ler, devolva 0.

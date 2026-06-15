@@ -30,6 +30,14 @@ describe('OCR do abastecimento', () => {
     expect(normalizeOdometerOcrResult({ km: '98.765', ocr_texto_bruto: 'ODO 98.765' })).toBe(98765);
   });
 
+  it('ignora hora e temperatura e usa o número seguido de km', () => {
+    expect(parseOdometerOcrText(`
+      15:21
+      21°C
+      25542 km
+    `)).toBe(25542);
+  });
+
   it('prioriza os três visores grandes por ordem vertical e o KM inferior próximo de km', () => {
     const pump = parsePumpOcrText(`
       12:48

@@ -125,11 +125,18 @@ export const normalizePumpOcrResult = (result: {
 export const parseOdometerOcrText = (text: string): number | null => {
   const source = String(text || '');
   const plausibleKm = (value: number) => value >= 1000 && value <= 9_999_999 && (value < 1900 || value > 2099);
-  const nearKm = Array.from(
-    source.matchAll(/(?:\b(\d{1,3}(?:[.,]\d{3}){1,2}|\d{4,7})\s*(?:km|od[oô]metro|hod[oô]metro)\b|(?:km|od[oô]metro|hod[oô]metro)[^\d]{0,20}(\d{1,3}(?:[.,]\d{3}){1,2}|\d{4,7}))/gi),
-    (match) => Number((match[1] || match[2]).replace(/\D/g, '')),
+  const integerKmPattern = String.raw`(?:\d{1,3}(?:[.,]\d{3}){1,2}|\d{4,7})`;
+  const numberFollowedByKm = Array.from(
+    source.matchAll(new RegExp(`\\b(${integerKmPattern})\\s*km\\b`, 'gi')),
+    (match) => Number(match[1].replace(/\D/g, '')),
   ).filter(plausibleKm);
-  if (nearKm.length) return nearKm.at(-1) ?? null;
+  if (numberFollowedByKm.length) return numberFollowedByKm.at(-1) ?? null;
+
+  const numberNearOdometerLabel = Array.from(
+    source.matchAll(new RegExp(`(?:km|od[oô]metro|hod[oô]metro)[^\\d]{0,20}(${integerKmPattern})`, 'gi')),
+    (match) => Number(match[1].replace(/\D/g, '')),
+  ).filter(plausibleKm);
+  if (numberNearOdometerLabel.length) return numberNearOdometerLabel.at(-1) ?? null;
 
   const lowerDisplayCandidates = displayNumbersByVerticalOrder(source)
     .map((candidate) => Math.round(candidate))
@@ -137,10 +144,10 @@ export const parseOdometerOcrText = (text: string): number | null => {
   if (lowerDisplayCandidates.length) return lowerDisplayCandidates.at(-1) ?? null;
 
   const candidates = Array.from(
-    source.matchAll(/\b\d{1,3}(?:[.,]\d{3}){1,2}\b|\b\d{4,7}\b/g),
+    source.matchAll(new RegExp(`\\b${integerKmPattern}\\b`, 'g')),
     (match) => Number(match[0].replace(/\D/g, '')),
   ).filter(plausibleKm);
-  return candidates.at(-1) ?? null;
+  return candidates.length ? Math.max(...candidates) : null;
 };
 
 export const normalizeOdometerOcrResult = (result: { km?: unknown; km_atual?: unknown; ocr_texto_bruto?: string } | null): number | null => {
