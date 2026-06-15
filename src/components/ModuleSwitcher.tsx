@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layers } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import EmployeeAccessControl from '@/components/EmployeeAccessControl';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +36,6 @@ const ADMIN_MODULES: ModuleDef[] = [
   { role: 'empresas', label: 'Empresas', path: '/admin/empresas' },
   { role: 'fechamento', label: 'Fechamento', path: '/admin/fechamento' },
   { role: 'operacional', label: 'Operacional', path: '/admin/chamados' },
-  { role: 'app_mecanico', label: 'App Mecanico', path: '/admin/app-mecanico' },
   { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
   { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
 ];
@@ -55,28 +55,31 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
           { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
           { role: 'relatorios', label: 'Relatorios', path: '/admin/relatorio' },
         ]
-    : PORTAL_MODULES.filter((m) => userRoles.includes(m.role as any));
-
-  if (available.length < 2) return null;
+      : PORTAL_MODULES.filter((m) => userRoles.includes(m.role as any));
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size={compact ? 'sm' : 'default'} className="gap-2">
-          <Layers className="w-4 h-4" />
-          {!compact && <span>Trocar modulo</span>}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 bg-popover z-50">
-        <DropdownMenuLabel>Modulos disponiveis</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {available.map((m) => (
-          <DropdownMenuItem key={m.role + m.path} onClick={() => navigate(m.path)}>
-            {m.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="flex items-center gap-2">
+      <EmployeeAccessControl />
+      {available.length >= 2 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size={compact ? 'sm' : 'default'} className="gap-2">
+              <Layers className="w-4 h-4" />
+              {!compact && <span>Trocar modulo</span>}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 bg-popover z-50">
+            <DropdownMenuLabel>Modulos disponiveis</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {available.map((m) => (
+              <DropdownMenuItem key={m.role + m.path} onClick={() => navigate(m.path)}>
+                {m.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
   );
 };
 
