@@ -26,11 +26,47 @@ const labeledNumber = (text: string, labels: RegExp, maxDecimals: number) => {
   return parseNumber(match?.[1]);
 };
 
+const displayNumbersByVerticalOrder = (text: string) => String(text || '')
+  .split(/\r?\n/)
+  .map((line) => {
+    const trimmed = line.trim();
+    const matches = [...trimmed.matchAll(/\d{1,6}(?:[.,]\d{1,3})?/g)];
+    if (matches.length !== 1) return null;
+    const token = matches[0][0];
+    const noise = trimmed
+      .replace(token, '')
+      .replace(/(?:r\$|litros?|lts?|pre[cç]o|total|valor|volume|unit[aá]rio|por|\/l)/gi, '')
+      .replace(/[^a-z]/gi, '');
+    if (noise.length > 3) return null;
+    return parseNumber(token);
+  })
+  .filter(Number.isFinite);
+
 export const parsePumpOcrText = (text: string): PumpReading => {
   const source = String(text || '').replace(/\s+/g, ' ');
   let valor = labeledNumber(source, /total(?:\s+a\s+pagar)?|valor(?:\s+total)?|r\$?/, 2);
   let litros = labeledNumber(source, /litros?|volume|quantidade/, 3);
   let precoLitro = labeledNumber(source, /pre[cç]o\s*(?:por\s*)?litro|pre[cç]o\s*\/\s*l|r\$?\s*\/\s*l|unit[aá]rio/, 3);
+  const vertical = displayNumbersByVerticalOrder(text);
+
+  if (vertical.length >= 3) {
+    const [top, middle, bottom] = vertical.slice(-3);
+    const orderedValues = {
+      valor: top,
+      litros: middle,
+      precoLitro: bottom,
+    };
+    if (
+      plausible(orderedValues.valor, 5, 10000)
+      && plausible(orderedValues.litros, 1, 500)
+      && plausible(orderedValues.precoLitro, 1.5, 30)
+      && consistentPumpReading(orderedValues.valor, orderedValues.litros, orderedValues.precoLitro)
+    ) {
+      valor = orderedValues.valor;
+      litros = orderedValues.litros;
+      precoLitro = orderedValues.precoLitro;
+    }
+  }
 
   if (plausible(valor, 5, 10000) && plausible(litros, 1, 500) && !plausible(precoLitro, 1.5, 30)) {
     precoLitro = valor / litros;
@@ -61,6 +97,7 @@ export const normalizePumpOcrResult = (result: {
   ocr_texto_bruto?: string;
 } | null): PumpReading => {
   const textReading = parsePumpOcrText(result?.ocr_texto_bruto || '');
+  if (textReading.complete) return textReading;
   let valor = parseNumber(result?.valor);
   let litros = parseNumber(result?.litros);
   let precoLitro = parseNumber(result?.valor_por_litro);
@@ -87,16 +124,35 @@ export const normalizePumpOcrResult = (result: {
 
 export const parseOdometerOcrText = (text: string): number | null => {
   const source = String(text || '');
-  const candidates = [
-    ...Array.from(source.matchAll(/(?:km|od[oô]metro|hod[oô]metro)[^\d]{0,20}(\d{1,3}(?:[.,]\d{3}){1,2}|\d{4,7})/gi), (match) => Number(match[1].replace(/\D/g, ''))),
-    ...Array.from(source.matchAll(/\b\d{1,3}(?:[.,]\d{3}){1,2}\b|\b\d{4,7}\b/g), (match) => Number(match[0].replace(/\D/g, ''))),
-  ].filter((value) => value >= 1000 && value <= 9_999_999 && (value < 1900 || value > 2099));
+  const plausibleKm = (value: number) => value >= 1000 && value <= 9_999_999 && (value < 1900 || value > 2099);
+  const integerKmPattern = String.raw`(?:\d{1,3}(?:[.,]\d{3}){1,2}|\d{4,7})`;
+  const numberFollowedByKm = Array.from(
+    source.matchAll(new RegExp(`\\b(${integerKmPattern})\\s*km\\b`, 'gi')),
+    (match) => Number(match[1].replace(/\D/g, '')),
+  ).filter(plausibleKm);
+  if (numberFollowedByKm.length) return numberFollowedByKm.at(-1) ?? null;
+
+  const numberNearOdometerLabel = Array.from(
+    source.matchAll(new RegExp(`(?:km|od[oô]metro|hod[oô]metro)[^\\d]{0,20}(${integerKmPattern})`, 'gi')),
+    (match) => Number(match[1].replace(/\D/g, '')),
+  ).filter(plausibleKm);
+  if (numberNearOdometerLabel.length) return numberNearOdometerLabel.at(-1) ?? null;
+
+  const lowerDisplayCandidates = displayNumbersByVerticalOrder(source)
+    .map((candidate) => Math.round(candidate))
+    .filter(plausibleKm);
+  if (lowerDisplayCandidates.length) return lowerDisplayCandidates.at(-1) ?? null;
+
+  const candidates = Array.from(
+    source.matchAll(new RegExp(`\\b${integerKmPattern}\\b`, 'g')),
+    (match) => Number(match[0].replace(/\D/g, '')),
+  ).filter(plausibleKm);
   return candidates.length ? Math.max(...candidates) : null;
 };
 
 export const normalizeOdometerOcrResult = (result: { km?: unknown; km_atual?: unknown; ocr_texto_bruto?: string } | null): number | null => {
   const direct = parseNumber(result?.km ?? result?.km_atual);
   const fromText = parseOdometerOcrText(result?.ocr_texto_bruto || '');
-  const candidates = [direct, fromText].filter((value): value is number => plausible(Number(value), 1000, 9_999_999));
-  return candidates.length ? Math.round(Math.max(...candidates)) : null;
+  if (fromText !== null) return fromText;
+  return plausible(direct, 1000, 9_999_999) ? Math.round(direct) : null;
 };

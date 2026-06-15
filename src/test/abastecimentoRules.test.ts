@@ -29,4 +29,33 @@ describe('OCR do abastecimento', () => {
   it('preserva KM plausível mesmo quando a confiança remota pede revisão', () => {
     expect(normalizeOdometerOcrResult({ km: '98.765', ocr_texto_bruto: 'ODO 98.765' })).toBe(98765);
   });
+
+  it('ignora hora e temperatura e usa o número seguido de km', () => {
+    expect(parseOdometerOcrText(`
+      15:21
+      21°C
+      25542 km
+    `)).toBe(25542);
+  });
+
+  it('prioriza os três visores grandes por ordem vertical e o KM inferior próximo de km', () => {
+    const pump = parsePumpOcrText(`
+      12:48
+      TOTAL
+      190,52
+      LITROS
+      28.017
+      PREÇO/L
+      6,800
+      BOMBA 03
+    `);
+    const km = parseOdometerOcrText(`
+      14:32
+      AUTONOMIA 410
+      25542 km
+    `);
+
+    expect(pump).toEqual({ valor: 190.52, litros: 28.017, precoLitro: 6.8, complete: true });
+    expect(km).toBe(25542);
+  });
 });
