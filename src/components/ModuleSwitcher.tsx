@@ -32,6 +32,7 @@ const ADMIN_MODULES: ModuleDef[] = [
   { role: 'empresas', label: 'Empresas', path: '/admin/empresas' },
   { role: 'fechamento', label: 'Fechamento', path: '/admin/fechamento' },
   { role: 'operacional', label: 'Operacional', path: '/admin/chamados' },
+  { role: 'mecanico', label: 'App Mecanico', path: '/admin/app-mecanico' },
   { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
   { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
 ];
