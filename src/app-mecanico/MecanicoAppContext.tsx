@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2, AlertCircle } from "lucide-react";
@@ -25,6 +25,7 @@ interface MecanicoAppCtx {
 
 const Ctx = createContext<MecanicoAppCtx | null>(null);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useMecanicoApp = () => {
   const v = useContext(Ctx);
   if (!v) throw new Error("useMecanicoApp deve ser usado dentro de MecanicoAppProvider");
@@ -32,6 +33,11 @@ export const useMecanicoApp = () => {
 };
 
 interface ProviderProps { children: ReactNode }
+interface ValidarAcessoResult { ok?: boolean; mecanico?: Mecanico; }
+
+const mecanicoRpc = supabase as unknown as {
+  rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+};
 
 export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const { acessoId } = useParams<{ acessoId: string }>();
@@ -40,28 +46,29 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  const carregar = async () => {
+  const carregar = useCallback(async () => {
     if (!acessoId) {
-      setErro("Acesso invÃ¡lido");
+      setErro("Acesso inválido");
       setLoading(false);
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.rpc("app_mecanico_validar_acesso" as any, { p_acesso_id: acessoId });
-    if (error || !(data as any)?.ok) {
-      setErro("Acesso nÃ£o autorizado ou bloqueado pelo administrador.");
+    const { data, error } = await mecanicoRpc.rpc("app_mecanico_validar_acesso", { p_acesso_id: acessoId });
+    const result = data as ValidarAcessoResult | null;
+    if (error || !result?.ok || !result.mecanico) {
+      setErro("Acesso não autorizado ou bloqueado pelo administrador.");
       setMecanico(null);
       setLoading(false);
       return;
     }
-    const m = (data as any).mecanico as Mecanico;
+    const m = result.mecanico;
     setMecanico(m);
     localStorage.setItem("app_mecanico_acesso_id", m.acesso_id);
     setErro(null);
     setLoading(false);
-  };
+  }, [acessoId]);
 
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [acessoId]);
+  useEffect(() => { void carregar(); }, [carregar]);
 
   const sair = () => {
     localStorage.removeItem("app_mecanico_acesso_id");
@@ -82,7 +89,7 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <div className="max-w-sm text-center space-y-4">
           <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
-          <p className="text-base text-foreground">{erro || "Acesso invÃ¡lido"}</p>
+          <p className="text-base text-foreground">{erro || "Acesso inválido"}</p>
           <button
             onClick={() => navigate("/acesso-mecanico", { replace: true })}
             className="text-primary underline text-sm"

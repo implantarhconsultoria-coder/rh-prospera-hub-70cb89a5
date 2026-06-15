@@ -8,6 +8,40 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+function collectApiKeys(value: unknown, keys: string[]): void {
+  if (typeof value === "string") {
+    if (value.startsWith("sb_publishable_") || value.split(".").length === 3) keys.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectApiKeys(item, keys));
+    return;
+  }
+  if (value && typeof value === "object") {
+    Object.values(value).forEach((item) => collectApiKeys(item, keys));
+  }
+}
+
+function configuredPublishableKeys(): string[] {
+  const keys: string[] = [];
+  collectApiKeys(Deno.env.get("SUPABASE_PUBLISHABLE_KEY"), keys);
+  collectApiKeys(Deno.env.get("SUPABASE_ANON_KEY"), keys);
+  const configured = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
+  if (configured) {
+    try {
+      collectApiKeys(JSON.parse(configured), keys);
+    } catch {
+      configured.split(",").forEach((value) => collectApiKeys(value.trim(), keys));
+    }
+  }
+  return [...new Set(keys)];
+}
+
+function hasValidPublishableKey(req: Request): boolean {
+  const supplied = req.headers.get("apikey")?.trim();
+  return Boolean(supplied && configuredPublishableKeys().includes(supplied));
+}
+
 const PUMP_PROMPT = `Voce analisa FOTOS REAIS de bombas de combustivel em postos brasileiros para preencher um recibo de abastecimento.
 Devolva SOMENTE um JSON valido, sem markdown, neste formato:
 {
@@ -45,7 +79,7 @@ Regras:
 - km = quilometragem atual do hodometro, sem pontos de milhar.
 - Leia apenas ODO, KM total, hodometro ou quilometragem acumulada.
 - Nao use velocidade, temperatura, hora, consumo, autonomia, trip A, trip B ou marcador parcial.
-- Se houver mais de um numero, escolha o que representa a quilometragem total do veiculo.
+- Se houver mais de um numero compatível com odômetro, escolha o MAIOR número visível; ignore relógio, autonomia, velocidade e TRIP.
 - ok deve ser true somente quando o numero de KM estiver visivel com clareza.
 - Se a foto estiver sem foco, cortada, refletida, ou mostrar apenas o velocimetro sem hodometro claro, ok=false e confianca abaixo de 0.70.
 - Se nao conseguir ler, devolva 0.
@@ -66,7 +100,8 @@ function parseBrNumber(value: unknown): number {
     normalized = raw.replace(/\./g, "").replace(",", ".");
   } else if (lastDot > lastComma) {
     const decimalLen = raw.length - lastDot - 1;
-    normalized = decimalLen === 3 && !raw.includes(",") ? raw.replace(/\./g, "") : raw.replace(/,/g, "");
+    const integerPart = raw.slice(0, lastDot).replace(/\D/g, "");
+    normalized = decimalLen === 3 && !raw.includes(",") && integerPart.length > 2 ? raw.replace(/\./g, "") : raw.replace(/,/g, "");
   } else {
     normalized = raw.replace(",", ".");
   }
@@ -259,6 +294,18 @@ async function callVisionProvider(args: { imageUrl: string; isPanel: boolean }) 
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "method_not_allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  if (!hasValidPublishableKey(req)) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   try {
     const body = await req.json().catch(() => ({}));

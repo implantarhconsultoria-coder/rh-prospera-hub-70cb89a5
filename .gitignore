@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Generated local validation artifacts
+src/test/fixtures/abastecimento/*.png
+src/test/fixtures/abastecimento/*.jpg
+src/test/fixtures/abastecimento/*.jpeg
+src/test/fixtures/abastecimento/*.webp
+src/test/fixtures/abastecimento/*.pdf

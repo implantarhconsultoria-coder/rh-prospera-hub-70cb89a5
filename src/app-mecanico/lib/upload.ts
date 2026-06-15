@@ -7,7 +7,7 @@ export async function uploadFoto(
   prefix: string,
   blob: Blob,
 ): Promise<string> {
-  const ext = blob.type.includes("png") ? "png" : "jpg";
+  const ext = blob.type.includes("pdf") ? "pdf" : blob.type.includes("png") ? "png" : "jpg";
   const path = `${acessoId}/${prefix}-${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from(bucket).upload(path, blob, {
     contentType: blob.type || "image/jpeg",

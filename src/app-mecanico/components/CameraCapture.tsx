@@ -21,6 +21,7 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const openRef = useRef(open);
   const [foto, setFoto] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -40,12 +41,16 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
         video: { facingMode: facing, width: { ideal: 1080 }, height: { ideal: 1440 } },
         audio: false,
       });
+      if (!openRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-    } catch (e: any) {
+    } catch {
       setErro("Permita acesso à câmera para concluir o registro.");
     } finally {
       setStarting(false);
@@ -53,14 +58,23 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
   };
 
   useEffect(() => {
-    if (open) start(); else stop();
-    return stop;
+    openRef.current = open;
+    if (open) void start(); else stop();
+    return () => {
+      openRef.current = false;
+      stop();
+    };
+    // `start` and `stop` intentionally follow the current camera props.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, facing]);
 
   const tirar = () => {
     const v = videoRef.current, c = canvasRef.current;
     if (!v || !c) return;
+    if (!v.videoWidth || !v.videoHeight) {
+      toast.error("A câmera ainda não está pronta. Tente novamente.");
+      return;
+    }
     c.width = v.videoWidth; c.height = v.videoHeight;
     const ctx = c.getContext("2d"); if (!ctx) return;
     if (facing === "user") { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
@@ -77,8 +91,8 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
       try {
         await onCapture(blob);
         stop(); onClose();
-      } catch (e: any) {
-        toast.error(e.message || "Erro ao salvar foto");
+      } catch (error: unknown) {
+        toast.error(error instanceof Error ? error.message : "Erro ao salvar foto");
       } finally { setSaving(false); }
     }, "image/jpeg", 0.85);
   };
