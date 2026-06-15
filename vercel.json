@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "buildCommand": "npm run build",
+  "buildCommand": "node scripts/normalize-source-encoding.mjs && npm run build",
   "outputDirectory": "dist",
   "rewrites": [
     {
