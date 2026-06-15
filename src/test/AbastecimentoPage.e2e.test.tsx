@@ -99,10 +99,6 @@ describe('AbastecimentoPage — fluxo completo', () => {
       throw new Error(`RPC inesperada: ${name}`);
     });
 
-    invoke
-      .mockResolvedValueOnce({ data: { ok: true, km: 123456, confianca: 0.95 }, error: null })
-      .mockResolvedValueOnce({ data: { ok: true, valor: 205.3, litros: 29.37, valor_por_litro: 6.99, confianca: 0.95 }, error: null });
-
     vi.mocked(uploadFoto)
       .mockResolvedValueOnce('https://storage.test/painel.jpg')
       .mockResolvedValueOnce('https://storage.test/bomba.jpg')
@@ -128,18 +124,18 @@ describe('AbastecimentoPage — fluxo completo', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Capturar Foto do painel/KM' }));
     });
 
-    await screen.findByText('KM reconhecido');
-    expect(screen.getByText('123456')).toBeInTheDocument();
+    await screen.findByText(/Foto do painel salva/);
     fireEvent.click(screen.getByRole('button', { name: 'Tirar foto da bomba' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Capturar Foto da bomba' }));
     });
 
-    await screen.findByText('Leitura automática concluída');
-    expect(screen.getByText('R$ 205,30')).toBeInTheDocument();
-    expect(screen.getByText('29,37 L')).toBeInTheDocument();
-    expect(screen.getByText('R$ 6,99')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Valor (R$)')).not.toBeInTheDocument();
+    await screen.findByText('Digite os dados do abastecimento');
+    fireEvent.change(screen.getByLabelText('Valor (R$)'), { target: { value: '205,30' } });
+    fireEvent.change(screen.getByLabelText('Litros'), { target: { value: '29,37' } });
+    fireEvent.change(screen.getByLabelText('Preço/L'), { target: { value: '6,99' } });
+    fireEvent.change(screen.getByLabelText('KM manual'), { target: { value: '123456' } });
+    expect(invoke).not.toHaveBeenCalled();
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar e gerar recibo' }));
@@ -188,20 +184,17 @@ describe('AbastecimentoPage — fluxo completo', () => {
     await act(async () => {
       fireEvent.change(screen.getByTestId('painel-teste-input'), { target: { files: [painelFile] } });
     });
-    await screen.findByText('123456');
-    expect(invoke).toHaveBeenNthCalledWith(1, 'ocr-bomba-combustivel', {
-      body: { dataUrl: expect.stringMatching(/^data:image\/png;base64,/), tipo: 'painel_km' },
-    });
+    await screen.findByText(/Foto do painel salva/);
 
     await act(async () => {
       fireEvent.change(screen.getByTestId('bomba-teste-input'), { target: { files: [bombaFile] } });
     });
-    await screen.findByText('Leitura automática concluída');
-    expect(screen.getByText('R$ 205,30')).toBeInTheDocument();
-    expect(screen.getByText('29,37 L')).toBeInTheDocument();
-    expect(invoke).toHaveBeenNthCalledWith(2, 'ocr-bomba-combustivel', {
-      body: { dataUrl: expect.stringMatching(/^data:image\/png;base64,/), tipo: 'bomba' },
-    });
+    await screen.findByText('Digite os dados do abastecimento');
+    fireEvent.change(screen.getByLabelText('Valor (R$)'), { target: { value: '205,30' } });
+    fireEvent.change(screen.getByLabelText('Litros'), { target: { value: '29,37' } });
+    fireEvent.change(screen.getByLabelText('Preço/L'), { target: { value: '6,99' } });
+    fireEvent.change(screen.getByLabelText('KM manual'), { target: { value: '123456' } });
+    expect(invoke).not.toHaveBeenCalled();
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar e gerar recibo' }));

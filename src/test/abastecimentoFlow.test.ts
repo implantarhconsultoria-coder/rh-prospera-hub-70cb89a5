@@ -11,8 +11,8 @@ describe('fluxo completo do abastecimento mecânico', () => {
 
   it('mantém a resolução do PR sem marcadores e preserva o fluxo mais novo', () => {
     expect(page).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
-    expect(page).toContain('normalizeOdometerOcrResult');
-    expect(page).toContain('normalizePumpOcrResult');
+    expect(page).not.toContain('functions.invoke("ocr-bomba-combustivel"');
+    expect(page).toContain('KM manual');
     expect(page).toContain('setStep("form")');
     expect(page).toContain('Refazer bomba');
     expect(page).toContain('Refazer painel');
@@ -23,11 +23,12 @@ describe('fluxo completo do abastecimento mecânico', () => {
     expect(page).toContain('Visualizar PDF');
   });
 
-  it('executa painel antes da bomba e mantém correção manual recolhida', () => {
+  it('executa painel antes da bomba e exige digitação manual dos dados', () => {
     expect(page).toContain('setStep("painel")');
     expect(page).toContain('setStep("bomba")');
     expect(page.indexOf('{step === "painel"')).toBeLessThan(page.indexOf('{step === "bomba"'));
-    expect(page).toContain('Corrigir leitura');
+    expect(page).toContain('OCR desligado');
+    expect(page).toContain('Informe exatamente os números mostrados nas fotos');
     expect(page).toContain('Confirmar e gerar recibo');
   });
 

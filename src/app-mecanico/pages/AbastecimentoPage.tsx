@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Check, ChevronDown, Eye, FileDown, Fuel, Gauge, Loader2, QrCode, RotateCcw, Share2 } from "lucide-react";
+import { AlertTriangle, Camera, Check, Eye, FileDown, Fuel, Gauge, Loader2, QrCode, RotateCcw, Share2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import QrScanner from "qr-scanner";
 import { toast } from "sonner";
@@ -12,7 +12,6 @@ import { getBrowserLocation } from "@/lib/browserGeo";
 import CameraCapture from "../components/CameraCapture";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { uploadFoto } from "../lib/upload";
-import { normalizeOdometerOcrResult, normalizePumpOcrResult, parseOdometerOcrText, parsePumpOcrText } from "../lib/abastecimentoRules";
 import { gerarCupomAbastecimentoPdf } from "../lib/abastecimentoPdf";
 
 type Step = "scan" | "painel" | "bomba" | "form" | "ok";
@@ -122,8 +121,6 @@ export default function AbastecimentoPage() {
   const [km, setKm] = useState("");
   const [obs, setObs] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
-  const [showCorrection, setShowCorrection] = useState(false);
-  const [ocrError, setOcrError] = useState("");
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [capturedLocation, setCapturedLocation] = useState<{ latitude: number | null; longitude: number | null }>({ latitude: null, longitude: null });
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -275,53 +272,13 @@ export default function AbastecimentoPage() {
     void getBrowserLocation().then(setCapturedLocation);
   };
 
-  const analisarFoto = async (blob: Blob, tipo: "bomba" | "painel_km" = "bomba") => {
-    const dataUrl = await blobToOptimizedDataUrl(blob);
-    let remoto: OcrResult | null = null;
-    try {
-      const { data, error } = await supabase.functions.invoke("ocr-bomba-combustivel", { body: { dataUrl, tipo } });
-      remoto = error ? ({ ok: false, error: error.message, origem: "supabase" } as OcrResult) : ((data as OcrResult | null) || null);
-    } catch (e) {
-      console.error("Erro OCR abastecimento:", e);
-    }
-
-    if (tipo === "painel_km" && isReliableKmResult(remoto)) return remoto;
-    if (tipo === "bomba" && isReliablePumpResult(remoto)) return remoto;
-
-    const local = await analisarFotoLocal(dataUrl, tipo);
-    const merged = mergeOcrResult(remoto, local, tipo);
-    if (tipo === "painel_km") return isReliableKmResult(merged) ? merged : { ...(merged || {}), ok: false, motivo: "Leitura do KM sem confianca suficiente." };
-    return isReliablePumpResult(merged) ? merged : { ...(merged || {}), ok: false, motivo: "Leitura da bomba sem confianca suficiente." };
-  };
-
-  const aplicarLeituraBomba = (r: OcrResult | null) => {
-    const reading = normalizePumpOcrResult(r);
-    if (!reading.complete) return false;
-    setValor(formatDecimal(reading.valor, 2));
-    setLitros(formatDecimal(reading.litros, 3));
-    setPrecoLitro(formatDecimal(reading.precoLitro, 3));
-    const combustivelLido = normalizeCombustivel(r?.combustivel);
-    if (combustivelLido) setCombustivel(combustivelLido);
-    return true;
-  };
-
   const onCaptureBomba = async (blob: Blob) => {
     setLoading(true);
     try {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "bomba", blob);
       setFotoBombaUrl(url);
-      const r = await analisarFoto(blob);
-      const leituraAplicada = aplicarLeituraBomba(r);
-      if (leituraAplicada) {
-        setOcrError("");
-        setStep("form");
-        toast.success("Valor, litros e preço por litro reconhecidos automaticamente.");
-      } else {
-        const message = "Não foi possível reconhecer a bomba. Refaça a foto enquadrando TOTAL, LITROS e PREÇO/L.";
-        setOcrError(message);
-        setStep("bomba");
-        toast.error(message);
-      }
+      setStep("form");
+      toast.success("Foto da bomba salva. Digite os dados exibidos nela.");
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload da bomba");
     } finally {
@@ -344,19 +301,9 @@ export default function AbastecimentoPage() {
     try {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", blob);
       setFotoPainelUrl(url);
-      const r = await analisarFoto(blob, "painel_km");
-      const kmLido = normalizeOdometerOcrResult(r);
-      if (kmLido) {
-        setKm(String(kmLido));
-        setOcrError("");
-        setStep("bomba");
-        toast.success("KM reconhecido automaticamente. Agora fotografe a bomba.");
-      } else {
-        const message = "Não foi possível reconhecer o KM. Refaça a foto com o odômetro visível.";
-        setOcrError(message);
-        setStep("painel");
-        toast.error(message);
-      }
+      setKm("");
+      setStep("bomba");
+      toast.success("Foto do painel salva. O KM deverá ser digitado manualmente.");
     } catch (e) {
       toast.error(getErrorMessage(e) || "Erro no upload do KM");
     } finally {
@@ -383,7 +330,7 @@ export default function AbastecimentoPage() {
     if (!posto) return;
     if (postosOpcao.length > 1 && posto.tipo_qr === "unidade") return toast.error("Selecione o posto de Goiania");
     if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("Fotos obrigatorias");
-    if (!valor || !litros || !precoLitro || !km) return toast.error("Leitura automática incompleta. Refaça as fotos antes de confirmar.");
+    if (!valor || !litros || !precoLitro || !km) return toast.error("Preencha valor, litros, preço por litro e KM.");
     if (mecInfo?.exige_selecao_carro && !placa) return toast.error("Selecione o carro");
     setLoading(true);
     const location = capturedLocation.latitude !== null || capturedLocation.longitude !== null
@@ -545,10 +492,7 @@ export default function AbastecimentoPage() {
     setKm("");
     setObs("");
     setReceipt(null);
-    setOcrWarning("");
     setScanError("");
-    setOcrError("");
-    setShowCorrection(false);
     setCapturedLocation({ latitude: null, longitude: null });
     setStep("scan");
   };
@@ -614,8 +558,8 @@ export default function AbastecimentoPage() {
             {mecInfo?.exige_selecao_carro && <AlertBox text="Selecione o carro usado antes de finalizar o abastecimento." />}
             {typeof mecInfo?.ultimo_km === "number" && <div className="text-xs text-muted-foreground">Ultimo KM salvo: {mecInfo.ultimo_km.toLocaleString("pt-BR")}</div>}
           </div>
-          {ocrError && <AlertBox text={ocrError} />}
-          <Button className="w-full" onClick={() => { setOcrError(""); setCamPainel(true); }}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
+          <AlertBox text="A foto do painel é obrigatória. O KM não será lido automaticamente: digite-o depois da foto da bomba." />
+          <Button className="w-full" onClick={() => setCamPainel(true)}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
           {mecInfo?.registro_teste && (
             <>
               <input ref={painelTestInputRef} data-testid="painel-teste-input" type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; void processarImagemTeste(file, "painel"); event.target.value = ""; }} />
@@ -628,9 +572,8 @@ export default function AbastecimentoPage() {
 
       {step === "bomba" && (
         <Card className="space-y-3 p-4">
-          {ocrError && <AlertBox text={ocrError} />}
           {fotoPainelUrl && <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />}
-          <ReadingCard label="KM reconhecido" value={km || "Não reconhecido"} />
+          <AlertBox text="Foto do painel salva. Agora fotografe a bomba; os números serão digitados manualmente." />
           <Button className="w-full" onClick={() => setCamBomba(true)}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
           {mecInfo?.registro_teste && (
             <>
@@ -644,22 +587,20 @@ export default function AbastecimentoPage() {
       {step === "form" && (
         <Card className="space-y-4 p-4">
           <div>
-            <div className="text-sm font-semibold">Leitura automática concluída</div>
-            <p className="text-xs text-muted-foreground">Revise os valores reconhecidos e confirme o abastecimento.</p>
+            <div className="text-sm font-semibold">Digite os dados do abastecimento</div>
+            <p className="text-xs text-muted-foreground">OCR desligado. Informe exatamente os números mostrados nas fotos.</p>
           </div>
-          {ocrError && <AlertBox text={ocrError} />}
           <div className="grid grid-cols-2 gap-2">
             {fotoBombaUrl && <img src={fotoBombaUrl} className="h-32 w-full rounded-lg object-cover" alt="Bomba" />}
             {fotoPainelUrl && <img src={fotoPainelUrl} className="h-32 w-full rounded-lg object-cover" alt="Painel" />}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <ReadingCard label="Valor reconhecido" value={valor ? fmtMoney(valor) : "Não reconhecido"} />
-            <ReadingCard label="Litros reconhecidos" value={litros ? `${fmtNumber(litros)} L` : "Não reconhecido"} />
-            <ReadingCard label="Preço/L reconhecido" value={precoLitro ? fmtMoney(precoLitro) : "Não reconhecido"} />
-            <ReadingCard label="KM reconhecido" value={km || "Não reconhecido"} />
-          </div>
-
           <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 rounded-lg border p-3">
+              <Field label="Valor (R$)" value={valor} setValue={updateValor} type="number" />
+              <Field label="Litros" value={litros} setValue={updateLitros} type="number" />
+              <Field label="Preço/L" value={precoLitro} setValue={updatePrecoLitro} type="number" />
+              <div><Field label="KM manual" value={km} setValue={(value) => setKm(value.replace(/\D/g, ""))} type="number" />{kmRodado !== null && <div className="mt-1 text-[11px] text-muted-foreground">Rodou {fmtNumber(String(kmRodado), 0)} km.</div>}</div>
+            </div>
             <div><Label className="text-xs">Combustível</Label><select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(e) => setCombustivel(e.target.value)}><option>Diesel S10</option><option>Diesel</option><option>Gasolina</option><option>Etanol</option><option>GNV</option></select></div>
             <div>
               <Label className="text-xs">{mecInfo?.exige_selecao_carro ? "Carro" : "Placa"}</Label>
@@ -676,20 +617,9 @@ export default function AbastecimentoPage() {
             <div><Label className="text-xs">Observação</Label><Input value={obs} onChange={(e) => setObs(e.target.value)} /></div>
           </div>
 
-          <Button type="button" variant="outline" className="w-full" onClick={() => setShowCorrection((current) => !current)}>
-            <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${showCorrection ? "rotate-180" : ""}`} /> Corrigir leitura
-          </Button>
-          {showCorrection && (
-            <div className="grid grid-cols-2 gap-3 rounded-lg border border-dashed p-3">
-              <Field label="Valor (R$)" value={valor} setValue={updateValor} type="number" />
-              <Field label="Litros" value={litros} setValue={updateLitros} type="number" />
-              <Field label="Preço/L" value={precoLitro} setValue={updatePrecoLitro} type="number" />
-              <div><Field label="KM" value={km} setValue={setKm} type="number" />{kmRodado !== null && <div className="mt-1 text-[11px] text-muted-foreground">Rodou {fmtNumber(String(kmRodado), 0)} km.</div>}</div>
-            </div>
-          )}
           <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" onClick={() => { setFotoBombaUrl(""); setValor(""); setLitros(""); setPrecoLitro(""); setOcrError(""); setStep("bomba"); setCamBomba(true); }}><Camera className="mr-2 h-4 w-4" /> Refazer bomba</Button>
-            <Button type="button" variant="outline" onClick={() => { setFotoPainelUrl(""); setKm(""); setOcrError(""); setStep("painel"); setCamPainel(true); }}><Gauge className="mr-2 h-4 w-4" /> Refazer painel</Button>
+            <Button type="button" variant="outline" onClick={() => { setFotoBombaUrl(""); setValor(""); setLitros(""); setPrecoLitro(""); setStep("bomba"); setCamBomba(true); }}><Camera className="mr-2 h-4 w-4" /> Refazer bomba</Button>
+            <Button type="button" variant="outline" onClick={() => { setFotoPainelUrl(""); setKm(""); setStep("painel"); setCamPainel(true); }}><Gauge className="mr-2 h-4 w-4" /> Refazer painel</Button>
           </div>
           <Button className="w-full" onClick={finalizar} disabled={loading || !valor || !litros || !precoLitro || !km}>
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />} Confirmar e gerar recibo
@@ -729,7 +659,7 @@ function ReadingCard({ label, value }: { label: string; value: string }) {
 }
 
 function Field({ label, value, setValue, type = "text" }: { label: string; value: string; setValue: (v: string) => void; type?: string }) {
-  return <div><Label className="text-xs">{label}</Label><Input type={type === "number" ? "text" : type} inputMode={type === "number" ? "decimal" : undefined} value={value} onChange={(e) => setValue(e.target.value)} /></div>;
+  return <div><Label className="text-xs">{label}</Label><Input aria-label={label} type={type === "number" ? "text" : type} inputMode={type === "number" ? "decimal" : undefined} value={value} onChange={(e) => setValue(e.target.value)} /></div>;
 }
 
 function Info({ k, v, wide }: { k: string; v: string; wide?: boolean }) {

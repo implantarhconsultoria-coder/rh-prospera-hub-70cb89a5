@@ -13,7 +13,7 @@ const Header = () => {
   const initials = (mecanico.nome || "M").trim().slice(0, 1).toUpperCase();
 
   return (
-    <header className="mec-header sticky top-0 z-30 backdrop-blur-md bg-card/85 border-b border-border/60 flex items-center gap-2 px-3 h-14">
+    <header className="mec-header sticky top-0 z-30 bg-card border-b border-border flex items-center gap-2 px-3 h-14">
       {!isHome ? (
         <Button size="icon" variant="ghost" className="rounded-full" onClick={() => navigate(base)} aria-label="Voltar">
           <ArrowLeft className="w-5 h-5" />
