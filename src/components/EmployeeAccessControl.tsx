@@ -27,8 +27,9 @@ const MODULOS = [
 
 type Modulo = (typeof MODULOS)[number]['value'];
 type AcessoRow = { modulo: string; status: string | null; acesso_liberado: boolean | null };
+type Props = { compact?: boolean };
 
-export default function EmployeeAccessControl() {
+export default function EmployeeAccessControl({ compact = false }: Props) {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const { employees, userRoles } = useApp();
@@ -101,9 +102,15 @@ export default function EmployeeAccessControl() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2">
+        <Button
+          variant="outline"
+          size={compact ? 'icon' : 'default'}
+          className={compact ? 'fixed right-[5.75rem] top-2 z-40 rounded-full bg-card' : 'gap-2'}
+          aria-label="Acessos do funcionario"
+          title="Acessos do funcionario"
+        >
           <KeyRound className="h-4 w-4" />
-          Acessos do funcionario
+          {!compact && <span>Acessos do funcionario</span>}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
