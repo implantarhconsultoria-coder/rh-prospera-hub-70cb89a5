@@ -1,8 +1,8 @@
 create table if not exists public.config_emails_contabilidade (
   id uuid primary key default gen_random_uuid(),
-  email_robson text not null default 'robson@topac.com.br',
+  email_robson text not null default '',
   email_marisa text not null default 'marisa@aatconsultoria.com.br',
-  emails_copia text not null default 'lucilene@aatconsultoria.com.br, dp@aatconsultoria.com.br, adm.matriz@topac.com.br',
+  emails_copia text not null default 'lucilene@aatconsultoria.com.br, dp@aatconsultoria.com.br, adm.matriz@topac.com.br, robson@topac.com.br',
   updated_by uuid,
   updated_by_nome text,
   created_at timestamptz not null default now(),
@@ -45,11 +45,16 @@ insert into public.config_emails_contabilidade (
   emails_copia
 )
 select
-  'robson@topac.com.br',
+  '',
   'marisa@aatconsultoria.com.br',
-  'lucilene@aatconsultoria.com.br, dp@aatconsultoria.com.br, adm.matriz@topac.com.br'
+  'lucilene@aatconsultoria.com.br, dp@aatconsultoria.com.br, adm.matriz@topac.com.br, robson@topac.com.br'
 where not exists (
   select 1 from public.config_emails_contabilidade
 );
+
+update public.config_emails_contabilidade
+set email_robson = '',
+    emails_copia = 'lucilene@aatconsultoria.com.br, dp@aatconsultoria.com.br, adm.matriz@topac.com.br, robson@topac.com.br',
+    updated_at = now();
 
 notify pgrst, 'reload schema';
