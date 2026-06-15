@@ -53,6 +53,52 @@ const parseEmails = (value: string) => {
 
 const formatEmails = (value?: string[]) => (value || []).join('; ');
 
+const getSaoPauloHour = () => {
+  const hour = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date()).find((part) => part.type === 'hour')?.value;
+  return Number(hour || new Date().getHours());
+};
+
+const getGreeting = () => {
+  const hour = getSaoPauloHour();
+  if (hour < 12) return 'Bom dia';
+  if (hour < 18) return 'Boa tarde';
+  return 'Boa noite';
+};
+
+const getBodyField = (body: string, label: string) => {
+  const line = body.split('\n').find((item) => item.trim().toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return line?.slice(line.indexOf(':') + 1).trim() || '';
+};
+
+const buildAtestadoBody = (originalBody: string) => {
+  const funcionario = getBodyField(originalBody, 'Funcionario') || 'colaborador informado';
+  const empresa = getBodyField(originalBody, 'Empresa');
+  const dataDocumento = getBodyField(originalBody, 'Data do documento');
+  const observacao = getBodyField(originalBody, 'Observacao/descricao');
+  const referencia = [empresa ? `da empresa ${empresa}` : '', dataDocumento ? `referente ao dia ${dataDocumento}` : '']
+    .filter(Boolean)
+    .join(', ');
+
+  return [
+    `${getGreeting()},`,
+    '',
+    `Encaminho, em anexo, o atestado médico do(a) colaborador(a) ${funcionario}${referencia ? `, ${referencia}` : ''}.`,
+    '',
+    observacao && observacao.toLowerCase() !== 'sem observacao/descricao.'
+      ? `Observação: ${observacao}.`
+      : '',
+    observacao && observacao.toLowerCase() !== 'sem observacao/descricao.' ? '' : '',
+    'Por gentileza, realizem o devido lançamento e confirmem o recebimento deste e-mail.',
+    '',
+    'Atenciosamente,',
+    'Rodrigo de Souza Sabino',
+  ].filter((line, index, lines) => line !== '' || (index > 0 && lines[index - 1] !== '')).join('\n');
+};
+
 export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpenChange }) => {
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
@@ -65,7 +111,9 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     setTo(formatEmails(draft.to));
     setCc(formatEmails(draft.cc));
     setSubject(draft.subject || '');
-    setBody(draft.body || '');
+    setBody(draft.subject.trim().toUpperCase().startsWith('ATESTADO')
+      ? buildAtestadoBody(draft.body || '')
+      : draft.body || '');
   }, [draft, open]);
 
   const handleSend = async () => {
