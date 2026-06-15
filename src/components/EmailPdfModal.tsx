@@ -46,12 +46,20 @@ type EmailPdfModalProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+const ATESTADO_TO = [
+  'marisa@aatconsultoria.com.br',
+  'lucilene@aatconsultoria.com.br',
+  'dp@aatconsultoria.com.br',
+];
+const ATESTADO_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'];
+
 const parseEmails = (value: string) => {
   const matches = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
   return Array.from(new Set(matches.map((email) => email.trim().toLowerCase())));
 };
 
 const formatEmails = (value?: string[]) => (value || []).join('; ');
+const isAtestadoSubject = (value: string) => value.trim().toUpperCase().startsWith('ATESTADO');
 
 const getSaoPauloHour = () => {
   const hour = new Intl.DateTimeFormat('pt-BR', {
@@ -108,18 +116,18 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
 
   useEffect(() => {
     if (!draft || !open) return;
-    setTo(formatEmails(draft.to));
-    setCc(formatEmails(draft.cc));
+    const atestado = isAtestadoSubject(draft.subject || '');
+    setTo(formatEmails(atestado ? ATESTADO_TO : draft.to));
+    setCc(formatEmails(atestado ? ATESTADO_CC : draft.cc));
     setSubject(draft.subject || '');
-    setBody(draft.subject.trim().toUpperCase().startsWith('ATESTADO')
-      ? buildAtestadoBody(draft.body || '')
-      : draft.body || '');
+    setBody(atestado ? buildAtestadoBody(draft.body || '') : draft.body || '');
   }, [draft, open]);
 
   const handleSend = async () => {
     if (!draft) return;
-    const toList = parseEmails(to);
-    const ccList = parseEmails(cc);
+    const atestado = isAtestadoSubject(subject);
+    const toList = atestado ? [...ATESTADO_TO] : parseEmails(to);
+    const ccList = atestado ? [...ATESTADO_CC] : parseEmails(cc);
     const attachments = draft.attachments?.length
       ? draft.attachments
       : draft.attachmentBlob && draft.attachmentName
