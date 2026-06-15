@@ -3,16 +3,18 @@ import { Sparkles, X, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useNavigate } from 'react-router-dom';
+import { useIsMobile } from '@/hooks/use-mobile';
 import EmployeeAccessControl from '@/components/EmployeeAccessControl';
 import AssistenteChat from './AssistenteChat';
 
 const AssistenteFab: React.FC = () => {
   const [open, setOpen] = useState(false);
   const nav = useNavigate();
+  const isMobile = useIsMobile();
 
   return (
     <>
-      <EmployeeAccessControl compact />
+      {isMobile && <EmployeeAccessControl compact />}
       <button
         onClick={() => setOpen(true)}
         aria-label="Assistente Operacional"
