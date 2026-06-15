@@ -11,6 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { FileText, Mail, Clock, User, Building2, Eye, Download, Trash2, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
@@ -19,6 +20,7 @@ import { downloadDocument, getDocumentUrl } from '@/lib/documentUrl';
 import { CC_OBRIGATORIO, DESTINATARIOS_CONTABILIDADE } from '@/lib/emailUtils';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
+import { prepareDocumentTextForSave } from '@/lib/documentoHistoricoTexto';
 
 interface Props {
   funcionarioId: string;
@@ -56,6 +58,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [viewing, setViewing] = useState<{ url: string; tipo: string; titulo: string } | null>(null);
   const [categoria, setCategoria] = useState('DOCUMENTACAO ADMISSIONAL');
   const [origem, setOrigem] = useState('upload_manual');
+  const [descricao, setDescricao] = useState('');
   const [observacao, setObservacao] = useState('');
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [filtroTipo, setFiltroTipo] = useState('');
@@ -112,6 +115,9 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       return;
     }
 
+    const descricaoSalva = prepareDocumentTextForSave(descricao);
+    const observacaoSalva = prepareDocumentTextForSave(observacao);
+
     setUploading(true);
     try {
       const path = await uploadDocumentoArquivo(
@@ -129,8 +135,8 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         tipoDocumento: categoria,
         categoria,
         origem,
-        descricao: observacao || arquivo.name,
-        observacao,
+        descricao: descricaoSalva || arquivo.name,
+        observacao: observacaoSalva,
         arquivoUrl: path,
         storageBucket: 'documentos-funcionarios',
         storagePath: path,
@@ -141,6 +147,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         unidade: company.name,
       });
       setArquivo(null);
+      setDescricao('');
       setObservacao('');
       await carregar();
       toast.success('Documento anexado ao historico do funcionario.');
@@ -268,7 +275,27 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             </Button>
           </div>
         </div>
-        <Input value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Observacao opcional" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="historico-documento-descricao" className="text-xs text-muted-foreground block mb-1">Descrição/nome do documento</label>
+            <Input
+              id="historico-documento-descricao"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex.: CARTA DEMISSIONAL ILMA MENDES GOIANIA"
+            />
+          </div>
+          <div>
+            <label htmlFor="historico-documento-observacao" className="text-xs text-muted-foreground block mb-1">Observação do documento</label>
+            <Textarea
+              id="historico-documento-observacao"
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              placeholder="Observação opcional"
+              className="min-h-10"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border border-border p-3">
@@ -322,7 +349,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                     {doc.status_envio === 'enviado' ? 'Enviado' : ORIGEM_LABEL[origemDoc] || origemDoc}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{doc.observacao || doc.descricao}</p>
+                <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{doc.observacao || doc.descricao}</p>
                 <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(doc.data_documento || doc.created_at).toLocaleString('pt-BR')}</span>
                   <span className="flex items-center gap-1"><User className="w-3 h-3" />{doc.funcionario_nome || funcionario?.name}</span>
