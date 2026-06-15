@@ -105,7 +105,7 @@ export default function EmployeeAccessControl({ compact = false }: Props) {
         <Button
           variant="outline"
           size={compact ? 'icon' : 'default'}
-          className={compact ? 'fixed right-[5.75rem] top-2 z-40 rounded-full bg-card' : 'gap-2'}
+          className={compact ? 'fixed right-[8.5rem] top-2 z-40 rounded-full bg-card' : 'gap-2'}
           aria-label="Acessos do funcionario"
           title="Acessos do funcionario"
         >
@@ -113,7 +113,7 @@ export default function EmployeeAccessControl({ compact = false }: Props) {
           {!compact && <span>Acessos do funcionario</span>}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader><DialogTitle>Acessos de {employee.name}</DialogTitle></DialogHeader>
         {!employeeActive && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
