@@ -8,6 +8,21 @@ const functionsConfig = readFileSync('supabase/config.toml', 'utf8');
 const ocrFunction = readFileSync('supabase/functions/ocr-bomba-combustivel/index.ts', 'utf8');
 
 describe('fluxo completo do abastecimento mecânico', () => {
+
+  it('mantém a resolução do PR sem marcadores e preserva o fluxo mais novo', () => {
+    expect(page).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
+    expect(page).toContain('normalizeOdometerOcrResult');
+    expect(page).toContain('normalizePumpOcrResult');
+    expect(page).toContain('setStep("form")');
+    expect(page).toContain('Refazer bomba');
+    expect(page).toContain('Refazer painel');
+    expect(page).toContain('app_mecanico_registrar_abastecimento_posto');
+    expect(page).toContain('gerarCupomAbastecimentoPdf');
+    expect(page).toContain('app_mecanico_vincular_recibo_pdf');
+    expect(page).toContain('Compartilhar PDF');
+    expect(page).toContain('Visualizar PDF');
+  });
+
   it('executa painel antes da bomba e mantém correção manual recolhida', () => {
     expect(page).toContain('setStep("painel")');
     expect(page).toContain('setStep("bomba")');
