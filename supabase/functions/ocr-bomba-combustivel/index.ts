@@ -58,7 +58,8 @@ Regras:
 - litros = quantidade/volume abastecido. Normalmente aparece como L, LITROS, VOLUME ou QTD.
 - valor_por_litro = preco unitario da bomba. Normalmente aparece como PRECO/LITRO, R$/L, P.UNIT, UNITARIO.
 - combustivel = tipo do combustivel visivel na bomba/bico/visor: Gasolina, Etanol, Diesel, Diesel S10 ou GNV.
-- Leia os tres campos principais mesmo que estejam em ordem vertical: TOTAL R$, LITROS/VOLUME e PRECO POR LITRO.
+- Priorize os tres numeros grandes do visor e ignore textos pequenos, hora e ruido.
+- Quando houver tres numeros grandes empilhados, mapeie pela ordem vertical: superior = valor total, meio = litros, inferior = valor_por_litro.
 - Nao confunda CNPJ, data, hora, numero da bomba, codigo do bico, cupom, KM ou placa com valor/litros/preco.
 - Se total e litros forem claros, calcule valor_por_litro com precisao. Se litros e preco forem claros, calcule o total.
 - ok deve ser true somente se pelo menos valor e litros foram lidos com clareza e a conta valor ~= litros * valor_por_litro fecha.
@@ -79,7 +80,8 @@ Regras:
 - km = quilometragem atual do hodometro, sem pontos de milhar.
 - Leia apenas ODO, KM total, hodometro ou quilometragem acumulada.
 - Nao use velocidade, temperatura, hora, consumo, autonomia, trip A, trip B ou marcador parcial.
-- Se houver mais de um numero compatível com odômetro, escolha o MAIOR número visível; ignore relógio, autonomia, velocidade e TRIP.
+- Priorize o numero grande proximo de "km". Sem rotulo legivel, use o numero grande inferior do painel.
+- Ignore textos pequenos, relogio, autonomia, velocidade e TRIP; nao escolha apenas pelo maior valor.
 - ok deve ser true somente quando o numero de KM estiver visivel com clareza.
 - Se a foto estiver sem foco, cortada, refletida, ou mostrar apenas o velocimetro sem hodometro claro, ok=false e confianca abaixo de 0.70.
 - Se nao conseguir ler, devolva 0.
