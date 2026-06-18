@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw, ClipboardCheck, UserX } from 'lucide-react';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
+import Dn4ImportPanel from '@/components/Dn4ImportPanel';
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -32,7 +33,6 @@ const FaturamentoDashboardPage: React.FC = () => {
     const safeIds = empIds !== null ? (empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : null;
     const applyEmp = (q: any) => safeIds ? q.in('empresa_id', safeIds) : q;
 
-    // KPIs vivos via RPC (apenas para visão admin/global)
     if (!ext.isExterno) {
       const { data: kpiData } = await supabase.rpc('dashboard_faturamento_kpis' as any);
       setKpis(kpiData || null);
@@ -66,7 +66,6 @@ const FaturamentoDashboardPage: React.FC = () => {
       reajustesProximos: contratosReaj.data?.length || 0,
     });
 
-    // Por empresa
     const empMap = new Map((empresas.data || []).map(e => [e.id, e.nome]));
     const porEmp = new Map<string, number>();
     f.forEach(x => {
@@ -75,7 +74,6 @@ const FaturamentoDashboardPage: React.FC = () => {
     });
     setPorEmpresa(Array.from(porEmp.entries()).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total));
 
-    // Top clientes
     const cliMap = new Map((clientes.data || []).map(c => [c.id, c.razao_social]));
     const porCli = new Map<string, number>();
     f.forEach(x => {
@@ -116,6 +114,8 @@ const FaturamentoDashboardPage: React.FC = () => {
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
         </button>
       </div>
+
+      <Dn4ImportPanel modulo="faturamento" />
 
       {kpis && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -170,7 +170,7 @@ const FaturamentoDashboardPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {mini.map((m, i) => (
+        {mini.map((m) => (
           <button key={m.label} onClick={() => navigate(m.path)} className="card-premium p-4 text-left hover:bg-sidebar-accent/20 transition-colors">
             <div className="flex items-center justify-between">
               <div>
