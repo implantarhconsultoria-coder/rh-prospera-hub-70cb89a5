@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "installCommand": "npm ci --legacy-peer-deps",
+  "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "node scripts/normalize-source-encoding.mjs && npm run build",
   "outputDirectory": "dist",
   "rewrites": [
