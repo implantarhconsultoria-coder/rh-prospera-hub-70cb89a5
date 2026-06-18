@@ -13,6 +13,23 @@ interface Props {
   hint?: string;
 }
 
+const getCameraMessage = (error: unknown) => {
+  const name = error instanceof DOMException ? error.name : "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "Permita acesso à câmera no navegador para concluir o registro.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "Nenhuma câmera foi encontrada neste aparelho.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "A câmera está em uso por outro aplicativo. Feche a câmera e tente novamente.";
+  }
+  if (typeof window !== "undefined" && !window.isSecureContext && window.location.hostname !== "localhost") {
+    return "Abra o app em um endereço seguro HTTPS para usar a câmera.";
+  }
+  return "Não foi possível abrir a câmera. Tente novamente ou verifique as permissões do navegador.";
+};
+
 /**
  * Câmera mobile-first reutilizável (selfie ou traseira).
  * Garante prova de vida para ponto e foto da bomba/painel para abastecimento.
@@ -23,7 +40,7 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
   const streamRef = useRef<MediaStream | null>(null);
   const openRef = useRef(open);
   const [foto, setFoto] = useState<string | null>(null);
-  const [starting, setStarting] = useState(true);
+  const [starting, setStarting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -32,26 +49,40 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
+    if (videoRef.current) videoRef.current.srcObject = null;
   };
 
   const start = async () => {
-    setStarting(true); setErro(null); setFoto(null);
+    if (starting) return;
+    setStarting(true);
+    setErro(null);
+    setFoto(null);
+    stop();
+
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setErro("Este navegador não liberou acesso à câmera. Use Chrome/Safari atualizado ou HTTPS.");
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1080 }, height: { ideal: 1440 } },
+        video: { facingMode: { ideal: facing }, width: { ideal: 1080 }, height: { ideal: 1440 } },
         audio: false,
       });
+
       if (!openRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-    } catch {
-      setErro("Permita acesso à câmera para concluir o registro.");
+    } catch (error) {
+      console.error("Erro ao iniciar câmera do app mecânico:", error);
+      setErro(getCameraMessage(error));
     } finally {
       setStarting(false);
     }
@@ -59,7 +90,8 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
 
   useEffect(() => {
     openRef.current = open;
-    if (open) void start(); else stop();
+    if (open) void start();
+    else stop();
     return () => {
       openRef.current = false;
       stop();
@@ -69,31 +101,53 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
   }, [open, facing]);
 
   const tirar = () => {
-    const v = videoRef.current, c = canvasRef.current;
-    if (!v || !c) return;
+    const v = videoRef.current;
+    const c = canvasRef.current;
+    if (!v || !c) {
+      toast.error("Câmera não inicializada. Tente novamente.");
+      return;
+    }
     if (!v.videoWidth || !v.videoHeight) {
       toast.error("A câmera ainda não está pronta. Tente novamente.");
       return;
     }
-    c.width = v.videoWidth; c.height = v.videoHeight;
-    const ctx = c.getContext("2d"); if (!ctx) return;
-    if (facing === "user") { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(v, 0, 0);
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    const ctx = c.getContext("2d");
+    if (!ctx) {
+      toast.error("Não foi possível preparar a foto.");
+      return;
+    }
+    ctx.save();
+    if (facing === "user") {
+      ctx.translate(c.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    ctx.restore();
     setFoto(c.toDataURL("image/jpeg", 0.85));
     stop();
   };
 
   const confirmar = async () => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || saving) return;
     setSaving(true);
     canvasRef.current.toBlob(async (blob) => {
-      if (!blob) { setSaving(false); return; }
+      if (!blob) {
+        setSaving(false);
+        toast.error("Não foi possível gerar a foto. Tente novamente.");
+        return;
+      }
       try {
         await onCapture(blob);
-        stop(); onClose();
+        stop();
+        onClose();
       } catch (error: unknown) {
+        console.error("Erro ao salvar foto do app mecânico:", error);
         toast.error(error instanceof Error ? error.message : "Erro ao salvar foto");
-      } finally { setSaving(false); }
+      } finally {
+        setSaving(false);
+      }
     }, "image/jpeg", 0.85);
   };
 
@@ -110,14 +164,13 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10 p-6 text-center">
               <AlertTriangle className="w-10 h-10 text-yellow-400" />
               <p className="text-sm">{erro}</p>
-              <Button onClick={start} variant="secondary" size="sm">Tentar novamente</Button>
+              <Button onClick={() => void start()} variant="secondary" size="sm">Tentar novamente</Button>
             </div>
           )}
           {foto ? (
             <img src={foto} alt="Captura" className="w-full h-full object-cover" />
           ) : (
-            <video ref={videoRef} playsInline muted className="w-full h-full object-cover"
-              style={facing === "user" ? { transform: "scaleX(-1)" } : undefined} />
+            <video ref={videoRef} playsInline muted className="w-full h-full object-cover" style={facing === "user" ? { transform: "scaleX(-1)" } : undefined} />
           )}
           <canvas ref={canvasRef} className="hidden" />
 
@@ -134,16 +187,15 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
         <div className="p-4 bg-black flex items-center justify-center gap-4">
           {foto ? (
             <>
-              <Button onClick={start} variant="outline" className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving}>
+              <Button onClick={() => void start()} variant="outline" className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving || starting}>
                 <RotateCcw className="w-4 h-4 mr-2" /> Refazer
               </Button>
-              <Button onClick={confirmar} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white" disabled={saving}>
+              <Button onClick={() => void confirmar()} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white" disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />} Confirmar
               </Button>
             </>
           ) : (
-            <Button onClick={tirar} disabled={starting || !!erro}
-              className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40">
+            <Button onClick={tirar} disabled={starting || !!erro} className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40">
               <div className="w-full h-full rounded-full bg-white border-2 border-black/20" />
             </Button>
           )}
