@@ -142,10 +142,10 @@ const enviarPontoPendente = async (item: PontoPendente) => {
   const { data, error } = await supabase.rpc("app_mecanico_registrar_ponto", {
     p_acesso_id: current.acessoId,
     p_tipo: current.tipo,
-    p_latitude: current.latitude,
-    p_longitude: current.longitude,
-    p_endereco: null,
-    p_selfie_url: current.selfieUrl,
+    p_latitude: current.latitude ?? undefined,
+    p_longitude: current.longitude ?? undefined,
+    p_endereco: undefined,
+    p_selfie_url: current.selfieUrl ?? undefined,
     p_dispositivo: dispositivo,
   });
 
