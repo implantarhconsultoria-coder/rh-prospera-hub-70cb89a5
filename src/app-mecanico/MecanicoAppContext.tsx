@@ -33,10 +33,27 @@ export const useMecanicoApp = () => {
 };
 
 interface ProviderProps { children: ReactNode }
-interface ValidarAcessoResult { ok?: boolean; mecanico?: Mecanico; }
+interface ValidarAcessoResult { ok?: boolean; error?: string; mecanico?: Partial<Mecanico>; }
 
 const mecanicoRpc = supabase as unknown as {
   rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+};
+
+const normalizarMecanico = (input: Partial<Mecanico> | undefined | null): Mecanico | null => {
+  if (!input?.acesso_id) return null;
+  return {
+    acesso_id: String(input.acesso_id),
+    nome: String(input.nome || "Mecânico"),
+    empresa: String(input.empresa || ""),
+    filial: String(input.filial || ""),
+    funcao: String(input.funcao || ""),
+    funcionario_id: input.funcionario_id ? String(input.funcionario_id) : null,
+    perfil_acesso: input.perfil_acesso ? String(input.perfil_acesso) : undefined,
+    registro_teste: Boolean(input.registro_teste),
+    teste_chave: input.teste_chave ? String(input.teste_chave) : undefined,
+    veiculo_teste: input.veiculo_teste ? String(input.veiculo_teste) : undefined,
+    placa_teste: input.placa_teste ? String(input.placa_teste) : undefined,
+  };
 };
 
 export const MecanicoAppProvider = ({ children }: ProviderProps) => {
@@ -48,24 +65,40 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
 
   const carregar = useCallback(async () => {
     if (!acessoId) {
-      setErro("Acesso inválido");
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const { data, error } = await mecanicoRpc.rpc("app_mecanico_validar_acesso", { p_acesso_id: acessoId });
-    const result = data as ValidarAcessoResult | null;
-    if (error || !result?.ok || !result.mecanico) {
-      setErro("Acesso não autorizado ou bloqueado pelo administrador.");
+      setErro("Acesso inválido. Entre novamente pelo PIN.");
       setMecanico(null);
       setLoading(false);
       return;
     }
-    const m = result.mecanico;
-    setMecanico(m);
-    localStorage.setItem("app_mecanico_acesso_id", m.acesso_id);
+
+    setLoading(true);
     setErro(null);
-    setLoading(false);
+
+    try {
+      const { data, error } = await mecanicoRpc.rpc("app_mecanico_validar_acesso", { p_acesso_id: acessoId });
+      const result = data as ValidarAcessoResult | null;
+      const mecanicoNormalizado = normalizarMecanico(result?.mecanico);
+
+      if (error || !result?.ok || !mecanicoNormalizado) {
+        console.error("Erro ao validar acesso do app mecânico:", error || result?.error || data);
+        setErro(
+          result?.error === "bloqueado"
+            ? "Acesso bloqueado pelo administrador."
+            : "Acesso não autorizado ou cadastro incompleto. Entre novamente pelo PIN."
+        );
+        setMecanico(null);
+        return;
+      }
+
+      setMecanico(mecanicoNormalizado);
+      localStorage.setItem("app_mecanico_acesso_id", mecanicoNormalizado.acesso_id);
+    } catch (error) {
+      console.error("Falha inesperada ao carregar app mecânico:", error);
+      setErro("Falha ao carregar o app mecânico. Verifique a internet e tente novamente.");
+      setMecanico(null);
+    } finally {
+      setLoading(false);
+    }
   }, [acessoId]);
 
   useEffect(() => { void carregar(); }, [carregar]);
@@ -94,7 +127,7 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
             onClick={() => navigate("/acesso-mecanico", { replace: true })}
             className="text-primary underline text-sm"
           >
-            Voltar
+            Entrar novamente
           </button>
         </div>
       </div>

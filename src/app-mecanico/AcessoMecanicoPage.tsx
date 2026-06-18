@@ -13,6 +13,27 @@ const acessoRpc = supabase as unknown as {
   rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
 };
 
+const normalizarUsuarios = (usuarios: unknown): Opcao[] => {
+  if (!Array.isArray(usuarios)) return [];
+  return usuarios
+    .map((item) => item as Partial<Opcao>)
+    .filter((item) => Boolean(item?.id))
+    .map((item) => ({
+      id: String(item.id || ""),
+      nome: String(item.nome || "Mecânico"),
+      empresa: String(item.empresa || ""),
+      filial: String(item.filial || ""),
+      funcao: String(item.funcao || ""),
+    }));
+};
+
+const mensagemErroPin = (error?: string) => {
+  if (error === "bloqueado") return "Acesso bloqueado pelo administrador.";
+  if (error === "pin_nao_encontrado") return "PIN não encontrado. Procure o administrador.";
+  if (error === "sem_permissao_modulo") return "Seu acesso ainda não está liberado para o app mecânico.";
+  return "PIN inválido ou acesso não liberado.";
+};
+
 export default function AcessoMecanicoPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -23,30 +44,61 @@ export default function AcessoMecanicoPage() {
 
   const validar = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    if (loading) return;
     setErro(null);
-    if (pin.length !== 4) { setErro("Digite os 4 últimos números do CPF."); return; }
-    setLoading(true);
-    const { data, error } = await acessoRpc.rpc("acesso_externo_validar_pin", {
-      p_pin: pin, p_modulo: "mecanico",
-    });
-    setLoading(false);
-    if (error) { setErro("Erro ao validar. Tente novamente."); return; }
-    const res = data as PinValidationResult | null;
-    if (!res?.ok) {
-      if (res?.error === "bloqueado") setErro("Acesso bloqueado pelo administrador.");
-      else if (res?.error === "pin_nao_encontrado") setErro("PIN não encontrado. Procure o administrador.");
-      else setErro("PIN inválido.");
+    setOpcoes(null);
+
+    if (pin.length !== 4) {
+      setErro("Digite os 4 últimos números do CPF.");
       return;
     }
-    const usuarios = res.usuarios || [];
-    if (res.count === 1 && usuarios[0]) entrar(usuarios[0]);
-    else setOpcoes(usuarios);
+
+    setLoading(true);
+    try {
+      const { data, error } = await acessoRpc.rpc("acesso_externo_validar_pin", {
+        p_pin: pin,
+        p_modulo: "mecanico",
+      });
+
+      if (error) {
+        console.error("Erro ao validar PIN do app mecânico:", error);
+        setErro("Erro ao validar o acesso. Tente novamente em alguns segundos.");
+        return;
+      }
+
+      const res = data as PinValidationResult | null;
+      if (!res?.ok) {
+        setErro(mensagemErroPin(res?.error));
+        return;
+      }
+
+      const usuarios = normalizarUsuarios(res.usuarios);
+      if (usuarios.length === 0) {
+        setErro("Nenhum mecânico encontrado para este PIN. Verifique o cadastro no admin.");
+        return;
+      }
+
+      if ((res.count === 1 || usuarios.length === 1) && usuarios[0]) {
+        entrar(usuarios[0]);
+      } else {
+        setOpcoes(usuarios);
+      }
+    } catch (error) {
+      console.error("Falha inesperada no acesso do app mecânico:", error);
+      setErro("Não foi possível validar agora. Verifique a conexão e tente novamente.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const entrar = (u: Opcao) => {
+    if (!u.id) {
+      setErro("Cadastro sem ID de acesso. Ajuste o usuário no admin.");
+      return;
+    }
     localStorage.setItem("app_mecanico_acesso_id", u.id);
     const qr = searchParams.get("qr") || searchParams.get("codigo") || "";
-    navigate(`/app-mecanico/${u.id}${qr ? `/abastecimento?qr=${encodeURIComponent(qr)}` : ""}`);
+    navigate(`/app-mecanico/${u.id}${qr ? `/abastecimento?qr=${encodeURIComponent(qr)}` : ""}`, { replace: true });
   };
 
   return (
@@ -63,12 +115,15 @@ export default function AcessoMecanicoPage() {
           {!opcoes ? (
             <form onSubmit={validar} className="space-y-4">
               <Input
-                type="text" inputMode="numeric" maxLength={4}
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 placeholder="••••"
                 className="text-center text-2xl tracking-[0.5em] h-14"
                 autoFocus
+                disabled={loading}
               />
               <p className="text-xs text-muted-foreground text-center">
                 4 últimos números do seu CPF
@@ -87,15 +142,19 @@ export default function AcessoMecanicoPage() {
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">Selecione seu nome:</p>
               {opcoes.map((u) => (
-                <button key={u.id} onClick={() => entrar(u)}
-                  className="w-full text-left p-3 rounded-md border hover:bg-accent transition-colors">
+                <button
+                  key={u.id}
+                  onClick={() => entrar(u)}
+                  className="w-full text-left p-3 rounded-md border hover:bg-accent transition-colors"
+                  disabled={loading}
+                >
                   <div className="font-medium">{u.nome}</div>
                   <div className="text-xs text-muted-foreground">
                     {[u.empresa, u.funcao].filter(Boolean).join(" • ")}
                   </div>
                 </button>
               ))}
-              <Button variant="ghost" className="w-full" onClick={() => { setOpcoes(null); setPin(""); }}>
+              <Button variant="ghost" className="w-full" onClick={() => { setOpcoes(null); setPin(""); setErro(null); }}>
                 Voltar
               </Button>
             </div>
