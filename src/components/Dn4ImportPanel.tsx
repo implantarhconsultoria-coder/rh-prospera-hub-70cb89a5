@@ -65,6 +65,17 @@ const normalize = (value: unknown) => String(value ?? '')
 
 const clean = (value: unknown) => String(value ?? '').replace(/\s+/g, ' ').trim();
 const digits = (value: unknown) => String(value ?? '').replace(/\D/g, '');
+const isCode = (value: unknown) => /^\d+$/.test(digits(value)) && digits(value).length <= 8;
+
+const documentRegex = /(?:\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}|\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2})/;
+
+const splitNameAndDocument = (value: unknown) => {
+  const text = clean(value).replace(/\n/g, ' ');
+  const match = text.match(documentRegex);
+  const documento = match ? match[0].trim() : '';
+  const nome = documento ? text.replace(documento, '').replace(/\s*,\s*$/g, '').trim() : text;
+  return { nome: nome.replace(/\s+/g, ' ').trim(), documento };
+};
 
 const findValue = (row: Record<string, unknown>, keys: string[]) => {
   const wanted = keys.map(normalize);
@@ -75,6 +86,67 @@ const findValue = (row: Record<string, unknown>, keys: string[]) => {
 const hasAnyHeader = (headers: string[], keys: string[]) => {
   const normalizedHeaders = headers.map(normalize);
   return keys.map(normalize).some(key => normalizedHeaders.some(header => header.includes(key) || key.includes(header)));
+};
+
+const isUsefulClientName = (value: string) => {
+  const name = clean(value);
+  if (!name || name === '.' || name === '-' || name === ', -') return false;
+  if (/^dn4 tecnologia/i.test(name)) return false;
+  return /[A-Za-zÀ-ÿ]{2}/.test(name);
+};
+
+const matrixToReportRows = (matrix: unknown[][], fileName: string, sheetName: string) => {
+  const headerIndex = matrix.findIndex(row => {
+    const first = normalize(row?.[0]);
+    const second = normalize(row?.[1]);
+    return first === 'codigo' && second === 'nome';
+  });
+
+  if (headerIndex < 0) return [] as Record<string, unknown>[];
+
+  const records: Record<string, unknown>[] = [];
+  let current: Record<string, unknown> | null = null;
+
+  for (let index = headerIndex + 1; index < matrix.length; index += 1) {
+    const row = matrix[index] || [];
+    const codigo = clean(row[0]);
+    const nomeRaw = clean(row[1]);
+
+    if (!codigo && !nomeRaw) continue;
+    if (/^dn4 tecnologia/i.test(codigo) || /^pagina/i.test(nomeRaw)) continue;
+
+    if (isCode(codigo) && nomeRaw) {
+      const { nome, documento } = splitNameAndDocument(nomeRaw);
+      if (!isUsefulClientName(nome)) {
+        current = null;
+        continue;
+      }
+      current = {
+        Código: digits(codigo),
+        Nome: nome,
+        Documento: documento,
+        'Origem DN4': fileName,
+        'Aba DN4': sheetName,
+      };
+      records.push(current);
+      continue;
+    }
+
+    if (!codigo && nomeRaw && current) {
+      const { nome, documento } = splitNameAndDocument(nomeRaw);
+      if (isUsefulClientName(nome)) current.Nome = clean(`${current.Nome || ''} ${nome}`);
+      if (documento && !current.Documento) current.Documento = documento;
+    }
+  }
+
+  return records;
+};
+
+const sheetToRecords = (XLSX: any, sheet: any, fileName: string, sheetName: string) => {
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false });
+  const dn4Rows = matrixToReportRows(matrix, fileName, sheetName);
+  if (dn4Rows.length) return dn4Rows;
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
 };
 
 const classifyRow = (row: Record<string, unknown>, origem: string, aba: string, index: number): LinhaDn4 => {
@@ -111,7 +183,7 @@ const classifyRow = (row: Record<string, unknown>, origem: string, aba: string, 
     confianca = 74;
   } else if (hasCliente) {
     entidade = 'cliente';
-    confianca = 76;
+    confianca = 92;
   }
 
   const pendencias: string[] = [];
@@ -169,7 +241,7 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
         const XLSX = await import('xlsx');
         const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
         workbook.SheetNames.forEach(sheetName => {
-          const sheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], { defval: '' });
+          const sheetRows = sheetToRecords(XLSX, workbook.Sheets[sheetName], file.name, sheetName);
           sheetRows.forEach((row, index) => parsed.push(classifyRow(row, file.name, sheetName, index + 1)));
         });
       } catch {
@@ -180,7 +252,7 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
     setRows(current => [...parsed, ...current]);
     setLoading(false);
     if (fileRef.current) fileRef.current.value = '';
-    if (parsed.length) toast.success(`${parsed.length} linha(s) do DN4 preparadas para conferência.`);
+    if (parsed.length) toast.success(`${parsed.length} registro(s) do DN4 preparados para conferência.`);
     if (failures.length) toast.warning(failures.join('\n'));
   };
 
