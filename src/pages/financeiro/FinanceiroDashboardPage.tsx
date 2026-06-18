@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Clock, Building2, RefreshCw, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
+import Dn4ImportPanel from '@/components/Dn4ImportPanel';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -28,7 +29,6 @@ const FinanceiroDashboardPage: React.FC = () => {
     const hoje = new Date().toISOString().slice(0, 10);
     const ha30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
-    // Filtro por empresa para acesso externo
     const empIds = ext.isExterno ? (ext.empresaIds || []) : null;
     const applyEmp = (q: any) => empIds !== null ? q.in('empresa_id', empIds.length ? empIds : ['00000000-0000-0000-0000-000000000000']) : q;
 
@@ -45,13 +45,13 @@ const FinanceiroDashboardPage: React.FC = () => {
     const tp = tPag.data || [];
 
     const aReceber = tr.filter(t => ['aberto', 'parcial', 'vencido'].includes(t.status)).reduce((s, t) => s + Number(t.saldo || 0), 0);
-    const aReceberVencido = tr.filter(t => ['aberto', 'parcial'].includes(t.status) && t.data_vencimento < hoje || t.status === 'vencido').reduce((s, t) => s + Number(t.saldo || 0), 0);
+    const aReceberVencido = tr.filter(t => (['aberto', 'parcial'].includes(t.status) && t.data_vencimento < hoje) || t.status === 'vencido').reduce((s, t) => s + Number(t.saldo || 0), 0);
     const recsFiltered = (recs.data || []).filter((r: any) => empIds === null || empIds.includes(r.titulos_receber?.empresa_id));
     const pagsFiltered = (pags.data || []).filter((p: any) => empIds === null || empIds.includes(p.titulos_pagar?.empresa_id));
     const recebido30d = recsFiltered.reduce((s, r: any) => s + Number(r.valor || 0), 0);
 
     const aPagar = tp.filter(t => ['aberto', 'parcial', 'vencido'].includes(t.status)).reduce((s, t) => s + Number(t.saldo || 0), 0);
-    const aPagarVencido = tp.filter(t => ['aberto', 'parcial'].includes(t.status) && t.data_vencimento < hoje || t.status === 'vencido').reduce((s, t) => s + Number(t.saldo || 0), 0);
+    const aPagarVencido = tp.filter(t => (['aberto', 'parcial'].includes(t.status) && t.data_vencimento < hoje) || t.status === 'vencido').reduce((s, t) => s + Number(t.saldo || 0), 0);
     const pago30d = pagsFiltered.reduce((s, p: any) => s + Number(p.valor || 0), 0);
 
     const saldoBancos = (cb.data || []).reduce((s, c) => s + Number(c.saldo_atual || 0), 0);
@@ -65,7 +65,6 @@ const FinanceiroDashboardPage: React.FC = () => {
 
     setContas((cb.data || []).map(c => ({ nome: c.nome, saldo: Number(c.saldo_atual), empresa: (c.empresas as any)?.nome || '-' })));
 
-    // Top inadimplentes
     const cliMap = new Map((clis.data || []).map(c => [c.id, c.razao_social]));
     const inad = new Map<string, { valor: number; dias: number }>();
     tr.filter(t => ['aberto', 'parcial', 'vencido'].includes(t.status) && t.data_vencimento < hoje).forEach(t => {
@@ -106,6 +105,8 @@ const FinanceiroDashboardPage: React.FC = () => {
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
         </button>
       </div>
+
+      <Dn4ImportPanel modulo="financeiro" />
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {cards.map((c, i) => (
