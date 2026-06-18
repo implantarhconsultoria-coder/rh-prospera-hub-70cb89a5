@@ -44,10 +44,14 @@ const criarClientId = () =>
   globalThis.crypto?.randomUUID?.() ||
   `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+const isBrowser = () => typeof window !== "undefined" && typeof localStorage !== "undefined";
+
 const lerPendentes = (): PontoPendente[] => {
+  if (!isBrowser()) return [];
   try {
     const value = localStorage.getItem(PONTOS_PENDENTES_KEY);
-    return value ? JSON.parse(value) : [];
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     console.error("Erro ao ler pontos pendentes:", error);
     return [];
@@ -55,6 +59,7 @@ const lerPendentes = (): PontoPendente[] => {
 };
 
 const gravarPendentes = (items: PontoPendente[]) => {
+  if (!isBrowser()) throw new Error("Armazenamento local indisponível neste aparelho.");
   localStorage.setItem(PONTOS_PENDENTES_KEY, JSON.stringify(items));
 };
 
@@ -76,12 +81,11 @@ const removerPendente = (clientId: string) => {
 
 const dataUrlParaBlob = (dataUrl: string) => {
   const [header, payload] = dataUrl.split(",");
+  if (!payload) throw new Error("Selfie inválida. Tire a foto novamente.");
   const mime = header.match(/data:(.*?);base64/)?.[1] || "image/jpeg";
   const binary = atob(payload);
   const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return new Blob([bytes], { type: mime });
 };
 
@@ -91,7 +95,7 @@ const comprimirFoto = (blob: Blob): Promise<string> =>
     const objectUrl = URL.createObjectURL(blob);
     image.onload = () => {
       const maxSide = 900;
-      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const scale = Math.min(1, maxSide / Math.max(image.width || 1, image.height || 1));
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(image.width * scale));
       canvas.height = Math.max(1, Math.round(image.height * scale));
@@ -123,15 +127,11 @@ const enviarPontoPendente = async (item: PontoPendente) => {
       dataUrlParaBlob(current.selfieDataUrl),
     );
     current = { ...current, selfieUrl, selfieDataUrl: null };
-    try {
-      salvarPendente(current);
-    } catch (error) {
-      console.error("Erro ao atualizar selfie na fila local:", error);
-    }
+    salvarPendente(current);
   }
 
   const dispositivo = JSON.stringify({
-    user_agent: navigator.userAgent.slice(0, 200),
+    user_agent: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 200) : "indisponivel",
     client_id: current.clientId,
     ocorrido_em: current.ocorridoEm,
     empresa: current.empresa,
@@ -142,18 +142,16 @@ const enviarPontoPendente = async (item: PontoPendente) => {
   const { data, error } = await supabase.rpc("app_mecanico_registrar_ponto", {
     p_acesso_id: current.acessoId,
     p_tipo: current.tipo,
-    p_latitude: current.latitude ?? undefined,
-    p_longitude: current.longitude ?? undefined,
-    p_endereco: undefined,
-    p_selfie_url: current.selfieUrl ?? undefined,
+    p_latitude: current.latitude,
+    p_longitude: current.longitude,
+    p_endereco: null,
+    p_selfie_url: current.selfieUrl,
     p_dispositivo: dispositivo,
   });
 
   if (error) throw error;
   const result = data as unknown as PontoRpcResult | null;
-  if (!result?.ok) {
-    throw new Error(result?.error || "registro_ponto_recusado");
-  }
+  if (!result?.ok) throw new Error(result?.error || "registro_ponto_recusado");
 
   removerPendente(current.clientId);
   return data;
@@ -162,16 +160,11 @@ const enviarPontoPendente = async (item: PontoPendente) => {
 export default function PontoPage() {
   const [params] = useSearchParams();
   const tipoParam = params.get("tipo") || "entrada";
-  const tipo = ["entrada", "saida", "almoco_inicio", "almoco_fim"].includes(tipoParam)
-    ? tipoParam
-    : "entrada";
+  const tipo = ["entrada", "saida", "almoco_inicio", "almoco_fim"].includes(tipoParam) ? tipoParam : "entrada";
   const { mecanico } = useMecanicoApp();
   const navigate = useNavigate();
   const { getLocation } = useGeolocation();
-  const [pos, setPos] = useState<{ lat: number | null; lng: number | null }>({
-    lat: null,
-    lng: null,
-  });
+  const [pos, setPos] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
   const [posErr, setPosErr] = useState(false);
   const [statusDia, setStatusDia] = useState<{ batidas: number } | null>(null);
   const [selfieDataUrl, setSelfieDataUrl] = useState<string | null>(null);
@@ -184,58 +177,72 @@ export default function PontoPage() {
   const exigirSelfie = tipo === "entrada" && (statusDia?.batidas ?? 0) === 0;
 
   const atualizarQuantidadePendente = useCallback(() => {
-    setPendentes(
-      lerPendentes().filter((item) => item.acessoId === mecanico.acesso_id).length,
-    );
+    setPendentes(lerPendentes().filter((item) => item.acessoId === mecanico.acesso_id).length);
   }, [mecanico.acesso_id]);
 
   const sincronizarPendentes = useCallback(async () => {
-    if (sincronizandoRef.current || !navigator.onLine) return;
+    if (sincronizandoRef.current) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
     sincronizandoRef.current = true;
     const items = lerPendentes().filter((item) => item.acessoId === mecanico.acesso_id);
     let enviados = 0;
 
-    for (const item of items) {
-      try {
-        await enviarPontoPendente(item);
-        enviados += 1;
-      } catch (error) {
-        console.error("Erro ao sincronizar ponto pendente:", error);
-        break;
+    try {
+      for (const item of items) {
+        try {
+          await enviarPontoPendente(item);
+          enviados += 1;
+        } catch (error) {
+          console.error("Erro ao sincronizar ponto pendente:", error);
+          break;
+        }
       }
+    } finally {
+      sincronizandoRef.current = false;
+      atualizarQuantidadePendente();
     }
 
-    sincronizandoRef.current = false;
-    atualizarQuantidadePendente();
     if (enviados > 0) toast.success("Ponto pendente sincronizado com sucesso");
   }, [atualizarQuantidadePendente, mecanico.acesso_id]);
 
   useEffect(() => {
+    let active = true;
     atualizarQuantidadePendente();
     void sincronizarPendentes();
 
-    getLocation().then((location) => {
-      setPos({ lat: location.latitude, lng: location.longitude });
-      if (!location.latitude) setPosErr(true);
-    });
+    getLocation()
+      .then((location) => {
+        if (!active) return;
+        setPos({ lat: location.latitude ?? null, lng: location.longitude ?? null });
+        if (!location.latitude || !location.longitude) setPosErr(true);
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error("GPS indisponível no app mecânico:", error);
+        setPosErr(true);
+      });
 
     supabase
       .rpc("app_mecanico_status_dia", { p_acesso_id: mecanico.acesso_id })
       .then(({ data, error }) => {
+        if (!active) return;
         const result = data as unknown as PontoRpcResult | null;
         if (error) console.error("Erro ao consultar ponto do dia:", error);
         setStatusDia({ batidas: result?.ok ? result.batidas_hoje || 0 : 0 });
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error("Falha ao consultar status do ponto:", error);
+        setStatusDia({ batidas: 0 });
       });
 
     const onOnline = () => void sincronizarPendentes();
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
-  }, [
-    atualizarQuantidadePendente,
-    getLocation,
-    mecanico.acesso_id,
-    sincronizarPendentes,
-  ]);
+    return () => {
+      active = false;
+      window.removeEventListener("online", onOnline);
+    };
+  }, [atualizarQuantidadePendente, getLocation, mecanico.acesso_id, sincronizarPendentes]);
 
   const handleSelfie = async (blob: Blob) => {
     const dataUrl = await comprimirFoto(blob);
@@ -244,6 +251,7 @@ export default function PontoPage() {
   };
 
   const registrar = async () => {
+    if (loading || doneMessage) return;
     if (exigirSelfie && !selfieDataUrl) {
       toast.error("Tire a selfie para concluir a entrada.");
       setOpenCam(true);
@@ -277,6 +285,7 @@ export default function PontoPage() {
     try {
       await enviarPontoPendente(item);
       setDoneMessage("Ponto registrado com sucesso");
+      setSelfieDataUrl(null);
       atualizarQuantidadePendente();
       toast.success("Ponto registrado com sucesso");
     } catch (error) {
@@ -293,55 +302,25 @@ export default function PontoPage() {
       setLoading(false);
     }
 
-    setTimeout(() => navigate(`/app-mecanico/${mecanico.acesso_id}`), 1500);
+    window.setTimeout(() => navigate(`/app-mecanico/${mecanico.acesso_id}`), 1500);
   };
 
   return (
     <Card className="space-y-4 p-6">
       <h1 className="text-xl font-semibold">{LABELS[tipo]}</h1>
       <div className="space-y-2 text-sm">
-        <p>
-          <span className="text-muted-foreground">Mecânico:</span> {mecanico.nome}
-        </p>
-        {mecanico.empresa && (
-          <p>
-            <span className="text-muted-foreground">Empresa:</span> {mecanico.empresa}
-          </p>
-        )}
-        {mecanico.registro_teste && (
-          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700">
-            Registro de teste: aparece para validação, mas não entra em fechamento oficial.
-          </p>
-        )}
-        <p>
-          <span className="text-muted-foreground">Data/Hora:</span>{" "}
-          {formatarAgoraBrasil()}
-        </p>
+        <p><span className="text-muted-foreground">Mecânico:</span> {mecanico.nome}</p>
+        {mecanico.empresa && <p><span className="text-muted-foreground">Empresa:</span> {mecanico.empresa}</p>}
+        {mecanico.registro_teste && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700">Registro de teste: aparece para validação, mas não entra em fechamento oficial.</p>}
+        <p><span className="text-muted-foreground">Data/Hora:</span> {formatarAgoraBrasil()}</p>
         <p className="flex items-center gap-2">
           <MapPin className="h-4 w-4 text-muted-foreground" />
-          {pos.lat
-            ? `${pos.lat.toFixed(5)}, ${pos.lng?.toFixed(5)}`
-            : posErr
-              ? "GPS indisponível; o ponto será salvo mesmo assim"
-              : "Obtendo localização..."}
+          {pos.lat && pos.lng ? `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}` : posErr ? "GPS indisponível; o ponto será salvo mesmo assim" : "Obtendo localização..."}
         </p>
       </div>
 
-      {posErr && (
-        <div className="flex items-start gap-2 rounded bg-amber-500/10 p-3 text-sm text-amber-700">
-          <AlertTriangle className="mt-0.5 h-4 w-4" />
-          <span>
-            Localização indisponível. O registro continuará e poderá ser conferido depois.
-          </span>
-        </div>
-      )}
-
-      {pendentes > 0 && (
-        <div className="flex items-start gap-2 rounded bg-blue-500/10 p-3 text-sm text-blue-700">
-          <Loader2 className="mt-0.5 h-4 w-4" />
-          <span>{pendentes} ponto(s) aguardando sincronização automática.</span>
-        </div>
-      )}
+      {posErr && <div className="flex items-start gap-2 rounded bg-amber-500/10 p-3 text-sm text-amber-700"><AlertTriangle className="mt-0.5 h-4 w-4" /><span>Localização indisponível. O registro continuará e poderá ser conferido depois.</span></div>}
+      {pendentes > 0 && <div className="flex items-start gap-2 rounded bg-blue-500/10 p-3 text-sm text-blue-700"><Loader2 className="mt-0.5 h-4 w-4" /><span>{pendentes} ponto(s) aguardando sincronização automática.</span></div>}
 
       {exigirSelfie && (
         <div className="space-y-2">
@@ -349,43 +328,17 @@ export default function PontoPage() {
           {selfieDataUrl ? (
             <div className="flex items-center gap-2 text-sm text-emerald-600">
               <CheckCircle2 className="h-4 w-4" /> Selfie capturada
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelfieDataUrl(null);
-                  setOpenCam(true);
-                }}
-              >
-                Refazer
-              </Button>
+              <Button variant="ghost" size="sm" onClick={() => { setSelfieDataUrl(null); setOpenCam(true); }}>Refazer</Button>
             </div>
           ) : (
-            <Button variant="outline" className="w-full" onClick={() => setOpenCam(true)}>
-              <Camera className="mr-2 h-4 w-4" /> Tirar selfie
-            </Button>
+            <Button variant="outline" className="w-full" onClick={() => setOpenCam(true)}><Camera className="mr-2 h-4 w-4" /> Tirar selfie</Button>
           )}
         </div>
       )}
 
-      {doneMessage ? (
-        <div className="flex items-center gap-2 text-emerald-600">
-          <CheckCircle2 className="h-5 w-5" /> {doneMessage}
-        </div>
-      ) : (
-        <Button onClick={registrar} disabled={loading} className="h-12 w-full">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}
-        </Button>
-      )}
+      {doneMessage ? <div className="flex items-center gap-2 text-emerald-600"><CheckCircle2 className="h-5 w-5" /> {doneMessage}</div> : <Button onClick={() => void registrar()} disabled={loading} className="h-12 w-full">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}</Button>}
 
-      <CameraCapture
-        open={openCam}
-        onClose={() => setOpenCam(false)}
-        onCapture={handleSelfie}
-        facing="user"
-        title="Selfie de Entrada"
-        hint="Centralize o rosto e tire a foto"
-      />
+      <CameraCapture open={openCam} onClose={() => setOpenCam(false)} onCapture={handleSelfie} facing="user" title="Selfie de Entrada" hint="Centralize o rosto e tire a foto" />
     </Card>
   );
 }
