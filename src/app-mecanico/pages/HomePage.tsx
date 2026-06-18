@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ElementType } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { LogIn, LogOut, ClipboardList, Car, Fuel, History, Sparkles, Wrench, UtensilsCrossed, Coffee, Settings, ArrowUpRight, CheckSquare } from "lucide-react";
@@ -7,11 +8,13 @@ import { cn } from "@/lib/utils";
 type Card = {
   label: string;
   sub?: string;
-  icon: React.ElementType;
+  icon: ElementType;
   to?: string;
   tint: string;
   action?: () => void;
 };
+
+const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0] || "Mecânico";
 
 export default function HomePage() {
   const { mecanico } = useMecanicoApp();
@@ -22,24 +25,36 @@ export default function HomePage() {
     return nome.includes("rodrigo") && nome.includes("sabino");
   }, [mecanico.nome]);
   const [layoutMode, setLayoutMode] = useState(() => {
-    return localStorage.getItem("topac_mecanico_layout_mode") || localStorage.getItem("topac_layout_mode") || "premium";
+    try {
+      return localStorage.getItem("topac_mecanico_layout_mode") || localStorage.getItem("topac_layout_mode") || "premium";
+    } catch {
+      return "premium";
+    }
   });
 
   useEffect(() => {
     if (!isRodrigo) return;
-    localStorage.setItem("topac_mecanico_layout_mode", "premium");
+    try {
+      localStorage.setItem("topac_mecanico_layout_mode", "premium");
+    } catch (error) {
+      console.warn("Nao foi possivel salvar layout do app mecanico:", error);
+    }
     setLayoutMode("premium");
   }, [isRodrigo]);
 
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
-  const firstName = mecanico.nome.split(" ")[0];
+  const firstName = primeiroNome(mecanico.nome);
 
   const setLayout = () => {
     const next = layoutMode === "premium" ? "padrao" : "premium";
-    localStorage.setItem("topac_mecanico_layout_mode", next);
+    try {
+      localStorage.setItem("topac_mecanico_layout_mode", next);
+      window.dispatchEvent(new Event("topac-layout-change"));
+    } catch (error) {
+      console.warn("Nao foi possivel alternar layout do app mecanico:", error);
+    }
     setLayoutMode(next);
-    window.dispatchEvent(new Event("topac-layout-change"));
   };
 
   const cards: Card[] = [
@@ -54,6 +69,11 @@ export default function HomePage() {
     { label: "Config", sub: layoutMode === "premium" ? "Layout premium" : "Layout padrao", icon: Settings, tint: "from-sky-500/20 to-violet-500/20", action: setLayout },
   ];
 
+  const go = (card: Card) => {
+    if (card.action) card.action();
+    else if (card.to) navigate(card.to);
+  };
+
   if (layoutMode !== "premium") {
     return (
       <div className="space-y-5">
@@ -67,7 +87,7 @@ export default function HomePage() {
         </div>
         <div className="grid grid-cols-2 gap-2.5">
           {cards.map((c) => (
-            <button key={c.label} onClick={() => c.action ? c.action() : navigate(c.to!)} className="rounded-2xl bg-card border border-border/60 shadow-sm active:scale-95 transition flex flex-col items-start gap-2 p-3 text-left min-h-[110px]">
+            <button key={c.label} onClick={() => go(c)} className="rounded-2xl bg-card border border-border/60 shadow-sm active:scale-95 transition flex flex-col items-start gap-2 p-3 text-left min-h-[110px]">
               <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br", c.tint)}><c.icon className="w-5 h-5" /></div>
               <div className="mt-auto"><div className="text-sm font-semibold leading-tight">{c.label}</div>{c.sub && <div className="text-[11px] text-muted-foreground mt-0.5">{c.sub}</div>}</div>
             </button>
@@ -88,32 +108,16 @@ export default function HomePage() {
 
       <section className="mec-mission-card">
         <div className="mec-card-title"><CheckSquare className="w-5 h-5 text-cyan-300" /> Ciclo do dia</div>
-        <button onClick={() => navigate(`${base}/ponto?tipo=entrada`)} className="mec-main-action">
-          <LogIn className="w-5 h-5" /> Registrar entrada
-        </button>
-        <button onClick={() => navigate(`${base}/chamados`)} className="mec-outline-action">
-          <ClipboardList className="w-5 h-5" /> Ver chamados
-        </button>
-        <button onClick={() => navigate(`${base}/abastecimento`)} className="mec-outline-action">
-          <Fuel className="w-5 h-5" /> Abastecimento QR Code
-        </button>
+        <button onClick={() => navigate(`${base}/ponto?tipo=entrada`)} className="mec-main-action"><LogIn className="w-5 h-5" /> Registrar entrada</button>
+        <button onClick={() => navigate(`${base}/chamados`)} className="mec-outline-action"><ClipboardList className="w-5 h-5" /> Ver chamados</button>
+        <button onClick={() => navigate(`${base}/abastecimento`)} className="mec-outline-action"><Fuel className="w-5 h-5" /> Abastecimento QR Code</button>
       </section>
 
       <section className="grid grid-cols-2 gap-3">
         {cards.map((c, index) => (
-          <button
-            key={c.label}
-            onClick={() => c.action ? c.action() : navigate(c.to!)}
-            className={cn("mec-tile", index === 0 && "mec-tile-primary")}
-          >
-            <div className="flex items-start justify-between">
-              <c.icon className="w-7 h-7" />
-              <ArrowUpRight className="w-4 h-4 opacity-70" />
-            </div>
-            <div className="mt-auto text-left">
-              <div className="font-bold text-base">{c.label}</div>
-              <div className="text-xs opacity-70">{c.sub}</div>
-            </div>
+          <button key={c.label} onClick={() => go(c)} className={cn("mec-tile", index === 0 && "mec-tile-primary")}>
+            <div className="flex items-start justify-between"><c.icon className="w-7 h-7" /><ArrowUpRight className="w-4 h-4 opacity-70" /></div>
+            <div className="mt-auto text-left"><div className="font-bold text-base">{c.label}</div><div className="text-xs opacity-70">{c.sub}</div></div>
           </button>
         ))}
       </section>
@@ -125,9 +129,7 @@ export default function HomePage() {
         </div>
         {["Acesso liberado", "GPS e camera prontos", "Chamados sincronizados"].map((line, idx) => (
           <div key={line} className="grid grid-cols-[54px_46px_1fr] gap-2 px-4 py-3 text-xs border-b border-cyan-300/10 last:border-0">
-            <span className="text-slate-400">{idx === 0 ? "agora" : "ok"}</span>
-            <span className="text-emerald-300">OK</span>
-            <span>{line}</span>
+            <span className="text-slate-400">{idx === 0 ? "agora" : "ok"}</span><span className="text-emerald-300">OK</span><span>{line}</span>
           </div>
         ))}
       </section>
