@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, Clock, Building2, RefreshCw, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Wallet, TrendingUp, AlertTriangle, Clock, Building2, RefreshCw, ArrowDownCircle, ArrowUpCircle, Landmark, GitMerge } from 'lucide-react';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 import Dn4ImportPanel from '@/components/Dn4ImportPanel';
+import TopacCentralDashboard from '@/components/TopacCentralDashboard';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -80,96 +80,49 @@ const FinanceiroDashboardPage: React.FC = () => {
 
   useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
-  const cards = [
-    { label: 'Saldo em Bancos', value: fmtBRL(stats.saldoBancos), icon: Wallet, color: 'text-primary', onClick: () => navigate(finPath('/bancos')) },
-    { label: 'Saldo Previsto', value: fmtBRL(stats.saldoPrevisto), icon: TrendingUp, color: stats.saldoPrevisto >= 0 ? 'text-success' : 'text-destructive' },
-    { label: 'A Receber', value: fmtBRL(stats.aReceber), icon: ArrowDownCircle, color: 'text-success', onClick: () => navigate(finPath('/contas-receber')) },
-    { label: 'A Pagar', value: fmtBRL(stats.aPagar), icon: ArrowUpCircle, color: 'text-warning', onClick: () => navigate(finPath('/contas-pagar')) },
-    { label: 'Inadimplência', value: fmtBRL(stats.inadimplencia), icon: AlertTriangle, color: 'text-destructive', onClick: () => navigate(finPath('/inadimplencia')) },
-    { label: 'Pagar Vencido', value: fmtBRL(stats.aPagarVencido), icon: Clock, color: 'text-destructive' },
+  const kpis = [
+    { label: 'Saldo em Bancos', value: fmtBRL(stats.saldoBancos), icon: Wallet, color: 'text-cyan-200', onClick: () => navigate(finPath('/bancos')) },
+    { label: 'Saldo Previsto', value: fmtBRL(stats.saldoPrevisto), icon: TrendingUp, color: stats.saldoPrevisto >= 0 ? 'text-emerald-300' : 'text-rose-300' },
+    { label: 'A Receber', value: fmtBRL(stats.aReceber), icon: ArrowDownCircle, color: 'text-emerald-300', onClick: () => navigate(finPath('/contas-receber')) },
+    { label: 'A Pagar', value: fmtBRL(stats.aPagar), icon: ArrowUpCircle, color: 'text-fuchsia-300', onClick: () => navigate(finPath('/contas-pagar')) },
   ];
 
-  const mini = [
-    { label: 'Recebido (30d)', value: fmtBRL(stats.recebido30d), icon: TrendingUp, color: 'text-success' },
-    { label: 'Pago (30d)', value: fmtBRL(stats.pago30d), icon: TrendingDown, color: 'text-destructive' },
+  const actions = [
+    { label: 'Contas a Receber', icon: ArrowDownCircle, onClick: () => navigate(finPath('/contas-receber')), tone: 'primary' as const },
+    { label: 'Contas a Pagar', icon: ArrowUpCircle, onClick: () => navigate(finPath('/contas-pagar')) },
+    { label: 'Bancos', icon: Landmark, onClick: () => navigate(finPath('/bancos')) },
+    { label: 'Inadimplência', icon: AlertTriangle, onClick: () => navigate(finPath('/inadimplencia')) },
+    { label: 'Conciliação', icon: GitMerge, onClick: () => navigate(finPath('/conciliacao')) },
+  ];
+
+  const alerts = [
+    stats.inadimplencia > 0
+      ? { title: 'Inadimplência', description: `${fmtBRL(stats.inadimplencia)} vencido para cobrança`, tone: 'danger' as const }
+      : { title: 'Cobrança em dia', description: 'Sem inadimplência crítica no momento', tone: 'success' as const },
+    stats.aPagarVencido > 0
+      ? { title: 'Pagar Vencido', description: `${fmtBRL(stats.aPagarVencido)} em títulos vencidos`, tone: 'danger' as const }
+      : { title: 'Pagamentos', description: 'Nenhum vencido financeiro crítico', tone: 'success' as const },
+    { title: 'Recebido 30 dias', description: `${fmtBRL(stats.recebido30d)} confirmado no período`, tone: 'success' as const },
+    { title: 'Pago 30 dias', description: `${fmtBRL(stats.pago30d)} baixado no período`, tone: 'warning' as const },
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold font-display flex items-center gap-2"><Wallet className="w-6 h-6 text-primary" /> Dashboard Financeiro</h1>
-          <p className="text-sm text-muted-foreground">Visão consolidada em tempo real</p>
-        </div>
-        <button onClick={carregar} disabled={loading} className="btn-secondary text-sm flex items-center gap-2">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
-        </button>
-      </div>
-
-      <Dn4ImportPanel modulo="financeiro" />
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {cards.map((c, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-            onClick={c.onClick}
-            className={`card-premium p-4 ${c.onClick ? 'cursor-pointer hover:bg-sidebar-accent/20' : ''}`}>
-            <div className="flex items-start justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{c.label}</p>
-                <p className={`text-base font-bold font-display mt-1 ${c.color} truncate`}>{c.value}</p>
-              </div>
-              <c.icon className={`w-5 h-5 ${c.color} opacity-30 flex-shrink-0 ml-2`} />
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        {mini.map((m, i) => (
-          <div key={i} className="card-premium p-4 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{m.label}</p>
-              <p className={`text-xl font-bold font-display mt-1 ${m.color}`}>{m.value}</p>
-            </div>
-            <m.icon className={`w-6 h-6 ${m.color} opacity-40`} />
-          </div>
-        ))}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="card-premium p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> Contas Bancárias</h2>
-          {contas.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Cadastre uma conta bancária em "Bancos".</p>
-          ) : (
-            <ul className="space-y-2">
-              {contas.map((c, i) => (
-                <li key={i} className="flex justify-between text-sm border-b border-border last:border-0 py-1.5">
-                  <span><span className="font-medium">{c.nome}</span> <span className="text-xs text-muted-foreground">· {c.empresa}</span></span>
-                  <span className={`font-semibold ${c.saldo >= 0 ? 'text-success' : 'text-destructive'}`}>{fmtBRL(c.saldo)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="card-premium p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-destructive" /> Top Inadimplentes</h2>
-          {topInadimplentes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem inadimplência no momento.</p>
-          ) : (
-            <ul className="space-y-2">
-              {topInadimplentes.map((c, i) => (
-                <li key={i} className="flex justify-between text-sm border-b border-border last:border-0 py-1.5">
-                  <span className="truncate pr-2">{c.cliente} <span className="text-[10px] text-destructive">· {c.dias}d atraso</span></span>
-                  <span className="font-semibold text-destructive">{fmtBRL(c.valor)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </div>
+    <TopacCentralDashboard
+      modulo="Financeiro"
+      subtitle="Visão financeira em tempo real"
+      loading={loading}
+      onRefresh={carregar}
+      kpis={kpis}
+      actions={actions}
+      alerts={alerts}
+      leftPanelTitle="Contas Bancárias"
+      leftPanelItems={contas.map(c => ({ title: c.nome, meta: c.empresa, value: fmtBRL(c.saldo), danger: c.saldo < 0 }))}
+      rightPanelTitle="Top Inadimplentes"
+      rightPanelItems={topInadimplentes.map(c => ({ title: c.cliente, meta: `${c.dias}d atraso`, value: fmtBRL(c.valor), danger: true }))}
+      emptyLeft="Cadastre uma conta bancária em Bancos."
+      emptyRight="Sem inadimplência no momento."
+      dn4Slot={<Dn4ImportPanel modulo="financeiro" />}
+    />
   );
 };
 
