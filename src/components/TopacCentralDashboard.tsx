@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { LucideIcon, Activity, AlertTriangle, CheckCircle2, Clock, Search, Settings, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { LucideIcon, Activity, AlertTriangle, Search, Settings, ShieldCheck, Users } from 'lucide-react';
+import '@/styles/topac-central.css';
 
 type CentralKpi = {
   label: string;
@@ -61,38 +62,30 @@ const toneClass = {
   success: 'topac-alert-success',
 };
 
-const KpiCard = ({ item, index }: { item: CentralKpi; index: number }) => {
-  const content = (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="topac-kpi-label">{item.label}</p>
-          <p className={`topac-kpi-value ${item.color || 'text-cyan-200'}`}>{item.value}</p>
-        </div>
-        <item.icon className={`h-5 w-5 shrink-0 ${item.color || 'text-cyan-300'} opacity-70`} />
+const KpiCard = ({ item, index }: { item: CentralKpi; index: number }) => (
+  <motion.button
+    type="button"
+    disabled={!item.onClick}
+    onClick={item.onClick}
+    className="topac-glass-card topac-kpi-card text-left disabled:cursor-default"
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: index * 0.05 }}
+  >
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="topac-kpi-label">{item.label}</p>
+        <p className={`topac-kpi-value ${item.color || 'text-cyan-200'}`}>{item.value}</p>
       </div>
-      <div className="topac-mini-chart" aria-hidden="true">
-        {sparkBars.map((h, barIndex) => (
-          <span key={barIndex} style={{ height: `${h}%` }} />
-        ))}
-      </div>
-    </>
-  );
-
-  return (
-    <motion.button
-      type="button"
-      disabled={!item.onClick}
-      onClick={item.onClick}
-      className="topac-glass-card topac-kpi-card text-left disabled:cursor-default"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-    >
-      {content}
-    </motion.button>
-  );
-};
+      <item.icon className={`h-5 w-5 shrink-0 ${item.color || 'text-cyan-300'} opacity-70`} />
+    </div>
+    <div className="topac-mini-chart" aria-hidden="true">
+      {sparkBars.map((h, barIndex) => (
+        <span key={barIndex} style={{ height: `${h}%` }} />
+      ))}
+    </div>
+  </motion.button>
+);
 
 const TopacCentralDashboard: React.FC<TopacCentralDashboardProps> = ({
   modulo,
