@@ -1,5 +1,12 @@
 const cleanText = (value?: string | null) => String(value || '').replace(/\s+/g, ' ').trim();
 
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
 const getCurrentTitle = () => {
   const heading = document.querySelector('main h1, [role="main"] h1, h1');
   return cleanText(heading?.textContent) || cleanText(document.title) || 'Relatorio TOPAC';
@@ -16,19 +23,21 @@ const getReportContent = () => {
 
 export const emitirRelatorioAtual = ({ modulo, titulo }: { modulo: string; titulo?: string }) => {
   const reportTitle = cleanText(titulo) || getCurrentTitle();
-  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
+  const printWindow = window.open('', '_blank');
   if (!printWindow) {
     window.print();
     return;
   }
 
-  const emittedAt = new Date().toLocaleString('pt-BR');
+  const safeTitle = escapeHtml(reportTitle);
+  const safeModulo = escapeHtml(cleanText(modulo));
+  const emittedAt = escapeHtml(new Date().toLocaleString('pt-BR'));
   printWindow.document.write(`<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${reportTitle}</title>
+  <title>${safeTitle}</title>
   ${collectStyles()}
   <style>
     body { background: #fff !important; color: #111827 !important; padding: 24px; }
@@ -49,8 +58,8 @@ export const emitirRelatorioAtual = ({ modulo, titulo }: { modulo: string; titul
 <body>
   <header class="report-header">
     <div>
-      <h1>${reportTitle}</h1>
-      <p>TOPAC · ${cleanText(modulo)}</p>
+      <h1>${safeTitle}</h1>
+      <p>TOPAC · ${safeModulo}</p>
     </div>
     <p>Emitido em ${emittedAt}</p>
   </header>
