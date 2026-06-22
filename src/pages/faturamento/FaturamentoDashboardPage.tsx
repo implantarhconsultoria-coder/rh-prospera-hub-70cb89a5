@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw, ClipboardCheck, UserX } from 'lucide-react';
+import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw, ClipboardCheck } from 'lucide-react';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 import Dn4ImportPanel from '@/components/Dn4ImportPanel';
+import TopacCentralDashboard from '@/components/TopacCentralDashboard';
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -13,7 +13,7 @@ const FaturamentoDashboardPage: React.FC = () => {
   const location = useLocation();
   const ext = useAcessoExternoFiltro();
   const [loading, setLoading] = useState(true);
-  const [kpis, setKpis] = useState<any>(null);
+  const [painelKpis, setPainelKpis] = useState<any>(null);
   const [stats, setStats] = useState({
     previsto: 0, emitido: 0, pago: 0, vencidos: 0, aVencer: 0,
     contratosAtivos: 0, clientesAtivos: 0, equipamentosFaturando: 0,
@@ -35,9 +35,9 @@ const FaturamentoDashboardPage: React.FC = () => {
 
     if (!ext.isExterno) {
       const { data: kpiData } = await supabase.rpc('dashboard_faturamento_kpis' as any);
-      setKpis(kpiData || null);
+      setPainelKpis(kpiData || null);
     } else {
-      setKpis(null);
+      setPainelKpis(null);
     }
 
     const [faturas, contratos, clientes, contratoEquip, pendencias, contratosReaj, empresas] = await Promise.all([
@@ -87,144 +87,57 @@ const FaturamentoDashboardPage: React.FC = () => {
 
   useEffect(() => { if (!ext.loading) carregar(); /* eslint-disable-next-line */ }, [ext.loading, ext.isExterno, JSON.stringify(ext.empresaIds)]);
 
-  const cards = [
-    { label: 'Faturamento Previsto', value: fmtBRL(stats.previsto), icon: TrendingUp, color: 'text-primary' },
-    { label: 'Total Emitido', value: fmtBRL(stats.emitido), icon: FileText, color: 'text-foreground' },
-    { label: 'Recebido (Pago)', value: fmtBRL(stats.pago), icon: CheckCircle2, color: 'text-success' },
-    { label: 'Vencidos', value: fmtBRL(stats.vencidos), icon: AlertTriangle, color: 'text-destructive', onClick: () => navigate(fatPath('/faturas?status=vencida')) },
-    { label: 'A Vencer (30d)', value: fmtBRL(stats.aVencer), icon: Clock, color: 'text-warning' },
-    { label: 'Pendências', value: stats.pendencias.toString(), icon: AlertTriangle, color: stats.pendencias > 0 ? 'text-destructive' : 'text-success', onClick: () => navigate(fatPath('/pendencias')) },
+  const kpis = [
+    { label: 'Faturamento Previsto', value: fmtBRL(stats.previsto), icon: TrendingUp, color: 'text-cyan-200' },
+    { label: 'Total Emitido', value: fmtBRL(stats.emitido), icon: FileText, color: 'text-blue-200', onClick: () => navigate(fatPath('/faturas')) },
+    { label: 'Recebido', value: fmtBRL(stats.pago), icon: CheckCircle2, color: 'text-emerald-300' },
+    { label: 'Vencidos', value: fmtBRL(stats.vencidos), icon: AlertTriangle, color: stats.vencidos > 0 ? 'text-rose-300' : 'text-emerald-300', onClick: () => navigate(fatPath('/faturas?status=vencida')) },
   ];
 
-  const mini = [
-    { label: 'Contratos Ativos', value: stats.contratosAtivos, icon: FileText, path: fatPath('/contratos') },
-    { label: 'Clientes Ativos', value: stats.clientesAtivos, icon: Users, path: fatPath('/clientes') },
-    { label: 'Equipamentos Faturando', value: stats.equipamentosFaturando, icon: Package, path: fatPath('/contratos') },
-    { label: 'Reajustes próx. 30d', value: stats.reajustesProximos, icon: RefreshCw, path: fatPath('/reajustes') },
+  const actions = [
+    { label: 'Faturas', icon: FileText, onClick: () => navigate(fatPath('/faturas')), tone: 'primary' as const },
+    { label: 'Contratos', icon: ClipboardCheck, onClick: () => navigate(fatPath('/contratos')) },
+    { label: 'Clientes', icon: Users, onClick: () => navigate(fatPath('/clientes')) },
+    { label: 'Reajustes', icon: RefreshCw, onClick: () => navigate(fatPath('/reajustes')) },
+    { label: 'Pendências', icon: AlertTriangle, onClick: () => navigate(fatPath('/pendencias')) },
   ];
+
+  const alerts = [
+    stats.pendencias > 0
+      ? { title: 'Pendências', description: `${stats.pendencias} pendências abertas no faturamento`, tone: 'danger' as const }
+      : { title: 'Pendências', description: 'Nenhuma pendência aberta agora', tone: 'success' as const },
+    stats.vencidos > 0
+      ? { title: 'Faturas vencidas', description: `${fmtBRL(stats.vencidos)} precisa de tratativa`, tone: 'danger' as const }
+      : { title: 'Faturas', description: 'Sem vencidos críticos no momento', tone: 'success' as const },
+    { title: 'A vencer 30 dias', description: `${fmtBRL(stats.aVencer)} em acompanhamento`, tone: 'warning' as const },
+    { title: 'Reajustes próximos', description: `${stats.reajustesProximos} contratos nos próximos 30 dias`, tone: stats.reajustesProximos > 0 ? 'warning' as const : 'success' as const },
+  ];
+
+  const leftPanelItems = porEmpresa.map(e => ({ title: e.nome, value: fmtBRL(e.total), meta: stats.emitido > 0 ? `${Math.round((e.total / stats.emitido) * 100)}% do emitido` : undefined }));
+  const rightPanelItems = topClientes.map(c => ({ title: c.razao_social, value: fmtBRL(c.total) }));
+
+  if (painelKpis) {
+    leftPanelItems.unshift({ title: `Faturado em ${painelKpis.competencia}`, value: fmtBRL(Number(painelKpis.total_faturado_mes || 0)), meta: 'Conferência mensal' });
+    rightPanelItems.unshift({ title: 'Medições pendentes', value: String(painelKpis.medicoes_pendentes || 0), meta: 'Aguardando conferência', danger: Number(painelKpis.medicoes_pendentes || 0) > 0 });
+  }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold font-display flex items-center gap-2"><Wallet className="w-6 h-6 text-primary" /> Dashboard de Faturamento</h1>
-          <p className="text-sm text-muted-foreground">Visão consolidada em tempo real</p>
-        </div>
-        <button onClick={carregar} disabled={loading} className="btn-secondary text-sm flex items-center gap-2">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
-        </button>
-      </div>
-
-      <Dn4ImportPanel modulo="faturamento" />
-
-      {kpis && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button onClick={() => navigate('/admin/faturamento/conferencia')} className="card-premium p-4 text-left hover:bg-sidebar-accent/20 transition-colors">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Faturado em {kpis.competencia}</p>
-            <p className="text-lg font-bold font-display mt-1 text-primary">{fmtBRL(Number(kpis.total_faturado_mes || 0))}</p>
-          </button>
-          <button onClick={() => navigate('/admin/faturamento/medicoes')} className="card-premium p-4 text-left hover:bg-sidebar-accent/20 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Medições pendentes</p>
-                <p className="text-lg font-bold font-display mt-1">{kpis.medicoes_pendentes}</p>
-              </div>
-              <ClipboardCheck className="w-5 h-5 text-warning opacity-50" />
-            </div>
-          </button>
-          <button onClick={() => navigate('/admin/faturamento/conferencia')} className="card-premium p-4 text-left hover:bg-sidebar-accent/20 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Vencem em 7 dias</p>
-                <p className="text-lg font-bold font-display mt-1 text-warning">{kpis.cobrancas_a_vencer}</p>
-              </div>
-              <Clock className="w-5 h-5 text-warning opacity-50" />
-            </div>
-          </button>
-          <button onClick={() => navigate('/admin/faturamento/conferencia?status=vencida')} className="card-premium p-4 text-left hover:bg-sidebar-accent/20 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Clientes inadimplentes</p>
-                <p className="text-lg font-bold font-display mt-1 text-destructive">{kpis.clientes_inadimplentes}</p>
-              </div>
-              <UserX className="w-5 h-5 text-destructive opacity-50" />
-            </div>
-          </button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {cards.map((c, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-            onClick={c.onClick}
-            className={`card-premium p-4 ${c.onClick ? 'cursor-pointer hover:bg-sidebar-accent/20' : ''}`}>
-            <div className="flex items-start justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{c.label}</p>
-                <p className={`text-base font-bold font-display mt-1 ${c.color} truncate`}>{c.value}</p>
-              </div>
-              <c.icon className={`w-5 h-5 ${c.color} opacity-30 flex-shrink-0 ml-2`} />
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {mini.map((m) => (
-          <button key={m.label} onClick={() => navigate(m.path)} className="card-premium p-4 text-left hover:bg-sidebar-accent/20 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{m.label}</p>
-                <p className="text-xl font-bold font-display mt-1">{m.value}</p>
-              </div>
-              <m.icon className="w-6 h-6 text-primary opacity-40" />
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="card-premium p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /> Faturamento por Empresa</h2>
-          {porEmpresa.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem faturas emitidas ainda.</p>
-          ) : (
-            <ul className="space-y-2">
-              {porEmpresa.map(e => {
-                const pct = stats.emitido > 0 ? (e.total / stats.emitido) * 100 : 0;
-                return (
-                  <li key={e.nome}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium truncate pr-2">{e.nome}</span>
-                      <span className="text-muted-foreground">{fmtBRL(e.total)}</span>
-                    </div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        <div className="card-premium p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2"><Users className="w-4 h-4 text-primary" /> Top Clientes</h2>
-          {topClientes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem clientes faturados ainda.</p>
-          ) : (
-            <ul className="space-y-2">
-              {topClientes.map(c => (
-                <li key={c.razao_social} className="flex justify-between text-sm border-b border-border last:border-0 py-1.5">
-                  <span className="truncate pr-2">{c.razao_social}</span>
-                  <span className="font-semibold text-primary">{fmtBRL(c.total)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </div>
+    <TopacCentralDashboard
+      modulo="Faturamento"
+      subtitle="Painel fluido de faturamento e DN4"
+      loading={loading}
+      onRefresh={carregar}
+      kpis={kpis}
+      actions={actions}
+      alerts={alerts}
+      leftPanelTitle="Faturamento por Empresa"
+      leftPanelItems={leftPanelItems}
+      rightPanelTitle="Top Clientes"
+      rightPanelItems={rightPanelItems}
+      emptyLeft="Sem faturas emitidas ainda."
+      emptyRight="Sem clientes faturados ainda."
+      dn4Slot={<Dn4ImportPanel modulo="faturamento" />}
+    />
   );
 };
 
