@@ -1,8 +1,9 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
+  Cloud,
   Database,
   Download,
   FileCheck2,
@@ -11,6 +12,7 @@ import {
   Layers,
   Package,
   Receipt,
+  Save,
   Settings2,
   ShieldCheck,
   Users,
@@ -28,14 +30,17 @@ type LinhaDn4 = {
   aba: string;
   entidade: EntidadeDn4;
   confianca: number;
+  destinoTopac: string;
   cliente: string;
   documento: string;
   contrato: string;
   equipamento: string;
   periodo: string;
+  dataEmissao: string;
   valor: string;
   vencimento: string;
   status: string;
+  nota: string;
   pendencias: string[];
   raw: Record<string, unknown>;
 };
@@ -47,6 +52,19 @@ type ArquivoDn4 = {
   tipo: string;
 };
 
+type PacoteImplantacao = {
+  id: string;
+  criadoEm: string;
+  modulo: ModuloDn4;
+  total: number;
+  validas: number;
+  pendentes: number;
+  cobertura: number;
+  arquivos: ArquivoDn4[];
+};
+
+const STORAGE_KEY = 'topac:dn4:pacotes-implantacao';
+
 const entidadeLabel: Record<EntidadeDn4, string> = {
   cliente: 'Cliente',
   contrato: 'Contrato',
@@ -55,6 +73,16 @@ const entidadeLabel: Record<EntidadeDn4, string> = {
   faturamento: 'Faturamento',
   financeiro: 'Financeiro',
   indefinido: 'Revisar',
+};
+
+const destinoTopac: Record<EntidadeDn4, string> = {
+  cliente: 'clientes_fat',
+  contrato: 'contratos',
+  locacao: 'contrato_equipamentos',
+  equipamento: 'equipamentos/ativos',
+  faturamento: 'faturas',
+  financeiro: 'titulos_receber/titulos_pagar',
+  indefinido: 'faturamento_pendencias',
 };
 
 const entidadeClasses: Record<EntidadeDn4, string> = {
@@ -68,15 +96,16 @@ const entidadeClasses: Record<EntidadeDn4, string> = {
 };
 
 const alias: Record<string, string[]> = {
-  cliente: ['cliente', 'razao social', 'razão social', 'nome cliente', 'nome', 'sacado', 'tomador', 'locatario', 'locatário'],
-  documento: ['cnpj', 'cpf', 'cnpj cpf', 'cpf cnpj', 'documento', 'doc cliente'],
-  contrato: ['contrato', 'numero contrato', 'n contrato', 'nº contrato', 'pedido', 'proposta', 'os'],
-  equipamento: ['equipamento', 'ativo', 'patrimonio', 'patrimônio', 'serie', 'série', 'numero serie', 'modelo', 'item'],
-  periodo: ['periodo', 'período', 'competencia', 'competência', 'data inicio', 'data início', 'data fim', 'dt inicio', 'dt fim'],
-  valor: ['valor', 'total', 'valor total', 'valor locacao', 'valor locação', 'saldo', 'vlr total', 'preco', 'preço'],
-  vencimento: ['vencimento', 'data vencimento', 'dt vencimento', 'vencto'],
-  status: ['status', 'situacao', 'situação'],
-  nota: ['nota', 'nf', 'nfe', 'fatura', 'titulo', 'título', 'duplicata', 'boleto'],
+  cliente: ['cliente', 'razao social', 'razão social', 'nome cliente', 'nome', 'sacado', 'tomador', 'locatario', 'locatário', 'empresa', 'fornecedor'],
+  documento: ['cnpj', 'cpf', 'cnpj cpf', 'cpf cnpj', 'documento', 'doc cliente', 'inscricao', 'inscrição'],
+  contrato: ['contrato', 'numero contrato', 'n contrato', 'nº contrato', 'pedido', 'proposta', 'os', 'locacao', 'locação'],
+  equipamento: ['equipamento', 'ativo', 'patrimonio', 'patrimônio', 'serie', 'série', 'numero serie', 'modelo', 'item', 'produto', 'maquina', 'máquina'],
+  periodo: ['periodo', 'período', 'competencia', 'competência', 'data inicio', 'data início', 'data fim', 'dt inicio', 'dt fim', 'referencia', 'referência'],
+  dataEmissao: ['emissao', 'emissão', 'data emissao', 'data emissão', 'dt emissao', 'dt emissão', 'data documento'],
+  valor: ['valor', 'total', 'valor total', 'valor locacao', 'valor locação', 'saldo', 'vlr total', 'preco', 'preço', 'liquido', 'líquido', 'bruto'],
+  vencimento: ['vencimento', 'data vencimento', 'dt vencimento', 'vencto', 'vcto'],
+  status: ['status', 'situacao', 'situação', 'estado'],
+  nota: ['nota', 'nf', 'nfe', 'fatura', 'titulo', 'título', 'duplicata', 'boleto', 'documento financeiro'],
 };
 
 const resumoInicial = { cliente: 0, contrato: 0, locacao: 0, equipamento: 0, faturamento: 0, financeiro: 0, indefinido: 0 };
@@ -105,7 +134,7 @@ const splitNameAndDocument = (value: unknown) => {
 
 const findValue = (row: Record<string, unknown>, keys: string[]) => {
   const wanted = keys.map(normalize);
-  const match = Object.entries(row).find(([key]) => wanted.includes(normalize(key)));
+  const match = Object.entries(row).find(([key]) => wanted.some(aliasKey => normalize(key).includes(aliasKey) || aliasKey.includes(normalize(key))));
   return clean(match?.[1]);
 };
 
@@ -182,31 +211,34 @@ const classifyRow = (row: Record<string, unknown>, origem: string, aba: string, 
   const contrato = findValue(row, alias.contrato);
   const equipamento = findValue(row, alias.equipamento);
   const periodo = findValue(row, alias.periodo);
+  const dataEmissao = findValue(row, alias.dataEmissao);
   const valor = findValue(row, alias.valor);
   const vencimento = findValue(row, alias.vencimento);
   const status = findValue(row, alias.status);
-  const hasNota = hasAnyHeader(headers, alias.nota);
+  const nota = findValue(row, alias.nota);
+  const hasNota = Boolean(nota) || hasAnyHeader(headers, alias.nota);
   const hasValor = Boolean(valor) || hasAnyHeader(headers, alias.valor);
   const hasEquipamento = Boolean(equipamento) || hasAnyHeader(headers, alias.equipamento);
   const hasContrato = Boolean(contrato) || hasAnyHeader(headers, alias.contrato);
   const hasCliente = Boolean(cliente) || Boolean(documento) || hasAnyHeader(headers, alias.cliente) || hasAnyHeader(headers, alias.documento);
   const hasVencimento = Boolean(vencimento) || hasAnyHeader(headers, alias.vencimento);
+  const hasFinanceiro = hasNota || hasVencimento || hasAnyHeader(headers, ['receber', 'pagar', 'baixa', 'pagamento', 'recebimento']);
 
   let entidade: EntidadeDn4 = 'indefinido';
   let confianca = 35;
 
-  if (hasNota || (hasValor && hasVencimento)) {
-    entidade = hasContrato || hasCliente ? 'faturamento' : 'financeiro';
-    confianca = hasNota && hasValor ? 88 : 72;
+  if (hasFinanceiro && hasValor) {
+    entidade = hasContrato || hasCliente || hasNota ? 'faturamento' : 'financeiro';
+    confianca = hasNota && hasValor ? 90 : 76;
   } else if (hasContrato && hasEquipamento) {
     entidade = 'locacao';
-    confianca = 86;
+    confianca = 88;
   } else if (hasEquipamento) {
     entidade = 'equipamento';
-    confianca = 78;
+    confianca = 80;
   } else if (hasContrato) {
     entidade = 'contrato';
-    confianca = 74;
+    confianca = 76;
   } else if (hasCliente) {
     entidade = 'cliente';
     confianca = 92;
@@ -217,6 +249,7 @@ const classifyRow = (row: Record<string, unknown>, origem: string, aba: string, 
   if (['cliente', 'contrato', 'locacao', 'faturamento'].includes(entidade) && !cliente && !documento) pendencias.push('sem cliente/CNPJ');
   if (['locacao', 'equipamento'].includes(entidade) && !equipamento) pendencias.push('sem equipamento/ativo');
   if (['faturamento', 'financeiro'].includes(entidade) && !valor) pendencias.push('sem valor');
+  if (['faturamento', 'financeiro'].includes(entidade) && !vencimento && !dataEmissao) pendencias.push('sem data financeira');
   if (documento && ![11, 14].includes(digits(documento).length)) pendencias.push('documento fora do padrão');
   if (entidade === 'indefinido') pendencias.push('tipo de linha não identificado');
 
@@ -226,14 +259,17 @@ const classifyRow = (row: Record<string, unknown>, origem: string, aba: string, 
     aba,
     entidade,
     confianca,
+    destinoTopac: destinoTopac[entidade],
     cliente,
     documento,
     contrato,
     equipamento,
     periodo,
+    dataEmissao,
     valor,
     vencimento,
     status,
+    nota,
     pendencias,
     raw: row,
   };
@@ -242,12 +278,12 @@ const classifyRow = (row: Record<string, unknown>, origem: string, aba: string, 
 const csvEscape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 const downloadCsv = (rows: LinhaDn4[], fileName: string) => {
-  const head = ['tipo', 'confianca', 'cliente', 'documento', 'contrato', 'equipamento', 'periodo', 'valor', 'vencimento', 'status', 'pendencias', 'origem', 'aba'];
+  const head = ['destino_topac', 'tipo', 'confianca', 'cliente', 'documento', 'contrato', 'equipamento', 'periodo', 'emissao', 'valor', 'vencimento', 'nota_titulo', 'status', 'pendencias', 'origem', 'aba'];
   const csv = [
     head.join(';'),
     ...rows.map(row => [
-      entidadeLabel[row.entidade], row.confianca, row.cliente, row.documento, row.contrato, row.equipamento,
-      row.periodo, row.valor, row.vencimento, row.status, row.pendencias.join(', '), row.origem, row.aba,
+      row.destinoTopac, entidadeLabel[row.entidade], row.confianca, row.cliente, row.documento, row.contrato, row.equipamento,
+      row.periodo, row.dataEmissao, row.valor, row.vencimento, row.nota, row.status, row.pendencias.join(', '), row.origem, row.aba,
     ].map(csvEscape).join(';')),
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -259,6 +295,18 @@ const downloadCsv = (rows: LinhaDn4[], fileName: string) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+const loadPacotes = (): PacoteImplantacao[] => {
+  try {
+    return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const savePacotes = (pacotes: PacoteImplantacao[]) => {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pacotes.slice(0, 20)));
+};
+
 const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<LinhaDn4[]>([]);
@@ -267,6 +315,11 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
   const [selected, setSelected] = useState<EntidadeDn4 | 'todos'>('todos');
   const [etapa, setEtapa] = useState<EtapaDn4>('diagnostico');
   const [aprovado, setAprovado] = useState(false);
+  const [pacotes, setPacotes] = useState<PacoteImplantacao[]>([]);
+
+  useEffect(() => {
+    setPacotes(loadPacotes().filter(pacote => pacote.modulo === modulo));
+  }, [modulo]);
 
   const resumo = useMemo(() => rows.reduce((acc, row) => ({ ...acc, [row.entidade]: acc[row.entidade] + 1 }), resumoInicial), [rows]);
   const pendentes = rows.filter(row => row.pendencias.length > 0).length;
@@ -278,9 +331,16 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
     { key: 'diagnostico' as const, label: 'Diagnóstico', icon: FileUp, ok: rows.length > 0 },
     { key: 'mapeamento' as const, label: 'Mapeamento', icon: Settings2, ok: validas.length > 0 },
     { key: 'validacao' as const, label: 'Validação', icon: ShieldCheck, ok: rows.length > 0 && pendentes === 0 },
-    { key: 'pacote' as const, label: 'Pacote TOPAC', icon: Database, ok: aprovado },
+    { key: 'pacote' as const, label: 'Pacote TOPAC', icon: Database, ok: aprovado || pacotes.length > 0 },
     { key: 'goLive' as const, label: 'Go-live', icon: CheckCircle2, ok: aprovado && pendentes === 0 },
   ];
+
+  const ingestRows = (parsed: LinhaDn4[], nextArquivos: ArquivoDn4[]) => {
+    setRows(current => [...parsed, ...current]);
+    setArquivos(current => [...nextArquivos, ...current]);
+    setEtapa(parsed.length ? 'mapeamento' : 'diagnostico');
+    if (parsed.length) toast.success(`${parsed.length} registro(s) do DN4 preparados para implantação.`);
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -313,13 +373,36 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
       }
     }
 
-    setRows(current => [...parsed, ...current]);
-    setArquivos(current => [...nextArquivos, ...current]);
-    setEtapa(parsed.length ? 'mapeamento' : 'diagnostico');
+    ingestRows(parsed, nextArquivos);
     setLoading(false);
     if (fileRef.current) fileRef.current.value = '';
-    if (parsed.length) toast.success(`${parsed.length} registro(s) do DN4 preparados para implantação.`);
     if (failures.length) toast.warning(failures.join('\n'));
+  };
+
+  const puxarConectorDn4 = async () => {
+    const env = import.meta.env as Record<string, string | undefined>;
+    const baseUrl = env.VITE_DN4_API_URL;
+    const token = env.VITE_DN4_API_TOKEN;
+    if (!baseUrl || !token) {
+      toast.warning('Conector DN4 preparado. Configure VITE_DN4_API_URL e VITE_DN4_API_TOKEN para puxada automática; enquanto isso use os arquivos exportados do DN4.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/exportacao-topac?modulo=${modulo}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error('Falha no conector DN4');
+      const payload = await response.json();
+      const registros = Array.isArray(payload?.registros) ? payload.registros : [];
+      const parsed = registros.map((row: Record<string, unknown>, index: number) => classifyRow(row, 'Conector DN4', payload?.modulo || 'API', index + 1));
+      ingestRows(parsed, [{ nome: 'Conector DN4', abas: 1, linhas: parsed.length, tipo: 'API DN4' }]);
+    } catch {
+      toast.error('Não foi possível puxar pelo conector DN4. Confira URL, token e liberação de acesso/CORS.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const limpar = () => {
@@ -330,16 +413,30 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
     setAprovado(false);
   };
 
-  const aprovarPacote = () => {
+  const registrarPacote = () => {
     if (!rows.length) return toast.error('Suba um arquivo DN4 primeiro.');
     if (pendentes > 0) {
       setEtapa('validacao');
-      toast.warning('Ainda existem pendências. Exporte o pacote de revisão antes da importação definitiva.');
+      toast.warning('Ainda existem pendências. Exporte e corrija antes da implantação definitiva.');
       return;
     }
+
+    const pacote: PacoteImplantacao = {
+      id: `DN4-${Date.now()}`,
+      criadoEm: new Date().toISOString(),
+      modulo,
+      total: rows.length,
+      validas: validas.length,
+      pendentes,
+      cobertura,
+      arquivos,
+    };
+    const todos = [pacote, ...loadPacotes().filter(item => item.id !== pacote.id)];
+    savePacotes(todos);
+    setPacotes(todos.filter(item => item.modulo === modulo));
     setAprovado(true);
     setEtapa('goLive');
-    toast.success('Pacote DN4 liberado para go-live operacional.');
+    toast.success('Pacote DN4 registrado no TOPAC para implantação.');
   };
 
   const cards = [
@@ -358,18 +455,21 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <FileUp className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-bold font-display">Implantação DN4</h2>
+            <h2 className="text-lg font-bold font-display">Migração completa DN4</h2>
             <span className="text-[10px] px-2 py-1 rounded-full bg-primary/15 text-primary uppercase tracking-wide">{modulo}</span>
-            <span className="text-[10px] px-2 py-1 rounded-full bg-success/15 text-success uppercase tracking-wide">rodando hoje</span>
+            <span className="text-[10px] px-2 py-1 rounded-full bg-success/15 text-success uppercase tracking-wide">TOPAC pronto</span>
           </div>
           <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-            Fluxo estruturado no padrão de implantação: diagnóstico do arquivo, mapeamento por módulo, validação de pendências, pacote TOPAC e go-live controlado.
+            Puxe por conector quando houver API liberada ou suba as exportações DN4. O TOPAC separa clientes, contratos, locações, equipamentos, faturas e financeiro em um pacote de implantação validável.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <input ref={fileRef} type="file" multiple accept=".csv,.xls,.xlsx" className="hidden" onChange={event => handleFiles(event.target.files)} />
+          <button onClick={puxarConectorDn4} disabled={loading} className="btn-secondary flex items-center gap-2 disabled:opacity-60">
+            <Cloud className="w-4 h-4" /> Puxar DN4
+          </button>
           <button onClick={() => fileRef.current?.click()} disabled={loading} className="btn-primary flex items-center gap-2 disabled:opacity-60">
-            <FileSpreadsheet className="w-4 h-4" /> {loading ? 'Lendo arquivo...' : 'Subir Excel/CSV DN4'}
+            <FileSpreadsheet className="w-4 h-4" /> {loading ? 'Processando...' : 'Subir exportações'}
           </button>
           {rows.length > 0 && <button onClick={limpar} className="btn-secondary flex items-center gap-2"><X className="w-4 h-4" /> Limpar</button>}
         </div>
@@ -388,7 +488,7 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="rounded-lg border border-border bg-muted/20 p-3">
           <p className="text-[10px] uppercase text-muted-foreground">Arquivos</p>
           <p className="text-xl font-bold font-display">{arquivos.length}</p>
@@ -405,6 +505,10 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
           <p className="text-[10px] uppercase text-muted-foreground">Pendências</p>
           <p className={`text-xl font-bold font-display ${pendentes ? 'text-warning' : 'text-success'}`}>{pendentes}</p>
         </div>
+        <div className="rounded-lg border border-border bg-muted/20 p-3">
+          <p className="text-[10px] uppercase text-muted-foreground">Pacotes</p>
+          <p className="text-xl font-bold font-display">{pacotes.length}</p>
+        </div>
       </div>
 
       {etapa === 'diagnostico' && (
@@ -412,13 +516,13 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
           <div className="flex items-center gap-2"><FileCheck2 className="w-4 h-4 text-primary" /><h3 className="font-semibold">Diagnóstico inicial</h3></div>
           {arquivos.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              Suba uma exportação do DN4 em Excel/CSV. O importador reconhece o relatório sintético de clientes e tabelas com Cliente, CNPJ, Contrato, Equipamento, Período, Valor, Vencimento, Nota/Fatura e Status.
+              Suba todas as exportações do DN4: clientes, contratos, locações, equipamentos, faturamento, títulos/financeiro e recebimentos. Se a API DN4 estiver liberada, configure o conector e use Puxar DN4.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 text-xs uppercase text-muted-foreground"><tr><th className="p-3 text-left">Arquivo</th><th className="p-3 text-left">Tipo</th><th className="p-3 text-right">Abas</th><th className="p-3 text-right">Linhas</th></tr></thead>
-                <tbody>{arquivos.map(file => <tr key={`${file.nome}-${file.abas}`} className="border-t border-border"><td className="p-3 font-medium">{file.nome}</td><td className="p-3 text-muted-foreground">{file.tipo}</td><td className="p-3 text-right">{file.abas}</td><td className="p-3 text-right">{file.linhas}</td></tr>)}</tbody>
+                <tbody>{arquivos.map(file => <tr key={`${file.nome}-${file.abas}-${file.linhas}`} className="border-t border-border"><td className="p-3 font-medium">{file.nome}</td><td className="p-3 text-muted-foreground">{file.tipo}</td><td className="p-3 text-right">{file.abas}</td><td className="p-3 text-right">{file.linhas}</td></tr>)}</tbody>
               </table>
             </div>
           )}
@@ -435,6 +539,7 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
                   <card.icon className="w-4 h-4 text-primary opacity-60" />
                 </div>
                 <p className="text-xl font-bold font-display mt-1">{resumo[card.key]}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{destinoTopac[card.key]}</p>
               </button>
             ))}
           </div>
@@ -443,14 +548,15 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
             <button onClick={() => setSelected('todos')} className={`text-xs px-3 py-1.5 rounded-full ${selected === 'todos' ? 'bg-primary text-primary-foreground' : 'bg-background text-foreground'}`}>Todos ({rows.length})</button>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {pendentes > 0 ? <AlertTriangle className="w-4 h-4 text-warning" /> : <CheckCircle2 className="w-4 h-4 text-success" />}
-              {pendentes > 0 ? `${pendentes} linha(s) precisam de revisão antes da gravação definitiva.` : 'Pacote sem pendências críticas.'}
+              {pendentes > 0 ? `${pendentes} linha(s) precisam de revisão antes da implantação definitiva.` : 'Pacote sem pendências críticas.'}
             </div>
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full min-w-[980px] text-sm">
+            <table className="w-full min-w-[1120px] text-sm">
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
+                  <th className="p-3 text-left">Destino TOPAC</th>
                   <th className="p-3 text-left">Tipo</th>
                   <th className="p-3 text-left">Cliente</th>
                   <th className="p-3 text-left">Contrato</th>
@@ -464,13 +570,14 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
               <tbody>
                 {filtradas.slice(0, 120).map(row => (
                   <tr key={row.id} className="border-t border-border hover:bg-sidebar-accent/10">
+                    <td className="p-3 font-mono text-xs text-muted-foreground">{row.destinoTopac}</td>
                     <td className="p-3"><span className={`text-[10px] px-2 py-1 rounded-full ${entidadeClasses[row.entidade]}`}>{entidadeLabel[row.entidade]} · {row.confianca}%</span></td>
                     <td className="p-3"><div className="font-medium truncate max-w-[220px]">{row.cliente || '—'}</div><div className="text-xs text-muted-foreground">{row.documento || row.origem}</div></td>
                     <td className="p-3 font-mono text-xs">{row.contrato || '—'}</td>
                     <td className="p-3 truncate max-w-[180px]">{row.equipamento || '—'}</td>
                     <td className="p-3 text-muted-foreground">{row.periodo || '—'}</td>
                     <td className="p-3 text-right font-semibold">{row.valor || '—'}</td>
-                    <td className="p-3 text-muted-foreground">{row.vencimento || '—'}</td>
+                    <td className="p-3 text-muted-foreground">{row.vencimento || row.dataEmissao || '—'}</td>
                     <td className="p-3 text-xs text-muted-foreground">{row.pendencias.length ? row.pendencias.join(', ') : <span className="text-success">ok para pacote TOPAC</span>}</td>
                   </tr>
                 ))}
@@ -485,13 +592,18 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
         <div className="grid md:grid-cols-3 gap-3">
           <button onClick={() => downloadCsv(rows, `dn4-topac-pacote-${modulo}.csv`)} disabled={!rows.length} className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"><Download className="w-4 h-4" /> Exportar pacote completo</button>
           <button onClick={() => downloadCsv(rows.filter(row => row.pendencias.length > 0), `dn4-topac-pendencias-${modulo}.csv`)} disabled={!pendentes} className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"><AlertTriangle className="w-4 h-4" /> Exportar pendências</button>
-          <button onClick={aprovarPacote} disabled={!rows.length} className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"><Database className="w-4 h-4" /> Liberar pacote TOPAC</button>
+          <button onClick={registrarPacote} disabled={!rows.length} className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" /> Registrar pacote TOPAC</button>
         </div>
       )}
 
-      {aprovado && (
-        <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" /> Pacote DN4 aprovado para go-live operacional. Próxima etapa: gravar no banco definitivo após confirmação do modelo de dados.
+      {(aprovado || pacotes.length > 0) && (
+        <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-success space-y-2">
+          <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Pacote DN4 registrado no TOPAC para implantação operacional.</div>
+          {pacotes.slice(0, 3).map(pacote => (
+            <div key={pacote.id} className="text-xs text-success/80">
+              {pacote.id} · {pacote.total} linhas · cobertura {pacote.cobertura}% · {new Date(pacote.criadoEm).toLocaleString('pt-BR')}
+            </div>
+          ))}
         </div>
       )}
     </section>
