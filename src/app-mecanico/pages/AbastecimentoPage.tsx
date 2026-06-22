@@ -52,6 +52,11 @@ type ReceiptInfo = {
   filial: string;
   placa: string;
   veiculo: string;
+  combustivel: string;
+  valor: number;
+  litros: number;
+  valorPorLitro: number | null;
+  kmAtual: number | null;
   fotoBombaUrl: string;
   fotoPainelUrl: string;
   createdAt: Date;
@@ -59,6 +64,7 @@ type ReceiptInfo = {
 };
 
 const CANONICAL_BASE_URL = "https://topacrh.pro";
+const FUEL_OPTIONS = ["Gasolina", "Etanol", "Diesel", "Diesel S10", "GNV"];
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
 };
@@ -80,6 +86,10 @@ export default function AbastecimentoPage() {
   const [placa, setPlaca] = useState("");
   const [carros, setCarros] = useState<string[]>([]);
   const [veiculos, setVeiculos] = useState<VeiculoInfo[]>([]);
+  const [combustivel, setCombustivel] = useState("Diesel S10");
+  const [litros, setLitros] = useState("");
+  const [valor, setValor] = useState("");
+  const [kmAtual, setKmAtual] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
   const [pdfCache, setPdfCache] = useState<{ blob: Blob; fileName: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -97,6 +107,14 @@ export default function AbastecimentoPage() {
     const atual = normalizePlate(placa);
     return veiculos.find((item) => normalizePlate(item.placa) === atual) || null;
   }, [placa, veiculos]);
+  const litrosNumero = useMemo(() => parseBrNumber(litros), [litros]);
+  const valorNumero = useMemo(() => parseBrNumber(valor), [valor]);
+  const kmNumero = useMemo(() => (kmAtual.trim() ? parseBrNumber(kmAtual) : null), [kmAtual]);
+  const valorPorLitro = useMemo(() => {
+    if (!litrosNumero || !valorNumero) return null;
+    return valorNumero / litrosNumero;
+  }, [litrosNumero, valorNumero]);
+  const dadosAbastecimentoValidos = Boolean(combustivel && litrosNumero && litrosNumero > 0 && valorNumero && valorNumero > 0);
 
   useEffect(() => {
     const qr = searchParams.get("qr") || searchParams.get("codigo") || "";
@@ -200,16 +218,29 @@ export default function AbastecimentoPage() {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, "painel", blob);
       setFotoPainelUrl(url);
       setStep("bomba");
-      toast.success("Foto do painel salva. Agora tire a foto da bomba.");
+      toast.success("Foto do painel salva. Confira os dados e tire a foto da bomba.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const abrirCameraBomba = () => {
+    if (!dadosAbastecimentoValidos) {
+      toast.error("Informe combustível, litros e valor antes da foto da bomba.");
+      return;
+    }
+    if (kmNumero != null && kmNumero < 0) {
+      toast.error("Informe um KM válido.");
+      return;
+    }
+    setCamBomba(true);
   };
 
   const onCaptureBomba = async (blob: Blob) => {
     if (!posto || !fotoPainelUrl) throw new Error("Foto do painel ou posto nao encontrado.");
     if (postosOpcao.length > 1 && posto.tipo_qr === "unidade") throw new Error("Selecione o posto antes das fotos.");
     if (mecInfo?.exige_selecao_carro && !placa) throw new Error("Selecione o veiculo antes das fotos.");
+    if (!dadosAbastecimentoValidos) throw new Error("Informe combustível, litros e valor antes de salvar.");
 
     const previewWindow = window.open("", "_blank");
     setLoading(true);
@@ -219,12 +250,12 @@ export default function AbastecimentoPage() {
       const { data, error } = await supabaseRpc.rpc("app_mecanico_registrar_abastecimento_posto", {
         p_acesso_id: mecanico.acesso_id,
         p_posto_codigo: posto.codigo,
-        p_valor: null,
-        p_litros: null,
-        p_combustivel: null,
-        p_km: null,
+        p_valor: valorNumero,
+        p_litros: litrosNumero,
+        p_combustivel: combustivel,
+        p_km: kmNumero,
         p_placa: placa || null,
-        p_observacao: "Dados do abastecimento registrados exclusivamente nas fotos da bomba e do painel.",
+        p_observacao: `Abastecimento registrado pelo app. Preço/L: ${valorPorLitro ? valorPorLitro.toFixed(3) : "-"}`,
         p_foto_bomba_url: fotoBombaUrl,
         p_foto_painel_url: fotoPainelUrl,
         p_latitude: location.latitude,
@@ -244,6 +275,11 @@ export default function AbastecimentoPage() {
         filial: mecInfo?.filial || mecanico.filial,
         placa,
         veiculo: veiculoSelecionado?.descricao || "",
+        combustivel,
+        valor: valorNumero || 0,
+        litros: litrosNumero || 0,
+        valorPorLitro,
+        kmAtual: kmNumero,
         fotoBombaUrl,
         fotoPainelUrl,
         createdAt: new Date(),
@@ -266,7 +302,7 @@ export default function AbastecimentoPage() {
       if (previewWindow) previewWindow.location.href = previewUrl;
       else window.open(previewUrl, "_blank", "noopener,noreferrer");
       window.setTimeout(() => URL.revokeObjectURL(previewUrl), 120000);
-      toast.success("PDF pronto para compartilhar.");
+      toast.success("Abastecimento registrado e PDF pronto.");
     } catch (error) {
       previewWindow?.close();
       throw error;
@@ -313,6 +349,10 @@ export default function AbastecimentoPage() {
     setPlaca("");
     setCarros([]);
     setVeiculos([]);
+    setCombustivel("Diesel S10");
+    setLitros("");
+    setValor("");
+    setKmAtual("");
     setReceipt(null);
     setPdfCache(null);
     setScanError("");
@@ -323,7 +363,7 @@ export default function AbastecimentoPage() {
       <Card className="p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600"><Fuel className="h-5 w-5" /></div>
-          <div><h1 className="text-base font-bold">Abastecimento</h1><p className="text-xs text-muted-foreground">QR Code + foto do painel + foto da bomba</p></div>
+          <div><h1 className="text-base font-bold">Abastecimento</h1><p className="text-xs text-muted-foreground">QR Code + dados do combustível + fotos</p></div>
         </div>
       </Card>
 
@@ -356,8 +396,29 @@ export default function AbastecimentoPage() {
           {mecInfo?.exige_selecao_carro && carros.length > 0 && (
             <div><Label className="text-xs">Veiculo</Label><select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={placa} onChange={(event) => setPlaca(event.target.value)}><option value="">Selecionar veiculo</option>{carros.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
           )}
-          <AlertBox text="Nao precisa digitar valor, litros ou KM. Esses dados ficarao registrados nas fotos." />
-          <Button className="w-full" onClick={() => setCamPainel(true)} disabled={(postosOpcao.length > 1 && posto.tipo_qr === "unidade") || Boolean(mecInfo?.exige_selecao_carro && !placa)}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Combustivel</Label>
+              <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(event) => setCombustivel(event.target.value)}>
+                {FUEL_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Litros</Label>
+              <Input inputMode="decimal" value={litros} onChange={(event) => setLitros(event.target.value)} placeholder="Ex.: 42,50" />
+            </div>
+            <div>
+              <Label className="text-xs">Valor total (R$)</Label>
+              <Input inputMode="decimal" value={valor} onChange={(event) => setValor(event.target.value)} placeholder="Ex.: 268,75" />
+            </div>
+            <div>
+              <Label className="text-xs">KM atual</Label>
+              <Input inputMode="numeric" value={kmAtual} onChange={(event) => setKmAtual(event.target.value)} placeholder="Opcional" />
+            </div>
+          </div>
+          {valorPorLitro && <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700">Preço calculado: R$ {valorPorLitro.toFixed(3).replace(".", ",")} por litro</div>}
+          <AlertBox text="Preencha os dados do abastecimento e tire a foto do painel/KM. Depois, tire a foto da bomba para salvar tudo no painel administrativo." />
+          <Button className="w-full" onClick={() => setCamPainel(true)} disabled={(postosOpcao.length > 1 && posto.tipo_qr === "unidade") || Boolean(mecInfo?.exige_selecao_carro && !placa) || !dadosAbastecimentoValidos}><Gauge className="mr-2 h-4 w-4" /> Tirar foto do painel/KM</Button>
           <Button className="w-full" variant="outline" onClick={reset}><RotateCcw className="mr-2 h-4 w-4" /> Cancelar</Button>
         </Card>
       )}
@@ -365,15 +426,27 @@ export default function AbastecimentoPage() {
       {step === "bomba" && (
         <Card className="space-y-4 p-4">
           <img src={fotoPainelUrl} className="w-full rounded-lg" alt="Painel" />
-          <AlertBox text="Agora tire a foto da bomba. Depois dela, o PDF sera aberto automaticamente." />
-          <Button className="w-full" onClick={() => setCamBomba(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
-          <Button className="w-full" variant="outline" onClick={() => { setFotoPainelUrl(""); setStep("painel"); }}><Gauge className="mr-2 h-4 w-4" /> Refazer painel</Button>
+          <div className="grid grid-cols-2 gap-2 rounded-lg border p-3 text-xs">
+            <div><b>Combustivel</b><br />{combustivel}</div>
+            <div><b>Litros</b><br />{litrosNumero?.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} L</div>
+            <div><b>Valor</b><br />R$ {valorNumero?.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div><b>KM</b><br />{kmNumero != null ? kmNumero.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "-"}</div>
+          </div>
+          <AlertBox text="Agora tire a foto da bomba. Depois dela, o abastecimento sera salvo com os dados preenchidos e o PDF abrira automaticamente." />
+          <Button className="w-full" onClick={abrirCameraBomba} disabled={loading}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba e salvar</Button>
+          <Button className="w-full" variant="outline" onClick={() => { setFotoPainelUrl(""); setStep("painel"); }}><Gauge className="mr-2 h-4 w-4" /> Refazer painel/dados</Button>
         </Card>
       )}
 
       {step === "ok" && receipt && (
         <Card className="space-y-4 p-4">
-          <div className="text-center"><Check className="mx-auto h-10 w-10 text-emerald-500" /><div className="mt-2 text-lg font-bold">PDF pronto</div><p className="text-sm text-muted-foreground">As fotos da bomba e do painel estao no comprovante.</p></div>
+          <div className="text-center"><Check className="mx-auto h-10 w-10 text-emerald-500" /><div className="mt-2 text-lg font-bold">Abastecimento registrado</div><p className="text-sm text-muted-foreground">Dados, fotos e comprovante foram salvos.</p></div>
+          <div className="grid grid-cols-2 gap-2 rounded-lg border p-3 text-xs">
+            <div><b>Combustivel</b><br />{receipt.combustivel}</div>
+            <div><b>Litros</b><br />{receipt.litros.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} L</div>
+            <div><b>Valor</b><br />R$ {receipt.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div><b>KM</b><br />{receipt.kmAtual != null ? receipt.kmAtual.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "-"}</div>
+          </div>
           <div className="grid grid-cols-2 gap-2"><img src={receipt.fotoBombaUrl} className="h-32 w-full rounded-lg object-cover" alt="Bomba" /><img src={receipt.fotoPainelUrl} className="h-32 w-full rounded-lg object-cover" alt="Painel" /></div>
           <Button onClick={() => void sharePdf()} className="w-full"><Share2 className="mr-2 h-4 w-4" /> Compartilhar PDF</Button>
           <div className="grid grid-cols-2 gap-2"><Button onClick={viewPdf} variant="outline"><Eye className="mr-2 h-4 w-4" /> Abrir PDF</Button><Button onClick={downloadPdf} variant="outline"><FileDown className="mr-2 h-4 w-4" /> Baixar</Button></div>
@@ -381,7 +454,7 @@ export default function AbastecimentoPage() {
         </Card>
       )}
 
-      {loading && step !== "scan" && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"><div className="rounded-lg bg-background p-5 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /><p className="mt-2 text-sm">Gerando o PDF...</p></div></div>}
+      {loading && step !== "scan" && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"><div className="rounded-lg bg-background p-5 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /><p className="mt-2 text-sm">Salvando abastecimento...</p></div></div>}
       <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" title="Foto do painel/KM" hint="Enquadre o ODO/KM total do painel" />
       <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" title="Foto da bomba" hint="Enquadre valor, litros e preco por litro" />
     </div>
@@ -406,4 +479,14 @@ function extractQrCode(value: string) {
 
 function normalizePlate(value: string | null | undefined) {
   return String(value || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
+
+function parseBrNumber(value: string) {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\s/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 }
