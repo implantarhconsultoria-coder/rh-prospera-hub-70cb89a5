@@ -57,15 +57,57 @@ export const makeDocumentFileName = (
   data?: string,
 ) => `${cleanFilePart(tipo)}_${cleanFilePart(empresa)}_${cleanFilePart(funcionario)}_${data || new Date().toISOString().slice(0, 10)}.pdf`;
 
+const normalizePlain = (value?: string) => cleanText(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase();
+
 const getExamHighlightColor = (tipoExame: string): [number, number, number] => {
-  const normalized = cleanText(tipoExame || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase();
+  const normalized = normalizePlain(tipoExame);
 
   if (normalized.includes('DEMISSIONAL')) return [255, 0, 0];
   if (normalized.includes('ADMISSIONAL')) return [0, 255, 0];
   return [255, 255, 0];
+};
+
+const getAsoClinicDefaults = (d: FichaASOData) => {
+  const source = normalizePlain(`${d.clinica || ''} ${d.empresa || ''} ${d.obraLocal || ''}`);
+  const isGoiania = source.includes('GOIANIA') || source.includes('GOIANIA') || source.includes('ASMETRO') || source.includes('GLOBAL MED');
+
+  if (isGoiania) {
+    return {
+      local: d.clinica || 'ASMETRO - Medicina do Trabalho, Rua 18, no. 247, Centro - Goiania/GO, ao lado do Colegio Liceu',
+      horarios: [
+        'DE SEGUNDA A SEXTA DAS 07h30 AS 11h30: CLINICO + COLETAS.',
+        'DE SEGUNDA A SEXTA DAS 13h00 AS 16h30: SOMENTE CLINICO.',
+        '(funcionario deve comparecer com documento de identidade e CPF)',
+      ],
+      agendamento: [
+        'CENTRAL DE AGENDAMENTO:',
+        'E-mail: agendamento@ponteaereaseguranca.com.br',
+        '(11) 3335-3200',
+        'Mediante agendamento previo no telefone e (ou) e-mail acima indicado;',
+        'E obrigatorio que o funcionario compareca munido de documento de identidade e CPF.',
+      ],
+    };
+  }
+
+  return {
+    local: d.clinica || 'Avenida Sao Joao, 313, 1o andar, Centro, Sao Paulo/SP',
+    horarios: [
+      'DE SEGUNDA A SEXTA DAS 07h30 AS 15h00.',
+      'PARA RAIO-X: ATENDIMENTO ATE AS 12h00',
+      '(atendimento por ordem de chegada)',
+    ],
+    agendamento: [
+      'CENTRAL DE AGENDAMENTO:',
+      'E-mail: agendamento@ponteaereaseguranca.com.br',
+      '(11) 95301-3663 (Duvidas e informacoes)',
+      '(11) 3333-1717',
+      'Mediante agendamento previo no telefone e (ou) e-mail acima indicado;',
+      'E obrigatorio que o funcionario compareca munido de documento de identidade e CPF.',
+    ],
+  };
 };
 
 const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) => {
@@ -182,6 +224,7 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   const dataExame = d.dataExame || today;
   const tipoExame = cleanText(d.tipoExame || 'Admissional').toUpperCase();
   const responsavel = cleanText(d.responsavelContato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385');
+  const clinicDefaults = getAsoClinicDefaults(d);
   const x = 18;
   const w = 174;
   let y = 5;
@@ -210,7 +253,7 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
     }
   };
   const next = (height: number) => { y += height; };
-  const checkbox = (checked?: boolean) => checked ? '(  X  ) SIM    (     ) NÃO' : '(     ) SIM    (     ) NÃO';
+  const checkbox = (checked?: boolean) => checked ? '(  X  ) SIM    (     ) NAO' : '(     ) SIM    (     ) NAO';
 
   const headerH = 23;
   doc.setDrawColor(0, 0, 0);
@@ -222,22 +265,21 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   } catch {
     // A identificação textual permanece disponível caso o logo não possa ser renderizado.
   }
-  write('AUTORIZAÇÃO DE EXAMES', x + 65 + (w - 65) / 2, y + 14, { size: 14, align: 'center' });
+  write('AUTORIZACAO DE EXAMES', x + 65 + (w - 65) / 2, y + 14, { size: 14, align: 'center' });
   next(headerH);
 
   const atendimentoH = 52;
   rect(atendimentoH);
   const centerX = x + w / 2;
-  const localAtendimento = cleanText(d.clinica || 'Avenida São João, 313, 1º andar, Centro, São Paulo/SP');
-  const localLines = doc.splitTextToSize(localAtendimento.toUpperCase(), 160).slice(0, 2);
+  const localLines = doc.splitTextToSize(cleanic(clinicDefaults.local), 160).slice(0, 3);
   write('LOCAL DE ATENDIMENTO:', centerX, y + 7, { size: 13, bold: true, align: 'center' });
   localLines.forEach((line: string, index: number) => {
-    write(line, centerX, y + 14 + index * 6, { size: 11.5, align: 'center' });
+    write(line, centerX, y + 14 + index * 5, { size: 10.6, align: 'center' });
   });
-  write('HORÁRIO DE ATENDIMENTO:', centerX, y + 30, { size: 12.5, bold: true, align: 'center' });
-  write('DE SEGUNDA A SEXTA DAS 07h30 ÀS 15h00.', centerX, y + 36, { size: 11, align: 'center' });
-  write('PARA RAIO-X: ATENDIMENTO ATÉ AS 12h00', centerX, y + 42, { size: 10.5, bold: true, align: 'center' });
-  write('(atendimento por ordem de chegada)', centerX, y + 48, { size: 10, align: 'center' });
+  write('HORARIO DE ATENDIMENTO:', centerX, y + 30, { size: 12.5, bold: true, align: 'center' });
+  clinicDefaults.horarios.forEach((line, index) => {
+    write(line, centerX, y + 36 + index * 4.5, { size: index === 1 ? 9.4 : 9.8, bold: index === 1, align: 'center' });
+  });
   next(atendimentoH);
 
   const empresaH = 21;
@@ -248,20 +290,22 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   write(`DATA DO EXAME: ${fmtBR(dataExame)}`, x + 93, y + 12, { size: 9.5, bold: true });
   next(empresaH);
 
-  const funcionarioH = 44;
+  const funcionarioH = 50;
   rect(funcionarioH);
   write(`OBRA / LOCAL: ${d.obraLocal || ''}`, x + 3, y + 6, { size: 9.5, bold: true });
-  write(`FUNCIONÁRIO: ${d.nome || ''}`, x + 3, y + 12.5, { size: 9.5, bold: true });
+  write(`FUNCIONARIO: ${d.nome || ''}`, x + 3, y + 12.5, { size: 9.5, bold: true, maxWidth: 168 });
   write(`SETOR/ GHE: ${d.setorGhe || ''}`, x + 3, y + 19, { size: 9.5, bold: true });
-  write(`FUNÇÃO:  ${d.funcao || ''}`, x + 3, y + 25.5, { size: 9.5, bold: true });
+  write(`FUNCAO:  ${d.funcao || ''}`, x + 3, y + 25.5, { size: 9.5, bold: true, maxWidth: 168 });
   write(`DATA DE NASCIMENTO: ${fmtBR(d.dataNascimento)}`, x + 3, y + 32, { size: 9.5, bold: true });
-  write(`CPF: ${d.cpf || ''}`, x + 3, y + 38.5, { size: 9.5, bold: true });
-  write(`DATA DE ADMISSÃO: ${fmtBR(d.dataAdmissao)}`, x + 78, y + 38.5, { size: 9.5, bold: true });
+  write(`RG: ${d.rg || ''}`, x + 105, y + 32, { size: 9.5, bold: true });
+  write(`CPF: ${d.cpf || ''}`, x + 3, y + 39, { size: 9.5, bold: true });
+  write(`DATA DE ADMISSAO: ${fmtBR(d.dataAdmissao)}`, x + 78, y + 39, { size: 9.5, bold: true });
+  write('PIS / CTPS / SERIE / ESTADO: PREENCHER SE APLICAVEL', x + 3, y + 46, { size: 8.2, bold: true });
   next(funcionarioH);
 
   const descH = 17;
   rect(descH, [219, 219, 219]);
-  write('DESCREVER ABAIXO O TIPO DE EXAME (ADMISSIONAL/ PERIÓDICO / DEMISSIONAL / MUDANÇA DE FUNÇÃO / RETORNO AO TRABALHO / AVALIAÇÃO MÉDICA /', centerX, y + 6, { size: 8.6, bold: true, align: 'center', maxWidth: 166 });
+  write('DESCREVER ABAIXO O TIPO DE EXAME (ADMISSIONAL/ PERIODICO / DEMISSIONAL / MUDANCA DE FUNCAO / RETORNO AO TRABALHO / AVALIACAO MEDICA /', centerX, y + 6, { size: 8.6, bold: true, align: 'center', maxWidth: 166 });
   write('OUTROS QUAL (DESCREVER)', centerX, y + 13, { size: 8.8, bold: true, align: 'center' });
   next(descH);
 
@@ -278,39 +322,38 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   rect(assH, [219, 219, 219]);
   doc.setFillColor(251, 228, 213);
   doc.rect(x + 3, y + 4, w - 6, 6, 'F');
-  write('ASSINALAR “SIM” CASO SE APLIQUE AOS ITENS ABAIXO:', centerX, y + 8.5, { size: 9, bold: true, align: 'center' });
+  write('ASSINALAR "SIM" CASO SE APLIQUE AOS ITENS ABAIXO:', centerX, y + 8.5, { size: 9, bold: true, align: 'center' });
   next(assH);
 
   const nrH = 12;
   rect(nrH);
-  write(`REALIZARÁ EXAMES P/ TRABALHO EM ALTURA – NR35   ${checkbox(d.trabalhoAltura)}`, x + 3, y + 8, { size: 9.5, bold: true });
+  write(`REALIZARA EXAMES P/ TRABALHO EM ALTURA - NR35   ${checkbox(d.trabalhoAltura)}`, x + 3, y + 8, { size: 9.5, bold: true });
   next(nrH);
   rect(nrH);
-  write(`REALIZARÁ EXAMES P/ TRABALHO EM ESPAÇO CONFINADO – NR33   ${checkbox(d.espacoConfinado)}`, x + 3, y + 8, { size: 9.5, bold: true });
+  write(`REALIZARA EXAMES P/ TRABALHO EM ESPACO CONFINADO - NR33   ${checkbox(d.espacoConfinado)}`, x + 3, y + 8, { size: 9.5, bold: true });
   next(nrH);
   rect(nrH);
-  write(`REALIZARÁ EXAME TOXICOLÓGICO   ${checkbox(d.toxicologico)}`, x + 3, y + 8, { size: 9.5, bold: true });
+  write(`REALIZARA EXAME TOXICOLOGICO   ${checkbox(d.toxicologico)}`, x + 3, y + 8, { size: 9.5, bold: true });
   next(nrH);
 
   const centralH = 40;
   rect(centralH);
-  write('CENTRAL DE AGENDAMENTO:', centerX, y + 8, { size: 10, bold: true, align: 'center' });
-  write('E-mail: agendamento@ponteaereaseguranca.com.br', centerX, y + 15, { size: 9.5, bold: true, align: 'center' });
-  write('(11) 95301-3663 (Dúvidas e informações)', centerX, y + 21.5, { size: 9.5, bold: true, align: 'center' });
-  write('(11) 3333-1717', centerX, y + 28, { size: 9.5, bold: true, align: 'center' });
-  write('Mediante agendamento prévio no telefone e (ou) e-mail acima indicado;', centerX, y + 34, { size: 8.7, bold: true, align: 'center' });
-  write('É obrigatório que o funcionário compareça munido de documento de identidade e CPF.', centerX, y + 38, { size: 8.5, bold: true, align: 'center' });
+  clinicDefaults.agendamento.forEach((line, index) => {
+    write(line, centerX, y + 8 + index * 6, { size: index === 0 ? 10 : 9.2, bold: true, align: 'center' });
+  });
   next(centralH);
 
   rect(5);
   next(5);
   rect(16);
-  write('Nome do Responsável / Contato (OBRIGATÓRIO):', x + 3, y + 9, { size: 9.5, bold: true });
+  write('Nome do Responsavel / Contato (OBRIGATORIO):', x + 3, y + 9, { size: 9.5, bold: true });
   write(responsavel, x + 83, y + 9, { size: 9.5, bold: true, maxWidth: 86 });
 
-  const fileName = `GUIA ASO AUDIOLIFE - ${cleanFilePart(d.nome).replace(/_/g, ' ')} - ${dataExame}.pdf`;
+  const fileName = `GUIA ASO - ${cleanFilePart(d.nome).replace(/_/g, ' ')} - ${dataExame}.pdf`;
   return { blob: doc.output('blob'), fileName };
 };
+
+const cleanic = (value: string) => cleanText(value).toUpperCase();
 
 export const gerarAvisoFeriasPdf = (d: AvisoFeriasData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
