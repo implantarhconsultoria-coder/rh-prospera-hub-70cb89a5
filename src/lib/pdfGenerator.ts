@@ -43,6 +43,22 @@ const fmtBR = (iso?: string) => {
   return new Date(iso).toLocaleDateString('pt-BR');
 };
 
+const localIsoDate = (offsetDays = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const resolveAsoExamDate = (date?: string) => {
+  const value = String(date || '').trim();
+  const today = localIsoDate();
+  const tomorrow = localIsoDate(1);
+  return !value || value === today ? tomorrow : value;
+};
+
 const cleanFilePart = (value?: string) => cleanText(value || 'SEM_INFORMACAO')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -66,7 +82,7 @@ const cleanic = (value: string) => cleanText(value).toUpperCase();
 
 const isGoianiaAso = (d: FichaASOData) => {
   const source = normalizePlain(`${d.clinica || ''} ${d.empresa || ''} ${d.obraLocal || ''}`);
-  return source.includes('GOIANIA') || source.includes('GOIANIA') || source.includes('ASMETRO') || source.includes('GLOBAL MED');
+  return source.includes('GOIANIA') || source.includes('ASMETRO') || source.includes('GLOBAL MED');
 };
 
 const getExamHighlightColor = (tipoExame: string): [number, number, number] => {
@@ -188,6 +204,7 @@ const drawSignatures = (doc: jsPDF, y: number) => {
 
 export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const dataExame = resolveAsoExamDate(d.dataExame);
   drawHeader(doc, d.empresa, d.cnpj || '', 'FICHA DE AGENDAMENTO ASO');
   let y = 35;
   y = drawBlock(doc, y, 'Dados do Colaborador', [
@@ -197,7 +214,7 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
     ['Nascimento', fmtBR(d.dataNascimento)], ['Setor/GHE', d.setorGhe || '---'],
   ]);
   y = drawBlock(doc, y, 'Dados do Exame', [
-    ['Data do Exame', fmtBR(d.dataExame)], ['Tipo', d.tipoExame],
+    ['Data do Exame', fmtBR(dataExame)], ['Tipo', d.tipoExame],
     ['Obra/Local', d.obraLocal || '-'], ['Responsavel', d.responsavelContato || '-'],
     ['NR35', d.trabalhoAltura ? 'Sim' : 'Nao'],
     ['NR33', d.espacoConfinado ? 'Sim' : 'Nao'],
@@ -218,14 +235,13 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
     y += 27;
   }
   drawSignatures(doc, y + 35);
-  const fileName = makeDocumentFileName('ASO', d.empresa, d.nome, d.dataExame || new Date().toISOString().slice(0, 10));
+  const fileName = makeDocumentFileName('ASO', d.empresa, d.nome, dataExame);
   return { blob: doc.output('blob'), fileName };
 };
 
 const gerarAutorizacaoExameGoianiaPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const today = new Date().toISOString().slice(0, 10);
-  const dataExame = d.dataExame || today;
+  const dataExame = resolveAsoExamDate(d.dataExame);
   const tipoNormalizado = normalizePlain(d.tipoExame || 'Admissional');
   const responsavel = cleanText(d.responsavelContato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385');
   const x = 18;
@@ -289,7 +305,7 @@ const gerarAutorizacaoExameGoianiaPdf = (d: FichaASOData): { blob: Blob; fileNam
   write(`Nome Da Empresa: ${d.empresa || ''}`, x + 2, topY + 5.4, { size: 10, bold: true, maxWidth: 84 });
   write(`DATA: ${fmtBR(dataExame)}`, x + 91, topY + 5.4, { size: 10, bold: true });
 
-  const dadosY = row(37);
+  const dadosY = row(44);
   write(`OBRA / LOCAL: ${d.obraLocal || ''}`, x + 2, dadosY + 5.2, { size: 9.8, bold: true, maxWidth: 168 });
   write(`FUNCIONARIO: ${d.nome || ''}`, x + 2, dadosY + 10.5, { size: 9.8, bold: true, maxWidth: 168 });
   write(`SETOR/ GHE: ${d.setorGhe || ''}`, x + 2, dadosY + 15.8, { size: 9.8, bold: true });
@@ -338,7 +354,7 @@ const gerarAutorizacaoExameGoianiaPdf = (d: FichaASOData): { blob: Blob; fileNam
   write('E obrigatorio ao funcionario no ato do exame clinico, comparecer munido', centerX, centralY + 31, { size: 9.8, bold: true, align: 'center' });
   write('de documento de identidade/CPF.', centerX, centralY + 36, { size: 9.8, bold: true, align: 'center' });
 
-  y += 8;
+  y += 4;
   rect(x, y, w, 16);
   write('Nome do Responsavel / contato ', x + 2, y + 6, { size: 10.2, bold: true });
   write('(OBRIGATORIO):', x + 61, y + 6, { size: 10.2, bold: true, color: [255, 0, 0] });
@@ -352,8 +368,7 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   if (isGoianiaAso(d)) return gerarAutorizacaoExameGoianiaPdf(d);
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  const today = new Date().toISOString().slice(0, 10);
-  const dataExame = d.dataExame || today;
+  const dataExame = resolveAsoExamDate(d.dataExame);
   const tipoExame = cleanText(d.tipoExame || 'Admissional').toUpperCase();
   const responsavel = cleanText(d.responsavelContato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385');
   const clinicDefaults = getAsoClinicDefaults(d);
