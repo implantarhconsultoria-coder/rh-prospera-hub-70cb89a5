@@ -11,6 +11,11 @@ export type AbastecimentoReceiptData = {
   filial?: string;
   placa: string;
   veiculo?: string;
+  combustivel?: string;
+  valor?: number;
+  litros?: number;
+  valorPorLitro?: number | null;
+  kmAtual?: number | null;
   fotoBombaUrl: string;
   fotoPainelUrl: string;
   createdAt: Date;
@@ -34,6 +39,16 @@ const imageData = async (source: string): Promise<string | null> => {
   }
 };
 
+const formatMoney = (value?: number | null) =>
+  typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+    : "-";
+
+const formatNumber = (value?: number | null, digits = 2) =>
+  typeof value === "number" && Number.isFinite(value)
+    ? value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+    : "-";
+
 export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData) {
   const [bomba, painel, qr] = await Promise.all([
     imageData(data.fotoBombaUrl),
@@ -41,7 +56,7 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
     data.codigo ? QRCode.toDataURL(data.codigo, { margin: 0, width: 180 }) : Promise.resolve(null),
   ]);
 
-  const pdf = new jsPDF({ unit: "mm", format: [80, 245], orientation: "portrait" });
+  const pdf = new jsPDF({ unit: "mm", format: [80, 260], orientation: "portrait" });
   const center = 40;
   let y = 8;
 
@@ -89,9 +104,12 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
   row("EMPRESA/FILIAL", [data.empresa, data.filial].filter(Boolean).join(" - "));
   row("VEICULO/PLACA", [data.veiculo, data.placa].filter(Boolean).join(" / "));
   line();
-  centered("VALOR, LITROS, PRECO E KM", 7.5, true);
-  centered("registrados nas fotos abaixo", 7);
-  y += 2;
+  row("COMBUSTIVEL", data.combustivel || "-");
+  row("LITROS", `${formatNumber(data.litros, 3)} L`);
+  row("VALOR", formatMoney(data.valor));
+  row("PRECO/L", formatMoney(data.valorPorLitro));
+  row("KM", data.kmAtual != null ? formatNumber(data.kmAtual, 0) : "-");
+  line();
   addPhoto("FOTO DA BOMBA", bomba);
   addPhoto("FOTO DO PAINEL / KM", painel);
 
