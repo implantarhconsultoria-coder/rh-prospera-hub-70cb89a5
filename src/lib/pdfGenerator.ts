@@ -62,6 +62,13 @@ const normalizePlain = (value?: string) => cleanText(value || '')
   .replace(/[\u0300-\u036f]/g, '')
   .toUpperCase();
 
+const cleanic = (value: string) => cleanText(value).toUpperCase();
+
+const isGoianiaAso = (d: FichaASOData) => {
+  const source = normalizePlain(`${d.clinica || ''} ${d.empresa || ''} ${d.obraLocal || ''}`);
+  return source.includes('GOIANIA') || source.includes('GOIANIA') || source.includes('ASMETRO') || source.includes('GLOBAL MED');
+};
+
 const getExamHighlightColor = (tipoExame: string): [number, number, number] => {
   const normalized = normalizePlain(tipoExame);
 
@@ -71,10 +78,7 @@ const getExamHighlightColor = (tipoExame: string): [number, number, number] => {
 };
 
 const getAsoClinicDefaults = (d: FichaASOData) => {
-  const source = normalizePlain(`${d.clinica || ''} ${d.empresa || ''} ${d.obraLocal || ''}`);
-  const isGoiania = source.includes('GOIANIA') || source.includes('GOIANIA') || source.includes('ASMETRO') || source.includes('GLOBAL MED');
-
-  if (isGoiania) {
+  if (isGoianiaAso(d)) {
     return {
       local: d.clinica || 'ASMETRO - Medicina do Trabalho, Rua 18, no. 247, Centro - Goiania/GO, ao lado do Colegio Liceu',
       horarios: [
@@ -218,7 +222,135 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
   return { blob: doc.output('blob'), fileName };
 };
 
+const gerarAutorizacaoExameGoianiaPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const today = new Date().toISOString().slice(0, 10);
+  const dataExame = d.dataExame || today;
+  const tipoNormalizado = normalizePlain(d.tipoExame || 'Admissional');
+  const responsavel = cleanText(d.responsavelContato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385');
+  const x = 18;
+  const w = 174;
+  let y = 14;
+  const centerX = x + w / 2;
+
+  const write = (
+    text: string,
+    tx: number,
+    ty: number,
+    options: { size?: number; bold?: boolean; align?: 'left' | 'center' | 'right'; maxWidth?: number; color?: [number, number, number] } = {},
+  ) => {
+    doc.setFont('times', options.bold ? 'bold' : 'normal');
+    doc.setFontSize(options.size || 9);
+    doc.setTextColor(...(options.color || [0, 0, 0]));
+    const value = cleanText(text);
+    const lines = options.maxWidth ? doc.splitTextToSize(value, options.maxWidth) : value;
+    doc.text(lines, tx, ty, { align: options.align || 'left' });
+  };
+
+  const rect = (rx: number, ry: number, rw: number, rh: number, fill?: [number, number, number]) => {
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.22);
+    if (fill) {
+      doc.setFillColor(...fill);
+      doc.rect(rx, ry, rw, rh, 'FD');
+    } else {
+      doc.rect(rx, ry, rw, rh);
+    }
+  };
+
+  const row = (height: number, fill?: [number, number, number]) => {
+    rect(x, y, w, height, fill);
+    const current = y;
+    y += height;
+    return current;
+  };
+
+  rect(x, y, 28, 18);
+  rect(x + 31, y, 109, 18);
+  rect(x + 144, y, 30, 18);
+  try {
+    doc.addImage(ponteAereaLogoDataUrl, 'PNG', x + 4, y + 2, 20, 13);
+  } catch {
+    write('Ponte Aerea', x + 14, y + 10, { size: 7, bold: true, align: 'center' });
+  }
+  write('AUTORIZACAO DE EXAMES', centerX, y + 11, { size: 20, align: 'center' });
+  y += 25;
+
+  write('RUA 18, No 247', centerX, y, { size: 16, bold: true, align: 'center' });
+  write('CENTRO - GOIANIA', centerX, y + 7, { size: 16, bold: true, align: 'center' });
+  write('(AO LADO DO COLEGIO LICEU)', centerX, y + 14, { size: 14, bold: true, align: 'center' });
+  write('DE SEGUNDA A SEXTA:', centerX, y + 21, { size: 14, bold: true, align: 'center' });
+  write('PARA CLINICO + COLETAS DAS 07:30HS AS 11:30HS.', centerX, y + 28, { size: 13, bold: true, align: 'center' });
+  write('SOMENTE CLINICO DAS 13:00AS 16:30 HS.', centerX, y + 35, { size: 13, bold: true, align: 'center' });
+  y += 41;
+
+  const topY = row(8);
+  doc.line(x + 89, topY, x + 89, topY + 8);
+  write(`Nome Da Empresa: ${d.empresa || ''}`, x + 2, topY + 5.4, { size: 10, bold: true, maxWidth: 84 });
+  write(`DATA: ${fmtBR(dataExame)}`, x + 91, topY + 5.4, { size: 10, bold: true });
+
+  const dadosY = row(37);
+  write(`OBRA / LOCAL: ${d.obraLocal || ''}`, x + 2, dadosY + 5.2, { size: 9.8, bold: true, maxWidth: 168 });
+  write(`FUNCIONARIO: ${d.nome || ''}`, x + 2, dadosY + 10.5, { size: 9.8, bold: true, maxWidth: 168 });
+  write(`SETOR/ GHE: ${d.setorGhe || ''}`, x + 2, dadosY + 15.8, { size: 9.8, bold: true });
+  write(`FUNCAO: ${d.funcao || ''}`, x + 2, dadosY + 21.1, { size: 9.8, bold: true, maxWidth: 168 });
+  write(`DATA DE NASCIMENTO: ${fmtBR(d.dataNascimento)}`, x + 2, dadosY + 26.4, { size: 9.8, bold: true });
+  write('PIS:', x + 91, dadosY + 26.4, { size: 9.8, bold: true });
+  write(`RG: ${d.rg || ''}`, x + 2, dadosY + 31.7, { size: 9.8, bold: true });
+  write(`CPF: ${d.cpf || ''}`, x + 2, dadosY + 37, { size: 9.8, bold: true });
+  write(`DATA DE ADMISSAO: ${fmtBR(d.dataAdmissao)}`, x + 2, dadosY + 42.3, { size: 9.8, bold: true });
+  write('CTPS n.o... Serie/ Estado:', x + 91, dadosY + 42.3, { size: 9.8, bold: true });
+
+  const titleY = row(7, [192, 192, 192]);
+  write('ASSSINALE O TIPO DE EXAME:', centerX, titleY + 5, { size: 11, bold: true, align: 'center', color: [255, 0, 0] });
+
+  const tipos = ['ADMISSIONAL', 'PERIODICO', 'DEMISSIONAL', 'MUDANCA DE FUNCAO', 'RETORNO AO TRABALHO', 'AVALIACAO MEDICA', 'OUTROS. QUAL'];
+  tipos.forEach((tipo) => {
+    const ty = row(5.8);
+    doc.line(x + 12, ty, x + 12, ty + 5.8);
+    const selected = tipoNormalizado.includes(tipo.replace('PERIODICO', 'PERIODICO').replace('OUTROS. QUAL', 'OUTROS')) ||
+      (tipo === 'MUDANCA DE FUNCAO' && tipoNormalizado.includes('MUDANCA')) ||
+      (tipo === 'RETORNO AO TRABALHO' && tipoNormalizado.includes('RETORNO')) ||
+      (tipo === 'AVALIACAO MEDICA' && tipoNormalizado.includes('AVALIACAO'));
+    if (selected) {
+      doc.setFillColor(...getExamHighlightColor(tipo));
+      doc.rect(x + 13, ty + 0.8, w - 14, 4.2, 'F');
+    }
+    write(tipo, centerX + 8, ty + 4.3, { size: 10.8, bold: selected || tipo.includes('OUTROS'), align: 'center' });
+  });
+
+  const itensY = row(7, [192, 192, 192]);
+  write('ASSINALAR SE CASO SIM PARA OS ITENS ABAIXO:', x + 14, itensY + 5, { size: 10.8, bold: true, color: [255, 0, 0] });
+
+  const alturaY = row(13);
+  doc.line(x + 12, alturaY, x + 12, alturaY + 13);
+  write(`REALIZARA EXAMES P/ TRABALHO EM ALTURA        ${d.trabalhoAltura ? '( X ) SIM  (   ) NAO' : '(   ) SIM  ( X ) NAO'}`, x + 14, alturaY + 8.3, { size: 10.6 });
+
+  const confinadoY = row(15);
+  doc.line(x + 12, confinadoY, x + 12, confinadoY + 15);
+  write(`REALIZARA EXAMES P/ TRABALHO EM ESPACO CONFINADO      ${d.espacoConfinado ? '( X ) SIM  (   ) NAO' : '(   ) SIM  ( X ) NAO'}`, x + 14, confinadoY + 8.8, { size: 10.2, maxWidth: 152 });
+
+  const centralY = row(40);
+  write('CENTRAL DE AGENDAMENTO TEL: (11) 33353200', centerX, centralY + 9, { size: 11, bold: true, align: 'center' });
+  write('E-MAIL: ', centerX - 38, centralY + 15, { size: 10.6, bold: true, align: 'left' });
+  write('agendamento@ponteaereaseguranca.com.br', centerX - 22, centralY + 15, { size: 10.6, bold: true, color: [0, 0, 255], align: 'left' });
+  write('Mediante agendamento previo no telefone e (ou) e-mail acima indicado;', centerX, centralY + 25, { size: 9.8, bold: true, align: 'center' });
+  write('E obrigatorio ao funcionario no ato do exame clinico, comparecer munido', centerX, centralY + 31, { size: 9.8, bold: true, align: 'center' });
+  write('de documento de identidade/CPF.', centerX, centralY + 36, { size: 9.8, bold: true, align: 'center' });
+
+  y += 8;
+  rect(x, y, w, 16);
+  write('Nome do Responsavel / contato ', x + 2, y + 6, { size: 10.2, bold: true });
+  write('(OBRIGATORIO):', x + 61, y + 6, { size: 10.2, bold: true, color: [255, 0, 0] });
+  write(responsavel, x + 2, y + 12, { size: 9.4, bold: true, maxWidth: 168 });
+
+  const fileName = `GUIA ASMETRO GOIANIA - ${cleanFilePart(d.nome).replace(/_/g, ' ')} - ${dataExame}.pdf`;
+  return { blob: doc.output('blob'), fileName };
+};
+
 export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {
+  if (isGoianiaAso(d)) return gerarAutorizacaoExameGoianiaPdf(d);
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const today = new Date().toISOString().slice(0, 10);
   const dataExame = d.dataExame || today;
@@ -352,8 +484,6 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   const fileName = `GUIA ASO - ${cleanFilePart(d.nome).replace(/_/g, ' ')} - ${dataExame}.pdf`;
   return { blob: doc.output('blob'), fileName };
 };
-
-const cleanic = (value: string) => cleanText(value).toUpperCase();
 
 export const gerarAvisoFeriasPdf = (d: AvisoFeriasData): { blob: Blob; fileName: string } => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
