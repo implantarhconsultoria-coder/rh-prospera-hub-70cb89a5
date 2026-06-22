@@ -3,10 +3,11 @@ import { Outlet, Navigate, NavLink, useNavigate, useLocation } from 'react-route
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Loader2, FileText, Users, FileSignature, Receipt, TrendingUp, AlertTriangle, LogOut, Building2, ClipboardCheck, Menu, ArrowLeft, X, FileUp } from 'lucide-react';
+import { Loader2, FileText, Users, FileSignature, Receipt, TrendingUp, AlertTriangle, LogOut, Building2, ClipboardCheck, Menu, ArrowLeft, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
+import ReportToolbar from '@/components/ReportToolbar';
 
 const ITEMS = [
   { to: '/faturamento', label: 'Dashboard', icon: TrendingUp, end: true },
@@ -51,6 +52,7 @@ const FaturamentoLayout: React.FC = () => {
             <div className="font-semibold text-sm truncate">{current?.label || 'Faturamento'}</div>
             <div className="text-[10px] text-muted-foreground truncate">{session?.user?.email}</div>
           </div>
+          <ReportToolbar modulo="Faturamento" compact />
           <Button size="icon" variant="ghost" onClick={() => setDrawerOpen(true)} aria-label="Menu">
             <Menu className="w-6 h-6" />
           </Button>
@@ -123,7 +125,10 @@ const FaturamentoLayout: React.FC = () => {
       </aside>
       <main className="ml-64 min-h-screen">
         <div className="p-6 max-w-[1600px] mx-auto">
-          <div className="flex justify-end mb-3 no-print"><ModuleSwitcher /></div>
+          <div className="flex items-center justify-between gap-2 mb-3 no-print">
+            <ReportToolbar modulo="Faturamento" />
+            <ModuleSwitcher />
+          </div>
           <Outlet />
         </div>
       </main>
