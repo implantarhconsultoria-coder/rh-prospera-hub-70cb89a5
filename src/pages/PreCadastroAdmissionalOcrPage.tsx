@@ -207,6 +207,12 @@ const fileNameFromUrl = (url: string, fallback: string) => {
   }
 };
 
+const buildMigrationBenefits = (emp: any) => [
+  emp.vrAtivo ? `VR ${formatBRL(Number(emp.vrDiario) || 0)}/dia` : '',
+  emp.vaAtivo ? `VA ${formatBRL(Number(emp.vaMensal) || 0)}/mes` : '',
+  emp.vtAtivo ? `VT ${formatBRL(Number(emp.vtDiario) || 0)}/dia` : '',
+].filter(Boolean).join(' | ');
+
 const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const { companies, employees, refreshData, session, config } = useApp();
   const [rows, setRows] = useState<PreCadastro[]>([]);
@@ -220,6 +226,8 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const [lastFichaFile, setLastFichaFile] = useState<File | null>(null);
   const [lastAsoGuide, setLastAsoGuide] = useState<GeneratedAsoGuide | null>(null);
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
+  const [migrationEmployeeId, setMigrationEmployeeId] = useState('');
+  const [migrationCompanyId, setMigrationCompanyId] = useState('');
 
   const carregar = async () => {
     setLoading(true);
@@ -236,6 +244,12 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
 
   const filtered = useMemo(() => { const q = search.toLowerCase(); return rows.filter(r => !q || `${r.nome} ${r.cpf} ${r.empresa_nome} ${r.status} ${r.funcao}`.toLowerCase().includes(q)); }, [rows, search]);
   const duplicateCpf = useMemo(() => { const cpf = onlyDigits(form.cpf); return !!cpf && rows.some(r => r.id !== form.id && onlyDigits(r.cpf) === cpf); }, [rows, form.cpf, form.id]);
+  const migrationEmployees = useMemo(() => employees
+    .filter(emp => emp.status !== 'excluido' && emp.categoria !== 'socio')
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [employees]);
+  const migrationEmployee = useMemo(() => employees.find(emp => emp.id === migrationEmployeeId), [employees, migrationEmployeeId]);
+  const migrationOriginCompany = migrationEmployee ? companies.find(c => c.id === migrationEmployee.companyId) : null;
+  const migrationDestinationCompanies = useMemo(() => companies.filter(c => c.id !== migrationEmployee?.companyId), [companies, migrationEmployee?.companyId]);
   const roleOptions = useMemo<RoleOption[]>(() => {
     if (!form.empresa_id) return [];
     const byRole = new Map<string, RoleOption>();
@@ -295,6 +309,87 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     });
   };
   const novo = () => { setSelectedId(''); setForm(initialForm); setOcrResult(null); setLastFichaFile(null); setLastAsoGuide(null); };
+
+  const prepararMigracaoFuncionario = () => {
+    const emp = migrationEmployee;
+    const destino = companies.find(c => c.id === migrationCompanyId);
+    const origem = emp ? companies.find(c => c.id === emp.companyId) : null;
+    if (!emp || !destino) {
+      toast.error('Selecione o funcionario de origem e a empresa destino.');
+      return;
+    }
+
+    const insalubridadeAtiva = employeeHasInsalubridade(emp);
+    const periculosidadeAtiva = isMotoboyRole(emp.cargo);
+    const periculosidadeValor = getPericulosidadeAplicavel(emp);
+    const now = new Date().toISOString();
+    if (lastAsoGuide?.url) URL.revokeObjectURL(lastAsoGuide.url);
+    setSelectedId('');
+    setSearch('');
+    setOcrResult(null);
+    setLastFichaFile(null);
+    setLastAsoGuide(null);
+    setForm({
+      status: 'aguardando_validacao',
+      empresa_id: destino.id,
+      empresa_nome: destino.name || '',
+      cnpj: destino.cnpj || '',
+      nome: emp.name || '',
+      cpf: emp.cpf || '',
+      rg: emp.rg || '',
+      data_nascimento: emp.dataNascimento || '',
+      data_admissao: emp.dataAdmissao || '',
+      funcao: emp.cargo || '',
+      setor_ghe: emp.setorGhe || '',
+      obra_local: destino.city || '',
+      salario: Number(emp.salarioBase) || null,
+      tipo_admissao: 'Transferencia entre empresas',
+      jornada: '',
+      beneficios: buildMigrationBenefits(emp),
+      insalubridade: insalubridadeAtiva ? formatInsalubridade(Number(emp.insalubridadeValor || config.valorInsalubridade || 0)) : periculosidadeAtiva ? formatPericulosidade(periculosidadeValor) : 'Nao',
+      filiacao: '',
+      endereco: emp.endereco || '',
+      escolaridade: '',
+      experiencia: [
+        emp.telefone ? `Telefone: ${emp.telefone}` : '',
+        emp.celular ? `Celular: ${emp.celular}` : '',
+        emp.email ? `E-mail: ${emp.email}` : '',
+        emp.observacoes ? `Observacoes origem: ${emp.observacoes}` : '',
+      ].filter(Boolean).join(' | '),
+      epi: '',
+      responsavel_contato: '',
+      arquivo_ficha_url: '',
+      arquivo_aso_url: '',
+      dados_extraidos: {
+        origem_migracao_funcionario: {
+          funcionario_id: emp.id,
+          funcionario_nome: emp.name,
+          empresa_origem_id: emp.companyId,
+          empresa_origem_nome: origem?.name || '',
+          empresa_destino_id: destino.id,
+          empresa_destino_nome: destino.name || '',
+          preparado_em: now,
+        },
+      },
+      conferencia: {
+        migracao_empresa: {
+          status: 'pre_ficha_pre_preenchida',
+          empresa_origem: origem?.name || '',
+          empresa_destino: destino.name || '',
+          funcionario_origem_id: emp.id,
+          preparado_em: now,
+        },
+      },
+      historico: [{
+        em: now,
+        acao: 'pre_ficha_migracao_empresa_pre_preenchida',
+        funcionario_origem_id: emp.id,
+        empresa_origem_nome: origem?.name || '',
+        empresa_destino_nome: destino.name || '',
+      }],
+    });
+    toast.success(`Pre-ficha preenchida para migrar ${emp.name} para ${destino.name}. Confira e salve.`);
+  };
 
   useEffect(() => {
     const funcao = form.funcao || '';
@@ -626,7 +721,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   return <div className="space-y-5 animate-fade-in">
     <div className="card-premium p-6 gradient-primary text-primary-foreground"><div className="flex items-center gap-4"><div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center"><FileSearch className="w-7 h-7" /></div><div><h1 className="text-2xl font-bold font-display">Pre-cadastro Admissional</h1><p className="text-primary-foreground/70 text-sm">Ficha, exame, documentos, ASO e aprovacao antes da base oficial.</p></div></div></div>
     <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-5">
-      <div className="card-premium p-4 space-y-3"><div className="flex gap-2"><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar nome, CPF, empresa, status..." /><Button variant="outline" onClick={carregar} disabled={loading}><RefreshCw className={loading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'} /></Button></div><Button onClick={novo} className="w-full gradient-accent text-accent-foreground">Novo pre-cadastro</Button><div className="space-y-2 max-h-[62vh] overflow-y-auto">{filtered.map(r => <button key={r.id} onClick={() => setSelectedId(r.id)} className={`w-full text-left rounded-xl border p-3 hover:bg-muted/40 ${selectedId === r.id ? 'border-primary bg-primary/5' : 'border-border'}`}><div className="font-semibold text-sm">{r.nome || 'Sem nome informado'}</div><div className="text-xs text-muted-foreground">{r.empresa_nome || 'Empresa pendente'} - {r.cpf || 'CPF pendente'}</div><Badge variant="outline" className="mt-2 text-[10px]">{statusLabel[r.status] || r.status}</Badge></button>)}{filtered.length === 0 && <div className="text-sm text-muted-foreground text-center py-8">Nenhum pre-cadastro encontrado.</div>}</div></div>
+      <div className="card-premium p-4 space-y-3"><div className="flex gap-2"><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar nome, CPF, empresa, status..." /><Button variant="outline" onClick={carregar} disabled={loading}><RefreshCw className={loading ? 'w-4 h-4 animate-spin' : 'w-4 h-4'} /></Button></div><Button onClick={novo} className="w-full gradient-accent text-accent-foreground">Novo pre-cadastro</Button><div className="border-t pt-3 space-y-2"><div><div className="text-sm font-semibold">Migrar funcionario</div><p className="text-xs text-muted-foreground">Puxa dados do cadastro atual para uma pre-ficha em outra empresa.</p></div><select value={migrationEmployeeId} onChange={e => { setMigrationEmployeeId(e.target.value); setMigrationCompanyId(''); }} className="w-full border rounded-lg px-3 py-2 text-sm bg-background"><option value="">Funcionario origem</option>{migrationEmployees.map(emp => { const empresa = companies.find(c => c.id === emp.companyId); return <option key={emp.id} value={emp.id}>{emp.name} - {empresa?.name || 'Empresa atual'}</option>; })}</select><select value={migrationCompanyId} onChange={e => setMigrationCompanyId(e.target.value)} disabled={!migrationEmployee} className="w-full border rounded-lg px-3 py-2 text-sm bg-background disabled:opacity-60"><option value="">Empresa destino</option>{migrationDestinationCompanies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>{migrationEmployee && <div className="text-[11px] text-muted-foreground">Origem: {migrationOriginCompany?.name || 'Empresa atual'} - CPF {migrationEmployee.cpf || 'pendente'}</div>}<Button type="button" variant="outline" onClick={prepararMigracaoFuncionario} className="w-full"><ArrowRight className="w-4 h-4 mr-2" />Puxar para pre-ficha</Button></div><div className="space-y-2 max-h-[62vh] overflow-y-auto">{filtered.map(r => <button key={r.id} onClick={() => setSelectedId(r.id)} className={`w-full text-left rounded-xl border p-3 hover:bg-muted/40 ${selectedId === r.id ? 'border-primary bg-primary/5' : 'border-border'}`}><div className="font-semibold text-sm">{r.nome || 'Sem nome informado'}</div><div className="text-xs text-muted-foreground">{r.empresa_nome || 'Empresa pendente'} - {r.cpf || 'CPF pendente'}</div><Badge variant="outline" className="mt-2 text-[10px]">{statusLabel[r.status] || r.status}</Badge></button>)}{filtered.length === 0 && <div className="text-sm text-muted-foreground text-center py-8">Nenhum pre-cadastro encontrado.</div>}</div></div>
       <div className="card-premium p-5 space-y-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold">Conferencia admissional</h2><p className="text-xs text-muted-foreground">Nada entra em Funcionarios antes da aprovacao final.</p></div><Badge className="bg-warning/20 text-warning">{statusLabel[String(form.status)] || form.status || 'Aguardando validacao'}</Badge></div>
         <div className="rounded-xl border border-dashed border-primary/40 p-4"><label className="text-sm font-semibold flex items-center gap-2 mb-2"><Upload className="w-4 h-4" /> Ficha de Solicitacao de Emprego</label><input type="file" accept=".pdf,image/*" onChange={e => uploadFicha(e.target.files?.[0])} className="text-sm" />{form.arquivo_ficha_url && <a href={form.arquivo_ficha_url} target="_blank" className="block mt-2 text-xs text-primary underline">Abrir ficha anexada</a>}<div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">{ocrLoading && <span className="inline-flex items-center gap-2 text-primary"><Loader2 className="w-3 h-3 animate-spin" /> Lendo PDF/imagem com OCR...</span>}{!ocrLoading && ocrResult?.confianca_geral !== undefined && <Badge variant="outline">OCR {(Number(ocrResult.confianca_geral || 0) * 100).toFixed(0)}%</Badge>}{lastFichaFile && !ocrLoading && <Button type="button" size="sm" variant="outline" onClick={() => form.arquivo_ficha_url && runFichaOcr(lastFichaFile, form.arquivo_ficha_url)}><RefreshCw className="w-3 h-3 mr-1" /> Reler ficha</Button>}</div></div>
         {ocrResult && <div className={`rounded-xl border p-4 space-y-3 ${ocrResult.ok === false ? 'border-warning bg-warning/10' : 'border-primary/30 bg-primary/5'}`}><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-sm flex items-center gap-2">{ocrResult.ok === false && <AlertTriangle className="w-4 h-4 text-warning" />}Conferencia OCR da ficha</div><p className="text-xs text-muted-foreground">Campos com baixa confianca ficam marcados para revisao manual antes da aprovacao oficial.</p></div>{ocrResult.ok !== false && <Badge className="bg-primary/15 text-primary">Standby</Badge>}</div>{ocrResult.error && <div className="text-sm text-warning">{ocrResult.error}</div>}{Object.keys(ocrResult.campos || {}).length > 0 && <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">{Object.entries(ocrResult.campos || {}).map(([key, field]) => { const confidence = Number(field?.confianca || 0); const low = confidence < LOW_CONFIDENCE; return <div key={key} className={`rounded-lg border p-2 ${low ? 'border-warning/50 bg-warning/10' : 'border-border bg-background/60'}`}><div className="flex items-center justify-between gap-2"><span className="text-[11px] uppercase tracking-wide text-muted-foreground">{OCR_FIELD_LABELS[key] || key}</span><Badge variant="outline" className={low ? 'text-warning border-warning/50' : ''}>{Math.round(confidence * 100)}%</Badge></div><div className="mt-1 text-sm font-medium break-words">{String(field?.valor || '-')}</div>{low && <div className="mt-1 text-[11px] text-warning">Revisar antes de salvar.</div>}</div>; })}</div>}{(ocrResult.pendencias || []).length > 0 && <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">{(ocrResult.pendencias || []).map((p, idx) => <div key={`${p}-${idx}`}>- {p}</div>)}</div>}</div>}
