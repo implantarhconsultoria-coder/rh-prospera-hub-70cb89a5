@@ -1,12 +1,251 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Wallet, FileText, AlertTriangle, CheckCircle2, Clock, TrendingUp, Building2, Users, Package, RefreshCw, ClipboardCheck } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  BriefcaseBusiness,
+  Calculator,
+  CheckCircle2,
+  ClipboardCheck,
+  Database,
+  FileCheck2,
+  FileText,
+  Landmark,
+  Mail,
+  MapPin,
+  Phone,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 import Dn4ImportPanel from '@/components/Dn4ImportPanel';
 import TopacCentralDashboard from '@/components/TopacCentralDashboard';
+import '@/styles/faturamento-dn4.css';
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const onlyDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
+const fmtDoc = (value?: string | null) => {
+  const d = onlyDigits(value);
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  return value || 'Sem documento';
+};
+
+const regraLabel: Record<string, string> = {
+  mensal_fixo: 'Mensal fixo',
+  quinzenal: 'Quinzenal',
+  semanal: 'Semanal',
+  diario: 'Diario',
+  periodo_locacao: 'Periodo de locacao',
+  medicao: 'Por medicao',
+  evento_os: 'Evento/OS',
+  equipamento: 'Por equipamento',
+  consumo: 'Consumo/uso',
+};
+
+type Dn4WorkspaceProps = {
+  clientes: any[];
+  contratos: any[];
+  faturas: any[];
+  stats: {
+    previsto: number;
+    emitido: number;
+    pago: number;
+    pendencias: number;
+    reajustesProximos: number;
+  };
+  go: (path?: string) => void;
+};
+
+const Dn4Field = ({ label, value, wide }: { label: string; value?: React.ReactNode; wide?: boolean }) => (
+  <div className={wide ? 'fat-dn4-field fat-dn4-field-wide' : 'fat-dn4-field'}>
+    <span>{label}</span>
+    <strong>{value || '—'}</strong>
+  </div>
+);
+
+const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contratos, faturas, stats, go }) => {
+  const cliente = clientes.find(c => c.status === 'ativo') || clientes[0] || null;
+  const contratosCliente = cliente
+    ? contratos.filter(c => c.cliente_id === cliente.id).slice(0, 5)
+    : contratos.slice(0, 5);
+  const faturasCliente = cliente
+    ? faturas.filter(f => f.cliente_id === cliente.id).slice(0, 4)
+    : faturas.slice(0, 4);
+  const documento = fmtDoc(cliente?.cnpj_cpf);
+  const isPessoaJuridica = onlyDigits(cliente?.cnpj_cpf).length !== 11;
+  const clienteCodigo = cliente?.id ? String(cliente.id).slice(0, 8).toUpperCase() : 'CLIENTE';
+
+  const workflow = useMemo(() => ([
+    { label: 'Cliente', value: clientes.length, meta: 'cadastro fiscal' },
+    { label: 'Contrato', value: contratos.filter(c => c.status === 'ativo').length, meta: 'locacao ativa' },
+    { label: 'Medicao', value: stats.pendencias, meta: 'conferencia' },
+    { label: 'Fatura', value: fmtBRL(stats.emitido), meta: 'emitido' },
+    { label: 'Financeiro', value: fmtBRL(stats.pago), meta: 'recebido' },
+  ]), [clientes.length, contratos, stats.emitido, stats.pago, stats.pendencias]);
+
+  return (
+    <section className="fat-dn4-workspace" aria-label="Operacao de faturamento no padrao DN4">
+      <div className="fat-dn4-head">
+        <div>
+          <p>Base de faturamento</p>
+          <h2>Cadastro, obra, tributacao e contrato no mesmo fluxo</h2>
+        </div>
+        <div className="fat-dn4-head-actions">
+          <button type="button" onClick={() => go('/clientes')}><Users /> Clientes</button>
+          <button type="button" onClick={() => go('/contratos')}><BriefcaseBusiness /> Contratos</button>
+          <button type="button" onClick={() => go('/medicoes')}><Calculator /> Medicoes</button>
+          <button type="button" onClick={() => go('/faturas')} className="fat-dn4-primary"><FileText /> Faturar</button>
+        </div>
+      </div>
+
+      <div className="fat-dn4-flow" aria-label="Esteira de faturamento">
+        {workflow.map((item, index) => (
+          <React.Fragment key={item.label}>
+            <button type="button" onClick={() => go(index === 0 ? '/clientes' : index === 1 ? '/contratos' : index === 2 ? '/medicoes' : index === 3 ? '/faturas' : '')}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.meta}</small>
+            </button>
+            {index < workflow.length - 1 && <ArrowRight className="fat-dn4-flow-arrow" />}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <div className="fat-dn4-grid">
+        <div className="fat-dn4-card fat-dn4-client-card">
+          <div className="fat-dn4-card-title">
+            <ShieldCheck />
+            <span>Informacoes do Cliente</span>
+          </div>
+          <div className="fat-dn4-form-grid">
+            <Dn4Field label="Codigo" value={clienteCodigo} />
+            <Dn4Field label="P.F. / P.J." value={isPessoaJuridica ? 'Pessoa Juridica' : 'Pessoa Fisica'} />
+            <Dn4Field label="CNPJ / CPF" value={documento} />
+            <Dn4Field label="Situacao" value={cliente?.status || 'Aguardando cadastro'} />
+            <Dn4Field label="Nome do Cliente" value={cliente?.razao_social || 'Selecione ou importe um cliente'} wide />
+            <Dn4Field label="Nome Fantasia" value={cliente?.nome_fantasia || cliente?.razao_social} />
+            <Dn4Field label="Tipo de Cliente" value="Cliente" />
+          </div>
+
+          <div className="fat-dn4-tabs" aria-label="Abas do cadastro de cliente">
+            {['Principal', 'Contatos', 'Inf. de Cobranca', 'Inf. de Entrega', 'Representantes', 'Tributacao', 'Arquivos'].map((tab, index) => (
+              <span key={tab} className={index === 0 ? 'is-active' : ''}>{tab}</span>
+            ))}
+          </div>
+
+          <div className="fat-dn4-split">
+            <div>
+              <div className="fat-dn4-section-label"><MapPin /> Informacoes de Entrega / Obra</div>
+              <div className="fat-dn4-form-grid compact">
+                <Dn4Field label="CEP" value={cliente?.cep} />
+                <Dn4Field label="Endereco" value={cliente?.endereco} wide />
+                <Dn4Field label="Cidade" value={cliente?.cidade} />
+                <Dn4Field label="UF" value={cliente?.uf} />
+              </div>
+            </div>
+            <div>
+              <div className="fat-dn4-section-label"><Phone /> Contato para faturamento</div>
+              <div className="fat-dn4-contact-box">
+                <span><Mail /> {cliente?.email || 'E-mail nao cadastrado'}</span>
+                <span><Phone /> {cliente?.telefone || 'Telefone nao cadastrado'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside className="fat-dn4-card fat-dn4-query-card">
+          <div className="fat-dn4-card-title">
+            <Search />
+            <span>Consulta de Cliente</span>
+          </div>
+          <div className="fat-dn4-query-grid">
+            <Dn4Field label="Codigo" value="" />
+            <Dn4Field label="Nome / Razao" value="" />
+            <Dn4Field label="CNPJ" value="" />
+            <Dn4Field label="Cidade" value="" />
+          </div>
+          <button type="button" onClick={() => go('/clientes')} className="fat-dn4-query-button">Visualizar clientes</button>
+          <p>{clientes.length ? `${clientes.length} cliente(s) disponiveis para faturamento.` : 'Importe ou cadastre clientes para iniciar o faturamento.'}</p>
+        </aside>
+      </div>
+
+      <div className="fat-dn4-bottom-grid">
+        <div className="fat-dn4-card">
+          <div className="fat-dn4-card-title">
+            <Landmark />
+            <span>Tributacao / CFOP</span>
+          </div>
+          <div className="fat-dn4-tax-grid">
+            <Dn4Field label="Regime Tributario" value="Conforme cadastro fiscal" />
+            <Dn4Field label="Indicador IE" value={cliente?.inscricao_estadual ? 'Contribuinte ICMS' : 'Nao informado'} />
+            <Dn4Field label="Inscricao Estadual" value={cliente?.inscricao_estadual} />
+            <Dn4Field label="Reter ISS" value="Conferir por cliente" />
+            <Dn4Field label="CFOP Padrao" value="Validar na emissao" />
+            <Dn4Field label="CFOP Interno" value="Validar na emissao" />
+          </div>
+        </div>
+
+        <div className="fat-dn4-card fat-dn4-contracts-card">
+          <div className="fat-dn4-card-title">
+            <Database />
+            <span>Projetos / contratos para faturar</span>
+          </div>
+          <div className="fat-dn4-table-wrap">
+            <table className="fat-dn4-table">
+              <thead>
+                <tr>
+                  <th>Contrato</th>
+                  <th>Cliente / Obra</th>
+                  <th>Regra</th>
+                  <th>Venc.</th>
+                  <th>Valor</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contratosCliente.length === 0 ? (
+                  <tr><td colSpan={6}>Nenhum contrato vinculado ao cliente selecionado.</td></tr>
+                ) : contratosCliente.map((contrato) => (
+                  <tr key={contrato.id} onClick={() => go(`/contratos/${contrato.id}`)}>
+                    <td>{contrato.numero || '—'}</td>
+                    <td>{contrato.clientes_fat?.razao_social || cliente?.razao_social || '—'}</td>
+                    <td>{regraLabel[contrato.regra_faturamento] || contrato.regra_faturamento || 'Mensal'}</td>
+                    <td>{contrato.dia_vencimento ? `Dia ${contrato.dia_vencimento}` : '—'}</td>
+                    <td>{fmtBRL(Number(contrato.valor_mensal || 0))}</td>
+                    <td><span className={contrato.status === 'ativo' ? 'is-ok' : 'is-warn'}>{contrato.status || '—'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="fat-dn4-card fat-dn4-invoices-card">
+          <div className="fat-dn4-card-title">
+            <FileCheck2 />
+            <span>Ultimas faturas do cliente</span>
+          </div>
+          <div className="fat-dn4-invoice-list">
+            {faturasCliente.length === 0 ? (
+              <p>Nenhuma fatura recente para esse cliente.</p>
+            ) : faturasCliente.map((fatura) => (
+              <button key={fatura.id} type="button" onClick={() => go('/faturas')}>
+                <span>{fatura.numero || fatura.competencia || 'Fatura'}</span>
+                <strong>{fmtBRL(Number(fatura.total || 0))}</strong>
+                <small>{fatura.status}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const FaturamentoDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -14,6 +253,9 @@ const FaturamentoDashboardPage: React.FC = () => {
   const ext = useAcessoExternoFiltro();
   const [loading, setLoading] = useState(true);
   const [painelKpis, setPainelKpis] = useState<any>(null);
+  const [clientesDn4, setClientesDn4] = useState<any[]>([]);
+  const [contratosDn4, setContratosDn4] = useState<any[]>([]);
+  const [faturasDn4, setFaturasDn4] = useState<any[]>([]);
   const [stats, setStats] = useState({
     previsto: 0, emitido: 0, pago: 0, vencidos: 0, aVencer: 0,
     contratosAtivos: 0, clientesAtivos: 0, equipamentosFaturando: 0,
@@ -41,9 +283,9 @@ const FaturamentoDashboardPage: React.FC = () => {
     }
 
     const [faturas, contratos, clientes, contratoEquip, pendencias, contratosReaj, empresas] = await Promise.all([
-      applyEmp(supabase.from('faturas').select('total, status, data_vencimento, empresa_id, cliente_id')),
-      applyEmp(supabase.from('contratos').select('id, status, empresa_id')),
-      supabase.from('clientes_fat').select('id, razao_social, status'),
+      applyEmp(supabase.from('faturas').select('id, numero, competencia, total, status, data_vencimento, empresa_id, cliente_id, contrato_id')),
+      applyEmp(supabase.from('contratos').select('id, numero, status, empresa_id, cliente_id, data_inicio, data_fim, valor_mensal, regra_faturamento, dia_vencimento, clientes_fat(razao_social, cnpj_cpf), empresas(nome)')),
+      supabase.from('clientes_fat').select('*').order('razao_social'),
       supabase.from('contrato_equipamentos').select('id, status, contrato_id, contratos!inner(empresa_id)'),
       supabase.from('faturamento_pendencias').select('id').eq('status', 'aberta'),
       applyEmp(supabase.from('contratos').select('id, proximo_reajuste, empresa_id').not('proximo_reajuste', 'is', null).lte('proximo_reajuste', em30)),
@@ -51,6 +293,10 @@ const FaturamentoDashboardPage: React.FC = () => {
     ]);
 
     const f = faturas.data || [];
+    setFaturasDn4(f);
+    setClientesDn4(clientes.data || []);
+    setContratosDn4(contratos.data || []);
+
     const previsto = f.filter(x => ['prevista', 'em_aberto', 'enviada'].includes(x.status)).reduce((s, x) => s + Number(x.total || 0), 0);
     const emitido = f.filter(x => ['enviada', 'em_aberto', 'vencida', 'paga', 'parcial'].includes(x.status)).reduce((s, x) => s + Number(x.total || 0), 0);
     const pago = f.filter(x => x.status === 'paga' || x.status === 'parcial').reduce((s, x) => s + Number(x.total || 0), 0);
@@ -99,32 +345,32 @@ const FaturamentoDashboardPage: React.FC = () => {
     { label: 'Contratos', icon: ClipboardCheck, onClick: () => navigate(fatPath('/contratos')) },
     { label: 'Clientes', icon: Users, onClick: () => navigate(fatPath('/clientes')) },
     { label: 'Reajustes', icon: RefreshCw, onClick: () => navigate(fatPath('/reajustes')) },
-    { label: 'Pendências', icon: AlertTriangle, onClick: () => navigate(fatPath('/pendencias')) },
+    { label: 'Pendencias', icon: AlertTriangle, onClick: () => navigate(fatPath('/pendencias')) },
   ];
 
   const alerts = [
     stats.pendencias > 0
-      ? { title: 'Pendências', description: `${stats.pendencias} pendências abertas no faturamento`, tone: 'danger' as const }
-      : { title: 'Pendências', description: 'Nenhuma pendência aberta agora', tone: 'success' as const },
+      ? { title: 'Pendencias', description: `${stats.pendencias} pendencias abertas no faturamento`, tone: 'danger' as const }
+      : { title: 'Pendencias', description: 'Nenhuma pendencia aberta agora', tone: 'success' as const },
     stats.vencidos > 0
       ? { title: 'Faturas vencidas', description: `${fmtBRL(stats.vencidos)} precisa de tratativa`, tone: 'danger' as const }
-      : { title: 'Faturas', description: 'Sem vencidos críticos no momento', tone: 'success' as const },
+      : { title: 'Faturas', description: 'Sem vencidos criticos no momento', tone: 'success' as const },
     { title: 'A vencer 30 dias', description: `${fmtBRL(stats.aVencer)} em acompanhamento`, tone: 'warning' as const },
-    { title: 'Reajustes próximos', description: `${stats.reajustesProximos} contratos nos próximos 30 dias`, tone: stats.reajustesProximos > 0 ? 'warning' as const : 'success' as const },
+    { title: 'Reajustes proximos', description: `${stats.reajustesProximos} contratos nos proximos 30 dias`, tone: stats.reajustesProximos > 0 ? 'warning' as const : 'success' as const },
   ];
 
   const leftPanelItems = porEmpresa.map(e => ({ title: e.nome, value: fmtBRL(e.total), meta: stats.emitido > 0 ? `${Math.round((e.total / stats.emitido) * 100)}% do emitido` : undefined }));
   const rightPanelItems = topClientes.map(c => ({ title: c.razao_social, value: fmtBRL(c.total) }));
 
   if (painelKpis) {
-    leftPanelItems.unshift({ title: `Faturado em ${painelKpis.competencia}`, value: fmtBRL(Number(painelKpis.total_faturado_mes || 0)), meta: 'Conferência mensal' });
-    rightPanelItems.unshift({ title: 'Medições pendentes', value: String(painelKpis.medicoes_pendentes || 0), meta: 'Aguardando conferência', danger: Number(painelKpis.medicoes_pendentes || 0) > 0 });
+    leftPanelItems.unshift({ title: `Faturado em ${painelKpis.competencia}`, value: fmtBRL(Number(painelKpis.total_faturado_mes || 0)), meta: 'Conferencia mensal' });
+    rightPanelItems.unshift({ title: 'Medicoes pendentes', value: String(painelKpis.medicoes_pendentes || 0), meta: 'Aguardando conferencia', danger: Number(painelKpis.medicoes_pendentes || 0) > 0 });
   }
 
   return (
     <TopacCentralDashboard
       modulo="Faturamento"
-      subtitle="Painel fluido de faturamento e DN4"
+      subtitle="Painel operacional de faturamento e DN4"
       loading={loading}
       onRefresh={carregar}
       kpis={kpis}
@@ -136,7 +382,18 @@ const FaturamentoDashboardPage: React.FC = () => {
       rightPanelItems={rightPanelItems}
       emptyLeft="Sem faturas emitidas ainda."
       emptyRight="Sem clientes faturados ainda."
-      dn4Slot={<Dn4ImportPanel modulo="faturamento" />}
+      dn4Slot={(
+        <div className="fat-dn4-stack">
+          <Dn4FaturamentoWorkspace
+            clientes={clientesDn4}
+            contratos={contratosDn4}
+            faturas={faturasDn4}
+            stats={stats}
+            go={(path = '') => navigate(fatPath(path))}
+          />
+          <Dn4ImportPanel modulo="faturamento" />
+        </div>
+      )}
     />
   );
 };
