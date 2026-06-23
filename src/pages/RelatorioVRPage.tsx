@@ -17,7 +17,6 @@ import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 
 const ALL_COMPANIES = 'todas';
-const VR_PADRAO_EXCETO_GOIANIA = 31;
 const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const competenciaPt = (c: string) => {
   const [y, m] = (c || '').split('-');
@@ -36,6 +35,8 @@ type ImportedVrRow = {
   valorTotal: number;
   motivo: string;
 };
+
+type VrBulkMode = 'sem_guincheiros' | 'todos' | 'somente_guincheiros';
 
 const normalizeHeader = (value: unknown) => String(value || '')
   .normalize('NFD')
@@ -111,7 +112,7 @@ const escapeHtml = (value: string) => String(value || '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
+  .replace(/\"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
 const printImportedVrRows = ({ rows, fileName, competencia }: { rows: ImportedVrRow[]; fileName: string; competencia: string }) => {
@@ -121,7 +122,7 @@ const printImportedVrRows = ({ rows, fileName, competencia }: { rows: ImportedVr
     toast.error('Não foi possível abrir a impressão. Libere pop-ups para o TOPAC.');
     return;
   }
-  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
+  win.document.write(`<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\" />
     <title>Relatório VR importado</title>
     <style>
       @page { size: A4; margin: 12mm; }
@@ -137,23 +138,30 @@ const printImportedVrRows = ({ rows, fileName, competencia }: { rows: ImportedVr
     </style></head><body>
     <header>
       <div><h1>RELATÓRIO DE VALE REFEIÇÃO - IMPORTADO</h1><p>Arquivo: ${escapeHtml(fileName || '-')}</p></div>
-      <div style="text-align:right"><p>Competência: ${escapeHtml(competenciaPt(competencia))}</p><p>Registros: ${rows.length}</p><p>Emitido em ${new Date().toLocaleString('pt-BR')}</p></div>
+      <div style=\"text-align:right\"><p>Competência: ${escapeHtml(competenciaPt(competencia))}</p><p>Registros: ${rows.length}</p><p>Emitido em ${new Date().toLocaleString('pt-BR')}</p></div>
     </header>
-    <table><thead><tr><th>Nome</th><th>Função</th><th>CPF</th><th class="num">VR/Dia</th><th class="num">Dias Prev.</th><th class="num">Desc.</th><th class="num">Dias Finais</th><th class="num">Valor Total</th><th>Motivo</th></tr></thead><tbody>
-      ${rows.map(row => `<tr><td>${escapeHtml(row.nome)}</td><td>${escapeHtml(row.cargo)}</td><td>${escapeHtml(row.cpf)}</td><td class="num">${formatCurrency(row.valorDiario)}</td><td class="num">${row.diasPrevistos || ''}</td><td class="num">${row.diasDescontados || ''}</td><td class="num">${row.diasFinais || ''}</td><td class="num"><strong>${formatCurrency(row.valorTotal)}</strong></td><td>${escapeHtml(row.motivo || '-')}</td></tr>`).join('')}
-    </tbody><tfoot><tr><td colspan="7">TOTAL</td><td class="num">${formatCurrency(total)}</td><td></td></tr></tfoot></table>
+    <table><thead><tr><th>Nome</th><th>Função</th><th>CPF</th><th class=\"num\">VR/Dia</th><th class=\"num\">Dias Prev.</th><th class=\"num\">Desc.</th><th class=\"num\">Dias Finais</th><th class=\"num\">Valor Total</th><th>Motivo</th></tr></thead><tbody>
+      ${rows.map(row => `<tr><td>${escapeHtml(row.nome)}</td><td>${escapeHtml(row.cargo)}</td><td>${escapeHtml(row.cpf)}</td><td class=\"num\">${formatCurrency(row.valorDiario)}</td><td class=\"num\">${row.diasPrevistos || ''}</td><td class=\"num\">${row.diasDescontados || ''}</td><td class=\"num\">${row.diasFinais || ''}</td><td class=\"num\"><strong>${formatCurrency(row.valorTotal)}</strong></td><td>${escapeHtml(row.motivo || '-')}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan=\"7\">TOTAL</td><td class=\"num\">${formatCurrency(total)}</td><td></td></tr></tfoot></table>
   </body></html>`);
   win.document.close();
   win.focus();
   window.setTimeout(() => win.print(), 500);
 };
 
-const isGoianiaCompany = (company: { codigo?: string; name?: string; city?: string }) => {
-  const text = `${company.codigo || ''} ${company.name || ''} ${company.city || ''}`
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-  return company.codigo === 'topac-gyn' || text.includes('goian');
+const normalizeSearchText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+const isGuincheiroEmployee = (employee: { name?: string; cargo?: string; setorGhe?: string; observacoes?: string; [key: string]: unknown }) => {
+  const text = normalizeSearchText([
+    employee.cargo,
+    employee.setorGhe,
+    employee.observacoes,
+    employee.name,
+  ].join(' '));
+  return text.includes('guincheir') || text.includes('motorista guincho') || /\bguincho\b/.test(text);
 };
 
 const RelatorioVRPage: React.FC = () => {
@@ -172,6 +180,9 @@ const RelatorioVRPage: React.FC = () => {
   const [previewRows, setPreviewRows] = useState<BenefitReportRow[]>([]);
   const [importFileName, setImportFileName] = useState('');
   const [importRows, setImportRows] = useState<ImportedVrRow[]>([]);
+  const [vrBulkValue, setVrBulkValue] = useState('31,00');
+  const [vrBulkCompany, setVrBulkCompany] = useState(ALL_COMPANIES);
+  const [vrBulkMode, setVrBulkMode] = useState<VrBulkMode>('sem_guincheiros');
   const [updatingVr, setUpdatingVr] = useState(false);
 
   const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
@@ -202,24 +213,45 @@ const RelatorioVRPage: React.FC = () => {
     toast.success(isAllCompanies ? 'Relatório de VR de todas as empresas gerado!' : 'Relatório de VR gerado!');
   };
 
-  const handleAtualizarVr31 = async () => {
+  const handleAtualizarVrValor = async () => {
     if (!isAdmin) {
       toast.error('Apenas administrador pode atualizar VR em lote.');
       return;
     }
-    const goianiaIds = new Set(companies.filter(isGoianiaCompany).map(c => c.id));
-    const targets = employees.filter(emp => emp.status === 'ativo' && emp.vrAtivo && !goianiaIds.has(emp.companyId));
+    const valor = roundCurrency(parseNumber(vrBulkValue));
+    if (valor <= 0) {
+      toast.error('Informe um valor de VR maior que zero.');
+      return;
+    }
+    const scopedEmployees = employees.filter(emp => {
+      if (emp.status !== 'ativo' || !emp.vrAtivo) return false;
+      return vrBulkCompany === ALL_COMPANIES || emp.companyId === vrBulkCompany;
+    });
+    const targets = scopedEmployees.filter(emp => {
+      const guincheiro = isGuincheiroEmployee(emp);
+      if (vrBulkMode === 'sem_guincheiros') return !guincheiro;
+      if (vrBulkMode === 'somente_guincheiros') return guincheiro;
+      return true;
+    });
     if (targets.length === 0) {
-      toast.info('Nenhum funcionário ativo com VR fora de Goiânia para atualizar.');
+      toast.info('Nenhum funcionário ativo com VR encontrado para esse filtro.');
       return;
     }
 
     setUpdatingVr(true);
     try {
-      await Promise.all(targets.map(emp => Promise.resolve(updateEmployee(emp.id, { vrDiario: VR_PADRAO_EXCETO_GOIANIA }))));
+      await Promise.all(targets.map(emp => Promise.resolve(updateEmployee(emp.id, { vrDiario: valor }))));
       await refreshData();
       setGenerated(false);
-      toast.success(`VR atualizado para ${formatCurrency(VR_PADRAO_EXCETO_GOIANIA)} em ${targets.length} funcionário(s). Goiânia não foi alterada.`);
+      const empresaLabel = vrBulkCompany === ALL_COMPANIES
+        ? 'todas as empresas'
+        : (companies.find(c => c.id === vrBulkCompany)?.name || 'empresa selecionada');
+      const modoLabel = vrBulkMode === 'sem_guincheiros'
+        ? 'exceto guincheiros'
+        : vrBulkMode === 'somente_guincheiros'
+          ? 'somente guincheiros'
+          : 'todos com VR ativo';
+      toast.success(`VR atualizado para ${formatCurrency(valor)} em ${targets.length} funcionário(s) de ${empresaLabel} (${modoLabel}).`);
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível atualizar o VR em lote.');
     } finally {
@@ -391,12 +423,45 @@ const RelatorioVRPage: React.FC = () => {
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório
         </Button>
-        {isAdmin && (
-          <Button type="button" onClick={handleAtualizarVr31} disabled={updatingVr} variant="outline" className="font-semibold">
-            {updatingVr ? 'Atualizando VR...' : 'Atualizar VR R$31 exceto Goiânia'}
-          </Button>
-        )}
       </div>
+
+      {isAdmin && (
+        <div className="card-premium p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-1 h-5 w-5 text-primary" />
+            <div>
+              <h3 className="font-semibold text-sm">Atualização de valor do VR</h3>
+              <p className="text-xs text-muted-foreground">Atualize o VR diario por empresa ou para todas, mantendo guincheiros separados quando necessario.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Valor diário</label>
+              <Input value={vrBulkValue} onChange={e => setVrBulkValue(e.target.value)} placeholder="31,00" className="w-32" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
+              <select value={vrBulkCompany} onChange={e => setVrBulkCompany(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-w-[220px]">
+                <option value={ALL_COMPANIES}>Todas as empresas</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Funcionários</label>
+              <select value={vrBulkMode} onChange={e => setVrBulkMode(e.target.value as VrBulkMode)}
+                className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-w-[220px]">
+                <option value="sem_guincheiros">Todos, exceto guincheiros</option>
+                <option value="todos">Todos com VR ativo</option>
+                <option value="somente_guincheiros">Somente guincheiros</option>
+              </select>
+            </div>
+            <Button type="button" onClick={handleAtualizarVrValor} disabled={updatingVr} variant="outline" className="font-semibold">
+              {updatingVr ? 'Atualizando VR...' : 'Atualizar valor do VR'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="card-premium p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
