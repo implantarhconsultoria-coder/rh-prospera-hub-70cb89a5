@@ -1,0 +1,164 @@
+:root {
+  --background: 222 47% 5%;
+  --foreground: 213 55% 91%;
+  --card: 222 44% 7%;
+  --card-foreground: 213 55% 91%;
+  --popover: 222 44% 7%;
+  --popover-foreground: 213 55% 91%;
+  --primary: 185 100% 50%;
+  --primary-foreground: 222 47% 5%;
+  --secondary: 222 38% 11%;
+  --secondary-foreground: 213 55% 91%;
+  --muted: 222 38% 11%;
+  --muted-foreground: 212 30% 64%;
+  --accent: 314 83% 64%;
+  --accent-foreground: 222 47% 5%;
+  --border: 185 82% 46% / 0.22;
+  --input: 185 82% 46% / 0.20;
+  --ring: 185 100% 50%;
+  --sidebar-background: 222 52% 5%;
+  --sidebar-foreground: 214 40% 82%;
+  --sidebar-primary: 185 100% 50%;
+  --sidebar-primary-foreground: 222 47% 5%;
+  --sidebar-accent: 222 38% 13%;
+  --sidebar-accent-foreground: 213 55% 91%;
+  --sidebar-border: 185 82% 46% / 0.22;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: #030712;
+}
+
+body {
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at 12% 18%, rgba(168, 85, 247, .16), transparent 30%),
+    radial-gradient(circle at 88% 10%, rgba(20, 184, 166, .14), transparent 28%),
+    radial-gradient(circle at 75% 86%, rgba(56, 189, 248, .10), transparent 32%),
+    linear-gradient(135deg, #12081d 0%, #071828 48%, #073637 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .24;
+  background-image:
+    radial-gradient(circle, rgba(125, 211, 252, .42) 0 1px, transparent 1.5px),
+    linear-gradient(120deg, transparent 0 18%, rgba(125, 211, 252, .10) 18.2%, transparent 18.6% 100%);
+  background-size: 72px 72px, 240px 240px;
+}
+
+.card-premium,
+.rounded-2xl.bg-card,
+.rounded-xl.bg-card,
+.rounded-lg.bg-card,
+aside[class*='bg-card'],
+header[class*='bg-card'],
+[class*='bg-card/'] {
+  border-color: rgba(125, 211, 252, .18) !important;
+  background: linear-gradient(145deg, rgba(15, 23, 42, .72), rgba(15, 118, 110, .16)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 18px 55px rgba(2, 6, 23, .24) !important;
+  backdrop-filter: blur(18px);
+}
+
+aside[class*='fixed'][class*='h-screen'] {
+  border-color: rgba(125, 211, 252, .16) !important;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(217, 70, 239, .18), transparent 30%),
+    linear-gradient(180deg, rgba(3, 7, 18, .96), rgba(7, 24, 40, .94)) !important;
+}
+
+header[class*='sticky'][class*='top-0'],
+.admin-command-topbar {
+  border-color: rgba(125, 211, 252, .16) !important;
+  background: rgba(5, 10, 20, .78) !important;
+  backdrop-filter: blur(18px);
+}
+
+button[class*='bg-primary'],
+a[class*='bg-primary'] {
+  background: linear-gradient(100deg, #34d399, #22d3ee, #e879f9) !important;
+  color: #06111f !important;
+  font-weight: 800;
+}
+
+input,
+select,
+textarea,
+[role='combobox'] {
+  border-color: rgba(125, 211, 252, .20) !important;
+  background-color: rgba(15, 23, 42, .58) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+main h1,
+main h2,
+main h3 {
+  color: #f8fafc;
+}
+
+main p,
+main span,
+main td,
+main th,
+main label {
+  border-color: rgba(125, 211, 252, .14);
+}
+
+@media (max-width: 860px) {
+  body {
+    background:
+      radial-gradient(circle at 16% 0%, rgba(168, 85, 247, .24), transparent 36%),
+      radial-gradient(circle at 92% 2%, rgba(45, 212, 191, .22), transparent 32%),
+      linear-gradient(180deg, #0f172a, #030712 48%, #031f22 100%);
+  }
+
+  header[class*='sticky'][class*='top-0'] {
+    height: 64px !important;
+    border-bottom: 1px solid rgba(125, 211, 252, .18) !important;
+    background: rgba(3, 7, 18, .78) !important;
+    box-shadow: 0 16px 46px rgba(2, 6, 23, .30);
+  }
+
+  main[class*='pb-24'],
+  main[class*='pb-20'] {
+    padding-top: 14px !important;
+  }
+
+  main[class*='pb-24'] > div:first-child,
+  main[class*='pb-20'] > *:first-child {
+    position: relative;
+  }
+
+  .aspect-square.rounded-2xl,
+  button.rounded-2xl,
+  .rounded-2xl.border {
+    border-color: rgba(125, 211, 252, .18) !important;
+    background: linear-gradient(145deg, rgba(15, 23, 42, .70), rgba(8, 145, 178, .16)) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 16px 42px rgba(2, 6, 23, .30) !important;
+  }
+
+  aside[class*='fixed'][class*='right-0'] {
+    background: linear-gradient(180deg, rgba(3, 7, 18, .98), rgba(7, 24, 40, .96)) !important;
+    border-color: rgba(125, 211, 252, .18) !important;
+  }
+}
+
+@media print {
+  body,
+  html,
+  #root {
+    background: #fff !important;
+    color: #111827 !important;
+  }
+
+  body::before {
+    display: none !important;
+  }
+}
