@@ -28,6 +28,7 @@ import '@/styles/faturamento-dn4.css';
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const onlyDigits = (value?: string | null) => String(value || '').replace(/\D/g, '');
+const normalize = (value?: string | null) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 const fmtDoc = (value?: string | null) => {
   const d = onlyDigits(value);
   if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
@@ -61,6 +62,26 @@ type Dn4WorkspaceProps = {
   go: (path?: string) => void;
 };
 
+type ClienteTab = 'principal' | 'contatos' | 'cobranca' | 'entrega' | 'representantes' | 'tributacao' | 'arquivos';
+
+type ConsultaCliente = {
+  codigo: string;
+  nome: string;
+  documento: string;
+  cidade: string;
+  status: string;
+};
+
+const tabs: Array<{ id: ClienteTab; label: string }> = [
+  { id: 'principal', label: 'Principal' },
+  { id: 'contatos', label: 'Contatos' },
+  { id: 'cobranca', label: 'Inf. de Cobranca' },
+  { id: 'entrega', label: 'Inf. de Entrega' },
+  { id: 'representantes', label: 'Representantes' },
+  { id: 'tributacao', label: 'Tributacao' },
+  { id: 'arquivos', label: 'Arquivos' },
+];
+
 const Dn4Field = ({ label, value, wide }: { label: string; value?: React.ReactNode; wide?: boolean }) => (
   <div className={wide ? 'fat-dn4-field fat-dn4-field-wide' : 'fat-dn4-field'}>
     <span>{label}</span>
@@ -68,14 +89,51 @@ const Dn4Field = ({ label, value, wide }: { label: string; value?: React.ReactNo
   </div>
 );
 
+const QueryInput = ({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) => (
+  <label className="fat-dn4-query-input">
+    <span>{label}</span>
+    <input value={value} onChange={(event) => onChange(event.target.value)} />
+  </label>
+);
+
 const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contratos, faturas, stats, go }) => {
-  const cliente = clientes.find(c => c.status === 'ativo') || clientes[0] || null;
+  const [activeTab, setActiveTab] = useState<ClienteTab>('principal');
+  const [selectedClienteId, setSelectedClienteId] = useState<string>('');
+  const [consulta, setConsulta] = useState<ConsultaCliente>({ codigo: '', nome: '', documento: '', cidade: '', status: '' });
+
+  const clientesOrdenados = useMemo(() => (
+    [...clientes].sort((a, b) => String(a.razao_social || '').localeCompare(String(b.razao_social || ''), 'pt-BR'))
+  ), [clientes]);
+
+  useEffect(() => {
+    if (!clientesOrdenados.length) {
+      setSelectedClienteId('');
+      return;
+    }
+    if (!selectedClienteId || !clientesOrdenados.some(c => c.id === selectedClienteId)) {
+      setSelectedClienteId((clientesOrdenados.find(c => c.status === 'ativo') || clientesOrdenados[0]).id);
+    }
+  }, [clientesOrdenados, selectedClienteId]);
+
+  const clientesFiltrados = useMemo(() => {
+    return clientesOrdenados.filter((cliente) => {
+      const codigo = String(cliente.id || '').slice(0, 8).toUpperCase();
+      if (consulta.codigo && !normalize(codigo).includes(normalize(consulta.codigo))) return false;
+      if (consulta.nome && !normalize(`${cliente.razao_social || ''} ${cliente.nome_fantasia || ''}`).includes(normalize(consulta.nome))) return false;
+      if (consulta.documento && !onlyDigits(cliente.cnpj_cpf).includes(onlyDigits(consulta.documento))) return false;
+      if (consulta.cidade && !normalize(`${cliente.cidade || ''} ${cliente.uf || ''}`).includes(normalize(consulta.cidade))) return false;
+      if (consulta.status && normalize(cliente.status) !== normalize(consulta.status)) return false;
+      return true;
+    });
+  }, [clientesOrdenados, consulta]);
+
+  const cliente = clientesOrdenados.find(c => c.id === selectedClienteId) || clientesFiltrados[0] || clientesOrdenados[0] || null;
   const contratosCliente = cliente
-    ? contratos.filter(c => c.cliente_id === cliente.id).slice(0, 5)
-    : contratos.slice(0, 5);
+    ? contratos.filter(c => c.cliente_id === cliente.id).slice(0, 6)
+    : contratos.slice(0, 6);
   const faturasCliente = cliente
-    ? faturas.filter(f => f.cliente_id === cliente.id).slice(0, 4)
-    : faturas.slice(0, 4);
+    ? faturas.filter(f => f.cliente_id === cliente.id).slice(0, 6)
+    : faturas.slice(0, 6);
   const documento = fmtDoc(cliente?.cnpj_cpf);
   const isPessoaJuridica = onlyDigits(cliente?.cnpj_cpf).length !== 11;
   const clienteCodigo = cliente?.id ? String(cliente.id).slice(0, 8).toUpperCase() : 'CLIENTE';
@@ -87,6 +145,137 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
     { label: 'Fatura', value: fmtBRL(stats.emitido), meta: 'emitido' },
     { label: 'Financeiro', value: fmtBRL(stats.pago), meta: 'recebido' },
   ]), [clientes.length, contratos, stats.emitido, stats.pago, stats.pendencias]);
+
+  const selecionarCliente = (id?: string) => {
+    if (!id) return;
+    setSelectedClienteId(id);
+    setActiveTab('principal');
+  };
+
+  const consultarCliente = () => selecionarCliente(clientesFiltrados[0]?.id);
+  const limparConsulta = () => setConsulta({ codigo: '', nome: '', documento: '', cidade: '', status: '' });
+
+  const renderTabContent = () => {
+    if (activeTab === 'contatos') {
+      return (
+        <div className="fat-dn4-split">
+          <div>
+            <div className="fat-dn4-section-label"><Phone /> Contato para faturamento</div>
+            <div className="fat-dn4-contact-box">
+              <span><Mail /> {cliente?.email || 'E-mail nao cadastrado'}</span>
+              <span><Phone /> {cliente?.telefone || 'Telefone nao cadastrado'}</span>
+              <span><Users /> {cliente?.contato_responsavel || 'Responsavel nao cadastrado'}</span>
+            </div>
+          </div>
+          <div>
+            <div className="fat-dn4-section-label"><Search /> Acao</div>
+            <button type="button" className="fat-dn4-query-button" onClick={() => cliente && go(`/clientes/${cliente.id}`)}>Abrir cadastro completo</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'cobranca') {
+      return (
+        <div className="fat-dn4-split">
+          <div>
+            <div className="fat-dn4-section-label"><FileCheck2 /> Faturas do cliente</div>
+            <div className="fat-dn4-invoice-list">
+              {faturasCliente.length === 0 ? <p>Nenhuma fatura recente para esse cliente.</p> : faturasCliente.map((fatura) => (
+                <button key={fatura.id} type="button" onClick={() => go('/faturas')}>
+                  <span>{fatura.numero || fatura.competencia || 'Fatura'}</span>
+                  <strong>{fmtBRL(Number(fatura.total || 0))}</strong>
+                  <small>{fatura.status}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="fat-dn4-section-label"><Calculator /> Emissao</div>
+            <div className="fat-dn4-contact-box">
+              <span>Contratos vinculados: {contratosCliente.length}</span>
+              <span>Total emitido: {fmtBRL(faturasCliente.reduce((sum, fatura) => sum + Number(fatura.total || 0), 0))}</span>
+            </div>
+            <button type="button" className="fat-dn4-query-button" onClick={() => go('/faturas')}>Gerar ou importar fatura</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'tributacao') {
+      return (
+        <div>
+          <div className="fat-dn4-section-label"><Landmark /> Informacoes fiscais / CFOP</div>
+          <div className="fat-dn4-tax-grid">
+            <Dn4Field label="Regime Tributario" value="Conforme cadastro fiscal" />
+            <Dn4Field label="Indicador IE" value={cliente?.inscricao_estadual ? 'Contribuinte ICMS' : 'Nao informado'} />
+            <Dn4Field label="Inscricao Estadual" value={cliente?.inscricao_estadual} />
+            <Dn4Field label="Reter ISS" value="Conferir por cliente" />
+            <Dn4Field label="CFOP Padrao" value="Validar na emissao" />
+            <Dn4Field label="CFOP Interno" value="Validar na emissao" />
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'representantes') {
+      return (
+        <div className="fat-dn4-split">
+          <div>
+            <div className="fat-dn4-section-label"><Users /> Representantes / responsaveis</div>
+            <div className="fat-dn4-contact-box">
+              <span>{cliente?.contato_responsavel || 'Responsavel comercial nao cadastrado'}</span>
+              <span>{cliente?.email || 'E-mail principal nao cadastrado'}</span>
+              <span>{cliente?.telefone || 'Telefone principal nao cadastrado'}</span>
+            </div>
+          </div>
+          <div>
+            <div className="fat-dn4-section-label"><FileText /> Cadastro</div>
+            <button type="button" className="fat-dn4-query-button" onClick={() => cliente && go(`/clientes/${cliente.id}`)}>Completar representantes</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'arquivos') {
+      return (
+        <div className="fat-dn4-split">
+          <div>
+            <div className="fat-dn4-section-label"><Database /> Arquivos do cliente</div>
+            <div className="fat-dn4-contact-box">
+              <span>Use a importacao DN4 abaixo para atualizar cliente, contrato, locacao e faturas.</span>
+              <span>Cliente selecionado: {cliente?.razao_social || 'nenhum'}</span>
+            </div>
+          </div>
+          <div>
+            <div className="fat-dn4-section-label"><Search /> Conferencia</div>
+            <button type="button" className="fat-dn4-query-button" onClick={() => go('/clientes')}>Abrir importacao/cadastro</button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fat-dn4-split">
+        <div>
+          <div className="fat-dn4-section-label"><MapPin /> Informacoes de Entrega / Obra</div>
+          <div className="fat-dn4-form-grid compact">
+            <Dn4Field label="CEP" value={cliente?.cep} />
+            <Dn4Field label="Endereco" value={cliente?.endereco} wide />
+            <Dn4Field label="Cidade" value={cliente?.cidade} />
+            <Dn4Field label="UF" value={cliente?.uf} />
+          </div>
+        </div>
+        <div>
+          <div className="fat-dn4-section-label"><Phone /> Contato para faturamento</div>
+          <div className="fat-dn4-contact-box">
+            <span><Mail /> {cliente?.email || 'E-mail nao cadastrado'}</span>
+            <span><Phone /> {cliente?.telefone || 'Telefone nao cadastrado'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section className="fat-dn4-workspace" aria-label="Operacao de faturamento no padrao DN4">
@@ -133,29 +322,12 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
           </div>
 
           <div className="fat-dn4-tabs" aria-label="Abas do cadastro de cliente">
-            {['Principal', 'Contatos', 'Inf. de Cobranca', 'Inf. de Entrega', 'Representantes', 'Tributacao', 'Arquivos'].map((tab, index) => (
-              <span key={tab} className={index === 0 ? 'is-active' : ''}>{tab}</span>
+            {tabs.map((tab) => (
+              <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={activeTab === tab.id ? 'is-active' : ''}>{tab.label}</button>
             ))}
           </div>
 
-          <div className="fat-dn4-split">
-            <div>
-              <div className="fat-dn4-section-label"><MapPin /> Informacoes de Entrega / Obra</div>
-              <div className="fat-dn4-form-grid compact">
-                <Dn4Field label="CEP" value={cliente?.cep} />
-                <Dn4Field label="Endereco" value={cliente?.endereco} wide />
-                <Dn4Field label="Cidade" value={cliente?.cidade} />
-                <Dn4Field label="UF" value={cliente?.uf} />
-              </div>
-            </div>
-            <div>
-              <div className="fat-dn4-section-label"><Phone /> Contato para faturamento</div>
-              <div className="fat-dn4-contact-box">
-                <span><Mail /> {cliente?.email || 'E-mail nao cadastrado'}</span>
-                <span><Phone /> {cliente?.telefone || 'Telefone nao cadastrado'}</span>
-              </div>
-            </div>
-          </div>
+          {renderTabContent()}
         </div>
 
         <aside className="fat-dn4-card fat-dn4-query-card">
@@ -164,13 +336,29 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
             <span>Consulta de Cliente</span>
           </div>
           <div className="fat-dn4-query-grid">
-            <Dn4Field label="Codigo" value="" />
-            <Dn4Field label="Nome / Razao" value="" />
-            <Dn4Field label="CNPJ" value="" />
-            <Dn4Field label="Cidade" value="" />
+            <QueryInput label="Codigo" value={consulta.codigo} onChange={(value) => setConsulta({ ...consulta, codigo: value })} />
+            <QueryInput label="Nome / Razao" value={consulta.nome} onChange={(value) => setConsulta({ ...consulta, nome: value })} />
+            <QueryInput label="CNPJ" value={consulta.documento} onChange={(value) => setConsulta({ ...consulta, documento: value })} />
+            <QueryInput label="Cidade" value={consulta.cidade} onChange={(value) => setConsulta({ ...consulta, cidade: value })} />
           </div>
-          <button type="button" onClick={() => go('/clientes')} className="fat-dn4-query-button">Visualizar clientes</button>
-          <p>{clientes.length ? `${clientes.length} cliente(s) disponiveis para faturamento.` : 'Importe ou cadastre clientes para iniciar o faturamento.'}</p>
+          <select value={consulta.status} onChange={(event) => setConsulta({ ...consulta, status: event.target.value })} className="fat-dn4-status-select" aria-label="Situacao do cliente">
+            <option value="">Todas as situacoes</option>
+            <option value="ativo">Cliente ativo</option>
+            <option value="inativo">Cliente inativo</option>
+          </select>
+          <div className="fat-dn4-query-actions">
+            <button type="button" onClick={consultarCliente} className="fat-dn4-query-button">Visualizar</button>
+            <button type="button" onClick={limparConsulta} className="fat-dn4-query-button">Limpar</button>
+          </div>
+          <div className="fat-dn4-result-list">
+            {clientesFiltrados.slice(0, 6).map((item) => (
+              <button key={item.id} type="button" onClick={() => selecionarCliente(item.id)} className={item.id === cliente?.id ? 'is-selected' : ''}>
+                <strong>{item.razao_social}</strong>
+                <small>{fmtDoc(item.cnpj_cpf)} {item.cidade ? `- ${item.cidade}/${item.uf || ''}` : ''}</small>
+              </button>
+            ))}
+            {clientesFiltrados.length === 0 && <p>Nenhum cliente encontrado com esses filtros.</p>}
+          </div>
         </aside>
       </div>
 
