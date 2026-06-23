@@ -83,7 +83,18 @@ const blobToBase64 = (blob: Blob, contentType = blob.type || PDF_CONTENT_TYPE) =
     reader.readAsDataURL(ensureAttachmentBlob(blob, contentType));
   });
 
-const buildEmailApiErrorMessage = (data: any) => {
+const parseEmailApiResponse = async (response: Response) => {
+  const text = await response.text().catch(() => '');
+  if (!text.trim()) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text.slice(0, 400) };
+  }
+};
+
+const buildEmailApiErrorMessage = (data: any, status?: number) => {
   if (data?.error === 'missing_email_provider_env') {
     const missing = Array.isArray(data?.missing) && data.missing.length
       ? ` Variáveis ausentes: ${data.missing.join(', ')}.`
@@ -102,7 +113,19 @@ const buildEmailApiErrorMessage = (data: any) => {
     return data?.message || 'Falha no provedor de e-mail configurado.';
   }
 
-  return data?.message || data?.error || 'email_send_failed';
+  if (data?.error === 'email_send_failed') {
+    return data?.message || 'O envio automático pelo servidor não foi concluído.';
+  }
+
+  if (status === 404) {
+    return 'A rota de envio de e-mail não foi encontrada na publicação atual.';
+  }
+
+  if (status && status >= 500) {
+    return 'O servidor de e-mail respondeu com falha temporária.';
+  }
+
+  return data?.message || data?.error || 'O envio automático pelo servidor não foi concluído.';
 };
 
 export const sendEmailWithPdfAttachment = async ({
@@ -179,9 +202,9 @@ export const sendEmailWithPdfAttachment = async ({
       documentName: documentName || documentNames,
     }),
   });
-  const data = await response.json().catch(() => ({}));
+  const data = await parseEmailApiResponse(response);
   if (!response.ok || data?.ok === false) {
-    throw new Error(buildEmailApiErrorMessage(data));
+    throw new Error(buildEmailApiErrorMessage(data, response.status));
   }
   return data;
 };
@@ -228,7 +251,7 @@ export const downloadEmailWithAttachment = async ({
     return { ok: true, mode: 'platform_email' };
   } catch (error: any) {
     openPdfPreview(attachmentBlob, cleanAttachmentName);
-    throw new Error(error?.message || 'email_send_failed');
+    throw new Error(error?.message || 'O envio automático pelo servidor não foi concluído.');
   }
 };
 
