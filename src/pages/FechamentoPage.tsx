@@ -183,12 +183,12 @@ const FechamentoPage: React.FC = () => {
     .toolbar button { border: 0; border-radius: 8px; padding: 8px 12px; background: #111827; color: #fff; font-weight: 700; cursor: pointer; }
     .toolbar span { font-size: 12px; color: #374151; }
     .sheet { width: 170mm; margin: 0 auto; padding: 0; display: grid; grid-template-columns: repeat(2, 73mm); column-gap: 5.2mm; row-gap: 3.1mm; justify-content: center; align-content: start; }
-    .label { width: 73mm; height: 29.8mm; border: 0.6pt solid #555; border-radius: 2mm; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; overflow: hidden; padding: 2.1mm 2.4mm 1.4mm; break-inside: avoid; page-break-inside: avoid; }
-    .company { font-size: 8.4pt; line-height: 1; font-weight: 800; margin-bottom: 1.8mm; }
-    .name { max-width: 100%; font-size: 9.7pt; line-height: 1.04; font-style: italic; font-weight: 700; text-decoration: underline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1.6mm; }
-    .role { max-width: 100%; font-size: 5.8pt; line-height: 1.1; font-weight: 800; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: .7mm; }
-    .month { font-size: 5.8pt; line-height: 1.1; font-weight: 800; margin-bottom: 1.9mm; }
-    .line { font-size: 4.7pt; line-height: 1.22; font-weight: 700; white-space: nowrap; }
+    .label { width: 73mm; height: 29.8mm; border: 0.6pt solid #555; border-radius: 2mm; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; overflow: hidden; padding: 1.7mm 2.2mm 1.1mm; break-inside: avoid; page-break-inside: avoid; }
+    .company { font-size: 9.4pt; line-height: 1; font-weight: 800; margin-bottom: 1.2mm; }
+    .name { max-width: 100%; font-size: 12.4pt; line-height: 1; font-style: italic; font-weight: 800; text-decoration: underline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1.1mm; }
+    .role { max-width: 100%; font-size: 6.8pt; line-height: 1.05; font-weight: 800; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: .5mm; }
+    .month { font-size: 6.7pt; line-height: 1.05; font-weight: 800; margin-bottom: 1.1mm; }
+    .line { font-size: 5.3pt; line-height: 1.13; font-weight: 700; white-space: nowrap; }
     @media print {
       .toolbar { display: none; }
       .sheet { margin: 0 auto; }
