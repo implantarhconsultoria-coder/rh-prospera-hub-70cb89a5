@@ -134,7 +134,7 @@ const FechamentoPage: React.FC = () => {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/\"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
   const funcionariosParaEtiqueta = compEmps.filter(e => etiquetaSelecionados.includes(e.id));
@@ -152,7 +152,7 @@ const FechamentoPage: React.FC = () => {
 
     const empresa = escapeHtml(empresaEtiqueta());
     const mes = escapeHtml(competenciaLabel);
-    const etiquetas = funcionariosParaEtiqueta.map(emp => `
+    const renderEtiqueta = (emp: typeof funcionariosParaEtiqueta[0]) => `
       <section class="label">
         <div class="company">${empresa}</div>
         <div class="name">${escapeHtml(emp.name)}</div>
@@ -161,7 +161,8 @@ const FechamentoPage: React.FC = () => {
         <div class="line">Seg. e Qui. - 7:30 as 12:00 / 13:00 as 17:30</div>
         <div class="line">Sex. - 7:30 as 12:00 / 13:00 as 16:30</div>
       </section>
-    `).join('');
+    `;
+    const etiquetas = funcionariosParaEtiqueta.flatMap(emp => [renderEtiqueta(emp), renderEtiqueta(emp)]).join('');
 
     const win = window.open('', '_blank');
     if (!win) {
@@ -196,7 +197,7 @@ const FechamentoPage: React.FC = () => {
   </style>
 </head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${funcionariosParaEtiqueta.length} etiquetas - ${empresa} - ${mes}</span></div>
+  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${funcionariosParaEtiqueta.length} funcionarios - ${funcionariosParaEtiqueta.length * 2} etiquetas em pares iguais - ${empresa} - ${mes}</span></div>
   <main class="sheet">${etiquetas}</main>
 </body>
 </html>`);
@@ -280,7 +281,7 @@ const FechamentoPage: React.FC = () => {
             );
           })}
         </div>
-        <p className="text-[11px] text-muted-foreground">A impressão usa sempre o mês selecionado acima e separa pelo filtro de empresa escolhido no fechamento. Para incluir novos funcionários manualmente, marque ou desmarque nomes na lista.</p>
+        <p className="text-[11px] text-muted-foreground">A impressao usa sempre o mes selecionado acima e separa pelo filtro de empresa escolhido no fechamento. Cada funcionario sai em duas etiquetas iguais, lado a lado, para dobrar e colocar no cartao de ponto.</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -388,7 +389,7 @@ const FechamentoPage: React.FC = () => {
                   <MoneyInput value={entry.comissaoBase || 0} onValueChange={(value) => update({ comissaoBase: value })} placeholder="Base" className="w-28 h-8 text-xs text-right" />
                   <div className="mt-1 text-[11px] text-muted-foreground">{(p.comissaoPct * 100).toFixed(0)}% = {formatCurrency(p.comissaoVal)}</div>
                   <div className="mt-2 text-[11px] text-muted-foreground">Adicionais</div>
-                  <MoneyInput value={entry.adicionais || 0} onValueChange={(value) => update({ adicionais: value })} className="w-28 h-8 text-xs text-right" />
+                  <MoneyInput value={entry.adicionais || 0} onValueChange={(value) => update({ adicionais: value })} className="mt-2 w-28 h-8 text-xs text-right" />
                 </td>
                 <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{formatCurrency(p.dsrComissao)}</td>
                 <td className="px-3 py-3 min-w-44">
