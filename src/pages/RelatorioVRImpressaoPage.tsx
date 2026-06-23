@@ -62,7 +62,7 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
       </thead>
       <tbody>
         {block.rows.map(r => (
-          <tr key={r.emp.id} className="even:bg-gray-50">
+          <tr key={r.emp.id} className="even:bg-gray-50 vr-report-row">
             <td className="border border-gray-300 px-2 py-1 font-medium">
               {r.emp.name}{r.corrigido ? ' *' : ''}
             </td>
@@ -76,7 +76,7 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
           </tr>
         ))}
         {block.rows.length === 0 && (
-          <tr><td colSpan={8} className="border border-gray-300 px-2 py-3 text-center text-gray-500">Nenhum funcionário com VR ativo nesta competência.</td></tr>
+          <tr className="vr-report-row"><td colSpan={8} className="border border-gray-300 px-2 py-3 text-center text-gray-500">Nenhum funcionário com VR ativo nesta competência.</td></tr>
         )}
       </tbody>
       <tfoot>
@@ -174,11 +174,21 @@ const RelatorioVRImpressaoPage: React.FC = () => {
     <>
       <style>{`
         @page { size: A4; margin: 12mm; }
+        table { page-break-inside: auto; }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+        .vr-report-row { break-inside: avoid; page-break-inside: avoid; }
+        .vr-report-row td { break-inside: avoid; page-break-inside: avoid; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
           body * { visibility: hidden !important; }
           #vr-print-area, #vr-print-area * { visibility: visible !important; }
           #vr-print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+          table { page-break-inside: auto; }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          .vr-report-row { break-inside: avoid !important; page-break-inside: avoid !important; }
+          .vr-report-row td { break-inside: avoid !important; page-break-inside: avoid !important; }
           .recibo-page { page-break-after: always; }
           .recibo-page:last-child { page-break-after: auto; }
           .no-print, .no-print *, iframe, nav, aside,
@@ -230,7 +240,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {blocks.map(b => (
-                    <tr key={b.company.id} className="even:bg-gray-50">
+                    <tr key={b.company.id} className="even:bg-gray-50 vr-report-row">
                       <td className="border border-gray-300 px-2 py-1 font-medium">{b.company.name}</td>
                       <td className="border border-gray-300 px-2 py-1">{b.company.cnpj}</td>
                       <td className="border border-gray-300 px-2 py-1 text-center">{b.rows.length}</td>
