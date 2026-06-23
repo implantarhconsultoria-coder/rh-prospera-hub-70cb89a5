@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays, getFirstBusinessDayOfNextMonth } from '@/lib/workingDays';
 import { useFeriados } from '@/hooks/useFeriados';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { UtensilsCrossed, FileText, User, Printer, Building2, Pencil, ShieldCheck, Eye } from 'lucide-react';
+import { UtensilsCrossed, FileText, User, Printer, Building2, Pencil, ShieldCheck, Eye, Upload, FileSpreadsheet } from 'lucide-react';
 import RecibosPreviewModal from '@/components/RecibosPreviewModal';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +21,129 @@ const competenciaPt = (c: string) => {
   const [y, m] = (c || '').split('-');
   const idx = Number(m) - 1;
   return idx >= 0 && idx < 12 ? `${MESES_PT[idx]} / ${y}` : c;
+};
+
+type ImportedVrRow = {
+  nome: string;
+  cargo: string;
+  cpf: string;
+  valorDiario: number;
+  diasPrevistos: number;
+  diasDescontados: number;
+  diasFinais: number;
+  valorTotal: number;
+  motivo: string;
+};
+
+const normalizeHeader = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+const parseNumber = (value: unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const text = String(value || '').trim();
+  if (!text) return 0;
+  const normalized = text
+    .replace(/R\$|r\$/g, '')
+    .replace(/[^0-9,.-]/g, '')
+    .replace(/\.(?=\d{3}(\D|$))/g, '')
+    .replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const roundCurrency = (value: number) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+
+const pickValue = (row: Record<string, unknown>, names: string[]) => {
+  const normalized = Object.entries(row).map(([key, value]) => ({ key: normalizeHeader(key), value }));
+  for (const name of names.map(normalizeHeader)) {
+    const exact = normalized.find(item => item.key === name);
+    if (exact) return exact.value;
+    const loose = normalized.find(item => item.key.includes(name) || name.includes(item.key));
+    if (loose) return loose.value;
+  }
+  return '';
+};
+
+const buildImportedVrRows = (rawRows: Array<Record<string, unknown>>) => rawRows
+  .map((raw) => {
+    const nome = String(pickValue(raw, ['nome', 'funcionario', 'colaborador', 'empregado']) || '').trim();
+    const cargo = String(pickValue(raw, ['cargo', 'funcao', 'função', 'setor']) || '').trim();
+    const cpf = String(pickValue(raw, ['cpf', 'documento']) || '').trim();
+    const valorDiario = parseNumber(pickValue(raw, ['vr dia', 'valor diario', 'valor diário', 'valor unitario', 'valor unitário', 'diaria', 'diária']));
+    const diasPrevistos = parseNumber(pickValue(raw, ['dias previstos', 'dias uteis', 'dias úteis', 'dias vr', 'dias']));
+    const diasDescontados = parseNumber(pickValue(raw, ['dias descontados', 'descontos', 'faltas', 'desc']));
+    const diasFinaisInformado = parseNumber(pickValue(raw, ['dias finais', 'dias pagos', 'dias considerados', 'qtd dias', 'quantidade']));
+    const totalInformado = parseNumber(pickValue(raw, ['valor total', 'total', 'total vr', 'valor vr']));
+    const diasFinais = diasFinaisInformado || Math.max(0, diasPrevistos - diasDescontados);
+    const valorTotal = totalInformado || roundCurrency(valorDiario * diasFinais);
+    const motivo = String(pickValue(raw, ['motivo', 'observacao', 'observação', 'obs']) || '').trim();
+    return { nome, cargo, cpf, valorDiario, diasPrevistos, diasDescontados, diasFinais, valorTotal, motivo };
+  })
+  .filter(row => row.nome || row.valorTotal > 0);
+
+const parseDelimitedText = (text: string) => {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (!lines.length) return [] as Array<Record<string, unknown>>;
+  const delimiters = [';', '\t', ','];
+  const delimiter = delimiters
+    .map(item => ({ item, count: lines[0].split(item).length }))
+    .sort((a, b) => b.count - a.count)[0]?.item || ';';
+  const first = lines[0].split(delimiter).map(cell => cell.trim());
+  const hasHeader = first.some(cell => ['nome', 'funcionario', 'colaborador', 'vr', 'valor', 'dias', 'total'].some(term => normalizeHeader(cell).includes(term)));
+  const headers = hasHeader ? first : ['Nome', 'Cargo', 'VR Dia', 'Dias Finais', 'Valor Total', 'Motivo'];
+  const dataLines = hasHeader ? lines.slice(1) : lines;
+  return dataLines.map(line => {
+    const cells = line.split(delimiter).map(cell => cell.trim());
+    return headers.reduce<Record<string, unknown>>((acc, header, index) => {
+      acc[header || `coluna_${index + 1}`] = cells[index] || '';
+      return acc;
+    }, {});
+  });
+};
+
+const escapeHtml = (value: string) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+const printImportedVrRows = ({ rows, fileName, competencia }: { rows: ImportedVrRow[]; fileName: string; competencia: string }) => {
+  const total = rows.reduce((sum, row) => sum + row.valorTotal, 0);
+  const win = window.open('', '_blank');
+  if (!win) {
+    toast.error('Não foi possível abrir a impressão. Libere pop-ups para o TOPAC.');
+    return;
+  }
+  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
+    <title>Relatório VR importado</title>
+    <style>
+      @page { size: A4; margin: 12mm; }
+      body { font-family: Arial, sans-serif; color: #111; padding: 12px; }
+      header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #111; padding-bottom: 12px; margin-bottom: 16px; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      p { margin: 0; font-size: 11px; color: #555; }
+      table { width: 100%; border-collapse: collapse; font-size: 10px; }
+      th, td { border: 1px solid #bbb; padding: 5px 6px; text-align: left; }
+      th { background: #e5e7eb; font-size: 9px; text-transform: uppercase; }
+      td.num, th.num { text-align: right; }
+      tfoot td { font-weight: 700; background: #f3f4f6; }
+    </style></head><body>
+    <header>
+      <div><h1>RELATÓRIO DE VALE REFEIÇÃO - IMPORTADO</h1><p>Arquivo: ${escapeHtml(fileName || '-')}</p></div>
+      <div style="text-align:right"><p>Competência: ${escapeHtml(competenciaPt(competencia))}</p><p>Registros: ${rows.length}</p><p>Emitido em ${new Date().toLocaleString('pt-BR')}</p></div>
+    </header>
+    <table><thead><tr><th>Nome</th><th>Função</th><th>CPF</th><th class="num">VR/Dia</th><th class="num">Dias Prev.</th><th class="num">Desc.</th><th class="num">Dias Finais</th><th class="num">Valor Total</th><th>Motivo</th></tr></thead><tbody>
+      ${rows.map(row => `<tr><td>${escapeHtml(row.nome)}</td><td>${escapeHtml(row.cargo)}</td><td>${escapeHtml(row.cpf)}</td><td class="num">${formatCurrency(row.valorDiario)}</td><td class="num">${row.diasPrevistos || ''}</td><td class="num">${row.diasDescontados || ''}</td><td class="num">${row.diasFinais || ''}</td><td class="num"><strong>${formatCurrency(row.valorTotal)}</strong></td><td>${escapeHtml(row.motivo || '-')}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan="7">TOTAL</td><td class="num">${formatCurrency(total)}</td><td></td></tr></tfoot></table>
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  window.setTimeout(() => win.print(), 500);
 };
 
 const RelatorioVRPage: React.FC = () => {
@@ -36,6 +160,8 @@ const RelatorioVRPage: React.FC = () => {
   const [formato, setFormato] = useState<'vr' | 'ambos'>('vr');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState<BenefitReportRow[]>([]);
+  const [importFileName, setImportFileName] = useState('');
+  const [importRows, setImportRows] = useState<ImportedVrRow[]>([]);
 
   const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
   const [diasUteisManual, setDiasUteisManual] = useState('');
@@ -58,6 +184,31 @@ const RelatorioVRPage: React.FC = () => {
     toast.success('Relatório de VR gerado!');
   };
 
+  const handleImportVrFile = async (file?: File | null) => {
+    if (!file) return;
+    try {
+      const lower = file.name.toLowerCase();
+      let rawRows: Array<Record<string, unknown>> = [];
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const firstSheet = workbook.SheetNames[0];
+        rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheet], { defval: '' });
+      } else {
+        rawRows = parseDelimitedText(await file.text());
+      }
+      const parsed = buildImportedVrRows(rawRows);
+      if (!parsed.length) {
+        toast.error('Não encontrei linhas de VR no arquivo. Confira se existe coluna de nome e valor/dias.');
+        return;
+      }
+      setImportFileName(file.name);
+      setImportRows(parsed);
+      toast.success(`${parsed.length} linha(s) importada(s) do arquivo de VR.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível ler o arquivo de VR.');
+    }
+  };
+
   const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional' && e.vrAtivo);
   const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
   const company = companies.find(c => c.id === selectedCompany);
@@ -77,6 +228,7 @@ const RelatorioVRPage: React.FC = () => {
     };
   }), [rawRows, correcoes, selectedCompany, competencia]);
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
+  const importTotal = useMemo(() => roundCurrency(importRows.reduce((sum, row) => sum + row.valorTotal, 0)), [importRows]);
   const emissaoDate = new Date().toLocaleDateString('pt-BR');
   const pagamentoDate = getFirstBusinessDayOfNextMonth(competencia);
 
@@ -188,6 +340,64 @@ const RelatorioVRPage: React.FC = () => {
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório
         </Button>
+      </div>
+
+      <div className="card-premium p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <FileSpreadsheet className="mt-1 h-5 w-5 text-primary" />
+            <div>
+              <h3 className="font-semibold text-sm">Importar VR por XLSX/TXT</h3>
+              <p className="text-xs text-muted-foreground">Aceita XLSX, XLS, CSV ou TXT com colunas: Nome, Cargo/Função, VR Dia, Dias, Descontos/Faltas, Valor Total e Motivo.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex cursor-pointer items-center rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">
+              <Upload className="mr-2 h-4 w-4" /> Escolher arquivo
+              <input type="file" accept=".xlsx,.xls,.csv,.txt,text/plain" className="hidden" onChange={(e) => handleImportVrFile(e.target.files?.[0])} />
+            </label>
+            <Button type="button" variant="outline" size="sm" disabled={!importRows.length} onClick={() => printImportedVrRows({ rows: importRows, fileName: importFileName, competencia })}>
+              <Printer className="mr-2 h-4 w-4" /> Imprimir importado / PDF
+            </Button>
+            {importRows.length > 0 && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setImportRows([]); setImportFileName(''); }}>
+                Limpar
+              </Button>
+            )}
+          </div>
+        </div>
+        {importRows.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <span className="truncate">Arquivo: <strong>{importFileName}</strong></span>
+              <span>Total importado: <strong className="text-success">{formatCurrency(importTotal)}</strong> · {importRows.length} linha(s)</span>
+            </div>
+            <div className="max-h-72 overflow-auto rounded-lg border border-border">
+              <table className="w-full min-w-[860px] text-xs">
+                <thead className="bg-muted/50 text-muted-foreground uppercase">
+                  <tr>
+                    {['Nome','Função','CPF','VR/Dia','Dias Prev.','Desc.','Dias Finais','Valor Total','Motivo'].map(h => <th key={h} className="px-2 py-2 text-left">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((row, index) => (
+                    <tr key={`${row.nome}-${index}`} className="border-t border-border">
+                      <td className="px-2 py-2 font-medium">{row.nome || '—'}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{row.cargo || '—'}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{row.cpf || '—'}</td>
+                      <td className="px-2 py-2">{formatCurrency(row.valorDiario)}</td>
+                      <td className="px-2 py-2 text-center">{row.diasPrevistos || '—'}</td>
+                      <td className="px-2 py-2 text-center text-destructive">{row.diasDescontados || '—'}</td>
+                      <td className="px-2 py-2 text-center">{row.diasFinais || '—'}</td>
+                      <td className="px-2 py-2 font-bold">{formatCurrency(row.valorTotal)}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{row.motivo || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Recibos em massa por empresa(s) — sempre disponíveis */}
@@ -366,4 +576,3 @@ const RelatorioVRPage: React.FC = () => {
 };
 
 export default RelatorioVRPage;
-
