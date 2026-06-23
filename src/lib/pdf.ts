@@ -14,8 +14,13 @@ export const fetchPdfBytes = async (sourceUrl: string): Promise<Uint8Array> => {
   return new Uint8Array(await response.arrayBuffer());
 };
 
+const clonePdfBytes = (source: Uint8Array) => new Uint8Array(source);
+
+const getPdfBytes = async (source: Uint8Array | string): Promise<Uint8Array> =>
+  typeof source === 'string' ? fetchPdfBytes(source) : clonePdfBytes(source);
+
 export const extractPdfText = async (source: Uint8Array | string): Promise<string> => {
-  const bytes = typeof source === 'string' ? await fetchPdfBytes(source) : source;
+  const bytes = await getPdfBytes(source);
   const pdf = await getDocument({ data: bytes }).promise;
   const parts: string[] = [];
 
@@ -64,7 +69,7 @@ const buildTextLinesFromItems = (items: any[]) => {
 };
 
 export const extractPdfLines = async (source: Uint8Array | string): Promise<string[]> => {
-  const bytes = typeof source === 'string' ? await fetchPdfBytes(source) : source;
+  const bytes = await getPdfBytes(source);
   const pdf = await getDocument({ data: bytes }).promise;
   const lines: string[] = [];
 
@@ -96,8 +101,9 @@ export const renderPdfPagesToDataUrls = async (
   scale = 1.35,
   maxPages = Number.POSITIVE_INFINITY,
 ): Promise<{ bytes: Uint8Array; pageCount: number; pageUrls: string[] }> => {
-  const bytes = typeof source === 'string' ? await fetchPdfBytes(source) : source;
-  const pdf = await getDocument({ data: bytes }).promise;
+  const bytes = await getPdfBytes(source);
+  const pdfBytes = clonePdfBytes(bytes);
+  const pdf = await getDocument({ data: pdfBytes }).promise;
   const pageUrls: string[] = [];
   const pagesToRender = Math.min(pdf.numPages, maxPages);
 
