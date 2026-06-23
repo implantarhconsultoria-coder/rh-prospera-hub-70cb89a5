@@ -10,6 +10,7 @@ import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
+const ALL_COMPANIES = 'todas';
 const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const competenciaLabel = (competencia: string) => {
   const [y, m] = competencia.split('-');
@@ -102,10 +103,15 @@ const RelatorioVRImpressaoPage: React.FC = () => {
   const empresaSingle = searchParams.get('empresa') || '';
 
   const empresaIds = useMemo(() => {
-    return empresasParam
+    const requested = empresasParam
       ? empresasParam.split(',').map(s => s.trim()).filter(Boolean)
       : (empresaSingle ? [empresaSingle] : []);
-  }, [empresasParam, empresaSingle]);
+
+    if (requested.includes(ALL_COMPANIES)) {
+      return companies.map(company => company.id);
+    }
+    return requested;
+  }, [empresasParam, empresaSingle, companies]);
 
   const consolidado = empresaIds.length > 1;
 
