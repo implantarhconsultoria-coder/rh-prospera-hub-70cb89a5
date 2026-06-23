@@ -17,6 +17,7 @@ import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 
 const ALL_COMPANIES = 'todas';
+const VR_PADRAO_EXCETO_GOIANIA = 31;
 const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const competenciaPt = (c: string) => {
   const [y, m] = (c || '').split('-');
@@ -147,8 +148,16 @@ const printImportedVrRows = ({ rows, fileName, competencia }: { rows: ImportedVr
   window.setTimeout(() => win.print(), 500);
 };
 
+const isGoianiaCompany = (company: { codigo?: string; name?: string; city?: string }) => {
+  const text = `${company.codigo || ''} ${company.name || ''} ${company.city || ''}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return company.codigo === 'topac-gyn' || text.includes('goian');
+};
+
 const RelatorioVRPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento, userRoles } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento, userRoles, updateEmployee, refreshData } = useApp();
   const isAdmin = userRoles?.includes('admin');
   const correcoes = useRecibosCorrecoes({ tipo: 'vr', competencia: undefined });
   const [editingRow, setEditingRow] = useState<BenefitReportRow | null>(null);
@@ -163,6 +172,7 @@ const RelatorioVRPage: React.FC = () => {
   const [previewRows, setPreviewRows] = useState<BenefitReportRow[]>([]);
   const [importFileName, setImportFileName] = useState('');
   const [importRows, setImportRows] = useState<ImportedVrRow[]>([]);
+  const [updatingVr, setUpdatingVr] = useState(false);
 
   const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
   const [diasUteisManual, setDiasUteisManual] = useState('');
@@ -190,6 +200,31 @@ const RelatorioVRPage: React.FC = () => {
     setGenerated(true);
     setSelectedEmployees(new Set());
     toast.success(isAllCompanies ? 'Relatório de VR de todas as empresas gerado!' : 'Relatório de VR gerado!');
+  };
+
+  const handleAtualizarVr31 = async () => {
+    if (!isAdmin) {
+      toast.error('Apenas administrador pode atualizar VR em lote.');
+      return;
+    }
+    const goianiaIds = new Set(companies.filter(isGoianiaCompany).map(c => c.id));
+    const targets = employees.filter(emp => emp.status === 'ativo' && emp.vrAtivo && !goianiaIds.has(emp.companyId));
+    if (targets.length === 0) {
+      toast.info('Nenhum funcionário ativo com VR fora de Goiânia para atualizar.');
+      return;
+    }
+
+    setUpdatingVr(true);
+    try {
+      await Promise.all(targets.map(emp => Promise.resolve(updateEmployee(emp.id, { vrDiario: VR_PADRAO_EXCETO_GOIANIA }))));
+      await refreshData();
+      setGenerated(false);
+      toast.success(`VR atualizado para ${formatCurrency(VR_PADRAO_EXCETO_GOIANIA)} em ${targets.length} funcionário(s). Goiânia não foi alterada.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível atualizar o VR em lote.');
+    } finally {
+      setUpdatingVr(false);
+    }
   };
 
   const handleImportVrFile = async (file?: File | null) => {
@@ -356,6 +391,11 @@ const RelatorioVRPage: React.FC = () => {
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
           <FileText className="w-4 h-4 mr-2" /> Gerar Relatório
         </Button>
+        {isAdmin && (
+          <Button type="button" onClick={handleAtualizarVr31} disabled={updatingVr} variant="outline" className="font-semibold">
+            {updatingVr ? 'Atualizando VR...' : 'Atualizar VR R$31 exceto Goiânia'}
+          </Button>
+        )}
       </div>
 
       <div className="card-premium p-5 space-y-4">
