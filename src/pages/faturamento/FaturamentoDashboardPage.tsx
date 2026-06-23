@@ -14,6 +14,7 @@ import {
   Landmark,
   Mail,
   MapPin,
+  Package,
   Phone,
   RefreshCw,
   Search,
@@ -52,6 +53,7 @@ type Dn4WorkspaceProps = {
   clientes: any[];
   contratos: any[];
   faturas: any[];
+  equipamentos: any[];
   stats: {
     previsto: number;
     emitido: number;
@@ -96,7 +98,7 @@ const QueryInput = ({ label, value, onChange }: { label: string; value: string; 
   </label>
 );
 
-const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contratos, faturas, stats, go }) => {
+const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contratos, faturas, equipamentos, stats, go }) => {
   const [activeTab, setActiveTab] = useState<ClienteTab>('principal');
   const [selectedClienteId, setSelectedClienteId] = useState<string>('');
   const [consulta, setConsulta] = useState<ConsultaCliente>({ codigo: '', nome: '', documento: '', cidade: '', status: '' });
@@ -131,20 +133,27 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
   const contratosCliente = cliente
     ? contratos.filter(c => c.cliente_id === cliente.id).slice(0, 6)
     : contratos.slice(0, 6);
+  const contratoIdsCliente = new Set(contratosCliente.map(c => c.id));
+  const equipamentosCliente = cliente
+    ? equipamentos.filter(e => e.contratos?.cliente_id === cliente.id || contratoIdsCliente.has(e.contrato_id)).slice(0, 8)
+    : equipamentos.slice(0, 8);
   const faturasCliente = cliente
     ? faturas.filter(f => f.cliente_id === cliente.id).slice(0, 6)
     : faturas.slice(0, 6);
   const documento = fmtDoc(cliente?.cnpj_cpf);
   const isPessoaJuridica = onlyDigits(cliente?.cnpj_cpf).length !== 11;
   const clienteCodigo = cliente?.id ? String(cliente.id).slice(0, 8).toUpperCase() : 'CLIENTE';
+  const equipamentosAtivosCliente = equipamentosCliente.filter(e => e.status === 'ativo');
+  const valorEquipamentosAtivos = equipamentosAtivosCliente.reduce((sum, item) => sum + Number(item.valor_unitario || 0), 0);
 
   const workflow = useMemo(() => ([
     { label: 'Cliente', value: clientes.length, meta: 'cadastro fiscal' },
-    { label: 'Contrato', value: contratos.filter(c => c.status === 'ativo').length, meta: 'locacao ativa' },
+    { label: 'Entrega / Obra', value: contratos.filter(c => c.status === 'ativo').length, meta: 'local do servico' },
+    { label: 'Equipamentos', value: equipamentos.filter(e => e.status === 'ativo').length, meta: 'itens locados' },
     { label: 'Medicao', value: stats.pendencias, meta: 'conferencia' },
     { label: 'Fatura', value: fmtBRL(stats.emitido), meta: 'emitido' },
     { label: 'Financeiro', value: fmtBRL(stats.pago), meta: 'recebido' },
-  ]), [clientes.length, contratos, stats.emitido, stats.pago, stats.pendencias]);
+  ]), [clientes.length, contratos, equipamentos, stats.emitido, stats.pago, stats.pendencias]);
 
   const selecionarCliente = (id?: string) => {
     if (!id) return;
@@ -154,6 +163,12 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
 
   const consultarCliente = () => selecionarCliente(clientesFiltrados[0]?.id);
   const limparConsulta = () => setConsulta({ codigo: '', nome: '', documento: '', cidade: '', status: '' });
+  const rotaFluxo = (index: number) => {
+    if (index === 0) return '/clientes';
+    if (index === 1 || index === 2) return '/contratos';
+    if (index === 3) return '/medicoes';
+    return '/faturas';
+  };
 
   const renderTabContent = () => {
     if (activeTab === 'contatos') {
@@ -194,6 +209,7 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
             <div className="fat-dn4-section-label"><Calculator /> Emissao</div>
             <div className="fat-dn4-contact-box">
               <span>Contratos vinculados: {contratosCliente.length}</span>
+              <span>Equipamentos ativos: {equipamentosAtivosCliente.length}</span>
               <span>Total emitido: {fmtBRL(faturasCliente.reduce((sum, fatura) => sum + Number(fatura.total || 0), 0))}</span>
             </div>
             <button type="button" className="fat-dn4-query-button" onClick={() => go('/faturas')}>Gerar ou importar fatura</button>
@@ -243,13 +259,36 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
           <div>
             <div className="fat-dn4-section-label"><Database /> Arquivos do cliente</div>
             <div className="fat-dn4-contact-box">
-              <span>Use a importacao DN4 abaixo para atualizar cliente, contrato, locacao e faturas.</span>
+              <span>Use a importacao DN4 abaixo para atualizar cliente, contrato, locacao, equipamentos e faturas.</span>
               <span>Cliente selecionado: {cliente?.razao_social || 'nenhum'}</span>
             </div>
           </div>
           <div>
             <div className="fat-dn4-section-label"><Search /> Conferencia</div>
             <button type="button" className="fat-dn4-query-button" onClick={() => go('/clientes')}>Abrir importacao/cadastro</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeTab === 'principal') {
+      return (
+        <div className="fat-dn4-split">
+          <div>
+            <div className="fat-dn4-section-label"><MapPin /> Informacoes de Entrega / Obra</div>
+            <div className="fat-dn4-form-grid compact">
+              <Dn4Field label="CEP" value={cliente?.cep} />
+              <Dn4Field label="Endereco" value={cliente?.endereco} wide />
+              <Dn4Field label="Cidade" value={cliente?.cidade} />
+              <Dn4Field label="UF" value={cliente?.uf} />
+            </div>
+          </div>
+          <div>
+            <div className="fat-dn4-section-label"><Package /> Bens locaveis</div>
+            <div className="fat-dn4-contact-box">
+              <span>Equipamentos vinculados: {equipamentosCliente.length}</span>
+              <span>Valor de itens ativos: {fmtBRL(valorEquipamentosAtivos)}</span>
+            </div>
           </div>
         </div>
       );
@@ -271,6 +310,7 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
           <div className="fat-dn4-contact-box">
             <span><Mail /> {cliente?.email || 'E-mail nao cadastrado'}</span>
             <span><Phone /> {cliente?.telefone || 'Telefone nao cadastrado'}</span>
+            <span>{equipamentosCliente.length} equipamento(s) localizado(s)</span>
           </div>
         </div>
       </div>
@@ -282,7 +322,7 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
       <div className="fat-dn4-head">
         <div>
           <p>Base de faturamento</p>
-          <h2>Cadastro, obra, tributacao e contrato no mesmo fluxo</h2>
+          <h2>Cadastro, obra, equipamentos, tributacao e contrato no mesmo fluxo</h2>
         </div>
         <div className="fat-dn4-head-actions">
           <button type="button" onClick={() => go('/clientes')}><Users /> Clientes</button>
@@ -295,7 +335,7 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
       <div className="fat-dn4-flow" aria-label="Esteira de faturamento">
         {workflow.map((item, index) => (
           <React.Fragment key={item.label}>
-            <button type="button" onClick={() => go(index === 0 ? '/clientes' : index === 1 ? '/contratos' : index === 2 ? '/medicoes' : index === 3 ? '/faturas' : '')}>
+            <button type="button" onClick={() => go(rotaFluxo(index))}>
               <span>{item.label}</span>
               <strong>{item.value}</strong>
               <small>{item.meta}</small>
@@ -413,21 +453,34 @@ const Dn4FaturamentoWorkspace: React.FC<Dn4WorkspaceProps> = ({ clientes, contra
           </div>
         </div>
 
-        <div className="fat-dn4-card fat-dn4-invoices-card">
+        <div className="fat-dn4-card fat-dn4-assets-card">
           <div className="fat-dn4-card-title">
-            <FileCheck2 />
-            <span>Ultimas faturas do cliente</span>
+            <Package />
+            <span>Bens locaveis / equipamentos</span>
           </div>
-          <div className="fat-dn4-invoice-list">
-            {faturasCliente.length === 0 ? (
-              <p>Nenhuma fatura recente para esse cliente.</p>
-            ) : faturasCliente.map((fatura) => (
-              <button key={fatura.id} type="button" onClick={() => go('/faturas')}>
-                <span>{fatura.numero || fatura.competencia || 'Fatura'}</span>
-                <strong>{fmtBRL(Number(fatura.total || 0))}</strong>
-                <small>{fatura.status}</small>
-              </button>
-            ))}
+          <div className="fat-dn4-table-wrap">
+            <table className="fat-dn4-table fat-dn4-assets-table">
+              <thead>
+                <tr>
+                  <th>Equipamento</th>
+                  <th>Patrimonio</th>
+                  <th>Contrato</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {equipamentosCliente.length === 0 ? (
+                  <tr><td colSpan={4}>Nenhum equipamento vinculado aos contratos deste cliente.</td></tr>
+                ) : equipamentosCliente.map((item) => (
+                  <tr key={item.id} onClick={() => item.contrato_id && go(`/contratos/${item.contrato_id}`)}>
+                    <td>{item.ativos?.descricao || item.descricao_livre || '—'}</td>
+                    <td>{item.patrimonio || item.ativos?.patrimonio || item.placa || item.ativos?.placa || '—'}</td>
+                    <td>{item.contratos?.numero || '—'}</td>
+                    <td>{fmtBRL(Number(item.valor_unitario || 0))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -444,6 +497,7 @@ const FaturamentoDashboardPage: React.FC = () => {
   const [clientesDn4, setClientesDn4] = useState<any[]>([]);
   const [contratosDn4, setContratosDn4] = useState<any[]>([]);
   const [faturasDn4, setFaturasDn4] = useState<any[]>([]);
+  const [equipamentosDn4, setEquipamentosDn4] = useState<any[]>([]);
   const [stats, setStats] = useState({
     previsto: 0, emitido: 0, pago: 0, vencidos: 0, aVencer: 0,
     contratosAtivos: 0, clientesAtivos: 0, equipamentosFaturando: 0,
@@ -474,16 +528,18 @@ const FaturamentoDashboardPage: React.FC = () => {
       applyEmp(supabase.from('faturas').select('id, numero, competencia, total, status, data_vencimento, empresa_id, cliente_id, contrato_id')),
       applyEmp(supabase.from('contratos').select('id, numero, status, empresa_id, cliente_id, data_inicio, data_fim, valor_mensal, regra_faturamento, dia_vencimento, clientes_fat(razao_social, cnpj_cpf), empresas(nome)')),
       supabase.from('clientes_fat').select('*').order('razao_social'),
-      supabase.from('contrato_equipamentos').select('id, status, contrato_id, contratos!inner(empresa_id)'),
+      supabase.from('contrato_equipamentos').select('id, status, contrato_id, valor_unitario, descricao_livre, patrimonio, placa, data_envio, data_retorno, ativos(descricao, placa, patrimonio, tipo), contratos!inner(empresa_id, cliente_id, numero)'),
       supabase.from('faturamento_pendencias').select('id').eq('status', 'aberta'),
       applyEmp(supabase.from('contratos').select('id, proximo_reajuste, empresa_id').not('proximo_reajuste', 'is', null).lte('proximo_reajuste', em30)),
       safeIds ? supabase.from('empresas').select('id, nome').in('id', safeIds) : supabase.from('empresas').select('id, nome'),
     ]);
 
     const f = faturas.data || [];
+    const equipamentos = (contratoEquip.data || []).filter((e: any) => !safeIds || safeIds.includes(e.contratos?.empresa_id));
     setFaturasDn4(f);
     setClientesDn4(clientes.data || []);
     setContratosDn4(contratos.data || []);
+    setEquipamentosDn4(equipamentos);
 
     const previsto = f.filter(x => ['prevista', 'em_aberto', 'enviada'].includes(x.status)).reduce((s, x) => s + Number(x.total || 0), 0);
     const emitido = f.filter(x => ['enviada', 'em_aberto', 'vencida', 'paga', 'parcial'].includes(x.status)).reduce((s, x) => s + Number(x.total || 0), 0);
@@ -495,7 +551,7 @@ const FaturamentoDashboardPage: React.FC = () => {
       previsto, emitido, pago, vencidos, aVencer,
       contratosAtivos: (contratos.data || []).filter(c => c.status === 'ativo').length,
       clientesAtivos: (clientes.data || []).filter(c => c.status === 'ativo').length,
-      equipamentosFaturando: (contratoEquip.data || []).filter((e: any) => e.status === 'ativo' && (!safeIds || safeIds.includes(e.contratos?.empresa_id))).length,
+      equipamentosFaturando: equipamentos.filter((e: any) => e.status === 'ativo').length,
       pendencias: pendencias.data?.length || 0,
       reajustesProximos: contratosReaj.data?.length || 0,
     });
@@ -576,6 +632,7 @@ const FaturamentoDashboardPage: React.FC = () => {
             clientes={clientesDn4}
             contratos={contratosDn4}
             faturas={faturasDn4}
+            equipamentos={equipamentosDn4}
             stats={stats}
             go={(path = '') => navigate(fatPath(path))}
           />
