@@ -1,0 +1,309 @@
+.topac-mobile-stage {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .topac-mobile-stage {
+    position: relative;
+    display: block;
+    min-height: 760px;
+    margin-top: 14px;
+    padding: 8px 0 28px;
+  }
+
+  .topac-mobile-stage + .topac-central-grid,
+  .topac-mobile-stage + .topac-central-grid + .topac-detail-grid,
+  .topac-dn4-panel {
+    display: none;
+  }
+
+  .topac-mobile-phone {
+    position: relative;
+    z-index: 2;
+    width: min(100%, 354px);
+    min-height: 706px;
+    margin: 0 auto;
+    border-radius: 34px;
+    padding: 12px;
+    border: 1px solid rgba(226, 232, 240, .28);
+    background: linear-gradient(160deg, rgba(2, 6, 23, .94), rgba(15, 23, 42, .86));
+    box-shadow: 0 30px 80px rgba(2, 6, 23, .56), inset 0 1px 0 rgba(255, 255, 255, .10);
+  }
+
+  .topac-mobile-speaker {
+    position: absolute;
+    top: 11px;
+    left: 50%;
+    width: 74px;
+    height: 5px;
+    transform: translateX(-50%);
+    border-radius: 99px;
+    background: rgba(148, 163, 184, .48);
+  }
+
+  .topac-mobile-screen {
+    min-height: 682px;
+    border-radius: 26px;
+    overflow: hidden;
+    padding: 22px 14px 16px;
+    background:
+      radial-gradient(circle at 18% 4%, rgba(168, 85, 247, .28), transparent 34%),
+      radial-gradient(circle at 96% 0%, rgba(45, 212, 191, .24), transparent 30%),
+      linear-gradient(180deg, rgba(15, 23, 42, .96), rgba(3, 7, 18, .98));
+  }
+
+  .topac-mobile-head,
+  .topac-mobile-nav,
+  .topac-mobile-hero-card,
+  .topac-mobile-kpis button,
+  .topac-mobile-feed div,
+  .topac-mobile-floating {
+    border: 1px solid rgba(148, 163, 184, .20);
+    background: linear-gradient(145deg, rgba(15, 23, 42, .62), rgba(8, 145, 178, .15));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 16px 42px rgba(2, 6, 23, .30);
+    backdrop-filter: blur(18px);
+  }
+
+  .topac-mobile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 18px;
+    padding: 12px;
+  }
+
+  .topac-mobile-head span,
+  .topac-mobile-floating span,
+  .topac-mobile-hero-card p,
+  .topac-mobile-kpis span {
+    display: block;
+    color: rgba(186, 230, 253, .68);
+    font-size: 10px;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .topac-mobile-head strong {
+    display: block;
+    margin-top: 3px;
+    color: #f8fafc;
+    font-size: 19px;
+    line-height: 1.05;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .topac-mobile-head button {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
+    color: #cffafe;
+    background: rgba(15, 23, 42, .58);
+    border: 1px solid rgba(125, 211, 252, .22);
+  }
+
+  .topac-mobile-head svg,
+  .topac-mobile-nav svg,
+  .topac-mobile-kpis svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .topac-mobile-search {
+    margin-top: 10px;
+    border-radius: 14px;
+    padding: 11px 13px;
+    color: rgba(203, 213, 225, .72);
+    background: rgba(15, 23, 42, .48);
+    border: 1px solid rgba(125, 211, 252, .16);
+    font-size: 12px;
+  }
+
+  .topac-mobile-hero-card {
+    margin-top: 12px;
+    border-radius: 20px;
+    padding: 16px;
+    background:
+      radial-gradient(circle at 0% 20%, rgba(34, 211, 238, .30), transparent 36%),
+      linear-gradient(135deg, rgba(88, 28, 135, .46), rgba(15, 118, 110, .22));
+  }
+
+  .topac-mobile-hero-card h2 {
+    margin: 8px 0 4px;
+    color: #f8fafc;
+    font-size: clamp(24px, 9vw, 36px);
+    line-height: 1;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .topac-mobile-hero-card small {
+    color: rgba(224, 242, 254, .72);
+    font-size: 12px;
+  }
+
+  .topac-mobile-kpis {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 9px;
+    margin-top: 12px;
+  }
+
+  .topac-mobile-kpis button {
+    min-height: 76px;
+    border-radius: 18px;
+    padding: 12px;
+    text-align: left;
+    color: #e0f2fe;
+  }
+
+  .topac-mobile-kpis strong {
+    display: block;
+    margin-top: 5px;
+    color: #f8fafc;
+    font-size: 19px;
+    line-height: 1;
+    font-weight: 900;
+  }
+
+  .topac-mobile-feed {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .topac-mobile-feed div {
+    position: relative;
+    min-height: 56px;
+    border-radius: 16px;
+    padding: 10px 10px 10px 34px;
+  }
+
+  .topac-mobile-feed div > span {
+    position: absolute;
+    left: 12px;
+    top: 15px;
+    width: 10px;
+    height: 10px;
+    border-radius: 99px;
+    background: #22d3ee;
+    box-shadow: 0 0 18px rgba(34, 211, 238, .9);
+  }
+
+  .topac-mobile-feed p {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 800;
+  }
+
+  .topac-mobile-feed small {
+    display: block;
+    margin-top: 3px;
+    color: rgba(203, 213, 225, .68);
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .topac-mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 12px;
+    border-radius: 22px;
+    padding: 9px;
+  }
+
+  .topac-mobile-nav button {
+    display: grid;
+    place-items: center;
+    min-height: 48px;
+    color: #e0f2fe;
+  }
+
+  .topac-mobile-nav span {
+    max-width: 100%;
+    margin-top: 4px;
+    color: rgba(203, 213, 225, .76);
+    font-size: 8.5px;
+    line-height: 1.05;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topac-mobile-floating {
+    position: absolute;
+    z-index: 3;
+    border-radius: 18px;
+    padding: 12px;
+    color: #f8fafc;
+  }
+
+  .topac-mobile-floating strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 17px;
+    line-height: 1;
+    font-weight: 900;
+  }
+
+  .topac-mobile-floating small {
+    display: block;
+    margin-top: 5px;
+    color: rgba(203, 213, 225, .70);
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .topac-mobile-left {
+    left: 0;
+    top: 128px;
+    width: min(42vw, 150px);
+    transform: translateX(-4px);
+  }
+
+  .topac-mobile-right {
+    right: 0;
+    top: 292px;
+    width: min(45vw, 162px);
+    transform: translateX(4px);
+  }
+
+  .topac-mobile-right div {
+    margin-top: 7px;
+    border-radius: 10px;
+    padding: 7px 8px;
+    color: #fecdd3;
+    background: rgba(127, 29, 29, .22);
+    font-size: 10px;
+    font-weight: 800;
+  }
+}
+
+@media (max-width: 430px) {
+  .topac-mobile-stage {
+    min-height: 740px;
+  }
+
+  .topac-mobile-phone {
+    width: min(100%, 326px);
+    min-height: 682px;
+  }
+
+  .topac-mobile-screen {
+    min-height: 658px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .topac-mobile-left,
+  .topac-mobile-right {
+    display: none;
+  }
+}
