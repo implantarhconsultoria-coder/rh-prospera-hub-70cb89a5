@@ -63,6 +63,13 @@ const safeStorageName = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'documento';
 
+const normalizeText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+
 const isMissingEnhancedColumnError = (error: any) =>
   /could not find|schema cache|column/i.test(error?.message || '') &&
   /categoria|origem|observacao|nome_arquivo|data_documento|storage_bucket|storage_path/i.test(error?.message || '');
@@ -79,6 +86,114 @@ const contentTypeFromExtension = (ext: string) => {
   if (ext === 'webp') return 'image/webp';
   if (ext === 'html') return 'text/html';
   return 'application/octet-stream';
+};
+
+const resolveCompetenciaAtestado = (doc: DocumentoRegistro) => {
+  if (/^\d{4}-\d{2}$/.test(doc.competencia || '')) return doc.competencia as string;
+
+  const rawDate = String(doc.dataDocumento || '').trim();
+  const iso = rawDate.match(/^(\d{4})-(\d{2})-\d{2}/);
+  if (iso) return `${iso[1]}-${iso[2]}`;
+
+  const br = rawDate.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+  if (br) {
+    const year = br[3].length === 2 ? `20${br[3]}` : br[3];
+    return `${year}-${br[2].padStart(2, '0')}`;
+  }
+
+  return new Date().toISOString().slice(0, 7);
+};
+
+const extrairHorasAtestado = (doc: DocumentoRegistro) => {
+  const texto = [doc.tipoDocumento, doc.categoria, doc.descricao, doc.observacao, doc.nomeArquivo]
+    .map((item) => String(item || ''))
+    .join(' | ');
+  const normalizado = normalizeText(texto);
+  const ehAtestado = normalizado.includes('atestado');
+  const mencionaHoras = /\bhora(s)?\b|\d+\s*h\b|\d+h\d{1,2}\b|\d{1,2}:\d{2}/i.test(normalizado);
+  if (!ehAtestado || !mencionaHoras) return 0;
+
+  const horasMinutos = normalizado.match(/\b(\d{1,2})\s*h\s*(\d{1,2})\b/) || normalizado.match(/\b(\d{1,2}):(\d{2})\b/);
+  if (horasMinutos) {
+    const horas = Number(horasMinutos[1]) || 0;
+    const minutos = Number(horasMinutos[2]) || 0;
+    return round2(horas + minutos / 60);
+  }
+
+  const decimal = normalizado.match(/\b(\d+(?:[,.]\d+)?)\s*(?:h|hora|horas)\b/);
+  if (decimal) return round2(Number(decimal[1].replace(',', '.')) || 0);
+
+  return 0;
+};
+
+const appendAtestadoHorasObservacao = (observacoes: string, horas: number, dataDocumento?: string) => {
+  const partes = [observacoes || ''];
+  const referenciaData = dataDocumento ? ` em ${dataDocumento}` : '';
+  partes.push(`ATESTADO HORAS: +${horas.toLocaleString('pt-BR')}h${referenciaData}`);
+  return partes.filter(Boolean).join(' | ');
+};
+
+const aplicarAtestadoHorasNoLancamento = async (doc: DocumentoRegistro) => {
+  const horas = extrairHorasAtestado(doc);
+  if (horas <= 0 || !doc.funcionarioId || !doc.companyId) return;
+
+  const competencia = resolveCompetenciaAtestado(doc);
+  const { data: entry, error: entryError } = await supabase
+    .from('lancamentos_mensais')
+    .select('id, atrasos, observacoes, bloqueado')
+    .eq('funcionario_id', doc.funcionarioId)
+    .eq('competencia', competencia)
+    .is('apagado_em', null)
+    .maybeSingle();
+
+  if (entryError) throw entryError;
+  if (entry?.bloqueado) {
+    console.warn('Atestado de horas nao aplicado: fechamento bloqueado para a competencia.', { funcionarioId: doc.funcionarioId, competencia });
+    return;
+  }
+
+  const observacoes = appendAtestadoHorasObservacao(String(entry?.observacoes || ''), horas, doc.dataDocumento);
+  if (entry?.id) {
+    const { error } = await supabase
+      .from('lancamentos_mensais')
+      .update({
+        atrasos: round2(Number(entry.atrasos) + horas),
+        observacoes,
+      } as any)
+      .eq('id', entry.id);
+    if (error) throw error;
+    return;
+  }
+
+  const { data: employee } = await supabase
+    .from('funcionarios')
+    .select('salario_base, salario, vr_ativo, va_ativo, vt_ativo, insalubridade_ativa')
+    .eq('id', doc.funcionarioId)
+    .maybeSingle();
+  const salarioBase = Number((employee as any)?.salario_base ?? (employee as any)?.salario) || 0;
+
+  const { error } = await supabase.from('lancamentos_mensais').insert({
+    funcionario_id: doc.funcionarioId,
+    company_id: doc.companyId,
+    competencia,
+    faltas_dias: 0,
+    atrasos: horas,
+    he50: 0,
+    he100: 0,
+    adicionais: 0,
+    descontos_diversos: 0,
+    adiantamento: round2(salarioBase * 0.4),
+    vr_aplicado: Boolean((employee as any)?.vr_ativo),
+    vr_dias: (employee as any)?.vr_ativo ? 22 : 0,
+    va_aplicado: Boolean((employee as any)?.va_ativo),
+    vt_aplicado: Boolean((employee as any)?.vt_ativo),
+    vt_desconto: 0,
+    comissao_base: 0,
+    insalubridade_aplicada: Boolean((employee as any)?.insalubridade_ativa),
+    status_conferencia: 'pendente',
+    observacoes,
+  } as any);
+  if (error) throw error;
 };
 
 export const registrarDocumento = async (doc: DocumentoRegistro) => {
@@ -118,6 +233,13 @@ export const registrarDocumento = async (doc: DocumentoRegistro) => {
     console.error('Erro ao registrar documento:', result.error);
     throw result.error;
   }
+
+  try {
+    await aplicarAtestadoHorasNoLancamento(doc);
+  } catch (error) {
+    console.error('Documento registrado, mas nao foi possivel aplicar atestado de horas no lancamento:', error);
+  }
+
   return result.data;
 };
 
