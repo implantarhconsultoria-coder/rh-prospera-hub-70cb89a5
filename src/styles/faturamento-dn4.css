@@ -1,0 +1,463 @@
+.fat-dn4-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.fat-dn4-workspace {
+  color: #e8f7ff;
+}
+
+.fat-dn4-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.fat-dn4-head p {
+  margin: 0 0 4px;
+  color: rgba(186, 230, 253, .64);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.fat-dn4-head h2 {
+  margin: 0;
+  color: #f8fafc;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.fat-dn4-head-actions,
+.fat-dn4-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fat-dn4-head-actions button,
+.fat-dn4-query-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(125, 211, 252, .18);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .64);
+  color: rgba(224, 242, 254, .86);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 800;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.fat-dn4-head-actions button:hover,
+.fat-dn4-query-button:hover,
+.fat-dn4-flow button:hover,
+.fat-dn4-table tbody tr:hover,
+.fat-dn4-invoice-list button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 212, 191, .48);
+  background: rgba(14, 116, 144, .24);
+}
+
+.fat-dn4-head-actions svg,
+.fat-dn4-query-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.fat-dn4-head-actions .fat-dn4-primary {
+  border: 0;
+  background: linear-gradient(100deg, #34d399, #22d3ee);
+  color: #06111f;
+}
+
+.fat-dn4-flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.fat-dn4-flow button {
+  min-height: 76px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, .78), rgba(6, 78, 59, .18));
+  color: #ecfeff;
+  padding: 10px;
+  text-align: left;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.fat-dn4-flow button span,
+.fat-dn4-flow button small {
+  display: block;
+}
+
+.fat-dn4-flow button span {
+  color: rgba(203, 213, 225, .76);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.fat-dn4-flow button strong {
+  display: block;
+  margin-top: 5px;
+  color: #f8fafc;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fat-dn4-flow button small {
+  margin-top: 2px;
+  color: rgba(186, 230, 253, .58);
+  font-size: 10px;
+}
+
+.fat-dn4-flow-arrow {
+  display: none;
+}
+
+.fat-dn4-grid,
+.fat-dn4-bottom-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.fat-dn4-grid {
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.fat-dn4-bottom-grid {
+  grid-template-columns: minmax(260px, .82fr) minmax(420px, 1.34fr) minmax(240px, .84fr);
+  margin-top: 10px;
+}
+
+.fat-dn4-card {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, .20);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .64);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 14px 36px rgba(2, 6, 23, .16);
+  padding: 10px;
+}
+
+.fat-dn4-card-title,
+.fat-dn4-section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #bae6fd;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.fat-dn4-card-title {
+  margin-bottom: 9px;
+}
+
+.fat-dn4-card-title svg,
+.fat-dn4-section-label svg {
+  width: 15px;
+  height: 15px;
+  color: #67e8f9;
+}
+
+.fat-dn4-form-grid,
+.fat-dn4-query-grid,
+.fat-dn4-tax-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.fat-dn4-query-grid,
+.fat-dn4-tax-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fat-dn4-form-grid.compact {
+  grid-template-columns: 100px minmax(0, 1fr) minmax(120px, .55fr) 56px;
+}
+
+.fat-dn4-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(72px, .42fr) minmax(0, 1fr);
+  align-items: center;
+  min-height: 32px;
+  border: 1px solid rgba(125, 211, 252, .12);
+  border-radius: 6px;
+  background: rgba(2, 6, 23, .30);
+  overflow: hidden;
+}
+
+.fat-dn4-field-wide {
+  grid-column: span 2;
+}
+
+.fat-dn4-field span {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  color: rgba(203, 213, 225, .72);
+  background: rgba(148, 163, 184, .10);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.fat-dn4-field strong {
+  min-width: 0;
+  display: block;
+  padding: 0 8px;
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fat-dn4-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  margin: 11px 0 10px;
+  border-bottom: 1px solid rgba(125, 211, 252, .16);
+  overflow-x: auto;
+}
+
+.fat-dn4-tabs span {
+  flex: 0 0 auto;
+  border: 1px solid rgba(125, 211, 252, .13);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: rgba(15, 23, 42, .72);
+  color: rgba(224, 242, 254, .68);
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fat-dn4-tabs span.is-active {
+  background: rgba(14, 116, 144, .34);
+  color: #f8fafc;
+}
+
+.fat-dn4-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(220px, .55fr);
+  gap: 10px;
+}
+
+.fat-dn4-section-label {
+  margin-bottom: 7px;
+}
+
+.fat-dn4-contact-box,
+.fat-dn4-invoice-list {
+  display: grid;
+  gap: 7px;
+}
+
+.fat-dn4-contact-box span {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(125, 211, 252, .12);
+  border-radius: 6px;
+  background: rgba(2, 6, 23, .30);
+  color: rgba(224, 242, 254, .82);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fat-dn4-contact-box svg {
+  width: 14px;
+  height: 14px;
+  color: #67e8f9;
+}
+
+.fat-dn4-query-card p,
+.fat-dn4-invoice-list p {
+  margin: 9px 0 0;
+  color: rgba(203, 213, 225, .68);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.fat-dn4-query-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.fat-dn4-table-wrap {
+  overflow-x: auto;
+}
+
+.fat-dn4-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.fat-dn4-table thead {
+  color: rgba(203, 213, 225, .72);
+  background: rgba(148, 163, 184, .12);
+  text-transform: uppercase;
+}
+
+.fat-dn4-table th,
+.fat-dn4-table td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.fat-dn4-table tbody tr {
+  cursor: pointer;
+  transition: transform .18s ease, background .18s ease;
+}
+
+.fat-dn4-table td:nth-child(2) {
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fat-dn4-table .is-ok,
+.fat-dn4-table .is-warn {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.fat-dn4-table .is-ok {
+  background: rgba(16, 185, 129, .14);
+  color: #86efac;
+}
+
+.fat-dn4-table .is-warn {
+  background: rgba(245, 158, 11, .14);
+  color: #fde68a;
+}
+
+.fat-dn4-invoice-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  align-items: center;
+  border: 1px solid rgba(125, 211, 252, .12);
+  border-radius: 7px;
+  background: rgba(2, 6, 23, .28);
+  padding: 8px;
+  text-align: left;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.fat-dn4-invoice-list span,
+.fat-dn4-invoice-list small {
+  color: rgba(203, 213, 225, .72);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fat-dn4-invoice-list strong {
+  color: #ecfeff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.fat-dn4-invoice-list small {
+  grid-column: 1 / -1;
+  text-transform: none;
+}
+
+@media (max-width: 1180px) {
+  .fat-dn4-head {
+    flex-direction: column;
+  }
+
+  .fat-dn4-grid,
+  .fat-dn4-bottom-grid,
+  .fat-dn4-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .fat-dn4-head h2 {
+    font-size: 17px;
+  }
+
+  .fat-dn4-flow,
+  .fat-dn4-form-grid,
+  .fat-dn4-form-grid.compact,
+  .fat-dn4-query-grid,
+  .fat-dn4-tax-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fat-dn4-field,
+  .fat-dn4-field-wide {
+    grid-column: auto;
+    grid-template-columns: 116px minmax(0, 1fr);
+  }
+
+  .fat-dn4-head-actions {
+    width: 100%;
+  }
+
+  .fat-dn4-head-actions button {
+    flex: 1 1 130px;
+  }
+}
+
+@media print {
+  .fat-dn4-head-actions,
+  .fat-dn4-flow,
+  .fat-dn4-query-card {
+    display: none !important;
+  }
+
+  .fat-dn4-card,
+  .fat-dn4-field,
+  .fat-dn4-contact-box span {
+    background: #fff !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
+    box-shadow: none !important;
+  }
+
+  .fat-dn4-field span,
+  .fat-dn4-field strong,
+  .fat-dn4-card-title,
+  .fat-dn4-section-label,
+  .fat-dn4-table th,
+  .fat-dn4-table td {
+    color: #111827 !important;
+  }
+}
