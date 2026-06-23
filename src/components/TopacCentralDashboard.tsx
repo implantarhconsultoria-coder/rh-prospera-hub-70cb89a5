@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { LucideIcon, Activity, AlertTriangle, Search, Settings, ShieldCheck, Users } from 'lucide-react';
 import '@/styles/topac-central.css';
+import '@/styles/topac-central-mobile.css';
 
 type CentralKpi = {
   label: string;
@@ -103,6 +104,12 @@ const TopacCentralDashboard: React.FC<TopacCentralDashboardProps> = ({
   emptyRight,
   dn4Slot,
 }) => {
+  const primaryKpi = kpis[0];
+  const secondaryKpi = kpis[1] || kpis[0];
+  const mobileActions = actions.slice(0, 5);
+  const mobileAlerts = alerts.slice(0, 3);
+  const mobileTimeline = timeline.slice(0, 3);
+
   return (
     <div className="topac-central-shell animate-fade-in">
       <div className="topac-network" aria-hidden="true" />
@@ -123,6 +130,66 @@ const TopacCentralDashboard: React.FC<TopacCentralDashboardProps> = ({
           <span>Atualizar</span>
         </button>
       </header>
+
+      <section className="topac-mobile-stage no-print" aria-label="TOPAC CENTRAL mobile">
+        <div className="topac-mobile-phone">
+          <div className="topac-mobile-speaker" />
+          <div className="topac-mobile-screen">
+            <div className="topac-mobile-head">
+              <div>
+                <span>{modulo}</span>
+                <strong>TOPAC CENTRAL</strong>
+              </div>
+              <button type="button" onClick={onRefresh} aria-label="Atualizar mobile"><Activity className={loading ? 'animate-spin' : ''} /></button>
+            </div>
+            <div className="topac-mobile-search">Buscar / executar</div>
+            <div className="topac-mobile-hero-card">
+              <p>{subtitle}</p>
+              <h2>{primaryKpi?.value || 'Online'}</h2>
+              <small>{primaryKpi?.label || 'Indicador principal'}</small>
+            </div>
+            <div className="topac-mobile-kpis">
+              {kpis.slice(0, 3).map((item) => (
+                <button key={item.label} type="button" onClick={item.onClick} disabled={!item.onClick}>
+                  <item.icon />
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </button>
+              ))}
+            </div>
+            <div className="topac-mobile-feed">
+              {mobileTimeline.map((event) => (
+                <div key={event.title}>
+                  <span />
+                  <p>{event.title}</p>
+                  <small>{event.meta}</small>
+                </div>
+              ))}
+            </div>
+            <nav className="topac-mobile-nav" aria-label="Ações mobile">
+              {mobileActions.map((action) => (
+                <button key={action.label} type="button" onClick={action.onClick}>
+                  <action.icon />
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        <div className="topac-mobile-floating topac-mobile-left">
+          <span>Fluxo</span>
+          <strong>{secondaryKpi?.value || 'Ativo'}</strong>
+          <small>{secondaryKpi?.label || 'Operação'}</small>
+        </div>
+
+        <div className="topac-mobile-floating topac-mobile-right">
+          <span>Task Inbox</span>
+          {mobileAlerts.map((alert) => (
+            <div key={alert.title}>{alert.title}</div>
+          ))}
+        </div>
+      </section>
 
       <section className="topac-central-grid">
         <main className="topac-central-main">
