@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { sendEmailWithPdfAttachment } from '@/lib/emailUtils';
+import { openEmailClient, sendEmailWithPdfAttachment } from '@/lib/emailUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -107,6 +107,29 @@ const buildAtestadoBody = (originalBody: string) => {
   ].filter((line, index, lines) => line !== '' || (index > 0 && lines[index - 1] !== '')).join('\n');
 };
 
+const downloadAttachmentFallback = (attachment: { attachmentBlob: Blob; attachmentName: string }) => {
+  const url = URL.createObjectURL(attachment.attachmentBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = attachment.attachmentName || 'anexo.pdf';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+};
+
+const getFriendlyEmailError = (message?: string) => {
+  const value = String(message || '').trim();
+  if (!value || value === 'email_send_failed') {
+    return 'O envio automático pelo servidor não foi concluído.';
+  }
+  if (value === 'pdf_anexo_vazio') {
+    return 'O anexo não foi gerado corretamente.';
+  }
+  return value;
+};
+
 export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpenChange }) => {
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
@@ -178,7 +201,10 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       toast.success('E-mail enviado com PDF anexado.');
       onOpenChange(false);
     } catch (error: any) {
-      toast.error(error?.message || 'Não foi possível enviar o e-mail agora.');
+      const friendlyMessage = getFriendlyEmailError(error?.message);
+      openEmailClient({ to: toList, cc: ccList, subject: subject.trim(), body: body.trim() });
+      attachments.forEach(downloadAttachmentFallback);
+      toast.warning(`${friendlyMessage} Abri o e-mail manual preenchido e baixei os anexos para envio imediato.`);
     } finally {
       setSending(false);
     }
