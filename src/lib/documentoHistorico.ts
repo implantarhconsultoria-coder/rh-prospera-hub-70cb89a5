@@ -5,6 +5,7 @@ export const DOCUMENTO_CATEGORIAS_PADRAO = [
   'CONTRATO',
   'ASO',
   'ATESTADO',
+  'DECLARACAO DE HORAS',
   'EPI',
   'UNIFORME',
   'VALE-TRANSPORTE / VT',
@@ -104,14 +105,24 @@ const resolveCompetenciaAtestado = (doc: DocumentoRegistro) => {
   return new Date().toISOString().slice(0, 7);
 };
 
+const parseHorarioParaHoras = (hora: string, minuto: string) => (Number(hora) || 0) + (Number(minuto) || 0) / 60;
+
 const extrairHorasAtestado = (doc: DocumentoRegistro) => {
   const texto = [doc.tipoDocumento, doc.categoria, doc.descricao, doc.observacao, doc.nomeArquivo]
     .map((item) => String(item || ''))
     .join(' | ');
   const normalizado = normalizeText(texto);
-  const ehAtestado = normalizado.includes('atestado');
+  const ehDocumentoHoras = normalizado.includes('atestado') || (normalizado.includes('declaracao') && normalizado.includes('hora'));
   const mencionaHoras = /\bhora(s)?\b|\d+\s*h\b|\d+h\d{1,2}\b|\d{1,2}:\d{2}/i.test(normalizado);
-  if (!ehAtestado || !mencionaHoras) return 0;
+  if (!ehDocumentoHoras || !mencionaHoras) return 0;
+
+  const intervalo = normalizado.match(/\b(\d{1,2})[:h](\d{2})\b.{0,30}\b(?:as|às|ate|até|-)\b.{0,30}\b(\d{1,2})[:h](\d{2})\b/);
+  if (intervalo) {
+    const inicio = parseHorarioParaHoras(intervalo[1], intervalo[2]);
+    const fim = parseHorarioParaHoras(intervalo[3], intervalo[4]);
+    const diferenca = fim >= inicio ? fim - inicio : (24 - inicio) + fim;
+    return round2(diferenca);
+  }
 
   const horasMinutos = normalizado.match(/\b(\d{1,2})\s*h\s*(\d{1,2})\b/) || normalizado.match(/\b(\d{1,2}):(\d{2})\b/);
   if (horasMinutos) {
@@ -129,7 +140,7 @@ const extrairHorasAtestado = (doc: DocumentoRegistro) => {
 const appendAtestadoHorasObservacao = (observacoes: string, horas: number, dataDocumento?: string) => {
   const partes = [observacoes || ''];
   const referenciaData = dataDocumento ? ` em ${dataDocumento}` : '';
-  partes.push(`ATESTADO HORAS: +${horas.toLocaleString('pt-BR')}h${referenciaData}`);
+  partes.push(`DECLARACAO/ATESTADO HORAS: +${horas.toLocaleString('pt-BR')}h${referenciaData}`);
   return partes.filter(Boolean).join(' | ');
 };
 
@@ -148,7 +159,7 @@ const aplicarAtestadoHorasNoLancamento = async (doc: DocumentoRegistro) => {
 
   if (entryError) throw entryError;
   if (entry?.bloqueado) {
-    console.warn('Atestado de horas nao aplicado: fechamento bloqueado para a competencia.', { funcionarioId: doc.funcionarioId, competencia });
+    console.warn('Declaracao/atestado de horas nao aplicado: fechamento bloqueado para a competencia.', { funcionarioId: doc.funcionarioId, competencia });
     return;
   }
 
@@ -237,7 +248,7 @@ export const registrarDocumento = async (doc: DocumentoRegistro) => {
   try {
     await aplicarAtestadoHorasNoLancamento(doc);
   } catch (error) {
-    console.error('Documento registrado, mas nao foi possivel aplicar atestado de horas no lancamento:', error);
+    console.error('Documento registrado, mas nao foi possivel aplicar declaracao/atestado de horas no lancamento:', error);
   }
 
   return result.data;
