@@ -5,9 +5,37 @@ import { getWorkingDays } from '@/lib/workingDays';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Printer, Download, BarChart3, AlertTriangle, DollarSign, Clock, CreditCard } from 'lucide-react';
+import { FileText, Printer, BarChart3, AlertTriangle, DollarSign, Clock, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+
+const ALL_COMPANIES = 'todas';
+
+type ReportRow = {
+  emp: any;
+  companyName: string;
+  entry: any;
+  calc: any;
+  he50Val: number;
+  he100Val: number;
+  faltaVal: number;
+  atrasoVal: number;
+  insVal: number;
+  periculosidadeVal: number;
+};
+
+const emptyTotals = () => ({
+  proventos: 0,
+  descontos: 0,
+  liquido: 0,
+  beneficios: 0,
+  insalubridade: 0,
+  periculosidade: 0,
+  he: 0,
+  adiantamentos: 0,
+  faltaDias: 0,
+  faltaVal: 0,
+});
 
 const RelatorioPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento } = useApp();
@@ -16,14 +44,19 @@ const RelatorioPage: React.FC = () => {
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [generated, setGenerated] = useState(false);
 
-  const company = companies.find(c => c.id === selectedCompany);
+  const isAllCompanies = selectedCompany === ALL_COMPANIES;
+  const selectedCompanies = isAllCompanies ? companies : companies.filter(c => c.id === selectedCompany);
+  const company = selectedCompanies[0];
   const diasUteis = getWorkingDays(competencia);
-  const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional');
-  const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
-  const fechamento = getFechamento(selectedCompany, competencia);
+  const companyIds = new Set(selectedCompanies.map(c => c.id));
+  const compEmps = employees.filter(e => companyIds.has(e.companyId) && e.status === 'ativo' && e.categoria === 'operacional');
+  const compEntries = entries.filter(e => companyIds.has(e.companyId) && e.competencia === competencia);
+  const fechamento = !isAllCompanies && selectedCompany ? getFechamento(selectedCompany, competencia) : { status: 'consolidado' };
 
-  const { rows, totals } = useMemo(() => {
-    let tProv = 0, tDesc = 0, tLiq = 0, tBen = 0, tIns = 0, tPeric = 0, tHE = 0, tAdiant = 0, tFaltaDias = 0, tFaltaVal = 0;
+  const { rows, totals, byCompany } = useMemo(() => {
+    const t = emptyTotals();
+    const grouped = new Map<string, { name: string; rows: ReportRow[]; totals: ReturnType<typeof emptyTotals> }>();
+
     const r = compEmps.map(emp => {
       const entry = compEntries.find(e => e.employeeId === emp.id);
       if (!entry) return null;
@@ -34,31 +67,49 @@ const RelatorioPage: React.FC = () => {
       const atrasoVal = calcAtraso(emp.salarioBase, entry.atrasos);
       const insVal = calc.insVal;
       const periculosidadeVal = calc.periculosidadeVal;
+      const companyName = companies.find(c => c.id === emp.companyId)?.name || 'Empresa não identificada';
+      const row: ReportRow = { emp, companyName, entry, calc, he50Val, he100Val, faltaVal, atrasoVal, insVal, periculosidadeVal };
 
-      tProv += calc.proventos; tDesc += calc.descontos; tLiq += calc.liquido;
-      tBen += calc.beneficios; tIns += insVal; tPeric += periculosidadeVal; tHE += he50Val + he100Val;
-      tAdiant += entry.adiantamento; tFaltaDias += entry.faltasDias; tFaltaVal += faltaVal;
+      t.proventos += calc.proventos; t.descontos += calc.descontos; t.liquido += calc.liquido;
+      t.beneficios += calc.beneficios; t.insalubridade += insVal; t.periculosidade += periculosidadeVal; t.he += he50Val + he100Val;
+      t.adiantamentos += entry.adiantamento; t.faltaDias += entry.faltasDias; t.faltaVal += faltaVal;
 
-      return { emp, entry, calc, he50Val, he100Val, faltaVal, atrasoVal, insVal, periculosidadeVal };
-    }).filter(Boolean) as any[];
+      const current = grouped.get(emp.companyId) || { name: companyName, rows: [], totals: emptyTotals() };
+      current.rows.push(row);
+      current.totals.proventos += calc.proventos;
+      current.totals.descontos += calc.descontos;
+      current.totals.liquido += calc.liquido;
+      current.totals.beneficios += calc.beneficios;
+      current.totals.insalubridade += insVal;
+      current.totals.periculosidade += periculosidadeVal;
+      current.totals.he += he50Val + he100Val;
+      current.totals.adiantamentos += entry.adiantamento;
+      current.totals.faltaDias += entry.faltasDias;
+      current.totals.faltaVal += faltaVal;
+      grouped.set(emp.companyId, current);
+
+      return row;
+    }).filter(Boolean) as ReportRow[];
 
     return {
       rows: r,
-      totals: { proventos: tProv, descontos: tDesc, liquido: tLiq, beneficios: tBen, insalubridade: tIns, periculosidade: tPeric, he: tHE, adiantamentos: tAdiant, faltaDias: tFaltaDias, faltaVal: tFaltaVal },
+      totals: t,
+      byCompany: Array.from(grouped.entries()).map(([companyId, value]) => ({ companyId, ...value })),
     };
-  }, [compEmps, compEntries, diasUteis]);
+  }, [compEmps, compEntries, diasUteis, companies]);
 
   const divergencias = compEntries.filter(e => e.statusConferencia === 'divergente').length;
 
   const handleGenerate = () => {
-    if (!selectedCompany) { toast.error('Selecione uma empresa'); return; }
-    getOrCreateEntries(selectedCompany, competencia);
+    if (!selectedCompany) { toast.error('Selecione uma empresa ou todas.'); return; }
+    const targets = isAllCompanies ? companies.map(c => c.id) : [selectedCompany];
+    targets.forEach(companyId => getOrCreateEntries(companyId, competencia));
     setGenerated(true);
-    toast.success('Relatório gerado com sucesso!');
+    toast.success(isAllCompanies ? 'Relatórios de todas as empresas gerados!' : 'Relatório gerado com sucesso!');
   };
 
-  const openPrintVersion = () => {
-    const url = `/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`;
+  const openPrintVersion = (companyId = selectedCompany) => {
+    const url = `/relatorio-impressao?empresa=${companyId}&competencia=${competencia}`;
     navigate(url);
   };
 
@@ -71,7 +122,7 @@ const RelatorioPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display">Relatório de Fechamento por Empresa</h1>
-            <p className="text-primary-foreground/70 text-sm">Gere, visualize e exporte o relatório consolidado</p>
+            <p className="text-primary-foreground/70 text-sm">Gere, visualize e imprima individualmente ou todas as empresas</p>
           </div>
         </div>
       </div>
@@ -81,8 +132,9 @@ const RelatorioPage: React.FC = () => {
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
             <select value={selectedCompany} onChange={e => { setSelectedCompany(e.target.value); setGenerated(false); }}
-              className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-w-[200px]">
+              className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-w-[220px]">
               <option value="">Selecionar Empresa</option>
+              <option value={ALL_COMPANIES}>Todas as empresas</option>
               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -97,11 +149,33 @@ const RelatorioPage: React.FC = () => {
             <BarChart3 className="w-4 h-4 mr-2" /> Gerar Relatório
           </Button>
           {generated && (
-            <>
-              <Button onClick={openPrintVersion} variant="outline"><Printer className="w-4 h-4 mr-2" /> Imprimir / PDF</Button>
-            </>
+            <Button onClick={() => openPrintVersion(isAllCompanies ? ALL_COMPANIES : selectedCompany)} variant="outline">
+              <Printer className="w-4 h-4 mr-2" /> {isAllCompanies ? 'Imprimir todos / PDF' : 'Imprimir / PDF'}
+            </Button>
           )}
         </div>
+
+        {generated && isAllCompanies && byCompany.length > 0 && (
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold">Impressão individual por empresa</p>
+              <Badge variant="secondary">{byCompany.length} empresas</Badge>
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {byCompany.map(item => (
+                <div key={item.companyId} className="flex items-center justify-between gap-2 rounded-md border border-border bg-background/70 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{item.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.rows.length} funcionário(s) · {formatCurrency(item.totals.liquido)}</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => openPrintVersion(item.companyId)}>
+                    <Printer className="mr-1 h-3.5 w-3.5" /> Imprimir
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {generated && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -122,13 +196,13 @@ const RelatorioPage: React.FC = () => {
         )}
       </div>
 
-      {generated && company && (
+      {generated && (company || isAllCompanies) && (
         <div className="card-premium p-6 space-y-6">
           <div className="border-b pb-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-bold font-display text-foreground">{company.name}</h2>
-                <p className="text-sm text-muted-foreground">CNPJ: {company.cnpj}</p>
+                <h2 className="text-lg font-bold font-display text-foreground">{isAllCompanies ? 'Todas as empresas' : company?.name}</h2>
+                <p className="text-sm text-muted-foreground">{isAllCompanies ? `${byCompany.length} empresas com dados na competência` : `CNPJ: ${company?.cnpj}`}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-muted-foreground">Competência: {competencia}</p>
@@ -164,14 +238,15 @@ const RelatorioPage: React.FC = () => {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  {['Nome','Cargo','Salário','HE 50%','HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido'].map(h => (
+                  {(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário','HE 50%','HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (
                     <th key={h} className="px-2 py-2 text-left font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r: any) => (
-                  <tr key={r.emp.id} className="border-b hover:bg-muted/20">
+                {rows.map((r: ReportRow) => (
+                  <tr key={`${r.emp.id}-${r.companyName}`} className="border-b hover:bg-muted/20">
+                    {isAllCompanies && <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{r.companyName}</td>}
                     <td className="px-2 py-2 font-medium whitespace-nowrap">{r.emp.name}</td>
                     <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{r.emp.cargo}</td>
                     <td className="px-2 py-2">{formatCurrency(r.emp.salarioBase)}</td>
@@ -191,7 +266,7 @@ const RelatorioPage: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 bg-muted/30 font-bold">
-                  <td colSpan={2} className="px-2 py-2">TOTAIS</td>
+                  <td colSpan={isAllCompanies ? 3 : 2} className="px-2 py-2">TOTAIS</td>
                   <td className="px-2 py-2">{formatCurrency(compEmps.reduce((s, e) => s + e.salarioBase, 0))}</td>
                   <td colSpan={2} className="px-2 py-2">{formatCurrency(totals.he)}</td>
                   <td></td>
