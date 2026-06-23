@@ -60,6 +60,7 @@ const parseEmails = (value: string) => {
 
 const formatEmails = (value?: string[]) => (value || []).join('; ');
 const isAtestadoSubject = (value: string) => value.trim().toUpperCase().startsWith('ATESTADO');
+const isAdmissionalSubject = (value: string) => value.trim().toLowerCase().startsWith('documentação admissional');
 
 const getSaoPauloHour = () => {
   const hour = new Intl.DateTimeFormat('pt-BR', {
@@ -107,6 +108,37 @@ const buildAtestadoBody = (originalBody: string) => {
   ].filter((line, index, lines) => line !== '' || (index > 0 && lines[index - 1] !== '')).join('\n');
 };
 
+const buildAdmissionalBody = (originalBody: string) => {
+  const lines = originalBody.split('\n').map((line) => line.trim()).filter(Boolean);
+  const intro = lines.find((line) => line.toLowerCase().startsWith('segue ')) || 'Segue documentação admissional do colaborador informado.';
+  const admissionDate = lines.find((line) => line.toLowerCase().startsWith('data de admissão') || line.toLowerCase().startsWith('data de admissao'));
+
+  return [
+    'Prezados,',
+    '',
+    intro,
+    admissionDate || '',
+    '',
+    'Solicito, por gentileza, a conferência da documentação enviada e a validação dos dados necessários para continuidade do processo admissional, incluindo:',
+    '',
+    '- Registro e enquadramento da função;',
+    '- Conferência de insalubridade, quando aplicável;',
+    '- Liberação e controle de Vale Refeição (VR);',
+    '- Entrega, controle e registro dos EPIs obrigatórios;',
+    '- Validação de ASO, ficha admissional e demais documentos anexados;',
+    '- Atualização dos dados no cadastro do colaborador e nos controles internos da empresa.',
+    '',
+    'Documentos anexados conforme pré-cadastro realizado na plataforma TopacRH PRO.',
+    '',
+    'Fico à disposição para qualquer ajuste ou complementação necessária.',
+    '',
+    'Atenciosamente,',
+    '',
+    'Rodrigo de Souza Sabino',
+    'Administrador da Plataforma TopacRH PRO Multiempresas',
+  ].filter((line, index, list) => line !== '' || (index > 0 && list[index - 1] !== '')).join('\n');
+};
+
 const downloadAttachmentFallback = (attachment: { attachmentBlob: Blob; attachmentName: string }) => {
   const url = URL.createObjectURL(attachment.attachmentBlob);
   const link = document.createElement('a');
@@ -140,10 +172,11 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
   useEffect(() => {
     if (!draft || !open) return;
     const atestado = isAtestadoSubject(draft.subject || '');
+    const admissional = isAdmissionalSubject(draft.subject || '');
     setTo(formatEmails(atestado ? ATESTADO_TO : draft.to));
     setCc(formatEmails(atestado ? ATESTADO_CC : draft.cc));
     setSubject(draft.subject || '');
-    setBody(atestado ? buildAtestadoBody(draft.body || '') : draft.body || '');
+    setBody(atestado ? buildAtestadoBody(draft.body || '') : admissional ? buildAdmissionalBody(draft.body || '') : draft.body || '');
   }, [draft, open]);
 
   const getPreparedEmail = () => {
