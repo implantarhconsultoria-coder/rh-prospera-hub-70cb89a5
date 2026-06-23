@@ -76,7 +76,7 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
           </tr>
         ))}
         {block.rows.length === 0 && (
-          <tr className="vr-report-row"><td colSpan={8} className="border border-gray-300 px-2 py-3 text-center text-gray-500">Nenhum funcionário com VR ativo nesta competência.</td></tr>
+          <tr className="vr-report-row"><td colSpan={8} className="border border-gray-300 px-2 py-3 text-center text-gray-500">Nenhum funcionário ativo nesta empresa.</td></tr>
         )}
       </tbody>
       <tfoot>
@@ -124,7 +124,9 @@ const RelatorioVRImpressaoPage: React.FC = () => {
       .filter(Boolean)
       .map((company: any) => {
         const fech = getFechamento(company.id, competencia);
-        const compEmps = employees.filter(e => e.companyId === company.id && e.status === 'ativo' && e.categoria === 'operacional' && e.vrAtivo);
+        const compEmps = employees
+          .filter(e => e.companyId === company.id && e.status === 'ativo')
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
         const compEntries = entries.filter(e => e.companyId === company.id && e.competencia === competencia);
         const rawRows = buildVRReportRows(compEmps, compEntries, diasUteis);
         const rows: BenefitReportRow[] = rawRows.map(r => {
