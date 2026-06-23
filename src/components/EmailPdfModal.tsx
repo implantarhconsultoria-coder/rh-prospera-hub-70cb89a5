@@ -146,32 +146,54 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     setBody(atestado ? buildAtestadoBody(draft.body || '') : draft.body || '');
   }, [draft, open]);
 
-  const handleSend = async () => {
-    if (!draft) return;
+  const getPreparedEmail = () => {
     const atestado = isAtestadoSubject(subject);
     const toList = atestado ? [...ATESTADO_TO] : parseEmails(to);
     const ccList = atestado ? [...ATESTADO_CC] : parseEmails(cc);
-    const attachments = draft.attachments?.length
+    const attachments = draft?.attachments?.length
       ? draft.attachments
-      : draft.attachmentBlob && draft.attachmentName
+      : draft?.attachmentBlob && draft?.attachmentName
         ? [{ attachmentBlob: draft.attachmentBlob, attachmentName: draft.attachmentName, documentId: draft.documentId, documentName: draft.documentName }]
         : [];
+    return { toList, ccList, attachments };
+  };
+
+  const validateEmailDraft = (attachments: { attachmentBlob: Blob; attachmentName: string }[]) => {
+    if (!draft) return false;
+    const { toList } = getPreparedEmail();
     if (toList.length === 0) {
       toast.error('Informe ao menos um destinatario.');
-      return;
+      return false;
     }
     if (!subject.trim()) {
       toast.error('Informe o assunto do e-mail.');
-      return;
+      return false;
     }
     if (!body.trim()) {
       toast.error('Informe a mensagem do e-mail.');
-      return;
+      return false;
     }
     if (!attachments.length) {
       toast.error('Nenhum anexo foi localizado para o e-mail.');
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const handleManualSend = (showToast = true) => {
+    if (!draft) return false;
+    const { toList, ccList, attachments } = getPreparedEmail();
+    if (!validateEmailDraft(attachments)) return false;
+    openEmailClient({ to: toList, cc: ccList, subject: subject.trim(), body: body.trim() });
+    attachments.forEach(downloadAttachmentFallback);
+    if (showToast) toast.success('E-mail manual aberto e anexos baixados. Anexe os arquivos baixados antes de enviar.');
+    return true;
+  };
+
+  const handleSend = async () => {
+    if (!draft) return;
+    const { toList, ccList, attachments } = getPreparedEmail();
+    if (!validateEmailDraft(attachments)) return;
 
     setSending(true);
     try {
@@ -202,8 +224,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       onOpenChange(false);
     } catch (error: any) {
       const friendlyMessage = getFriendlyEmailError(error?.message);
-      openEmailClient({ to: toList, cc: ccList, subject: subject.trim(), body: body.trim() });
-      attachments.forEach(downloadAttachmentFallback);
+      handleManualSend(false);
       toast.warning(`${friendlyMessage} Abri o e-mail manual preenchido e baixei os anexos para envio imediato.`);
     } finally {
       setSending(false);
@@ -255,13 +276,16 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
           ) : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>
             Cancelar
           </Button>
+          <Button type="button" variant="secondary" onClick={() => handleManualSend(true)} disabled={sending || !draft}>
+            <Mail className="mr-2 h-4 w-4" /> Enviar manual
+          </Button>
           <Button type="button" onClick={handleSend} disabled={sending || !draft}>
             {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-            Enviar
+            Enviar automático
           </Button>
         </DialogFooter>
       </DialogContent>
