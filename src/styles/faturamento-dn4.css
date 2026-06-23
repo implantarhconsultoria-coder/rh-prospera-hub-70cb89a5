@@ -62,7 +62,8 @@
 .fat-dn4-query-button:hover,
 .fat-dn4-flow button:hover,
 .fat-dn4-table tbody tr:hover,
-.fat-dn4-invoice-list button:hover {
+.fat-dn4-invoice-list button:hover,
+.fat-dn4-result-list button:hover {
   transform: translateY(-1px);
   border-color: rgba(45, 212, 191, .48);
   background: rgba(14, 116, 144, .24);
@@ -139,7 +140,7 @@
 }
 
 .fat-dn4-grid {
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 320px;
 }
 
 .fat-dn4-bottom-grid {
@@ -194,7 +195,8 @@
   grid-template-columns: 100px minmax(0, 1fr) minmax(120px, .55fr) 56px;
 }
 
-.fat-dn4-field {
+.fat-dn4-field,
+.fat-dn4-query-input {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(72px, .42fr) minmax(0, 1fr);
@@ -210,7 +212,8 @@
   grid-column: span 2;
 }
 
-.fat-dn4-field span {
+.fat-dn4-field span,
+.fat-dn4-query-input span {
   height: 100%;
   display: flex;
   align-items: center;
@@ -234,6 +237,36 @@
   text-overflow: ellipsis;
 }
 
+.fat-dn4-query-input input,
+.fat-dn4-status-select {
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f8fafc;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fat-dn4-query-input input::placeholder {
+  color: rgba(203, 213, 225, .42);
+}
+
+.fat-dn4-status-select {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 7px;
+  border: 1px solid rgba(125, 211, 252, .12);
+  border-radius: 6px;
+  background: rgba(2, 6, 23, .30);
+}
+
+.fat-dn4-status-select option {
+  color: #0f172a;
+}
+
 .fat-dn4-tabs {
   display: flex;
   align-items: flex-end;
@@ -243,7 +276,7 @@
   overflow-x: auto;
 }
 
-.fat-dn4-tabs span {
+.fat-dn4-tabs button {
   flex: 0 0 auto;
   border: 1px solid rgba(125, 211, 252, .13);
   border-bottom: 0;
@@ -253,11 +286,14 @@
   padding: 6px 9px;
   font-size: 11px;
   font-weight: 800;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
 }
 
-.fat-dn4-tabs span.is-active {
+.fat-dn4-tabs button:hover,
+.fat-dn4-tabs button.is-active {
   background: rgba(14, 116, 144, .34);
   color: #f8fafc;
+  border-color: rgba(45, 212, 191, .32);
 }
 
 .fat-dn4-split {
@@ -271,7 +307,8 @@
 }
 
 .fat-dn4-contact-box,
-.fat-dn4-invoice-list {
+.fat-dn4-invoice-list,
+.fat-dn4-result-list {
   display: grid;
   gap: 7px;
 }
@@ -297,7 +334,8 @@
 }
 
 .fat-dn4-query-card p,
-.fat-dn4-invoice-list p {
+.fat-dn4-invoice-list p,
+.fat-dn4-result-list p {
   margin: 9px 0 0;
   color: rgba(203, 213, 225, .68);
   font-size: 11px;
@@ -306,7 +344,57 @@
 
 .fat-dn4-query-button {
   width: 100%;
+  margin-top: 0;
+}
+
+.fat-dn4-query-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
   margin-top: 8px;
+}
+
+.fat-dn4-result-list {
+  margin-top: 9px;
+  max-height: 232px;
+  overflow: auto;
+}
+
+.fat-dn4-result-list button {
+  min-width: 0;
+  border: 1px solid rgba(125, 211, 252, .12);
+  border-radius: 7px;
+  background: rgba(2, 6, 23, .28);
+  color: #e8f7ff;
+  padding: 8px;
+  text-align: left;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.fat-dn4-result-list button.is-selected {
+  border-color: rgba(52, 211, 153, .46);
+  background: rgba(6, 78, 59, .30);
+}
+
+.fat-dn4-result-list strong,
+.fat-dn4-result-list small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fat-dn4-result-list strong {
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.fat-dn4-result-list small {
+  margin-top: 3px;
+  color: rgba(203, 213, 225, .66);
+  font-size: 10px;
 }
 
 .fat-dn4-table-wrap {
@@ -422,7 +510,8 @@
   }
 
   .fat-dn4-field,
-  .fat-dn4-field-wide {
+  .fat-dn4-field-wide,
+  .fat-dn4-query-input {
     grid-column: auto;
     grid-template-columns: 116px minmax(0, 1fr);
   }
@@ -445,6 +534,7 @@
 
   .fat-dn4-card,
   .fat-dn4-field,
+  .fat-dn4-query-input,
   .fat-dn4-contact-box span {
     background: #fff !important;
     color: #111827 !important;
@@ -454,6 +544,8 @@
 
   .fat-dn4-field span,
   .fat-dn4-field strong,
+  .fat-dn4-query-input span,
+  .fat-dn4-query-input input,
   .fat-dn4-card-title,
   .fat-dn4-section-label,
   .fat-dn4-table th,
