@@ -83,7 +83,7 @@
 
 .fat-dn4-flow {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -406,6 +406,16 @@
   min-width: 620px;
   border-collapse: collapse;
   font-size: 11px;
+}
+
+.fat-dn4-assets-table {
+  min-width: 440px;
+}
+
+.fat-dn4-assets-table td:first-child {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fat-dn4-table thead {
