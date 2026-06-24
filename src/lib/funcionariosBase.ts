@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { DEFAULT_INSALUBRIDADE, employeeHasInsalubridade, getCargoDefaults } from '@/lib/employeeRoleRules';
 import type { Company, Employee } from '@/types/database';
 
 export const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
@@ -117,20 +118,28 @@ export const upsertFuncionarioBase = async (
     return { ok: false, error: 'Selecione ou informe uma empresa/filial valida para vincular o funcionario.' };
   }
 
+  const cargo = input.cargo?.trim() || localEmployee?.cargo || '';
+  const cargoDefaults = getCargoDefaults(cargo);
+  const salarioBase = Number(input.salarioBase) || cargoDefaults?.salarioBase || localEmployee?.salarioBase || 0;
+  const insalubridadeAtiva = cargoDefaults?.insalubridadeAtiva ?? employeeHasInsalubridade({ cargo, name: nome });
+  const insalubridadeValor = insalubridadeAtiva ? (cargoDefaults?.insalubridadeValor || DEFAULT_INSALUBRIDADE) : 0;
+
   const row: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
   addFilled(row, 'company_id', resolvedCompanyId);
   addFilled(row, 'nome', nome);
   addFilled(row, 'cpf', input.cpf.trim());
-  addFilled(row, 'cargo', input.cargo?.trim() || localEmployee?.cargo);
+  addFilled(row, 'cargo', cargo);
   addFilled(row, 'email', input.email?.trim().toLowerCase() || localEmployee?.email);
   addFilled(row, 'telefone', input.telefone?.trim() || localEmployee?.telefone);
   addFilled(row, 'celular', input.celular?.trim() || localEmployee?.celular);
   addFilled(row, 'rg', input.rg?.trim() || localEmployee?.rg);
   addFilled(row, 'endereco', input.endereco?.trim() || localEmployee?.endereco);
   addFilled(row, 'categoria', input.setor?.trim() || localEmployee?.categoria || 'operacional');
-  addFilled(row, 'salario_base', input.salarioBase ?? localEmployee?.salarioBase ?? 0);
+  addFilled(row, 'salario_base', salarioBase);
+  addFilled(row, 'insalubridade_ativa', insalubridadeAtiva);
+  addFilled(row, 'insalubridade_valor', insalubridadeValor);
   addFilled(row, 'data_admissao', input.dataAdmissao || localEmployee?.dataAdmissao || null);
 
   if (existingId) {
@@ -148,11 +157,12 @@ export const upsertFuncionarioBase = async (
     created_at: new Date().toISOString(),
     status: 'ativo',
     categoria: 'operacional',
-    salario_base: Number(input.salarioBase) || 0,
+    salario_base: salarioBase,
     vr_ativo: false,
     va_ativo: false,
     vt_ativo: false,
-    insalubridade_ativa: false,
+    insalubridade_ativa: insalubridadeAtiva,
+    insalubridade_valor: insalubridadeValor,
   };
 
   const { data, error } = await (supabase as any)
