@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
 import { calcTotalFuncionario, calcFalta, calcAtraso, formatCurrency, formatDate } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
+import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,28 @@ const emptyTotals = () => ({
   faltaVal: 0,
 });
 
+const defaultEntry = (emp: any, competencia: string, diasUteis: number) => ({
+  employeeId: emp.id,
+  companyId: emp.companyId,
+  competencia,
+  faltasDias: 0,
+  atrasos: 0,
+  he50: 0,
+  he100: 0,
+  adicionais: 0,
+  descontosDiversos: 0,
+  adiantamento: Math.round((Number(emp.salarioBase) || 0) * 0.4 * 100) / 100,
+  vrAplicado: true,
+  vrDias: diasUteis,
+  vaAplicado: false,
+  vtAplicado: Boolean(emp.vtAtivo),
+  vtDesconto: 0,
+  comissaoBase: 0,
+  insalubridadeAplicada: employeeHasInsalubridade(emp),
+  statusConferencia: 'pendente',
+  observacoes: '',
+});
+
 const RelatorioPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento } = useApp();
   const navigate = useNavigate();
@@ -49,7 +72,9 @@ const RelatorioPage: React.FC = () => {
   const company = selectedCompanies[0];
   const diasUteis = getWorkingDays(competencia);
   const companyIds = new Set(selectedCompanies.map(c => c.id));
-  const compEmps = employees.filter(e => companyIds.has(e.companyId) && e.status === 'ativo' && e.categoria === 'operacional');
+  const compEmps = employees
+    .filter(e => companyIds.has(e.companyId) && e.status === 'ativo')
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const compEntries = entries.filter(e => companyIds.has(e.companyId) && e.competencia === competencia);
   const fechamento = !isAllCompanies && selectedCompany ? getFechamento(selectedCompany, competencia) : { status: 'consolidado' };
 
@@ -58,8 +83,7 @@ const RelatorioPage: React.FC = () => {
     const grouped = new Map<string, { name: string; rows: ReportRow[]; totals: ReturnType<typeof emptyTotals> }>();
 
     const r = compEmps.map(emp => {
-      const entry = compEntries.find(e => e.employeeId === emp.id);
-      if (!entry) return null;
+      const entry = compEntries.find(e => e.employeeId === emp.id) || defaultEntry(emp, competencia, diasUteis);
       const calc = calcTotalFuncionario(emp, entry, diasUteis);
       const he50Val = calc.he50Val;
       const he100Val = calc.he100Val;
@@ -89,14 +113,14 @@ const RelatorioPage: React.FC = () => {
       grouped.set(emp.companyId, current);
 
       return row;
-    }).filter(Boolean) as ReportRow[];
+    }) as ReportRow[];
 
     return {
       rows: r,
       totals: t,
       byCompany: Array.from(grouped.entries()).map(([companyId, value]) => ({ companyId, ...value })),
     };
-  }, [compEmps, compEntries, diasUteis, companies]);
+  }, [compEmps, compEntries, competencia, diasUteis, companies]);
 
   const divergencias = compEntries.filter(e => e.statusConferencia === 'divergente').length;
 
