@@ -32,6 +32,9 @@ const getCompleteEntries = (entries: MonthlyEntry[]) => {
   return Array.isArray(cached) ? cached as MonthlyEntry[] : entries;
 };
 
+const inferCompetencia = (entries: MonthlyEntry[], competencia?: string) =>
+  competencia || entries.find((entry) => Boolean(entry.competencia))?.competencia || '';
+
 const findEntry = (entries: MonthlyEntry[], employeeId: string, competencia?: string) =>
   entries.find((item) => item.employeeId === employeeId && (!competencia || item.competencia === competencia));
 
@@ -75,11 +78,12 @@ const buildBenefitRow = ({
 };
 
 export const buildVRReportRows = (employees: Employee[], entries: MonthlyEntry[], diasUteis: number, competencia?: string) => {
-  const previousCompetencia = getPreviousCompetencia(competencia || '');
+  const currentCompetencia = inferCompetencia(entries, competencia);
+  const previousCompetencia = getPreviousCompetencia(currentCompetencia);
   return employees.map((emp) =>
     buildBenefitRow({
       emp,
-      entry: findEntryWithFallback(entries, emp.id, competencia),
+      entry: findEntryWithFallback(entries, emp.id, currentCompetencia),
       descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
       diasUteis,
       type: 'vr',
@@ -88,11 +92,12 @@ export const buildVRReportRows = (employees: Employee[], entries: MonthlyEntry[]
 };
 
 export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[], diasUteis: number, competencia?: string) => {
-  const previousCompetencia = getPreviousCompetencia(competencia || '');
+  const currentCompetencia = inferCompetencia(entries, competencia);
+  const previousCompetencia = getPreviousCompetencia(currentCompetencia);
   return employees.map((emp) =>
     buildBenefitRow({
       emp,
-      entry: findEntryWithFallback(entries, emp.id, competencia),
+      entry: findEntryWithFallback(entries, emp.id, currentCompetencia),
       descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
       diasUteis,
       type: 'vt',
