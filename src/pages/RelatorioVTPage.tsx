@@ -15,6 +15,7 @@ import { buildVTReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 
+const ALL_COMPANIES = 'todas';
 const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const competenciaPt = (c: string) => {
   const [y, m] = (c || '').split('-');
@@ -42,28 +43,38 @@ const RelatorioVTPage: React.FC = () => {
   const [dataPagamentoManual, setDataPagamentoManual] = useState('');
   const [dataPagamentoEmpresaManual, setDataPagamentoEmpresaManual] = useState('');
 
-  const { datas: feriadosDatas } = useFeriados(competencia, selectedCompany);
+  const isAllCompanies = selectedCompany === ALL_COMPANIES;
+  const reportCompanyIds = useMemo(
+    () => isAllCompanies ? companies.map(c => c.id) : (selectedCompany ? [selectedCompany] : []),
+    [companies, isAllCompanies, selectedCompany],
+  );
+  const companyNameById = useMemo(() => new Map<string, string>(companies.map(c => [c.id, c.name])), [companies]);
+
+  const { datas: feriadosDatas } = useFeriados(competencia, isAllCompanies ? undefined : selectedCompany);
   const diasUteisCalculado = getWorkingDays(competencia, feriadosDatas);
   const diasUteis = Number(diasUteisManual) > 0 ? Number(diasUteisManual) : diasUteisCalculado;
   const diasUteisEmpresa = Number(diasUteisEmpresaManual) > 0 ? Number(diasUteisEmpresaManual) : undefined;
-  const fechamento = getFechamento(selectedCompany, competencia);
+  const fechamento = isAllCompanies ? { dataFechamento: '' } : getFechamento(selectedCompany, competencia);
   const dataFechamento = fechamento.dataFechamento || '';
 
   const handleGenerate = () => {
     if (!selectedCompany) { toast.error('Selecione uma empresa'); return; }
-    getOrCreateEntries(selectedCompany, competencia);
+    reportCompanyIds.forEach(companyId => getOrCreateEntries(companyId, competencia));
     setGenerated(true);
     setSelectedEmployees(new Set());
-    toast.success('Relatório de VT gerado!');
+    toast.success(isAllCompanies ? 'Relatório de VT de todas as empresas gerado!' : 'Relatório de VT gerado!');
   };
 
-  const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional' && e.vtAtivo);
-  const compEntries = entries.filter(e => e.companyId === selectedCompany && e.competencia === competencia);
-  const company = companies.find(c => c.id === selectedCompany);
+  const compEmps = employees
+    .filter(e => reportCompanyIds.includes(e.companyId) && e.status === 'ativo' && e.categoria === 'operacional' && e.vtAtivo)
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const compEntries = entries.filter(e => reportCompanyIds.includes(e.companyId) && e.competencia === competencia);
+  const company = isAllCompanies ? undefined : companies.find(c => c.id === selectedCompany);
 
   const rawRows = useMemo(() => buildVTReportRows(compEmps, compEntries, diasUteis), [compEmps, compEntries, diasUteis]);
   const rows = useMemo<BenefitReportRow[]>(() => rawRows.map(r => {
-    const c = correcoes.findFor('vt', selectedCompany, r.emp.id, competencia);
+    const correctionCompanyId = isAllCompanies ? r.emp.companyId : selectedCompany;
+    const c = correcoes.findFor('vt', correctionCompanyId, r.emp.id, competencia);
     if (!c) return r;
     return {
       ...r,
@@ -74,14 +85,18 @@ const RelatorioVTPage: React.FC = () => {
       correcaoMotivo: c.motivo,
       correcaoObservacao: c.observacao,
     };
-  }), [rawRows, correcoes, selectedCompany, competencia]);
+  }), [rawRows, correcoes, selectedCompany, competencia, isAllCompanies]);
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
   const emissaoDate = new Date().toLocaleDateString('pt-BR');
   const pagamentoDate = getFirstBusinessDayOfNextMonth(competencia);
 
   const handlePrintRelatorio = () => {
-    addBenefitReport({ type: 'vt', companyId: selectedCompany, competencia });
-    const params = new URLSearchParams({ empresa: selectedCompany, competencia });
+    if (!selectedCompany) { toast.error('Selecione uma empresa'); return; }
+    reportCompanyIds.forEach(companyId => addBenefitReport({ type: 'vt', companyId, competencia }));
+    const params = new URLSearchParams(isAllCompanies
+      ? { empresas: ALL_COMPANIES, competencia }
+      : { empresa: selectedCompany, competencia },
+    );
     if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
     navigate(`/relatorio-vt-impressao?${params.toString()}`);
   };
@@ -89,8 +104,7 @@ const RelatorioVTPage: React.FC = () => {
   const handlePrintConsolidadoTodas = () => {
     if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
     companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
-    const ids = companies.map(c => c.id).join(',');
-    const params = new URLSearchParams({ empresas: ids, competencia: competenciaEmpresa });
+    const params = new URLSearchParams({ empresas: ALL_COMPANIES, competencia: competenciaEmpresa });
     if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
     window.open(`/relatorio-vt-impressao?${params.toString()}`, '_blank');
   };
@@ -178,6 +192,7 @@ const RelatorioVTPage: React.FC = () => {
           <select value={selectedCompany} onChange={e => { setSelectedCompany(e.target.value); setGenerated(false); }}
             className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-w-[200px]">
             <option value="">Selecionar Empresa</option>
+            <option value={ALL_COMPANIES}>Todas as empresas</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
@@ -251,12 +266,14 @@ const RelatorioVTPage: React.FC = () => {
         </div>
       </div>
 
-      {generated && company && (
+      {generated && (company || isAllCompanies) && (
         <div className="card-premium p-5 overflow-x-auto space-y-3">
           <div className="flex flex-wrap justify-between gap-3">
             <div>
-              <h2 className="font-bold text-foreground">{company.name}</h2>
-              <p className="text-xs text-muted-foreground">CNPJ: {company.cnpj} — Competência: {competenciaPt(competencia)} — Dias úteis: {diasUteis}</p>
+              <h2 className="font-bold text-foreground">{isAllCompanies ? 'Todas as empresas' : company?.name}</h2>
+              <p className="text-xs text-muted-foreground">
+                {isAllCompanies ? `${companies.length} empresas` : `CNPJ: ${company?.cnpj}`} — Competência: {competenciaPt(competencia)} — Dias úteis: {diasUteis}
+              </p>
               <p className="text-xs text-muted-foreground">
                 Emissão: {emissaoDate} — Pagamento previsto: {pagamentoDate}
                 {dataFechamento ? ` — Fechamento: ${new Date(dataFechamento).toLocaleDateString('pt-BR')}` : ''}
@@ -270,46 +287,51 @@ const RelatorioVTPage: React.FC = () => {
           <div className="flex flex-wrap gap-2 items-center border-t pt-3">
             <span className="text-xs font-semibold text-muted-foreground mr-2">RELATÓRIO:</span>
             <Button onClick={handlePrintRelatorio} variant="default" size="sm">
-              <Printer className="w-4 h-4 mr-2" /> Imprimir / PDF do Relatório
+              <Printer className="w-4 h-4 mr-2" /> {isAllCompanies ? 'Imprimir relatório de todas / PDF' : 'Imprimir / PDF do Relatório'}
             </Button>
-            <span className="text-xs font-semibold text-muted-foreground ml-4 mr-2">RECIBOS:</span>
-            <Button onClick={handleRecibosEmpresa} size="sm" variant="outline">
-              <FileText className="w-4 h-4 mr-2" /> Recibos da empresa
-            </Button>
-            <Button onClick={handleRecibosSelecionados} size="sm" variant="outline" disabled={selectedEmployees.size === 0}>
-              <FileText className="w-4 h-4 mr-2" /> Recibos selecionados ({selectedEmployees.size})
-            </Button>
-            <Button
-              onClick={() => {
-                const base = selectedEmployees.size > 0 ? rows.filter(r => selectedEmployees.has(r.emp.id)) : rows;
-                if (base.length === 0) { toast.error('Sem dados para pré-visualizar'); return; }
-                setPreviewRows(base);
-                setPreviewOpen(true);
-              }}
-              size="sm"
-              variant="secondary"
-            >
-              <Eye className="w-4 h-4 mr-2" /> Pré-visualizar recibos
-            </Button>
+            {!isAllCompanies && (
+              <>
+                <span className="text-xs font-semibold text-muted-foreground ml-4 mr-2">RECIBOS:</span>
+                <Button onClick={handleRecibosEmpresa} size="sm" variant="outline">
+                  <FileText className="w-4 h-4 mr-2" /> Recibos da empresa
+                </Button>
+                <Button onClick={handleRecibosSelecionados} size="sm" variant="outline" disabled={selectedEmployees.size === 0}>
+                  <FileText className="w-4 h-4 mr-2" /> Recibos selecionados ({selectedEmployees.size})
+                </Button>
+                <Button
+                  onClick={() => {
+                    const base = selectedEmployees.size > 0 ? rows.filter(r => selectedEmployees.has(r.emp.id)) : rows;
+                    if (base.length === 0) { toast.error('Sem dados para pré-visualizar'); return; }
+                    setPreviewRows(base);
+                    setPreviewOpen(true);
+                  }}
+                  size="sm"
+                  variant="secondary"
+                >
+                  <Eye className="w-4 h-4 mr-2" /> Pré-visualizar recibos
+                </Button>
+              </>
+            )}
           </div>
 
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="px-2 py-2 text-left">
-                  <Checkbox checked={selectedEmployees.size === rows.length && rows.length > 0} onCheckedChange={toggleAllEmps} />
+                  {!isAllCompanies && <Checkbox checked={selectedEmployees.size === rows.length && rows.length > 0} onCheckedChange={toggleAllEmps} />}
                 </th>
-                {['Nome', 'Função', 'VT/Dia', 'Dias Prev.', 'Desc.', 'Dias Finais', 'Valor Total', 'Motivo', ''].map(h => (
+                {(isAllCompanies ? ['Empresa', 'Nome', 'Função', 'VT/Dia', 'Dias Prev.', 'Desc.', 'Dias Finais', 'Valor Total', 'Motivo', ''] : ['Nome', 'Função', 'VT/Dia', 'Dias Prev.', 'Desc.', 'Dias Finais', 'Valor Total', 'Motivo', '']).map(h => (
                   <th key={h} className="px-2 py-2 text-left font-medium text-muted-foreground uppercase">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.emp.id} className="border-b hover:bg-muted/20">
+                <tr key={`${r.emp.companyId}-${r.emp.id}`} className="border-b hover:bg-muted/20">
                   <td className="px-2 py-2">
-                    <Checkbox checked={selectedEmployees.has(r.emp.id)} onCheckedChange={() => toggleEmp(r.emp.id)} />
+                    {!isAllCompanies && <Checkbox checked={selectedEmployees.has(r.emp.id)} onCheckedChange={() => toggleEmp(r.emp.id)} />}
                   </td>
+                  {isAllCompanies && <td className="px-2 py-2 text-muted-foreground">{companyNameById.get(r.emp.companyId) || '—'}</td>}
                   <td className="px-2 py-2 font-medium">
                     <div className="flex items-center gap-2">
                       <span>{r.emp.name}</span>
@@ -331,24 +353,28 @@ const RelatorioVTPage: React.FC = () => {
                   <td className="px-2 py-2 font-bold">{formatCurrency(r.valorTotal)}</td>
                   <td className="px-2 py-2 text-muted-foreground">{r.motivo || '—'}</td>
                   <td className="px-2 py-2 flex gap-2">
-                    <button onClick={() => handleReciboIndividual(r.emp.id)} title="Imprimir recibo individual" className="text-primary hover:text-primary/80">
-                      <Printer className="w-3.5 h-3.5" />
-                    </button>
-                    {isAdmin && (
+                    {!isAllCompanies && (
+                      <button onClick={() => handleReciboIndividual(r.emp.id)} title="Imprimir recibo individual" className="text-primary hover:text-primary/80">
+                        <Printer className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {isAdmin && !isAllCompanies && (
                       <button onClick={() => setEditingRow(r)} title="Corrigir recibo" className="text-amber-600 hover:text-amber-700">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <button onClick={() => navigate(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${r.emp.id}`)} title="Ficha individual" className="text-muted-foreground hover:text-foreground">
-                      <User className="w-3.5 h-3.5" />
-                    </button>
+                    {!isAllCompanies && (
+                      <button onClick={() => navigate(`/relatorio-beneficio-individual?empresa=${selectedCompany}&competencia=${competencia}&funcionario=${r.emp.id}`)} title="Ficha individual" className="text-muted-foreground hover:text-foreground">
+                        <User className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t bg-muted/30 font-bold">
-                <td colSpan={7} className="px-2 py-2">TOTAL</td>
+                <td colSpan={isAllCompanies ? 8 : 7} className="px-2 py-2">TOTAL</td>
                 <td className="px-2 py-2">{formatCurrency(totalFinal)}</td>
                 <td colSpan={2}></td>
               </tr>
