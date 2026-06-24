@@ -84,7 +84,9 @@ const RelatorioImpressaoPage: React.FC = () => {
 
   const companyReports = useMemo(() => selectedCompanies.map(company => {
     const companyEntries = entries.filter(e => e.companyId === company.id && e.competencia === competencia);
-    const companyEmployees = employees.filter(e => e.companyId === company.id && e.status === 'ativo' && e.categoria === 'operacional');
+    const companyEmployees = employees
+      .filter(e => e.companyId === company.id && e.status === 'ativo')
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     const fechamento = getFechamento(company.id, competencia);
     const comissaoPct = getComissaoPercentual(company);
     const totals = emptyTotals();
@@ -277,7 +279,7 @@ const RelatorioImpressaoPage: React.FC = () => {
                     </tr>
                   ))}
                   {rows.length === 0 && (
-                    <tr><td colSpan={14} className="border border-gray-300 px-2 py-4 text-center text-gray-500">Sem funcionarios operacionais ativos para esta competencia.</td></tr>
+                    <tr><td colSpan={14} className="border border-gray-300 px-2 py-4 text-center text-gray-500">Sem funcionarios ativos para esta competencia.</td></tr>
                   )}
                 </tbody>
                 <tfoot>
