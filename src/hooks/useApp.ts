@@ -1,9 +1,9 @@
 // Hook isolado para evitar quebrar o Fast Refresh do Vite/SWC.
 // Mantém um único ponto de consumo do AppContext.
-import { useContext } from 'react';
+import { useContext, type ContextType } from 'react';
 import { AppContext } from '@/context/AppContextValue';
 
-const exposeEntriesForBenefitReports = (ctx: NonNullable<React.ContextType<typeof AppContext>>) => {
+const exposeEntriesForBenefitReports = (ctx: NonNullable<ContextType<typeof AppContext>>) => {
   if (typeof window === 'undefined') return;
   (window as any).__topacMonthlyEntries = ctx.entries;
 };
