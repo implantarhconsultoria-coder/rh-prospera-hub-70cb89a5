@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
-import { buildVRReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { buildVRReportRows, getPreviousCompetencia, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useFeriados } from '@/hooks/useFeriados';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
@@ -98,6 +98,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
+  const competenciaAnterior = useMemo(() => getPreviousCompetencia(competencia), [competencia]);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
   const empresasParam = searchParams.get('empresas') || '';
   const empresaSingle = searchParams.get('empresa') || '';
@@ -115,13 +116,15 @@ const RelatorioVRImpressaoPage: React.FC = () => {
 
   const consolidado = empresaIds.length > 1;
 
-  // Feriados — sem filtrar por empresa para PDF consolidado: pega todos do mês
   const { datas: feriadosDatas } = useFeriados(competencia);
   const correcoes = useRecibosCorrecoes({ tipo: 'vr', competencia });
 
   useEffect(() => {
-    empresaIds.forEach(id => getOrCreateEntries(id, competencia));
-  }, [empresaIds.join(','), competencia]);
+    empresaIds.forEach(id => {
+      getOrCreateEntries(id, competencia);
+      if (competenciaAnterior) getOrCreateEntries(id, competenciaAnterior);
+    });
+  }, [empresaIds.join(','), competencia, competenciaAnterior]);
 
   const blocks: EmpresaBlock[] = useMemo(() => {
     const diasUteis = diasUteisManual > 0 ? diasUteisManual : getWorkingDays(competencia, feriadosDatas);
@@ -133,8 +136,10 @@ const RelatorioVRImpressaoPage: React.FC = () => {
         const compEmps = employees
           .filter(e => e.companyId === company.id && e.status === 'ativo')
           .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-        const compEntries = entries.filter(e => e.companyId === company.id && e.competencia === competencia);
-        const rawRows = buildVRReportRows(compEmps, compEntries, diasUteis);
+        const compEntries = entries.filter(e =>
+          e.companyId === company.id && (e.competencia === competencia || e.competencia === competenciaAnterior),
+        );
+        const rawRows = buildVRReportRows(compEmps, compEntries, diasUteis, competencia);
         const rows: BenefitReportRow[] = rawRows.map(r => {
           const c = correcoes.findFor('vr', company.id, r.emp.id, competencia);
           if (!c) return r;
@@ -151,7 +156,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
         const total = sumBenefitRows(rows);
         return { company, diasUteis, dataFechamento: fech.dataFechamento || '', rows, total };
       });
-  }, [empresaIds, companies, employees, entries, competencia, feriadosDatas, correcoes, diasUteisManual]);
+  }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, feriadosDatas, correcoes, diasUteisManual]);
 
   const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
 
