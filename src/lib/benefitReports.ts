@@ -26,8 +26,17 @@ export const getPreviousCompetencia = (competencia: string) => {
   return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`;
 };
 
+const getCompleteEntries = (entries: MonthlyEntry[]) => {
+  if (typeof window === 'undefined') return entries;
+  const cached = (window as any).__topacMonthlyEntries;
+  return Array.isArray(cached) ? cached as MonthlyEntry[] : entries;
+};
+
 const findEntry = (entries: MonthlyEntry[], employeeId: string, competencia?: string) =>
   entries.find((item) => item.employeeId === employeeId && (!competencia || item.competencia === competencia));
+
+const findEntryWithFallback = (entries: MonthlyEntry[], employeeId: string, competencia?: string) =>
+  findEntry(entries, employeeId, competencia) || findEntry(getCompleteEntries(entries), employeeId, competencia);
 
 const buildBenefitRow = ({
   emp,
@@ -70,8 +79,8 @@ export const buildVRReportRows = (employees: Employee[], entries: MonthlyEntry[]
   return employees.map((emp) =>
     buildBenefitRow({
       emp,
-      entry: findEntry(entries, emp.id, competencia),
-      descontoEntry: previousCompetencia ? findEntry(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
+      entry: findEntryWithFallback(entries, emp.id, competencia),
+      descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
       diasUteis,
       type: 'vr',
     }),
@@ -83,8 +92,8 @@ export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[]
   return employees.map((emp) =>
     buildBenefitRow({
       emp,
-      entry: findEntry(entries, emp.id, competencia),
-      descontoEntry: previousCompetencia ? findEntry(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
+      entry: findEntryWithFallback(entries, emp.id, competencia),
+      descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
       diasUteis,
       type: 'vt',
     }),
