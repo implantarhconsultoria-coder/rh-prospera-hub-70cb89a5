@@ -1,4 +1,5 @@
-const DEFAULT_INSALUBRIDADE = 648.40;
+export const DEFAULT_INSALUBRIDADE = 648.40;
+export const AUXILIAR_PINTOR_SALARIO = 1996.14;
 const PERICULOSIDADE_MOTOBOY_PCT = 0.3;
 
 export const normalizeCargo = (value?: string | null) =>
@@ -18,6 +19,11 @@ export const isAjudanteOficinaRole = (cargo?: string | null) => {
   return normalized.includes('AJUDANTE') && normalized.includes('OFICINA');
 };
 
+export const isAuxiliarPintorRole = (cargo?: string | null) => {
+  const normalized = normalizeCargo(cargo);
+  return normalized.includes('AUXILIAR') && normalized.includes('PINTOR');
+};
+
 export const isLeonelInsalubridadeException = (name?: string | null) =>
   /^LEONEL\b/.test(normalizeCargo(name));
 
@@ -27,11 +33,25 @@ export const employeeHasInsalubridade = (
   isMechanicRole(emp.cargo) ||
   isWelderRole(emp.cargo) ||
   isAjudanteOficinaRole(emp.cargo) ||
+  isAuxiliarPintorRole(emp.cargo) ||
   isLeonelInsalubridadeException(emp.name || emp.nome);
 
 export const isMotoboyRole = (cargo?: string | null) => {
   const normalized = normalizeCargo(cargo).replace(/[^A-Z0-9]/g, '');
   return normalized.includes('MOTOBOY') || normalized.includes('MOTOFRETISTA') || normalized.includes('MOTOCICLISTA');
+};
+
+export const getCargoDefaults = (cargo?: string | null) => {
+  if (isAuxiliarPintorRole(cargo)) {
+    return {
+      cargo: 'AUXILIAR DE PINTOR',
+      salarioBase: AUXILIAR_PINTOR_SALARIO,
+      insalubridadeAtiva: true,
+      insalubridadeValor: DEFAULT_INSALUBRIDADE,
+    };
+  }
+
+  return null;
 };
 
 export const getInsalubridadeAplicavel = (
