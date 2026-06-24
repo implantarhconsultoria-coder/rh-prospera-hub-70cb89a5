@@ -59,6 +59,11 @@ const FechamentoPage: React.FC = () => {
     const without = observacoes.replace(/(^|\s*\|\s*)FALTAS:\s*[^|]+/i, '').trim();
     return [datas.trim() ? `FALTAS: ${datas.trim()}` : '', without].filter(Boolean).join(' | ');
   };
+  const getHorasDocumento = (observacoes = '') => {
+    const matches = [...String(observacoes || '').matchAll(/DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/gi)];
+    return matches.reduce((sum, match) => sum + (Number(String(match[1]).replace(',', '.')) || 0), 0);
+  };
+  const formatHoras = (value: number) => `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
 
   const calcPayroll = (emp: typeof compEmps[0], entry: typeof compEntries[0]) => {
     const calc = calcTotalFuncionario(emp, entry, diasUteis);
@@ -80,12 +85,13 @@ const FechamentoPage: React.FC = () => {
       acc.tDescontos += p.descontosLegais + p.descontosOperacionais + p.adiantamento + p.descontosDiversos;
       acc.tBruto += p.bruto; acc.tINSS += p.inss; acc.tIRRF += p.irrf; acc.tFGTS += p.fgts; acc.tLiq += p.liquido;
       acc.tBen += c.vrVal + c.vaVal + c.vtVal; acc.tIns += p.insVal; acc.tPeric += p.periculosidadeVal; acc.tFD += entry.faltasDias; acc.tFV += p.faltaVal;
+      acc.tAtrasosH += Number(entry.atrasos || 0); acc.tAtrasosVal += p.atrasoVal; acc.tDocHoras += getHorasDocumento(entry.observacoes);
       acc.tAdiant += p.adiantamento; acc.tComissao += p.comissaoVal; acc.tDSRHE += p.dsrHE; acc.tDSRComissao += p.dsrComissao;
       acc.tHE50Qtd += Number(entry.he50 || 0); acc.tHE100Qtd += Number(entry.he100 || 0);
       acc.tHE50Val += p.he50Val; acc.tHE100Val += p.he100Val;
       acc.tDescOp += p.descontosOperacionais; acc.tDescDiv += p.descontosDiversos;
       return acc;
-    }, { tProventos: 0, tDescontos: 0, tBruto: 0, tINSS: 0, tIRRF: 0, tFGTS: 0, tLiq: 0, tBen: 0, tIns: 0, tPeric: 0, tFD: 0, tFV: 0, tAdiant: 0, tComissao: 0, tDSRHE: 0, tDSRComissao: 0, tHE50Qtd: 0, tHE100Qtd: 0, tHE50Val: 0, tHE100Val: 0, tDescOp: 0, tDescDiv: 0 });
+    }, { tProventos: 0, tDescontos: 0, tBruto: 0, tINSS: 0, tIRRF: 0, tFGTS: 0, tLiq: 0, tBen: 0, tIns: 0, tPeric: 0, tFD: 0, tFV: 0, tAtrasosH: 0, tAtrasosVal: 0, tDocHoras: 0, tAdiant: 0, tComissao: 0, tDSRHE: 0, tDSRComissao: 0, tHE50Qtd: 0, tHE100Qtd: 0, tHE50Val: 0, tHE100Val: 0, tDescOp: 0, tDescDiv: 0 });
   }, [compEmps, compEntries, diasUteis, domingosFeriados, comissaoPct]);
 
   const fechamentoTotals = {
@@ -206,12 +212,12 @@ const FechamentoPage: React.FC = () => {
   };
 
   const exportApontamentoCsv = () => {
-    const headers = ['Funcionario', 'Empresa', 'Faltas', 'Datas das faltas', 'HE 50%', 'HE 100%', 'Valor HE', 'DSR HE', 'Comissao', 'DSR Comissao', 'Adicional', 'INSS', 'IRRF', 'FGTS informativo', 'Liquido', 'Observacoes'];
+    const headers = ['Funcionario', 'Empresa', 'Faltas', 'Datas das faltas', 'Horas descontadas', 'Horas por atestado/declaracao', 'HE 50%', 'HE 100%', 'Valor HE', 'DSR HE', 'Comissao', 'DSR Comissao', 'Adicional', 'INSS', 'IRRF', 'FGTS informativo', 'Liquido', 'Observacoes'];
     const rows = compEmps.map(emp => {
       const entry = compEntries.find(e => e.employeeId === emp.id);
       if (!entry) return null;
       const p = calcPayroll(emp, entry);
-      return [emp.name, companies.find(c => c.id === emp.companyId)?.name || '', entry.faltasDias, getFaltaDatas(entry.observacoes), entry.he50, entry.he100, p.totalHE, p.dsrHE, p.comissaoVal, p.dsrComissao, entry.adicionais, p.inss, p.irrf, p.fgtsInformativo, p.liquido, entry.observacoes];
+      return [emp.name, companies.find(c => c.id === emp.companyId)?.name || '', entry.faltasDias, getFaltaDatas(entry.observacoes), entry.atrasos || 0, getHorasDocumento(entry.observacoes), entry.he50, entry.he100, p.totalHE, p.dsrHE, p.comissaoVal, p.dsrComissao, entry.adicionais, p.inss, p.irrf, p.fgtsInformativo, p.liquido, entry.observacoes];
     }).filter(Boolean) as Array<Array<string | number>>;
     const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -285,7 +291,9 @@ const FechamentoPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[['Total Bruto', totals.tBruto], ['Total INSS', totals.tINSS], ['Total IRRF', totals.tIRRF], ['FGTS Info', totals.tFGTS], ['Beneficios VR/VT/VA', totals.tBen], ['Liquido Estimado', totals.tLiq], ['Faltas (dias)', totals.tFD], ['Funcionarios', compEmps.length]].map(([label, value]) => (
+        {[
+          ['Total Bruto', totals.tBruto], ['Total INSS', totals.tINSS], ['Total IRRF', totals.tIRRF], ['FGTS Info', totals.tFGTS], ['Beneficios VR/VT/VA', totals.tBen], ['Liquido Estimado', totals.tLiq], ['Faltas (dias)', totals.tFD], ['Horas desc.', formatHoras(totals.tAtrasosH)], ['Desc. horas', totals.tAtrasosVal], ['Horas doc.', formatHoras(totals.tDocHoras)], ['Funcionarios', compEmps.length]
+        ].map(([label, value]) => (
           <div key={String(label)} className="card-premium p-4 text-center"><p className="text-xs text-muted-foreground uppercase">{label}</p><p className="text-lg font-bold font-display mt-1">{typeof value === 'number' && label !== 'Faltas (dias)' && label !== 'Funcionarios' ? formatCurrency(value) : value}</p></div>
         ))}
       </div>
@@ -306,6 +314,8 @@ const FechamentoPage: React.FC = () => {
             ['Periculosidade', totals.tPeric, true],
             ['HE 50% qtd.', `${totals.tHE50Qtd.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, false],
             ['HE 100% qtd.', `${totals.tHE100Qtd.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, false],
+            ['Horas descontadas', formatHoras(totals.tAtrasosH), false],
+            ['Valor horas desc.', totals.tAtrasosVal, true],
             ['Adiantamentos', totals.tAdiant, true],
             ['Faltas/desc.', totals.tDescOp + totals.tDescDiv, true],
             ['Liquido previsto', totals.tLiq, true],
@@ -324,7 +334,7 @@ const FechamentoPage: React.FC = () => {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/40">
-                {['Funcionario','Cargo','Salario','Insal.','Peric.','HE50 qtd','HE100 qtd','Adiant.','Faltas/Desc.','Liquido'].map(h => (
+                {['Funcionario','Cargo','Salario','Insal.','Peric.','HE50 qtd','HE100 qtd','Horas desc.','Adiant.','Faltas/Desc.','Liquido'].map(h => (
                   <th key={h} className="px-2 py-2 text-left font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -334,6 +344,7 @@ const FechamentoPage: React.FC = () => {
                 const entry = compEntries.find(e => e.employeeId === emp.id);
                 if (!entry) return null;
                 const p = calcPayroll(emp, entry);
+                const docHoras = getHorasDocumento(entry.observacoes);
                 return (
                   <tr key={emp.id} className="border-b">
                     <td className="px-2 py-2 font-medium whitespace-nowrap">{emp.name}</td>
@@ -343,6 +354,10 @@ const FechamentoPage: React.FC = () => {
                     <td className="px-2 py-2 text-right">{formatCurrency(p.periculosidadeVal || 0)}</td>
                     <td className="px-2 py-2 text-right">{Number(entry.he50 || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h</td>
                     <td className="px-2 py-2 text-right">{Number(entry.he100 || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h</td>
+                    <td className="px-2 py-2 text-right">
+                      <span className="font-semibold text-destructive">{formatHoras(Number(entry.atrasos || 0))}</span>
+                      {docHoras > 0 && <div className="text-[10px] text-muted-foreground">Doc {formatHoras(docHoras)}</div>}
+                    </td>
                     <td className="px-2 py-2 text-right">{formatCurrency(p.adiantamento || 0)}</td>
                     <td className="px-2 py-2 text-right">{formatCurrency((p.descontosOperacionais || 0) + (p.descontosDiversos || 0))}</td>
                     <td className="px-2 py-2 text-right font-bold text-success">{formatCurrency(p.liquido || 0)}</td>
@@ -366,11 +381,13 @@ const FechamentoPage: React.FC = () => {
           <tbody>{compEmps.map(emp => {
             const entry = compEntries.find(e => e.employeeId === emp.id); if (!entry) return null;
             const p = calcPayroll(emp, entry); const update = (data: any) => updateEntry(emp.id, competencia, data);
+            const docHoras = getHorasDocumento(entry.observacoes);
             return (
               <tr key={emp.id} className="border-b hover:bg-muted/20 align-top">
                 <td className="px-3 py-3 font-medium whitespace-nowrap text-xs">
                   {emp.name}
                   {p.pendencias.length > 0 && <Badge variant="destructive" className="ml-2 text-[10px]">Pendente conferencia</Badge>}
+                  {docHoras > 0 && <Badge variant="secondary" className="ml-2 text-[10px]">Doc horas {formatHoras(docHoras)}</Badge>}
                 </td>
                 <td className="px-3 py-3 text-xs min-w-32">{emp.cargo || '-'}</td>
                 <td className="px-3 py-3 text-xs tabular-nums whitespace-nowrap">{formatCurrency(emp.salarioBase)}</td>
@@ -401,7 +418,8 @@ const FechamentoPage: React.FC = () => {
                     <span>Atrasos h</span>
                     <DecimalInput value={entry.atrasos} decimals={2} onValueChange={(value) => update({ atrasos: value })} className="w-20 h-8 text-xs text-right" />
                   </div>
-                  <div className="mt-1 text-[11px] text-destructive">Faltas/atrasos {formatCurrency(p.descontosOperacionais)}</div>
+                  {docHoras > 0 && <div className="mt-1 text-[11px] text-amber-600">Inclui {formatHoras(docHoras)} de declaração/atestado</div>}
+                  <div className="mt-1 text-[11px] text-destructive">Faltas/atrasos {formatCurrency(p.descontosOperacionais)} · Horas {formatCurrency(p.atrasoVal)}</div>
                   <MoneyInput value={entry.descontosDiversos || 0} onValueChange={(value) => update({ descontosDiversos: value })} className="mt-2 w-28 h-8 text-xs text-right" />
                 </td>
                 <td className="px-3 py-3">
@@ -444,7 +462,7 @@ const FechamentoPage: React.FC = () => {
       <div className="flex justify-end"><Button variant="outline" size="sm" onClick={async () => { await refreshEntries(); toast.success('Lancamentos recarregados.'); }}><RefreshCw className="w-3.5 h-3.5 mr-2" />Recarregar</Button></div>
 
       <div className="card-premium p-4 overflow-x-auto"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-3"><div><h2 className="text-sm font-bold text-foreground">Apontamento para Contabilidade</h2><p className="text-xs text-muted-foreground">Relatorio operacional; nao substitui o fechamento financeiro final.</p></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={exportApontamentoCsv}><Table className="w-4 h-4 mr-2" />Exportar Excel</Button><Button variant="outline" size="sm" onClick={() => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`)}><FileText className="w-4 h-4 mr-2" />PDF</Button></div></div>
-        <table className="w-full text-sm"><thead><tr className="border-b bg-muted/50">{['Funcionario','Empresa','Faltas','Datas','HE 50%','HE 100%','Adicional/Comissao','Observacoes'].map(h => <th key={h} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>)}</tr></thead><tbody>{compEmps.map(emp => { const entry = compEntries.find(e => e.employeeId === emp.id); if (!entry) return null; const p = calcPayroll(emp, entry); return <tr key={emp.id} className="border-b hover:bg-muted/20"><td className="px-3 py-2 font-medium whitespace-nowrap">{emp.name}</td><td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{companies.find(c => c.id === emp.companyId)?.name}</td><td className="px-3 py-2">{entry.faltasDias || '-'}</td><td className="px-3 py-2">{getFaltaDatas(entry.observacoes) || '-'}</td><td className="px-3 py-2">{entry.he50 || '-'}</td><td className="px-3 py-2">{entry.he100 || '-'}</td><td className="px-3 py-2">{p.comissaoVal || entry.adicionais ? formatCurrency(p.comissaoVal + entry.adicionais) : '-'}</td><td className="px-3 py-2 text-muted-foreground max-w-xs truncate">{entry.observacoes || '-'}</td></tr>; })}</tbody></table>
+        <table className="w-full text-sm"><thead><tr className="border-b bg-muted/50">{['Funcionario','Empresa','Faltas','Datas','Horas desc.','Horas doc.','HE 50%','HE 100%','Adicional/Comissao','Observacoes'].map(h => <th key={h} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>)}</tr></thead><tbody>{compEmps.map(emp => { const entry = compEntries.find(e => e.employeeId === emp.id); if (!entry) return null; const p = calcPayroll(emp, entry); const docHoras = getHorasDocumento(entry.observacoes); return <tr key={emp.id} className="border-b hover:bg-muted/20"><td className="px-3 py-2 font-medium whitespace-nowrap">{emp.name}</td><td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{companies.find(c => c.id === emp.companyId)?.name}</td><td className="px-3 py-2">{entry.faltasDias || '-'}</td><td className="px-3 py-2">{getFaltaDatas(entry.observacoes) || '-'}</td><td className="px-3 py-2">{entry.atrasos ? `${formatHoras(entry.atrasos)} (${formatCurrency(p.atrasoVal)})` : '-'}</td><td className="px-3 py-2">{docHoras > 0 ? formatHoras(docHoras) : '-'}</td><td className="px-3 py-2">{entry.he50 || '-'}</td><td className="px-3 py-2">{entry.he100 || '-'}</td><td className="px-3 py-2">{p.comissaoVal || entry.adicionais ? formatCurrency(p.comissaoVal + entry.adicionais) : '-'}</td><td className="px-3 py-2 text-muted-foreground max-w-xs truncate">{entry.observacoes || '-'}</td></tr>; })}</tbody></table>
       </div>
 
       <div className="card-premium p-4 space-y-3"><label className="text-xs text-muted-foreground">Observacao do Fechamento</label><textarea value={fechamento.observacoes} onChange={e => updateFechamento(selectedCompany, competencia, { observacoes: e.target.value }, { persist: false })} className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[60px]" placeholder="Observacoes gerais..." /><div className="flex gap-3 flex-wrap"><Button onClick={handleSalvarFechamento} className="gradient-primary text-primary-foreground"><Save className="w-4 h-4 mr-2" />Salvar Fechamento</Button><Button onClick={handleMarcarFechado} variant="outline"><Lock className="w-4 h-4 mr-2" />Marcar como Fechado</Button><Button onClick={() => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`)} variant="outline"><FileText className="w-4 h-4 mr-2" />Relatorio para Impressao</Button><Button onClick={imprimirEtiquetas} variant="outline"><Tags className="w-4 h-4 mr-2" />Etiquetas</Button></div></div>
