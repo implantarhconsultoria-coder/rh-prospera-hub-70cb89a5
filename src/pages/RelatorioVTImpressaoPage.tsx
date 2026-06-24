@@ -10,6 +10,7 @@ import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
+const ALL_COMPANIES = 'todas';
 const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const competenciaLabel = (competencia: string) => {
   const [y, m] = competencia.split('-');
@@ -58,7 +59,7 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
       </thead>
       <tbody>
         {block.rows.map(r => (
-          <tr key={r.emp.id} className="even:bg-gray-50">
+          <tr key={r.emp.id} className="even:bg-gray-50 vt-report-row">
             <td className="border border-gray-300 px-2 py-1 font-medium">{r.emp.name}{r.corrigido ? ' *' : ''}</td>
             <td className="border border-gray-300 px-2 py-1">{r.emp.cargo}</td>
             <td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(r.valorDiario)}</td>
@@ -70,7 +71,7 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
           </tr>
         ))}
         {block.rows.length === 0 && (
-          <tr><td colSpan={8} className="border border-gray-300 px-2 py-3 text-center text-gray-500">Nenhum funcionário com VT ativo nesta competência.</td></tr>
+          <tr className="vt-report-row"><td colSpan={8} className="border border-gray-300 px-2 py-3 text-center text-gray-500">Nenhum funcionário com VT ativo nesta competência.</td></tr>
         )}
       </tbody>
       <tfoot>
@@ -81,6 +82,9 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
         </tr>
       </tfoot>
     </table>
+    {block.rows.some(r => r.corrigido) && (
+      <p className="text-[9px] text-gray-600 mt-2">* Linha com correção manual aplicada.</p>
+    )}
   </div>
 );
 
@@ -93,11 +97,15 @@ const RelatorioVTImpressaoPage: React.FC = () => {
   const empresaSingle = searchParams.get('empresa') || '';
 
   const empresaIds = useMemo(() => {
-    const list = empresasParam
+    const requested = empresasParam
       ? empresasParam.split(',').map(s => s.trim()).filter(Boolean)
       : (empresaSingle ? [empresaSingle] : []);
-    return list;
-  }, [empresasParam, empresaSingle]);
+
+    if (requested.includes(ALL_COMPANIES)) {
+      return companies.map(company => company.id);
+    }
+    return requested;
+  }, [empresasParam, empresaSingle, companies]);
 
   const consolidado = empresaIds.length > 1;
 
@@ -115,7 +123,9 @@ const RelatorioVTImpressaoPage: React.FC = () => {
       .filter(Boolean)
       .map((company: any) => {
         const fech = getFechamento(company.id, competencia);
-        const compEmps = employees.filter(e => e.companyId === company.id && e.status === 'ativo' && e.categoria === 'operacional' && e.vtAtivo);
+        const compEmps = employees
+          .filter(e => e.companyId === company.id && e.status === 'ativo' && e.categoria === 'operacional' && e.vtAtivo)
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
         const compEntries = entries.filter(e => e.companyId === company.id && e.competencia === competencia);
         const rawRows = buildVTReportRows(compEmps, compEntries, diasUteis);
         const rows: BenefitReportRow[] = rawRows.map(r => {
@@ -165,11 +175,21 @@ const RelatorioVTImpressaoPage: React.FC = () => {
     <>
       <style>{`
         @page { size: A4; margin: 12mm; }
+        table { page-break-inside: auto; }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+        .vt-report-row { break-inside: avoid; page-break-inside: avoid; }
+        .vt-report-row td { break-inside: avoid; page-break-inside: avoid; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
           body * { visibility: hidden !important; }
           #vt-print-area, #vt-print-area * { visibility: visible !important; }
           #vt-print-area { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+          table { page-break-inside: auto; }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          .vt-report-row { break-inside: avoid !important; page-break-inside: avoid !important; }
+          .vt-report-row td { break-inside: avoid !important; page-break-inside: avoid !important; }
           .recibo-page { page-break-after: always; }
           .recibo-page:last-child { page-break-after: auto; }
           .no-print, .no-print *, iframe, nav, aside,
@@ -221,7 +241,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {blocks.map(b => (
-                    <tr key={b.company.id} className="even:bg-gray-50">
+                    <tr key={b.company.id} className="even:bg-gray-50 vt-report-row">
                       <td className="border border-gray-300 px-2 py-1 font-medium">{b.company.name}</td>
                       <td className="border border-gray-300 px-2 py-1">{b.company.cnpj}</td>
                       <td className="border border-gray-300 px-2 py-1 text-center">{b.rows.length}</td>
