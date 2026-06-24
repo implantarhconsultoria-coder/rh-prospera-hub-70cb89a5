@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getFirstBusinessDayOfNextMonth, getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
-import { buildIndividualBenefitData } from '@/lib/benefitReports';
+import { buildIndividualBenefitData, getPreviousCompetencia } from '@/lib/benefitReports';
 import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
@@ -20,12 +20,15 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
   const diasUteis = getWorkingDays(competencia);
   const fechamento = getFechamento(companyId, competencia);
   const dataFechamento = fechamento.dataFechamento || '';
+  const competenciaAnterior = getPreviousCompetencia(competencia);
 
   useEffect(() => {
     if (companyId && competencia) getOrCreateEntries(companyId, competencia);
-  }, [companyId, competencia]);
+    if (companyId && competenciaAnterior) getOrCreateEntries(companyId, competenciaAnterior);
+  }, [companyId, competencia, competenciaAnterior]);
 
   const entry = entries.find(e => e.employeeId === funcionarioId && e.companyId === companyId && e.competencia === competencia);
+  const descontoEntry = entries.find(e => e.employeeId === funcionarioId && e.companyId === companyId && e.competencia === competenciaAnterior);
 
   const competenciaLabel = (() => {
     const [y, m] = competencia.split('-');
@@ -35,11 +38,8 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
 
   const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
 
-  // VR calculation
-  const vrData = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: 'vr' }), [emp, entry, diasUteis]);
-
-  // VT calculation
-  const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, diasUteis, type: 'vt' }), [emp, entry, diasUteis]);
+  const vrData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vr' }), [emp, entry, descontoEntry, diasUteis]);
+  const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vt' }), [emp, entry, descontoEntry, diasUteis]);
 
   const handleSalvarPdf = async () => {
     try {
@@ -115,7 +115,6 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
         </div>
 
         <div id="benefit-individual-print" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
-          {/* Header */}
           <div className="border-b-2 border-black pb-3 mb-4">
             <div className="flex justify-between items-start">
               <div>
@@ -131,7 +130,6 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Employee data */}
           <div className="border border-gray-400 rounded p-3 mb-4" style={{ fontSize: '10px' }}>
             <div className="grid grid-cols-2 gap-1">
               <p><strong>Nome:</strong> {emp.name}</p>
@@ -143,10 +141,7 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
             </div>
           </div>
 
-          {/* VR section */}
           {renderBenefitTable('VALE REFEIÇÃO (VR)', vrData)}
-
-          {/* VT section */}
           {renderBenefitTable('VALE TRANSPORTE (VT)', vtData)}
 
           <div className="mt-12 mb-6">
@@ -155,7 +150,6 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
             <p className="text-center text-xs mt-1">Data: ____/____/________</p>
           </div>
 
-          {/* Footer */}
           <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
             {' '}
           </div>
