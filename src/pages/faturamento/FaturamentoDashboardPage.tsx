@@ -25,6 +25,7 @@ import {
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 import Dn4ImportPanel from '@/components/Dn4ImportPanel';
 import TopacCentralDashboard from '@/components/TopacCentralDashboard';
+import FaturamentoDashboardDN4 from '@/components/FaturamentoDashboardDN4';
 import '@/styles/faturamento-dn4.css';
 
 const fmtBRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });

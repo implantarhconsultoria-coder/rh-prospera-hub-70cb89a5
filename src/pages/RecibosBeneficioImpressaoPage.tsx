@@ -17,7 +17,7 @@ type Formato = 'vr' | 'vt' | 'ambos';
 
 const competenciaPt = (competencia: string) => {
   const [y, m] = competencia.split('-');
-  const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const meses = ['Janeiro', 'Fevereiro', 'MarÃ§o', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   return `${meses[Number(m) - 1]} / ${y}`;
 };
 
@@ -142,7 +142,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Carregando recibos…</p>
+        <p className="text-sm text-muted-foreground">Carregando recibosâ¦</p>
       </div>
     );
   }
@@ -150,8 +150,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   if (recibos.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 p-10 text-center">
-        <p className="text-base font-medium">Nenhum recibo encontrado para a competência selecionada.</p>
-        <button onClick={() => window.history.back()} className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg">← Voltar</button>
+        <p className="text-base font-medium">Nenhum recibo encontrado para a competÃªncia selecionada.</p>
+        <button onClick={() => window.history.back()} className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg">â Voltar</button>
       </div>
     );
   }
@@ -374,9 +374,9 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
           <td colSpan={2} className="px-2 py-1 font-bold text-xs uppercase">{label}</td>
         </tr>
         <tr><td className="px-2 py-1 font-semibold w-1/2">Dias previstos</td><td className="px-2 py-1">{row.diasPrevistos}</td></tr>
-        <tr><td className="px-2 py-1 font-semibold">Descontos / faltas</td><td className="px-2 py-1">{row.diasDescontados > 0 ? `${row.diasDescontados} — ${row.motivo}` : '—'}</td></tr>
+        <tr><td className="px-2 py-1 font-semibold">Descontos / faltas</td><td className="px-2 py-1">{row.diasDescontados > 0 ? `${row.diasDescontados} â ${row.motivo}` : 'â'}</td></tr>
         <tr><td className="px-2 py-1 font-semibold">Dias considerados</td><td className="px-2 py-1">{row.diasFinais}</td></tr>
-        <tr><td className="px-2 py-1 font-semibold">Valor diário</td><td className="px-2 py-1">{formatCurrency(row.valorDiario)}</td></tr>
+        <tr><td className="px-2 py-1 font-semibold">Valor diÃ¡rio</td><td className="px-2 py-1">{formatCurrency(row.valorDiario)}</td></tr>
         <tr className="bg-gray-50"><td className="px-2 py-1 font-bold">TOTAL {sigla}</td><td className="px-2 py-1 font-bold">{formatCurrency(row.valorTotal)}</td></tr>
       </tbody>
     </table>
@@ -387,11 +387,11 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       <h3 className="text-sm font-bold mb-2 bg-gray-200 px-2 py-1">{label}</h3>
       <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
         <tbody>
-          <tr><td className="border border-gray-300 px-2 py-1 font-medium w-1/2">Valor Diário</td><td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(row.valorDiario)}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium w-1/2">Valor DiÃ¡rio</td><td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(row.valorDiario)}</td></tr>
           <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Previstos</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasPrevistos}</td></tr>
           <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Descontados</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasDescontados || 0}</td></tr>
           <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Finais</td><td className="border border-gray-300 px-2 py-1 text-right">{row.diasFinais}</td></tr>
-          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Motivo Desconto</td><td className="border border-gray-300 px-2 py-1 text-right">{row.motivo || '—'}</td></tr>
+          <tr><td className="border border-gray-300 px-2 py-1 font-medium">Motivo Desconto</td><td className="border border-gray-300 px-2 py-1 text-right">{row.motivo || 'â'}</td></tr>
           <tr className="bg-gray-100 font-bold"><td className="border border-gray-400 px-2 py-1">Valor Total</td><td className="border border-gray-400 px-2 py-1 text-right">{formatCurrency(row.valorTotal)}</td></tr>
         </tbody>
       </table>
@@ -415,8 +415,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
 
       <div className="bg-white text-black min-h-screen" style={{ fontFamily: "'Segoe UI', Arial, sans-serif" }}>
         <div className="no-print flex flex-wrap items-center gap-3 px-8 py-3 bg-gray-100 border-b sticky top-0 z-10">
-          <button onClick={() => window.history.back()} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">← Voltar</button>
-          <button onClick={handleImprimirPdf} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">🖨 Imprimir / PDF</button>
+          <button onClick={() => window.history.back()} className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">â Voltar</button>
+          <button onClick={handleImprimirPdf} className="px-4 py-2 text-sm font-medium bg-gray-700 text-white rounded-lg hover:bg-gray-800">ð¨ Imprimir / PDF</button>
           <button
             onClick={handleSalvarPdf}
             disabled={savingPdf}
@@ -434,10 +434,10 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
             Enviar por e-mail
           </button>
           <div className="text-sm text-gray-700 ml-2">
-            <strong>Pré-visualização:</strong> {recibos.length} recibo(s) — {recibos.length} página(s) ({formatoLabel})
+            <strong>PrÃ©-visualizaÃ§Ã£o:</strong> {recibos.length} recibo(s) â {recibos.length} pÃ¡gina(s) ({formatoLabel})
             {recibos.some((r) => r.vr?.corrigido || r.vt?.corrigido) && (
               <span className="ml-2 inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-0.5 text-xs">
-                ⚠ Inclui recibo(s) com correção administrativa
+                â  Inclui recibo(s) com correÃ§Ã£o administrativa
               </span>
             )}
           </div>
@@ -455,10 +455,10 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
                       <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold">FICHA INDIVIDUAL DE BENEF�CIOS</p>
-                      <p className="text-xs">Compet�ncia: {competenciaLabel}</p>
+                      <p className="text-sm font-bold">FICHA INDIVIDUAL DE BENEFÍCIOS</p>
+                      <p className="text-xs">Competência: {competenciaLabel}</p>
                       <p className="text-xs">Pagamento: {dataPagamento}</p>
-                      <p className="text-xs">Emiss�o: {dataEmissao}</p>
+                      <p className="text-xs">Emissão: {dataEmissao}</p>
                     </div>
                   </div>
                 </div>
@@ -467,19 +467,19 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
                   <div className="grid grid-cols-2 gap-1">
                     <p><strong>Nome:</strong> {emp.name}</p>
                     <p><strong>Cargo:</strong> {emp.cargo}</p>
-                    <p><strong>CPF:</strong> {emp.cpf || '�'}</p>
-                    <p><strong>Registro:</strong> {emp.registro || '�'}</p>
-                    <p><strong>Admiss�o:</strong> {emp.dataAdmissao ? new Date(emp.dataAdmissao).toLocaleDateString('pt-BR') : '�'}</p>
-                    <p><strong>Dias �teis:</strong> {diasUteis}</p>
+                    <p><strong>CPF:</strong> {emp.cpf || ''}</p>
+                    <p><strong>Registro:</strong> {emp.registro || ''}</p>
+                    <p><strong>Admissão:</strong> {emp.dataAdmissao ? new Date(emp.dataAdmissao).toLocaleDateString('pt-BR') : ''}</p>
+                    <p><strong>Dias úteis:</strong> {diasUteis}</p>
                   </div>
                 </div>
 
-                {(formato === 'vr' || isAmbos) && vr && renderFichaBloco('VALE REFEI��O (VR)', vr)}
+                {(formato === 'vr' || isAmbos) && vr && renderFichaBloco('VALE REFEIÇÃO (VR)', vr)}
                 {(formato === 'vt' || isAmbos) && vt && renderFichaBloco('VALE TRANSPORTE (VT)', vt)}
 
                 {(vr?.corrigido || vt?.corrigido) && (
                   <p className="text-[10px] text-amber-700 border border-amber-300 bg-amber-50 rounded px-2 py-1 mb-4">
-                    Ficha ajustada conforme corre��o administrativa registrada.
+                    Ficha ajustada conforme correção administrativa registrada.
                   </p>
                 )}
 

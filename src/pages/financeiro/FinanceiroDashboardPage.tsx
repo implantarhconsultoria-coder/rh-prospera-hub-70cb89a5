@@ -5,6 +5,7 @@ import { Wallet, TrendingUp, AlertTriangle, Clock, Building2, RefreshCw, ArrowDo
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 import Dn4ImportPanel from '@/components/Dn4ImportPanel';
 import TopacCentralDashboard from '@/components/TopacCentralDashboard';
+import FinanceiroDashboardDN4 from '@/components/FinanceiroDashboardDN4';
 
 const fmtBRL = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
