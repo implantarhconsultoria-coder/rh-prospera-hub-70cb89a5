@@ -24,7 +24,7 @@ const mensagemUpload = (bucket: UploadBucket, message?: string) => {
   return `Não foi possível enviar a foto/comprovante de abastecimento.${detalhe}`;
 };
 
-/** Upload de selfie/foto. Para buckets públicos retorna URL pública; privados retorna URL assinada. */
+/** Upload de selfie/foto. Para buckets públicos retorna URL pública; privados retorna URL assinada quando possível. */
 export async function uploadFoto(
   bucket: UploadBucket,
   acessoId: string,
@@ -55,7 +55,12 @@ export async function uploadFoto(
     const { data: signed, error: signedError } = await supabase.storage
       .from(bucket)
       .createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
-    if (signedError) throw signedError;
+
+    if (signedError) {
+      console.warn("Selfie enviada, mas URL assinada não foi gerada. Salvando caminho privado.", signedError);
+      return path;
+    }
+
     return signed?.signedUrl || path;
   } catch (error) {
     console.error("Erro no upload do app mecânico:", { bucket, path, error });
