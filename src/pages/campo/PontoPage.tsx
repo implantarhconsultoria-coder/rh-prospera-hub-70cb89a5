@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { LogIn, UtensilsCrossed, Coffee, LogOut, Loader2, Camera } from 'lucide-react';
+import { LogIn, UtensilsCrossed, Coffee, LogOut, Loader2, Camera, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
@@ -12,10 +12,10 @@ import { toast } from 'sonner';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
 const TIPOS = [
-  { tipo: 'entrada', label: 'Bater Ponto', sublabel: 'Entrada · selfie obrigatória', icon: LogIn, gradient: 'from-blue-500 to-blue-700' },
-  { tipo: 'almoco_saida', label: 'Saída Almoço', sublabel: 'Início da pausa', icon: UtensilsCrossed, gradient: 'from-orange-500 to-amber-600' },
-  { tipo: 'almoco_volta', label: 'Volta Almoço', sublabel: 'Retorno', icon: Coffee, gradient: 'from-emerald-500 to-green-600' },
-  { tipo: 'saida', label: 'Saída Expediente', sublabel: 'Fim do dia', icon: LogOut, gradient: 'from-rose-500 to-red-600' },
+  { tipo: 'entrada', label: 'Bater Ponto', sublabel: 'Entrada · selfie e GPS obrigatórios', icon: LogIn, gradient: 'from-blue-500 to-blue-700' },
+  { tipo: 'almoco_saida', label: 'Saída Almoço', sublabel: 'Início da pausa · GPS obrigatório', icon: UtensilsCrossed, gradient: 'from-orange-500 to-amber-600' },
+  { tipo: 'almoco_volta', label: 'Volta Almoço', sublabel: 'Retorno · GPS obrigatório', icon: Coffee, gradient: 'from-emerald-500 to-green-600' },
+  { tipo: 'saida', label: 'Saída Expediente', sublabel: 'Fim do dia · GPS obrigatório', icon: LogOut, gradient: 'from-rose-500 to-red-600' },
 ];
 
 const TIPO_LABELS: Record<string, string> = {
@@ -24,6 +24,18 @@ const TIPO_LABELS: Record<string, string> = {
   almoco_volta: 'Volta do Almoço',
   saida: 'Saída do Expediente',
 };
+
+const localDate = (date: Date) => {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const localTime = (date: Date) =>
+  [date.getHours(), date.getMinutes(), date.getSeconds()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
 
 const PontoPage: React.FC = () => {
   const { session } = useApp();
@@ -39,13 +51,21 @@ const PontoPage: React.FC = () => {
   const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Colaborador';
 
   const persistRegistro = async (tipo: string, selfieUrl?: string) => {
+    if (!session?.user?.id) {
+      throw new Error('Sessão expirada. Entre novamente para registrar o ponto.');
+    }
+
     const geo = await getLocation();
+    if (typeof geo.latitude !== 'number' || typeof geo.longitude !== 'number') {
+      throw new Error('GPS obrigatório. Ative a localização do celular/navegador e tente novamente.');
+    }
+
     const now = new Date();
-    const data = now.toISOString().split('T')[0];
-    const hora = now.toTimeString().slice(0, 8);
+    const data = localDate(now);
+    const hora = localTime(now);
 
     const { error } = await (supabase as any).from('registros_ponto').insert({
-      user_id: session!.user.id,
+      user_id: session.user.id,
       tipo,
       data,
       hora,
@@ -53,6 +73,8 @@ const PontoPage: React.FC = () => {
       longitude: geo.longitude,
       veiculo_id: veiculo.veiculo_id,
       selfie_url: selfieUrl || null,
+      origem: 'campo',
+      status: 'registrado',
     });
     if (error) throw error;
 
@@ -64,7 +86,7 @@ const PontoPage: React.FC = () => {
         { label: 'Data', valor: new Date().toLocaleDateString('pt-BR') },
         { label: 'Hora', valor: hora },
         ...(selfieUrl ? [{ label: 'Selfie', valor: '✓ Capturada' }] : []),
-        ...(geo.latitude ? [{ label: 'Localização', valor: `${geo.latitude.toFixed(5)}, ${geo.longitude!.toFixed(5)}` }] : []),
+        { label: 'Localização', valor: `${geo.latitude.toFixed(5)}, ${geo.longitude.toFixed(5)}` },
         ...(veiculo.placa ? [{ label: 'Veículo', valor: `${veiculo.modelo} — ${veiculo.placa}` }] : []),
       ],
     });
@@ -114,7 +136,12 @@ const PontoPage: React.FC = () => {
     <div className="space-y-5">
       <div>
         <h2 className="text-2xl font-bold font-display text-white">Controle de Ponto</h2>
-        <p className="text-sm text-white/60 mt-1">Geolocalização ativa · entrada com selfie</p>
+        <p className="text-sm text-white/60 mt-1">GPS obrigatório · entrada com selfie</p>
+      </div>
+
+      <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 p-3 text-xs text-amber-100 flex gap-2">
+        <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
+        <span>O ponto só será salvo com localização ativa. Libere o GPS do navegador antes de registrar.</span>
       </div>
 
       <div className="space-y-3">
