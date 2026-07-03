@@ -1,16 +1,35 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useApp } from '@/context/AppContext';
 import { lovable } from '@/integrations/lovable/index';
 import { supabase } from '@/integrations/supabase/client';
 
 const LOGIN_ALIASES: Record<string, string> = {
   fat: 'fat@topac.local',
   fin: 'fin@topac.local',
+};
+
+const ROLE_REDIRECTS: Record<string, string> = {
+  admin: '/admin',
+  diretor_geral: '/admin',
+  faturamento: '/faturamento',
+  financeiro: '/financeiro',
+  filial_matriz: '/filial',
+  filial_praia: '/filial',
+  filial_goiania: '/filial',
+  almoxarifado: '/almoxarifado',
+  operacional: '/operacional',
+  tecnico_campo: '/campo',
+};
+
+const getRedirectPath = (roles: string[]) => {
+  const role = Object.keys(ROLE_REDIRECTS).find((key) => roles.includes(key));
+  return role ? ROLE_REDIRECTS[role] : '/admin';
 };
 
 const OPERATIONAL_STATS = [
@@ -20,9 +39,15 @@ const OPERATIONAL_STATS = [
 ];
 
 const LoginPage: React.FC = () => {
+  const { isAuthenticated, userRoles, roleLoading } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || roleLoading) return;
+    window.location.replace(getRedirectPath(userRoles));
+  }, [isAuthenticated, roleLoading, userRoles]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,13 +67,13 @@ const LoginPage: React.FC = () => {
       toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha invalidos' : error.message);
       return;
     }
-    window.location.assign('/admin');
+    window.location.assign('/');
   };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     const result = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: `${window.location.origin}/admin`,
+      redirect_uri: `${window.location.origin}/`,
     });
     if (result.error) {
       toast.error('Erro ao entrar com Google');
@@ -56,7 +81,7 @@ const LoginPage: React.FC = () => {
       return;
     }
     if (result.redirected) return;
-    setLoading(false);
+    window.location.assign('/');
   };
 
   return (
