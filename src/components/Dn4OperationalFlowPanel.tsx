@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, BriefcaseBusiness, Calculator, FileText, Landmark, MapPin, Package, ShieldCheck, Users } from 'lucide-react';
+import '@/styles/dn4-legacy-exact.css';
 
-type Dn4Tab = 'cliente' | 'contatos' | 'cobranca' | 'entrega' | 'representantes' | 'tributacao' | 'arquivos' | 'contratos' | 'equipamentos' | 'medicoes' | 'faturas' | 'financeiro';
+type Dn4Tab = 'produtos' | 'servicos' | 'complemento' | 'totais' | 'vencimentos' | 'nfe' | 'arquivos';
+type Dn4Tela = 'recebimento' | 'equipamentos';
 
 type Props = {
   cliente: any;
@@ -19,90 +20,133 @@ const fmtDoc = (value?: string | null) => {
   const d = onlyDigits(value);
   if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
   if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-  return value || 'Sem documento';
+  return value || '';
 };
 
 const tabs: Array<{ id: Dn4Tab; label: string }> = [
-  { id: 'cliente', label: 'Dados do cliente' },
-  { id: 'contatos', label: 'Contatos' },
-  { id: 'cobranca', label: 'Cobranca' },
-  { id: 'entrega', label: 'Entrega / Obra' },
-  { id: 'representantes', label: 'Representantes' },
-  { id: 'tributacao', label: 'Tributacao' },
+  { id: 'produtos', label: 'Produtos' },
+  { id: 'servicos', label: 'Serviços' },
+  { id: 'complemento', label: 'Complemento de Informações' },
+  { id: 'totais', label: 'Totais' },
+  { id: 'vencimentos', label: 'Vencimentos' },
+  { id: 'nfe', label: 'NF-e' },
   { id: 'arquivos', label: 'Arquivos' },
-  { id: 'contratos', label: 'Contratos' },
-  { id: 'equipamentos', label: 'Equipamentos' },
-  { id: 'medicoes', label: 'Medicoes' },
-  { id: 'faturas', label: 'Faturas' },
-  { id: 'financeiro', label: 'Financeiro' },
 ];
 
-const Field = ({ label, value, wide }: { label: string; value?: React.ReactNode; wide?: boolean }) => (
-  <div className={wide ? 'fat-dn4-field fat-dn4-field-wide' : 'fat-dn4-field'}>
-    <span>{label}</span>
-    <strong>{value || '—'}</strong>
-  </div>
+const Field = ({ label, value, required, wide }: { label: string; value?: React.ReactNode; required?: boolean; wide?: boolean }) => (
+  <label className={wide ? 'dn4-field dn4-field-wide' : 'dn4-field'}>
+    <span>{label}{required ? ' *' : ''}</span>
+    <div>{value || ''}</div>
+  </label>
+);
+
+const ToolbarButton = ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => (
+  <button type="button" onClick={onClick}>{children}</button>
 );
 
 const Dn4OperationalFlowPanel: React.FC<Props> = ({ cliente, clientes, contratos, equipamentos, faturas, pendencias, go }) => {
-  const [tab, setTab] = useState<Dn4Tab>('cliente');
+  const [tab, setTab] = useState<Dn4Tab>('produtos');
+  const [tela, setTela] = useState<Dn4Tela>('recebimento');
+
   const contratosCliente = useMemo(() => cliente ? contratos.filter(item => item.cliente_id === cliente.id) : contratos, [cliente, contratos]);
   const contratoIds = useMemo(() => new Set(contratosCliente.map(item => item.id)), [contratosCliente]);
   const equipamentosCliente = useMemo(() => cliente ? equipamentos.filter(item => item.contratos?.cliente_id === cliente.id || contratoIds.has(item.contrato_id)) : equipamentos, [cliente, contratoIds, equipamentos]);
   const faturasCliente = useMemo(() => cliente ? faturas.filter(item => item.cliente_id === cliente.id) : faturas, [cliente, faturas]);
-  const equipamentosAtivos = equipamentosCliente.filter(item => item.status === 'ativo');
-  const totalEmitido = faturasCliente.reduce((sum, item) => sum + Number(item.total || 0), 0);
+
+  const contratoPrincipal = contratosCliente[0];
+  const totalProdutos = equipamentosCliente.reduce((sum, item) => sum + Number(item.valor_unitario || 0), 0);
+  const totalFaturas = faturasCliente.reduce((sum, item) => sum + Number(item.total || 0), 0);
   const totalAberto = faturasCliente.filter(item => ['prevista', 'enviada', 'em_aberto', 'vencida'].includes(item.status)).reduce((sum, item) => sum + Number(item.total || 0), 0);
-  const clienteCodigo = cliente?.id ? String(cliente.id).slice(0, 8).toUpperCase() : 'CLIENTE';
+  const pedido = contratoPrincipal?.numero || faturasCliente[0]?.numero || '000000';
 
-  const steps = [
-    { label: 'Cliente', value: clientes.length, meta: 'cadastro', tab: 'cliente' as Dn4Tab },
-    { label: 'Contrato', value: contratosCliente.length, meta: 'criar / abrir', tab: 'contratos' as Dn4Tab },
-    { label: 'Equipamentos', value: equipamentosAtivos.length, meta: 'locacao', tab: 'equipamentos' as Dn4Tab },
-    { label: 'Medicao', value: pendencias, meta: 'conferir', tab: 'medicoes' as Dn4Tab },
-    { label: 'Fatura', value: fmtBRL(totalEmitido), meta: 'emitir', tab: 'faturas' as Dn4Tab },
-    { label: 'Financeiro', value: fmtBRL(totalAberto), meta: 'receber', tab: 'financeiro' as Dn4Tab },
-  ];
-
-  const abrirCliente = () => cliente && go(`/clientes/${cliente.id}`);
-  const abrirContrato = (id?: string) => go(id ? `/contratos/${id}` : '/contratos');
-  const abrirMedicoes = () => go('/medicoes');
-  const abrirFaturas = () => go('/faturas');
-  const abrirFinanceiro = () => go('/faturas?status=em_aberto');
-
-  const tabelaContratos = (
-    <div className="fat-dn4-table-wrap"><table className="fat-dn4-table"><thead><tr><th>Contrato</th><th>Cliente / Obra</th><th>Regra</th><th>Venc.</th><th>Valor</th><th>Status</th></tr></thead><tbody>{contratosCliente.length === 0 ? <tr><td colSpan={6}>Nenhum contrato vinculado ao cliente selecionado.</td></tr> : contratosCliente.slice(0, 12).map(contrato => <tr key={contrato.id} onClick={() => abrirContrato(contrato.id)}><td>{contrato.numero || '—'}</td><td>{contrato.clientes_fat?.razao_social || cliente?.razao_social || '—'}</td><td>{contrato.regra_faturamento || 'Mensal'}</td><td>{contrato.dia_vencimento ? `Dia ${contrato.dia_vencimento}` : '—'}</td><td>{fmtBRL(Number(contrato.valor_mensal || 0))}</td><td><span className={contrato.status === 'ativo' ? 'is-ok' : 'is-warn'}>{contrato.status || '—'}</span></td></tr>)}</tbody></table></div>
+  const renderMenu = () => (
+    <>
+      <div className="dn4-titlebar">Gestão Empresarial.NET - [{tela === 'recebimento' ? 'Recebimento de Produtos e Serviços' : 'Equipamentos Disponíveis'}]</div>
+      <div className="dn4-menubar">
+        {['Configurações', 'Locação', 'Manutenção', 'Faturamento', 'Vendas', 'Financeiro', 'Estoque', 'Compras', 'Janelas', 'Ajuda'].map(item => <button key={item} type="button">{item}</button>)}
+      </div>
+      <div className="dn4-toolbar">
+        <ToolbarButton>Dep</ToolbarButton><ToolbarButton>B</ToolbarButton><ToolbarButton>Ex</ToolbarButton>
+        <span className="dn4-sep" />
+        <ToolbarButton onClick={() => setTela('recebimento')}>Novo RP (01)</ToolbarButton>
+        <ToolbarButton>Primeiro</ToolbarButton><ToolbarButton>Voltar</ToolbarButton><ToolbarButton>Avançar</ToolbarButton><ToolbarButton>Último</ToolbarButton>
+        <span className="dn4-sep" />
+        <ToolbarButton onClick={() => go('/contratos')}>Gravar</ToolbarButton>
+        <ToolbarButton onClick={() => go('/faturas')}>Emitir Relatório</ToolbarButton>
+        <ToolbarButton onClick={() => setTela('equipamentos')}>Equip. Disp.</ToolbarButton>
+      </div>
+    </>
   );
 
-  const tabelaEquipamentos = (
-    <div className="fat-dn4-table-wrap"><table className="fat-dn4-table fat-dn4-assets-table"><thead><tr><th>Equipamento</th><th>Patrimonio</th><th>Contrato</th><th>Valor</th></tr></thead><tbody>{equipamentosCliente.length === 0 ? <tr><td colSpan={4}>Nenhum equipamento vinculado aos contratos deste cliente.</td></tr> : equipamentosCliente.slice(0, 12).map(item => <tr key={item.id} onClick={() => item.contrato_id && abrirContrato(item.contrato_id)}><td>{item.ativos?.descricao || item.descricao_livre || '—'}</td><td>{item.patrimonio || item.ativos?.patrimonio || item.placa || item.ativos?.placa || '—'}</td><td>{item.contratos?.numero || '—'}</td><td>{fmtBRL(Number(item.valor_unitario || 0))}</td></tr>)}</tbody></table></div>
+  const renderRecebimento = () => (
+    <div className="dn4-body">
+      <h3>Recebimento de Produtos e Serviços</h3>
+      <div className="dn4-form dn4-form-main">
+        <Field label="Nº do Pedido" value={pedido} />
+        <Field label="Situação" required value={faturasCliente[0]?.status || 'Em Aberto'} />
+        <Field label="Documento" required value={faturasCliente[0]?.numero || 'NF / RP'} />
+        <Field label="Tipo de Doc." required value="NF" />
+        <Field label="Cliente" required wide value={cliente?.razao_social || 'Selecione um cliente'} />
+        <Field label="CNPJ / CPF" value={fmtDoc(cliente?.cnpj_cpf)} />
+        <Field label="Data de Emissão" value={faturasCliente[0]?.data_vencimento || new Date().toLocaleDateString('pt-BR')} />
+        <Field label="Contrato" value={contratoPrincipal?.numero || '—'} />
+        <Field label="CFOP" value="Selecionar" />
+        <Field label="Representante" value={cliente?.contato_responsavel || '—'} />
+      </div>
+
+      <div className="dn4-tabs">
+        {tabs.map(item => <button key={item.id} type="button" onClick={() => setTab(item.id)} className={tab === item.id ? 'active' : ''}>{item.label}</button>)}
+      </div>
+
+      {tab === 'produtos' && (
+        <div className="dn4-tab-panel">
+          <div className="dn4-grid-title">Itens de Produtos</div>
+          <table className="dn4-table">
+            <thead><tr><th>Código</th><th>Descrição do Produto</th><th>Qtd</th><th>UN</th><th>Valor Unit.</th><th>Contrato</th><th>Situação</th></tr></thead>
+            <tbody>{equipamentosCliente.length ? equipamentosCliente.slice(0, 12).map((item, index) => <tr key={item.id || index} onClick={() => item.contrato_id && go(`/contratos/${item.contrato_id}`)}><td>{item.patrimonio || item.ativos?.patrimonio || String(index + 1).padStart(4, '0')}</td><td>{item.ativos?.descricao || item.descricao_livre || 'Equipamento locado'}</td><td>1,0000</td><td>UN</td><td>{fmtBRL(Number(item.valor_unitario || 0))}</td><td>{item.contratos?.numero || contratoPrincipal?.numero || '—'}</td><td>{item.status || 'ativo'}</td></tr>) : <tr><td colSpan={7}>Nenhum produto/equipamento vinculado ao cliente selecionado.</td></tr>}</tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === 'servicos' && (
+        <div className="dn4-tab-panel"><div className="dn4-grid-title">Itens de Serviços</div><table className="dn4-table"><thead><tr><th>Serviço</th><th>Competência</th><th>Contrato</th><th>Valor</th><th>Status</th></tr></thead><tbody>{faturasCliente.length ? faturasCliente.slice(0, 10).map(item => <tr key={item.id} onClick={() => go('/faturas')}><td>{item.numero || 'Faturamento de locação'}</td><td>{item.competencia || '—'}</td><td>{item.contrato_id || contratoPrincipal?.numero || '—'}</td><td>{fmtBRL(Number(item.total || 0))}</td><td>{item.status || '—'}</td></tr>) : <tr><td colSpan={5}>Nenhuma fatura lançada para este cliente.</td></tr>}</tbody></table></div>
+      )}
+
+      {tab === 'complemento' && (
+        <div className="dn4-tab-panel dn4-form"><Field label="Tipo de Frete" value="Sem Frete" /><Field label="Emitente" value="TOPAC" /><Field label="Destinatário" value={cliente?.razao_social} /><Field label="Observações" wide value="Gerar informações fiscais e financeiras conforme contrato/medição." /></div>
+      )}
+
+      {tab === 'totais' && (
+        <div className="dn4-tab-panel dn4-totals"><Field label="Valor Produtos" value={fmtBRL(totalProdutos)} /><Field label="Valor Serviços" value={fmtBRL(totalFaturas)} /><Field label="Desconto" value={fmtBRL(0)} /><Field label="Total do Documento" value={fmtBRL(totalProdutos + totalFaturas)} /></div>
+      )}
+
+      {tab === 'vencimentos' && (
+        <div className="dn4-tab-panel"><div className="dn4-checkline"><input type="checkbox" checked readOnly /> Gerar informações financeiras deste documento por frequência / condição de pagamento</div><div className="dn4-form"><Field label="Vencimento Inicial" value={faturasCliente[0]?.data_vencimento || '—'} /><Field label="Nº Parcelas" value="1" /><Field label="Forma de Pagto" value="Boleto / Carteira" /><Field label="Total em Aberto" value={fmtBRL(totalAberto)} /></div></div>
+      )}
+
+      {tab === 'nfe' && (
+        <div className="dn4-tab-panel dn4-actions"><ToolbarButton>Calcular Imp.</ToolbarButton><ToolbarButton>Saldos CFOP</ToolbarButton><ToolbarButton onClick={() => go('/faturas')}>Gerar Nota Fiscal</ToolbarButton><ToolbarButton onClick={() => go('/faturas')}>Enviar / Emitir</ToolbarButton></div>
+      )}
+
+      {tab === 'arquivos' && (
+        <div className="dn4-tab-panel dn4-actions"><ToolbarButton onClick={() => go('/clientes')}>Anexos do Cliente</ToolbarButton><ToolbarButton onClick={() => go('/contratos')}>Arquivos do Contrato</ToolbarButton><ToolbarButton onClick={() => go('/faturas')}>XML / PDF da Nota</ToolbarButton></div>
+      )}
+    </div>
   );
 
-  const listaFaturas = (
-    <div className="fat-dn4-invoice-list">{faturasCliente.length === 0 ? <p>Nenhuma fatura recente para esse cliente.</p> : faturasCliente.slice(0, 12).map(fatura => <button key={fatura.id} type="button" onClick={abrirFaturas}><span>{fatura.numero || fatura.competencia || 'Fatura'}</span><strong>{fmtBRL(Number(fatura.total || 0))}</strong><small>{fatura.status} · venc. {fatura.data_vencimento || '—'}</small></button>)}</div>
+  const renderEquipamentos = () => (
+    <div className="dn4-body">
+      <h3>Equipamentos Disponíveis</h3>
+      <fieldset className="dn4-fieldset"><legend>Critérios de Consulta</legend><div className="dn4-form"><Field label="Equipamentos" value="Todos" /><Field label="Tipo do Equipamento" value="Equipamento" /><Field label="Faixa de Potência" value="Potência" /><Field label="Potência Até" value="" /><Field label="Situação da Locação" value="Todas as situações" /><Field label="Cod. Barras" value="" /></div><div className="dn4-checkline"><input type="checkbox" readOnly /> Apresentar informações dos equipamentos controlados por quantidade de todas as empresas e filiais</div></fieldset>
+      <table className="dn4-table dn4-equips"><thead><tr><th>Patrimônio</th><th>Situação da Locação</th><th>Descrição do Equipamento</th><th>Marca / Modelo</th><th>Cod. Barras</th><th>Contrato</th><th>Valor</th></tr></thead><tbody>{equipamentosCliente.length ? equipamentosCliente.slice(0, 18).map((item, index) => <tr key={item.id || index} onClick={() => item.contrato_id && go(`/contratos/${item.contrato_id}`)}><td>{item.patrimonio || item.ativos?.patrimonio || String(index + 1).padStart(5, '0')}</td><td>{item.status === 'ativo' ? 'Locado' : item.status || 'Disponível'}</td><td>{item.ativos?.descricao || item.descricao_livre || 'Equipamento'}</td><td>{item.ativos?.tipo || item.placa || '—'}</td><td>{item.ativos?.placa || item.placa || '—'}</td><td>{item.contratos?.numero || '—'}</td><td>{fmtBRL(Number(item.valor_unitario || 0))}</td></tr>) : <tr><td colSpan={7}>Nenhum equipamento encontrado.</td></tr>}</tbody></table>
+    </div>
   );
-
-  const content: Record<Dn4Tab, React.ReactNode> = {
-    cliente: <div className="fat-dn4-form-grid"><Field label="Codigo" value={clienteCodigo} /><Field label="P.F. / P.J." value={onlyDigits(cliente?.cnpj_cpf).length === 11 ? 'Pessoa Fisica' : 'Pessoa Juridica'} /><Field label="CNPJ / CPF" value={fmtDoc(cliente?.cnpj_cpf)} /><Field label="Situacao" value={cliente?.status || 'Aguardando cadastro'} /><Field label="Nome do Cliente" value={cliente?.razao_social || 'Selecione ou importe um cliente'} wide /><Field label="Nome Fantasia" value={cliente?.nome_fantasia || cliente?.razao_social} /></div>,
-    contatos: <div className="fat-dn4-contact-box"><span>{cliente?.email || 'E-mail nao cadastrado'}</span><span>{cliente?.telefone || 'Telefone nao cadastrado'}</span><span>{cliente?.contato_responsavel || 'Responsavel nao cadastrado'}</span></div>,
-    cobranca: <div className="fat-dn4-contact-box"><span>Total emitido: {fmtBRL(totalEmitido)}</span><span>Total em aberto: {fmtBRL(totalAberto)}</span><button type="button" className="fat-dn4-query-button" onClick={abrirFinanceiro}>Abrir financeiro / cobranca</button></div>,
-    entrega: <div className="fat-dn4-form-grid"><Field label="CEP" value={cliente?.cep} /><Field label="Endereco" value={cliente?.endereco} wide /><Field label="Cidade" value={cliente?.cidade} /><Field label="UF" value={cliente?.uf} /></div>,
-    representantes: <div className="fat-dn4-contact-box"><span>{cliente?.contato_responsavel || 'Responsavel comercial nao cadastrado'}</span><button type="button" className="fat-dn4-query-button" onClick={abrirCliente}>Completar representantes</button></div>,
-    tributacao: <div className="fat-dn4-tax-grid"><Field label="Regime Tributario" value="Conforme cadastro fiscal" /><Field label="Indicador IE" value={cliente?.inscricao_estadual ? 'Contribuinte ICMS' : 'Nao informado'} /><Field label="Inscricao Estadual" value={cliente?.inscricao_estadual} /><Field label="Reter ISS" value="Conferir por cliente" /><Field label="CFOP Padrao" value="Validar na emissao" /><Field label="CFOP Interno" value="Validar na emissao" /></div>,
-    arquivos: <div className="fat-dn4-contact-box"><span>Arquivos e importacoes ficam vinculados ao cliente, contrato, fatura e financeiro.</span><button type="button" className="fat-dn4-query-button" onClick={abrirCliente}>Abrir cadastro / anexos</button></div>,
-    contratos: <div className="space-y-3"><div className="fat-dn4-contact-box"><span>Fluxo: localizar cliente, criar/abrir contrato, informar regra, obra e vencimento.</span><button type="button" className="fat-dn4-query-button" onClick={() => abrirContrato(contratosCliente[0]?.id)}>Abrir contrato</button><button type="button" className="fat-dn4-query-button" onClick={() => abrirContrato()}>Novo contrato</button></div>{tabelaContratos}</div>,
-    equipamentos: <div className="space-y-3"><div className="fat-dn4-contact-box"><span>Fluxo: selecionar contrato, incluir equipamento, conferir patrimonio e valor.</span><button type="button" className="fat-dn4-query-button" onClick={() => abrirContrato(contratosCliente[0]?.id)}>Adicionar equipamento no contrato</button></div>{tabelaEquipamentos}</div>,
-    medicoes: <div className="fat-dn4-contact-box"><span>Fluxo: abrir contrato, conferir periodo, aprovar medicao e liberar faturamento.</span><span>Pendencias abertas: {pendencias}</span><button type="button" className="fat-dn4-query-button" onClick={abrirMedicoes}>Abrir medicoes</button><button type="button" className="fat-dn4-query-button" onClick={abrirFaturas}>Liberar para faturar</button></div>,
-    faturas: <div className="fat-dn4-split"><div>{listaFaturas}</div><div><button type="button" className="fat-dn4-query-button" onClick={abrirFaturas}>Gerar fatura</button><button type="button" className="fat-dn4-query-button" onClick={abrirFaturas}>Emitir / enviar fatura</button></div></div>,
-    financeiro: <div className="fat-dn4-contact-box"><span>Fluxo: fatura emitida gera titulo, acompanha vencimento e recebimento.</span><span>Total em aberto: {fmtBRL(totalAberto)}</span><button type="button" className="fat-dn4-query-button" onClick={abrirFinanceiro}>Abrir titulos a receber</button></div>,
-  };
 
   return (
-    <section className="fat-dn4-workspace" aria-label="Fluxo operacional DN4 no TOPAC">
-      <div className="fat-dn4-head"><div><p>Base de faturamento</p><h2>Fluxo DN4 no TOPAC: cliente, contrato, locacao, medicao, fatura e financeiro</h2></div><div className="fat-dn4-head-actions"><button type="button" onClick={() => setTab('cliente')}><Users /> Cliente</button><button type="button" onClick={() => setTab('contratos')}><BriefcaseBusiness /> Contrato</button><button type="button" onClick={() => setTab('medicoes')}><Calculator /> Medicao</button><button type="button" onClick={() => setTab('faturas')} className="fat-dn4-primary"><FileText /> Faturar</button></div></div>
-      <div className="fat-dn4-flow" aria-label="Esteira DN4">{steps.map((item, index) => <React.Fragment key={item.label}><button type="button" onClick={() => setTab(item.tab)}><span>{item.label}</span><strong>{item.value}</strong><small>{item.meta}</small></button>{index < steps.length - 1 && <ArrowRight className="fat-dn4-flow-arrow" />}</React.Fragment>)}</div>
-      <div className="fat-dn4-card fat-dn4-client-card"><div className="fat-dn4-card-title"><ShieldCheck /><span>Ficha DN4 unificada</span></div><div className="fat-dn4-tabs" aria-label="Abas DN4">{tabs.map(item => <button key={item.id} type="button" onClick={() => setTab(item.id)} className={tab === item.id ? 'is-active' : ''}>{item.label}</button>)}</div>{content[tab]}</div>
-      <div className="fat-dn4-bottom-grid"><div className="fat-dn4-card"><div className="fat-dn4-card-title"><Landmark /><span>Tributacao / CFOP</span></div>{content.tributacao}</div><div className="fat-dn4-card fat-dn4-contracts-card"><div className="fat-dn4-card-title"><BriefcaseBusiness /><span>Contratos</span></div>{tabelaContratos}</div><div className="fat-dn4-card fat-dn4-assets-card"><div className="fat-dn4-card-title"><Package /><span>Equipamentos</span></div>{tabelaEquipamentos}</div></div>
+    <section className="dn4-legacy-shell" aria-label="Tela DN4 replicada no TOPAC">
+      {renderMenu()}
+      <div className="dn4-switch"><button type="button" className={tela === 'recebimento' ? 'active' : ''} onClick={() => setTela('recebimento')}>Recebimento de Produtos e Serviços</button><button type="button" className={tela === 'equipamentos' ? 'active' : ''} onClick={() => setTela('equipamentos')}>Equipamentos Disponíveis</button><span>{clientes.length} clientes · {contratosCliente.length} contratos · {pendencias} pendências</span></div>
+      {tela === 'recebimento' ? renderRecebimento() : renderEquipamentos()}
     </section>
   );
 };
