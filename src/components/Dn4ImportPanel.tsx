@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 type ModuloDn4 = 'faturamento' | 'financeiro';
 type EntidadeDn4 = 'cliente' | 'contrato' | 'locacao' | 'equipamento' | 'faturamento' | 'financeiro' | 'indefinido';
@@ -63,7 +64,33 @@ type PacoteImplantacao = {
   arquivos: ArquivoDn4[];
 };
 
+type ImplantacaoErro = {
+  linha: string;
+  tipo: string;
+  mensagem: string;
+};
+
+type ResultadoImplantacao = {
+  clientesCriados: number;
+  contratosCriados: number;
+  faturasCriadas: number;
+  titulosReceberCriados: number;
+  linhasIgnoradas: number;
+  erros: ImplantacaoErro[];
+  iniciadoEm?: string;
+  finalizadoEm?: string;
+};
+
 const STORAGE_KEY = 'topac:dn4:pacotes-implantacao';
+
+const resultadoInicial: ResultadoImplantacao = {
+  clientesCriados: 0,
+  contratosCriados: 0,
+  faturasCriadas: 0,
+  titulosReceberCriados: 0,
+  linhasIgnoradas: 0,
+  erros: [],
+};
 
 const entidadeLabel: Record<EntidadeDn4, string> = {
   cliente: 'Cliente',
@@ -307,11 +334,45 @@ const savePacotes = (pacotes: PacoteImplantacao[]) => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(pacotes.slice(0, 20)));
 };
 
+const parseMoney = (value: unknown) => {
+  const text = clean(value);
+  if (!text) return 0;
+  const normalized = text
+    .replace(/[^\d,.-]/g, '')
+    .replace(/\.(?=\d{3}(?:\D|$))/g, '')
+    .replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const parseDate = (value: unknown) => {
+  const text = clean(value);
+  if (!text) return new Date().toISOString().slice(0, 10);
+  const br = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  if (br) {
+    const year = br[3].length === 2 ? `20${br[3]}` : br[3];
+    return `${year}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
+  }
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString().slice(0, 10) : parsed.toISOString().slice(0, 10);
+};
+
+const competenciaFrom = (row: LinhaDn4) => {
+  const base = parseDate(row.periodo || row.dataEmissao || row.vencimento);
+  return base.slice(0, 7);
+};
+
+const numeroFatura = (row: LinhaDn4) => clean(row.nota) || `DN4-${clean(row.contrato)}-${competenciaFrom(row)}`;
+
 const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [rows, setRows] = useState<LinhaDn4[]>([]);
   const [arquivos, setArquivos] = useState<ArquivoDn4[]>([]);
   const [loading, setLoading] = useState(false);
+  const [implantando, setImplantando] = useState(false);
+  const [resultadoImplantacao, setResultadoImplantacao] = useState<ResultadoImplantacao | null>(null);
   const [selected, setSelected] = useState<EntidadeDn4 | 'todos'>('todos');
   const [etapa, setEtapa] = useState<EtapaDn4>('diagnostico');
   const [aprovado, setAprovado] = useState(false);
@@ -331,13 +392,14 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
     { key: 'diagnostico' as const, label: 'Diagnóstico', icon: FileUp, ok: rows.length > 0 },
     { key: 'mapeamento' as const, label: 'Mapeamento', icon: Settings2, ok: validas.length > 0 },
     { key: 'validacao' as const, label: 'Validação', icon: ShieldCheck, ok: rows.length > 0 && pendentes === 0 },
-    { key: 'pacote' as const, label: 'Pacote TOPAC', icon: Database, ok: aprovado || pacotes.length > 0 },
-    { key: 'goLive' as const, label: 'Go-live', icon: CheckCircle2, ok: aprovado && pendentes === 0 },
+    { key: 'pacote' as const, label: 'Pacote TOPAC', icon: Database, ok: aprovado || pacotes.length > 0 || Boolean(resultadoImplantacao?.finalizadoEm) },
+    { key: 'goLive' as const, label: 'Go-live', icon: CheckCircle2, ok: aprovado && pendentes === 0 && !resultadoImplantacao?.erros.length },
   ];
 
   const ingestRows = (parsed: LinhaDn4[], nextArquivos: ArquivoDn4[]) => {
     setRows(current => [...parsed, ...current]);
     setArquivos(current => [...nextArquivos, ...current]);
+    setResultadoImplantacao(null);
     setEtapa(parsed.length ? 'mapeamento' : 'diagnostico');
     if (parsed.length) toast.success(`${parsed.length} registro(s) do DN4 preparados para implantação.`);
   };
@@ -411,6 +473,198 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
     setSelected('todos');
     setEtapa('diagnostico');
     setAprovado(false);
+    setResultadoImplantacao(null);
+  };
+
+  const buscarEmpresaPadrao = async () => {
+    const { data, error } = await supabase.from('empresas').select('id').eq('status', 'ativo').limit(1).maybeSingle();
+    if (error) throw error;
+    if (data?.id) return data.id;
+    const fallback = await supabase.from('empresas').select('id').limit(1).maybeSingle();
+    if (fallback.error) throw fallback.error;
+    if (!fallback.data?.id) throw new Error('Nenhuma empresa cadastrada para vincular contratos, faturas e títulos.');
+    return fallback.data.id;
+  };
+
+  const implantarNoBanco = async () => {
+    if (!rows.length) return toast.error('Suba um arquivo DN4 primeiro.');
+    const resultado: ResultadoImplantacao = {
+      ...resultadoInicial,
+      erros: [],
+      iniciadoEm: new Date().toISOString(),
+    };
+
+    if (!validas.length) {
+      setResultadoImplantacao({ ...resultado, linhasIgnoradas: rows.length, finalizadoEm: new Date().toISOString() });
+      return toast.warning('Nenhuma linha válida para implantar.');
+    }
+
+    setImplantando(true);
+    setEtapa('pacote');
+
+    try {
+      const empresaId = await buscarEmpresaPadrao();
+      const [{ data: clientesData, error: clientesError }, { data: contratosData, error: contratosError }, { data: faturasData, error: faturasError }, { data: titulosData, error: titulosError }] = await Promise.all([
+        supabase.from('clientes_fat').select('id, cnpj_cpf, razao_social'),
+        supabase.from('contratos').select('id, numero, cliente_id, empresa_id'),
+        supabase.from('faturas').select('id, numero'),
+        supabase.from('titulos_receber').select('id, numero'),
+      ]);
+
+      if (clientesError) throw clientesError;
+      if (contratosError) throw contratosError;
+      if (faturasError) throw faturasError;
+      if (titulosError) throw titulosError;
+
+      const clientesPorDoc = new Map((clientesData || []).filter((c: any) => digits(c.cnpj_cpf)).map((c: any) => [digits(c.cnpj_cpf), c]));
+      const clientesPorNome = new Map((clientesData || []).map((c: any) => [normalize(c.razao_social), c]));
+      const contratosPorNumero = new Map((contratosData || []).map((c: any) => [normalize(c.numero), c]));
+      const faturasPorNumero = new Map((faturasData || []).map((f: any) => [normalize(f.numero), f]));
+      const titulosPorNumero = new Map((titulosData || []).map((t: any) => [normalize(t.numero), t]));
+
+      const garantirCliente = async (row: LinhaDn4) => {
+        const documentoLimpo = digits(row.documento);
+        const nome = clean(row.cliente) || `Cliente DN4 ${documentoLimpo || row.id}`;
+        const existente = documentoLimpo ? clientesPorDoc.get(documentoLimpo) : clientesPorNome.get(normalize(nome));
+        if (existente) return existente;
+
+        const { data, error } = await supabase.from('clientes_fat').insert({
+          razao_social: nome,
+          nome_fantasia: nome,
+          cnpj_cpf: documentoLimpo || null,
+          status: 'ativo',
+          observacoes: `Importado do DN4: ${row.origem} / ${row.aba}`,
+        }).select('id, cnpj_cpf, razao_social').single();
+
+        if (error) throw error;
+        clientesPorNome.set(normalize(data.razao_social), data);
+        if (digits(data.cnpj_cpf)) clientesPorDoc.set(digits(data.cnpj_cpf), data);
+        resultado.clientesCriados += 1;
+        return data;
+      };
+
+      const garantirContrato = async (row: LinhaDn4, clienteId: string) => {
+        const numero = clean(row.contrato);
+        if (!numero) throw new Error('Contrato sem número.');
+        const existente = contratosPorNumero.get(normalize(numero));
+        if (existente) return existente;
+
+        const vencimento = parseDate(row.vencimento || row.dataEmissao);
+        const { data, error } = await supabase.from('contratos').insert({
+          numero,
+          cliente_id: clienteId,
+          empresa_id: empresaId,
+          data_inicio: parseDate(row.periodo || row.dataEmissao),
+          dia_vencimento: Number(vencimento.slice(8, 10)) || null,
+          valor_mensal: parseMoney(row.valor),
+          regra_faturamento: 'periodo_locacao',
+          periodicidade: 'mensal',
+          tipo: row.entidade === 'locacao' ? 'locacao' : 'contrato',
+          status: 'ativo',
+          observacoes: `Importado do DN4: ${row.origem} / ${row.aba}`,
+        }).select('id, numero, cliente_id, empresa_id').single();
+
+        if (error) throw error;
+        contratosPorNumero.set(normalize(data.numero), data);
+        resultado.contratosCriados += 1;
+        return data;
+      };
+
+      for (const row of rows) {
+        if (row.entidade === 'indefinido' || row.pendencias.length > 0 || !['cliente', 'contrato', 'locacao', 'faturamento'].includes(row.entidade)) {
+          resultado.linhasIgnoradas += 1;
+          continue;
+        }
+
+        try {
+          const cliente = await garantirCliente(row);
+
+          if (row.entidade === 'cliente') continue;
+
+          const contrato = await garantirContrato(row, cliente.id);
+
+          if (row.entidade !== 'faturamento') continue;
+
+          const numero = numeroFatura(row);
+          if (faturasPorNumero.has(normalize(numero))) {
+            resultado.linhasIgnoradas += 1;
+            continue;
+          }
+
+          const valor = parseMoney(row.valor);
+          const dataEmissao = parseDate(row.dataEmissao || row.vencimento);
+          const dataVencimento = parseDate(row.vencimento || row.dataEmissao);
+          const competencia = competenciaFrom(row);
+
+          const { data: fatura, error: faturaError } = await supabase.from('faturas').insert({
+            numero,
+            cliente_id: cliente.id,
+            contrato_id: contrato.id,
+            empresa_id: contrato.empresa_id || empresaId,
+            competencia,
+            data_emissao: dataEmissao,
+            data_vencimento: dataVencimento,
+            subtotal: valor,
+            total: valor,
+            status: normalize(row.status).includes('pag') ? 'paga' : 'em_aberto',
+            observacoes: `Importada do DN4: ${row.origem} / ${row.aba}`,
+          }).select('id, numero').single();
+
+          if (faturaError) throw faturaError;
+          faturasPorNumero.set(normalize(fatura.numero), fatura);
+          resultado.faturasCriadas += 1;
+
+          if (!titulosPorNumero.has(normalize(numero))) {
+            const { data: titulo, error: tituloError } = await supabase.from('titulos_receber').insert({
+              numero,
+              cliente_id: cliente.id,
+              contrato_id: contrato.id,
+              fatura_id: fatura.id,
+              empresa_id: contrato.empresa_id || empresaId,
+              competencia,
+              data_emissao: dataEmissao,
+              data_vencimento: dataVencimento,
+              valor_original: valor,
+              saldo: valor,
+              status: normalize(row.status).includes('pag') ? 'pago' : 'em_aberto',
+              observacoes: `Gerado automaticamente pela importação DN4 da fatura ${numero}`,
+            }).select('id, numero').single();
+
+            if (tituloError) throw tituloError;
+            titulosPorNumero.set(normalize(titulo.numero), titulo);
+            resultado.titulosReceberCriados += 1;
+          }
+        } catch (error) {
+          resultado.erros.push({
+            linha: row.id,
+            tipo: entidadeLabel[row.entidade],
+            mensagem: error instanceof Error ? error.message : 'Erro não identificado na implantação.',
+          });
+        }
+      }
+
+      resultado.finalizadoEm = new Date().toISOString();
+      setResultadoImplantacao(resultado);
+      setAprovado(resultado.erros.length === 0);
+      setEtapa('goLive');
+
+      if (resultado.erros.length) {
+        toast.warning(`Implantação concluída com ${resultado.erros.length} erro(s) por linha.`);
+      } else {
+        toast.success('Implantação DN4 concluída no banco TOPAC.');
+      }
+    } catch (error) {
+      resultado.finalizadoEm = new Date().toISOString();
+      resultado.erros.push({
+        linha: 'implantacao',
+        tipo: 'Geral',
+        mensagem: error instanceof Error ? error.message : 'Erro geral ao implantar DN4.',
+      });
+      setResultadoImplantacao(resultado);
+      toast.error('Falha ao iniciar implantação DN4 no banco TOPAC.');
+    } finally {
+      setImplantando(false);
+    }
   };
 
   const registrarPacote = () => {
@@ -449,6 +703,15 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
     { key: 'indefinido' as const, label: 'Revisar', icon: AlertTriangle },
   ];
 
+  const resultadoCards = resultadoImplantacao ? [
+    { label: 'Clientes criados', value: resultadoImplantacao.clientesCriados },
+    { label: 'Contratos criados', value: resultadoImplantacao.contratosCriados },
+    { label: 'Faturas criadas', value: resultadoImplantacao.faturasCriadas },
+    { label: 'Títulos a receber criados', value: resultadoImplantacao.titulosReceberCriados },
+    { label: 'Linhas ignoradas', value: resultadoImplantacao.linhasIgnoradas },
+    { label: 'Erros', value: resultadoImplantacao.erros.length },
+  ] : [];
+
   return (
     <section className="card-premium p-5 space-y-5 border-primary/20">
       <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
@@ -460,18 +723,18 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
             <span className="text-[10px] px-2 py-1 rounded-full bg-success/15 text-success uppercase tracking-wide">TOPAC pronto</span>
           </div>
           <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-            Puxe por conector quando houver API liberada ou suba as exportações DN4. O TOPAC separa clientes, contratos, locações, equipamentos, faturas e financeiro em um pacote de implantação validável.
+            Puxe por conector quando houver API liberada ou suba as exportações DN4. O TOPAC separa clientes, contratos, locações, equipamentos, faturas e financeiro para implantação validável.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <input ref={fileRef} type="file" multiple accept=".csv,.xls,.xlsx" className="hidden" onChange={event => handleFiles(event.target.files)} />
-          <button onClick={puxarConectorDn4} disabled={loading} className="btn-secondary flex items-center gap-2 disabled:opacity-60">
+          <button onClick={puxarConectorDn4} disabled={loading || implantando} className="btn-secondary flex items-center gap-2 disabled:opacity-60">
             <Cloud className="w-4 h-4" /> Puxar DN4
           </button>
-          <button onClick={() => fileRef.current?.click()} disabled={loading} className="btn-primary flex items-center gap-2 disabled:opacity-60">
+          <button onClick={() => fileRef.current?.click()} disabled={loading || implantando} className="btn-primary flex items-center gap-2 disabled:opacity-60">
             <FileSpreadsheet className="w-4 h-4" /> {loading ? 'Processando...' : 'Subir exportações'}
           </button>
-          {rows.length > 0 && <button onClick={limpar} className="btn-secondary flex items-center gap-2"><X className="w-4 h-4" /> Limpar</button>}
+          {rows.length > 0 && <button onClick={limpar} disabled={implantando} className="btn-secondary flex items-center gap-2 disabled:opacity-60"><X className="w-4 h-4" /> Limpar</button>}
         </div>
       </div>
 
@@ -506,10 +769,45 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
           <p className={`text-xl font-bold font-display ${pendentes ? 'text-warning' : 'text-success'}`}>{pendentes}</p>
         </div>
         <div className="rounded-lg border border-border bg-muted/20 p-3">
-          <p className="text-[10px] uppercase text-muted-foreground">Pacotes</p>
-          <p className="text-xl font-bold font-display">{pacotes.length}</p>
+          <p className="text-[10px] uppercase text-muted-foreground">Válidas</p>
+          <p className="text-xl font-bold font-display">{validas.length}</p>
         </div>
       </div>
+
+      {resultadoImplantacao && (
+        <div className={`rounded-xl border p-4 space-y-3 ${resultadoImplantacao.erros.length ? 'border-warning/40 bg-warning/10' : 'border-success/30 bg-success/10'}`}>
+          <div className="flex items-center gap-2">
+            {resultadoImplantacao.erros.length ? <AlertTriangle className="w-4 h-4 text-warning" /> : <CheckCircle2 className="w-4 h-4 text-success" />}
+            <h3 className="font-semibold">Resultado da implantação no banco TOPAC</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2">
+            {resultadoCards.map(item => (
+              <div key={item.label} className="rounded-lg border border-border bg-background/60 p-3">
+                <p className="text-[10px] uppercase text-muted-foreground">{item.label}</p>
+                <p className="text-xl font-bold font-display">{item.value}</p>
+              </div>
+            ))}
+          </div>
+          {resultadoImplantacao.erros.length > 0 && (
+            <div className="overflow-x-auto rounded-lg border border-border bg-background/60">
+              <table className="w-full min-w-[720px] text-xs">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr><th className="p-2 text-left">Linha</th><th className="p-2 text-left">Tipo</th><th className="p-2 text-left">Erro</th></tr>
+                </thead>
+                <tbody>
+                  {resultadoImplantacao.erros.slice(0, 80).map((erro, index) => (
+                    <tr key={`${erro.linha}-${index}`} className="border-t border-border">
+                      <td className="p-2 font-mono">{erro.linha}</td>
+                      <td className="p-2">{erro.tipo}</td>
+                      <td className="p-2">{erro.mensagem}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {etapa === 'diagnostico' && (
         <div className="rounded-xl border border-border p-4 space-y-3">
@@ -578,7 +876,7 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
                     <td className="p-3 text-muted-foreground">{row.periodo || '—'}</td>
                     <td className="p-3 text-right font-semibold">{row.valor || '—'}</td>
                     <td className="p-3 text-muted-foreground">{row.vencimento || row.dataEmissao || '—'}</td>
-                    <td className="p-3 text-xs text-muted-foreground">{row.pendencias.length ? row.pendencias.join(', ') : <span className="text-success">ok para pacote TOPAC</span>}</td>
+                    <td className="p-3 text-xs text-muted-foreground">{row.pendencias.length ? row.pendencias.join(', ') : <span className="text-success">ok para implantação TOPAC</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -589,10 +887,11 @@ const Dn4ImportPanel: React.FC<{ modulo: ModuloDn4 }> = ({ modulo }) => {
       )}
 
       {(etapa === 'validacao' || etapa === 'pacote' || etapa === 'goLive') && (
-        <div className="grid md:grid-cols-3 gap-3">
-          <button onClick={() => downloadCsv(rows, `dn4-topac-pacote-${modulo}.csv`)} disabled={!rows.length} className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"><Download className="w-4 h-4" /> Exportar pacote completo</button>
-          <button onClick={() => downloadCsv(rows.filter(row => row.pendencias.length > 0), `dn4-topac-pendencias-${modulo}.csv`)} disabled={!pendentes} className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"><AlertTriangle className="w-4 h-4" /> Exportar pendências</button>
-          <button onClick={registrarPacote} disabled={!rows.length} className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" /> Registrar pacote TOPAC</button>
+        <div className="grid md:grid-cols-4 gap-3">
+          <button onClick={() => downloadCsv(rows, `dn4-topac-pacote-${modulo}.csv`)} disabled={!rows.length || implantando} className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"><Download className="w-4 h-4" /> Exportar pacote completo</button>
+          <button onClick={() => downloadCsv(rows.filter(row => row.pendencias.length > 0), `dn4-topac-pendencias-${modulo}.csv`)} disabled={!pendentes || implantando} className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"><AlertTriangle className="w-4 h-4" /> Exportar pendências</button>
+          <button onClick={registrarPacote} disabled={!rows.length || implantando} className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"><Save className="w-4 h-4" /> Registrar pacote TOPAC</button>
+          <button onClick={implantarNoBanco} disabled={!validas.length || implantando} className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50"><Database className="w-4 h-4" /> {implantando ? 'Implantando...' : 'Implantar no banco TOPAC'}</button>
         </div>
       )}
 
