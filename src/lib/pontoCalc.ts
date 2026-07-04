@@ -18,18 +18,28 @@ export interface JornadaConfig {
   saidaPadrao: string;
 }
 
+/**
+ * Jornada operacional TOPAC.
+ * Regra de negócio confirmada: entrada padrão 07:30 com 15 minutos de tolerância.
+ * Segunda a quinta: 07:30-12:00 / 13:00-17:30.
+ * Sexta costuma encerrar 16:30 nas etiquetas, mas o cálculo mensal mantém 8h/dia
+ * e apura saldo/HE pelo total efetivamente trabalhado.
+ */
 export const JORNADA_PADRAO: JornadaConfig = {
   horasDia: 8,
   minutosAlmoco: 60,
-  toleranciaMin: 10,
-  entradaPadrao: '08:00',
-  saidaPadrao: '17:00',
+  toleranciaMin: 15,
+  entradaPadrao: '07:30',
+  saidaPadrao: '17:30',
 };
 
 /** Configuração por empresa (codigo). Default: JORNADA_PADRAO. */
 export const JORNADA_POR_EMPRESA: Record<string, JornadaConfig> = {
-  // Pode-se sobrescrever por empresa aqui no futuro:
-  // 'topac-matriz': { ...JORNADA_PADRAO, horasDia: 8 },
+  'topac-matriz': JORNADA_PADRAO,
+  'topac-pg': JORNADA_PADRAO,
+  'topac-gyn': JORNADA_PADRAO,
+  alqui: JORNADA_PADRAO,
+  lmt: JORNADA_PADRAO,
 };
 
 export const getJornada = (empresaCodigo?: string): JornadaConfig => {
