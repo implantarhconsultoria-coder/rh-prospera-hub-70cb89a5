@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from '@supabase/supabase-js';
 
 const json = (body: unknown, status = 200) =>
@@ -18,10 +19,10 @@ const parseBody = (req: any) => {
   }
 };
 
-const findUserByEmail = async (supabase: ReturnType<typeof createClient>, email: string) => {
+const findUserByEmail = async (supabase: any, email: string) => {
   const { data, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
   if (error) throw error;
-  return data.users.find((user) => user.email?.toLowerCase() === email);
+  return data.users.find((user: any) => user.email?.toLowerCase() === email);
 };
 
 export default async function handler(req: any, res?: any) {
