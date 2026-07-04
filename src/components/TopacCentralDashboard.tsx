@@ -51,7 +51,7 @@ type TopacCentralDashboardProps = {
 
 const sparkBars = [28, 44, 38, 56, 48, 68, 62, 74, 86];
 const timeline = [
-  { title: 'Mecânicos atrigaram serviço', meta: 'Chegada registrada no operacional', tone: 'cyan' },
+  { title: 'Mecânicos registraram serviço', meta: 'Chegada registrada no operacional', tone: 'cyan' },
   { title: 'Solicitar peças', meta: 'Pedido enviado para almoxarifado', tone: 'pink' },
   { title: 'Aprovar ponto', meta: 'Conferência pendente no módulo', tone: 'green' },
   { title: 'Confirmar peças', meta: 'Baixa disponível para validação', tone: 'cyan' },
@@ -119,7 +119,7 @@ const TopacCentralDashboard: React.FC<TopacCentralDashboardProps> = ({
           <span className="topac-live-dot" />
           <span className="truncate">Núcleo TOPAC online</span>
           <span className="hidden sm:inline text-cyan-100/45">central-rh</span>
-          <span className="hidden sm:inline text-cyan-100/45">v2.41</span>
+          <span className="hidden sm:inline text-cyan-100/45">v2.42</span>
         </div>
         <div className="topac-search-box">
           <Search className="h-4 w-4" />
@@ -227,7 +227,7 @@ const TopacCentralDashboard: React.FC<TopacCentralDashboardProps> = ({
           </div>
 
           <div className="topac-actions-strip no-print">
-            <span>Contextual actions</span>
+            <span>Ações rápidas</span>
             <div className="flex flex-wrap gap-2">
               {actions.map((action) => (
                 <button key={action.label} type="button" onClick={action.onClick} className={action.tone === 'primary' ? 'topac-action-primary' : 'topac-action'}>
