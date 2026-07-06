@@ -143,6 +143,16 @@ const FechamentoPage: React.FC = () => {
     .replace(/\"/g, '&quot;')
     .replace(/'/g, '&#039;');
 
+  const limparFuncaoEtiqueta = (value?: string) => {
+    const funcao = String(value || '').trim();
+    const semValores = funcao
+      .replace(/\s*-?\s*R\$\s*[\d.,]+.*$/i, '')
+      .replace(/\s*\+\s*(INSALUBRIDADE|INSALUBRID\.?|PERICULOSIDADE|ADICIONAL).*$/i, '')
+      .replace(/\s*-\s*(INSALUBRIDADE|INSALUBRID\.?|PERICULOSIDADE|ADICIONAL).*$/i, '')
+      .trim();
+    return semValores || '-';
+  };
+
   const funcionariosParaEtiqueta = compEmps.filter(e => etiquetaSelecionados.includes(e.id));
 
   const toggleEtiquetaFuncionario = (id: string) => {
@@ -162,7 +172,7 @@ const FechamentoPage: React.FC = () => {
       <section class="label">
         <div class="company">${empresa}</div>
         <div class="name">${escapeHtml(emp.name)}</div>
-        <div class="role">${escapeHtml(emp.cargo || '-')}</div>
+        <div class="role">${escapeHtml(limparFuncaoEtiqueta(emp.cargo))}</div>
         <div class="month">${mes}</div>
         <div class="line">Seg. e Qui. - 7:30 as 12:00 / 13:00 as 17:30</div>
         <div class="line">Sex. - 7:30 as 12:00 / 13:00 as 16:30</div>
