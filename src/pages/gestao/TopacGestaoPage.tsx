@@ -182,7 +182,7 @@ const TopacGestaoPage: React.FC = () => {
   const openSection = (groupLabel: string, section: string) => {
     setActiveGroup(groupLabel);
     setActiveSection(section);
-    navigate(`/admin/gestao/locacao/cadastros/${normalizeSection(section)}`);
+    navigate(`/admin/gestao/${normalizeSection(section)}`);
   };
 
   const gridRows = activeSection === 'Clientes'
