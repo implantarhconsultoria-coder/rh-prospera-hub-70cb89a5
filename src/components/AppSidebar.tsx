@@ -6,6 +6,7 @@ import {
   UserCheck, Package, ClipboardList, ChevronDown, ChevronRight, Receipt, RefreshCw,
   AlertTriangle, ClipboardCheck, ArrowDownCircle, ArrowUpCircle, Truck, Landmark,
   Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch, ShoppingCart,
+  BriefcaseBusiness, Boxes,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ const operationalItems: MenuItem[] = [
 
 const directorItems: MenuItem[] = [
   { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin' },
+  { label: 'TOPAC Gestao', icon: BriefcaseBusiness, path: '/admin/gestao' },
   { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
   { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
   { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
@@ -48,6 +50,21 @@ const directorItems: MenuItem[] = [
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
   { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio' },
+];
+
+const gestaoItems: MenuItem[] = [
+  { label: 'Painel', icon: LayoutDashboard, path: '/admin/gestao' },
+  { label: 'Clientes', icon: Users, path: '/admin/gestao/clientes' },
+  { label: 'Contratos', icon: FileText, path: '/admin/gestao/contratos' },
+  { label: 'Locacoes', icon: Layers, path: '/admin/gestao/locacoes' },
+  { label: 'Equipamentos', icon: Boxes, path: '/admin/gestao/equipamentos' },
+  { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/gestao/medicoes' },
+  { label: 'Faturamento', icon: Receipt, path: '/admin/gestao/faturamento' },
+  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/gestao/receber' },
+  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/gestao/pagar' },
+  { label: 'Bancos', icon: Landmark, path: '/admin/gestao/bancos' },
+  { label: 'Conciliacao', icon: CheckSquare, path: '/admin/gestao/conciliacao' },
+  { label: 'Relatorios', icon: Activity, path: '/admin/gestao/relatorios' },
 ];
 
 const faturamentoItems: MenuItem[] = [
@@ -77,6 +94,7 @@ interface Props { collapsed: boolean; onToggle: () => void }
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout, userRoles } = useApp();
   const location = useLocation();
+  const [gestaoOpen, setGestaoOpen] = useState(location.pathname.startsWith('/admin/gestao'));
   const [fatOpen, setFatOpen] = useState(location.pathname.startsWith('/admin/faturamento'));
   const [finOpen, setFinOpen] = useState(location.pathname.startsWith('/admin/financeiro'));
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
@@ -113,9 +131,11 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
         {(isDirector ? directorItems : menuItems).map(renderLink)}
         {!isDirector && sectionTitle('Operacional')}
         {!isDirector && operationalItems.map(renderLink)}
-        {!isDirector && sectionTitle('Faturamento')}
+        {!isDirector && sectionTitle('TOPAC Gestao')}
+        {!isDirector && expandable('TOPAC Gestao', BriefcaseBusiness, gestaoOpen, setGestaoOpen, gestaoItems, '/admin/gestao')}
+        {!isDirector && sectionTitle('Faturamento antigo')}
         {!isDirector && expandable('Faturamento', Wallet, fatOpen, setFatOpen, faturamentoItems, '/admin/faturamento')}
-        {!isDirector && sectionTitle('Financeiro')}
+        {!isDirector && sectionTitle('Financeiro antigo')}
         {!isDirector && expandable('Financeiro', DollarSign, finOpen, setFinOpen, financeiroItems, '/admin/financeiro')}
       </nav>
 
