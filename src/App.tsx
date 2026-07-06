@@ -102,6 +102,7 @@ import FluxoCaixaPage from "@/pages/financeiro/FluxoCaixaPage";
 import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
 import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
 import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
+import TopacGestaoPage from "@/pages/gestao/TopacGestaoPage";
 import NotFound from "@/pages/NotFound";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
 import AcessoDiretoPage from "@/pages/AcessoDiretoPage";
@@ -296,6 +297,9 @@ const AuthGate = () => {
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="/admin/acessos-externos" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/assistente" element={<AssistentePage />} />
+        {/* TOPAC Gestao - novo modulo interno */}
+        <Route path="/admin/gestao" element={<TopacGestaoPage />} />
+        <Route path="/admin/gestao/:secao" element={<TopacGestaoPage />} />
         {/* Faturamento */}
         <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
         <Route path="/admin/faturamento/clientes" element={<ClientesFatPage />} />
