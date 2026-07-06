@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -40,6 +40,8 @@ export type EmailPdfDraft = {
   afterSend?: () => Promise<void> | void;
 };
 
+type EmailAttachment = NonNullable<EmailPdfDraft['attachments']>[number];
+
 type EmailPdfModalProps = {
   open: boolean;
   draft: EmailPdfDraft | null;
@@ -61,6 +63,77 @@ const parseEmails = (value: string) => {
 const formatEmails = (value?: string[]) => (value || []).join('; ');
 const isAtestadoSubject = (value: string) => value.trim().toUpperCase().startsWith('ATESTADO');
 const isAdmissionalSubject = (value: string) => value.trim().toLowerCase().startsWith('documentação admissional');
+
+const normalizeText = (value?: string) => String(value || '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/^\d{10,}-/, '')
+  .replace(/[._-]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const attachmentCategory = (attachment: EmailAttachment) => {
+  const text = normalizeText(`${attachment.label || ''} ${attachment.documentName || ''} ${attachment.attachmentName || ''}`);
+  if (text.includes('aso') || text.includes('guia aso')) return 'aso';
+  if (text.includes('dados cadastrais') || text.includes('dado cadastral') || text.includes('ficha de solicitacao') || text.includes('ficha solicitacao')) return 'dados-cadastrais';
+  if (text.includes('ctps') || text.includes('contrato digital') || text.includes('contratosdigitais')) return 'ctps-contrato-digital';
+  return '';
+};
+
+const isBetterAttachment = (candidate: EmailAttachment, current: EmailAttachment) => {
+  const category = attachmentCategory(candidate);
+  const candidateName = normalizeText(candidate.attachmentName || candidate.documentName || '');
+  const currentName = normalizeText(current.attachmentName || current.documentName || '');
+
+  if (category === 'aso') {
+    const candidateIsGuia = candidateName.includes('guia aso');
+    const currentIsGuia = currentName.includes('guia aso');
+    if (currentIsGuia && !candidateIsGuia) return true;
+  }
+
+  if (!current.attachmentBlob?.size && candidate.attachmentBlob?.size) return true;
+  return false;
+};
+
+const dedupeAttachments = (attachments: EmailAttachment[] = []) => {
+  const result: EmailAttachment[] = [];
+  const indexByKey = new Map<string, number>();
+
+  attachments.forEach((attachment) => {
+    if (!attachment?.attachmentBlob || !attachment.attachmentName) return;
+
+    const normalizedName = normalizeText(attachment.attachmentName || attachment.documentName || 'anexo');
+    const normalizedLabel = normalizeText(attachment.label || '');
+    const category = attachmentCategory(attachment);
+    const size = attachment.attachmentBlob.size || 0;
+
+    const keys = [
+      category ? `categoria:${category}` : '',
+      normalizedName ? `nome:${normalizedName}` : '',
+      normalizedLabel && normalizedName ? `label-nome:${normalizedLabel}:${normalizedName}` : '',
+      normalizedName && size ? `nome-size:${normalizedName}:${size}` : '',
+      attachment.documentId ? `doc:${attachment.documentId}` : '',
+    ].filter(Boolean);
+
+    const existingKey = keys.find((key) => indexByKey.has(key));
+    if (existingKey) {
+      const existingIndex = indexByKey.get(existingKey)!;
+      const current = result[existingIndex];
+      if (isBetterAttachment(attachment, current)) {
+        result[existingIndex] = attachment;
+        keys.forEach((key) => indexByKey.set(key, existingIndex));
+      }
+      return;
+    }
+
+    const nextIndex = result.length;
+    result.push(attachment);
+    keys.forEach((key) => indexByKey.set(key, nextIndex));
+  });
+
+  return result;
+};
 
 const getSaoPauloHour = () => {
   const hour = new Intl.DateTimeFormat('pt-BR', {
@@ -169,25 +242,29 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
 
+  const preparedAttachments = useMemo(() => {
+    const source = draft?.attachments?.length
+      ? draft.attachments
+      : draft?.attachmentBlob && draft?.attachmentName
+        ? [{ attachmentBlob: draft.attachmentBlob, attachmentName: draft.attachmentName, documentId: draft.documentId, documentName: draft.documentName }]
+        : [];
+    return dedupeAttachments(source);
+  }, [draft]);
+
   useEffect(() => {
     if (!draft || !open) return;
     const atestado = isAtestadoSubject(draft.subject || '');
-    const admissional = isAdmissionalSubject(draft.subject || '');
     setTo(formatEmails(atestado ? ATESTADO_TO : draft.to));
     setCc(formatEmails(atestado ? ATESTADO_CC : draft.cc));
     setSubject(draft.subject || '');
-    setBody(atestado ? buildAtestadoBody(draft.body || '') : admissional ? buildAdmissionalBody(draft.body || '') : draft.body || '');
+    setBody(atestado ? buildAtestadoBody(draft.body || '') : draft.body || '');
   }, [draft, open]);
 
   const getPreparedEmail = () => {
     const atestado = isAtestadoSubject(subject);
     const toList = atestado ? [...ATESTADO_TO] : parseEmails(to);
     const ccList = atestado ? [...ATESTADO_CC] : parseEmails(cc);
-    const attachments = draft?.attachments?.length
-      ? draft.attachments
-      : draft?.attachmentBlob && draft?.attachmentName
-        ? [{ attachmentBlob: draft.attachmentBlob, attachmentName: draft.attachmentName, documentId: draft.documentId, documentName: draft.documentName }]
-        : [];
+    const attachments = preparedAttachments;
     return { toList, ccList, attachments };
   };
 
@@ -253,7 +330,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
         console.error('E-mail enviado, mas houve erro ao atualizar historico:', historyError);
         toast.warning('E-mail enviado, mas nao foi possivel atualizar o historico automaticamente.');
       }
-      toast.success('E-mail enviado com PDF anexado.');
+      toast.success('E-mail enviado com anexos.');
       onOpenChange(false);
     } catch (error: any) {
       const friendlyMessage = getFriendlyEmailError(error?.message);
@@ -290,17 +367,17 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
             <Label>Mensagem</Label>
             <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={9} />
           </div>
-          {draft?.attachmentName && (
+          {draft?.attachmentName && !preparedAttachments.length && (
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
               Anexo: <span className="font-medium">{draft.attachmentName}</span>
             </div>
           )}
-          {draft?.attachments?.length ? (
+          {preparedAttachments.length ? (
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-              <p className="mb-1 font-medium">Anexos ({draft.attachments.length}):</p>
+              <p className="mb-1 font-medium">Anexos ({preparedAttachments.length}):</p>
               <ul className="space-y-1">
-                {draft.attachments.map((attachment) => (
-                  <li key={`${attachment.attachmentName}-${attachment.documentId || attachment.label || ''}`} className="text-xs text-muted-foreground">
+                {preparedAttachments.map((attachment, index) => (
+                  <li key={`${attachment.attachmentName}-${attachment.documentId || attachment.label || index}`} className="text-xs text-muted-foreground">
                     {attachment.label ? `${attachment.label}: ` : ''}<span className="font-medium text-foreground">{attachment.attachmentName}</span>
                   </li>
                 ))}
