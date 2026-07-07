@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowDownCircle,
-  ArrowUpCircle,
   BarChart3,
   Box,
   Building2,
@@ -44,43 +42,42 @@ const topModules = [
   { key: 'compras', label: 'Compras', icon: Truck },
 ];
 
-const locacaoTree = [
-  {
-    label: 'Comercial',
-    icon: BarChart3,
-    children: ['Prospect', 'Clientes', 'Representantes', 'Alterações de Representantes em Clientes'],
-  },
-  {
-    label: 'Operacional',
-    icon: ClipboardList,
-    children: ['Contratos', 'Locações', 'Medições', 'Movimentações', 'Ordem de Serviço'],
-  },
-  {
-    label: 'Cadastros',
-    icon: Settings,
-    children: [
-      'Prospect',
-      'Clientes',
-      'Representantes',
-      'Alterações de Representantes em Clientes',
-      'Tabela de Preços',
-      'Equipamentos',
-      'Veículos',
-      'Localizações',
-      'Fornecedores',
-      'Serviços',
-      'Funcionários',
-      'Concorrentes',
-      'Outros Cadastros',
-      'Relatórios',
-    ],
-  },
-  {
-    label: 'Painel de Controle',
-    icon: FileBarChart,
-    children: ['Indicadores', 'Relatórios Gerenciais', 'Auditoria'],
-  },
-];
+const moduleTrees = {
+  locacao: [
+    { label: 'Comercial', icon: BarChart3, children: ['Prospect', 'Clientes', 'Representantes', 'Alterações de Representantes em Clientes'] },
+    { label: 'Operacional', icon: ClipboardList, children: ['Contratos', 'Locações', 'Medições', 'Movimentações', 'Ordem de Serviço'] },
+    { label: 'Cadastros', icon: Settings, children: ['Prospect', 'Clientes', 'Representantes', 'Alterações de Representantes em Clientes', 'Tabela de Preços', 'Equipamentos', 'Veículos', 'Localizações', 'Fornecedores', 'Serviços', 'Funcionários', 'Concorrentes', 'Outros Cadastros', 'Relatórios'] },
+    { label: 'Painel de Controle', icon: FileBarChart, children: ['Indicadores', 'Relatórios Gerenciais', 'Auditoria'] },
+  ],
+  manutencao: [
+    { label: 'Operacional', icon: Wrench, children: ['Chamados', 'Ordens de Serviço', 'Técnicos', 'Veículos', 'Histórico de Manutenção'] },
+    { label: 'Cadastros', icon: Settings, children: ['Equipamentos', 'Serviços', 'Funcionários', 'Fornecedores'] },
+    { label: 'Relatórios', icon: FileBarChart, children: ['Manutenções em aberto', 'Custos', 'Produtividade'] },
+  ],
+  faturamento: [
+    { label: 'Operacional', icon: FileText, children: ['Medições', 'Faturas', 'Notas', 'Conferência', 'Reajustes'] },
+    { label: 'Cadastros', icon: Settings, children: ['Clientes', 'Contratos', 'Tabela de Preços', 'Serviços'] },
+    { label: 'Relatórios', icon: FileBarChart, children: ['Faturamento mensal', 'Pendências', 'Resumo por cliente'] },
+  ],
+  vendas: [
+    { label: 'Comercial', icon: BarChart3, children: ['Prospect', 'Propostas', 'Clientes', 'Representantes', 'Concorrentes'] },
+    { label: 'Relatórios', icon: FileBarChart, children: ['Funil de vendas', 'Oportunidades', 'Conversão'] },
+  ],
+  financeiro: [
+    { label: 'Contas', icon: DollarSign, children: ['Contas a Receber', 'Contas a Pagar', 'Bancos', 'Conciliação', 'Fluxo de Caixa'] },
+    { label: 'Cadastros', icon: Settings, children: ['Fornecedores', 'Centros de Custo', 'Categorias', 'Contas Bancárias'] },
+    { label: 'Relatórios', icon: FileBarChart, children: ['Inadimplência', 'Pagamentos', 'Recebimentos', 'Saldo previsto'] },
+  ],
+  estoque: [
+    { label: 'Operacional', icon: Box, children: ['Itens', 'Entradas', 'Saídas', 'Transferências', 'Inventário'] },
+    { label: 'Cadastros', icon: Settings, children: ['Produtos', 'Categorias', 'Localizações', 'Fornecedores'] },
+  ],
+  compras: [
+    { label: 'Operacional', icon: Truck, children: ['Solicitações', 'Pedidos', 'Cotações', 'Recebimentos'] },
+    { label: 'Cadastros', icon: Settings, children: ['Fornecedores', 'Produtos', 'Condições de pagamento'] },
+    { label: 'Relatórios', icon: FileBarChart, children: ['Compras por período', 'Pendências', 'Fornecedores'] },
+  ],
+} as const;
 
 const sectionIcons: Record<string, React.ElementType> = {
   Prospect: UserCog,
@@ -100,7 +97,31 @@ const sectionIcons: Record<string, React.ElementType> = {
   Contratos: FileText,
   Locações: Layers,
   Medições: ClipboardList,
+  Chamados: Wrench,
+  'Ordens de Serviço': ClipboardList,
+  Técnicos: Users,
+  Faturas: FileText,
+  Notas: FileText,
+  Conferência: ClipboardList,
+  Reajustes: RefreshCw,
+  Propostas: FileText,
+  'Contas a Receber': DollarSign,
+  'Contas a Pagar': DollarSign,
+  Bancos: Landmark,
+  Conciliação: Landmark,
+  'Fluxo de Caixa': BarChart3,
+  Itens: Box,
+  Entradas: Box,
+  Saídas: Box,
+  Transferências: Box,
+  Inventário: Box,
+  Solicitações: ClipboardList,
+  Pedidos: FileText,
+  Cotações: FileText,
+  Recebimentos: DollarSign,
 };
+
+type ModuleKey = keyof typeof moduleTrees;
 
 type ClienteFat = {
   id: string;
@@ -114,6 +135,15 @@ type ClienteFat = {
   status?: string | null;
 };
 
+type GridRow = {
+  codigo: string;
+  nome: string;
+  documento: string;
+  cidade: string;
+  contato: string;
+  status: string;
+};
+
 const normalizeSection = (value = '') => value
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -123,7 +153,7 @@ const normalizeSection = (value = '') => value
 
 const getSectionFromPath = (pathname: string) => {
   const last = pathname.split('/').filter(Boolean).pop() || 'clientes';
-  const all = locacaoTree.flatMap(group => group.children);
+  const all = Object.values(moduleTrees).flatMap(groups => groups.flatMap(group => group.children));
   return all.find(item => normalizeSection(item) === last) || 'Clientes';
 };
 
@@ -137,12 +167,16 @@ const statusColor = (status?: string | null) => {
 const TopacGestaoPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeModule, setActiveModule] = useState('locacao');
+  const [activeModule, setActiveModule] = useState<ModuleKey>('locacao');
   const [activeGroup, setActiveGroup] = useState('Cadastros');
   const [activeSection, setActiveSection] = useState(getSectionFromPath(location.pathname));
   const [clientes, setClientes] = useState<ClienteFat[]>([]);
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<GridRow | null>(null);
+  const [lastAction, setLastAction] = useState('Aguardando seleção operacional.');
+
+  const activeTree = moduleTrees[activeModule];
 
   useEffect(() => {
     setActiveSection(getSectionFromPath(location.pathname));
@@ -176,13 +210,33 @@ const TopacGestaoPage: React.FC = () => {
     return clientes.filter(cliente => `${cliente.razao_social || ''} ${cliente.nome_fantasia || ''} ${cliente.cnpj_cpf || ''} ${cliente.cidade || ''} ${cliente.uf || ''}`.toLowerCase().includes(q));
   }, [clientes, busca]);
 
-  const currentGroup = locacaoTree.find(group => group.label === activeGroup) || locacaoTree[2];
+  const currentGroup = activeTree.find(group => group.label === activeGroup) || activeTree[0];
   const SectionIcon = sectionIcons[activeSection] || FileText;
+
+  const selectModule = (moduleKey: ModuleKey) => {
+    const nextTree = moduleTrees[moduleKey];
+    const nextGroup = nextTree[0];
+    const nextSection = nextGroup.children[0];
+    setActiveModule(moduleKey);
+    setActiveGroup(nextGroup.label);
+    setActiveSection(nextSection);
+    setSelectedRow(null);
+    setLastAction(`Módulo aberto: ${topModules.find(module => module.key === moduleKey)?.label || moduleKey}`);
+    navigate(`/admin/gestao/${normalizeSection(nextSection)}`);
+  };
 
   const openSection = (groupLabel: string, section: string) => {
     setActiveGroup(groupLabel);
     setActiveSection(section);
+    setSelectedRow(null);
+    setLastAction(`Tela aberta: ${section}`);
     navigate(`/admin/gestao/${normalizeSection(section)}`);
+  };
+
+  const handleAction = (action: string) => {
+    const message = `${action}: ${activeSection}${selectedRow ? ` - ${selectedRow.nome}` : ''}`;
+    setLastAction(message);
+    toast.info(message);
   };
 
   const gridRows = activeSection === 'Clientes'
@@ -197,6 +251,7 @@ const TopacGestaoPage: React.FC = () => {
     : [
       { codigo: '000001', nome: `${activeSection} modelo`, documento: 'Cadastro preparado', cidade: 'TOPAC', contato: 'Aguardando conexão', status: 'proposta visual' },
       { codigo: '000002', nome: `${activeSection} operacional`, documento: 'Fluxo DN4-like', cidade: 'TOPAC', contato: 'Próxima fase', status: 'visual' },
+      { codigo: '000003', nome: `${activeSection} consulta`, documento: 'Filtro e grade', cidade: 'TOPAC', contato: 'Clique ativo', status: 'teste visual' },
     ];
 
   return (
@@ -209,8 +264,8 @@ const TopacGestaoPage: React.FC = () => {
             <span>Ambiente operacional interno</span>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">DN4-like visual</Badge>
-            <span>Sem migração de dados</span>
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">DN4-like funcional</Badge>
+            <span>{lastAction}</span>
           </div>
         </div>
 
@@ -221,7 +276,7 @@ const TopacGestaoPage: React.FC = () => {
             return (
               <button
                 key={module.key}
-                onClick={() => setActiveModule(module.key)}
+                onClick={() => selectModule(module.key as ModuleKey)}
                 className={`flex items-center gap-2 rounded-t-md border px-4 py-2 text-sm font-semibold transition ${active ? 'border-cyan-500 bg-slate-950 text-cyan-200' : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
               >
                 <Icon className="h-4 w-4" />
@@ -240,13 +295,16 @@ const TopacGestaoPage: React.FC = () => {
           </div>
 
           <div className="space-y-1 p-2">
-            {locacaoTree.map(group => {
+            {activeTree.map(group => {
               const Icon = group.icon;
               const open = activeGroup === group.label;
               return (
                 <div key={group.label} className="rounded-lg border border-slate-800 bg-slate-950/40">
                   <button
-                    onClick={() => setActiveGroup(open ? '' : group.label)}
+                    onClick={() => {
+                      setActiveGroup(open ? '' : group.label);
+                      setLastAction(`${open ? 'Fechado' : 'Aberto'}: ${group.label}`);
+                    }}
                     className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold ${open ? 'text-cyan-200' : 'text-slate-300'}`}
                   >
                     <Icon className="h-4 w-4" />
@@ -290,11 +348,11 @@ const TopacGestaoPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"><Plus className="mr-1 h-4 w-4" />Novo</Button>
-                <Button size="sm" variant="outline"><Edit className="mr-1 h-4 w-4" />Alterar</Button>
-                <Button size="sm" variant="outline"><Trash2 className="mr-1 h-4 w-4" />Excluir</Button>
-                <Button size="sm" variant="outline"><Search className="mr-1 h-4 w-4" />Consultar</Button>
-                <Button size="sm" variant="outline"><Printer className="mr-1 h-4 w-4" />Imprimir</Button>
+                <Button size="sm" onClick={() => handleAction('Novo')} className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"><Plus className="mr-1 h-4 w-4" />Novo</Button>
+                <Button size="sm" variant="outline" onClick={() => handleAction('Alterar')}><Edit className="mr-1 h-4 w-4" />Alterar</Button>
+                <Button size="sm" variant="outline" onClick={() => handleAction('Excluir')}><Trash2 className="mr-1 h-4 w-4" />Excluir</Button>
+                <Button size="sm" variant="outline" onClick={() => handleAction('Consultar')}><Search className="mr-1 h-4 w-4" />Consultar</Button>
+                <Button size="sm" variant="outline" onClick={() => handleAction('Imprimir')}><Printer className="mr-1 h-4 w-4" />Imprimir</Button>
               </div>
             </div>
           </div>
@@ -305,17 +363,17 @@ const TopacGestaoPage: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <Input value={busca} onChange={event => setBusca(event.target.value)} placeholder="Localizar por código, nome, documento, cidade, contato..." className="border-slate-700 bg-slate-900 pl-9 text-slate-100" />
               </div>
-              <select className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
+              <select onChange={(event) => setLastAction(`Filtro status: ${event.target.value}`)} className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
                 <option>Todos os status</option>
                 <option>Ativos</option>
                 <option>Inativos</option>
               </select>
-              <select className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
+              <select onChange={(event) => setLastAction(`Filtro tipo: ${event.target.value}`)} className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200">
                 <option>Todos os tipos</option>
                 <option>Cliente</option>
                 <option>Fornecedor</option>
               </select>
-              <Button variant="outline" onClick={carregarClientes} disabled={loading}>
+              <Button variant="outline" onClick={() => { carregarClientes(); setLastAction(`Atualizado: ${activeSection}`); }} disabled={loading}>
                 <RefreshCw className={`mr-1 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Atualizar
               </Button>
             </div>
@@ -345,7 +403,11 @@ const TopacGestaoPage: React.FC = () => {
                   </thead>
                   <tbody>
                     {gridRows.map((row, index) => (
-                      <tr key={`${row.codigo}-${index}`} className="border-t border-slate-800 odd:bg-slate-950 even:bg-slate-900/45 hover:bg-cyan-500/10">
+                      <tr
+                        key={`${row.codigo}-${index}`}
+                        onClick={() => { setSelectedRow(row); setLastAction(`Registro selecionado: ${row.nome}`); }}
+                        className={`cursor-pointer border-t border-slate-800 odd:bg-slate-950 even:bg-slate-900/45 hover:bg-cyan-500/10 ${selectedRow?.codigo === row.codigo ? 'bg-cyan-500/20 outline outline-1 outline-cyan-500/50' : ''}`}
+                      >
                         <td className="border-r border-slate-800 px-3 py-2 font-mono text-xs text-cyan-300">{row.codigo}</td>
                         <td className="border-r border-slate-800 px-3 py-2 font-semibold text-slate-100">{row.nome}</td>
                         <td className="border-r border-slate-800 px-3 py-2 text-slate-300">{row.documento}</td>
@@ -364,28 +426,22 @@ const TopacGestaoPage: React.FC = () => {
               <div className="space-y-3 rounded-lg border border-slate-700 bg-slate-950 p-4">
                 <div>
                   <label className="text-xs text-slate-400">Código</label>
-                  <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">AUTO</div>
+                  <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">{selectedRow?.codigo || 'AUTO'}</div>
                 </div>
                 <div>
                   <label className="text-xs text-slate-400">Descrição / Nome</label>
-                  <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">{activeSection}</div>
+                  <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">{selectedRow?.nome || activeSection}</div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400">Documento</label>
+                  <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">{selectedRow?.documento || '-'}</div>
                 </div>
                 <div>
                   <label className="text-xs text-slate-400">Status</label>
-                  <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">Ativo</div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-slate-400">Criado em</label>
-                    <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">--/--/----</div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-400">Atualizado</label>
-                    <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">--/--/----</div>
-                  </div>
+                  <div className="mt-1 rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm">{selectedRow?.status || 'Ativo'}</div>
                 </div>
                 <div className="rounded border border-dashed border-cyan-500/40 bg-cyan-500/5 p-3 text-xs text-cyan-100">
-                  Área preparada para formulário com abas, histórico e anexos no padrão operacional.
+                  Cliques ativos: módulos, menu, grade e botões já alteram o estado visual da tela. Próxima fase conecta formulário real.
                 </div>
               </div>
             </aside>
