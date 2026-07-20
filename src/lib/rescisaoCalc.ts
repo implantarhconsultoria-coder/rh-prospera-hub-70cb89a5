@@ -13,13 +13,13 @@ export type AvisoPrevio = 'trabalhado' | 'indenizado' | 'dispensado';
 export interface RescisaoInput {
   salarioBase: number;
   dependentes: number;
-  dataAdmissao: string; // YYYY-MM-DD
-  dataDesligamento: string; // YYYY-MM-DD
+  dataAdmissao: string;
+  dataDesligamento: string;
   tipo: TipoRescisao;
   aviso: AvisoPrevio;
   saldoFgtsDepositado: number;
   outrosDescontos?: number;
-  feriasVencidasMeses?: number; // 0 ou 12 normalmente
+  feriasVencidasMeses?: number;
   mediaHorasExtras?: number;
   mediaComissao?: number;
 }
@@ -47,29 +47,84 @@ export interface RescisaoResultado {
 }
 
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
+const MS_DIA = 1000 * 60 * 60 * 24;
 
-const diffMeses = (inicio: Date, fim: Date) => {
-  const ms = fim.getTime() - inicio.getTime();
-  return ms / (1000 * 60 * 60 * 24 * 30.4375);
+// Evita o erro de fuso horario do new Date('YYYY-MM-DD'), que em Brasil
+// podia transformar dia 21 em dia 20 e reduzir o saldo de salario.
+const parseLocalDate = (value: string) => {
+  const [ano, mes, dia] = String(value || '').split('-').map(Number);
+  if (!ano || !mes || !dia) return new Date();
+  return new Date(ano, mes - 1, dia, 12, 0, 0, 0);
 };
 
-const diffAnos = (inicio: Date, fim: Date) => diffMeses(inicio, fim) / 12;
+const addDays = (date: Date, days: number) => {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+};
+
+const completedYears = (start: Date, end: Date) => {
+  let years = end.getFullYear() - start.getFullYear();
+  const anniversary = new Date(end.getFullYear(), start.getMonth(), start.getDate(), 12);
+  if (end < anniversary) years -= 1;
+  return Math.max(0, years);
+};
+
+const countVacationTwelfths = (admission: Date, reference: Date) => {
+  let periodStart = new Date(admission);
+  while (true) {
+    const next = new Date(periodStart);
+    next.setFullYear(next.getFullYear() + 1);
+    if (next > reference) break;
+    periodStart = next;
+  }
+
+  let months =
+    (reference.getFullYear() - periodStart.getFullYear()) * 12 +
+    (reference.getMonth() - periodStart.getMonth());
+
+  const monthReference = new Date(
+    periodStart.getFullYear(),
+    periodStart.getMonth() + Math.max(0, months),
+    periodStart.getDate(),
+    12,
+  );
+
+  const fractionDays = Math.floor((reference.getTime() - monthReference.getTime()) / MS_DIA);
+  if (fractionDays >= 15) months += 1;
+
+  return Math.min(12, Math.max(0, months));
+};
+
+const countThirteenthTwelfths = (admission: Date, reference: Date) => {
+  const year = reference.getFullYear();
+  const start = admission.getFullYear() === year ? admission : new Date(year, 0, 1, 12);
+  if (start > reference) return 0;
+
+  let months = reference.getMonth() - start.getMonth();
+  const firstMonthDays = new Date(year, start.getMonth() + 1, 0).getDate() - start.getDate() + 1;
+  if (firstMonthDays >= 15) months += 1;
+
+  for (let month = start.getMonth() + 1; month < reference.getMonth(); month += 1) months += 1;
+  if (reference.getDate() >= 15 && reference.getMonth() !== start.getMonth()) months += 1;
+
+  return Math.min(12, Math.max(0, months));
+};
 
 export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
-  const adm = new Date(i.dataAdmissao);
-  const desl = new Date(i.dataDesligamento);
-  const sal = i.salarioBase;
-  const mediaHorasExtras = i.mediaHorasExtras || 0;
-  const mediaComissao = i.mediaComissao || 0;
-  const baseRemuneracao = sal + mediaHorasExtras + mediaComissao;
-  const valorDiaSalario = sal / 30;
+  const adm = parseLocalDate(i.dataAdmissao);
+  const desl = parseLocalDate(i.dataDesligamento);
+  const salarioBase = Math.max(0, Number(i.salarioBase) || 0);
+  const mediaHorasExtras = Math.max(0, Number(i.mediaHorasExtras) || 0);
+  const mediaComissao = Math.max(0, Number(i.mediaComissao) || 0);
+  const baseRemuneracao = salarioBase + mediaHorasExtras + mediaComissao;
+  const valorDiaSalario = salarioBase / 30;
   const valorDiaRemuneracao = baseRemuneracao / 30;
-  const dependentes = i.dependentes || 0;
-  const saldoFgts = i.saldoFgtsDepositado || 0;
+  const dependentes = Math.max(0, Number(i.dependentes) || 0);
+  const saldoFgts = Math.max(0, Number(i.saldoFgtsDepositado) || 0);
 
-  // 1. Dias de aviso (Lei 12.506: 30 + 3 por ano completo, máx 90)
-  const anos = Math.floor(diffAnos(adm, desl));
-  const diasAvisoBase = Math.min(90, 30 + Math.max(0, anos - 1) * 3);
+  const anosCompletos = completedYears(adm, desl);
+  const diasAvisoBase = Math.min(90, 30 + anosCompletos * 3);
 
   let diasAviso = 0;
   let avisoPrevioValor = 0;
@@ -79,105 +134,61 @@ export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
       avisoPrevioValor = valorDiaRemuneracao * diasAviso;
     } else if (i.aviso === 'trabalhado') {
       diasAviso = diasAvisoBase;
-      // já trabalhado - não vira provento separado
     }
   } else if (i.tipo === 'acordo_mutuo_484a') {
     if (i.aviso === 'indenizado') {
       diasAviso = diasAvisoBase;
-      avisoPrevioValor = (valorDiaRemuneracao * diasAviso) / 2; // metade
+      avisoPrevioValor = (valorDiaRemuneracao * diasAviso) / 2;
     } else if (i.aviso === 'trabalhado') {
       diasAviso = diasAvisoBase;
     }
   }
-  // pedido_demissao, justa_causa, termino_contrato: sem aviso a receber
 
-  // Data projetada (para cálculo de proporcionais quando aviso é indenizado)
-  const projetada = new Date(desl);
-  if (avisoPrevioValor > 0) projetada.setDate(projetada.getDate() + diasAviso);
+  const projetada = avisoPrevioValor > 0 ? addDays(desl, diasAviso) : new Date(desl);
+  const saldoSalario = valorDiaSalario * Math.min(30, Math.max(0, desl.getDate()));
 
-  // 2. Saldo de salário: dias trabalhados no mês do desligamento
-  const diaDesl = desl.getDate();
-  const saldoSalario = valorDiaSalario * diaDesl;
+  const mesesVencidos = Math.max(0, Number(i.feriasVencidasMeses) || 0);
+  const feriasVencidas = mesesVencidos >= 12 ? baseRemuneracao : 0;
 
-  // 3. Férias vencidas (passadas pelo input ou 0)
-  const mesesVencidos = i.feriasVencidasMeses ?? 0;
-  const feriasVencidas = i.tipo === 'justa_causa' ? 0 : (mesesVencidos >= 12 ? baseRemuneracao : 0);
-
-  // 4. Férias proporcionais e 13º proporcional baseado em meses trabalhados no período aquisitivo / ano
-  // Período aquisitivo de férias: meses desde último aniversário de admissão (ou desde admissão)
-  let mesesPeriodoFerias = 0;
-  const ultimoAniv = new Date(projetada);
-  ultimoAniv.setFullYear(adm.getFullYear() + Math.max(1, Math.floor(diffAnos(adm, projetada))));
-  // tentativa simples: pega o aniversário anterior à data projetada
-  let ref = new Date(adm);
-  while (true) {
-    const next = new Date(ref);
-    next.setFullYear(next.getFullYear() + 1);
-    if (next > projetada) break;
-    ref = next;
-  }
-  mesesPeriodoFerias = Math.min(12, Math.floor(diffMeses(ref, projetada)));
-  // Considera frações > 14 dias como mês completo
-  const fracDias = (projetada.getTime() - new Date(ref.getFullYear(), ref.getMonth() + mesesPeriodoFerias, ref.getDate()).getTime()) / (1000 * 60 * 60 * 24);
-  if (fracDias >= 15) mesesPeriodoFerias = Math.min(12, mesesPeriodoFerias + 1);
-
-  let feriasProporcionais = 0;
-  if (i.tipo !== 'justa_causa' && i.tipo !== 'pedido_demissao') {
-    feriasProporcionais = (baseRemuneracao / 12) * mesesPeriodoFerias;
-  } else if (i.tipo === 'pedido_demissao' && diffAnos(adm, projetada) >= 1) {
-    // após 1 ano, mesmo no pedido de demissão paga proporcionais
-    feriasProporcionais = (baseRemuneracao / 12) * mesesPeriodoFerias;
-  }
-
+  const mesesPeriodoFerias = countVacationTwelfths(adm, projetada);
+  const feriasProporcionais = i.tipo === 'justa_causa'
+    ? 0
+    : (baseRemuneracao / 12) * mesesPeriodoFerias;
   const tercoFerias = (feriasVencidas + feriasProporcionais) / 3;
 
-  // 5. 13º proporcional: meses trabalhados no ano (jan-dez) do desligamento
-  const inicioAno = new Date(projetada.getFullYear(), 0, 1);
-  let mesesAno = 0;
-  if (adm > inicioAno) {
-    mesesAno = Math.floor(diffMeses(adm, projetada));
-  } else {
-    mesesAno = projetada.getMonth() + 1; // janeiro=1
-  }
-  mesesAno = Math.min(12, Math.max(0, mesesAno));
+  const mesesAno = countThirteenthTwelfths(adm, projetada);
   const decimoTerceiro = i.tipo === 'justa_causa' ? 0 : (baseRemuneracao / 12) * mesesAno;
 
-  // 6. INSS sobre saldo+aviso (se indenizado, aviso não tem INSS) e separado sobre 13º
-  const baseInssMes = saldoSalario; // aviso indenizado é isento
+  const baseInssMes = saldoSalario;
   const inssMes = calcINSS(baseInssMes);
   const inss13 = calcINSS(decimoTerceiro);
   const inss = inssMes + inss13;
 
-  // 7. IRRF sobre (saldo - inssMes) e separado em 13º (saldo+aviso geralmente)
-  const irrfMes = calcIRRF(baseInssMes - inssMes, dependentes, baseInssMes);
-  const irrf13 = calcIRRF(decimoTerceiro - inss13, dependentes, decimoTerceiro);
+  const irrfMes = calcIRRF(Math.max(0, baseInssMes - inssMes), dependentes, baseInssMes);
+  const irrf13 = calcIRRF(Math.max(0, decimoTerceiro - inss13), dependentes, decimoTerceiro);
   const irrf = irrfMes + irrf13;
 
-  // 8. FGTS do mês: 8% sobre (saldo + 13º + aviso indenizado quando aplicável)
   const baseFgtsMes = saldoSalario + decimoTerceiro + avisoPrevioValor;
   const fgtsMes = calcFGTS(baseFgtsMes);
 
-  // 9. Multa do FGTS sobre saldo depositado informado
   let multaFgts = 0;
-  if (i.tipo === 'sem_justa_causa' || i.tipo === 'rescisao_indireta') {
-    multaFgts = saldoFgts * 0.4;
-  } else if (i.tipo === 'acordo_mutuo_484a') {
-    multaFgts = saldoFgts * 0.2;
-  }
+  if (i.tipo === 'sem_justa_causa' || i.tipo === 'rescisao_indireta') multaFgts = saldoFgts * 0.4;
+  else if (i.tipo === 'acordo_mutuo_484a') multaFgts = saldoFgts * 0.2;
 
-  const outros = i.outrosDescontos || 0;
+  const outros = Math.max(0, Number(i.outrosDescontos) || 0);
 
+  // A multa de FGTS e informativa/depositada na conta vinculada e nao entra
+  // no liquido pago diretamente pela empresa ao funcionario.
   const totalProventos =
     saldoSalario +
     avisoPrevioValor +
     feriasVencidas +
     feriasProporcionais +
     tercoFerias +
-    decimoTerceiro +
-    multaFgts;
+    decimoTerceiro;
 
   const totalDescontos = inss + irrf + outros;
-  const liquido = totalProventos - totalDescontos;
+  const liquido = Math.max(0, totalProventos - totalDescontos);
 
   return {
     diasAviso,
@@ -210,6 +221,7 @@ export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
       baseFgtsMes: round2(baseFgtsMes),
       mesesPeriodoFerias,
       mesesAno,
+      totalComFgtsInformativo: round2(totalProventos + multaFgts),
     },
   };
 };
