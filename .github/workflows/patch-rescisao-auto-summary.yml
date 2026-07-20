@@ -1,9 +1,10 @@
-name: Ajustar resumo automatico da rescisao
+name: Finalizar painel automatico da rescisao
 
 on:
   push:
     paths:
       - '.github/workflows/patch-rescisao-auto-summary.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,9 +16,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Aplicar resumo automatico visivel
+      - name: Atualizar painel da rescisao
+        shell: bash
         run: |
-          python3 - <<'PY'
+          python3 <<'PY'
           from pathlib import Path
 
           path = Path('src/pages/RescisaoPage.tsx')
@@ -44,60 +46,89 @@ jobs:
                   <div className="text-xs text-muted-foreground">Ao salvar, o funcionario sera marcado como desligado e o e-mail sera aberto com a ficha preenchida.</div>
                 </div>
               )}'''
+
           new = '''              {resultado && (
-                <div className="md:col-span-2 space-y-3">
-                  <div className="flex items-center justify-between rounded border border-success/30 bg-success/10 px-3 py-2">
+                <div className="md:col-span-2 space-y-3 rounded-xl border bg-card p-4 text-sm shadow-sm">
+                  <div className="flex flex-col gap-1 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <div className="font-bold">Calculo automatico atualizado</div>
-                      <div className="text-xs text-muted-foreground">Os valores abaixo mudam imediatamente ao alterar data, tipo, aviso ou descontos.</div>
+                      <div className="font-bold text-base">Calculo automatico em tempo real</div>
+                      <div className="text-xs text-muted-foreground">Os valores abaixo sao recalculados sempre que os dados da rescisao forem alterados.</div>
                     </div>
-                    <Badge variant="outline" className="border-success/40 text-success">Em tempo real</Badge>
+                    <Badge variant="outline" className="w-fit border-success/40 text-success">Atualizado automaticamente</Badge>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div className="rounded border bg-card p-3">
-                      <div className="text-xs text-muted-foreground">Total de proventos</div>
-                      <div className="text-lg font-bold">{formatCurrency(resultado.totalProventos)}</div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border bg-background p-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Base de remuneracao</div>
+                      <div className="mt-1 text-lg font-bold">{formatCurrency(resultado.baseRemuneracao)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Salario + medias registradas</div>
                     </div>
-                    <div className="rounded border bg-card p-3">
-                      <div className="text-xs text-muted-foreground">Total de descontos</div>
-                      <div className="text-lg font-bold text-destructive">{formatCurrency(resultado.totalDescontos)}</div>
+                    <div className="rounded-lg border bg-background p-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total de proventos</div>
+                      <div className="mt-1 text-lg font-bold text-success">{formatCurrency(resultado.totalProventos)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Valores pagos diretamente</div>
                     </div>
-                    <div className="rounded border border-success/40 bg-success/10 p-3">
-                      <div className="text-xs text-muted-foreground">Liquido estimado</div>
-                      <div className="text-xl font-bold text-success">{formatCurrency(resultado.liquido)}</div>
+                    <div className="rounded-lg border bg-background p-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total de descontos</div>
+                      <div className="mt-1 text-lg font-bold text-destructive">{formatCurrency(resultado.totalDescontos)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">INSS, IRRF e outros</div>
                     </div>
                   </div>
 
-                  <div className="bg-muted p-3 rounded space-y-1 text-sm">
-                    <div className="font-bold text-base mb-2">Detalhamento do calculo</div>
-                    <div className="flex justify-between"><span>Base de remuneracao</span><span>{formatCurrency(resultado.baseRemuneracao)}</span></div>
-                    <div className="flex justify-between"><span>Media HE ({mediasRescisao.meses} meses)</span><span>{formatCurrency(resultado.mediaHorasExtras)}</span></div>
-                    <div className="flex justify-between"><span>Media comissao ({mediasRescisao.meses} meses)</span><span>{formatCurrency(resultado.mediaComissao)}</span></div>
-                    <div className="flex justify-between"><span>Saldo de salario</span><span>{formatCurrency(resultado.saldoSalario)}</span></div>
-                    {resultado.avisoPrevioValor > 0 && <div className="flex justify-between"><span>Aviso previo indenizado ({resultado.diasAviso} dias)</span><span>{formatCurrency(resultado.avisoPrevioValor)}</span></div>}
-                    {resultado.feriasVencidas > 0 && <div className="flex justify-between"><span>Ferias vencidas</span><span>{formatCurrency(resultado.feriasVencidas)}</span></div>}
-                    {resultado.feriasProporcionais > 0 && <div className="flex justify-between"><span>Ferias proporcionais</span><span>{formatCurrency(resultado.feriasProporcionais)}</span></div>}
-                    {resultado.tercoFerias > 0 && <div className="flex justify-between"><span>1/3 ferias</span><span>{formatCurrency(resultado.tercoFerias)}</span></div>}
-                    {resultado.decimoTerceiro > 0 && <div className="flex justify-between"><span>13o proporcional</span><span>{formatCurrency(resultado.decimoTerceiro)}</span></div>}
-                    <div className="flex justify-between text-destructive"><span>(-) INSS</span><span>{formatCurrency(resultado.inss)}</span></div>
-                    <div className="flex justify-between text-destructive"><span>(-) IRRF</span><span>{formatCurrency(resultado.irrf)}</span></div>
-                    {resultado.outrosDescontos > 0 && <div className="flex justify-between text-destructive"><span>(-) Outros</span><span>{formatCurrency(resultado.outrosDescontos)}</span></div>}
-                    <div className="border-t mt-2 pt-2 text-xs text-muted-foreground">
-                      FGTS do mes: {formatCurrency(resultado.fgtsMes)}. Multa estimada: {formatCurrency(resultado.multaFgts)}. Estes valores sao informativos e nao entram no liquido pago diretamente.
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 rounded-lg border bg-background p-3">
+                      <div className="font-semibold">Proventos calculados</div>
+                      <div className="flex justify-between"><span>Saldo de salario</span><strong>{formatCurrency(resultado.saldoSalario)}</strong></div>
+                      {resultado.avisoPrevioValor > 0 && <div className="flex justify-between"><span>Aviso previo indenizado ({resultado.diasAviso} dias)</span><strong>{formatCurrency(resultado.avisoPrevioValor)}</strong></div>}
+                      {resultado.feriasVencidas > 0 && <div className="flex justify-between"><span>Ferias vencidas</span><strong>{formatCurrency(resultado.feriasVencidas)}</strong></div>}
+                      {resultado.feriasProporcionais > 0 && <div className="flex justify-between"><span>Ferias proporcionais</span><strong>{formatCurrency(resultado.feriasProporcionais)}</strong></div>}
+                      {resultado.tercoFerias > 0 && <div className="flex justify-between"><span>1/3 de ferias</span><strong>{formatCurrency(resultado.tercoFerias)}</strong></div>}
+                      {resultado.decimoTerceiro > 0 && <div className="flex justify-between"><span>13o proporcional</span><strong>{formatCurrency(resultado.decimoTerceiro)}</strong></div>}
                     </div>
-                    <div className="text-xs text-muted-foreground">Previa para conferencia. O fechamento oficial deve ser validado pela contabilidade.</div>
+
+                    <div className="space-y-2 rounded-lg border bg-background p-3">
+                      <div className="font-semibold">Descontos calculados</div>
+                      <div className="flex justify-between text-destructive"><span>INSS</span><strong>- {formatCurrency(resultado.inss)}</strong></div>
+                      <div className="flex justify-between text-destructive"><span>IRRF</span><strong>- {formatCurrency(resultado.irrf)}</strong></div>
+                      <div className="flex justify-between text-destructive"><span>Outros descontos</span><strong>- {formatCurrency(resultado.outrosDescontos)}</strong></div>
+                      <div className="border-t pt-2 text-xs text-muted-foreground">Bases: INSS {formatCurrency(resultado.detalhe.baseInssMes || 0)} + 13o {formatCurrency(resultado.detalhe.baseInss13 || 0)}; IRRF {formatCurrency(resultado.detalhe.baseIrrfMes || 0)} + 13o {formatCurrency(resultado.detalhe.baseIrrf13 || 0)}.</div>
+                    </div>
                   </div>
+
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                    <div className="font-semibold">Informacoes que dependem de conferencia manual</div>
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <div className="flex justify-between"><span>Saldo FGTS informado</span><strong>{formatCurrency(saldoFgts)}</strong></div>
+                      <div className="flex justify-between"><span>Ferias vencidas informadas</span><strong>{feriasVencidasMeses >= 12 ? 'Sim' : 'Nao'}</strong></div>
+                      <div className="flex justify-between"><span>FGTS rescisorio do mes</span><strong>{formatCurrency(resultado.fgtsMes)}</strong></div>
+                      <div className="flex justify-between"><span>Multa do FGTS informativa</span><strong>{formatCurrency(resultado.multaFgts)}</strong></div>
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">O saldo real do FGTS, ferias vencidas ainda nao registradas e descontos adicionais precisam ser confirmados antes do envio.</div>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl border-2 border-success/30 bg-success/5 p-4">
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Liquido estimado da rescisao</div>
+                      <div className="text-xs text-muted-foreground">Total de proventos menos total de descontos</div>
+                    </div>
+                    <div className="text-2xl font-bold text-success">{formatCurrency(resultado.liquido)}</div>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">Previa estimada para conferencia. O calculo oficial deve ser validado pela contabilidade. Ao salvar, o funcionario sera marcado como desligado e o e-mail sera preparado com a ficha preenchida.</div>
                 </div>
               )}'''
+
           if old not in text:
-              raise SystemExit('Bloco original nao encontrado')
-          path.write_text(text.replace(old, new), encoding='utf-8')
+              raise SystemExit('Bloco antigo da previa nao encontrado; nenhuma alteracao aplicada.')
+
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
-      - name: Commitar ajuste
+      - name: Publicar alteracao
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/pages/RescisaoPage.tsx
-          git commit -m "Exibe totais automaticos na rescisao" || exit 0
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -m "Finaliza painel automatico da rescisao"
+          git push origin main
