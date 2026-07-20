@@ -1,4 +1,4 @@
-name: Preencher automaticamente dados da rescisao
+name: Padronizar aviso de estimativa nas rescisoes
 
 on:
   push:
@@ -15,4 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.G
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Aplicar aviso padrao em tela email e PDF
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib
