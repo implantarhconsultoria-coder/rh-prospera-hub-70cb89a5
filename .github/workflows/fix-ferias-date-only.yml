@@ -26,78 +26,53 @@ jobs:
           page = Path('src/pages/AvisoFeriasPage.tsx')
           text = page.read_text(encoding='utf-8')
 
-          text = text.replace(
-          """  const calcRetorno = () => {
+          replacements = [
+            ("""  const calcRetorno = () => {
     if (!inicioFerias) return '';
     return addDaysISO(inicioFerias, Math.max(0, diasFerias - 1));
   };
-  const retorno = calcRetorno();""",
-          """  const calcFimFerias = () => {
+  const retorno = calcRetorno();""", """  const calcFimFerias = () => {
     if (!inicioFerias) return '';
     return addDaysISO(inicioFerias, Math.max(0, diasFerias - 1));
   };
   const fimFerias = calcFimFerias();
-  const retorno = inicioFerias ? addDaysISO(inicioFerias, Math.max(0, diasFerias)) : '';"""
-          )
+  const retorno = inicioFerias ? addDaysISO(inicioFerias, Math.max(0, diasFerias)) : '';"""),
+            ("if (!retorno) { toast.error('Informe o periodo de ferias'); return null; }", "if (!fimFerias || !retorno) { toast.error('Informe o periodo de ferias'); return null; }"),
+            ("const statusAtual = feriasPeriodoStatus(inicioFerias, retorno);", "const statusAtual = feriasPeriodoStatus(inicioFerias, fimFerias);"),
+            ("const observacao = `Ferias de ${diasFerias} dias. Inicio: ${formatDate(inicioFerias)}. Fim/retorno previsto: ${formatDate(retorno)}.`;", "const observacao = `Ferias de ${diasFerias} dias. Inicio: ${formatDate(inicioFerias)}. Ultimo dia: ${formatDate(fimFerias)}. Retorno previsto: ${formatDate(retorno)}.`;"),
+            ("periodo_gozo_fim: retorno,", "periodo_gozo_fim: fimFerias,"),
+            ("inicioFerias && retorno ? { inicio: inicioFerias, fim: retorno, dias: diasFerias } : undefined,", "inicioFerias && fimFerias ? { inicio: inicioFerias, fim: fimFerias, dias: diasFerias } : undefined,"),
+            (">Fim/retorno</span>", ">Ultimo dia</span>"),
+            (">Retorno Previsto</label>", ">Retorno ao Trabalho</label>"),
+          ]
+
+          for old, new in replacements:
+            if old not in text:
+              print(f'AVISO: trecho nao encontrado: {old[:70]}')
+            text = text.replace(old, new)
 
           text = text.replace(
-          """    if (!retorno) { toast.error('Informe o periodo de ferias'); return null; }""",
-          """    if (!fimFerias || !retorno) { toast.error('Informe o periodo de ferias'); return null; }"""
-          )
-
-          text = text.replace(
-          """      const statusAtual = feriasPeriodoStatus(inicioFerias, retorno);
-      const observacao = `Ferias de ${diasFerias} dias. Inicio: ${formatDate(inicioFerias)}. Fim/retorno previsto: ${formatDate(retorno)}.`;""",
-          """      const statusAtual = feriasPeriodoStatus(inicioFerias, fimFerias);
-      const observacao = `Ferias de ${diasFerias} dias. Inicio: ${formatDate(inicioFerias)}. Ultimo dia: ${formatDate(fimFerias)}. Retorno previsto: ${formatDate(retorno)}.`;"""
-          )
-
-          text = text.replace(
-          """        periodo_gozo_fim: retorno,
-        data_retorno: retorno,""",
-          """        periodo_gozo_fim: fimFerias,
-        data_retorno: retorno,"""
-          )
-
-          text = text.replace(
-          """        observacoes: `${emp.observacoes || ''}\n[FERIAS] Inicio: ${inicioFerias} | Fim/retorno previsto: ${retorno} | ${diasFerias} dias | Status: ${statusAtual?.label || 'Ferias marcadas'}`.trim(),""",
-          """        observacoes: `${emp.observacoes || ''}\n[FERIAS] Inicio: ${inicioFerias} | Ultimo dia: ${fimFerias} | Retorno: ${retorno} | ${diasFerias} dias | Status: ${statusAtual?.label || 'Ferias marcadas'}`.trim(),"""
-          )
-
-          text = text.replace(
-          """      inicioFerias && retorno ? { inicio: inicioFerias, fim: retorno, dias: diasFerias } : undefined,""",
-          """      inicioFerias && fimFerias ? { inicio: inicioFerias, fim: fimFerias, dias: diasFerias } : undefined,"""
-          )
-
-          text = text.replace(
-          """<div><span className=\"text-xs text-muted-foreground block\">Fim/retorno</span><strong>{fer.fim ? formatDate(fer.fim) : 'Sem data'}</strong></div>""",
-          """<div><span className=\"text-xs text-muted-foreground block\">Ultimo dia</span><strong>{fer.fim ? formatDate(fer.fim) : 'Sem data'}</strong></div>"""
-          )
-
-          text = text.replace(
-          """<div><label className=\"text-xs text-muted-foreground block mb-1\">Retorno Previsto</label>
-              <p className=\"text-sm font-medium bg-muted/50 px-3 py-2 rounded-md\">{retorno ? formatDate(retorno) : '—'}</p></div>""",
-          """<div><label className=\"text-xs text-muted-foreground block mb-1\">Retorno ao Trabalho</label>
-              <p className=\"text-sm font-medium bg-muted/50 px-3 py-2 rounded-md\">{retorno ? formatDate(retorno) : '—'}</p></div>"""
+            "`${emp.observacoes || ''}\\n[FERIAS] Inicio: ${inicioFerias} | Fim/retorno previsto: ${retorno} | ${diasFerias} dias | Status: ${statusAtual?.label || 'Ferias marcadas'}`",
+            "`${emp.observacoes || ''}\\n[FERIAS] Inicio: ${inicioFerias} | Ultimo dia: ${fimFerias} | Retorno: ${retorno} | ${diasFerias} dias | Status: ${statusAtual?.label || 'Ferias marcadas'}`"
           )
 
           page.write_text(text, encoding='utf-8')
 
           calc = Path('src/lib/calculations.ts')
           ctext = calc.read_text(encoding='utf-8')
-          ctext = ctext.replace(
-          """export const formatDate = (d: string) => {
+          old = """export const formatDate = (d: string) => {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('pt-BR');
-};""",
-          """export const formatDate = (d: string) => {
+};"""
+          new = """export const formatDate = (d: string) => {
   if (!d) return '—';
   const match = String(d).match(/^(\\d{4})-(\\d{2})-(\\d{2})/);
   if (match) return `${match[3]}/${match[2]}/${match[1]}`;
   return new Date(d).toLocaleDateString('pt-BR');
 };"""
-          )
-          calc.write_text(ctext, encoding='utf-8')
+          if old not in ctext:
+            print('AVISO: formatDate antigo nao encontrado')
+          calc.write_text(ctext.replace(old, new), encoding='utf-8')
           PY
 
       - name: Publicar correcao
