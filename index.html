@@ -71,7 +71,83 @@
           return card;
         };
 
+        const setReactInputValue = (input, value) => {
+          if (!input) return;
+          const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+          descriptor?.set?.call(input, String(value));
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        const findInputByLabel = (labelText) => {
+          const label = [...document.querySelectorAll('label')].find((node) =>
+            node.textContent.trim().toLowerCase().startsWith(labelText.toLowerCase())
+          );
+          return label?.parentElement?.querySelector('input') || null;
+        };
+
+        const parseLocalDate = (value) => {
+          const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (!match) return null;
+          return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
+        };
+
+        const completedYears = (start, end) => {
+          let years = end.getFullYear() - start.getFullYear();
+          const anniversary = new Date(end.getFullYear(), start.getMonth(), start.getDate(), 12);
+          if (end < anniversary) years -= 1;
+          return Math.max(0, years);
+        };
+
+        let lastAutoFillKey = '';
+        const autoFillRescisao = () => {
+          const dialogTitle = [...document.querySelectorAll('[role="dialog"] *')].find((node) =>
+            node.childElementCount === 0 && node.textContent.trim() === 'Nova Rescisao'
+          );
+          if (!dialogTitle) {
+            lastAutoFillKey = '';
+            return;
+          }
+
+          const dialog = dialogTitle.closest('[role="dialog"]');
+          if (!dialog) return;
+          const info = [...dialog.querySelectorAll('div')].find((node) =>
+            node.textContent.includes('Admissao:') && node.textContent.includes('Salario:')
+          );
+          const dateInput = [...dialog.querySelectorAll('input[type="date"]')][0];
+          if (!info || !dateInput?.value) return;
+
+          const admissionMatch = info.textContent.match(/Admissao:\s*(\d{4}-\d{2}-\d{2})/i);
+          const salaryMatch = info.textContent.match(/Salario:\s*R\$\s*([\d.]+,\d{2})/i);
+          if (!admissionMatch || !salaryMatch) return;
+
+          const admission = parseLocalDate(admissionMatch[1]);
+          const termination = parseLocalDate(dateInput.value);
+          const salary = parseMoney(salaryMatch[1]);
+          if (!admission || !termination || termination < admission || salary <= 0) return;
+
+          const key = `${admissionMatch[1]}|${dateInput.value}|${salary}`;
+          if (key === lastAutoFillKey) return;
+          lastAutoFillKey = key;
+
+          const totalDays = Math.max(1, Math.floor((termination.getTime() - admission.getTime()) / 86400000) + 1);
+          const estimatedMonths = totalDays / 30;
+          const estimatedFgts = Math.round((salary * 0.08 * estimatedMonths) * 100) / 100;
+          const overdueVacationMonths = completedYears(admission, termination) * 12;
+
+          const fgtsInput = findInputByLabel('Saldo FGTS depositado');
+          const vacationInput = findInputByLabel('Meses de ferias vencidas');
+          setReactInputValue(fgtsInput, estimatedFgts.toFixed(2).replace('.', ','));
+          setReactInputValue(vacationInput, overdueVacationMonths);
+
+          const fgtsLabel = fgtsInput?.parentElement?.querySelector('label');
+          if (fgtsLabel) fgtsLabel.textContent = 'Saldo FGTS estimado (R$) — editável';
+          const vacationLabel = vacationInput?.parentElement?.querySelector('label');
+          if (vacationLabel) vacationLabel.textContent = 'Meses de férias vencidas estimados — editável';
+        };
+
         const enhance = () => {
+          autoFillRescisao();
           const titles = [...document.querySelectorAll('div')].filter((node) =>
             node.childElementCount === 0 && node.textContent.trim() === 'Previa dos calculos'
           );
@@ -135,7 +211,7 @@
               manual = document.createElement('div');
               manual.dataset.rescisaoManual = 'true';
               manual.style.cssText = 'margin-top:10px;padding:10px;border:1px solid rgba(245,158,11,.35);border-radius:9px;background:rgba(245,158,11,.06);font-size:12px;';
-              manual.innerHTML = '<strong>Conferencia manual:</strong> saldo real do FGTS, ferias vencidas e outros descontos devem ser confirmados antes do envio.<br><span style="color:hsl(var(--muted-foreground))">Previa estimada. O calculo oficial deve ser validado pela contabilidade.</span>';
+              manual.innerHTML = '<strong>Conferencia manual:</strong> o FGTS e as ferias sao estimados automaticamente e permanecem editaveis. Confirme os valores reais antes do envio.<br><span style="color:hsl(var(--muted-foreground))">Previa estimada. O calculo oficial deve ser validado pela contabilidade.</span>';
               panel.appendChild(manual);
             }
           });
