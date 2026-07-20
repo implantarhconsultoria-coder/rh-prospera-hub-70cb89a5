@@ -1,0 +1,22 @@
+name: Ajustar resumo automatico da rescisao
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-rescisao-auto-summary.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Aplicar resumo automatico visivel
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
