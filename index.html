@@ -43,5 +43,118 @@
   <body class="notranslate" translate="no">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      (() => {
+        const parseMoney = (value) => {
+          const normalized = String(value || '')
+            .replace(/[^0-9,.-]/g, '')
+            .replace(/\./g, '')
+            .replace(',', '.');
+          return Number(normalized) || 0;
+        };
+
+        const money = (value) => new Intl.NumberFormat('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        }).format(value || 0);
+
+        const createCard = (label, value, tone) => {
+          const card = document.createElement('div');
+          card.style.cssText = 'border:1px solid hsl(var(--border));border-radius:10px;padding:12px;background:hsl(var(--background));min-width:0;';
+          const title = document.createElement('div');
+          title.textContent = label;
+          title.style.cssText = 'font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:hsl(var(--muted-foreground));font-weight:600;';
+          const amount = document.createElement('div');
+          amount.textContent = money(value);
+          amount.style.cssText = `font-size:20px;font-weight:800;margin-top:4px;color:${tone};`;
+          card.append(title, amount);
+          return card;
+        };
+
+        const enhance = () => {
+          const titles = [...document.querySelectorAll('div')].filter((node) =>
+            node.childElementCount === 0 && node.textContent.trim() === 'Previa dos calculos'
+          );
+
+          titles.forEach((title) => {
+            const panel = title.parentElement;
+            if (!panel) return;
+
+            const rows = [...panel.children].filter((child) => child !== title && child.querySelectorAll('span').length >= 2);
+            const values = new Map();
+            rows.forEach((row) => {
+              const spans = row.querySelectorAll('span');
+              if (spans.length < 2) return;
+              values.set(spans[0].textContent.trim().toLowerCase(), parseMoney(spans[1].textContent));
+            });
+
+            const getByStart = (prefix) => {
+              for (const [label, value] of values.entries()) {
+                if (label.startsWith(prefix)) return value;
+              }
+              return 0;
+            };
+
+            const totalProventos =
+              getByStart('saldo de salario') +
+              getByStart('aviso previo indenizado') +
+              getByStart('ferias vencidas') +
+              getByStart('ferias proporcionais') +
+              getByStart('1/3 ferias') +
+              getByStart('13o proporcional');
+
+            const totalDescontos =
+              getByStart('(-) inss') +
+              getByStart('(-) irrf') +
+              getByStart('(-) outros');
+
+            title.textContent = 'Calculo automatico em tempo real';
+            title.style.marginBottom = '0';
+
+            let summary = panel.querySelector('[data-rescisao-summary="true"]');
+            if (!summary) {
+              summary = document.createElement('div');
+              summary.dataset.rescisaoSummary = 'true';
+              summary.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0;';
+              title.insertAdjacentElement('afterend', summary);
+            }
+            summary.replaceChildren(
+              createCard('Base de remuneracao', getByStart('base de remuneracao'), 'hsl(var(--foreground))'),
+              createCard('Total de proventos', totalProventos, 'hsl(var(--success))'),
+              createCard('Total de descontos', totalDescontos, 'hsl(var(--destructive))')
+            );
+
+            const liquidRow = rows.find((row) => row.querySelector('span')?.textContent.trim() === 'Liquido');
+            if (liquidRow) {
+              liquidRow.querySelector('span').textContent = 'Liquido estimado';
+              liquidRow.style.cssText += ';border:2px solid color-mix(in srgb,hsl(var(--success)) 35%,transparent);border-radius:10px;padding:12px;margin-top:12px;background:color-mix(in srgb,hsl(var(--success)) 7%,transparent);';
+            }
+
+            let manual = panel.querySelector('[data-rescisao-manual="true"]');
+            if (!manual) {
+              manual = document.createElement('div');
+              manual.dataset.rescisaoManual = 'true';
+              manual.style.cssText = 'margin-top:10px;padding:10px;border:1px solid rgba(245,158,11,.35);border-radius:9px;background:rgba(245,158,11,.06);font-size:12px;';
+              manual.innerHTML = '<strong>Conferencia manual:</strong> saldo real do FGTS, ferias vencidas e outros descontos devem ser confirmados antes do envio.<br><span style="color:hsl(var(--muted-foreground))">Previa estimada. O calculo oficial deve ser validado pela contabilidade.</span>';
+              panel.appendChild(manual);
+            }
+          });
+        };
+
+        let scheduled = false;
+        const observer = new MutationObserver(() => {
+          if (scheduled) return;
+          scheduled = true;
+          requestAnimationFrame(() => {
+            scheduled = false;
+            enhance();
+          });
+        });
+
+        observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+        window.addEventListener('DOMContentLoaded', enhance);
+        setTimeout(enhance, 1000);
+      })();
+    </script>
   </body>
 </html>
