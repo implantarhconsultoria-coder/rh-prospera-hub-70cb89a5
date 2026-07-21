@@ -6,11 +6,77 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && 'main' || github.sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Liberar campos manuais do pre-cadastro
+        if: github.event_name == 'push'
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
+          text = path.read_text(encoding='utf-8')
+          original = text
+
+          old_funcao = """  const setFuncaoComPadroes = (funcao: string) => {
+    const role = roleByName.get(normalizeRole(funcao));
+    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
+    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
+    const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
+    setForm(p => {
+      const salario = role?.salarioBase || p.salario || null;
+      const periculosidadeValor = Number(role?.periculosidadeValor || getPericulosidadeAplicavel({ cargo: funcao, salarioBase: salario || 0 }));
+      return {
+        ...p,
+        funcao,
+        salario,
+        insalubridade: insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : periculosidadeAtiva ? formatPericulosidade(periculosidadeValor) : 'Nao',
+      };
+    });
+  };
+"""
+          new_funcao = """  const setFuncaoComPadroes = (funcao: string) => {
+    setForm(p => ({ ...p, funcao }));
+  };
+"""
+
+          old_effect = """  useEffect(() => {
+    const funcao = form.funcao || '';
+    if (!funcao) return;
+    const role = roleByName.get(normalizeRole(funcao));
+    const shouldFillSalary = Boolean(role?.salarioBase && !Number(form.salario || 0));
+    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
+    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
+    const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
+    const periculosidadeValor = Number(role?.periculosidadeValor || getPericulosidadeAplicavel({ cargo: funcao, salarioBase: role?.salarioBase || form.salario || 0 }));
+    const nextInsalubridade = insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : periculosidadeAtiva ? formatPericulosidade(periculosidadeValor) : role ? 'Nao' : '';
+    const shouldFillInsalubridade = Boolean(nextInsalubridade && form.insalubridade !== nextInsalubridade);
+    if (!shouldFillSalary && !shouldFillInsalubridade) return;
+    setForm(p => ({
+      ...p,
+      salario: shouldFillSalary ? role?.salarioBase || p.salario || null : p.salario,
+      insalubridade: shouldFillInsalubridade ? nextInsalubridade : p.insalubridade,
+    }));
+  }, [form.funcao, form.salario, form.insalubridade, roleByName, config.valorInsalubridade]);
+"""
+
+          if old_funcao in text:
+              text = text.replace(old_funcao, new_funcao, 1)
+          if old_effect in text:
+              text = text.replace(old_effect, '', 1)
+
+          path.write_text(text, encoding='utf-8')
+          if text == original:
+              print('Campos ja estavam liberados; nenhuma alteracao necessaria.')
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -18,3 +84,15 @@ jobs:
       - run: npm ci
       - run: node scripts/normalize-source-encoding.mjs
       - run: npm run build
+      - name: Publicar liberacao dos campos
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet; then
+            echo "Sem alteracoes para publicar"
+            exit 0
+          fi
+          git config user.name "TOPAC Automation"
+          git config user.email "actions@github.com"
+          git add src/pages/PreCadastroAdmissionalOcrPage.tsx
+          git commit -m "Libera empresa funcao salario e insalubridade no pre-cadastro"
+          git push origin HEAD:main
