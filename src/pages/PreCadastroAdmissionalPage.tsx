@@ -4,6 +4,8 @@ import PreCadastroAdmissionalOcrPage from './PreCadastroAdmissionalOcrPage';
 const CUSTOM_FUNCAO_VALUE = '__topac_custom_funcao__';
 const ASO_DATE_INPUT_ID = 'topac-aso-data-exame';
 const ASO_DATE_STORAGE_KEY = 'topac_pre_cadastro_data_exame_aso';
+const MULTI_UPLOAD_ATTR = 'data-topac-multi-upload';
+const SYNTHETIC_CHANGE_ATTR = 'data-topac-synthetic-change';
 
 const findFuncaoSelect = () => {
   const selects = Array.from(document.querySelectorAll('select')) as HTMLSelectElement[];
@@ -11,6 +13,37 @@ const findFuncaoSelect = () => {
     const label = select.parentElement?.querySelector('label')?.textContent || '';
     return label.trim().toLowerCase().startsWith('funcao');
   }) || null;
+};
+
+const findFichaInput = () => {
+  const inputs = Array.from(document.querySelectorAll('input[type="file"]')) as HTMLInputElement[];
+  return inputs.find((input) => {
+    const containerText = input.parentElement?.textContent?.toLowerCase() || '';
+    return containerText.includes('ficha de solicitacao de emprego');
+  }) || null;
+};
+
+const ensureMultiDocumentUpload = () => {
+  const input = findFichaInput();
+  if (!input) return;
+  input.multiple = true;
+  input.accept = '.pdf,image/*';
+  input.setAttribute(MULTI_UPLOAD_ATTR, 'true');
+  input.setAttribute('title', 'Selecione CNH, RG, CPF, certidao, comprovante de residencia e demais documentos de uma vez');
+
+  const label = input.closest('div')?.querySelector('label');
+  if (label && !label.textContent?.includes('Documentos pessoais')) {
+    label.textContent = 'Documentos pessoais para leitura automatica';
+  }
+
+  const helperId = 'topac-multi-upload-helper';
+  if (!document.getElementById(helperId)) {
+    const helper = document.createElement('p');
+    helper.id = helperId;
+    helper.className = 'mt-2 text-xs text-muted-foreground';
+    helper.textContent = 'Selecione todos os arquivos de uma vez. O sistema le cada documento e combina os dados encontrados.';
+    input.insertAdjacentElement('afterend', helper);
+  }
 };
 
 const ensureCustomFuncaoOption = () => {
@@ -104,7 +137,7 @@ const ensureAsoDateInput = () => {
     try {
       window.localStorage.setItem(ASO_DATE_STORAGE_KEY, input.value);
     } catch {
-      // Ignora bloqueio de storage; o valor da tela continua valendo.
+      // O valor atual da tela continua valendo.
     }
   });
 
@@ -113,24 +146,49 @@ const ensureAsoDateInput = () => {
   toolbar.insertBefore(wrapper, gerarButton);
 };
 
-const useCustomFuncaoOption = () => {
+const useTopacEnhancements = () => {
   useEffect(() => {
-    const handleChange = (event: Event) => {
-      const select = event.target as HTMLSelectElement | null;
-      if (!(select instanceof HTMLSelectElement)) return;
-      if (select.value !== CUSTOM_FUNCAO_VALUE) return;
+    const handleChange = async (event: Event) => {
+      const target = event.target;
 
-      const typed = window.prompt('Digite a nova funcao/cargo para este pre-cadastro:');
-      const funcao = String(typed || '').trim().replace(/\s+/g, ' ').toUpperCase();
-      setSelectValueAndNotify(select, funcao);
+      if (target instanceof HTMLSelectElement && target.value === CUSTOM_FUNCAO_VALUE) {
+        const typed = window.prompt('Digite a nova funcao/cargo para este pre-cadastro:');
+        const funcao = String(typed || '').trim().replace(/\s+/g, ' ').toUpperCase();
+        setSelectValueAndNotify(target, funcao);
+        return;
+      }
+
+      if (!(target instanceof HTMLInputElement) || target.type !== 'file') return;
+      if (!target.hasAttribute(MULTI_UPLOAD_ATTR)) return;
+      if (target.hasAttribute(SYNTHETIC_CHANGE_ATTR)) return;
+
+      const files = Array.from(target.files || []);
+      if (files.length <= 1) return;
+
+      event.stopImmediatePropagation();
+      event.preventDefault();
+
+      for (const file of files) {
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        target.files = transfer.files;
+        target.setAttribute(SYNTHETIC_CHANGE_ATTR, 'true');
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+        target.removeAttribute(SYNTHETIC_CHANGE_ATTR);
+        await new Promise((resolve) => window.setTimeout(resolve, 900));
+      }
+
+      target.value = '';
     };
 
-    ensureCustomFuncaoOption();
-    ensureAsoDateInput();
-    const observer = new MutationObserver(() => {
+    const applyEnhancements = () => {
       ensureCustomFuncaoOption();
       ensureAsoDateInput();
-    });
+      ensureMultiDocumentUpload();
+    };
+
+    applyEnhancements();
+    const observer = new MutationObserver(applyEnhancements);
     observer.observe(document.body, { childList: true, subtree: true });
     document.addEventListener('change', handleChange, true);
 
@@ -161,7 +219,7 @@ const useSelectableAsoDate = () => {
 };
 
 const PreCadastroAdmissionalPage: React.FC = () => {
-  useCustomFuncaoOption();
+  useTopacEnhancements();
   useSelectableAsoDate();
   return <PreCadastroAdmissionalOcrPage />;
 };
