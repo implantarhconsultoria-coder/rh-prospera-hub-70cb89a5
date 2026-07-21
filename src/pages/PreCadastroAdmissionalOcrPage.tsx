@@ -292,22 +292,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const roleByName = useMemo(() => new Map(roleOptions.map(role => [normalizeRole(role.cargo), role])), [roleOptions]);
 
   const setCompany = (id: string) => { const c = companies.find(x => x.id === id); setForm(p => ({ ...p, empresa_id: id, empresa_nome: c?.name || '', cnpj: c?.cnpj || '' })); };
-  const setFuncaoComPadroes = (funcao: string) => {
-    const role = roleByName.get(normalizeRole(funcao));
-    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
-    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
-    const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
-    setForm(p => {
-      const salario = role?.salarioBase || p.salario || null;
-      const periculosidadeValor = Number(role?.periculosidadeValor || getPericulosidadeAplicavel({ cargo: funcao, salarioBase: salario || 0 }));
-      return {
-        ...p,
-        funcao,
-        salario,
-        insalubridade: insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : periculosidadeAtiva ? formatPericulosidade(periculosidadeValor) : 'Nao',
-      };
-    });
-  };
+  const setFuncaoComPadroes = (funcao: string) => { setForm(p => ({ ...p, funcao })); };
   const novo = () => { setSelectedId(''); setForm(initialForm); setOcrResult(null); setLastFichaFile(null); setLastAsoGuide(null); };
 
   const prepararMigracaoFuncionario = () => {
@@ -391,24 +376,6 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     toast.success(`Pre-ficha preenchida para migrar ${emp.name} para ${destino.name}. Confira e salve.`);
   };
 
-  useEffect(() => {
-    const funcao = form.funcao || '';
-    if (!funcao) return;
-    const role = roleByName.get(normalizeRole(funcao));
-    const shouldFillSalary = Boolean(role?.salarioBase && !Number(form.salario || 0));
-    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
-    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
-    const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
-    const periculosidadeValor = Number(role?.periculosidadeValor || getPericulosidadeAplicavel({ cargo: funcao, salarioBase: role?.salarioBase || form.salario || 0 }));
-    const nextInsalubridade = insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : periculosidadeAtiva ? formatPericulosidade(periculosidadeValor) : role ? 'Nao' : '';
-    const shouldFillInsalubridade = Boolean(nextInsalubridade && form.insalubridade !== nextInsalubridade);
-    if (!shouldFillSalary && !shouldFillInsalubridade) return;
-    setForm(p => ({
-      ...p,
-      salario: shouldFillSalary ? role?.salarioBase || p.salario || null : p.salario,
-      insalubridade: shouldFillInsalubridade ? nextInsalubridade : p.insalubridade,
-    }));
-  }, [form.funcao, form.salario, form.insalubridade, roleByName, config.valorInsalubridade]);
 
   const salvar = async () => {
     setSaving(true);
