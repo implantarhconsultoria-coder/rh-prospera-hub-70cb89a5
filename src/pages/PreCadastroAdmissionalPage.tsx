@@ -1,226 +1,215 @@
 import React, { useEffect } from 'react';
 import PreCadastroAdmissionalOcrPage from './PreCadastroAdmissionalOcrPage';
+import { supabase } from '@/integrations/supabase/client';
+import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
+import { toast } from 'sonner';
 
-const CUSTOM_FUNCAO_VALUE = '__topac_custom_funcao__';
-const ASO_DATE_INPUT_ID = 'topac-aso-data-exame';
-const ASO_DATE_STORAGE_KEY = 'topac_pre_cadastro_data_exame_aso';
-const MULTI_UPLOAD_ATTR = 'data-topac-multi-upload';
-const SYNTHETIC_CHANGE_ATTR = 'data-topac-synthetic-change';
+const MARK = 'data-topac-batch-upload';
+const SYNTHETIC = 'data-topac-synthetic-change';
+const BUCKETS = ['documentos-admissionais', 'documentos-funcionarios', 'atestados', 'documentos-ativos'];
 
-const findFuncaoSelect = () => {
-  const selects = Array.from(document.querySelectorAll('select')) as HTMLSelectElement[];
-  return selects.find((select) => {
-    const label = select.parentElement?.querySelector('label')?.textContent || '';
-    return label.trim().toLowerCase().startsWith('funcao');
-  }) || null;
+type Campo = { valor?: string | number | null; confianca?: number };
+type Ocr = { campos?: Record<string, Campo>; pendencias?: string[] };
+type Candidate = { value: string; score: number; source: string };
+
+const clean = (v: unknown) => String(v || '').replace(/\s+/g, ' ').trim();
+const norm = (v: unknown) => clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+const cpfDigits = (v: unknown) => clean(v).replace(/\D/g, '');
+const formatCpf = (v: unknown) => {
+  const d = cpfDigits(v);
+  return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '';
 };
+const fileDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result || ''));
+  reader.onerror = () => reject(new Error(`Nao foi possivel ler ${file.name}`));
+  reader.readAsDataURL(file);
+});
 
-const findFichaInput = () => {
-  const inputs = Array.from(document.querySelectorAll('input[type="file"]')) as HTMLInputElement[];
-  return inputs.find((input) => {
-    const containerText = input.parentElement?.textContent?.toLowerCase() || '';
-    return containerText.includes('ficha de solicitacao de emprego');
-  }) || null;
-};
+const findInput = () => Array.from(document.querySelectorAll('input[type="file"]')).find((el) => {
+  const input = el as HTMLInputElement;
+  const text = input.closest('div')?.textContent?.toLowerCase() || '';
+  return text.includes('ficha de solicitacao') || text.includes('documentos pessoais para leitura');
+}) as HTMLInputElement | undefined;
 
-const ensureMultiDocumentUpload = () => {
-  const input = findFichaInput();
-  if (!input) return;
-  input.multiple = true;
-  input.accept = '.pdf,image/*';
-  input.setAttribute(MULTI_UPLOAD_ATTR, 'true');
-  input.setAttribute('title', 'Selecione CNH, RG, CPF, certidao, comprovante de residencia e demais documentos de uma vez');
-
-  const label = input.closest('div')?.querySelector('label');
-  if (label && !label.textContent?.includes('Documentos pessoais')) {
-    label.textContent = 'Documentos pessoais para leitura automatica';
+const uploadFile = async (file: File, prefix: string) => {
+  const safe = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]+/g, '_');
+  const path = `${prefix}/${Date.now()}-${crypto.randomUUID()}-${safe}`;
+  let lastError = '';
+  for (const bucket of BUCKETS) {
+    const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
+    if (!error) return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    lastError = error.message;
+    if (!/bucket not found|not found|does not exist/i.test(error.message)) break;
   }
+  throw new Error(lastError || `Falha ao arquivar ${file.name}`);
+};
 
-  const helperId = 'topac-multi-upload-helper';
-  if (!document.getElementById(helperId)) {
-    const helper = document.createElement('p');
-    helper.id = helperId;
-    helper.className = 'mt-2 text-xs text-muted-foreground';
-    helper.textContent = 'Selecione todos os arquivos de uma vez. O sistema le cada documento e combina os dados encontrados.';
-    input.insertAdjacentElement('afterend', helper);
+const readDocument = async (file: File): Promise<Ocr> => {
+  let text = '';
+  let images: string[] = [];
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    text = await extractPdfText(bytes).catch(() => '');
+    images = (await renderPdfPagesToDataUrls(bytes, 1.8, 2)).pageUrls;
+  } else {
+    images = [await fileDataUrl(file)];
   }
-};
-
-const ensureCustomFuncaoOption = () => {
-  const select = findFuncaoSelect();
-  if (!select) return;
-  if (Array.from(select.options).some((option) => option.value === CUSTOM_FUNCAO_VALUE)) return;
-
-  const option = document.createElement('option');
-  option.value = CUSTOM_FUNCAO_VALUE;
-  option.textContent = '+ Digitar nova funcao';
-  select.appendChild(option);
-};
-
-const setSelectValueAndNotify = (select: HTMLSelectElement, value: string) => {
-  if (value && !Array.from(select.options).some((option) => option.value === value)) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
-    select.appendChild(option);
-  }
-
-  select.value = value;
-  select.dispatchEvent(new Event('change', { bubbles: true }));
-};
-
-const getSavedAsoDate = () => {
-  try {
-    return window.localStorage.getItem(ASO_DATE_STORAGE_KEY) || new Date().toISOString().slice(0, 10);
-  } catch {
-    return new Date().toISOString().slice(0, 10);
-  }
-};
-
-const getSelectedAsoDate = () => {
-  const input = document.getElementById(ASO_DATE_INPUT_ID) as HTMLInputElement | null;
-  return input?.value || getSavedAsoDate();
-};
-
-const isAsoActionButton = (target: EventTarget | null) => {
-  const element = target instanceof Element ? target.closest('button') : null;
-  const text = element?.textContent?.toLowerCase() || '';
-  return text.includes('gerar guia aso') || text.includes('enviar guia aso');
-};
-
-const withAsoDateForCurrentClick = (dateValue: string) => {
-  if (!dateValue) return;
-
-  const RealDate = window.Date;
-  const fixedNow = new RealDate(`${dateValue}T12:00:00`);
-
-  const PatchedDate = function DateOverride(this: unknown, ...args: any[]) {
-    if (this instanceof PatchedDate) {
-      return args.length ? new (RealDate as any)(...args) : new RealDate(fixedNow.getTime());
-    }
-    return args.length ? (RealDate as any)(...args) : new RealDate(fixedNow.getTime()).toString();
-  } as any;
-
-  PatchedDate.UTC = RealDate.UTC;
-  PatchedDate.parse = RealDate.parse;
-  PatchedDate.now = () => fixedNow.getTime();
-  PatchedDate.prototype = RealDate.prototype;
-
-  window.Date = PatchedDate;
-  window.setTimeout(() => {
-    window.Date = RealDate;
-  }, 0);
-};
-
-const ensureAsoDateInput = () => {
-  if (document.getElementById(ASO_DATE_INPUT_ID)) return;
-
-  const buttons = Array.from(document.querySelectorAll('button')) as HTMLButtonElement[];
-  const gerarButton = buttons.find((button) => (button.textContent || '').toLowerCase().includes('gerar guia aso'));
-  const toolbar = gerarButton?.parentElement;
-  if (!toolbar) return;
-
-  const wrapper = document.createElement('label');
-  wrapper.className = 'inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm bg-background';
-  wrapper.setAttribute('title', 'Data que aparecera na guia ASO gerada');
-
-  const span = document.createElement('span');
-  span.textContent = 'Data exame';
-  span.className = 'text-xs text-muted-foreground whitespace-nowrap';
-
-  const input = document.createElement('input');
-  input.id = ASO_DATE_INPUT_ID;
-  input.type = 'date';
-  input.value = getSavedAsoDate();
-  input.className = 'bg-transparent text-sm outline-none min-w-[132px]';
-  input.addEventListener('change', () => {
-    try {
-      window.localStorage.setItem(ASO_DATE_STORAGE_KEY, input.value);
-    } catch {
-      // O valor atual da tela continua valendo.
-    }
+  const { data, error } = await supabase.functions.invoke('ocr-pre-cadastro', {
+    body: { fileName: file.name, mimeType: file.type || 'application/octet-stream', text, images },
   });
-
-  wrapper.appendChild(span);
-  wrapper.appendChild(input);
-  toolbar.insertBefore(wrapper, gerarButton);
+  if (error) throw error;
+  return (data?.data || data || {}) as Ocr;
 };
 
-const useTopacEnhancements = () => {
+const sourceBoost = (field: string, fileName: string) => {
+  const n = norm(fileName);
+  if (field === 'rg' && /(RG|CNH)/.test(n)) return 0.45;
+  if (field === 'cpf' && /(CPF|RG|CNH|CERTIDAO|BOLETO)/.test(n)) return 0.35;
+  if (field === 'nome' && /(RG|CNH|TITULO|CERTIDAO|PIS)/.test(n)) return 0.35;
+  if (field === 'data_nascimento' && /(RG|CNH|TITULO|CERTIDAO)/.test(n)) return 0.4;
+  if (field === 'endereco' && /(BOLETO|ENDERECO|RESIDENCIA|COMPROVANTE)/.test(n)) return 0.55;
+  return 0;
+};
+
+const validValue = (field: string, raw: unknown) => {
+  const value = clean(raw);
+  if (!value) return '';
+  const n = norm(value);
+  if (/HTTP|WWW|QR.?CODE|VALIDA|AUTENTICIDADE|ORIENTACOES/.test(n)) return '';
+  if (field === 'nome') {
+    if (value.split(' ').length < 2 || /\d/.test(value) || /NOME DO|DATA DE|ELEITOR|PAGADOR|BENEFICIARIO/.test(n)) return '';
+    return value;
+  }
+  if (field === 'cpf') return formatCpf(value);
+  if (field === 'rg') return /\d/.test(value) && value.length >= 6 ? value : '';
+  if (field === 'data_nascimento') return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+  if (field === 'endereco') {
+    if (/EVOLUTIONPRO|TELECOM LTDA|BENEFICIARIO/.test(n)) return '';
+    return /(RUA|AVENIDA|AV\.|ESTRADA|RODOVIA|TRAVESSA|ALAMEDA|CEP|\d{5}-?\d{3})/.test(n) ? value : '';
+  }
+  return value;
+};
+
+const choose = (list: Candidate[]) => {
+  if (!list.length) return '';
+  const grouped = new Map<string, Candidate>();
+  for (const item of list) {
+    const key = norm(item.value).replace(/\W/g, '');
+    const current = grouped.get(key);
+    grouped.set(key, current ? { ...current, score: current.score + item.score + 0.25 } : item);
+  }
+  return [...grouped.values()].sort((a, b) => b.score - a.score)[0]?.value || '';
+};
+
+const classify = (name: string) => {
+  const n = norm(name);
+  if (n.includes('CNH')) return 'cnh';
+  if (n.includes('RG')) return 'rg_cpf';
+  if (n.includes('TITULO')) return 'titulo_eleitoral';
+  if (n.includes('PIS') || n.includes('CIDADAO')) return 'pis';
+  if (n.includes('CERTIDAO')) return 'certidao_casamento';
+  if (n.includes('BOLETO') || n.includes('PAGAMENTO')) return 'comprovante_endereco';
+  return 'documento_admissional';
+};
+
+const processBatch = async (files: File[]) => {
+  const fields = ['nome', 'cpf', 'rg', 'data_nascimento', 'endereco'];
+  const candidates: Record<string, Candidate[]> = Object.fromEntries(fields.map((f) => [f, []]));
+  const archived: Array<{ file: File; url: string }> = [];
+
+  for (let i = 0; i < files.length; i += 1) {
+    const file = files[i];
+    toast.loading(`Arquivando e lendo ${i + 1}/${files.length}: ${file.name}`, { id: 'topac-batch' });
+    const [url, ocr] = await Promise.all([
+      uploadFile(file, 'pre-cadastro-lote'),
+      readDocument(file),
+    ]);
+    archived.push({ file, url });
+    for (const field of fields) {
+      const value = validValue(field, ocr.campos?.[field]?.valor);
+      if (!value) continue;
+      const confidence = Number(ocr.campos?.[field]?.confianca || 0.65);
+      candidates[field].push({ value, score: confidence + sourceBoost(field, file.name), source: file.name });
+    }
+  }
+
+  const result = Object.fromEntries(fields.map((f) => [f, choose(candidates[f])]));
+  const { data: auth } = await supabase.auth.getUser();
+  const payload = {
+    status: 'aguardando_validacao',
+    nome: result.nome || '',
+    cpf: result.cpf || '',
+    rg: result.rg || '',
+    data_nascimento: result.data_nascimento || null,
+    endereco: result.endereco || '',
+    arquivo_ficha_url: archived[0]?.url || '',
+    criado_por: auth.user?.id || null,
+    dados_extraidos: { lote_documentos: { resultado: result, arquivos: archived.map((a) => a.file.name) } },
+    conferencia: { lote_documentos: { status: 'processado', processado_em: new Date().toISOString() } },
+    historico: [{ em: new Date().toISOString(), acao: 'lote_documentos_arquivado_e_processado', quantidade: archived.length }],
+  };
+
+  const { data: draft, error } = await (supabase as any)
+    .from('pre_cadastros_admissionais')
+    .insert(payload)
+    .select('id')
+    .single();
+  if (error) throw error;
+
+  const docs = archived.map(({ file, url }) => ({
+    pre_cadastro_id: draft.id,
+    tipo_documento: classify(file.name),
+    nome_arquivo: file.name,
+    arquivo_url: url,
+  }));
+  const { error: docsError } = await (supabase as any).from('pre_cadastro_documentos').insert(docs);
+  if (docsError) throw docsError;
+
+  toast.success(`${archived.length} documentos arquivados. Cadastro preenchido com os dados encontrados.`, { id: 'topac-batch', duration: 5000 });
+  window.setTimeout(() => window.location.reload(), 900);
+};
+
+const useBatchUpload = () => {
   useEffect(() => {
-    const handleChange = async (event: Event) => {
-      const target = event.target;
+    const enhance = () => {
+      const input = findInput();
+      if (!input) return;
+      input.multiple = true;
+      input.accept = '.pdf,image/*';
+      input.setAttribute(MARK, 'true');
+      const label = input.closest('div')?.querySelector('label');
+      if (label) label.textContent = 'Documentos admissionais - selecione todos de uma vez';
+    };
 
-      if (target instanceof HTMLSelectElement && target.value === CUSTOM_FUNCAO_VALUE) {
-        const typed = window.prompt('Digite a nova funcao/cargo para este pre-cadastro:');
-        const funcao = String(typed || '').trim().replace(/\s+/g, ' ').toUpperCase();
-        setSelectValueAndNotify(target, funcao);
-        return;
-      }
-
-      if (!(target instanceof HTMLInputElement) || target.type !== 'file') return;
-      if (!target.hasAttribute(MULTI_UPLOAD_ATTR)) return;
-      if (target.hasAttribute(SYNTHETIC_CHANGE_ATTR)) return;
-
-      const files = Array.from(target.files || []);
+    const onChange = async (event: Event) => {
+      const input = event.target as HTMLInputElement;
+      if (!(input instanceof HTMLInputElement) || input.type !== 'file' || !input.hasAttribute(MARK) || input.hasAttribute(SYNTHETIC)) return;
+      const files = Array.from(input.files || []);
       if (files.length <= 1) return;
-
-      event.stopImmediatePropagation();
       event.preventDefault();
-
-      for (const file of files) {
-        const transfer = new DataTransfer();
-        transfer.items.add(file);
-        target.files = transfer.files;
-        target.setAttribute(SYNTHETIC_CHANGE_ATTR, 'true');
-        target.dispatchEvent(new Event('change', { bubbles: true }));
-        target.removeAttribute(SYNTHETIC_CHANGE_ATTR);
-        await new Promise((resolve) => window.setTimeout(resolve, 900));
+      event.stopImmediatePropagation();
+      input.value = '';
+      try {
+        await processBatch(files);
+      } catch (error: any) {
+        toast.error(`Falha no lote: ${error?.message || 'erro desconhecido'}`, { id: 'topac-batch', duration: 8000 });
       }
-
-      target.value = '';
     };
 
-    const applyEnhancements = () => {
-      ensureCustomFuncaoOption();
-      ensureAsoDateInput();
-      ensureMultiDocumentUpload();
-    };
-
-    applyEnhancements();
-    const observer = new MutationObserver(applyEnhancements);
+    enhance();
+    const observer = new MutationObserver(enhance);
     observer.observe(document.body, { childList: true, subtree: true });
-    document.addEventListener('change', handleChange, true);
-
+    document.addEventListener('change', onChange, true);
     return () => {
       observer.disconnect();
-      document.removeEventListener('change', handleChange, true);
-    };
-  }, []);
-};
-
-const useSelectableAsoDate = () => {
-  useEffect(() => {
-    const handleAsoClick = (event: MouseEvent) => {
-      if (!isAsoActionButton(event.target)) return;
-      withAsoDateForCurrentClick(getSelectedAsoDate());
-    };
-
-    ensureAsoDateInput();
-    const observer = new MutationObserver(ensureAsoDateInput);
-    observer.observe(document.body, { childList: true, subtree: true });
-    document.addEventListener('click', handleAsoClick, true);
-
-    return () => {
-      observer.disconnect();
-      document.removeEventListener('click', handleAsoClick, true);
+      document.removeEventListener('change', onChange, true);
     };
   }, []);
 };
 
 const PreCadastroAdmissionalPage: React.FC = () => {
-  useTopacEnhancements();
-  useSelectableAsoDate();
+  useBatchUpload();
   return <PreCadastroAdmissionalOcrPage />;
 };
 
