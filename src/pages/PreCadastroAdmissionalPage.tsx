@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { createWorker } from 'tesseract.js';
+import { createWorker, type Worker } from 'tesseract.js';
 import PreCadastroAdmissionalOcrPage from './PreCadastroAdmissionalOcrPage';
 import { supabase } from '@/integrations/supabase/client';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 const MARK = 'data-topac-batch-upload';
 const BUCKETS = ['documentos-admissionais', 'documentos-funcionarios', 'atestados', 'documentos-ativos'];
+const OCR_TIMEOUT = 22000;
 
 const clean = (v: unknown) => String(v || '').replace(/\s+/g, ' ').trim();
 const norm = (v: unknown) => clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
@@ -15,6 +16,7 @@ const formatCpf = (v: unknown) => {
   const d = digits(v);
   return d.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '';
 };
+const pause = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0));
 
 const fileDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
@@ -23,22 +25,46 @@ const fileDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-let workerPromise: ReturnType<typeof createWorker> | null = null;
-const getOcrWorker = () => {
-  if (!workerPromise) workerPromise = createWorker('por');
-  return workerPromise;
+let worker: Worker | null = null;
+let workerStarting: Promise<Worker> | null = null;
+const getWorker = async () => {
+  if (worker) return worker;
+  if (!workerStarting) {
+    workerStarting = createWorker('por', 1, {
+      logger: (message) => {
+        if (message.status === 'recognizing text' && typeof message.progress === 'number') {
+          toast.loading(`Lendo dados do documento: ${Math.round(message.progress * 100)}%`, { id: 'topac-batch' });
+        }
+      },
+    }).then((created) => {
+      worker = created;
+      return created;
+    });
+  }
+  return workerStarting;
 };
 
-const localOcr = async (images: string[], fileName: string) => {
-  if (!images.length) return '';
-  const worker = await getOcrWorker();
-  const parts: string[] = [];
-  for (let i = 0; i < images.length; i += 1) {
-    toast.loading(`Lendo documento pessoal: ${fileName} (${i + 1}/${images.length})`, { id: 'topac-batch' });
-    const result = await worker.recognize(images[i]);
-    if (result.data.text) parts.push(result.data.text);
+const resetWorker = async () => {
+  const current = worker;
+  worker = null;
+  workerStarting = null;
+  if (current) await current.terminate().catch(() => undefined);
+};
+
+const recognizeWithTimeout = async (image: string, fileName: string) => {
+  toast.loading(`Lendo dados pessoais em ${fileName}...`, { id: 'topac-batch' });
+  const task = (async () => {
+    const activeWorker = await getWorker();
+    const result = await activeWorker.recognize(image);
+    return result.data.text || '';
+  })();
+  const timeout = new Promise<string>((_, reject) => window.setTimeout(() => reject(new Error('Tempo limite da leitura atingido')), OCR_TIMEOUT));
+  try {
+    return await Promise.race([task, timeout]);
+  } catch {
+    await resetWorker();
+    return '';
   }
-  return parts.join('\n');
 };
 
 const findInput = () => Array.from(document.querySelectorAll('input[type="file"]')).find((el) => {
@@ -60,8 +86,9 @@ const uploadFile = async (file: File, prefix: string) => {
   throw new Error(lastError || `Falha ao arquivar ${file.name}`);
 };
 
-type Candidate = { value: string; score: number; source: string };
+type Candidate = { value: string; score: number };
 type Extracted = { nome: string; cpf: string; rg: string; data_nascimento: string; endereco: string };
+type Prepared = { file: File; url: string; text: string; image: string };
 
 const validPersonName = (value: string) => {
   const n = norm(value);
@@ -83,52 +110,36 @@ const toIsoDate = (raw: string) => {
 const extractFromText = (rawText: string, fileName: string): Extracted => {
   const text = rawText.replace(/\r/g, '\n');
   const lines = text.split(/\n+/).map(clean).filter(Boolean);
-  const upper = norm(text);
   let nome = '';
   let cpf = '';
   let rg = '';
   let data_nascimento = '';
   let endereco = '';
 
-  const cpfMatches = text.match(/\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}\b/g) || [];
-  cpf = cpfMatches.map(formatCpf).find(Boolean) || '';
+  cpf = (text.match(/\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}\b/g) || []).map(formatCpf).find(Boolean) || '';
 
-  const labelledNamePatterns = [
+  const namePatterns = [
     /NOME(?: DO ELEITOR| COMPLETO| DO CONDUTOR| DO TITULAR)?\s*[:\-]?\s*\n?([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' ]{8,})/i,
     /1[ºO]?\s*CONJUGE\s*\n?([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' ]{8,})/i,
+    /NOME E SOBRENOME\s*\n?([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý' ]{8,})/i,
   ];
-  for (const pattern of labelledNamePatterns) {
-    const match = text.match(pattern)?.[1];
-    if (match && validPersonName(clean(match))) { nome = clean(match); break; }
+  for (const pattern of namePatterns) {
+    const match = clean(text.match(pattern)?.[1]);
+    if (validPersonName(match)) { nome = match; break; }
   }
-
-  if (!nome && upper.includes('NOME DO ELEITOR')) {
-    const index = lines.findIndex((line) => norm(line).includes('NOME DO ELEITOR'));
-    const around = [lines[index + 1], lines[index - 1]].filter(Boolean) as string[];
-    nome = around.find(validPersonName) || '';
-  }
-
   if (!nome) {
     const mrz = text.match(/\n([A-Z]{2,})<<([A-Z<]{2,})<+/)?.slice(1);
     if (mrz) {
-      const mrzName = `${mrz[1]} ${mrz[2].replace(/<+/g, ' ')}`.replace(/\s+/g, ' ').trim();
-      if (validPersonName(mrzName)) nome = mrzName;
+      const candidate = `${mrz[1]} ${mrz[2].replace(/<+/g, ' ')}`.replace(/\s+/g, ' ').trim();
+      if (validPersonName(candidate)) nome = candidate;
     }
   }
+  if (!nome) nome = lines.filter(validPersonName).sort((a, b) => b.split(' ').length - a.split(' ').length)[0] || '';
 
-  if (!nome) {
-    const candidates = lines.filter(validPersonName);
-    nome = candidates.sort((a, b) => {
-      const score = (v: string) => (v === v.toUpperCase() ? 2 : 0) + Math.min(v.split(' ').length, 5) - (norm(v).includes('LTDA') ? 10 : 0);
-      return score(b) - score(a);
-    })[0] || '';
-  }
-
-  const birthContext = text.match(/(?:DATA\s+DE\s+NASCIMENTO|NASCIMENTO|DT\.?\s*NASC)[^\d]{0,30}(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i)?.[1];
-  if (birthContext) data_nascimento = toIsoDate(birthContext);
-  if (!data_nascimento && /TITULO|CNH|RG|CERTIDAO/i.test(fileName)) {
-    const dates = text.match(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}\b/g) || [];
-    data_nascimento = dates.map(toIsoDate).find(Boolean) || '';
+  const birth = text.match(/(?:DATA\s+DE\s+NASCIMENTO|NASCIMENTO|DT\.?\s*NASC)[^\d]{0,40}(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4})/i)?.[1];
+  if (birth) data_nascimento = toIsoDate(birth);
+  if (!data_nascimento && /(CNH|RG|TITULO|CERTIDAO)/i.test(fileName)) {
+    data_nascimento = (text.match(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}\b/g) || []).map(toIsoDate).find(Boolean) || '';
   }
 
   const rgPatterns = [
@@ -136,8 +147,8 @@ const extractFromText = (rawText: string, fileName: string): Extracted => {
     /([0-9]{2}[.]?[0-9]{3}[.]?[0-9]{3}[-]?[0-9Xx])\s*(?:SSP|SP)/i,
   ];
   for (const pattern of rgPatterns) {
-    const match = text.match(pattern)?.[1];
-    if (match) { rg = clean(match); break; }
+    const match = clean(text.match(pattern)?.[1]);
+    if (match) { rg = match; break; }
   }
 
   const addressLine = lines.find((line) => /\b(RUA|R\.|AVENIDA|AV\.|TRAVESSA|ALAMEDA|ESTRADA|RODOVIA)\b/i.test(line) && !/BENEFICIARIO|EVOLUTIONPRO|TELECOM LTDA/i.test(line));
@@ -150,26 +161,17 @@ const extractFromText = (rawText: string, fileName: string): Extracted => {
   return { nome, cpf, rg, data_nascimento, endereco };
 };
 
-const boost = (field: keyof Extracted, fileName: string) => {
+const score = (field: keyof Extracted, fileName: string) => {
   const n = norm(fileName);
-  if (field === 'nome' && /(CNH|RG|TITULO|CERTIDAO|PIS)/.test(n)) return 0.6;
-  if (field === 'cpf' && /(CNH|RG|CPF|CERTIDAO|BOLETO)/.test(n)) return 0.7;
-  if (field === 'rg' && /(CNH|RG)/.test(n)) return 0.9;
-  if (field === 'data_nascimento' && /(CNH|RG|TITULO|CERTIDAO)/.test(n)) return 0.8;
-  if (field === 'endereco' && /(BOLETO|COMPROVANTE|ENDERECO|RESIDENCIA)/.test(n)) return 1;
-  return 0.1;
+  if (field === 'nome' && /(CNH|RG|TITULO|CERTIDAO|PIS)/.test(n)) return 2;
+  if (field === 'cpf' && /(CNH|RG|CPF|CERTIDAO)/.test(n)) return 2.2;
+  if (field === 'rg' && /(CNH|RG)/.test(n)) return 2.5;
+  if (field === 'data_nascimento' && /(CNH|RG|TITULO|CERTIDAO)/.test(n)) return 2.3;
+  if (field === 'endereco' && /(BOLETO|COMPROVANTE|ENDERECO|RESIDENCIA)/.test(n)) return 3;
+  return 1;
 };
 
-const choose = (items: Candidate[]) => {
-  if (!items.length) return '';
-  const grouped = new Map<string, Candidate>();
-  for (const item of items) {
-    const key = norm(item.value).replace(/[^A-Z0-9]/g, '');
-    const current = grouped.get(key);
-    grouped.set(key, current ? { ...current, score: current.score + item.score + 0.5 } : item);
-  }
-  return [...grouped.values()].sort((a, b) => b.score - a.score)[0]?.value || '';
-};
+const choose = (items: Candidate[]) => items.sort((a, b) => b.score - a.score)[0]?.value || '';
 
 const classify = (name: string) => {
   const n = norm(name);
@@ -182,33 +184,47 @@ const classify = (name: string) => {
   return 'documento_admissional';
 };
 
+const prepareFile = async (file: File, index: number, total: number): Promise<Prepared> => {
+  toast.loading(`Salvando documento ${index + 1}/${total}: ${file.name}`, { id: 'topac-batch' });
+  const urlPromise = uploadFile(file, 'pre-cadastro-lote');
+  let text = '';
+  let image = '';
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    text = await extractPdfText(bytes).catch(() => '');
+    const shouldRender = /(CNH|RG|CPF|TITULO|CERTIDAO|BOLETO|PAGAMENTO|COMPROVANTE)/i.test(file.name) || text.length < 80;
+    if (shouldRender) image = (await renderPdfPagesToDataUrls(bytes, 1.55, 1)).pageUrls[0] || '';
+  } else {
+    image = await fileDataUrl(file);
+  }
+  return { file, url: await urlPromise, text, image };
+};
+
 const processBatch = async (files: File[]) => {
+  toast.loading(`Salvando ${files.length} documentos...`, { id: 'topac-batch' });
+  const prepared: Prepared[] = [];
+  for (let i = 0; i < files.length; i += 1) {
+    prepared.push(await prepareFile(files[i], i, files.length));
+    await pause();
+  }
+
+  const identity = prepared.find((item) => /CNH/i.test(item.file.name))
+    || prepared.find((item) => /RG|CPF/i.test(item.file.name))
+    || prepared.find((item) => /CERTIDAO|TITULO/i.test(item.file.name));
+  if (identity?.image) identity.text += `\n${await recognizeWithTimeout(identity.image, identity.file.name)}`;
+
+  const address = prepared.find((item) => /BOLETO|PAGAMENTO|COMPROVANTE|ENDERECO|RESIDENCIA/i.test(item.file.name));
+  if (address?.image && !/\b(RUA|AVENIDA|AV\.|TRAVESSA|ESTRADA|RODOVIA)\b/i.test(address.text)) {
+    address.text += `\n${await recognizeWithTimeout(address.image, address.file.name)}`;
+  }
+
   const fields: Array<keyof Extracted> = ['nome', 'cpf', 'rg', 'data_nascimento', 'endereco'];
   const candidates: Record<keyof Extracted, Candidate[]> = { nome: [], cpf: [], rg: [], data_nascimento: [], endereco: [] };
-  const archived: Array<{ file: File; url: string }> = [];
-
-  for (let i = 0; i < files.length; i += 1) {
-    const file = files[i];
-    toast.loading(`Arquivando e lendo ${i + 1}/${files.length}: ${file.name}`, { id: 'topac-batch' });
-    let parsedText = '';
-    let images: string[] = [];
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      parsedText = await extractPdfText(bytes).catch(() => '');
-      images = (await renderPdfPagesToDataUrls(bytes, 2.2, 2)).pageUrls;
-    } else {
-      images = [await fileDataUrl(file)];
-    }
-
-    const visualText = await localOcr(images, file.name).catch(() => '');
-    const fullText = `${parsedText}\n${visualText}`.trim();
-    const extracted = extractFromText(fullText, file.name);
-    const url = await uploadFile(file, 'pre-cadastro-lote');
-    archived.push({ file, url });
-
+  for (const item of prepared) {
+    const extracted = extractFromText(item.text, item.file.name);
     for (const field of fields) {
       const value = clean(extracted[field]);
-      if (value) candidates[field].push({ value, score: 1 + boost(field, file.name), source: file.name });
+      if (value) candidates[field].push({ value, score: score(field, item.file.name) });
     }
   }
 
@@ -228,48 +244,54 @@ const processBatch = async (files: File[]) => {
     rg: result.rg,
     data_nascimento: result.data_nascimento || null,
     endereco: result.endereco,
-    arquivo_ficha_url: archived[0]?.url || '',
+    arquivo_ficha_url: prepared[0]?.url || '',
     criado_por: auth.user?.id || null,
-    dados_extraidos: { lote_documentos: { resultado: result, arquivos: archived.map((a) => a.file.name) } },
-    conferencia: { lote_documentos: { status: 'processado_localmente', processado_em: new Date().toISOString() } },
-    historico: [{ em: new Date().toISOString(), acao: 'documentos_pessoais_arquivados_e_lidos', quantidade: archived.length }],
+    dados_extraidos: { lote_documentos: { resultado: result, arquivos: prepared.map((item) => item.file.name) } },
+    conferencia: { lote_documentos: { status: 'processado_sem_bloqueio', processado_em: new Date().toISOString() } },
+    historico: [{ em: new Date().toISOString(), acao: 'documentos_pessoais_salvos_e_consolidados', quantidade: prepared.length }],
   };
 
   const { data: draft, error } = await (supabase as any).from('pre_cadastros_admissionais').insert(payload).select('id').single();
   if (error) throw error;
-
-  const docs = archived.map(({ file, url }) => ({ pre_cadastro_id: draft.id, tipo_documento: classify(file.name), nome_arquivo: file.name, arquivo_url: url }));
+  const docs = prepared.map(({ file, url }) => ({ pre_cadastro_id: draft.id, tipo_documento: classify(file.name), nome_arquivo: file.name, arquivo_url: url }));
   const { error: docsError } = await (supabase as any).from('pre_cadastro_documentos').insert(docs);
   if (docsError) throw docsError;
 
-  toast.success(`${archived.length} documentos salvos. Nome, CPF, RG, nascimento e endereco foram consolidados.`, { id: 'topac-batch', duration: 6000 });
-  window.setTimeout(() => window.location.reload(), 1000);
+  toast.success(`${prepared.length} documentos salvos. Cadastro criado para conferencia.`, { id: 'topac-batch', duration: 5000 });
+  window.setTimeout(() => window.location.reload(), 900);
 };
 
 const useBatchUpload = () => {
   useEffect(() => {
+    let running = false;
     const enhance = () => {
       const input = findInput();
       if (!input) return;
       input.multiple = true;
       input.accept = '.pdf,image/*';
       input.setAttribute(MARK, 'true');
+      input.disabled = running;
       const label = input.closest('div')?.querySelector('label');
-      if (label) label.textContent = 'Documentos pessoais - selecione todos de uma vez';
+      if (label) label.textContent = running ? 'Processando documentos...' : 'Documentos pessoais - selecione todos de uma vez';
     };
 
     const onChange = async (event: Event) => {
       const input = event.target as HTMLInputElement;
-      if (!(input instanceof HTMLInputElement) || input.type !== 'file' || !input.hasAttribute(MARK)) return;
+      if (!(input instanceof HTMLInputElement) || input.type !== 'file' || !input.hasAttribute(MARK) || running) return;
       const files = Array.from(input.files || []);
       if (!files.length) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       input.value = '';
+      running = true;
+      enhance();
       try {
         await processBatch(files);
       } catch (error: any) {
         toast.error(`Falha ao processar documentos: ${error?.message || 'erro desconhecido'}`, { id: 'topac-batch', duration: 10000 });
+      } finally {
+        running = false;
+        enhance();
       }
     };
 
@@ -280,6 +302,7 @@ const useBatchUpload = () => {
     return () => {
       observer.disconnect();
       document.removeEventListener('change', onChange, true);
+      void resetWorker();
     };
   }, []);
 };
