@@ -20,4 +20,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache:
+          cache: npm
+      - name: Liberar campos manuais
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
+          s=p.read_text(encoding='utf-8')
+          s,n1=re.subn(r"  const setFuncaoComPadroes = \(funcao: string\) => \{.*?\n  \};\n  const novo", "  const setFuncaoComPadroes = (funcao: string) => { setForm(p => ({ ...p, funcao })); };\n  const novo", s, count=1, flags=re.S)
+          s,n2=re.subn(r"\n  useEffect\(\(\) => \{\n    const funcao = form\.funcao.*?\n  \}, \[form\.funcao, form\.salario, form\.insalubridade, roleByName, config\.valorInsalubridade\]\);\n", "\n", s, count=1, flags=re.S)
+          if n1==0 and n2==0:
+              print('Campos ja liberados')
+          p.write_text(s,encoding='utf-8')
+      - run: npm ci
+      - run: node scripts/normalize-source-encoding.mjs
+      - run: npm run build
+      - name: Publicar correcao
+        if: github.event_name == 'push'
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "TOPAC Automation"
+          git config user.email "actions@github.com"
+          git add src/pages/PreCadastroAdmissionalOcrPage.tsx
+          git commit -m "Libera empresa funcao salario e insalubridade"
+          git push origin main
