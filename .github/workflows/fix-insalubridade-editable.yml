@@ -1,0 +1,73 @@
+name: Corrigir insalubridade editavel
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-insalubridade-editable.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Liberar edicao manual da insalubridade
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
+          text = path.read_text(encoding='utf-8')
+          old = """  useEffect(() => {
+    const funcao = form.funcao || '';
+    if (!funcao) return;
+    const role = roleByName.get(normalizeRole(funcao));
+    const shouldFillSalary = Boolean(role?.salarioBase && !Number(form.salario || 0));
+    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
+    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
+    const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
+    const periculosidadeValor = Number(role?.periculosidadeValor || getPericulosidadeAplicavel({ cargo: funcao, salarioBase: role?.salarioBase || form.salario || 0 }));
+    const nextInsalubridade = insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : periculosidadeAtiva ? formatPericulosidade(periculosidadeValor) : role ? 'Nao' : '';
+    const shouldFillInsalubridade = Boolean(nextInsalubridade && form.insalubridade !== nextInsalubridade);
+    if (!shouldFillSalary && !shouldFillInsalubridade) return;
+    setForm(p => ({
+      ...p,
+      salario: shouldFillSalary ? role?.salarioBase || p.salario || null : p.salario,
+      insalubridade: shouldFillInsalubridade ? nextInsalubridade : p.insalubridade,
+    }));
+  }, [form.funcao, form.salario, form.insalubridade, roleByName, config.valorInsalubridade]);
+"""
+          new = """  useEffect(() => {
+    const funcao = form.funcao || '';
+    if (!funcao) return;
+    const role = roleByName.get(normalizeRole(funcao));
+    const shouldFillSalary = Boolean(role?.salarioBase && !Number(form.salario || 0));
+    const insalubridadeAtiva = employeeHasInsalubridade({ cargo: funcao });
+    const insalubridadeValor = Number(role?.insalubridadeValor || config.valorInsalubridade || 0);
+    const periculosidadeAtiva = Boolean(role?.periculosidadeAtiva || isMotoboyRole(funcao));
+    const periculosidadeValor = Number(role?.periculosidadeValor || getPericulosidadeAplicavel({ cargo: funcao, salarioBase: role?.salarioBase || form.salario || 0 }));
+    const nextInsalubridade = insalubridadeAtiva ? formatInsalubridade(insalubridadeValor) : periculosidadeAtiva ? formatPericulosidade(periculosidadeValor) : role ? 'Nao' : '';
+    const shouldFillInsalubridade = Boolean(nextInsalubridade && !String(form.insalubridade || '').trim());
+    if (!shouldFillSalary && !shouldFillInsalubridade) return;
+    setForm(p => ({
+      ...p,
+      salario: shouldFillSalary ? role?.salarioBase || p.salario || null : p.salario,
+      insalubridade: shouldFillInsalubridade ? nextInsalubridade : p.insalubridade,
+    }));
+  }, [form.funcao, roleByName, config.valorInsalubridade]);
+"""
+          if old not in text:
+              raise SystemExit('Bloco esperado nao encontrado; nenhuma alteracao aplicada.')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+      - name: Commit da correcao
+        run: |
+          git config user.name "TOPAC Automation"
+          git config user.email "actions@github.com"
+          git add src/pages/PreCadastroAdmissionalOcrPage.tsx
+          git commit -m "Libera edicao manual da insalubridade no pre-cadastro"
+          git push origin main
