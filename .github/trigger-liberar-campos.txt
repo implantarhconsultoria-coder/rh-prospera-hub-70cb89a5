@@ -1,1 +1,1 @@
-Dispara o workflow que remove travas automaticas de empresa, funcao, salario e insalubridade no pre-cadastro admissional.
+Executar agora a liberacao completa de empresa, funcao, salario e insalubridade sem sobrescrita automatica.
