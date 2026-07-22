@@ -72,34 +72,57 @@ const FilialFechamentoPage: React.FC = () => {
     [employees, companyId]
   );
 
+  const empresaAtual = companies.find(c => c.id === companyId);
+  const empresaNome = empresaAtual?.name || '';
+  const textoEmpresa = `${empresaAtual?.codigo || ''} ${empresaAtual?.name || ''} ${empresaAtual?.city || ''}`
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const filialGoiania = textoEmpresa.includes('goian') || textoEmpresa.includes('gyn');
+
+  const montarEntry = (emp: any, c: any) => ({
+    employeeId: emp.id,
+    companyId,
+    competencia,
+    faltasDias: c?.falta.quantidade || 0,
+    atrasos: c?.atraso.quantidade || 0,
+    he50: c?.he50.quantidade || 0,
+    he100: c?.he100.quantidade || 0,
+    adicionais: c?.adicional.valor || 0,
+    descontosDiversos: c?.desconto.valor || 0,
+    adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
+    vrAplicado: emp.vrAtivo,
+    vrDias: 0,
+    vaAplicado: emp.vaAtivo,
+    vtAplicado: emp.vtAtivo,
+    vtDesconto: 0,
+    comissaoBase: 0,
+    insalubridadeAplicada: employeeHasInsalubridade(emp),
+    observacoes: '',
+    statusConferencia: 'pendente',
+  } as any);
+
+  const diferencialHEGoiania = (emp: any, c: any) => {
+    if (!filialGoiania || !c?.he50.quantidade) return 0;
+    const calc = calcTotalFuncionario(emp, montarEntry(emp, c));
+    return Math.round((calc.he50Val / 15) * 100) / 100;
+  };
+
   // Cálculo dos totais consolidados
   const totaisGerais = useMemo(() => {
     let proventos = 0, descontos = 0, liquido = 0;
     let funcAfetados = 0;
     compEmps.forEach(emp => {
       const c = consolidado.get(emp.id);
-      const entry = {
-        faltasDias: c?.falta.quantidade || 0,
-        atrasos: c?.atraso.quantidade || 0,
-        he50: c?.he50.quantidade || 0,
-        he100: c?.he100.quantidade || 0,
-        adicionais: c?.adicional.valor || 0,
-        descontosDiversos: c?.desconto.valor || 0,
-        adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
-        vrAplicado: emp.vrAtivo, vrDias: 0, vaAplicado: emp.vaAtivo, vtAplicado: emp.vtAtivo, vtDesconto: 0,
-        comissaoBase: 0, insalubridadeAplicada: employeeHasInsalubridade(emp), observacoes: '', statusConferencia: 'pendente',
-      } as any;
-      const calc = calcTotalFuncionario(emp, entry);
-      proventos += calc.proventos;
+      const calc = calcTotalFuncionario(emp, montarEntry(emp, c));
+      const diferencial60 = diferencialHEGoiania(emp, c);
+      proventos += calc.proventos + diferencial60;
       descontos += calc.descontos;
-      liquido += calc.liquido;
+      liquido += calc.liquido + diferencial60;
       if (c) funcAfetados += 1;
     });
     return { proventos, descontos, liquido, funcAfetados };
-  }, [consolidado, compEmps]);
+  }, [consolidado, compEmps, filialGoiania, companyId, competencia]);
 
   const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || '';
-  const empresaNome = companies.find(c => c.id === companyId)?.name || '';
   const fechado = fechamento?.status === 'fechado';
 
   const fechar = async () => {
@@ -133,10 +156,12 @@ const FilialFechamentoPage: React.FC = () => {
       // 2) Para cada funcionário, gerar/atualizar lançamento mensal consolidado
       for (const emp of compEmps) {
         const c = consolidado.get(emp.id);
+        const diferencial60 = diferencialHEGoiania(emp, c);
         const obsLista = c ? [
           ...c.falta.observacoes, ...c.atraso.observacoes, ...c.he50.observacoes, ...c.he100.observacoes,
           ...c.adicional.observacoes, ...c.desconto.observacoes, ...c.adiantamento.observacoes, ...c.observacao.observacoes,
         ].filter(Boolean) : [];
+        if (diferencial60 > 0) obsLista.push(`Goiânia: adicional de 10% aplicado às ${c?.he50.quantidade || 0}h de dias úteis, totalizando HE 60%`);
 
         const payload = {
           company_id: companyId,
@@ -146,7 +171,7 @@ const FilialFechamentoPage: React.FC = () => {
           atrasos: c?.atraso.quantidade || 0,
           he50: c?.he50.quantidade || 0,
           he100: c?.he100.quantidade || 0,
-          adicionais: c?.adicional.valor || 0,
+          adicionais: (c?.adicional.valor || 0) + diferencial60,
           descontos_diversos: c?.desconto.valor || 0,
           adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
           vr_aplicado: emp.vrAtivo,
@@ -185,6 +210,7 @@ const FilialFechamentoPage: React.FC = () => {
           total_proventos: totaisGerais.proventos,
           total_descontos: totaisGerais.descontos,
           total_liquido: totaisGerais.liquido,
+          regra_hora_extra: filialGoiania ? 'dias úteis 60% e domingos/feriados 100%' : 'dias úteis 50% e domingos/feriados 100%',
         },
       });
 
@@ -224,6 +250,13 @@ const FilialFechamentoPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {filialGoiania && (
+        <div className="card-premium p-4 border-l-4 border-primary bg-primary/5">
+          <p className="text-sm font-semibold">Regra de Goiânia ativa</p>
+          <p className="text-xs text-muted-foreground mt-1">Horas extras em dias úteis: 60%. Domingos e feriados: 100%.</p>
+        </div>
+      )}
 
       {/* Status */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card-premium p-5">
