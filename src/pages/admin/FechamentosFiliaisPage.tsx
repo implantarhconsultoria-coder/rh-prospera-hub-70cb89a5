@@ -50,7 +50,11 @@ const FechamentosFiliaisPage: React.FC = () => {
       let totalDescontos = Number(fech?.total_descontos || 0);
       let totalLiquido = Number(fech?.total_liquido || 0);
 
-      if (!fech && lancamentosEmpresa.length > 0) {
+      const fechamentoSemTotais = Boolean(fech) &&
+        Number(fech?.total_funcionarios || 0) === 0 &&
+        totalProventos === 0 && totalDescontos === 0 && totalLiquido === 0;
+
+      if (lancamentosEmpresa.length > 0 && (!fech || fechamentoSemTotais)) {
         totalProventos = 0;
         totalDescontos = 0;
         totalLiquido = 0;
@@ -89,12 +93,15 @@ const FechamentosFiliaisPage: React.FC = () => {
       }
 
       const status = fech?.status || (lancamentosEmpresa.length > 0 ? 'aberto' : 'pendente');
+      const totalFuncionarios = Number(fech?.total_funcionarios || 0) > 0
+        ? Number(fech?.total_funcionarios)
+        : Math.max(funcionariosAtivos.length, lancamentosEmpresa.length);
 
       return {
         company,
         fech,
         status,
-        totalFuncionarios: fech?.total_funcionarios || funcionariosAtivos.length,
+        totalFuncionarios,
         totalProventos,
         totalDescontos,
         totalLiquido,
@@ -212,12 +219,8 @@ const FechamentosFiliaisPage: React.FC = () => {
                   <td className="px-3 py-2 text-xs">{l.fech?.fechado_por_nome || '—'}</td>
                   <td className="px-3 py-2 text-xs">{l.fech?.fechado_em ? new Date(l.fech.fechado_em).toLocaleString('pt-BR') : '—'}</td>
                   <td className="px-3 py-2 flex gap-1">
-                    {l.fech && (
-                      <Button variant="ghost" size="sm" onClick={() => verHistorico(l.fech!.id)} title="Histórico"><Clock className="w-4 h-4" /></Button>
-                    )}
-                    {l.status === 'fechado' && (
-                      <Button variant="ghost" size="sm" onClick={() => reabrir(l.fech!)} title="Reabrir" className="text-warning"><Unlock className="w-4 h-4" /></Button>
-                    )}
+                    {l.fech && <Button variant="ghost" size="sm" onClick={() => verHistorico(l.fech!.id)} title="Histórico"><Clock className="w-4 h-4" /></Button>}
+                    {l.status === 'fechado' && <Button variant="ghost" size="sm" onClick={() => reabrir(l.fech!)} title="Reabrir" className="text-warning"><Unlock className="w-4 h-4" /></Button>}
                     <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/lancamentos?empresa=${l.company.id}&comp=${competencia}`)} title="Ver lançamentos"><ArrowRight className="w-4 h-4" /></Button>
                   </td>
                 </tr>
