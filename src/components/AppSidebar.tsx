@@ -18,6 +18,7 @@ const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
+  { label: 'Fechamentos das Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
   { label: 'Rescisoes', icon: FileX, path: '/admin/rescisoes' },
 ];
