@@ -100,7 +100,6 @@ export const calcDescontoVT = (salarioBase: number): number => {
  */
 export const calcDSR = (totalHE: number, diasUteis: number, competencia?: string) => {
   if (diasUteis <= 0) return 0;
-  // dias no mês
   let diasNoMes = 30;
   if (competencia) {
     const [y, m] = competencia.split('-').map(Number);
@@ -188,7 +187,13 @@ export const calcPayrollBreakdown = (
   const totalHE = round2(he50Val + he100Val);
   const dsrHE = diasUteis > 0 ? round2((totalHE / diasUteis) * domingosFeriados) : 0;
   const comissaoBase = entry.comissaoBase || 0;
-  const comissaoPct = opts.comissaoPct || 0;
+  const nomeNormalizado = String(emp.name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const comissaoPct = opts.comissaoPct === 0.02
+    ? (nomeNormalizado.includes('aldenei') ? 0.02 : 0.01)
+    : (opts.comissaoPct || 0);
   const comissaoVal = round2(comissaoBase * comissaoPct);
   const dsrComissao = diasUteis > 0 && comissaoVal > 0
     ? round2((comissaoVal / diasUteis) * domingosFeriados)
@@ -263,16 +268,10 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
     + insVal
     + periculosidadeVal;
 
-  // VR: use entry vrDias (auto or manual), discount faltas
   const vrDiasEfetivos = Math.max(0, (entry.vrDias ?? diasUteis) - entry.faltasDias);
   const vrVal = entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * vrDiasEfetivos : 0;
-
-  // VA: fixed monthly
   const vaVal = entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0;
-
-  // VT: benefício, sem desconto automático
   const vtVal = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario * Math.max(0, diasUteis - entry.faltasDias) : 0;
-
   const beneficios = vrVal + vaVal + vtVal;
 
   const descontos = calcFalta(emp.salarioBase, entry.faltasDias)
