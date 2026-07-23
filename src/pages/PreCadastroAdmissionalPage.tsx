@@ -6,7 +6,16 @@ import { toast } from 'sonner';
 
 const MARK = 'data-topac-batch-upload';
 const SYNTHETIC = 'data-topac-synthetic-change';
+const DELETE_MARK = 'data-topac-delete-ready';
+const GREETING_MARK = 'data-topac-greeting-ready';
 const BUCKETS = ['documentos-admissionais', 'documentos-funcionarios', 'atestados', 'documentos-ativos'];
+
+const saudacaoAtual = () => {
+  const hora = new Date().getHours();
+  if (hora < 12) return 'bom dia';
+  if (hora < 18) return 'boa tarde';
+  return 'boa noite';
+};
 
 type Campo = { valor?: string | number | null; confianca?: number };
 type Ocr = { campos?: Record<string, Campo>; pendencias?: string[] };
@@ -170,16 +179,108 @@ const processBatch = async (files: File[]) => {
   window.setTimeout(() => window.location.reload(), 900);
 };
 
+const aplicarSaudacaoEmail = () => {
+  const dialogos = Array.from(document.querySelectorAll('[role="dialog"]')) as HTMLElement[];
+  for (const dialogo of dialogos) {
+    if (!dialogo.textContent?.includes('Enviar PDF por e-mail')) continue;
+    const textarea = dialogo.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea || textarea.hasAttribute(GREETING_MARK)) continue;
+    const atualizado = textarea.value.replace(/Prezados,\s*(bom dia|boa tarde|boa noite)\./i, `Prezados, ${saudacaoAtual()}.`);
+    if (atualizado !== textarea.value) {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      setter?.call(textarea, atualizado);
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    textarea.setAttribute(GREETING_MARK, 'true');
+  }
+};
+
+const excluirPreCadastroPeloCard = async (card: HTMLButtonElement) => {
+  const texto = card.textContent || '';
+  const cpfMatch = texto.match(/\d{3}\.\d{3}\.\d{3}-\d{2}|\d{11}/);
+  const cpf = cpfDigits(cpfMatch?.[0] || '');
+  const nomeVisivel = clean(card.querySelector('.font-semibold')?.textContent || '');
+  if (!cpf) {
+    toast.error('Nao foi possivel identificar o CPF deste pre-cadastro.');
+    return;
+  }
+  const confirmar = window.confirm(`Excluir este pre-cadastro${nomeVisivel ? ` de ${nomeVisivel}` : ''}? Esta acao remove tambem os anexos vinculados.`);
+  if (!confirmar) return;
+
+  const { data, error } = await (supabase as any)
+    .from('pre_cadastros_admissionais')
+    .select('id,nome,cpf,created_at')
+    .order('created_at', { ascending: false });
+  if (error) {
+    toast.error(`Erro ao localizar pre-cadastro: ${error.message}`);
+    return;
+  }
+
+  const candidatos = (data || []).filter((row: any) => cpfDigits(row.cpf) === cpf);
+  const alvo = candidatos.find((row: any) => {
+    const nomeBanco = clean(row.nome);
+    return nomeVisivel === 'Sem nome informado' ? !nomeBanco : norm(nomeBanco) === norm(nomeVisivel);
+  }) || candidatos[0];
+
+  if (!alvo?.id) {
+    toast.error('Pre-cadastro nao encontrado para exclusao.');
+    return;
+  }
+
+  const { error: docsError } = await (supabase as any).from('pre_cadastro_documentos').delete().eq('pre_cadastro_id', alvo.id);
+  if (docsError) {
+    toast.error(`Erro ao excluir anexos: ${docsError.message}`);
+    return;
+  }
+  const { error: deleteError } = await (supabase as any).from('pre_cadastros_admissionais').delete().eq('id', alvo.id);
+  if (deleteError) {
+    toast.error(`Erro ao excluir pre-cadastro: ${deleteError.message}`);
+    return;
+  }
+
+  toast.success('Pre-cadastro excluido com sucesso.');
+  window.setTimeout(() => window.location.reload(), 500);
+};
+
+const adicionarBotoesExcluir = () => {
+  const cards = Array.from(document.querySelectorAll('button.w-full.text-left.rounded-xl')) as HTMLButtonElement[];
+  for (const card of cards) {
+    if (card.hasAttribute(DELETE_MARK)) continue;
+    card.setAttribute(DELETE_MARK, 'true');
+    card.style.position = 'relative';
+    const excluir = document.createElement('span');
+    excluir.setAttribute('role', 'button');
+    excluir.setAttribute('tabindex', '0');
+    excluir.textContent = 'Excluir';
+    excluir.className = 'absolute right-3 bottom-2 text-[11px] font-semibold text-destructive hover:underline';
+    const executar = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void excluirPreCadastroPeloCard(card);
+    };
+    excluir.addEventListener('click', executar);
+    excluir.addEventListener('keydown', (event) => {
+      const keyboard = event as KeyboardEvent;
+      if (keyboard.key === 'Enter' || keyboard.key === ' ') executar(event);
+    });
+    card.appendChild(excluir);
+  }
+};
+
 const useBatchUpload = () => {
   useEffect(() => {
     const enhance = () => {
       const input = findInput();
-      if (!input) return;
-      input.multiple = true;
-      input.accept = '.pdf,image/*';
-      input.setAttribute(MARK, 'true');
-      const label = input.closest('div')?.querySelector('label');
-      if (label) label.textContent = 'Documentos admissionais - selecione todos de uma vez';
+      if (input) {
+        input.multiple = true;
+        input.accept = '.pdf,image/*';
+        input.setAttribute(MARK, 'true');
+        const label = input.closest('div')?.querySelector('label');
+        if (label) label.textContent = 'Documentos admissionais - selecione todos de uma vez';
+      }
+      aplicarSaudacaoEmail();
+      adicionarBotoesExcluir();
     };
 
     const onChange = async (event: Event) => {
