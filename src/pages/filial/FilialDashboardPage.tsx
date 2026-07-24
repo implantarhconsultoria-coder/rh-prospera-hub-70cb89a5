@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/context/AppContext';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
@@ -8,17 +8,16 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 
 const FilialDashboardPage: React.FC = () => {
-  const { userRole, employees, companies, session } = useApp();
+  const { employees, companies, session } = useApp();
   const { filialCompanyId } = useFilialFilter();
   const navigate = useNavigate();
 
-  // Filter employees by real company UUID
   const emps = employees.filter(e => e.companyId === filialCompanyId && e.status === 'ativo');
   const asoAlerta = emps.filter(e => asoStatus(e.dataExameMedico).status !== 'ok').length;
   const feriasAlerta = emps.filter(e => feriasStatus(e.dataAdmissao).status !== 'em dia').length;
 
   const company = companies.find(c => c.id === filialCompanyId);
-  const branchName = company?.name || (userRole === 'filial_praia' ? 'Praia Grande' : 'Goiânia');
+  const branchName = company?.name || 'Filial selecionada';
   const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || null;
   const userEmail = session?.user?.email || '';
 
@@ -26,14 +25,11 @@ const FilialDashboardPage: React.FC = () => {
   const greeting = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
   const greetingText = userName ? `${greeting}, ${userName.split(' ')[0]}` : greeting;
 
-  // Realtime subscription for employees table
   useEffect(() => {
     if (!filialCompanyId) return;
     const channel = supabase
-      .channel('filial-dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'funcionarios' }, () => {
-        // AppContext will re-fetch, but we can trigger a toast
-      })
+      .channel(`filial-dashboard-${filialCompanyId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'funcionarios' }, () => undefined)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [filialCompanyId]);
@@ -48,19 +44,17 @@ const FilialDashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* User identification */}
       <div className="card-premium p-4 flex items-center gap-4">
         <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
           <User className="w-5 h-5 text-primary" />
         </div>
         <div className="flex-1">
           <h1 className="text-xl font-bold font-display text-foreground">{greetingText}</h1>
-          <p className="text-muted-foreground text-sm">Portal RH — {branchName}</p>
-          <p className="text-xs text-muted-foreground/70">{userEmail}</p>
+          <p className="text-muted-foreground text-sm">Visão administrativa — {branchName}</p>
+          <p className="text-xs text-muted-foreground/70">Sessão Central TOPAC: {userEmail}</p>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[
           { label: 'Funcionários Ativos', value: emps.length, icon: Users, color: 'text-primary' },
@@ -81,7 +75,6 @@ const FilialDashboardPage: React.FC = () => {
         ))}
       </div>
 
-      {/* Quick alerts */}
       {(asoAlerta > 0 || feriasAlerta > 0) && (
         <div className="card-premium p-4 border-l-4 border-warning">
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -95,7 +88,6 @@ const FilialDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Shortcuts */}
       <div>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Acesso Rápido</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
