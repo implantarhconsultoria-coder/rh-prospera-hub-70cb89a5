@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { FileText, Loader2, Plus, Printer, RefreshCw, Save, Search, Trash2 } from 'lucide-react';
+import { FileText, Loader2, Plus, Printer, Search, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 import type { Employee } from '@/types/database';
+import { registrarDocumento } from '@/lib/documentoHistorico';
+import { printDocumentInPage } from '@/lib/printInPage';
 
 interface RetiradaItem {
   nome: string;
@@ -16,101 +17,69 @@ interface RetiradaItem {
   observacao?: string;
 }
 
-interface RetiradaRow {
-  id: string;
-  funcionario_id: string | null;
-  funcionario_nome: string;
-  cpf: string;
-  matricula: string;
-  funcao: string;
-  setor: string;
-  empresa_nome: string;
-  filial: string;
-  data_carga: string;
-  itens_json: RetiradaItem[];
-  observacao: string;
-  status: string;
-  responsavel_nome: string;
-  created_at: string;
-}
-
 const normalizar = (valor: string) =>
-  valor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  String(valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-const escaparHtml = (valor: string) => valor
+const escaparHtml = (valor: string) => String(valor || '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
-const gerarTermoHTML = (registro: Partial<RetiradaRow>) => {
-  const itens = registro.itens_json || [];
-  const data = registro.data_carga
-    ? new Date(`${registro.data_carga}T12:00:00`).toLocaleDateString('pt-BR')
-    : new Date().toLocaleDateString('pt-BR');
-  const hora = registro.created_at
-    ? new Date(registro.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    : new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const localizarFuncionario = (texto: string, employees: Employee[]) => {
+  const textoNormalizado = normalizar(texto);
+  const ativos = employees.filter(employee => employee.status === 'ativo');
 
-  return `<!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8" />
-<title>Termo de Retirada - ${escaparHtml(registro.funcionario_nome || '')}</title>
-<style>
-@page { size: A4; margin: 16mm; }
-body { font-family: Arial, sans-serif; color: #111; font-size: 12px; }
-.header { text-align: center; margin-bottom: 18px; }
-.header h1 { font-size: 17px; margin: 0 0 5px; }
-.header p { margin: 0; color: #555; font-size: 11px; }
-.box { border: 1px solid #777; border-radius: 6px; padding: 11px; margin-bottom: 12px; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-th, td { border: 1px solid #aaa; padding: 7px; text-align: left; }
-th { background: #f1f1f1; }
-.declaracao { margin: 18px 0; text-align: justify; line-height: 1.5; }
-.assinaturas { display: flex; gap: 50px; margin-top: 60px; }
-.assinatura { flex: 1; text-align: center; border-top: 1px solid #222; padding-top: 5px; }
-</style>
-</head>
-<body>
-<div class="header">
-  <h1>TERMO DE RETIRADA DE MATERIAIS</h1>
-  <p>Documento de controle interno do almoxarifado</p>
-</div>
-<div class="box">
-  <div class="grid">
-    <div><strong>Funcionário:</strong> ${escaparHtml(registro.funcionario_nome || '—')}</div>
-    <div><strong>CPF:</strong> ${escaparHtml(registro.cpf || '—')}</div>
-    <div><strong>Matrícula:</strong> ${escaparHtml(registro.matricula || '—')}</div>
-    <div><strong>Função:</strong> ${escaparHtml(registro.funcao || '—')}</div>
-    <div><strong>Empresa:</strong> ${escaparHtml(registro.empresa_nome || '—')}</div>
-    <div><strong>Filial:</strong> ${escaparHtml(registro.filial || '—')}</div>
-    <div><strong>Setor:</strong> ${escaparHtml(registro.setor || '—')}</div>
-    <div><strong>Data/Hora:</strong> ${data} às ${hora}</div>
-  </div>
-</div>
-<table>
-<thead><tr><th style="width:8%">#</th><th>Material retirado</th><th style="width:15%">Quantidade</th><th>Observação</th></tr></thead>
-<tbody>
-${itens.map((item, index) => `<tr><td>${index + 1}</td><td>${escaparHtml(item.nome)}</td><td>${item.quantidade}</td><td>${escaparHtml(item.observacao || '')}</td></tr>`).join('')}
-</tbody>
-</table>
-${registro.observacao ? `<div class="box" style="margin-top:12px"><strong>Observação:</strong><br>${escaparHtml(registro.observacao)}</div>` : ''}
-<p class="declaracao">Declaro que recebi os materiais descritos acima, nas quantidades informadas, ficando responsável por sua guarda, conservação e utilização adequada nas atividades da empresa.</p>
-<div class="assinaturas">
-  <div class="assinatura">Assinatura do funcionário</div>
-  <div class="assinatura">Responsável pela entrega</div>
-</div>
-</body>
-</html>`;
+  const nomeCompleto = ativos.find(employee => textoNormalizado.includes(normalizar(employee.name)));
+  if (nomeCompleto) return nomeCompleto;
+
+  const candidatos = ativos.filter(employee => {
+    const nomes = normalizar(employee.name).split(/\s+/).filter(parte => parte.length >= 4);
+    return nomes.some(parte => new RegExp(`\\b${parte}\\b`, 'i').test(textoNormalizado));
+  });
+
+  return candidatos.length === 1 ? candidatos[0] : null;
+};
+
+const extrairItensLocalmente = (texto: string): RetiradaItem[] => {
+  const linhas = texto.split(/\r?\n/).map(linha => linha.trim()).filter(Boolean);
+  const itens: RetiradaItem[] = [];
+
+  const adicionar = (quantidade: number, nome: string) => {
+    const item = nome
+      .replace(/\b(?:para|pro|pra)\s+(?:o|a)?\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s-]*$/i, '')
+      .replace(/[.,;:]+$/g, '')
+      .trim();
+    if (item && quantidade > 0) itens.push({ nome: item, quantidade, observacao: '' });
+  };
+
+  for (const linha of linhas) {
+    const padroes = [
+      /(?:carga|retirada|entrega|separar|emitir)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
+      /(?:preciso|solicito|favor|gentileza)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
+      /^[-•*]?\s*(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unidade|unidades|pç|peça|peças)?\s*[-:–—]?\s*(.+)$/i,
+      /\b(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([A-Za-zÀ-ÿ][^,.\n]*)/i,
+    ];
+
+    for (const padrao of padroes) {
+      const match = linha.match(padrao);
+      if (match) {
+        adicionar(Number(match[1].replace(',', '.')), match[2]);
+        break;
+      }
+    }
+  }
+
+  return itens;
 };
 
 const AlmoxarifadoCargaTab: React.FC = () => {
   const { session, employees, companies } = useApp();
   const userId = session?.user?.id;
 
+  const [textoColado, setTextoColado] = useState('');
+  const [processando, setProcessando] = useState(false);
   const [funcionarioId, setFuncionarioId] = useState('');
   const [funcionarioNome, setFuncionarioNome] = useState('');
   const [cpf, setCpf] = useState('');
@@ -119,15 +88,15 @@ const AlmoxarifadoCargaTab: React.FC = () => {
   const [empresaNome, setEmpresaNome] = useState('');
   const [filial, setFilial] = useState('');
   const [setor, setSetor] = useState('');
-  const [dataCarga, setDataCarga] = useState(new Date().toISOString().slice(0, 10));
+  const [dataRetirada, setDataRetirada] = useState(new Date().toISOString().slice(0, 10));
   const [itens, setItens] = useState<RetiradaItem[]>([{ nome: '', quantidade: 1, observacao: '' }]);
   const [observacao, setObservacao] = useState('');
-  const [salvando, setSalvando] = useState(false);
-  const [historico, setHistorico] = useState<RetiradaRow[]>([]);
-  const [carregando, setCarregando] = useState(false);
-  const [busca, setBusca] = useState('');
+  const [gerando, setGerando] = useState(false);
 
-  const empresas = useMemo(() => Array.from(new Set(companies.map(c => c.name))).sort(), [companies]);
+  const empresa = useMemo(
+    () => companies.find(company => company.name === empresaNome),
+    [companies, empresaNome],
+  );
 
   const aplicarFuncionario = (employee: Employee | null) => {
     if (!employee) {
@@ -140,51 +109,161 @@ const AlmoxarifadoCargaTab: React.FC = () => {
       return;
     }
 
-    const empresa = companies.find(c => c.id === employee.companyId);
+    const company = companies.find(item => item.id === employee.companyId);
     setFuncionarioId(employee.id);
     setFuncionarioNome(employee.name);
     setCpf(employee.cpf || '');
     setMatricula(employee.matriculaEsocial || employee.registro || '');
     setFuncao(employee.cargo || '');
-    setEmpresaNome(empresa?.name || '');
+    setEmpresaNome(company?.name || '');
+    setFilial(company?.city || '');
+    setSetor(employee.categoria === 'operacional' ? 'Operacional' : employee.categoria || '');
   };
 
-  const carregarHistorico = async () => {
-    setCarregando(true);
-    const { data, error } = await (supabase.from('almoxarifado_carga') as any)
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(300);
-    setCarregando(false);
-
-    if (error) {
-      toast.error(error.message);
+  const lerEPreencher = async () => {
+    if (!textoColado.trim()) {
+      toast.error('Cole a solicitação antes de ler.');
       return;
     }
 
-    setHistorico((data || []) as RetiradaRow[]);
+    setProcessando(true);
+    try {
+      const funcionarioLocal = localizarFuncionario(textoColado, employees);
+      let itensExtraidos = extrairItensLocalmente(textoColado);
+      let nomeFuncionarioIA = '';
+
+      try {
+        const { data, error } = await supabase.functions.invoke('parse-text', {
+          body: { text: textoColado, type: 'almoxarifado' },
+        });
+        if (error) throw error;
+        const resultado = data?.data || {};
+        nomeFuncionarioIA = resultado.funcionario_nome || resultado.funcionario || resultado.nome || '';
+        const itensIA = Array.isArray(resultado.itens) ? resultado.itens : [];
+        if (itensIA.length) {
+          itensExtraidos = itensIA.map((item: any) => ({
+            nome: String(item.nome || item.item || item.descricao || '').trim(),
+            quantidade: Number(item.quantidade || item.qtd || 1),
+            observacao: String(item.observacao || ''),
+          })).filter((item: RetiradaItem) => item.nome && item.quantidade > 0);
+        }
+      } catch (error) {
+        console.warn('[almoxarifado] leitura IA indisponível; usando leitura local', error);
+      }
+
+      let funcionario = funcionarioLocal;
+      if (!funcionario && nomeFuncionarioIA) {
+        const alvo = normalizar(nomeFuncionarioIA);
+        funcionario = employees.find(employee => normalizar(employee.name).includes(alvo) || alvo.includes(normalizar(employee.name))) || null;
+      }
+
+      if (funcionario) aplicarFuncionario(funcionario);
+      if (itensExtraidos.length) setItens(itensExtraidos);
+      setObservacao(textoColado);
+
+      if (!funcionario && itensExtraidos.length === 0) {
+        toast.warning('O texto foi copiado para observação. Selecione o funcionário e informe os materiais manualmente.');
+      } else if (!funcionario) {
+        toast.warning('Materiais preenchidos. Selecione o funcionário para gerar o documento.');
+      } else if (itensExtraidos.length === 0) {
+        toast.warning('Funcionário preenchido. Informe os materiais para gerar o documento.');
+      } else {
+        toast.success('Solicitação lida e formulário preenchido. Revise antes de gerar.');
+      }
+    } finally {
+      setProcessando(false);
+    }
   };
 
-  useEffect(() => {
-    carregarHistorico();
-  }, []);
+  const atualizarItem = (index: number, dados: Partial<RetiradaItem>) => {
+    setItens(current => current.map((item, i) => i === index ? { ...item, ...dados } : item));
+  };
 
-  const imprimir = (registro: Partial<RetiradaRow>) => {
-    const janela = window.open('', '_blank', 'width=900,height=700');
-    if (!janela) {
-      toast.error('Permita pop-ups para imprimir o termo.');
+  const montarDocumento = (itensValidos: RetiradaItem[]) => {
+    const dataFormatada = new Date(`${dataRetirada}T12:00:00`).toLocaleDateString('pt-BR');
+    const emissao = new Date().toLocaleString('pt-BR');
+    const cnpj = empresa?.cnpj || '';
+
+    return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Termo de Retirada de Materiais</title>
+<style>
+@page{size:A4;margin:12mm}body{margin:0;background:#fff;color:#000;font-family:'Segoe UI',Arial,sans-serif;font-size:11px}.pagina{max-width:210mm;margin:0 auto;padding:6mm}.cabecalho{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px}.titulo{text-align:right;font-size:15px;font-weight:700}.sub{font-size:10px;color:#555}.box{border:1px solid #999;border-radius:5px;padding:10px;margin-bottom:14px}.legenda{font-size:9px;text-transform:uppercase;color:#666;font-weight:700;margin-bottom:7px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px 14px}.rotulo{color:#666}.valor{font-weight:600}table{width:100%;border-collapse:collapse;margin-bottom:14px}th,td{border:1px solid #aaa;padding:7px}th{background:#e9e9e9;text-align:left}.centro{text-align:center}.termo{border:1px solid #999;border-radius:5px;padding:11px;line-height:1.5;text-align:justify}.assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:70px}.assinatura{text-align:center;border-top:1px solid #000;padding-top:5px}.nome{font-weight:700}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pagina{padding:0}}
+</style></head><body><div class="pagina">
+<div class="cabecalho"><div><div style="font-size:17px;font-weight:700">${escaparHtml(empresaNome || 'TOPAC')}</div><div class="sub">CNPJ: ${escaparHtml(cnpj)}</div></div><div class="titulo">TERMO DE RETIRADA DE MATERIAIS<div class="sub">Data: ${dataFormatada}<br>Emissão: ${emissao}</div></div></div>
+<div class="box"><div class="legenda">Dados do colaborador</div><div class="grid">
+<div><span class="rotulo">Nome:</span> <span class="valor">${escaparHtml(funcionarioNome)}</span></div>
+<div><span class="rotulo">Função:</span> ${escaparHtml(funcao || '—')}</div>
+<div><span class="rotulo">CPF:</span> ${escaparHtml(cpf || '—')}</div>
+<div><span class="rotulo">Matrícula:</span> ${escaparHtml(matricula || '—')}</div>
+<div><span class="rotulo">Setor:</span> ${escaparHtml(setor || '—')}</div>
+<div><span class="rotulo">Empresa:</span> ${escaparHtml(empresaNome || '—')}</div>
+<div><span class="rotulo">Unidade:</span> ${escaparHtml(filial || empresa?.city || '—')}</div>
+<div><span class="rotulo">Data da retirada:</span> ${dataFormatada}</div>
+</div></div>
+<table><thead><tr><th>Item / Descrição</th><th style="width:14%" class="centro">Quantidade</th><th style="width:30%">Observação</th></tr></thead><tbody>
+${itensValidos.map(item => `<tr><td>${escaparHtml(item.nome)}</td><td class="centro">${item.quantidade}</td><td>${escaparHtml(item.observacao || '—')}</td></tr>`).join('')}
+</tbody></table>
+${observacao ? `<div class="box"><div class="legenda">Solicitação / observação</div><div style="white-space:pre-wrap">${escaparHtml(observacao)}</div></div>` : ''}
+<div class="termo"><div class="legenda">Termo de responsabilidade</div>Declaro que recebi os materiais descritos acima, nas quantidades informadas, ficando responsável por sua guarda, conservação e utilização adequada nas atividades da empresa.</div>
+<div class="assinaturas"><div class="assinatura"><div class="nome">${escaparHtml(funcionarioNome)}</div><div class="sub">Colaborador</div></div><div class="assinatura"><div class="nome">&nbsp;</div><div class="sub">Responsável pela entrega</div></div></div>
+</div></body></html>`;
+  };
+
+  const gerarDocumento = async () => {
+    if (!userId) {
+      toast.error('Sessão expirada.');
+      return;
+    }
+    if (!funcionarioId || !funcionarioNome) {
+      toast.error('Selecione o funcionário.');
       return;
     }
 
-    janela.document.write(gerarTermoHTML(registro));
-    janela.document.close();
-    setTimeout(() => {
-      janela.focus();
-      janela.print();
-    }, 250);
+    const itensValidos = itens.filter(item => item.nome.trim() && item.quantidade > 0);
+    if (!itensValidos.length) {
+      toast.error('Informe pelo menos um material.');
+      return;
+    }
+
+    const employee = employees.find(item => item.id === funcionarioId);
+    const company = companies.find(item => item.id === employee?.companyId);
+    if (!employee || !company) {
+      toast.error('Dados do funcionário ou da empresa não encontrados.');
+      return;
+    }
+
+    setGerando(true);
+    const html = montarDocumento(itensValidos);
+    const resumo = itensValidos.map(item => `${item.quantidade}x ${item.nome}`).join(', ');
+
+    try {
+      await registrarDocumento({
+        funcionarioId: employee.id,
+        funcionarioNome: employee.name,
+        companyId: company.id,
+        empresaNome: company.name,
+        tipoDocumento: 'Termo de Retirada de Materiais',
+        competencia: dataRetirada.slice(0, 7),
+        descricao: `Retirada de materiais: ${resumo}`,
+        geradoPorUserId: userId,
+        geradoPorNome: session?.user?.user_metadata?.nome_completo || session?.user?.email || 'Sistema',
+        unidade: company.city,
+        categoria: 'TERMOS',
+        origem: 'gerado_sistema',
+        observacao: observacao || textoColado,
+        dataDocumento: dataRetirada,
+      });
+    } catch (error) {
+      console.warn('[almoxarifado] documento impresso, mas histórico não foi salvo', error);
+      toast.warning('Documento será aberto para impressão, mas o histórico não pôde ser salvo.');
+    }
+
+    printDocumentInPage(html);
+    toast.success('Documento gerado. Use a janela de impressão para imprimir ou salvar em PDF.');
+    setGerando(false);
   };
 
   const limpar = () => {
+    setTextoColado('');
     setFuncionarioId('');
     setFuncionarioNome('');
     setCpf('');
@@ -193,226 +272,61 @@ const AlmoxarifadoCargaTab: React.FC = () => {
     setEmpresaNome('');
     setFilial('');
     setSetor('');
+    setDataRetirada(new Date().toISOString().slice(0, 10));
     setItens([{ nome: '', quantidade: 1, observacao: '' }]);
     setObservacao('');
-    setDataCarga(new Date().toISOString().slice(0, 10));
   };
-
-  const salvar = async (imprimirDepois: boolean) => {
-    if (!userId) {
-      toast.error('Sessão expirada.');
-      return;
-    }
-
-    if (!funcionarioNome.trim()) {
-      toast.error('Selecione o funcionário.');
-      return;
-    }
-
-    const itensValidos = itens.filter(item => item.nome.trim() && item.quantidade > 0);
-    if (itensValidos.length === 0) {
-      toast.error('Informe pelo menos um material.');
-      return;
-    }
-
-    setSalvando(true);
-    try {
-      const responsavel = session?.user?.email || 'Sistema';
-      const employee = employees.find(e => e.id === funcionarioId);
-      const payload = {
-        user_id: userId,
-        usuario_nome: responsavel,
-        funcionario_id: funcionarioId || null,
-        funcionario_nome: funcionarioNome,
-        cpf,
-        matricula,
-        funcao,
-        setor,
-        filial,
-        empresa_nome: empresaNome,
-        company_id: employee?.companyId || null,
-        veiculo: '',
-        data_carga: dataCarga,
-        email_bruto: '',
-        itens_json: itensValidos,
-        observacao,
-        status: 'pendente',
-        tipo: 'retirada',
-        responsavel_nome: responsavel,
-        anexo_url: '',
-        anexo_nome: '',
-      };
-
-      const { data, error } = await (supabase.from('almoxarifado_carga') as any)
-        .insert(payload)
-        .select()
-        .single();
-      if (error) throw error;
-
-      if (funcionarioId) {
-        await supabase.from('documentos_funcionario').insert({
-          funcionario_id: funcionarioId,
-          funcionario_nome: funcionarioNome,
-          company_id: employee?.companyId || null,
-          empresa_nome: empresaNome,
-          tipo_documento: 'Termo de Retirada de Materiais',
-          competencia: dataCarga.slice(0, 7),
-          descricao: `${itensValidos.length} item(ns) — ${itensValidos.map(i => `${i.quantidade}x ${i.nome}`).join(', ')}`,
-          arquivo_url: '',
-          gerado_por_user_id: userId,
-          gerado_por_nome: responsavel,
-          status_envio: 'arquivado',
-          unidade: empresaNome,
-        } as any);
-      }
-
-      toast.success('Documento criado com sucesso.');
-      if (imprimirDepois) imprimir(data as RetiradaRow);
-      limpar();
-      await carregarHistorico();
-    } catch (erro) {
-      toast.error(erro instanceof Error ? erro.message : 'Erro ao criar documento.');
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  const filtrados = historico.filter(registro => {
-    const q = normalizar(busca);
-    if (!q) return true;
-    const materiais = (registro.itens_json || []).map(i => i.nome).join(' ');
-    return normalizar(`${registro.funcionario_nome} ${registro.empresa_nome} ${materiais}`).includes(q);
-  });
 
   return (
     <div className="space-y-5">
       <div className="card-premium p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-bold flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" /> Criar termo de retirada de materiais
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            Preencha os dados e gere o documento. Este módulo não consulta, valida ou desconta estoque.
-          </p>
+          <h2 className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Termo de retirada do almoxarifado</h2>
+          <p className="text-xs text-muted-foreground mt-1">Cole a solicitação como no Protocolo, revise os campos preenchidos e gere uma ficha no modelo da Entrega de EPI. Não consulta nem desconta estoque.</p>
+        </div>
+
+        <div className="border rounded-lg p-4 space-y-2 bg-muted/20">
+          <label className="text-xs font-medium">Cole o e-mail ou WhatsApp</label>
+          <Textarea value={textoColado} onChange={event => setTextoColado(event.target.value)} rows={4} placeholder="Ex.: Bom dia, por gentileza emitir a carga de 2 cadeados para o Gustavo" />
+          <Button size="sm" onClick={lerEPreencher} disabled={processando}>
+            {processando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} Ler e preencher
+          </Button>
         </div>
 
         <div>
-          <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1">
-            <Search className="w-3 h-3" /> Funcionário *
-          </label>
+          <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><Search className="w-3 h-3" /> Funcionário *</label>
           <EmployeeCombobox value={funcionarioId} onChange={aplicarFuncionario} placeholder="Buscar por nome, CPF ou matrícula..." />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div><label className="text-[10px] uppercase text-muted-foreground">CPF</label><Input value={cpf} onChange={e => setCpf(e.target.value)} /></div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">Matrícula</label><Input value={matricula} onChange={e => setMatricula(e.target.value)} /></div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">Função</label><Input value={funcao} onChange={e => setFuncao(e.target.value)} /></div>
-          <div>
-            <label className="text-[10px] uppercase text-muted-foreground">Empresa</label>
-            <select value={empresaNome} onChange={e => setEmpresaNome(e.target.value)} className="w-full h-10 rounded-md border bg-background px-3 text-sm">
-              <option value="">Selecione</option>
-              {empresas.map(empresa => <option key={empresa} value={empresa}>{empresa}</option>)}
-            </select>
-          </div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">Filial</label><Input value={filial} onChange={e => setFilial(e.target.value)} /></div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">Setor</label><Input value={setor} onChange={e => setSetor(e.target.value)} /></div>
-          <div><label className="text-[10px] uppercase text-muted-foreground">Data</label><Input type="date" value={dataCarga} onChange={e => setDataCarga(e.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">CPF</label><Input value={cpf} onChange={event => setCpf(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Matrícula</label><Input value={matricula} onChange={event => setMatricula(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Função</label><Input value={funcao} onChange={event => setFuncao(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Empresa</label><Input value={empresaNome} readOnly /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Unidade / Filial</label><Input value={filial} onChange={event => setFilial(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Setor</label><Input value={setor} onChange={event => setSetor(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Data</label><Input type="date" value={dataRetirada} onChange={event => setDataRetirada(event.target.value)} /></div>
         </div>
 
         <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold">Materiais do documento</h3>
-            <Button size="sm" variant="outline" onClick={() => setItens([...itens, { nome: '', quantidade: 1, observacao: '' }])}>
-              <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar material
-            </Button>
-          </div>
-
+          <div className="flex justify-between items-center"><h3 className="text-sm font-semibold">Materiais</h3><Button size="sm" variant="outline" onClick={() => setItens(current => [...current, { nome: '', quantidade: 1, observacao: '' }])}><Plus className="w-3.5 h-3.5 mr-1" /> Adicionar material</Button></div>
           {itens.map((item, index) => (
             <div key={index} className="grid grid-cols-12 gap-2">
-              <Input className="col-span-6" value={item.nome} onChange={e => {
-                const copia = [...itens];
-                copia[index] = { ...copia[index], nome: e.target.value };
-                setItens(copia);
-              }} placeholder="Descrição do material" />
-              <Input className="col-span-2" type="number" min="1" value={item.quantidade} onChange={e => {
-                const copia = [...itens];
-                copia[index] = { ...copia[index], quantidade: Number(e.target.value) };
-                setItens(copia);
-              }} />
-              <Input className="col-span-3" value={item.observacao || ''} onChange={e => {
-                const copia = [...itens];
-                copia[index] = { ...copia[index], observacao: e.target.value };
-                setItens(copia);
-              }} placeholder="Observação" />
-              <Button className="col-span-1" variant="ghost" size="icon" onClick={() => {
-                const restantes = itens.filter((_, i) => i !== index);
-                setItens(restantes.length ? restantes : [{ nome: '', quantidade: 1, observacao: '' }]);
-              }}>
-                <Trash2 className="w-4 h-4 text-destructive" />
-              </Button>
+              <Input className="col-span-6" value={item.nome} onChange={event => atualizarItem(index, { nome: event.target.value })} placeholder="Descrição do material" />
+              <Input className="col-span-2" type="number" min="1" value={item.quantidade} onChange={event => atualizarItem(index, { quantidade: Number(event.target.value) })} />
+              <Input className="col-span-3" value={item.observacao || ''} onChange={event => atualizarItem(index, { observacao: event.target.value })} placeholder="Observação" />
+              <Button className="col-span-1" variant="ghost" size="icon" onClick={() => setItens(current => current.length === 1 ? [{ nome: '', quantidade: 1, observacao: '' }] : current.filter((_, i) => i !== index))}><Trash2 className="w-4 h-4 text-destructive" /></Button>
             </div>
           ))}
         </div>
 
-        <div>
-          <label className="text-[10px] uppercase text-muted-foreground">Observação geral</label>
-          <Textarea rows={2} value={observacao} onChange={e => setObservacao(e.target.value)} />
-        </div>
+        <div><label className="text-[10px] uppercase text-muted-foreground">Solicitação / observação</label><Textarea rows={3} value={observacao} onChange={event => setObservacao(event.target.value)} /></div>
 
         <div className="flex gap-2 flex-wrap">
-          <Button onClick={() => salvar(false)} disabled={salvando}>
-            {salvando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Criar documento
+          <Button onClick={gerarDocumento} disabled={gerando} className="gradient-accent text-accent-foreground font-semibold">
+            {gerando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Printer className="w-4 h-4 mr-2" />} Gerar documento
           </Button>
-          <Button onClick={() => salvar(true)} disabled={salvando} variant="secondary">
-            <Printer className="w-4 h-4 mr-2" /> Criar e imprimir
-          </Button>
-          <Button onClick={limpar} variant="ghost">Limpar</Button>
-        </div>
-      </div>
-
-      <div className="card-premium p-5 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold">Histórico de documentos</h2>
-          <Button size="sm" variant="outline" onClick={carregarHistorico} disabled={carregando}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${carregando ? 'animate-spin' : ''}`} /> Atualizar
-          </Button>
-        </div>
-
-        <Input placeholder="Buscar por funcionário, empresa ou material..." value={busca} onChange={e => setBusca(e.target.value)} />
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-2">Data</th>
-                <th className="text-left p-2">Funcionário</th>
-                <th className="text-left p-2">Empresa</th>
-                <th className="text-left p-2">Materiais</th>
-                <th className="text-left p-2">Status</th>
-                <th className="text-left p-2">Ação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtrados.map(registro => (
-                <tr key={registro.id} className="border-b">
-                  <td className="p-2 whitespace-nowrap">{new Date(`${registro.data_carga}T12:00:00`).toLocaleDateString('pt-BR')}</td>
-                  <td className="p-2">{registro.funcionario_nome}</td>
-                  <td className="p-2">{registro.empresa_nome || '—'}</td>
-                  <td className="p-2">{(registro.itens_json || []).map(i => `${i.quantidade}x ${i.nome}`).join(', ')}</td>
-                  <td className="p-2"><Badge variant="secondary">{registro.status || 'pendente'}</Badge></td>
-                  <td className="p-2">
-                    <Button size="sm" variant="outline" onClick={() => imprimir(registro)}>
-                      <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-              {filtrados.length === 0 && (
-                <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Nenhum documento encontrado.</td></tr>
-              )}
-            </tbody>
-          </table>
+          <Button variant="ghost" onClick={limpar}>Limpar</Button>
         </div>
       </div>
     </div>
