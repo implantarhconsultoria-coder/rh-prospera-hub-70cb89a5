@@ -58,7 +58,7 @@ const extrairItensLocalmente = (texto: string): RetiradaItem[] => {
     const padroes = [
       /(?:carga|retirada|entrega|separar|emitir)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
       /(?:preciso|solicito|favor|gentileza)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
-      /^[-•*]?\s*(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unidade|unidades|pç|peça|peças)?\s*[-:–—]?\s*(.+)$/i,
+      /^(?:-|•|\*)?\s*(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unidade|unidades|pç|peça|peças)?\s*(?:(?:-|:|–|—))?\s*(.+)$/i,
       /\b(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([A-Za-zÀ-ÿ][^,.\n]*)/i,
     ];
 
