@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 
-interface ModuleDef { role: string; label: string; path: string; }
+interface ModuleDef { role: string; label: string; path: string; filialCodigo?: string; }
 
 const PORTAL_MODULES: ModuleDef[] = [
   { role: 'admin', label: 'Administracao', path: '/admin' },
@@ -32,6 +32,10 @@ const ADMIN_MODULES: ModuleDef[] = [
   { role: 'empresas', label: 'Empresas', path: '/admin/empresas' },
   { role: 'fechamento', label: 'Fechamento', path: '/admin/fechamento' },
   { role: 'operacional', label: 'Operacional', path: '/admin/chamados' },
+  { role: 'app_mecanico', label: 'App dos mecanicos', path: '/admin/app-mecanico' },
+  { role: 'filial_matriz', label: 'Filial Matriz', path: '/filial', filialCodigo: 'topac-matriz' },
+  { role: 'filial_praia', label: 'Filial Praia Grande', path: '/filial', filialCodigo: 'topac-pg' },
+  { role: 'filial_goiania', label: 'Filial Goiania', path: '/filial', filialCodigo: 'topac-gyn' },
   { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
   { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
 ];
@@ -52,6 +56,13 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
         ]
       : PORTAL_MODULES.filter((m) => userRoles.includes(m.role as any));
 
+  const abrirModulo = (modulo: ModuleDef) => {
+    if (modulo.filialCodigo) {
+      sessionStorage.setItem('admin_filial_preview_codigo', modulo.filialCodigo);
+    }
+    navigate(modulo.path);
+  };
+
   return (
     <div className="flex items-center gap-2">
       <EmployeeAccessControl />
@@ -67,7 +78,7 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
             <DropdownMenuLabel>Modulos disponiveis</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {available.map((m) => (
-              <DropdownMenuItem key={m.role + m.path} onClick={() => navigate(m.path)}>{m.label}</DropdownMenuItem>
+              <DropdownMenuItem key={m.role + m.path} onClick={() => abrirModulo(m)}>{m.label}</DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
