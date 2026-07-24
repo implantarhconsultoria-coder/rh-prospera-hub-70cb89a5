@@ -1,24 +1,29 @@
 import { useApp } from '@/context/AppContext';
 
+const ROLE_CODIGO_MAP: Record<string, string> = {
+  filial_matriz: 'topac-matriz',
+  filial_praia: 'topac-pg',
+  filial_goiania: 'topac-gyn',
+};
+
+const CODIGOS_FILIAIS = new Set(Object.values(ROLE_CODIGO_MAP));
+
 /**
- * Filters data by company for filial users.
- * Uses the company `codigo` field to map roles to companies.
- * RLS at the database level enforces this - this hook is for UI convenience.
+ * Filters data by company for filial users and for admin preview mode.
+ * Admin preview is selected from the module switcher and reuses the current session.
  */
 export const useFilialFilter = () => {
-  const { userRole, companies } = useApp();
+  const { userRole, userRoles, companies } = useApp();
+  const isAdmin = userRoles.includes('admin');
+  const roleCodigo = userRole ? ROLE_CODIGO_MAP[userRole] : undefined;
+  const previewCodigo = typeof window !== 'undefined'
+    ? sessionStorage.getItem('admin_filial_preview_codigo')
+    : null;
+  const codigoFilial = roleCodigo || (isAdmin && previewCodigo && CODIGOS_FILIAIS.has(previewCodigo) ? previewCodigo : null);
+  const isFilial = Boolean(codigoFilial);
 
-  const isFilial = userRole === 'filial_matriz' || userRole === 'filial_praia' || userRole === 'filial_goiania';
-
-  // Map role to company codigo
-  const ROLE_CODIGO_MAP: Record<string, string> = {
-    filial_matriz: 'topac-matriz',
-    filial_praia: 'topac-pg',
-    filial_goiania: 'topac-gyn',
-  };
-
-  const filialCompanyId = isFilial
-    ? companies.find(c => c.codigo === ROLE_CODIGO_MAP[userRole!])?.id || null
+  const filialCompanyId = codigoFilial
+    ? companies.find(company => company.codigo === codigoFilial)?.id || null
     : null;
 
   const getCompanyFilter = (selectedCompanyId?: string): string | null => {
@@ -26,5 +31,5 @@ export const useFilialFilter = () => {
     return selectedCompanyId || null;
   };
 
-  return { isFilial, filialCompanyId, getCompanyFilter };
+  return { isFilial, filialCompanyId, getCompanyFilter, filialCodigo: codigoFilial, isAdminPreview: isAdmin && !roleCodigo && Boolean(codigoFilial) };
 };
