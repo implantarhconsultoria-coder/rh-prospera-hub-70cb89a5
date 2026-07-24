@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { FileText, Loader2, Plus, Printer, RefreshCw, Save, Search, Trash2, Wand2 } from 'lucide-react';
+import { FileText, Loader2, Plus, Printer, RefreshCw, Save, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 import type { Employee } from '@/types/database';
@@ -26,88 +26,16 @@ interface RetiradaRow {
   setor: string;
   empresa_nome: string;
   filial: string;
-  veiculo: string;
   data_carga: string;
   itens_json: RetiradaItem[];
   observacao: string;
   status: string;
-  tipo: string;
   responsavel_nome: string;
   created_at: string;
 }
 
 const normalizar = (valor: string) =>
   valor.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-const limparNomeItem = (valor: string) => valor
-  .replace(/\b(?:para|pro|pra)\s+(?:o|a)?\s*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s-]*$/i, '')
-  .replace(/[.,;:]+$/g, '')
-  .trim();
-
-const extrairItens = (texto: string): RetiradaItem[] => {
-  const linhas = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const encontrados: RetiradaItem[] = [];
-
-  const adicionar = (quantidade: number, nome: string) => {
-    const item = limparNomeItem(nome);
-    if (!item || quantidade <= 0) return;
-    if (/^(bom dia|boa tarde|boa noite|prezad|favor|gentileza|solicito|emitir|carga|retirada)$/i.test(item)) return;
-    encontrados.push({ nome: item, quantidade });
-  };
-
-  for (const linha of linhas) {
-    let match: RegExpMatchArray | null;
-
-    match = linha.match(/^[-•*]?\s*(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unidade|unidades|pç|peça|peças)?\s*[-:–—]?\s*(.+)$/i);
-    if (match) {
-      adicionar(Number(match[1].replace(',', '.')), match[2]);
-      continue;
-    }
-
-    match = linha.match(/^[-•*]?\s*(.+?)\s*[-:–—]\s*(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unidade|unidades|pç|peça|peças)?$/i);
-    if (match) {
-      adicionar(Number(match[2].replace(',', '.')), match[1]);
-      continue;
-    }
-
-    const padroesFrase = [
-      /(?:carga|retirada|entrega|separa(?:r)?|emitir)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
-      /(?:preciso|solicito|favor|gentileza)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
-      /\b(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([A-Za-zÀ-ÿ][^,.\n]*)/i,
-    ];
-
-    for (const padrao of padroesFrase) {
-      match = linha.match(padrao);
-      if (match) {
-        adicionar(Number(match[1].replace(',', '.')), match[2]);
-        break;
-      }
-    }
-  }
-
-  const unicos = new Map<string, RetiradaItem>();
-  for (const item of encontrados) {
-    const chave = normalizar(item.nome);
-    const atual = unicos.get(chave);
-    unicos.set(chave, atual ? { ...atual, quantidade: atual.quantidade + item.quantidade } : item);
-  }
-  return Array.from(unicos.values());
-};
-
-const localizarFuncionario = (texto: string, employees: Employee[]): Employee | null => {
-  const alvo = normalizar(texto);
-  const ativos = employees.filter(e => e.status === 'ativo');
-
-  const porNomeCompleto = ativos.find(e => alvo.includes(normalizar(e.name)));
-  if (porNomeCompleto) return porNomeCompleto;
-
-  const mencionados = ativos.filter(e => {
-    const partes = normalizar(e.name).split(/\s+/).filter(p => p.length >= 3);
-    return partes.some(p => new RegExp(`\\b${p}\\b`, 'i').test(alvo));
-  });
-
-  return mencionados.length === 1 ? mencionados[0] : null;
-};
 
 const escaparHtml = (valor: string) => valor
   .replace(/&/g, '&amp;')
@@ -183,7 +111,6 @@ const AlmoxarifadoCargaTab: React.FC = () => {
   const { session, employees, companies } = useApp();
   const userId = session?.user?.id;
 
-  const [texto, setTexto] = useState('');
   const [funcionarioId, setFuncionarioId] = useState('');
   const [funcionarioNome, setFuncionarioNome] = useState('');
   const [cpf, setCpf] = useState('');
@@ -193,7 +120,7 @@ const AlmoxarifadoCargaTab: React.FC = () => {
   const [filial, setFilial] = useState('');
   const [setor, setSetor] = useState('');
   const [dataCarga, setDataCarga] = useState(new Date().toISOString().slice(0, 10));
-  const [itens, setItens] = useState<RetiradaItem[]>([]);
+  const [itens, setItens] = useState<RetiradaItem[]>([{ nome: '', quantidade: 1, observacao: '' }]);
   const [observacao, setObservacao] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [historico, setHistorico] = useState<RetiradaRow[]>([]);
@@ -212,6 +139,7 @@ const AlmoxarifadoCargaTab: React.FC = () => {
       setEmpresaNome('');
       return;
     }
+
     const empresa = companies.find(c => c.id === employee.companyId);
     setFuncionarioId(employee.id);
     setFuncionarioNome(employee.name);
@@ -221,28 +149,6 @@ const AlmoxarifadoCargaTab: React.FC = () => {
     setEmpresaNome(empresa?.name || '');
   };
 
-  const identificar = () => {
-    if (!texto.trim()) {
-      toast.error('Cole o texto do e-mail ou WhatsApp.');
-      return;
-    }
-
-    const funcionario = localizarFuncionario(texto, employees);
-    const materiais = extrairItens(texto);
-
-    if (funcionario) aplicarFuncionario(funcionario);
-    setItens(materiais);
-
-    if (!funcionario && materiais.length === 0) {
-      toast.error('Não consegui identificar funcionário nem materiais. Ajuste o texto ou preencha manualmente.');
-      return;
-    }
-
-    if (!funcionario) toast.warning('Materiais identificados. Selecione o funcionário manualmente.');
-    else if (materiais.length === 0) toast.warning('Funcionário identificado. Adicione os materiais manualmente.');
-    else toast.success(`${funcionario.name} e ${materiais.length} item(ns) identificados.`);
-  };
-
   const carregarHistorico = async () => {
     setCarregando(true);
     const { data, error } = await (supabase.from('almoxarifado_carga') as any)
@@ -250,10 +156,12 @@ const AlmoxarifadoCargaTab: React.FC = () => {
       .order('created_at', { ascending: false })
       .limit(300);
     setCarregando(false);
+
     if (error) {
       toast.error(error.message);
       return;
     }
+
     setHistorico((data || []) as RetiradaRow[]);
   };
 
@@ -267,6 +175,7 @@ const AlmoxarifadoCargaTab: React.FC = () => {
       toast.error('Permita pop-ups para imprimir o termo.');
       return;
     }
+
     janela.document.write(gerarTermoHTML(registro));
     janela.document.close();
     setTimeout(() => {
@@ -276,7 +185,6 @@ const AlmoxarifadoCargaTab: React.FC = () => {
   };
 
   const limpar = () => {
-    setTexto('');
     setFuncionarioId('');
     setFuncionarioNome('');
     setCpf('');
@@ -285,7 +193,7 @@ const AlmoxarifadoCargaTab: React.FC = () => {
     setEmpresaNome('');
     setFilial('');
     setSetor('');
-    setItens([]);
+    setItens([{ nome: '', quantidade: 1, observacao: '' }]);
     setObservacao('');
     setDataCarga(new Date().toISOString().slice(0, 10));
   };
@@ -295,13 +203,15 @@ const AlmoxarifadoCargaTab: React.FC = () => {
       toast.error('Sessão expirada.');
       return;
     }
+
     if (!funcionarioNome.trim()) {
       toast.error('Selecione o funcionário.');
       return;
     }
-    const itensValidos = itens.filter(i => i.nome.trim() && i.quantidade > 0);
+
+    const itensValidos = itens.filter(item => item.nome.trim() && item.quantidade > 0);
     if (itensValidos.length === 0) {
-      toast.error('Adicione pelo menos um material.');
+      toast.error('Informe pelo menos um material.');
       return;
     }
 
@@ -323,7 +233,7 @@ const AlmoxarifadoCargaTab: React.FC = () => {
         company_id: employee?.companyId || null,
         veiculo: '',
         data_carga: dataCarga,
-        email_bruto: texto,
+        email_bruto: '',
         itens_json: itensValidos,
         observacao,
         status: 'pendente',
@@ -356,22 +266,22 @@ const AlmoxarifadoCargaTab: React.FC = () => {
         } as any);
       }
 
-      toast.success('Termo de retirada salvo.');
+      toast.success('Documento criado com sucesso.');
       if (imprimirDepois) imprimir(data as RetiradaRow);
       limpar();
       await carregarHistorico();
     } catch (erro) {
-      toast.error(erro instanceof Error ? erro.message : 'Erro ao salvar termo.');
+      toast.error(erro instanceof Error ? erro.message : 'Erro ao criar documento.');
     } finally {
       setSalvando(false);
     }
   };
 
-  const filtrados = historico.filter(r => {
+  const filtrados = historico.filter(registro => {
     const q = normalizar(busca);
     if (!q) return true;
-    const itensTexto = (r.itens_json || []).map(i => i.nome).join(' ');
-    return normalizar(`${r.funcionario_nome} ${r.empresa_nome} ${itensTexto}`).includes(q);
+    const materiais = (registro.itens_json || []).map(i => i.nome).join(' ');
+    return normalizar(`${registro.funcionario_nome} ${registro.empresa_nome} ${materiais}`).includes(q);
   });
 
   return (
@@ -379,27 +289,11 @@ const AlmoxarifadoCargaTab: React.FC = () => {
       <div className="card-premium p-5 space-y-4">
         <div>
           <h2 className="text-sm font-bold flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" /> Gerar termo de retirada de materiais
+            <FileText className="w-4 h-4 text-primary" /> Criar termo de retirada de materiais
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
-            Cole o e-mail ou WhatsApp. O sistema identifica o funcionário e os materiais. Não consulta nem desconta estoque.
+            Preencha os dados e gere o documento. Este módulo não consulta, valida ou desconta estoque.
           </p>
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Texto da solicitação</label>
-          <Textarea
-            value={texto}
-            onChange={e => setTexto(e.target.value)}
-            rows={5}
-            placeholder="Ex.: Bom dia, por gentileza emitir a carga de 2 cadeados para o Gustavo"
-          />
-          <div className="flex gap-2 mt-2">
-            <Button onClick={identificar} size="sm">
-              <Wand2 className="w-4 h-4 mr-2" /> Identificar funcionário e itens
-            </Button>
-            <Button onClick={limpar} size="sm" variant="ghost">Limpar</Button>
-          </div>
         </div>
 
         <div>
@@ -417,7 +311,7 @@ const AlmoxarifadoCargaTab: React.FC = () => {
             <label className="text-[10px] uppercase text-muted-foreground">Empresa</label>
             <select value={empresaNome} onChange={e => setEmpresaNome(e.target.value)} className="w-full h-10 rounded-md border bg-background px-3 text-sm">
               <option value="">Selecione</option>
-              {empresas.map(e => <option key={e} value={e}>{e}</option>)}
+              {empresas.map(empresa => <option key={empresa} value={empresa}>{empresa}</option>)}
             </select>
           </div>
           <div><label className="text-[10px] uppercase text-muted-foreground">Filial</label><Input value={filial} onChange={e => setFilial(e.target.value)} /></div>
@@ -427,13 +321,11 @@ const AlmoxarifadoCargaTab: React.FC = () => {
 
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold">Materiais ({itens.length})</h3>
-            <Button size="sm" variant="outline" onClick={() => setItens([...itens, { nome: '', quantidade: 1 }])}>
-              <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar
+            <h3 className="text-sm font-semibold">Materiais do documento</h3>
+            <Button size="sm" variant="outline" onClick={() => setItens([...itens, { nome: '', quantidade: 1, observacao: '' }])}>
+              <Plus className="w-3.5 h-3.5 mr-1" /> Adicionar material
             </Button>
           </div>
-
-          {itens.length === 0 && <div className="border rounded-md p-5 text-center text-xs text-muted-foreground">Nenhum material identificado. Clique em identificar ou adicione manualmente.</div>}
 
           {itens.map((item, index) => (
             <div key={index} className="grid grid-cols-12 gap-2">
@@ -441,8 +333,8 @@ const AlmoxarifadoCargaTab: React.FC = () => {
                 const copia = [...itens];
                 copia[index] = { ...copia[index], nome: e.target.value };
                 setItens(copia);
-              }} placeholder="Material" />
-              <Input className="col-span-2" type="number" min="0" value={item.quantidade} onChange={e => {
+              }} placeholder="Descrição do material" />
+              <Input className="col-span-2" type="number" min="1" value={item.quantidade} onChange={e => {
                 const copia = [...itens];
                 copia[index] = { ...copia[index], quantidade: Number(e.target.value) };
                 setItens(copia);
@@ -452,7 +344,10 @@ const AlmoxarifadoCargaTab: React.FC = () => {
                 copia[index] = { ...copia[index], observacao: e.target.value };
                 setItens(copia);
               }} placeholder="Observação" />
-              <Button className="col-span-1" variant="ghost" size="icon" onClick={() => setItens(itens.filter((_, i) => i !== index))}>
+              <Button className="col-span-1" variant="ghost" size="icon" onClick={() => {
+                const restantes = itens.filter((_, i) => i !== index);
+                setItens(restantes.length ? restantes : [{ nome: '', quantidade: 1, observacao: '' }]);
+              }}>
                 <Trash2 className="w-4 h-4 text-destructive" />
               </Button>
             </div>
@@ -467,25 +362,37 @@ const AlmoxarifadoCargaTab: React.FC = () => {
         <div className="flex gap-2 flex-wrap">
           <Button onClick={() => salvar(false)} disabled={salvando}>
             {salvando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Salvar termo
+            Criar documento
           </Button>
           <Button onClick={() => salvar(true)} disabled={salvando} variant="secondary">
-            <Printer className="w-4 h-4 mr-2" /> Salvar e imprimir
+            <Printer className="w-4 h-4 mr-2" /> Criar e imprimir
           </Button>
+          <Button onClick={limpar} variant="ghost">Limpar</Button>
         </div>
       </div>
 
       <div className="card-premium p-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold">Histórico de termos</h2>
+          <h2 className="text-sm font-bold">Histórico de documentos</h2>
           <Button size="sm" variant="outline" onClick={carregarHistorico} disabled={carregando}>
             <RefreshCw className={`w-4 h-4 mr-2 ${carregando ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
         </div>
+
         <Input placeholder="Buscar por funcionário, empresa ou material..." value={busca} onChange={e => setBusca(e.target.value)} />
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead><tr className="border-b"><th className="text-left p-2">Data</th><th className="text-left p-2">Funcionário</th><th className="text-left p-2">Empresa</th><th className="text-left p-2">Materiais</th><th className="text-left p-2">Status</th><th className="text-left p-2">Ação</th></tr></thead>
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-2">Data</th>
+                <th className="text-left p-2">Funcionário</th>
+                <th className="text-left p-2">Empresa</th>
+                <th className="text-left p-2">Materiais</th>
+                <th className="text-left p-2">Status</th>
+                <th className="text-left p-2">Ação</th>
+              </tr>
+            </thead>
             <tbody>
               {filtrados.map(registro => (
                 <tr key={registro.id} className="border-b">
@@ -494,10 +401,16 @@ const AlmoxarifadoCargaTab: React.FC = () => {
                   <td className="p-2">{registro.empresa_nome || '—'}</td>
                   <td className="p-2">{(registro.itens_json || []).map(i => `${i.quantidade}x ${i.nome}`).join(', ')}</td>
                   <td className="p-2"><Badge variant="secondary">{registro.status || 'pendente'}</Badge></td>
-                  <td className="p-2"><Button size="sm" variant="outline" onClick={() => imprimir(registro)}><Printer className="w-3.5 h-3.5 mr-1" />Imprimir</Button></td>
+                  <td className="p-2">
+                    <Button size="sm" variant="outline" onClick={() => imprimir(registro)}>
+                      <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir
+                    </Button>
+                  </td>
                 </tr>
               ))}
-              {filtrados.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Nenhum termo encontrado.</td></tr>}
+              {filtrados.length === 0 && (
+                <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Nenhum documento encontrado.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
