@@ -3,14 +3,14 @@ name: Adicionar funcoes no pre-cadastro
 on:
   issues:
     types: [opened]
+  workflow_dispatch:
 
 permissions:
   contents: write
-  issues: write
 
 jobs:
   aplicar:
-    if: github.event.issue.title == '[TOPAC] adicionar vendedor e representante no pre-cadastro'
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.issue.title, '[EXECUTAR FUNCOES PRE-CADASTRO]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,17 +70,7 @@ jobs:
           git add src/pages/PreCadastroAdmissionalOcrPage.tsx
           if git diff --cached --quiet; then
             echo "Nada para alterar"
-          else
-            git commit -m "feat: adicionar Vendedor e Representante no pre-cadastro"
-            git push origin main
+            exit 0
           fi
-      - name: Encerrar issue de disparo
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              state: 'closed'
-            })
+          git commit -m "feat: adicionar Vendedor e Representante no pre-cadastro"
+          git push origin main
