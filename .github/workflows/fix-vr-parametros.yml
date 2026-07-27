@@ -1,0 +1,225 @@
+name: Corrigir parametros VR
+
+on:
+  push:
+    branches:
+      - fix/vr-parametros-sincronizados
+    paths:
+      - .github/workflows/fix-vr-parametros.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/vr-parametros-sincronizados
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Aplicar correções
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: esperado 1 trecho, encontrado {count}')
+              return text.replace(old, new, 1)
+
+          vr_path = Path('src/pages/RelatorioVRPage.tsx')
+          text = vr_path.read_text(encoding='utf-8')
+
+          text = replace_once(text,
+          """  const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
+  const [diasUteisManual, setDiasUteisManual] = useState('');
+  const [diasUteisEmpresaManual, setDiasUteisEmpresaManual] = useState('');
+  const [dataPagamentoManual, setDataPagamentoManual] = useState('');
+  const [dataPagamentoEmpresaManual, setDataPagamentoEmpresaManual] = useState('');
+""",
+          """  const [diasUteisManual, setDiasUteisManual] = useState('');
+  const [dataPagamentoManual, setDataPagamentoManual] = useState('');
+""",
+          'remover estados duplicados')
+
+          text = replace_once(text,
+          """  const diasUteis = Number(diasUteisManual) > 0 ? Number(diasUteisManual) : diasUteisCalculado;
+  const diasUteisEmpresa = Number(diasUteisEmpresaManual) > 0 ? Number(diasUteisEmpresaManual) : undefined;
+""",
+          """  const diasUteis = Number(diasUteisManual) > 0 ? Number(diasUteisManual) : diasUteisCalculado;
+""",
+          'remover dias uteis duplicados')
+
+          text = replace_once(text,
+          """  const pagamentoDate = getFirstBusinessDayOfNextMonth(competencia);
+""",
+          """  const pagamentoDate = dataPagamentoManual || getFirstBusinessDayOfNextMonth(competencia);
+""",
+          'sincronizar data exibida')
+
+          text = replace_once(text,
+          """    if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
+    navigate(`/relatorio-vr-impressao?${params.toString()}`);
+""",
+          """    if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
+    if (dataPagamentoManual) params.set('dataPagamento', dataPagamentoManual);
+    navigate(`/relatorio-vr-impressao?${params.toString()}`);
+""",
+          'enviar data ao relatorio')
+
+          text = replace_once(text,
+          """  const handleRecibosTodasEmpresas = () => {
+    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
+    companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
+    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: companies.map(c => c.id).join(',') });
+    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
+    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
+    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+  };
+  const handleRecibosEmpresasSelecionadas = () => {
+    if (multiCompanies.size === 0) { toast.error('Selecione ao menos uma empresa'); return; }
+    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
+    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
+    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: Array.from(multiCompanies).join(',') });
+    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
+    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
+    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+  };
+""",
+          """  const handleRecibosTodasEmpresas = () => {
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    companies.forEach(c => getOrCreateEntries(c.id, competencia));
+    goRecibos(companies.map(c => c.id));
+  };
+  const handleRecibosEmpresasSelecionadas = () => {
+    if (multiCompanies.size === 0) { toast.error('Selecione ao menos uma empresa'); return; }
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competencia));
+    goRecibos(Array.from(multiCompanies));
+  };
+""",
+          'unificar geracao em massa')
+
+          text = replace_once(text,
+          """            <Input type=\"month\" value={competenciaEmpresa} onChange={e => setCompetenciaEmpresa(e.target.value)} className=\"w-44\" />
+""",
+          """            <Input type=\"month\" value={competencia} onChange={e => { setCompetencia(e.target.value); setGenerated(false); }} className=\"w-44\" />
+""",
+          'unificar competencia da secao')
+
+          text = replace_once(text,
+          """            <Input type=\"number\" min=\"1\" step=\"1\" value={diasUteisEmpresaManual}
+              onChange={e => setDiasUteisEmpresaManual(e.target.value)}
+              placeholder=\"auto\" className=\"w-28\" />
+""",
+          """            <Input type=\"number\" min=\"1\" step=\"1\" value={diasUteisManual}
+              onChange={e => { setDiasUteisManual(e.target.value); setGenerated(false); }}
+              placeholder={String(diasUteisCalculado)} className=\"w-28\" />
+""",
+          'unificar dias da secao')
+
+          text = replace_once(text,
+          """            <Input type=\"date\" value={dataPagamentoEmpresaManual} onChange={e => setDataPagamentoEmpresaManual(e.target.value)} className=\"w-40\" />
+""",
+          """            <Input type=\"date\" value={dataPagamentoManual} onChange={e => setDataPagamentoManual(e.target.value)} className=\"w-40\" />
+""",
+          'unificar pagamento da secao')
+
+          text = replace_once(text,
+          """      <RecibosPreviewModal open={previewOpen} onOpenChange={setPreviewOpen} tipo=\"vr\" company={company} competencia={competencia} rows={previewRows} onPrint={handleRecibosSelecionados} />
+""",
+          """      <RecibosPreviewModal open={previewOpen} onOpenChange={setPreviewOpen} tipo=\"vr\" company={company} competencia={competencia} diasUteis={diasUteis} dataPagamento={pagamentoDate} rows={previewRows} onPrint={handleRecibosSelecionados} />
+""",
+          'parametros da previa')
+
+          vr_path.write_text(text, encoding='utf-8')
+
+          preview_path = Path('src/components/RecibosPreviewModal.tsx')
+          text = preview_path.read_text(encoding='utf-8')
+          text = replace_once(text,
+          """  competencia: string;
+  rows: BenefitReportRow[];
+""",
+          """  competencia: string;
+  diasUteis?: number;
+  dataPagamento?: string;
+  rows: BenefitReportRow[];
+""",
+          'props da previa')
+          text = replace_once(text,
+          """const RecibosPreviewModal: React.FC<Props> = ({ open, onOpenChange, tipo, company, competencia, rows, onPrint }) => {
+  const competenciaLabel = competencia ? competenciaPt(competencia) : '';
+  const dataPagamento = competencia ? getFirstBusinessDayOfNextMonth(competencia) : '';
+""",
+          """const RecibosPreviewModal: React.FC<Props> = ({ open, onOpenChange, tipo, company, competencia, diasUteis, dataPagamento: dataPagamentoProp, rows, onPrint }) => {
+  const competenciaLabel = competencia ? competenciaPt(competencia) : '';
+  const dataPagamento = dataPagamentoProp || (competencia ? getFirstBusinessDayOfNextMonth(competencia) : '');
+""",
+          'usar pagamento informado na previa')
+          text = replace_once(text,
+          """                        <tr><td className=\"py-1 pr-4 font-semibold\">Competência:</td><td className=\"py-1\">{competenciaLabel}</td></tr>
+""",
+          """                        <tr><td className=\"py-1 pr-4 font-semibold\">Competência:</td><td className=\"py-1\">{competenciaLabel}</td></tr>
+                        {diasUteis ? <tr><td className=\"py-1 pr-4 font-semibold\">Dias úteis:</td><td className=\"py-1\">{diasUteis}</td></tr> : null}
+""",
+          'mostrar dias na previa')
+          preview_path.write_text(text, encoding='utf-8')
+
+          print_path = Path('src/pages/RelatorioVRImpressaoPage.tsx')
+          text = print_path.read_text(encoding='utf-8')
+          text = replace_once(text,
+          """const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consolidado: boolean }> = ({ block, competencia, consolidado }) => (
+""",
+          """const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consolidado: boolean; dataPagamento?: string }> = ({ block, competencia, consolidado, dataPagamento }) => (
+""",
+          'prop pagamento impressao')
+          text = replace_once(text,
+          """          <p className=\"text-xs\">Dias úteis: {block.diasUteis}</p>
+""",
+          """          <p className=\"text-xs\">Dias úteis: {block.diasUteis}</p>
+          {dataPagamento && <p className=\"text-xs\">Pagamento: {dataPagamento}</p>}
+""",
+          'mostrar pagamento no relatorio')
+          text = replace_once(text,
+          """  const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
+""",
+          """  const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
+  const dataPagamentoParam = searchParams.get('dataPagamento') || '';
+  const dataPagamento = dataPagamentoParam
+    ? dataPagamentoParam.split('-').reverse().join('/')
+    : '';
+""",
+          'ler pagamento do relatorio')
+          text = replace_once(text,
+          """            <EmpresaPagina key={b.company.id} block={b} competencia={competencia} consolidado={consolidado} />
+""",
+          """            <EmpresaPagina key={b.company.id} block={b} competencia={competencia} consolidado={consolidado} dataPagamento={dataPagamento} />
+""",
+          'passar pagamento para pagina')
+          print_path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Validar build
+        run: npm run build
+
+      - name: Commitar correção
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/RelatorioVRPage.tsx src/components/RecibosPreviewModal.tsx src/pages/RelatorioVRImpressaoPage.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: sincronizar parametros de VR em relatorios e recibos"
+          git push origin HEAD:fix/vr-parametros-sincronizados
