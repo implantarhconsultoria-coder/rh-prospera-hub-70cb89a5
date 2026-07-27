@@ -25,7 +25,7 @@ jobs:
           path = Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
           text = path.read_text(encoding='utf-8')
 
-          marker = """  {
+          old_block = """  {
             cargo: 'AJUDANTE DE MECANICO',
             salarioBase: 2100,
             insalubridadeAtiva: true,
@@ -34,7 +34,10 @@ jobs:
             periculosidadeValor: 0,
           },
           """
-          addition = marker + """  {
+
+          # O bloco real usa dois espacos antes das propriedades.
+          old_block = old_block.replace('            ', '    ').replace('          },', '  },')
+          addition = old_block + """  {
             cargo: 'VENDEDOR',
             salarioBase: 0,
             insalubridadeAtiva: false,
@@ -51,19 +54,26 @@ jobs:
             periculosidadeValor: 0,
           },
           """
+          addition = addition.replace('            ', '    ').replace('          {', '  {').replace('          },', '  },')
 
           if "cargo: 'VENDEDOR'" not in text:
-              if marker not in text:
+              if old_block not in text:
                   raise SystemExit('Bloco de funcoes fixas nao encontrado')
-              text = text.replace(marker, addition, 1)
+              text = text.replace(old_block, addition, 1)
 
           text = text.replace("    if (!form.empresa_id) return [];\n", "")
-          text = text.replace("      .filter(emp => emp.companyId === form.empresa_id && emp.categoria !== 'socio' && normalizeRole(emp.cargo))", "      .filter(emp => emp.categoria !== 'socio' && normalizeRole(emp.cargo))")
-          text = text.replace("  }, [employees, form.empresa_id, config.valorInsalubridade]);", "  }, [employees, config.valorInsalubridade]);")
+          text = text.replace(
+              "      .filter(emp => emp.companyId === form.empresa_id && emp.categoria !== 'socio' && normalizeRole(emp.cargo))",
+              "      .filter(emp => emp.categoria !== 'socio' && normalizeRole(emp.cargo))",
+          )
+          text = text.replace(
+              "  }, [employees, form.empresa_id, config.valorInsalubridade]);",
+              "  }, [employees, config.valorInsalubridade]);",
+          )
 
-          old = "{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
-          new = "{role.cargo}{role.salarioBase > 0 ? ` - ${formatBRL(role.salarioBase)}` : ''}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
-          text = text.replace(old, new)
+          old_label = "{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
+          new_label = "{role.cargo}{role.salarioBase > 0 ? ` - ${formatBRL(role.salarioBase)}` : ''}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
+          text = text.replace(old_label, new_label)
 
           path.write_text(text, encoding='utf-8')
           PY
