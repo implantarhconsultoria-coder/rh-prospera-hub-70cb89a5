@@ -1,4 +1,4 @@
-name: Adicionar funcoes globais no pre-cadastro
+name: Aplicar funcoes globais no pre-cadastro
 
 on:
   push:
@@ -17,7 +17,8 @@ jobs:
         with:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Ajustar lista global de funcoes
+
+      - name: Aplicar alteracao no arquivo
         run: |
           python <<'PY'
           from pathlib import Path
@@ -25,41 +26,48 @@ jobs:
           path = Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
           text = path.read_text(encoding='utf-8')
 
-          old_block = """  {
-            cargo: 'AJUDANTE DE MECANICO',
-            salarioBase: 2100,
-            insalubridadeAtiva: true,
-            insalubridadeValor: 648.40,
-            periculosidadeAtiva: false,
-            periculosidadeValor: 0,
-          },
-          """
+          bloco_atual = """const FIXED_ROLE_PRESETS: RoleOption[] = [
+            {
+              cargo: 'AJUDANTE DE MECANICO',
+              salarioBase: 2100,
+              insalubridadeAtiva: true,
+              insalubridadeValor: 648.40,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+          ];""".replace('          ', '')
 
-          # O bloco real usa dois espacos antes das propriedades.
-          old_block = old_block.replace('            ', '    ').replace('          },', '  },')
-          addition = old_block + """  {
-            cargo: 'VENDEDOR',
-            salarioBase: 0,
-            insalubridadeAtiva: false,
-            insalubridadeValor: 0,
-            periculosidadeAtiva: false,
-            periculosidadeValor: 0,
-          },
-          {
-            cargo: 'REPRESENTANTE',
-            salarioBase: 0,
-            insalubridadeAtiva: false,
-            insalubridadeValor: 0,
-            periculosidadeAtiva: false,
-            periculosidadeValor: 0,
-          },
-          """
-          addition = addition.replace('            ', '    ').replace('          {', '  {').replace('          },', '  },')
+          bloco_novo = """const FIXED_ROLE_PRESETS: RoleOption[] = [
+            {
+              cargo: 'AJUDANTE DE MECANICO',
+              salarioBase: 2100,
+              insalubridadeAtiva: true,
+              insalubridadeValor: 648.40,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+            {
+              cargo: 'VENDEDOR',
+              salarioBase: 0,
+              insalubridadeAtiva: false,
+              insalubridadeValor: 0,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+            {
+              cargo: 'REPRESENTANTE',
+              salarioBase: 0,
+              insalubridadeAtiva: false,
+              insalubridadeValor: 0,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+          ];""".replace('          ', '')
 
           if "cargo: 'VENDEDOR'" not in text:
-              if old_block not in text:
-                  raise SystemExit('Bloco de funcoes fixas nao encontrado')
-              text = text.replace(old_block, addition, 1)
+              if bloco_atual not in text:
+                  raise SystemExit('Bloco FIXED_ROLE_PRESETS nao encontrado')
+              text = text.replace(bloco_atual, bloco_novo, 1)
 
           text = text.replace("    if (!form.empresa_id) return [];\n", "")
           text = text.replace(
@@ -70,14 +78,15 @@ jobs:
               "  }, [employees, form.empresa_id, config.valorInsalubridade]);",
               "  }, [employees, config.valorInsalubridade]);",
           )
-
-          old_label = "{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
-          new_label = "{role.cargo}{role.salarioBase > 0 ? ` - ${formatBRL(role.salarioBase)}` : ''}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
-          text = text.replace(old_label, new_label)
+          text = text.replace(
+              "{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}",
+              "{role.cargo}{role.salarioBase > 0 ? ` - ${formatBRL(role.salarioBase)}` : ''}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}",
+          )
 
           path.write_text(text, encoding='utf-8')
           PY
-      - name: Commit da alteracao
+
+      - name: Commit e push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
