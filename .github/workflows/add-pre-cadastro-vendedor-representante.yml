@@ -73,3 +73,5 @@ jobs:
           fi
           git commit -m "feat: adicionar Vendedor e Representante no pre-cadastro"
           git push origin main
+
+# disparo manual por atualizacao do arquivo
