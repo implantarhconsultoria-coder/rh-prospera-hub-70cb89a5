@@ -1,0 +1,1 @@
+Força novo deploy da opção visível "Adicionar foto da galeria" no app dos mecânicos.
