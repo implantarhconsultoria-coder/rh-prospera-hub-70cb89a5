@@ -41,6 +41,12 @@ const findEntry = (entries: MonthlyEntry[], employeeId: string, competencia?: st
 const findEntryWithFallback = (entries: MonthlyEntry[], employeeId: string, competencia?: string) =>
   findEntry(entries, employeeId, competencia) || findEntry(getCompleteEntries(entries), employeeId, competencia);
 
+const getDiasPrevistos = (entry: MonthlyEntry | undefined, diasUteis: number, type: 'vr' | 'vt') => {
+  if (type === 'vt') return Math.max(0, diasUteis);
+  const diasVrInformados = Number(entry?.vrDias || 0);
+  return diasVrInformados > 0 ? diasVrInformados : Math.max(0, diasUteis);
+};
+
 const buildBenefitRow = ({
   emp,
   entry,
@@ -54,11 +60,14 @@ const buildBenefitRow = ({
   diasUteis: number;
   type: 'vr' | 'vt';
 }): BenefitReportRow => {
-  const faltasDias = descontoEntry?.faltasDias || 0;
-  const diasPrevistos = type === 'vr' ? (entry?.vrDias ?? diasUteis) : diasUteis;
-  const diasDescontados = Math.min(faltasDias, diasPrevistos);
+  // VR e VT são pagos antecipadamente. As faltas lançadas no mês anterior
+  // são descontadas na competência atual. O lançamento do próprio mês não
+  // pode reduzir o benefício que já está sendo pago agora.
+  const faltasCompetenciaAnterior = Math.max(0, Number(descontoEntry?.faltasDias || 0));
+  const diasPrevistos = getDiasPrevistos(entry, diasUteis, type);
+  const diasDescontados = Math.min(faltasCompetenciaAnterior, diasPrevistos);
   const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
-  const valorDiario = type === 'vr' ? emp.vrDiario : emp.vtDiario;
+  const valorDiario = Math.max(0, Number(type === 'vr' ? emp.vrDiario : emp.vtDiario) || 0);
   const valorTotal = roundCurrency(valorDiario * diasFinais);
   const motivo = diasDescontados > 0
     ? `${diasDescontados} falta(s) da competência anterior${descontoEntry?.competencia ? ` (${descontoEntry.competencia})` : ''}`
@@ -84,7 +93,7 @@ export const buildVRReportRows = (employees: Employee[], entries: MonthlyEntry[]
     buildBenefitRow({
       emp,
       entry: findEntryWithFallback(entries, emp.id, currentCompetencia),
-      descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
+      descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : undefined,
       diasUteis,
       type: 'vr',
     }),
@@ -98,7 +107,7 @@ export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[]
     buildBenefitRow({
       emp,
       entry: findEntryWithFallback(entries, emp.id, currentCompetencia),
-      descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : findEntry(entries, emp.id),
+      descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : undefined,
       diasUteis,
       type: 'vt',
     }),
@@ -125,7 +134,7 @@ export const buildIndividualBenefitData = ({
   if (type === 'vr' && !emp.vrAtivo) return null;
   if (type === 'vt' && !emp.vtAtivo) return null;
 
-  const row = buildBenefitRow({ emp, entry, descontoEntry: descontoEntry ?? entry, diasUteis, type });
+  const row = buildBenefitRow({ emp, entry, descontoEntry, diasUteis, type });
   return {
     valorDiario: row.valorDiario,
     diasPrevistos: row.diasPrevistos,
