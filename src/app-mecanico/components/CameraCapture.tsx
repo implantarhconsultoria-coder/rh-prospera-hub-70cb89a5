@@ -220,7 +220,7 @@ export default function CameraCapture({
               <p className="text-sm">{erro}</p>
               <div className="flex flex-col gap-2 w-full max-w-xs">
                 <Button onClick={() => void start()} variant="secondary" size="sm">Tentar câmera novamente</Button>
-                {galleryEnabled && <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm" className="bg-white text-black"><ImageUp className="w-4 h-4 mr-2" />Selecionar da galeria</Button>}
+                {galleryEnabled && <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm" className="bg-white text-black"><ImageUp className="w-4 h-4 mr-2" />Adicionar foto da galeria</Button>}
               </div>
             </div>
           )}
@@ -251,25 +251,33 @@ export default function CameraCapture({
           )}
         </div>
 
-        <div className="p-4 bg-black flex items-center justify-center gap-3">
+        <div className="p-4 bg-black space-y-3">
           {foto ? (
             <>
-              <Button onClick={() => void start()} variant="outline" className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving || starting}>
-                <RotateCcw className="w-4 h-4 mr-2" /> Refazer
-              </Button>
-              {galleryEnabled && <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving}><ImageUp className="w-4 h-4 mr-2" /> Galeria</Button>}
-              <Button onClick={() => void confirmar()} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white" disabled={saving}>
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />} Confirmar
-              </Button>
+              <div className="grid grid-cols-2 gap-3">
+                <Button onClick={() => void start()} variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving || starting}>
+                  <RotateCcw className="w-4 h-4 mr-2" /> Refazer
+                </Button>
+                <Button onClick={() => void confirmar()} className="bg-emerald-500 hover:bg-emerald-600 text-white" disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />} Confirmar
+                </Button>
+              </div>
+              {galleryEnabled && (
+                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full bg-white text-black border-white hover:bg-white/90" disabled={saving}>
+                  <ImageUp className="w-4 h-4 mr-2" /> Adicionar outra foto da galeria
+                </Button>
+              )}
             </>
           ) : (
             <>
-              <Button onClick={tirar} disabled={starting || !!erro} className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40">
-                <div className="w-full h-full rounded-full bg-white border-2 border-black/20" />
-              </Button>
-              {galleryEnabled && !erro && (
-                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="absolute right-4 bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving}>
-                  <ImageUp className="w-4 h-4 mr-2" /> Galeria
+              <div className="flex justify-center">
+                <Button onClick={tirar} disabled={starting || !!erro} className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40">
+                  <div className="w-full h-full rounded-full bg-white border-2 border-black/20" />
+                </Button>
+              </div>
+              {galleryEnabled && (
+                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full bg-white text-black border-white hover:bg-white/90" disabled={saving}>
+                  <ImageUp className="w-4 h-4 mr-2" /> Adicionar foto da galeria
                 </Button>
               )}
             </>
