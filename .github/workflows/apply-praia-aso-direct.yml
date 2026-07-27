@@ -1,0 +1,86 @@
+name: Aplicar guia ASO Praia Grande
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-praia-aso-direct.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Corrigir endereço e horário da Praia Grande
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/lib/pdfGenerator.ts')
+          text = path.read_text(encoding='utf-8')
+
+          goiania = """const isGoianiaAso = (d: FichaASOData) => {
+            const source = normalizePlain(`${d.clinica || ''} ${d.empresa || ''} ${d.obraLocal || ''}`);
+            return source.includes('GOIANIA') || source.includes('ASMETRO') || source.includes('GLOBAL MED');
+          };""".replace('          ', '')
+
+          praia = """const isPraiaGrandeAso = (d: FichaASOData) => {
+            const source = normalizePlain(`${d.clinica || ''} ${d.empresa || ''} ${d.obraLocal || ''}`);
+            return source.includes('PRAIA GRANDE') || source.includes('TOPAC FILIAL PRAIA') || source.includes('RUA LONDRINA');
+          };""".replace('          ', '')
+
+          if 'const isPraiaGrandeAso' not in text:
+              if goiania not in text:
+                  raise SystemExit('Bloco isGoianiaAso não localizado')
+              text = text.replace(goiania, goiania + '\n\n' + praia, 1)
+
+          default_return = """  return {
+            local: d.clinica || 'Avenida Sao Joao, 313, 1o andar, Centro, Sao Paulo/SP',""".replace('          ', '')
+
+          praia_return = """  if (isPraiaGrandeAso(d)) {
+            return {
+              local: 'Rua Londrina, 483. Centro, Praia Grande/SP.',
+              horarios: [
+                'DE SEGUNDA A SEXTA DAS 08h00 AS 11h00.',
+                '(horario agendado)',
+              ],
+              agendamento: [
+                'ATENDIMENTO SOMENTE COM HORARIO AGENDADO.',
+                'E obrigatorio que o funcionario compareca munido de documento de identidade e CPF.',
+              ],
+            };
+          }
+
+          """.replace('          ', '')
+
+          if "local: 'Rua Londrina, 483. Centro, Praia Grande/SP.'" not in text:
+              if default_return not in text:
+                  raise SystemExit('Retorno padrão da clínica não localizado')
+              text = text.replace(default_return, praia_return + default_return, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validar alteração
+        run: |
+          grep -n "Rua Londrina, 483" src/lib/pdfGenerator.ts
+          grep -n "08h00 AS 11h00" src/lib/pdfGenerator.ts
+          npm ci
+          npm run build
+
+      - name: Commit da correção
+        run: |
+          git config user.name "TOPAC RH PRO"
+          git config user.email "actions@github.com"
+          git add src/lib/pdfGenerator.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: corrigir guia ASO da filial Praia Grande"
+          git push
