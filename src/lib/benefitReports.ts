@@ -42,9 +42,10 @@ const findEntryWithFallback = (entries: MonthlyEntry[], employeeId: string, comp
   findEntry(entries, employeeId, competencia) || findEntry(getCompleteEntries(entries), employeeId, competencia);
 
 const getDiasPrevistos = (entry: MonthlyEntry | undefined, diasUteis: number, type: 'vr' | 'vt') => {
-  if (type === 'vt') return Math.max(0, diasUteis);
-  const diasVrInformados = Number(entry?.vrDias || 0);
-  return diasVrInformados > 0 ? diasVrInformados : Math.max(0, diasUteis);
+  const diasPagosSelecionados = Math.max(0, Number(diasUteis || 0));
+  if (diasPagosSelecionados > 0) return diasPagosSelecionados;
+  if (type === 'vt') return 0;
+  return Math.max(0, Number(entry?.vrDias || 0));
 };
 
 const buildBenefitRow = ({
