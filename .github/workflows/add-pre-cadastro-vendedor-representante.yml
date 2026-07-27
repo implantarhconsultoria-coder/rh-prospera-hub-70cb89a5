@@ -1,8 +1,8 @@
-name: Adicionar funcoes no pre-cadastro
+name: Adicionar funcoes globais no pre-cadastro
 
 on:
-  issues:
-    types: [opened]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -10,59 +10,63 @@ permissions:
 
 jobs:
   aplicar:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.issue.title, '[EXECUTAR FUNCOES PRE-CADASTRO]')
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Adicionar Vendedor e Representante
-        shell: python
+      - name: Ajustar lista global de funcoes
         run: |
+          python <<'PY'
           from pathlib import Path
 
           path = Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
           text = path.read_text(encoding='utf-8')
 
           marker = """  {
-    cargo: 'AJUDANTE DE MECANICO',
-    salarioBase: 2100,
-    insalubridadeAtiva: true,
-    insalubridadeValor: 648.40,
-    periculosidadeAtiva: false,
-    periculosidadeValor: 0,
-  },
-"""
+            cargo: 'AJUDANTE DE MECANICO',
+            salarioBase: 2100,
+            insalubridadeAtiva: true,
+            insalubridadeValor: 648.40,
+            periculosidadeAtiva: false,
+            periculosidadeValor: 0,
+          },
+          """
           addition = marker + """  {
-    cargo: 'VENDEDOR',
-    salarioBase: 0,
-    insalubridadeAtiva: false,
-    insalubridadeValor: 0,
-    periculosidadeAtiva: false,
-    periculosidadeValor: 0,
-  },
-  {
-    cargo: 'REPRESENTANTE',
-    salarioBase: 0,
-    insalubridadeAtiva: false,
-    insalubridadeValor: 0,
-    periculosidadeAtiva: false,
-    periculosidadeValor: 0,
-  },
-"""
+            cargo: 'VENDEDOR',
+            salarioBase: 0,
+            insalubridadeAtiva: false,
+            insalubridadeValor: 0,
+            periculosidadeAtiva: false,
+            periculosidadeValor: 0,
+          },
+          {
+            cargo: 'REPRESENTANTE',
+            salarioBase: 0,
+            insalubridadeAtiva: false,
+            insalubridadeValor: 0,
+            periculosidadeAtiva: false,
+            periculosidadeValor: 0,
+          },
+          """
 
           if "cargo: 'VENDEDOR'" not in text:
               if marker not in text:
                   raise SystemExit('Bloco de funcoes fixas nao encontrado')
               text = text.replace(marker, addition, 1)
 
+          text = text.replace("    if (!form.empresa_id) return [];\n", "")
+          text = text.replace("      .filter(emp => emp.companyId === form.empresa_id && emp.categoria !== 'socio' && normalizeRole(emp.cargo))", "      .filter(emp => emp.categoria !== 'socio' && normalizeRole(emp.cargo))")
+          text = text.replace("  }, [employees, form.empresa_id, config.valorInsalubridade]);", "  }, [employees, config.valorInsalubridade]);")
+
           old = "{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
           new = "{role.cargo}{role.salarioBase > 0 ? ` - ${formatBRL(role.salarioBase)}` : ''}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}"
-          if old in text:
-              text = text.replace(old, new, 1)
+          text = text.replace(old, new)
 
           path.write_text(text, encoding='utf-8')
+          PY
       - name: Commit da alteracao
         run: |
           git config user.name "github-actions[bot]"
@@ -72,5 +76,5 @@ jobs:
             echo "Nada para alterar"
             exit 0
           fi
-          git commit -m "feat: adicionar Vendedor e Representante no pre-cadastro"
+          git commit -m "feat: disponibilizar todas as funcoes em todas as empresas"
           git push origin main
