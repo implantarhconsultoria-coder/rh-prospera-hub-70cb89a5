@@ -184,12 +184,8 @@ const RelatorioVRPage: React.FC = () => {
   const [vrBulkCompany, setVrBulkCompany] = useState(ALL_COMPANIES);
   const [vrBulkMode, setVrBulkMode] = useState<VrBulkMode>('sem_guincheiros');
   const [updatingVr, setUpdatingVr] = useState(false);
-
-  const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
   const [diasUteisManual, setDiasUteisManual] = useState('');
-  const [diasUteisEmpresaManual, setDiasUteisEmpresaManual] = useState('');
   const [dataPagamentoManual, setDataPagamentoManual] = useState('');
-  const [dataPagamentoEmpresaManual, setDataPagamentoEmpresaManual] = useState('');
 
   const isAllCompanies = selectedCompany === ALL_COMPANIES;
   const reportCompanyIds = useMemo(
@@ -201,7 +197,6 @@ const RelatorioVRPage: React.FC = () => {
   const { datas: feriadosDatas } = useFeriados(competencia, isAllCompanies ? undefined : selectedCompany);
   const diasUteisCalculado = getWorkingDays(competencia, feriadosDatas);
   const diasUteis = Number(diasUteisManual) > 0 ? Number(diasUteisManual) : diasUteisCalculado;
-  const diasUteisEmpresa = Number(diasUteisEmpresaManual) > 0 ? Number(diasUteisEmpresaManual) : undefined;
   const fechamento = isAllCompanies ? { dataFechamento: '' } : getFechamento(selectedCompany, competencia);
   const dataFechamento = fechamento.dataFechamento || '';
 
@@ -308,7 +303,7 @@ const RelatorioVRPage: React.FC = () => {
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
   const importTotal = useMemo(() => roundCurrency(importRows.reduce((sum, row) => sum + row.valorTotal, 0)), [importRows]);
   const emissaoDate = new Date().toLocaleDateString('pt-BR');
-  const pagamentoDate = getFirstBusinessDayOfNextMonth(competencia);
+  const pagamentoDate = dataPagamentoManual || getFirstBusinessDayOfNextMonth(competencia);
 
   const handlePrintRelatorio = () => {
     if (!selectedCompany) { toast.error('Selecione uma empresa'); return; }
@@ -318,6 +313,7 @@ const RelatorioVRPage: React.FC = () => {
       : { empresa: selectedCompany, competencia },
     );
     if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
+    if (dataPagamentoManual) params.set('dataPagamento', dataPagamentoManual);
     navigate(`/relatorio-vr-impressao?${params.toString()}`);
   };
 
@@ -339,21 +335,15 @@ const RelatorioVRPage: React.FC = () => {
   };
   const handleRecibosEmpresa = () => goRecibos([selectedCompany]);
   const handleRecibosTodasEmpresas = () => {
-    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
-    companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
-    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: companies.map(c => c.id).join(',') });
-    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
-    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
-    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    companies.forEach(c => getOrCreateEntries(c.id, competencia));
+    goRecibos(companies.map(c => c.id));
   };
   const handleRecibosEmpresasSelecionadas = () => {
     if (multiCompanies.size === 0) { toast.error('Selecione ao menos uma empresa'); return; }
-    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
-    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
-    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: Array.from(multiCompanies).join(',') });
-    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
-    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
-    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competencia));
+    goRecibos(Array.from(multiCompanies));
   };
 
   const toggleEmp = (id: string) => {
@@ -530,17 +520,17 @@ const RelatorioVRPage: React.FC = () => {
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Competência (mês)</label>
-            <Input type="month" value={competenciaEmpresa} onChange={e => setCompetenciaEmpresa(e.target.value)} className="w-44" />
+            <Input type="month" value={competencia} onChange={e => { setCompetencia(e.target.value); setGenerated(false); }} className="w-44" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Dias pagos (opcional)</label>
-            <Input type="number" min="1" step="1" value={diasUteisEmpresaManual}
-              onChange={e => setDiasUteisEmpresaManual(e.target.value)}
-              placeholder="auto" className="w-28" />
+            <Input type="number" min="1" step="1" value={diasUteisManual}
+              onChange={e => { setDiasUteisManual(e.target.value); setGenerated(false); }}
+              placeholder={String(diasUteisCalculado)} className="w-28" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Data pagamento</label>
-            <Input type="date" value={dataPagamentoEmpresaManual} onChange={e => setDataPagamentoEmpresaManual(e.target.value)} className="w-40" />
+            <Input type="date" value={dataPagamentoManual} onChange={e => setDataPagamentoManual(e.target.value)} className="w-40" />
           </div>
           <Button onClick={handleRecibosTodasEmpresas} variant="outline" size="sm">
             <Printer className="w-4 h-4 mr-2" /> Recibos de todas as empresas
