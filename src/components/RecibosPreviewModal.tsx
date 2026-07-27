@@ -20,6 +20,8 @@ interface Props {
   tipo: Tipo;
   company: Company | undefined;
   competencia: string;
+  diasUteis?: number;
+  dataPagamento?: string;
   rows: BenefitReportRow[];
   onPrint?: () => void;
 }
@@ -30,9 +32,9 @@ const competenciaPt = (competencia: string) => {
   return `${meses[Number(m) - 1]} / ${y}`;
 };
 
-const RecibosPreviewModal: React.FC<Props> = ({ open, onOpenChange, tipo, company, competencia, rows, onPrint }) => {
+const RecibosPreviewModal: React.FC<Props> = ({ open, onOpenChange, tipo, company, competencia, diasUteis, dataPagamento: dataPagamentoProp, rows, onPrint }) => {
   const competenciaLabel = competencia ? competenciaPt(competencia) : '';
-  const dataPagamento = competencia ? getFirstBusinessDayOfNextMonth(competencia) : '';
+  const dataPagamento = dataPagamentoProp || (competencia ? getFirstBusinessDayOfNextMonth(competencia) : '');
   const sigla = tipo === 'vr' ? 'VR' : 'VT';
   const titulo = tipo === 'vr' ? 'RECIBO DE VALE-REFEIÇÃO' : 'RECIBO DE VALE-TRANSPORTE';
   const beneficio = tipo === 'vr' ? 'Vale-Refeição' : 'Vale-Transporte';
@@ -83,6 +85,7 @@ const RecibosPreviewModal: React.FC<Props> = ({ open, onOpenChange, tipo, compan
                         <tr><td className="py-1 pr-4 font-semibold w-1/3">Funcionário:</td><td className="py-1">{r.emp.name}</td></tr>
                         <tr><td className="py-1 pr-4 font-semibold">Função:</td><td className="py-1">{r.emp.cargo}</td></tr>
                         <tr><td className="py-1 pr-4 font-semibold">Competência:</td><td className="py-1">{competenciaLabel}</td></tr>
+                        {diasUteis ? <tr><td className="py-1 pr-4 font-semibold">Dias úteis:</td><td className="py-1">{diasUteis}</td></tr> : null}
                       </tbody>
                     </table>
 

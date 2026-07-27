@@ -25,7 +25,7 @@ type EmpresaBlock = {
   total: number;
 };
 
-const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consolidado: boolean }> = ({ block, competencia, consolidado }) => (
+const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consolidado: boolean; dataPagamento?: string }> = ({ block, competencia, consolidado, dataPagamento }) => (
   <div className="recibo-page" style={{ pageBreakAfter: 'always' }}>
     <div className="border-b-2 border-black pb-3 mb-4">
       <div className="flex justify-between items-start">
@@ -37,6 +37,7 @@ const EmpresaPagina: React.FC<{ block: EmpresaBlock; competencia: string; consol
           <p className="text-sm font-bold">{consolidado ? 'RELATÓRIO CONSOLIDADO DE VALE REFEIÇÃO' : 'RELATÓRIO DE VALE REFEIÇÃO'}</p>
           <p className="text-xs">Competência: {competenciaLabel(competencia)}</p>
           <p className="text-xs">Dias úteis: {block.diasUteis}</p>
+          {dataPagamento && <p className="text-xs">Pagamento: {dataPagamento}</p>}
           {block.dataFechamento && <p className="text-xs">Fechamento: {new Date(block.dataFechamento).toLocaleDateString('pt-BR')}</p>}
         </div>
       </div>
@@ -100,6 +101,8 @@ const RelatorioVRImpressaoPage: React.FC = () => {
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
   const competenciaAnterior = useMemo(() => getPreviousCompetencia(competencia), [competencia]);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
+  const dataPagamentoParam = searchParams.get('dataPagamento') || '';
+  const dataPagamento = dataPagamentoParam ? dataPagamentoParam.split('-').reverse().join('/') : '';
   const empresasParam = searchParams.get('empresas') || '';
   const empresaSingle = searchParams.get('empresa') || '';
 
@@ -233,7 +236,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
 
         <div id="vr-print-area" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
           {blocks.map(b => (
-            <EmpresaPagina key={b.company.id} block={b} competencia={competencia} consolidado={consolidado} />
+            <EmpresaPagina key={b.company.id} block={b} competencia={competencia} consolidado={consolidado} dataPagamento={dataPagamento} />
           ))}
 
           {consolidado && (
