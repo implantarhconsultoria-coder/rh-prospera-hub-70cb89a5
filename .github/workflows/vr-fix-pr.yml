@@ -1,0 +1,36 @@
+name: Aplicar correcao VR no PR
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/vr-parametros-sincronizados'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Aplicar patch
+        run: |
+          python3 .github/scripts/fix_vr_parametros.py
+      - run: npm ci
+      - run: npm run build
+      - name: Commitar
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/RelatorioVRPage.tsx src/components/RecibosPreviewModal.tsx src/pages/RelatorioVRImpressaoPage.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: sincronizar parametros de VR em relatorios e recibos"
+          git push origin HEAD:${{ github.head_ref }}
