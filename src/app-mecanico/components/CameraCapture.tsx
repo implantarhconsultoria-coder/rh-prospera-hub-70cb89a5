@@ -32,9 +32,9 @@ const getCameraMessage = (error: unknown) => {
 };
 
 /**
- * Câmera mobile-first reutilizável.
- * Fotos operacionais com câmera traseira também podem ser escolhidas da galeria.
- * Selfies continuam exigindo captura ao vivo por padrão.
+ * Câmera mobile-first reutilizável do app mecânico.
+ * A galeria fica liberada por padrão para garantir envio de fotos já existentes.
+ * Use allowGallery={false} somente em capturas que precisem ser obrigatoriamente ao vivo.
  */
 export default function CameraCapture({
   open,
@@ -43,7 +43,7 @@ export default function CameraCapture({
   facing = "user",
   title = "Foto",
   hint,
-  allowGallery,
+  allowGallery = true,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -54,7 +54,7 @@ export default function CameraCapture({
   const [starting, setStarting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const galleryEnabled = allowGallery ?? facing === "environment";
+  const galleryEnabled = allowGallery !== false;
 
   const stop = () => {
     if (streamRef.current) {
@@ -210,7 +210,7 @@ export default function CameraCapture({
       <DialogContent className="max-w-md p-0 overflow-hidden bg-black border-0">
         <div className="relative bg-black aspect-[3/4] w-full flex items-center justify-center">
           {starting && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10 pointer-events-none">
               <Loader2 className="w-8 h-8 animate-spin" /><p className="text-sm">Iniciando câmera...</p>
             </div>
           )}
