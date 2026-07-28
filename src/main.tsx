@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import "./styles/topac-platform.css";
+import "./styles/hide-vercel-toolbar.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 const MOBILE_BUILD_TAG = "20260605-acesso-final-1";
