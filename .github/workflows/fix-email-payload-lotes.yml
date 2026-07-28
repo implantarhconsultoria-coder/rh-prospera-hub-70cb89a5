@@ -21,22 +21,74 @@ jobs:
           node-version: 20
       - name: Aplicar correção isolada no envio
         run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const path = 'src/lib/emailUtils.ts';
-          let text = fs.readFileSync(path, 'utf8');
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('src/lib/emailUtils.ts')
+          text = path.read_text()
+          start = text.index('  const firstAttachment = normalizedAttachments[0];')
+          end_marker = '  return data;\n};'
+          end = text.index(end_marker, start)
+          replacement = '''  const MAX_PAYLOAD_BASE64_CHARS = 2_900_000;
+  const batches: typeof normalizedAttachments[] = [];
+  let currentBatch: typeof normalizedAttachments = [];
+  let currentSize = 0;
 
-          const start = text.indexOf("  const firstAttachment = normalizedAttachments[0];");
-          const endMarker = "  return data;\n};";
-          const end = text.indexOf(endMarker, start);
-          if (start < 0 || end < 0) throw new Error('Trecho de envio esperado não encontrado');
+  normalizedAttachments.forEach((attachment) => {
+    const attachmentSize = attachment.attachmentBase64.length;
+    if (attachmentSize > MAX_PAYLOAD_BASE64_CHARS) {
+      throw new Error(`O arquivo "${attachment.attachmentName}" é grande demais para envio automático. Reduza o tamanho do arquivo e tente novamente.`);
+    }
+    if (currentBatch.length && currentSize + attachmentSize > MAX_PAYLOAD_BASE64_CHARS) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentSize = 0;
+    }
+    currentBatch.push(attachment);
+    currentSize += attachmentSize;
+  });
+  if (currentBatch.length) batches.push(currentBatch);
 
-          const replacement = `  const MAX_PAYLOAD_BASE64_CHARS = 2_900_000;\n  const batches: typeof normalizedAttachments[] = [];\n  let currentBatch: typeof normalizedAttachments = [];\n  let currentSize = 0;\n\n  normalizedAttachments.forEach((attachment) => {\n    const attachmentSize = attachment.attachmentBase64.length;\n    if (attachmentSize > MAX_PAYLOAD_BASE64_CHARS) {\n      throw new Error(\\`O arquivo \\\"\\${attachment.attachmentName}\\\" é grande demais para envio automático. Reduza o tamanho do arquivo e tente novamente.\\`);\n    }\n    if (currentBatch.length && currentSize + attachmentSize > MAX_PAYLOAD_BASE64_CHARS) {\n      batches.push(currentBatch);\n      currentBatch = [];\n      currentSize = 0;\n    }\n    currentBatch.push(attachment);\n    currentSize += attachmentSize;\n  });\n  if (currentBatch.length) batches.push(currentBatch);\n\n  const results = [];\n  for (let index = 0; index < batches.length; index += 1) {\n    const batch = batches[index];\n    const firstAttachment = batch[0];\n    const documentNames = batch.map((item) => item.documentName || item.attachmentName).join('; ');\n    const batchSubject = batches.length > 1 ? \\\`\\${subject} - Parte \\${index + 1}/\\${batches.length}\\\` : subject;\n    const response = await fetch('/api/send-email-pdf', {\n      method: 'POST',\n      headers: {\n        'content-type': 'application/json',\n        ...(authToken ? { authorization: \\\`Bearer \\${authToken}\\\` } : {}),\n      },\n      body: JSON.stringify({\n        to,\n        cc: cc || [],\n        subject: batchSubject,\n        body,\n        attachments: batch,\n        attachmentName: firstAttachment.attachmentName,\n        attachmentBase64: firstAttachment.attachmentBase64,\n        attachmentContentType: firstAttachment.attachmentContentType,\n        attachmentSize: firstAttachment.attachmentSize,\n        senderUserId,\n        senderName,\n        senderEmail,\n        moduleOrigin,\n        documentId: documentId || firstAttachment.documentId,\n        documentName: documentName || documentNames,\n      }),\n    });\n    const data = await parseEmailApiResponse(response);\n    if (!response.ok || data?.ok === false) {\n      throw new Error(buildEmailApiErrorMessage(data, response.status));\n    }\n    results.push(data);\n  }\n  return { ok: true, batches: results.length, results };\n};`;
-
-          text = text.slice(0, start) + replacement + text.slice(end + endMarker.length);
-          fs.writeFileSync(path, text);
-          fs.rmSync('.github/workflows/fix-email-payload-lotes.yml');
-          NODE
+  const results = [];
+  for (let index = 0; index < batches.length; index += 1) {
+    const batch = batches[index];
+    const firstAttachment = batch[0];
+    const documentNames = batch.map((item) => item.documentName || item.attachmentName).join('; ');
+    const batchSubject = batches.length > 1 ? `${subject} - Parte ${index + 1}/${batches.length}` : subject;
+    const response = await fetch('/api/send-email-pdf', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: JSON.stringify({
+        to,
+        cc: cc || [],
+        subject: batchSubject,
+        body,
+        attachments: batch,
+        attachmentName: firstAttachment.attachmentName,
+        attachmentBase64: firstAttachment.attachmentBase64,
+        attachmentContentType: firstAttachment.attachmentContentType,
+        attachmentSize: firstAttachment.attachmentSize,
+        senderUserId,
+        senderName,
+        senderEmail,
+        moduleOrigin,
+        documentId: documentId || firstAttachment.documentId,
+        documentName: documentName || documentNames,
+      }),
+    });
+    const data = await parseEmailApiResponse(response);
+    if (!response.ok || data?.ok === false) {
+      throw new Error(buildEmailApiErrorMessage(data, response.status));
+    }
+    results.push(data);
+  }
+  return { ok: true, batches: results.length, results };
+};'''
+          path.write_text(text[:start] + replacement + text[end + len(end_marker):])
+          Path('.github/workflows/fix-email-payload-lotes.yml').unlink()
+          PY
       - name: Validar build
         run: |
           npm ci
