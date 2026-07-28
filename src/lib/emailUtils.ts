@@ -34,7 +34,6 @@ export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
 };
 
 const PDF_CONTENT_TYPE = 'application/pdf';
-const MAX_PAYLOAD_BASE64_CHARS = 4_000_000;
 
 const safeFileName = (value: string) =>
   (value || 'email')
@@ -176,62 +175,38 @@ export const sendEmailWithPdfAttachment = async ({
     };
   }));
 
-  const batches: typeof normalizedAttachments[] = [];
-  let currentBatch: typeof normalizedAttachments = [];
-  let currentSize = 0;
+  const firstAttachment = normalizedAttachments[0];
+  const documentNames = normalizedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
 
-  normalizedAttachments.forEach((attachment) => {
-    const attachmentSize = attachment.attachmentBase64.length;
-    if (attachmentSize > MAX_PAYLOAD_BASE64_CHARS) {
-      throw new Error(`O arquivo "${attachment.attachmentName}" é grande demais para envio automático. Reduza o tamanho do arquivo e tente novamente.`);
-    }
-    if (currentBatch.length && currentSize + attachmentSize > MAX_PAYLOAD_BASE64_CHARS) {
-      batches.push(currentBatch);
-      currentBatch = [];
-      currentSize = 0;
-    }
-    currentBatch.push(attachment);
-    currentSize += attachmentSize;
+  const response = await fetch('/api/send-email-pdf', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify({
+      to,
+      cc: cc || [],
+      subject,
+      body,
+      attachments: normalizedAttachments,
+      attachmentName: firstAttachment.attachmentName,
+      attachmentBase64: firstAttachment.attachmentBase64,
+      attachmentContentType: firstAttachment.attachmentContentType,
+      attachmentSize: firstAttachment.attachmentSize,
+      senderUserId,
+      senderName,
+      senderEmail,
+      moduleOrigin,
+      documentId: documentId || firstAttachment.documentId,
+      documentName: documentName || documentNames,
+    }),
   });
-  if (currentBatch.length) batches.push(currentBatch);
-
-  const results = [];
-  for (let index = 0; index < batches.length; index += 1) {
-    const batch = batches[index];
-    const firstAttachment = batch[0];
-    const documentNames = batch.map((item) => item.documentName || item.attachmentName).join('; ');
-    const batchSubject = batches.length > 1 ? `${subject} - Parte ${index + 1}/${batches.length}` : subject;
-    const response = await fetch('/api/send-email-pdf', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
-      },
-      body: JSON.stringify({
-        to,
-        cc: cc || [],
-        subject: batchSubject,
-        body,
-        attachments: batch,
-        attachmentName: firstAttachment.attachmentName,
-        attachmentBase64: firstAttachment.attachmentBase64,
-        attachmentContentType: firstAttachment.attachmentContentType,
-        attachmentSize: firstAttachment.attachmentSize,
-        senderUserId,
-        senderName,
-        senderEmail,
-        moduleOrigin,
-        documentId: documentId || firstAttachment.documentId,
-        documentName: documentName || documentNames,
-      }),
-    });
-    const data = await parseEmailApiResponse(response);
-    if (!response.ok || data?.ok === false) {
-      throw new Error(buildEmailApiErrorMessage(data, response.status));
-    }
-    results.push(data);
+  const data = await parseEmailApiResponse(response);
+  if (!response.ok || data?.ok === false) {
+    throw new Error(buildEmailApiErrorMessage(data, response.status));
   }
-  return { ok: true, batches: results.length, results };
+  return data;
 };
 
 export const downloadEmailWithAttachment = async ({
