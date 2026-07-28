@@ -34,7 +34,7 @@ export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
 };
 
 const PDF_CONTENT_TYPE = 'application/pdf';
-const MAX_PAYLOAD_BASE64_CHARS = 2_900_000;
+const MAX_PAYLOAD_BASE64_CHARS = 4_000_000;
 
 const safeFileName = (value: string) =>
   (value || 'email')
