@@ -342,9 +342,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     const company = companies.find(x => x.id === id);
     setForm(prev => ({ ...prev, empresa_id: id, empresa_nome: company?.name || '', cnpj: company?.cnpj || '' }));
   };
-  const setFuncaoComPadroes = (funcao: string) => {
-    setForm(prev => ({ ...prev, funcao, exige_toxicologico: isGuincheiro(funcao) ? true : prev.exige_toxicologico }));
-  };
+  const setFuncaoComPadroes = (funcao: string) => { setForm(p => ({ ...p, funcao })); };
   const novo = () => {
     setSelectedId('');
     setForm(initialForm);
