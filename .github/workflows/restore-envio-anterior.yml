@@ -1,0 +1,53 @@
+name: Restaurar fluxo anterior de envio
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-envio-anterior.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Restaurar somente arquivos de envio
+        run: |
+          git checkout 1c4500180f404efa884b9b87a03198679f0c5003 -- src/lib/emailUtils.ts src/pages/PreCadastroAdmissionalOcrPage.tsx
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'src/pages/PreCadastroAdmissionalOcrPage.tsx';
+          let text = fs.readFileSync(path, 'utf8');
+
+          const blocking = "if (missingDocs.length) return toast.error(`Faltando: ${missingDocs.join(', ')}`); ";
+          if (!text.includes(blocking)) throw new Error('Bloqueio de documentos faltantes não encontrado');
+          text = text.replace(blocking, '');
+
+          const disabledOld = 'disabled={missingDocs.length > 0 || selectedDocs.length === 0}';
+          const disabledNew = 'disabled={selectedDocs.length === 0}';
+          if (!text.includes(disabledOld)) throw new Error('Condição original do botão não encontrada');
+          text = text.replace(disabledOld, disabledNew);
+
+          fs.writeFileSync(path, text);
+          fs.rmSync('.github/workflows/restore-envio-anterior.yml');
+          NODE
+      - name: Validar build
+        run: |
+          npm ci
+          npm run build
+      - name: Publicar restauração
+        run: |
+          git config user.name "TOPAC Automation"
+          git config user.email "actions@github.com"
+          git add src/lib/emailUtils.ts src/pages/PreCadastroAdmissionalOcrPage.tsx .github/workflows/restore-envio-anterior.yml
+          git commit -m "fix: restaurar fluxo anterior de envio e exame"
+          git push origin main
