@@ -1,0 +1,50 @@
+name: Unblock accounting send
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/unblock-accounting-send.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Remove missing-document blocking
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
+          s = p.read_text()
+          old1 = "if (missingDocs.length) return toast.error(`Faltando: ${missingDocs.join(', ')}`); "
+          old2 = "disabled={missingDocs.length > 0 || selectedDocs.length === 0}"
+          if old1 not in s:
+              raise SystemExit('bloqueio da funcao nao encontrado')
+          if old2 not in s:
+              raise SystemExit('bloqueio do botao nao encontrado')
+          s = s.replace(old1, '', 1)
+          s = s.replace(old2, 'disabled={selectedDocs.length === 0}', 1)
+          p.write_text(s)
+          PY
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Commit and push
+        run: |
+          git config user.name "TOPAC Automation"
+          git config user.email "actions@github.com"
+          git add src/pages/PreCadastroAdmissionalOcrPage.tsx
+          git commit -m "fix: permitir envio para contabilidade com documentos pendentes"
+          git push
