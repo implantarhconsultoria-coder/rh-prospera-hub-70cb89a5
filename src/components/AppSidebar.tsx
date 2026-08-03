@@ -38,6 +38,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Pre-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
+  { label: 'Envios para Clinicas', icon: FileText, path: '/admin/emails-contabilidade' },
   { label: 'Historico', icon: History, path: '/admin/historico' },
 ];
 
@@ -50,6 +51,7 @@ const directorItems: MenuItem[] = [
   { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento' },
   { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
   { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
+  { label: 'Envios para Clinicas', icon: FileText, path: '/admin/emails-contabilidade' },
   { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio' },
 ];
 
