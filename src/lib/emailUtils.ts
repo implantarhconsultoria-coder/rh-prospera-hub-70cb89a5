@@ -23,12 +23,28 @@ export interface EmailAttachmentInput {
   documentName?: string;
 }
 
+export const EMAIL_SIGNATURE = [
+  'Atenciosamente,',
+  '',
+  'Rodrigo de Souza Sabino',
+  'Administrador da Plataforma Topac RH PRO Multiempresas',
+].join('\n');
+
+export const applyGlobalEmailSignature = (value?: string) => {
+  const body = String(value || '').replace(/\r\n/g, '\n').trim();
+  const withoutOldSignature = body
+    .replace(/(?:\n\s*)?Atenciosamente,?[\s\S]*$/i, '')
+    .replace(/(?:\n\s*)?Rodrigo de Souza Sabino[\s\S]*$/i, '')
+    .trim();
+  return withoutOldSignature ? `${withoutOldSignature}\n\n${EMAIL_SIGNATURE}` : EMAIL_SIGNATURE;
+};
+
 export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
   const enc = encodeURIComponent;
   const params: string[] = [];
   if (cc?.length) params.push(`cc=${cc.map(enc).join(',')}`);
   params.push(`subject=${enc(subject)}`);
-  params.push(`body=${enc(body)}`);
+  params.push(`body=${enc(applyGlobalEmailSignature(body))}`);
   const mailto = `mailto:${to.map(enc).join(',')}?${params.join('&')}`;
   window.location.href = mailto;
 };
@@ -54,6 +70,7 @@ const contentTypeToExtension = (contentType: string) => {
   if (type.includes('png')) return 'png';
   if (type.includes('webp')) return 'webp';
   if (type.includes('jpeg') || type.includes('jpg')) return 'jpg';
+  if (type.includes('spreadsheetml.sheet')) return 'xlsx';
   if (type.includes('wordprocessingml.document')) return 'docx';
   if (type.includes('msword')) return 'doc';
   return 'pdf';
@@ -188,7 +205,7 @@ export const sendEmailWithPdfAttachment = async ({
       to,
       cc: cc || [],
       subject,
-      body,
+      body: applyGlobalEmailSignature(body),
       attachments: normalizedAttachments,
       attachmentName: firstAttachment.attachmentName,
       attachmentBase64: firstAttachment.attachmentBase64,
