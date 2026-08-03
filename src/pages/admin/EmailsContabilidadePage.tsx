@@ -1,1 +1,1 @@
-export { default } from './EnviosMensaisClinicasPage';
+export { default } from './EnviosMensaisClinicasV2Page';
