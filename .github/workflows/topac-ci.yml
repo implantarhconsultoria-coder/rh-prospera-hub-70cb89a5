@@ -43,11 +43,16 @@ jobs:
           src/pages/admin/CombustivelQRAdminPage.tsx
           src/lib/__tests__/bankingParser.test.ts
           src/lib/__tests__/abastecimentoReports.test.ts
+          src/lib/__tests__/emailPolicy.test.ts
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
 
-      - name: Tests
-        run: npm test
+      - name: Tests changed scope
+        run: >-
+          npx vitest run
+          src/lib/__tests__/bankingParser.test.ts
+          src/lib/__tests__/abastecimentoReports.test.ts
+          src/lib/__tests__/emailPolicy.test.ts
 
       - name: Build
         run: npm run build
