@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildConsolidatedFuelReport, resolveFuelPeriod, type FuelReportRecord } from '@/lib/abastecimentoReports';
 
@@ -20,6 +21,13 @@ describe('buildConsolidatedFuelReport', () => {
     expect(result[0].quantidadeTotal).toBe(3);
     expect(result[0].valorTotal).toBe(230);
     expect(result[0].funcionarios.find((item) => item.nome === 'Ana')).toMatchObject({ quantidade: 2, valorTotal: 180 });
+  });
+
+  it('mantém os dois PDFs executivos em A4 paisagem', () => {
+    const source = readFileSync(new URL('../abastecimentoReports.ts', import.meta.url), 'utf8');
+    const landscapeDefinitions = source.match(/orientation:\s*['"]landscape['"]/g) || [];
+    expect(landscapeDefinitions).toHaveLength(2);
+    expect(source.match(/format:\s*['"]a4['"]/g) || []).toHaveLength(2);
   });
 });
 
