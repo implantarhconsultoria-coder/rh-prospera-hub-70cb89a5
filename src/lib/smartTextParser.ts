@@ -103,12 +103,13 @@ export const parseEmployeeTextLocally = (rawText: string): EmployeeSmartParseRes
     /(?:data\s+de\s+admiss[aã]o|admiss[aã]o|admitido\s+em)\s*[:-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})/i,
   ]));
 
-  const labelledCell = first(flat, [/(?:celular|whatsapp|whats)\s*[:-]?\s*(\+?\d[\d\s().-]{8,20})/i]);
-  const labelledPhone = first(flat, [/(?:telefone|fone)\s*[:-]?\s*(\+?\d[\d\s().-]{8,20})/i]);
+  const phonePattern = /((?:\+?55\s*)?\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4})/i;
+  const labelledCell = first(flat, [new RegExp(`(?:celular|whatsapp|whats)\\s*[:-]?\\s*${phonePattern.source}`, 'i')]);
+  const labelledPhone = first(flat, [new RegExp(`(?:telefone|fone)\\s*[:-]?\\s*${phonePattern.source}`, 'i')]);
   data.celular = normalizePhone(labelledCell);
   data.telefone = normalizePhone(labelledPhone);
   if (!data.celular && !data.telefone) {
-    const genericPhone = flat.match(/(?:\+?55\s*)?\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4}/)?.[0] || '';
+    const genericPhone = flat.match(/(?:\+?55\s*)?\(?\d{2}\)?\s*9?\d{4}[-\s]\d{4}/)?.[0] || '';
     data.celular = normalizePhone(genericPhone);
   }
 
