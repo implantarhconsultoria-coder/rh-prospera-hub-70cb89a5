@@ -42,6 +42,9 @@ jobs:
           src/components/BankingDataEditor.tsx
           src/components/EmailPdfModal.tsx
           src/components/EmployeeSmartTextPanel.tsx
+          src/components/EmployeeSmartEditOverlay.tsx
+          src/components/AppLayout.tsx
+          src/components/FilialLayout.tsx
           src/pages/FuncionariosPage.tsx
           src/pages/ProtocoloPage.tsx
           src/pages/admin/CombustivelQRAdminPage.tsx
