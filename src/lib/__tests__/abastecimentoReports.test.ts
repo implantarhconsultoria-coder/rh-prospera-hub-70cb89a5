@@ -24,7 +24,7 @@ describe('buildConsolidatedFuelReport', () => {
   });
 
   it('mantém os dois PDFs executivos em A4 paisagem', () => {
-    const source = readFileSync(new URL('../abastecimentoReports.ts', import.meta.url), 'utf8');
+    const source = readFileSync('src/lib/abastecimentoReports.ts', 'utf8');
     const landscapeDefinitions = source.match(/orientation:\s*['"]landscape['"]/g) || [];
     expect(landscapeDefinitions).toHaveLength(2);
     expect(source.match(/format:\s*['"]a4['"]/g) || []).toHaveLength(2);
