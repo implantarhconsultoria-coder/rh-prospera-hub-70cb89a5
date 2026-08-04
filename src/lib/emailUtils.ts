@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { applyTopacEmailPolicy } from '@/lib/emailPolicy';
 
 /** Abre o cliente de e-mail padrão ou envia anexos pelo endpoint da plataforma. */
@@ -41,7 +42,7 @@ const safeFileName = (value: string) =>
   (value || 'email')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, ' ')
+    .replace(/[<>:"/\\|?*]+/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\s+\./g, '.')
     .trim()
