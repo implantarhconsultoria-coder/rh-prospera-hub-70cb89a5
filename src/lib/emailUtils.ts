@@ -1,6 +1,6 @@
-/**
- * Abre o cliente de e-mail padrao (Outlook etc.) com campos preenchidos.
- */
+import { applyTopacEmailPolicy } from '@/lib/emailPolicy';
+
+/** Abre o cliente de e-mail padrão ou envia anexos pelo endpoint da plataforma. */
 export interface EmailParams {
   to: readonly string[];
   cc?: readonly string[];
@@ -13,6 +13,8 @@ export interface EmailParams {
   documentId?: string;
   documentName?: string;
   authToken?: string;
+  attachmentNames?: readonly string[];
+  attachmentContentTypes?: readonly string[];
 }
 
 export interface EmailAttachmentInput {
@@ -23,30 +25,14 @@ export interface EmailAttachmentInput {
   documentName?: string;
 }
 
-export const EMAIL_SIGNATURE = [
-  'Atenciosamente,',
-  '',
-  'Rodrigo de Souza Sabino',
-  'Administrador da Plataforma Topac RH PRO Multiempresas',
-].join('\n');
-
-export const applyGlobalEmailSignature = (value?: string) => {
-  const body = String(value || '').replace(/\r\n/g, '\n').trim();
-  const withoutOldSignature = body
-    .replace(/(?:\n\s*)?Atenciosamente,?[\s\S]*$/i, '')
-    .replace(/(?:\n\s*)?Rodrigo de Souza Sabino[\s\S]*$/i, '')
-    .trim();
-  return withoutOldSignature ? `${withoutOldSignature}\n\n${EMAIL_SIGNATURE}` : EMAIL_SIGNATURE;
-};
-
-export const openEmailClient = ({ to, cc, subject, body }: EmailParams) => {
+export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
+  const policy = applyTopacEmailPolicy({ subject, body, cc, moduleOrigin, attachmentNames, attachmentContentTypes });
   const enc = encodeURIComponent;
   const params: string[] = [];
-  if (cc?.length) params.push(`cc=${cc.map(enc).join(',')}`);
+  if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
   params.push(`subject=${enc(subject)}`);
-  params.push(`body=${enc(applyGlobalEmailSignature(body))}`);
-  const mailto = `mailto:${to.map(enc).join(',')}?${params.join('&')}`;
-  window.location.href = mailto;
+  params.push(`body=${enc(policy.body)}`);
+  window.location.href = `mailto:${to.map(enc).join(',')}?${params.join('&')}`;
 };
 
 const PDF_CONTENT_TYPE = 'application/pdf';
@@ -61,32 +47,28 @@ const safeFileName = (value: string) =>
     .trim()
     .slice(0, 150);
 
-const ensurePdfBlob = (blob: Blob) =>
-  blob.type === PDF_CONTENT_TYPE ? blob : new Blob([blob], { type: PDF_CONTENT_TYPE });
-
 const contentTypeToExtension = (contentType: string) => {
   const type = contentType.toLowerCase();
+  if (type.includes('spreadsheetml.sheet')) return 'xlsx';
+  if (type.includes('text/csv') || type.includes('csv')) return 'csv';
   if (type.includes('pdf')) return 'pdf';
   if (type.includes('png')) return 'png';
   if (type.includes('webp')) return 'webp';
   if (type.includes('jpeg') || type.includes('jpg')) return 'jpg';
-  if (type.includes('spreadsheetml.sheet')) return 'xlsx';
   if (type.includes('wordprocessingml.document')) return 'docx';
   if (type.includes('msword')) return 'doc';
-  return 'pdf';
+  return 'bin';
 };
 
 const hasFileExtension = (value: string) => /\.[a-z0-9]{2,8}$/i.test(value);
+const ensureAttachmentBlob = (blob: Blob, contentType: string) => blob.type === contentType ? blob : new Blob([blob], { type: contentType });
+const ensurePdfBlob = (blob: Blob) => ensureAttachmentBlob(blob, PDF_CONTENT_TYPE);
 
-const ensureAttachmentBlob = (blob: Blob, contentType: string) =>
-  blob.type === contentType ? blob : new Blob([blob], { type: contentType });
-
-const openPdfPreview = (blob: Blob, fileName: string) => {
-  const pdf = ensurePdfBlob(blob);
-  const url = URL.createObjectURL(pdf);
+const openPdfPreview = (blob: Blob) => {
+  const url = URL.createObjectURL(ensurePdfBlob(blob));
   const win = window.open(url, '_blank', 'noopener,noreferrer');
   window.setTimeout(() => URL.revokeObjectURL(url), 120000);
-  return { opened: Boolean(win), fileName };
+  return Boolean(win);
 };
 
 const blobToBase64 = (blob: Blob, contentType = blob.type || PDF_CONTENT_TYPE) =>
@@ -103,63 +85,25 @@ const blobToBase64 = (blob: Blob, contentType = blob.type || PDF_CONTENT_TYPE) =
 const parseEmailApiResponse = async (response: Response) => {
   const text = await response.text().catch(() => '');
   if (!text.trim()) return {};
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { message: text.slice(0, 400) };
-  }
+  try { return JSON.parse(text); } catch { return { message: text.slice(0, 400) }; }
 };
 
 const buildEmailApiErrorMessage = (data: any, status?: number) => {
   if (data?.error === 'missing_email_provider_env') {
-    const missing = Array.isArray(data?.missing) && data.missing.length
-      ? ` Variáveis ausentes: ${data.missing.join(', ')}.`
-      : '';
-    const alternatives = Array.isArray(data?.alternatives) && data.alternatives.length
-      ? ` Configure uma destas opções: ${data.alternatives.map((group: string[]) => group.join(' + ')).join(' ou ')}.`
-      : '';
-    return `${data?.message || 'Envio de e-mail não configurado no servidor.'}${missing}${alternatives}`;
+    const missing = Array.isArray(data?.missing) && data.missing.length ? ` Variáveis ausentes: ${data.missing.join(', ')}.` : '';
+    return `${data?.message || 'Envio de e-mail não configurado no servidor.'}${missing}`;
   }
-
-  if (data?.error === 'dados_invalidos') {
-    return data?.message || 'Preencha destinatário, assunto, mensagem e PDF antes de enviar.';
-  }
-
-  if (data?.error === 'email_provider_failed') {
-    return data?.message || 'Falha no provedor de e-mail configurado.';
-  }
-
-  if (data?.error === 'email_send_failed') {
-    return data?.message || 'O envio automático pelo servidor não foi concluído.';
-  }
-
-  if (status === 404) {
-    return 'A rota de envio de e-mail não foi encontrada na publicação atual.';
-  }
-
-  if (status && status >= 500) {
-    return 'O servidor de e-mail respondeu com falha temporária.';
-  }
-
+  if (data?.error === 'dados_invalidos') return data?.message || 'Preencha destinatário, assunto, mensagem e anexos antes de enviar.';
+  if (data?.error === 'email_provider_failed') return data?.message || 'Falha no provedor de e-mail configurado.';
+  if (data?.error === 'email_send_failed') return data?.message || 'O envio automático pelo servidor não foi concluído.';
+  if (status === 404) return 'A rota de envio de e-mail não foi encontrada na publicação atual.';
+  if (status && status >= 500) return 'O servidor de e-mail respondeu com falha temporária.';
   return data?.message || data?.error || 'O envio automático pelo servidor não foi concluído.';
 };
 
 export const sendEmailWithPdfAttachment = async ({
-  to,
-  cc,
-  subject,
-  body,
-  attachmentBlob,
-  attachmentName,
-  attachments,
-  senderUserId,
-  senderName,
-  senderEmail,
-  moduleOrigin,
-  documentId,
-  documentName,
-  authToken,
+  to, cc, subject, body, attachmentBlob, attachmentName, attachments,
+  senderUserId, senderName, senderEmail, moduleOrigin, documentId, documentName, authToken,
 }: EmailParams & {
   attachmentBlob?: Blob;
   attachmentName?: string;
@@ -170,7 +114,6 @@ export const sendEmailWithPdfAttachment = async ({
     : attachmentBlob && attachmentName
       ? [{ attachmentBlob, attachmentName, documentId, documentName }]
       : [];
-
   if (!rawAttachments.length) throw new Error('pdf_anexo_vazio');
 
   const normalizedAttachments = await Promise.all(rawAttachments.map(async (attachment) => {
@@ -179,9 +122,7 @@ export const sendEmailWithPdfAttachment = async ({
     const attachmentBase64 = await blobToBase64(normalizedBlob, attachmentContentType);
     if (!attachmentBase64) throw new Error('pdf_anexo_vazio');
     const safeName = safeFileName(attachment.attachmentName);
-    const cleanAttachmentName = hasFileExtension(safeName)
-      ? safeName
-      : `${safeName}.${contentTypeToExtension(attachmentContentType)}`;
+    const cleanAttachmentName = hasFileExtension(safeName) ? safeName : `${safeName}.${contentTypeToExtension(attachmentContentType)}`;
     return {
       attachmentName: cleanAttachmentName,
       attachmentBase64,
@@ -192,27 +133,35 @@ export const sendEmailWithPdfAttachment = async ({
     };
   }));
 
+  const policy = applyTopacEmailPolicy({
+    subject,
+    body,
+    cc,
+    moduleOrigin,
+    attachmentNames: normalizedAttachments.map((item) => item.attachmentName),
+    attachmentContentTypes: normalizedAttachments.map((item) => item.attachmentContentType),
+  });
   const firstAttachment = normalizedAttachments[0];
   const documentNames = normalizedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
 
   const response = await fetch('/api/send-email-pdf', {
     method: 'POST',
     headers: {
-      'content-type': 'application/json',
+      'content-type': 'application/json; charset=utf-8',
       ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
     },
     body: JSON.stringify({
       to,
-      cc: cc || [],
+      cc: policy.cc,
       subject,
-      body: applyGlobalEmailSignature(body),
+      body: policy.body,
       attachments: normalizedAttachments,
       attachmentName: firstAttachment.attachmentName,
       attachmentBase64: firstAttachment.attachmentBase64,
       attachmentContentType: firstAttachment.attachmentContentType,
       attachmentSize: firstAttachment.attachmentSize,
       senderUserId,
-      senderName,
+      senderName: policy.institutional ? 'Administrador Topac RH PRO Multiempresas' : senderName,
       senderEmail,
       moduleOrigin,
       documentId: documentId || firstAttachment.documentId,
@@ -220,87 +169,40 @@ export const sendEmailWithPdfAttachment = async ({
     }),
   });
   const data = await parseEmailApiResponse(response);
-  if (!response.ok || data?.ok === false) {
-    throw new Error(buildEmailApiErrorMessage(data, response.status));
-  }
+  if (!response.ok || data?.ok === false) throw new Error(buildEmailApiErrorMessage(data, response.status));
   return data;
 };
 
 export const downloadEmailWithAttachment = async ({
-  to,
-  cc,
-  subject,
-  body,
-  attachmentBlob,
-  attachmentName,
-  senderUserId,
-  senderName,
-  senderEmail,
-  moduleOrigin,
-  documentId,
-  documentName,
-  authToken,
-}: EmailParams & {
-  attachmentBlob: Blob;
-  attachmentName: string;
-  fileName?: string;
-}) => {
-  const cleanAttachmentName = safeFileName(attachmentName).endsWith('.pdf')
-    ? safeFileName(attachmentName)
-    : `${safeFileName(attachmentName)}.pdf`;
-
+  to, cc, subject, body, attachmentBlob, attachmentName,
+  senderUserId, senderName, senderEmail, moduleOrigin, documentId, documentName, authToken,
+}: EmailParams & { attachmentBlob: Blob; attachmentName: string; fileName?: string }) => {
+  const safeName = safeFileName(attachmentName);
+  const cleanAttachmentName = hasFileExtension(safeName) ? safeName : `${safeName}.pdf`;
   try {
     await sendEmailWithPdfAttachment({
-      to,
-      cc,
-      subject,
-      body,
-      attachmentBlob,
-      attachmentName: cleanAttachmentName,
-      senderUserId,
-      senderName,
-      senderEmail,
-      moduleOrigin,
-      documentId,
-      documentName,
-      authToken,
+      to, cc, subject, body, attachmentBlob, attachmentName: cleanAttachmentName,
+      senderUserId, senderName, senderEmail, moduleOrigin, documentId, documentName, authToken,
     });
     return { ok: true, mode: 'platform_email' };
   } catch (error: any) {
-    openPdfPreview(attachmentBlob, cleanAttachmentName);
+    openPdfPreview(attachmentBlob);
     throw new Error(error?.message || 'O envio automático pelo servidor não foi concluído.');
   }
 };
 
 export const CC_OBRIGATORIO = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
-
-export const DESTINATARIOS_CONTABILIDADE = [
-  'marisa@aatconsultoria.com.br',
-  'lucilene@aatconsultoria.com.br',
-  'dp@aatconsultoria.com.br',
-] as const;
-
+export const DESTINATARIOS_CONTABILIDADE = ['marisa@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br', 'dp@aatconsultoria.com.br'] as const;
 export const DESTINATARIOS_ASO = ['agendamento@ponteaereaseguranca.com.br'] as const;
 
 export const getDestinatariosFerias = (unidade: string): readonly string[] => {
-  const u = (unidade || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase();
-
-  if (u.includes('GOIANIA') || u.includes('GOIANA')) {
-    return ['requisicao@incocontabilidade.com.br'];
-  }
-
-  return [
-    ...DESTINATARIOS_CONTABILIDADE,
-  ];
+  const normalized = String(unidade || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  return normalized.includes('GOIANIA') || normalized.includes('GOIANA')
+    ? ['requisicao@incocontabilidade.com.br']
+    : DESTINATARIOS_CONTABILIDADE;
 };
 
-export const getDestinatariosRescisao = (unidade: string): readonly string[] => {
-  return getDestinatariosFerias(unidade);
-};
-
+export const getDestinatariosRescisao = (unidade: string): readonly string[] => getDestinatariosFerias(unidade);
 export const DESTINATARIOS = {
   ferias: getDestinatariosFerias(''),
   rescisao: getDestinatariosRescisao(''),
