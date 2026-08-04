@@ -39,7 +39,7 @@ export const formatCpf = (value: string) => {
 
 export const normalizeDateInput = (value: string) => {
   const raw = clean(value);
-  const br = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+  const br = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
   if (br) return `${br[3]}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return iso ? raw : '';
@@ -69,8 +69,7 @@ const removeTrailingLabels = (value: string) => clean(value)
 
 export const emptyEmployeeSmartData = (): EmployeeSmartData => ({
   nome: '', cpf: '', rg: '', cargo: '', salarioBase: '', dataAdmissao: '',
-  telefone: '', celular: '', email: '', endereco: '',
-  banking: parseBankingText('').data,
+  telefone: '', celular: '', email: '', endereco: '', banking: parseBankingText('').data,
 });
 
 export const parseEmployeeTextLocally = (rawText: string): EmployeeSmartParseResult => {
@@ -79,33 +78,33 @@ export const parseEmployeeTextLocally = (rawText: string): EmployeeSmartParseRes
   const data = emptyEmployeeSmartData();
 
   data.nome = removeTrailingLabels(first(flat, [
-    /(?:nome\s+completo|nome\s+do\s+(?:funcion[aá]rio|colaborador)|funcion[aá]rio|colaborador|nome)\s*[:\-]?\s*([^|]{3,120})/i,
+    /(?:nome\s+completo|nome\s+do\s+(?:funcion[aá]rio|colaborador)|funcion[aá]rio|colaborador|nome)\s*[:-]?\s*([^|]{3,120})/i,
   ]));
 
   const cpf = first(flat, [
-    /\bcpf\s*[:\-]?\s*(\d{3}\.?\d{3}\.?\d{3}[-\s]?\d{2}|\d{11})\b/i,
+    /\bcpf\s*[:-]?\s*(\d{3}\.?\d{3}\.?\d{3}[-\s]?\d{2}|\d{11})\b/i,
   ]) || flat.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/)?.[0] || '';
   data.cpf = cpf ? formatCpf(cpf) : '';
 
   data.rg = first(flat, [
-    /\brg\s*[:\-]?\s*([0-9A-Z.\-\/]{4,25})\b/i,
-    /\bidentidade\s*[:\-]?\s*([0-9A-Z.\-\/]{4,25})\b/i,
+    /\brg\s*[:-]?\s*([0-9A-Z./-]{4,25})\b/i,
+    /\bidentidade\s*[:-]?\s*([0-9A-Z./-]{4,25})\b/i,
   ]);
 
   data.cargo = removeTrailingLabels(first(flat, [
-    /(?:cargo\s*\/\s*fun[cç][aã]o|cargo|fun[cç][aã]o)\s*[:\-]?\s*([^|]{2,100})/i,
+    /(?:cargo\s*\/\s*fun[cç][aã]o|cargo|fun[cç][aã]o)\s*[:-]?\s*([^|]{2,100})/i,
   ]));
 
   data.salarioBase = normalizeMoney(first(flat, [
-    /(?:sal[aá]rio\s+base|sal[aá]rio|remunera[cç][aã]o)\s*[:\-]?\s*(?:R\$\s*)?([0-9.,]+)/i,
+    /(?:sal[aá]rio\s+base|sal[aá]rio|remunera[cç][aã]o)\s*[:-]?\s*(?:R\$\s*)?([0-9.,]+)/i,
   ]));
 
   data.dataAdmissao = normalizeDateInput(first(flat, [
-    /(?:data\s+de\s+admiss[aã]o|admiss[aã]o|admitido\s+em)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i,
+    /(?:data\s+de\s+admiss[aã]o|admiss[aã]o|admitido\s+em)\s*[:-]?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})/i,
   ]));
 
-  const labelledCell = first(flat, [/(?:celular|whatsapp|whats)\s*[:\-]?\s*(\+?\d[\d\s()\-.]{8,20})/i]);
-  const labelledPhone = first(flat, [/(?:telefone|fone)\s*[:\-]?\s*(\+?\d[\d\s()\-.]{8,20})/i]);
+  const labelledCell = first(flat, [/(?:celular|whatsapp|whats)\s*[:-]?\s*(\+?\d[\d\s().-]{8,20})/i]);
+  const labelledPhone = first(flat, [/(?:telefone|fone)\s*[:-]?\s*(\+?\d[\d\s().-]{8,20})/i]);
   data.celular = normalizePhone(labelledCell);
   data.telefone = normalizePhone(labelledPhone);
   if (!data.celular && !data.telefone) {
@@ -113,11 +112,11 @@ export const parseEmployeeTextLocally = (rawText: string): EmployeeSmartParseRes
     data.celular = normalizePhone(genericPhone);
   }
 
-  data.email = first(flat, [/(?:e-?mail)\s*[:\-]?\s*([^\s|;,]+@[^\s|;,]+\.[A-Z]{2,})/i]) ||
+  data.email = first(flat, [/(?:e-?mail)\s*[:-]?\s*([^\s|;,]+@[^\s|;,]+\.[A-Z]{2,})/i]) ||
     flat.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0] || '';
 
   data.endereco = removeTrailingLabels(first(flat, [
-    /(?:endere[cç]o\s+completo|endere[cç]o|resid[eê]ncia)\s*[:\-]?\s*([^|]{5,180})/i,
+    /(?:endere[cç]o\s+completo|endere[cç]o|resid[eê]ncia)\s*[:-]?\s*([^|]{5,180})/i,
   ]));
 
   data.banking = parseBankingText(original).data;
