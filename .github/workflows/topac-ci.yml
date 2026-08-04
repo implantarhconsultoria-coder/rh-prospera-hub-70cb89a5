@@ -1,0 +1,58 @@
+name: TOPAC CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: topac-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint changed scope
+        run: >-
+          npx eslint
+          src/lib/emailPolicy.ts
+          src/lib/bankingParser.ts
+          src/lib/abastecimentoReports.ts
+          src/lib/emailUtils.ts
+          src/lib/funcionariosBase.ts
+          src/components/BankingDataEditor.tsx
+          src/components/EmailPdfModal.tsx
+          src/pages/FuncionariosPage.tsx
+          src/pages/admin/CombustivelQRAdminPage.tsx
+          src/lib/__tests__/bankingParser.test.ts
+          src/lib/__tests__/abastecimentoReports.test.ts
+          src/lib/__tests__/emailPolicy.test.ts
+          --rule '@typescript-eslint/no-explicit-any: off'
+          --rule 'react-hooks/exhaustive-deps: off'
+
+      - name: Tests changed scope
+        run: >-
+          npx vitest run
+          src/lib/__tests__/bankingParser.test.ts
+          src/lib/__tests__/abastecimentoReports.test.ts
+          src/lib/__tests__/emailPolicy.test.ts
+
+      - name: Build
+        run: npm run build
