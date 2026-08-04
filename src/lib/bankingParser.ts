@@ -76,38 +76,38 @@ export const parseBankingText = (rawText: string): BankingParseResult => {
   data.textoOriginal = original;
 
   const bankByName = BANKS.find((bank) => bank.aliases.some((alias) => lower.includes(alias)));
-  const explicitBank = first(flat, [/(?:banco|institui[cç][aã]o)\s*[:\-]?\s*([^|,;\n]{2,60})/i])
+  const explicitBank = first(flat, [/(?:banco|institui[cç][aã]o)\s*[:-]?\s*([^|,;]{2,60})/i])
     .replace(/\s+(?:ag[eê]ncia|conta|pix).*$/i, '').trim();
-  const bankCode = first(flat, [/(?:c[oó]digo\s+do\s+banco|c[oó]d\.?\s*banco|banco\s+c[oó]digo)\s*[:\-]?\s*(\d{3})/i]);
+  const bankCode = first(flat, [/(?:c[oó]digo\s+do\s+banco|c[oó]d\.?\s*banco|banco\s+c[oó]digo)\s*[:-]?\s*(\d{3})/i]);
   const bankByCode = BANKS.find((bank) => bank.code === bankCode);
   data.banco = bankByName?.name || bankByCode?.name || explicitBank;
   data.bancoCodigo = bankCode || bankByName?.code || '';
 
-  data.agencia = first(flat, [/(?:ag[eê]ncia|ag\.)\s*[:\-]?\s*([0-9A-Za-z.-]{1,15})/i])
+  data.agencia = first(flat, [/(?:ag[eê]ncia|ag\.)\s*[:-]?\s*([0-9A-Za-z.-]{1,15})/i])
     .replace(/[^0-9A-Za-z.-]/g, '');
 
-  const accountRaw = first(flat, [/(?:n[uú]mero\s+da\s+conta|conta(?:\s+(?:corrente|poupan[cç]a|sal[aá]rio|pagamento))?|c\/c)\s*[:\-]?\s*([0-9A-Za-z.\/-]+(?:\s*[-/]\s*[0-9A-Za-z])?)/i]);
-  const accountMatch = accountRaw.match(/^(.+?)[-\/]([0-9A-Za-z])$/);
+  const accountRaw = first(flat, [/(?:n[uú]mero\s+da\s+conta|conta(?:\s+(?:corrente|poupan[cç]a|sal[aá]rio|pagamento))?|c\/c)\s*[:-]?\s*([-0-9A-Za-z./]+(?:\s*[-/]\s*[0-9A-Za-z])?)/i]);
+  const accountMatch = accountRaw.match(/^(.+?)[-/]([0-9A-Za-z])$/);
   data.conta = clean(accountMatch?.[1] || accountRaw).replace(/\s/g, '');
-  data.digito = clean(accountMatch?.[2] || first(flat, [/(?:d[ií]gito|d[ií]g\.?|dv)\s*[:\-]?\s*([0-9A-Za-z])/i]));
+  data.digito = clean(accountMatch?.[2] || first(flat, [/(?:d[ií]gito|d[ií]g\.?|dv)\s*[:-]?\s*([0-9A-Za-z])/i]));
 
-  const accountType = first(flat, [/(?:tipo\s+de\s+conta|conta)\s*[:\-]?\s*(corrente|poupan[cç]a|sal[aá]rio|pagamento)/i]) ||
+  const accountType = first(flat, [/(?:tipo\s+de\s+conta|conta)\s*[:-]?\s*(corrente|poupan[cç]a|sal[aá]rio|pagamento)/i]) ||
     (lower.match(/conta\s+(corrente|poupan[cç]a|sal[aá]rio|pagamento)/i)?.[1] || '');
   data.tipoConta = clean(accountType).replace(/^./, (char) => char.toUpperCase());
 
-  data.titular = first(flat, [/(?:nome\s+do\s+titular|titular|favorecido|benefici[aá]rio)\s*[:\-]?\s*([^|,;\n]{3,100})/i])
+  data.titular = first(flat, [/(?:nome\s+do\s+titular|titular|favorecido|benefici[aá]rio)\s*[:-]?\s*([^|,;]{3,100})/i])
     .replace(/\s+(?:cpf|pix|ag[eê]ncia|conta).*$/i, '').trim();
 
-  const cpf = first(flat, [/(?:cpf(?:\s+do\s+titular)?)\s*[:\-]?\s*(\d{3}\.?\d{3}\.?\d{3}[-\s]?\d{2}|\d{11})/i]) ||
+  const cpf = first(flat, [/(?:cpf(?:\s+do\s+titular)?)\s*[:-]?\s*(\d{3}\.?\d{3}\.?\d{3}[-\s]?\d{2}|\d{11})/i]) ||
     (flat.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/)?.[0] || '');
   data.cpfTitular = cpf ? formatCpf(cpf) : '';
 
-  const labelledPix = first(flat, [/(?:chave\s+pix|pix)\s*[:\-]?\s*([^|,;\n]{3,120})/i])
+  const labelledPix = first(flat, [/(?:chave\s+pix|pix)\s*[:-]?\s*([^|,;]{3,120})/i])
     .replace(/\s+(?:tipo\s+da\s+chave|tipo\s+pix).*$/i, '').trim();
   const inferredEmail = flat.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0] || '';
   const inferredRandom = flat.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0] || '';
   data.chavePix = labelledPix || inferredRandom || inferredEmail;
-  data.tipoChavePix = first(flat, [/(?:tipo\s+da\s+chave\s+pix|tipo\s+pix)\s*[:\-]?\s*(cpf|cnpj|telefone|celular|e-?mail|aleat[oó]ria|chave\s+aleat[oó]ria)/i]);
+  data.tipoChavePix = first(flat, [/(?:tipo\s+da\s+chave\s+pix|tipo\s+pix)\s*[:-]?\s*(cpf|cnpj|telefone|celular|e-?mail|aleat[oó]ria|chave\s+aleat[oó]ria)/i]);
   data.tipoChavePix = data.tipoChavePix
     ? clean(data.tipoChavePix).replace(/^./, (char) => char.toUpperCase())
     : inferPixType(data.chavePix);
