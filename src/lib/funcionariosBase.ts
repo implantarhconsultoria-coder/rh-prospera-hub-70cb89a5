@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { DEFAULT_INSALUBRIDADE, employeeHasInsalubridade, getCargoDefaults } from '@/lib/employeeRoleRules';
 import type { Company, Employee } from '@/types/database';
+import type { BankingData } from '@/lib/bankingParser';
 
 export const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
 
@@ -22,7 +23,6 @@ export const resolveFuncionarioCompanyId = (
   empresaNome?: string | null,
 ) => {
   if (companyId && (!companies.length || companies.some((c) => c.id === companyId))) return companyId;
-
   const needle = normalize(empresaNome);
   if (!needle) return companyId || null;
 
@@ -33,11 +33,7 @@ export const resolveFuncionarioCompanyId = (
   if (direct) return direct.id;
 
   const alias = companies.find((company) => {
-    const code = normalize(company.codigo);
-    const name = normalize(company.name);
-    const city = normalize(company.city);
-    const joined = `${code} ${name} ${city}`;
-
+    const joined = [company.codigo, company.name, company.city].map(normalize).join(' ');
     if ((needle.includes('matriz') || needle.includes('sao paulo') || needle.includes('topac/sp') || needle.includes('topac sp')) && (joined.includes('matriz') || joined.includes('sao paulo'))) return true;
     if ((needle.includes('praia') || needle === 'pg' || needle.includes('topac pg')) && (joined.includes('praia') || joined.includes('pg'))) return true;
     if ((needle.includes('goian') || needle === 'go' || needle.includes('topac go')) && (joined.includes('goian') || joined.includes('gyn'))) return true;
@@ -45,17 +41,30 @@ export const resolveFuncionarioCompanyId = (
     if (needle.includes('lmt') && joined.includes('lmt')) return true;
     return false;
   });
-
   return alias?.id || companyId || null;
 };
 
-const findByCpf = (employees: Employee[], cpfClean: string) =>
-  employees.find((employee) => onlyDigits(employee.cpf) === cpfClean) || null;
-
+const findByCpf = (employees: Employee[], cpfClean: string) => employees.find((employee) => onlyDigits(employee.cpf) === cpfClean) || null;
 const addFilled = (row: Record<string, unknown>, key: string, value: unknown) => {
   if (value === undefined || value === null) return;
   if (typeof value === 'string' && !value.trim()) return;
   row[key] = value;
+};
+
+const addBanking = (row: Record<string, unknown>, data?: BankingData | null) => {
+  if (!data) return;
+  row.banco = data.banco || null;
+  row.banco_codigo = data.bancoCodigo || null;
+  row.agencia = data.agencia || null;
+  row.conta = data.conta || null;
+  row.conta_digito = data.digito || null;
+  row.tipo_conta = data.tipoConta || null;
+  row.titular_conta = data.titular || null;
+  row.cpf_titular = data.cpfTitular || null;
+  row.pix = data.chavePix || null;
+  row.tipo_chave_pix = data.tipoChavePix || null;
+  row.dados_bancarios_origem = data.textoOriginal || null;
+  row.dados_bancarios_atualizado_em = new Date().toISOString();
 };
 
 type UpsertFuncionarioBaseInput = {
@@ -75,48 +84,29 @@ type UpsertFuncionarioBaseInput = {
   salarioBase?: number | null;
   dataAdmissao?: string | null;
   setor?: string | null;
+  dadosBancarios?: BankingData | null;
 };
 
 export type UpsertFuncionarioBaseResult =
   | { ok: true; employeeId: string; action: 'created' | 'updated' | 'linked' }
   | { ok: false; error: string };
 
-export const upsertFuncionarioBase = async (
-  input: UpsertFuncionarioBaseInput,
-): Promise<UpsertFuncionarioBaseResult> => {
+export const upsertFuncionarioBase = async (input: UpsertFuncionarioBaseInput): Promise<UpsertFuncionarioBaseResult> => {
   const cpfClean = onlyDigits(input.cpf);
   const nome = input.nome.trim();
-
   if (!nome) return { ok: false, error: 'Informe o nome completo do funcionario.' };
   if (cpfClean.length !== 11) return { ok: false, error: 'CPF valido e obrigatorio para evitar cadastro duplicado.' };
 
-  const localEmployee =
-    (input.funcionarioId && input.employees.find((employee) => employee.id === input.funcionarioId)) ||
-    findByCpf(input.employees, cpfClean);
-
+  const localEmployee = (input.funcionarioId && input.employees.find((employee) => employee.id === input.funcionarioId)) || findByCpf(input.employees, cpfClean);
   let existingId = localEmployee?.id || input.funcionarioId || null;
-
   if (!existingId) {
     const cpfMasked = formatCpf(cpfClean);
-    const { data } = await (supabase as any)
-      .from('funcionarios')
-      .select('id,cpf')
-      .or(`cpf.eq.${cpfClean},cpf.eq.${cpfMasked}`)
-      .limit(1)
-      .maybeSingle();
-
+    const { data } = await (supabase as any).from('funcionarios').select('id,cpf').or(`cpf.eq.${cpfClean},cpf.eq.${cpfMasked}`).limit(1).maybeSingle();
     if (data?.id) existingId = data.id;
   }
 
-  const resolvedCompanyId = resolveFuncionarioCompanyId(
-    input.companies,
-    input.companyId || localEmployee?.companyId || null,
-    input.empresaNome,
-  );
-
-  if (!resolvedCompanyId) {
-    return { ok: false, error: 'Selecione ou informe uma empresa/filial valida para vincular o funcionario.' };
-  }
+  const resolvedCompanyId = resolveFuncionarioCompanyId(input.companies, input.companyId || localEmployee?.companyId || null, input.empresaNome);
+  if (!resolvedCompanyId) return { ok: false, error: 'Selecione ou informe uma empresa/filial valida para vincular o funcionario.' };
 
   const cargo = input.cargo?.trim() || localEmployee?.cargo || '';
   const cargoDefaults = getCargoDefaults(cargo);
@@ -124,10 +114,9 @@ export const upsertFuncionarioBase = async (
   const insalubridadeAtiva = cargoDefaults?.insalubridadeAtiva ?? employeeHasInsalubridade({ cargo, name: nome });
   const insalubridadeValor = insalubridadeAtiva ? (cargoDefaults?.insalubridadeValor || DEFAULT_INSALUBRIDADE) : 0;
 
-  const row: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   addFilled(row, 'company_id', resolvedCompanyId);
+  addFilled(row, 'empresa_id', resolvedCompanyId);
   addFilled(row, 'nome', nome);
   addFilled(row, 'cpf', input.cpf.trim());
   addFilled(row, 'cargo', cargo);
@@ -138,16 +127,14 @@ export const upsertFuncionarioBase = async (
   addFilled(row, 'endereco', input.endereco?.trim() || localEmployee?.endereco);
   addFilled(row, 'categoria', input.setor?.trim() || localEmployee?.categoria || 'operacional');
   addFilled(row, 'salario_base', salarioBase);
+  addFilled(row, 'salario', salarioBase);
   addFilled(row, 'insalubridade_ativa', insalubridadeAtiva);
   addFilled(row, 'insalubridade_valor', insalubridadeValor);
   addFilled(row, 'data_admissao', input.dataAdmissao || localEmployee?.dataAdmissao || null);
+  addBanking(row, input.dadosBancarios);
 
   if (existingId) {
-    const { error } = await (supabase as any)
-      .from('funcionarios')
-      .update(row)
-      .eq('id', existingId);
-
+    const { error } = await (supabase as any).from('funcionarios').update(row).eq('id', existingId);
     if (error) return { ok: false, error: error.message || 'Nao foi possivel atualizar o funcionario.' };
     return { ok: true, employeeId: existingId, action: localEmployee ? 'linked' : 'updated' };
   }
@@ -164,37 +151,23 @@ export const upsertFuncionarioBase = async (
     insalubridade_ativa: insalubridadeAtiva,
     insalubridade_valor: insalubridadeValor,
   };
-
-  const { data, error } = await (supabase as any)
-    .from('funcionarios')
-    .insert(insertRow)
-    .select('id')
-    .single();
-
+  const { data, error } = await (supabase as any).from('funcionarios').insert(insertRow).select('id').single();
   if (error) return { ok: false, error: error.message || 'Nao foi possivel criar o funcionario.' };
   return { ok: true, employeeId: data.id, action: 'created' };
 };
 
 export const getFuncionarioVeiculoInfo = async (funcionarioId?: string | null) => {
   if (!funcionarioId) return null;
-
   const { data, error } = await (supabase as any)
     .from('tecnicos_campo')
     .select('veiculo_id, veiculos(placa, modelo, identificacao_interna)')
     .eq('funcionario_id', funcionarioId)
     .maybeSingle();
-
   if (error || !data) return null;
-
   const veiculo = Array.isArray(data.veiculos) ? data.veiculos[0] : data.veiculos;
   if (!veiculo?.placa) return null;
-
-  const descricao = [veiculo.placa, veiculo.modelo, veiculo.identificacao_interna]
-    .filter(Boolean)
-    .join(' - ');
-
   return {
     placa: String(veiculo.placa).toUpperCase(),
-    descricao,
+    descricao: [veiculo.placa, veiculo.modelo, veiculo.identificacao_interna].filter(Boolean).join(' - '),
   };
 };
