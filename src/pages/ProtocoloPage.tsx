@@ -50,12 +50,12 @@ const extractProtocolLocally = (rawText: string): ProtocolTextData => {
     return '';
   };
   return {
-    placa: normalizeVehiclePlate(pick([/\bplaca\s*[:\-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i])),
-    patrimonio: pick([/\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:\-]?\s*([A-Z0-9./-]{2,30})\b/i]),
-    empresa_destinataria: pick([/(?:empresa destinat[aá]ria|empresa)\s*[:\-]?\s*([^,;|]{2,80})/i]),
-    local_canteiro: pick([/(?:local|canteiro|obra)\s*[:\-]?\s*([^,;|]{2,80})/i]),
-    responsavel_recebimento: pick([/(?:respons[aá]vel(?: pelo recebimento)?|a\/c)\s*[:\-]?\s*([^,;|]{2,60})/i]),
-    descricao_ativo: pick([/(?:descri[cç][aã]o|equipamento|ativo)\s*[:\-]?\s*([^,;|]{2,100})/i]),
+    placa: normalizeVehiclePlate(pick([/\bplaca\s*[:-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i])),
+    patrimonio: pick([/\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:-]?\s*([A-Z0-9./-]{2,30})\b/i]),
+    empresa_destinataria: pick([/(?:empresa destinat[aá]ria|empresa)\s*[:-]?\s*([^,;|]{2,80})/i]),
+    local_canteiro: pick([/(?:local|canteiro|obra)\s*[:-]?\s*([^,;|]{2,80})/i]),
+    responsavel_recebimento: pick([/(?:respons[aá]vel(?: pelo recebimento)?|a\/c)\s*[:-]?\s*([^,;|]{2,60})/i]),
+    descricao_ativo: pick([/(?:descri[cç][aã]o|equipamento|ativo)\s*[:-]?\s*([^,;|]{2,100})/i]),
     observacoes: text,
   };
 };
