@@ -57,15 +57,25 @@ const formatCpf = (value: string) => {
     : clean(value);
 };
 
-const inferPixType = (key: string) => {
+const inferPixType = (key: string, sourceText: string) => {
   const value = clean(key);
   const number = digits(value);
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'E-mail';
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) return 'Chave aleatória';
-  if (number.length === 11 && !value.startsWith('+')) return 'CPF';
-  if (number.length >= 10 && number.length <= 13) return 'Telefone';
-  if (number.length === 14) return 'CNPJ';
-  return value ? 'Outro' : '';
+  if (/\bcpf\b/i.test(sourceText) && number.length === 11) return 'CPF';
+  if (/\bcnpj\b/i.test(sourceText) && number.length === 14) return 'CNPJ';
+  if (/\b(?:telefone|celular|whatsapp|fone)\b/i.test(sourceText) && number.length >= 10 && number.length <= 13) return 'Telefone';
+  if (/^\+?55/.test(value) || /[()]/.test(value)) return 'Telefone';
+  return '';
+};
+
+const splitAccount = (value: string) => {
+  const raw = clean(value).replace(/\s/g, '');
+  const match = raw.match(/^(.+?)[-/]([0-9A-Za-z])$/);
+  return {
+    conta: clean(match?.[1] || raw),
+    digito: clean(match?.[2] || ''),
+  };
 };
 
 export const parseBankingText = (rawText: string): BankingParseResult => {
@@ -76,8 +86,10 @@ export const parseBankingText = (rawText: string): BankingParseResult => {
   data.textoOriginal = original;
 
   const bankByName = BANKS.find((bank) => bank.aliases.some((alias) => lower.includes(alias)));
-  const explicitBank = first(flat, [/(?:banco|institui[cç][aã]o)\s*[:-]?\s*([^|,;]{2,60})/i])
-    .replace(/\s+(?:ag[eê]ncia|conta|pix).*$/i, '').trim();
+  const explicitBank = first(flat, [
+    /(?:^|[|;,]\s*|\b(?:dados|conta)\s+banc[aá]rios?\s*[:-]?\s*)\bbanco\s*[:-]\s*([^|,;]{2,60})/i,
+    /\binstitui[cç][aã]o\s*[:-]?\s*([^|,;]{2,60})/i,
+  ]).replace(/\s+(?:ag[eê]ncia|conta|pix).*$/i, '').trim();
   const bankCode = first(flat, [/(?:c[oó]digo\s+do\s+banco|c[oó]d\.?\s*banco|banco\s+c[oó]digo)\s*[:-]?\s*(\d{3})/i]);
   const bankByCode = BANKS.find((bank) => bank.code === bankCode);
   data.banco = bankByName?.name || bankByCode?.name || explicitBank;
@@ -86,10 +98,15 @@ export const parseBankingText = (rawText: string): BankingParseResult => {
   data.agencia = first(flat, [/(?:ag[eê]ncia|ag\.)\s*[:-]?\s*([0-9A-Za-z.-]{1,15})/i])
     .replace(/[^0-9A-Za-z.-]/g, '');
 
-  const accountRaw = first(flat, [/(?:n[uú]mero\s+da\s+conta|conta(?:\s+(?:corrente|poupan[cç]a|sal[aá]rio|pagamento))?|c\/c)\s*[:-]?\s*([-0-9A-Za-z./]+(?:\s*[-/]\s*[0-9A-Za-z])?)/i]);
-  const accountMatch = accountRaw.match(/^(.+?)[-/]([0-9A-Za-z])$/);
-  data.conta = clean(accountMatch?.[1] || accountRaw).replace(/\s/g, '');
-  data.digito = clean(accountMatch?.[2] || first(flat, [/(?:d[ií]gito|d[ií]g\.?|dv)\s*[:-]?\s*([0-9A-Za-z])/i]));
+  // Uma conta genérica só é aceita quando há delimitador após a palavra "conta".
+  // Isso impede que "conta bancária" seja interpretada como conta = "banc".
+  const accountRaw = first(flat, [
+    /(?:n[uú]mero\s+da\s+conta|conta\s+(?:corrente|poupan[cç]a|sal[aá]rio|pagamento)|c\/c)\s*[:-]?\s*([0-9A-Za-z.]+(?:\s*[-/]\s*[0-9A-Za-z])?)/i,
+    /\bconta\s*[:=-]\s*([0-9A-Za-z.]+(?:\s*[-/]\s*[0-9A-Za-z])?)/i,
+  ]);
+  const account = splitAccount(accountRaw);
+  data.conta = account.conta;
+  data.digito = account.digito || clean(first(flat, [/(?:d[ií]gito|d[ií]g\.?|dv)\s*[:-]?\s*([0-9A-Za-z])/i]));
 
   const accountType = first(flat, [/(?:tipo\s+de\s+conta|conta)\s*[:-]?\s*(corrente|poupan[cç]a|sal[aá]rio|pagamento)/i]) ||
     (lower.match(/conta\s+(corrente|poupan[cç]a|sal[aá]rio|pagamento)/i)?.[1] || '');
@@ -103,14 +120,13 @@ export const parseBankingText = (rawText: string): BankingParseResult => {
   data.cpfTitular = cpf ? formatCpf(cpf) : '';
 
   const labelledPix = first(flat, [/(?:chave\s+pix|pix)\s*[:-]?\s*([^|,;]{3,120})/i])
-    .replace(/\s+(?:tipo\s+da\s+chave|tipo\s+pix).*$/i, '').trim();
-  const inferredEmail = flat.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0] || '';
+    .replace(/\s+(?:tipo\s+da\s+chave|tipo\s+pix|banco|ag[eê]ncia|conta).*$/i, '').trim();
   const inferredRandom = flat.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0] || '';
-  data.chavePix = labelledPix || inferredRandom || inferredEmail;
+  data.chavePix = labelledPix || inferredRandom;
   data.tipoChavePix = first(flat, [/(?:tipo\s+da\s+chave\s+pix|tipo\s+pix)\s*[:-]?\s*(cpf|cnpj|telefone|celular|e-?mail|aleat[oó]ria|chave\s+aleat[oó]ria)/i]);
   data.tipoChavePix = data.tipoChavePix
     ? clean(data.tipoChavePix).replace(/^./, (char) => char.toUpperCase())
-    : inferPixType(data.chavePix);
+    : inferPixType(data.chavePix, flat);
 
   const identified = Object.entries(data)
     .filter(([key, value]) => key !== 'textoOriginal' && Boolean(clean(value)))
@@ -123,6 +139,7 @@ export const parseBankingText = (rawText: string): BankingParseResult => {
   if (!data.titular) warnings.push('Titular não identificado.');
   if (!data.cpfTitular) warnings.push('CPF do titular não identificado.');
   if (!data.chavePix) warnings.push('Chave PIX não identificada.');
+  if (data.chavePix && !data.tipoChavePix) warnings.push('Tipo da chave PIX ambíguo; revise antes de salvar.');
 
   return { data, identified, warnings };
 };

@@ -120,7 +120,8 @@ export const parseEmployeeTextLocally = (rawText: string): EmployeeSmartParseRes
     /(?:endere[cç]o\s+completo|endere[cç]o|resid[eê]ncia)\s*[:-]?\s*([^|]{5,180})/i,
   ]));
 
-  data.banking = parseBankingText(original).data;
+  const bankingResult = parseBankingText(original);
+  data.banking = bankingResult.data;
   if (!data.banking.titular && data.nome) data.banking.titular = data.nome;
   if (!data.banking.cpfTitular && data.cpf) data.banking.cpfTitular = data.cpf;
 
@@ -134,32 +135,44 @@ export const parseEmployeeTextLocally = (rawText: string): EmployeeSmartParseRes
   if (!original) warnings.push('Cole uma mensagem antes de analisar.');
   if (!data.nome) warnings.push('Nome não identificado.');
   if (!data.cpf) warnings.push('CPF não identificado.');
+  if (!data.nome && !data.cpf) warnings.push('Identidade não confirmada; confira o funcionário de destino antes de aplicar.');
   if (!data.cargo) warnings.push('Cargo ou função não identificado.');
   if (!data.dataAdmissao) warnings.push('Data de admissão não identificada.');
+  warnings.push(...bankingResult.warnings.filter((warning) => warning.includes('ambíguo')));
 
   return { data, identified, warnings };
 };
+
+const preferDeterministic = (localValue: string, remoteValue: unknown) => clean(localValue) || clean(remoteValue);
 
 export const mergeEmployeeSmartData = (
   local: EmployeeSmartData,
   remote?: Partial<EmployeeSmartData> | null,
 ): EmployeeSmartData => {
   const source = remote || {};
-  const choose = (remoteValue: unknown, localValue: string) => clean(remoteValue) || localValue;
+  const remoteBanking = (source.banking || {}) as Partial<BankingData>;
   return {
-    nome: choose(source.nome, local.nome),
-    cpf: formatCpf(choose(source.cpf, local.cpf)),
-    rg: choose(source.rg, local.rg),
-    cargo: choose(source.cargo, local.cargo),
-    salarioBase: normalizeMoney(choose(source.salarioBase, local.salarioBase)),
-    dataAdmissao: normalizeDateInput(choose(source.dataAdmissao, local.dataAdmissao)),
-    telefone: normalizePhone(choose(source.telefone, local.telefone)),
-    celular: normalizePhone(choose(source.celular, local.celular)),
-    email: choose(source.email, local.email),
-    endereco: choose(source.endereco, local.endereco),
+    nome: preferDeterministic(local.nome, source.nome),
+    cpf: formatCpf(preferDeterministic(local.cpf, source.cpf)),
+    rg: preferDeterministic(local.rg, source.rg),
+    cargo: preferDeterministic(local.cargo, source.cargo),
+    salarioBase: normalizeMoney(preferDeterministic(local.salarioBase, source.salarioBase)),
+    dataAdmissao: normalizeDateInput(preferDeterministic(local.dataAdmissao, source.dataAdmissao)),
+    telefone: normalizePhone(preferDeterministic(local.telefone, source.telefone)),
+    celular: normalizePhone(preferDeterministic(local.celular, source.celular)),
+    email: preferDeterministic(local.email, source.email),
+    endereco: preferDeterministic(local.endereco, source.endereco),
     banking: {
-      ...local.banking,
-      ...((source.banking || {}) as Partial<BankingData>),
+      banco: preferDeterministic(local.banking.banco, remoteBanking.banco),
+      bancoCodigo: preferDeterministic(local.banking.bancoCodigo, remoteBanking.bancoCodigo),
+      agencia: preferDeterministic(local.banking.agencia, remoteBanking.agencia),
+      conta: preferDeterministic(local.banking.conta, remoteBanking.conta),
+      digito: preferDeterministic(local.banking.digito, remoteBanking.digito),
+      tipoConta: preferDeterministic(local.banking.tipoConta, remoteBanking.tipoConta),
+      titular: preferDeterministic(local.banking.titular, remoteBanking.titular),
+      cpfTitular: preferDeterministic(local.banking.cpfTitular, remoteBanking.cpfTitular),
+      chavePix: preferDeterministic(local.banking.chavePix, remoteBanking.chavePix),
+      tipoChavePix: preferDeterministic(local.banking.tipoChavePix, remoteBanking.tipoChavePix),
       textoOriginal: local.banking.textoOriginal,
     },
   };
