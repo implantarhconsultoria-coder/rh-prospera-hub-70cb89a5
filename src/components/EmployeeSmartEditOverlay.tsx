@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { RotateCcw, Sparkles } from 'lucide-react';
+import { RotateCcw, Sparkles, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -23,6 +23,7 @@ const EmployeeSmartEditOverlay: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [undoAvailable, setUndoAvailable] = useState(false);
   const [undoing, setUndoing] = useState(false);
+  const [clearingBanking, setClearingBanking] = useState(false);
   const employeeId = useMemo(() => location.pathname.match(/\/funcionarios\/([0-9a-f-]{36})\/?$/i)?.[1] || '', [location.pathname]);
   const employee = employees.find((item) => item.id === employeeId) || null;
 
@@ -140,6 +141,40 @@ const EmployeeSmartEditOverlay: React.FC = () => {
     }
   };
 
+  const clearBankingData = async () => {
+    if (clearingBanking) return;
+    if (!window.confirm(`Limpar todos os dados bancários cadastrados em ${employee.name}?`)) return;
+
+    setClearingBanking(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('funcionarios')
+        .update({
+          banco: null,
+          banco_codigo: null,
+          agencia: null,
+          conta: null,
+          conta_digito: null,
+          tipo_conta: null,
+          titular_conta: null,
+          cpf_titular: null,
+          pix: null,
+          tipo_chave_pix: null,
+          dados_bancarios_origem: null,
+          dados_bancarios_atualizado_em: new Date().toISOString(),
+        })
+        .eq('id', employeeId);
+      if (error) throw new Error(error.message);
+      await refreshData();
+      toast.success(`Dados bancários de ${employee.name} removidos.`);
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível limpar os dados bancários.');
+    } finally {
+      setClearingBanking(false);
+    }
+  };
+
   return (
     <>
       <Button type="button" onClick={() => setOpen(true)} className="fixed bottom-6 right-24 z-40 gap-2 shadow-xl no-print">
@@ -148,14 +183,19 @@ const EmployeeSmartEditOverlay: React.FC = () => {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
           <DialogHeader><DialogTitle>Leitura Inteligente — {employee.name}</DialogTitle></DialogHeader>
-          {undoAvailable && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-              <p className="text-xs text-amber-900">Existe uma aplicação recente com backup disponível.</p>
-              <Button type="button" variant="outline" size="sm" onClick={() => void undoLastApply()} disabled={undoing}>
-                <RotateCcw className="mr-2 h-4 w-4" /> {undoing ? 'Desfazendo...' : 'Desfazer última leitura'}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <p className="text-xs text-amber-900">Aplicou no funcionário errado? Desfaça a última leitura ou limpe somente os dados bancários.</p>
+            <div className="flex flex-wrap gap-2">
+              {undoAvailable && (
+                <Button type="button" variant="outline" size="sm" onClick={() => void undoLastApply()} disabled={undoing}>
+                  <RotateCcw className="mr-2 h-4 w-4" /> {undoing ? 'Desfazendo...' : 'Desfazer última leitura'}
+                </Button>
+              )}
+              <Button type="button" variant="outline" size="sm" onClick={() => void clearBankingData()} disabled={clearingBanking} className="text-destructive hover:text-destructive">
+                <Trash2 className="mr-2 h-4 w-4" /> {clearingBanking ? 'Limpando...' : 'Limpar dados bancários'}
               </Button>
             </div>
-          )}
+          </div>
           <EmployeeSmartTextPanel onApply={apply} targetName={employee.name} />
           <p className="text-xs text-muted-foreground">A aplicação é transacional, preserva os campos não identificados e cria um backup antes de alterar o cadastro.</p>
         </DialogContent>
