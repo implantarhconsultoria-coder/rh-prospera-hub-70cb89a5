@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle2, ClipboardPaste, WandSparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ClipboardPaste, RotateCcw, WandSparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { type BankingData, parseBankingText } from '@/lib/bankingParser';
+import { emptyBankingData, type BankingData, parseBankingText } from '@/lib/bankingParser';
 
 export type BankingDataEditorProps = {
   value: BankingData;
@@ -33,6 +33,15 @@ const BankingDataEditor: React.FC<BankingDataEditorProps> = ({ value, onChange, 
     setIdentifiedCount(result.identified.length);
   };
 
+  const clearAll = () => {
+    const hasData = Object.entries(value).some(([key, fieldValue]) => key !== 'textoOriginal' && Boolean(String(fieldValue || '').trim()));
+    if (hasData && !window.confirm('Limpar todos os dados bancários deste funcionário? Depois clique em Salvar para confirmar.')) return;
+    onChange(emptyBankingData());
+    setPasteText('');
+    setWarnings([]);
+    setIdentifiedCount(0);
+  };
+
   return (
     <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
       <div>
@@ -45,9 +54,14 @@ const BankingDataEditor: React.FC<BankingDataEditorProps> = ({ value, onChange, 
         placeholder={'Ex.: Banco: Itaú\nAgência: 1234\nConta corrente: 12345-6\nTitular: Nome\nCPF: 000.000.000-00\nChave PIX: email@exemplo.com'}
         className="min-h-32 font-mono text-xs"
       />
-      <Button type="button" variant="outline" onClick={analyze} className="gap-2">
-        <WandSparkles className="h-4 w-4" /> Analisar e preencher
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={analyze} className="gap-2">
+          <WandSparkles className="h-4 w-4" /> Analisar e preencher
+        </Button>
+        <Button type="button" variant="outline" onClick={clearAll} className="gap-2 text-destructive hover:text-destructive">
+          <RotateCcw className="h-4 w-4" /> Limpar dados bancários
+        </Button>
+      </div>
 
       {identifiedCount > 0 && (
         <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-700">

@@ -36,6 +36,29 @@ Chave Pix: 11966113197`);
     expect(result.warnings).toContain('Tipo da chave PIX ambíguo; revise antes de salvar.');
   });
 
+  it('separa corretamente campos recebidos por WhatsApp com bullets e negrito', () => {
+    const result = parseBankingText(`
+      *Dados bancários*
+      • Banco: Caixa
+      • Ag: 0123
+      • Conta poupança: 98765-0
+      • Titular: JOÃO PEDRO ALVES
+      • CPF: 12345678901
+      • Chave PIX: joao.pedro@example.com
+    `);
+
+    expect(result.data.banco).toBe('Caixa Econômica Federal');
+    expect(result.data.bancoCodigo).toBe('104');
+    expect(result.data.agencia).toBe('0123');
+    expect(result.data.conta).toBe('98765');
+    expect(result.data.digito).toBe('0');
+    expect(result.data.tipoConta.toLowerCase()).toContain('poupança');
+    expect(result.data.titular).toBe('JOÃO PEDRO ALVES');
+    expect(result.data.cpfTitular).toBe('123.456.789-01');
+    expect(result.data.chavePix).toBe('joao.pedro@example.com');
+    expect(result.data.tipoChavePix).toBe('E-mail');
+  });
+
   it('mantém avisos quando campos não são identificados', () => {
     const result = parseBankingText('Banco Nubank, chave pix 11999999999');
     expect(result.data.banco).toBe('Nubank');
