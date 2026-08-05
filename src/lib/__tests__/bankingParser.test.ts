@@ -21,6 +21,21 @@ describe('parseBankingText', () => {
     expect(result.data.tipoChavePix).toBe('E-mail');
   });
 
+  it('interpreta conta bancária compacta sem capturar a palavra bancária como número', () => {
+    const result = parseBankingText(`O e-mail: erikjuan.1996@gmail.com conta bancária: Banco Bradesco agência:2466 conta corrente:33778-1
+Chave Pix: 11966113197`);
+
+    expect(result.data.banco).toBe('Bradesco');
+    expect(result.data.bancoCodigo).toBe('237');
+    expect(result.data.agencia).toBe('2466');
+    expect(result.data.conta).toBe('33778');
+    expect(result.data.digito).toBe('1');
+    expect(result.data.tipoConta).toBe('Corrente');
+    expect(result.data.chavePix).toBe('11966113197');
+    expect(result.data.conta).not.toBe('banc');
+    expect(result.warnings).toContain('Tipo da chave PIX ambíguo; revise antes de salvar.');
+  });
+
   it('mantém avisos quando campos não são identificados', () => {
     const result = parseBankingText('Banco Nubank, chave pix 11999999999');
     expect(result.data.banco).toBe('Nubank');
