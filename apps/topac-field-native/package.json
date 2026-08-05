@@ -1,0 +1,36 @@
+{
+  "name": "topac-field",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "prebuild": "expo prebuild --clean",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@supabase/supabase-js": "^2.110.8",
+    "expo": "^56.0.12",
+    "expo-constants": "^56.0.9",
+    "expo-dev-client": "^56.0.14",
+    "expo-location": "^56.0.22",
+    "expo-router": "^56.2.11",
+    "expo-status-bar": "^56.0.7",
+    "expo-task-manager": "^56.0.23",
+    "react": "19.2.0",
+    "react-native": "0.85.0",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-url-polyfill": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/react": "^19.2.0",
+    "babel-preset-expo": "^56.0.9",
+    "jest": "^30.0.5",
+    "typescript": "^5.9.2"
+  }
+}

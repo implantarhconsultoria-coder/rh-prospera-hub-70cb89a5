@@ -1,0 +1,40 @@
+name: TOPAC Field Native CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/topac-field-native/**"
+      - "supabase/migrations/20260805140500_app_mecanico_localizacao_operacional.sql"
+      - "supabase/migrations/20260805142000_restringir_helper_acesso_mecanico.sql"
+      - ".github/workflows/topac-field-native-ci.yml"
+  push:
+    branches:
+      - "feature/topac-field-native-gps-20260805"
+    paths:
+      - "apps/topac-field-native/**"
+      - ".github/workflows/topac-field-native-ci.yml"
+
+jobs:
+  validate-native-app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/topac-field-native
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Validate Expo config
+        run: npx expo config --type public
