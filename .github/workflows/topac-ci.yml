@@ -37,13 +37,23 @@ jobs:
           src/lib/abastecimentoReports.ts
           src/lib/emailUtils.ts
           src/lib/funcionariosBase.ts
+          src/lib/smartTextParser.ts
+          src/lib/vehicleSync.ts
           src/components/BankingDataEditor.tsx
           src/components/EmailPdfModal.tsx
+          src/components/EmployeeSmartTextPanel.tsx
+          src/components/EmployeeSmartEditOverlay.tsx
+          src/components/AppLayout.tsx
+          src/components/FilialLayout.tsx
           src/pages/FuncionariosPage.tsx
+          src/pages/ProtocoloPage.tsx
           src/pages/admin/CombustivelQRAdminPage.tsx
           src/lib/__tests__/bankingParser.test.ts
           src/lib/__tests__/abastecimentoReports.test.ts
           src/lib/__tests__/emailPolicy.test.ts
+          src/lib/__tests__/smartTextParser.test.ts
+          src/lib/__tests__/vehicleSync.test.ts
+          src/lib/__tests__/protocoloFrotaSource.test.ts
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
 
@@ -53,6 +63,9 @@ jobs:
           src/lib/__tests__/bankingParser.test.ts
           src/lib/__tests__/abastecimentoReports.test.ts
           src/lib/__tests__/emailPolicy.test.ts
+          src/lib/__tests__/smartTextParser.test.ts
+          src/lib/__tests__/vehicleSync.test.ts
+          src/lib/__tests__/protocoloFrotaSource.test.ts
 
       - name: Build
         run: npm run build

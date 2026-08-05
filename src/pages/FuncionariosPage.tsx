@@ -10,7 +10,9 @@ import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { formatCurrency } from '@/lib/calculations';
 import { upsertFuncionarioBase, onlyDigits } from '@/lib/funcionariosBase';
 import BankingDataEditor from '@/components/BankingDataEditor';
+import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
 import { emptyBankingData, type BankingData } from '@/lib/bankingParser';
+import type { EmployeeSmartData } from '@/lib/smartTextParser';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -57,6 +59,15 @@ const bankingPayload = (data: BankingData) => ({
   dados_bancarios_origem: data.textoOriginal || null,
   dados_bancarios_atualizado_em: new Date().toISOString(),
 });
+
+const mergeBankingNonEmpty = (current: BankingData, next: BankingData): BankingData => {
+  const output = { ...current };
+  (Object.keys(output) as Array<keyof BankingData>).forEach((key) => {
+    const value = String(next[key] || '').trim();
+    if (value) output[key] = value;
+  });
+  return output;
+};
 
 const FuncionariosPage: React.FC = () => {
   const { employees, companies, refreshData } = useApp();
@@ -110,6 +121,23 @@ const FuncionariosPage: React.FC = () => {
     };
     void load();
   }, [accessEmployee?.id, accessEmployee?.cpf]);
+
+  const applySmartEmployee = (data: EmployeeSmartData) => {
+    setNewEmp((current) => ({
+      ...current,
+      nome: data.nome || current.nome,
+      cpf: data.cpf || current.cpf,
+      rg: data.rg || current.rg,
+      cargo: data.cargo || current.cargo,
+      salario_base: data.salarioBase || current.salario_base,
+      data_admissao: data.dataAdmissao || current.data_admissao,
+      telefone: data.telefone || current.telefone,
+      celular: data.celular || current.celular,
+      email: data.email || current.email,
+      endereco: data.endereco || current.endereco,
+      banking: mergeBankingNonEmpty(current.banking, data.banking),
+    }));
+  };
 
   const saveNewEmployee = async () => {
     if (!newEmp.nome.trim()) return toast.error('Nome é obrigatório.');
@@ -218,6 +246,7 @@ const FuncionariosPage: React.FC = () => {
         <div className="card-premium space-y-4 border-l-4 border-primary p-5">
           <div className="flex items-center justify-between"><h2 className="text-sm font-bold">Cadastrar Novo Funcionário</h2><Button variant="ghost" size="icon" onClick={() => setShowNew(false)}><X className="h-4 w-4" /></Button></div>
           {!isFilial && !filterCompany && <p className="text-xs text-warning">Selecione uma empresa no filtro antes de cadastrar.</p>}
+          <EmployeeSmartTextPanel onApply={applySmartEmployee} />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             <Field label="Nome Completo *" value={newEmp.nome} onChange={(value) => setNewEmp((current) => ({ ...current, nome: value }))} />
             <Field label="CPF" value={newEmp.cpf} onChange={(value) => setNewEmp((current) => ({ ...current, cpf: value }))} />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import FilialSidebar from '@/components/FilialSidebar';
+import EmployeeSmartEditOverlay from '@/components/EmployeeSmartEditOverlay';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 import { Loader2, LogOut } from 'lucide-react';
@@ -17,11 +18,7 @@ const FilialLayout: React.FC = () => {
   const navigate = useNavigate();
 
   if (roleLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
 
   if (!userRole && !userRoles.includes('admin')) return <AguardandoAcesso />;
@@ -29,9 +26,7 @@ const FilialLayout: React.FC = () => {
   const isFilialRole = userRole === 'filial_matriz' || userRole === 'filial_praia' || userRole === 'filial_goiania';
   const acessoAdminValido = userRoles.includes('admin') && isAdminPreview && Boolean(filialCompanyId);
 
-  if (!isFilialRole && !acessoAdminValido) {
-    return <Navigate to="/admin" replace />;
-  }
+  if (!isFilialRole && !acessoAdminValido) return <Navigate to="/admin" replace />;
 
   const trocarUsuario = async () => {
     await logout();
@@ -41,25 +36,14 @@ const FilialLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-background">
       <FilialSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-
       <div className="fixed right-3 top-3 z-50 flex items-center gap-2 no-print">
         <ModuleSwitcher />
-        {!userRoles.includes('admin') && (
-          <Button type="button" variant="outline" size="sm" onClick={trocarUsuario} className="gap-2 shadow-md">
-            <LogOut className="h-4 w-4" />
-            Trocar usuário
-          </Button>
-        )}
+        {!userRoles.includes('admin') && <Button type="button" variant="outline" size="sm" onClick={trocarUsuario} className="gap-2 shadow-md"><LogOut className="h-4 w-4" />Trocar usuário</Button>}
       </div>
-
-      <main className={cn(
-        'transition-all duration-300 min-h-screen',
-        collapsed ? 'ml-16' : 'ml-64'
-      )}>
-        <div className="p-6 pt-20 max-w-[1600px] mx-auto">
-          <ErrorBoundary><Outlet /></ErrorBoundary>
-        </div>
+      <main className={cn('transition-all duration-300 min-h-screen', collapsed ? 'ml-16' : 'ml-64')}>
+        <div className="p-6 pt-20 max-w-[1600px] mx-auto"><ErrorBoundary><Outlet /></ErrorBoundary></div>
       </main>
+      <EmployeeSmartEditOverlay />
     </div>
   );
 };

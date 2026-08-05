@@ -1,32 +1,68 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FileCheck, LinkIcon, Loader2, Printer, Search, Sparkles } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
-import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
-import { FileCheck, Printer, Sparkles, Upload, Loader2, Search, LinkIcon } from 'lucide-react';
-import { toast } from 'sonner';
+import { renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
 import { registrarAcao } from '@/lib/acoesLog';
+import {
+  findVehicleByPlate,
+  normalizeVehiclePlate,
+  toProtocolVehicleFields,
+  vehicleIdentityWarnings,
+  type VehicleSyncRecord,
+} from '@/lib/vehicleSync';
+import { toast } from 'sonner';
 
-interface AtivoDoc {
-  id: string;
-  descricao: string;
-  placa: string;
-  patrimonio: string;
-  renavam: string;
-  chassi: string;
-  ano_fabricacao: string;
-  ano_modelo: string;
-  empresa: string;
-  arquivo_url: string;
-  observacao?: string;
+interface AtivoDoc extends VehicleSyncRecord {
+  patrimonio?: string | null;
+  renavam?: string | null;
+  chassi?: string | null;
+  ano_fabricacao?: string | null;
+  ano_modelo?: string | null;
+  empresa?: string | null;
+  arquivo_url?: string | null;
+  documento_url?: string | null;
+  observacao?: string | null;
 }
+
+type ProtocolTextData = {
+  empresa_destinataria?: string;
+  local_canteiro?: string;
+  responsavel_recebimento?: string;
+  placa?: string;
+  patrimonio?: string;
+  descricao_ativo?: string;
+  observacoes?: string;
+};
+
+const extractProtocolLocally = (rawText: string): ProtocolTextData => {
+  const text = String(rawText || '').replace(/\r/g, '').trim();
+  const flat = text.replace(/\s+/g, ' ');
+  const pick = (patterns: RegExp[]) => {
+    for (const pattern of patterns) {
+      const match = flat.match(pattern) || text.match(pattern);
+      if (match?.[1]) return match[1].trim();
+    }
+    return '';
+  };
+  return {
+    placa: normalizeVehiclePlate(pick([/\bplaca\s*[:-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i])),
+    patrimonio: pick([/\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:-]?\s*([A-Z0-9./-]{2,30})\b/i]),
+    empresa_destinataria: pick([/(?:empresa destinat[aá]ria|empresa)\s*[:-]?\s*([^,;|]{2,80})/i]),
+    local_canteiro: pick([/(?:local|canteiro|obra)\s*[:-]?\s*([^,;|]{2,80})/i]),
+    responsavel_recebimento: pick([/(?:respons[aá]vel(?: pelo recebimento)?|a\/c)\s*[:-]?\s*([^,;|]{2,60})/i]),
+    descricao_ativo: pick([/(?:descri[cç][aã]o|equipamento|ativo)\s*[:-]?\s*([^,;|]{2,100})/i]),
+    observacoes: text,
+  };
+};
 
 const ProtocoloPage: React.FC = () => {
   const { companies } = useApp();
-  const topac = companies.find(c => c.id === 'topac-matriz');
+  const topac = companies.find((company) => company.id === 'topac-matriz');
 
   const [empresaDestinataria, setEmpresaDestinataria] = useState('');
   const [localCanteiro, setLocalCanteiro] = useState('');
@@ -43,324 +79,95 @@ const ProtocoloPage: React.FC = () => {
   const [dataEmissao, setDataEmissao] = useState(new Date().toISOString().slice(0, 10));
   const [textoColado, setTextoColado] = useState('');
   const [parsing, setParsing] = useState(false);
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfUrl, setPdfUrl] = useState('');
-  const [loadingPdf, setLoadingPdf] = useState(false);
   const [savingProtocol, setSavingProtocol] = useState(false);
   const [lastSavedProtocolId, setLastSavedProtocolId] = useState<string | null>(null);
-
-  // Auto-lookup state
   const [ativosCache, setAtivosCache] = useState<AtivoDoc[]>([]);
   const [matchedAtivo, setMatchedAtivo] = useState<AtivoDoc | null>(null);
-  const [showManualSelect, setShowManualSelect] = useState(false);
   const [ativoSearch, setAtivoSearch] = useState('');
-  const hydratingIdsRef = useRef(new Set<string>());
-  const lastMatchedIdRef = useRef<string | null>(null);
+  const [showManualSelect, setShowManualSelect] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState('');
 
-  // Load all vehicle docs for matching
   useEffect(() => {
     const load = async () => {
-      const { data } = await supabase.from('ativos').select('*').eq('tipo', 'veiculo').order('created_at', { ascending: false });
-      if (data) setAtivosCache(data as unknown as AtivoDoc[]);
+      const { data, error } = await supabase
+        .from('ativos')
+        .select('id,descricao,placa,patrimonio,renavam,chassi,ano_fabricacao,ano_modelo,empresa,arquivo_url,documento_url,observacao')
+        .eq('tipo', 'veiculo')
+        .order('created_at', { ascending: false });
+      if (error) {
+        toast.error(`Não foi possível carregar a Frota: ${error.message}`);
+        return;
+      }
+      setAtivosCache((data as AtivoDoc[]) || []);
     };
-    load();
+    void load();
   }, []);
 
-  const sanitize = (value: string) => (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const hasValue = (value?: string | null) => Boolean(value?.trim());
-  const firstFilled = (...values: Array<unknown>) =>
-    values.find((value) => typeof value === 'string' && value.trim()) as string | undefined;
-  const normalizeDateInput = (value: string) => {
-    const match = (value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    return match ? `${match[3]}-${match[2]}-${match[1]}` : value;
-  };
-  const extractLocalProtocolData = (rawText: string) => {
-    const text = (rawText || '').replace(/\r/g, '').trim();
-    const flat = text.replace(/\s+/g, ' ');
-    const pick = (patterns: RegExp[]) => {
-      for (const pattern of patterns) {
-        const match = flat.match(pattern) || text.match(pattern);
-        if (match?.[1]) return match[1].replace(/\s+(por favor|favor)$/i, '').trim();
-      }
-      return '';
-    };
-    const placaValue = pick([/\bplaca\s*[:\-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i]);
-    const patrimonioValue = pick([
-      /\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:\-]?\s*([A-Z0-9./-]{2,30})\b/i,
-      /(?:^|\n|\s)([A-Z]{1,4}\d{1,4}(?:[./-]\d{1,6})?)\s*(?:[-–—]\s*)?(?:placa|ve[ií]culo|compressor)\b/i,
-    ]);
-    const destinoMatch = flat.match(/encaminhad[ao]s?\s+(?:a|à)\s+empresa\s+(.+?)(?:\s+aos cuidados de\s+|\s+a\/c\s+|[.,;\n]|$)/i);
-    let empresaDestino = '';
-    let localDestino = '';
-    if (destinoMatch?.[1]) {
-      const destino = destinoMatch[1].trim();
-      const canteiroIdx = destino.toLowerCase().indexOf(' canteiro ');
-      if (canteiroIdx >= 0) {
-        empresaDestino = destino.slice(0, canteiroIdx).trim();
-        localDestino = destino.slice(canteiroIdx + 1).trim();
-      } else {
-        empresaDestino = destino;
-      }
-    }
-    const descricaoMatch = flat.match(/\b(compressor|ve[ií]culo|caminh[aã]o|carro|equipamento|m[aá]quina|munck|guindaste)\b[^.,;\n]*/i);
-    return {
-      empresa_destinataria: empresaDestino || pick([
-        /(?:encaminhad[ao]s?\s+(?:a|à)\s+empresa|empresa destinat[aá]ria|empresa)\s*[:\-]?\s*([A-ZÁ-Ú0-9][A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+(?:aos cuidados|referente|para|no|na|$)|[.,;\n])/i,
-      ]),
-      local_canteiro: localDestino || pick([
-        /(?:local|canteiro|obra)\s*[:\-]?\s*([A-ZÁ-Ú0-9][A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+(?:aos cuidados|respons[aá]vel|referente|$)|[.,;\n])/i,
-        /\b(canteiro\s+(?:de|da|do)\s+[A-ZÁ-Úa-zá-ú0-9 &./-]{2,80}?)(?=\s+aos cuidados|[.,;\n]|$)/i,
-      ]),
-      responsavel_recebimento: pick([
-        /(?:aos cuidados (?:de|do|da)|a\/c|respons[aá]vel(?: pelo recebimento)?|recebimento)\s*[:\-]?\s*([A-ZÁ-Ú][A-ZÁ-Úa-zá-ú ]{2,60}?)(?=[.,;\n]|$)/i,
-      ]),
-      placa: placaValue,
-      patrimonio: patrimonioValue,
-      renavam: pick([/\brenavam\s*[:\-]?\s*(\d{6,20})\b/i]),
-      chassi: pick([/\bchassi\s*[:\-]?\s*([A-Z0-9]{8,30})\b/i]),
-      ano_fabricacao: pick([/\bano fabrica[cç][aã]o\s*[:\-]?\s*(\d{4})\b/i, /\bfabrica[cç][aã]o\s*[:\-]?\s*(\d{4})\b/i]),
-      ano_modelo: pick([/\bano modelo\s*[:\-]?\s*(\d{4})\b/i, /\bmodelo\s*[:\-]?\s*(\d{4})\b/i]),
-      descricao_ativo: descricaoMatch ? descricaoMatch[0].trim() : '',
-      observacoes: text,
-    };
-  };
-  const mergeParsedData = (aiData: any, localData: any) => {
-    const d = aiData || {};
-    return {
-      empresa_destinataria: firstFilled(localData.empresa_destinataria, d.empresa_destinataria, d.empresa),
-      local_canteiro: firstFilled(localData.local_canteiro, d.local_canteiro, d.local, d.canteiro),
-      responsavel_recebimento: firstFilled(localData.responsavel_recebimento, d.responsavel_recebimento, d.responsavel, d.recebedor),
-      placa: firstFilled(d.placa, localData.placa),
-      patrimonio: firstFilled(d.patrimonio, localData.patrimonio),
-      renavam: firstFilled(d.renavam, localData.renavam),
-      chassi: firstFilled(d.chassi, localData.chassi),
-      ano_fabricacao: firstFilled(d.ano_fabricacao, localData.ano_fabricacao),
-      ano_modelo: firstFilled(d.ano_modelo, localData.ano_modelo),
-      empresa: firstFilled(d.empresa),
-      descricao_ativo: firstFilled(localData.descricao_ativo, d.descricao_ativo, d.descricao),
-      observacoes: firstFilled(d.observacoes, d.observacao, localData.observacoes),
-    };
+  const applyVehicle = (vehicle: AtivoDoc) => {
+    const data = toProtocolVehicleFields(vehicle);
+    setMatchedAtivo(vehicle);
+    setPlaca(data.placa);
+    setPatrimonio(data.patrimonio);
+    setRenavam(data.renavam);
+    setChassi(data.chassi);
+    setAnoFabricacao(data.anoFabricacao);
+    setAnoModelo(data.anoModelo);
+    if (data.empresa) setEmpresaDestinataria(data.empresa);
+    if (data.descricao) setDescricaoEquipamento(data.descricao);
+    if (data.observacao && !observacoes.trim()) setObservacoes(data.observacao);
+    setPdfUrl(data.pdfUrl);
+    const warnings = vehicleIdentityWarnings(vehicle);
+    if (warnings.length) toast.warning(`Veículo legado localizado. Atualize a Frota: ${warnings.join(' ')}`);
   };
 
-  const analyzeVehiclePdf = async (sourceUrl: string, fileLabel: string) => {
-    const { bytes, pageUrls } = await renderPdfPagesToDataUrls(sourceUrl, 1.15, 2);
-    const extractedText = await extractPdfText(bytes).catch(() => '');
-    const { data, error } = await supabase.functions.invoke('parse-text', {
-      body: {
-        text: `Arquivo: ${fileLabel}\n\n${extractedText}`.trim(),
-        images: pageUrls,
-        type: 'documento_veiculo',
-      },
-    });
-
-    if (error) throw error;
-    return data?.data ?? {};
-  };
-
-  const applyMatchedAtivo = (ativo: AtivoDoc) => {
-    if (hasValue(ativo.placa)) setPlaca(ativo.placa);
-    if (hasValue(ativo.patrimonio)) setPatrimonio(ativo.patrimonio);
-    if (hasValue(ativo.renavam)) setRenavam(ativo.renavam);
-    if (hasValue(ativo.chassi)) setChassi(ativo.chassi);
-    if (hasValue(ativo.ano_fabricacao)) setAnoFabricacao(ativo.ano_fabricacao);
-    if (hasValue(ativo.ano_modelo)) setAnoModelo(ativo.ano_modelo);
-    if (hasValue(ativo.empresa)) setEmpresaDestinataria(ativo.empresa);
-    if (hasValue(ativo.descricao)) setDescricaoEquipamento(ativo.descricao);
-    if (hasValue(ativo.observacao) && !hasValue(observacoes)) setObservacoes(ativo.observacao || '');
-    if (hasValue(ativo.arquivo_url)) setPdfUrl(ativo.arquivo_url);
-  };
-
-  const hydrateMatchedAtivo = async (ativo: AtivoDoc) => {
-    if (!ativo.arquivo_url || hydratingIdsRef.current.has(ativo.id)) return;
-
-    const missingFields = {
-      patrimonio: !hasValue(ativo.patrimonio),
-      renavam: !hasValue(ativo.renavam),
-      chassi: !hasValue(ativo.chassi),
-      ano_fabricacao: !hasValue(ativo.ano_fabricacao),
-      ano_modelo: !hasValue(ativo.ano_modelo),
-      empresa: !hasValue(ativo.empresa),
-      descricao: !hasValue(ativo.descricao),
-      observacao: !hasValue(ativo.observacao),
-    };
-
-    if (!Object.values(missingFields).some(Boolean)) return;
-
-    hydratingIdsRef.current.add(ativo.id);
-    setLoadingPdf(true);
-
-    try {
-      const extracted = await analyzeVehiclePdf(ativo.arquivo_url, ativo.descricao || ativo.placa || 'Documento do veículo');
-      const updates: Record<string, string> = {};
-
-      Object.entries(missingFields).forEach(([field, shouldFill]) => {
-        const nextValue = extracted?.[field];
-        if (shouldFill && typeof nextValue === 'string' && nextValue.trim()) {
-          updates[field] = nextValue.trim();
-        }
-      });
-
-      if (Object.keys(updates).length === 0) return;
-
-      const hydratedAtivo = { ...ativo, ...updates } as AtivoDoc;
-      const { error } = await supabase.from('ativos').update(updates as any).eq('id', ativo.id);
-      if (error) throw error;
-
-      setAtivosCache((current) => current.map((item) => (item.id === ativo.id ? hydratedAtivo : item)));
-      setMatchedAtivo(hydratedAtivo);
-      applyMatchedAtivo(hydratedAtivo);
-      toast.success('Dados do veículo atualizados a partir do PDF salvo no sistema.');
-    } catch {
-      toast.error('Não foi possível complementar os dados do veículo pelo PDF.');
-    } finally {
-      hydratingIdsRef.current.delete(ativo.id);
-      setLoadingPdf(false);
-    }
-  };
-
-  // Auto-match when key fields change — auto-fill ALL vehicle fields
   useEffect(() => {
-    if (!placa && !patrimonio && !renavam && !chassi) {
+    const normalized = normalizeVehiclePlate(placa);
+    if (normalized.length !== 7) {
       setMatchedAtivo(null);
-      lastMatchedIdRef.current = null;
+      setPdfUrl('');
       return;
     }
-
-    const normalizedPlaca = sanitize(placa);
-    const normalizedPatrimonio = sanitize(patrimonio);
-    const normalizedRenavam = renavam.trim();
-    const normalizedChassi = chassi.trim().toLowerCase();
-
-    const plateMatch = normalizedPlaca
-      ? ativosCache.find((a) => hasValue(a.placa) && sanitize(a.placa) === normalizedPlaca)
-      : null;
-
-    const match = plateMatch || ativosCache.find(a => {
-      if (normalizedPatrimonio && hasValue(a.patrimonio) && sanitize(a.patrimonio) === normalizedPatrimonio) return true;
-      if (normalizedRenavam && hasValue(a.renavam) && a.renavam === normalizedRenavam) return true;
-      if (normalizedChassi && hasValue(a.chassi) && a.chassi.toLowerCase() === normalizedChassi) return true;
-      return false;
-    });
-
-    if (match) {
-      setMatchedAtivo(match);
-      applyMatchedAtivo(match);
-
-      if (lastMatchedIdRef.current !== match.id) {
-        toast.success(`Veículo localizado: ${match.descricao || match.placa} — campos preenchidos automaticamente.`);
-        lastMatchedIdRef.current = match.id;
-      }
-
-      hydrateMatchedAtivo(match);
-    } else {
+    const match = findVehicleByPlate(ativosCache, normalized);
+    if (!match) {
       setMatchedAtivo(null);
-      lastMatchedIdRef.current = null;
+      setPdfUrl('');
+      return;
     }
-  }, [placa, patrimonio, renavam, chassi, ativosCache]);
+    if (matchedAtivo?.id !== match.id) {
+      applyVehicle(match);
+      toast.success(`Veículo sincronizado com a Frota: ${match.descricao || normalized}.`);
+    }
+  }, [placa, ativosCache, matchedAtivo?.id]);
 
   const filteredAtivos = useMemo(() => {
-    if (!ativoSearch || ativoSearch.length < 2) return [];
-    const q = ativoSearch.toLowerCase();
-    return ativosCache.filter(a =>
-      (a.descricao || '').toLowerCase().includes(q) ||
-      (a.placa || '').toLowerCase().includes(q) ||
-      (a.patrimonio || '').toLowerCase().includes(q) ||
-      (a.renavam || '').toLowerCase().includes(q)
-    ).slice(0, 10);
-  }, [ativoSearch, ativosCache]);
+    const query = ativoSearch.trim().toLowerCase();
+    if (!query) return ativosCache.slice(0, 30);
+    return ativosCache.filter((vehicle) => `${vehicle.descricao || ''} ${vehicle.placa || ''} ${vehicle.patrimonio || ''}`.toLowerCase().includes(query)).slice(0, 50);
+  }, [ativosCache, ativoSearch]);
 
   const handleParseText = async () => {
-    if (!textoColado.trim()) { toast.error('Cole o texto primeiro'); return; }
+    if (!textoColado.trim()) return toast.error('Cole o texto antes de iniciar a leitura.');
     setParsing(true);
+    const local = extractProtocolLocally(textoColado);
+    let remote: ProtocolTextData = {};
     try {
-      const localData = extractLocalProtocolData(textoColado);
-      let aiData = {};
-      try {
-        const { data, error } = await supabase.functions.invoke('parse-text', {
-          body: { text: textoColado, type: 'protocolo' },
-        });
-        if (error) throw error;
-        aiData = data?.data || {};
-      } catch (e) {
-        console.warn('[protocolo] parse-text indisponivel, usando leitura local', e);
-      }
-
-      const d = mergeParsedData(aiData, localData);
-      if (d.empresa_destinataria) setEmpresaDestinataria(d.empresa_destinataria);
-      if (d.local_canteiro) setLocalCanteiro(d.local_canteiro);
-      if (d.responsavel_recebimento) setResponsavelRecebimento(d.responsavel_recebimento);
-      if (d.placa) setPlaca(d.placa);
-      if (d.patrimonio) setPatrimonio(d.patrimonio);
-      if (d.renavam) setRenavam(d.renavam);
-      if (d.chassi) setChassi(d.chassi);
-      if (d.ano_fabricacao) setAnoFabricacao(d.ano_fabricacao);
-      if (d.ano_modelo) setAnoModelo(d.ano_modelo);
-      if (d.empresa && !d.empresa_destinataria) setEmpresaDestinataria(d.empresa);
-      if (d.descricao_ativo) setDescricaoEquipamento(d.descricao_ativo);
-      if (d.observacoes) setObservacoes(d.observacoes);
-      toast.success('Texto lido e campos preenchidos. Revise antes de salvar ou imprimir.');
-    } catch (e: any) {
-      toast.error('Erro ao processar texto: ' + (e.message || 'Tente novamente'));
-    } finally {
-      setParsing(false);
+      const { data, error } = await supabase.functions.invoke('parse-text', {
+        body: { type: 'protocolo', text: textoColado },
+      });
+      if (!error) remote = data?.data || {};
+    } catch (error) {
+      console.warn('[protocolo] parser remoto indisponível; leitura local mantida.', error);
     }
-  };
-  const handleSelectAtivo = (a: AtivoDoc) => {
-    setMatchedAtivo(a);
-    applyMatchedAtivo(a);
-    setShowManualSelect(false);
-    setAtivoSearch('');
-    hydrateMatchedAtivo(a);
-    toast.success('Documento vinculado! PDF carregado automaticamente.');
-  };
-
-  const handlePdfUpload = async (file: File) => {
-    setPdfFile(file);
-    const fileName = `protocolo-${Date.now()}-${file.name}`;
-    const { error } = await supabase.storage.from('documentos-ativos').upload(fileName, file, { contentType: 'application/pdf' });
-    if (error) { toast.error('Erro no upload'); return; }
-    const { data: urlData } = supabase.storage.from('documentos-ativos').getPublicUrl(fileName);
-    setPdfUrl(urlData.publicUrl);
-    toast.success('PDF anexado!');
-  };
-
-  const titulo = 'PROTOCOLO DE LIBERAÇÃO DE DOCUMENTO';
-
-  const buildProtocoloHtml = (via: number, total: number) => {
-    const co = topac;
-    return `<div style="page-break-after:always;padding:15mm;font-family:Arial,sans-serif;font-size:12px;color:#000;box-sizing:border-box;">
-    <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:14px">
-      <div><strong>${co?.name || 'TOPAC MATRIZ'}</strong><br/><span style="font-size:10px">CNPJ: ${co?.cnpj || ''}</span></div>
-      <div style="font-size:14px;font-weight:bold;text-align:right">${titulo}<br/><span style="font-size:10px;color:#666">${via}ª Via de ${total}</span></div>
-    </div>
-    <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
-      <div style="font-weight:bold;font-size:11px;text-transform:uppercase;color:#555;margin-bottom:6px">Dados da Liberação</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px">
-        <div><span style="color:#666">Empresa Destinatária:</span> ${empresaDestinataria}</div>
-        <div><span style="color:#666">Local/Canteiro:</span> ${localCanteiro || '—'}</div>
-        <div><span style="color:#666">Responsável Recebimento:</span> ${responsavelRecebimento || '—'}</div>
-        <div><span style="color:#666">Data:</span> ${new Date(dataEmissao).toLocaleDateString('pt-BR')}</div>
-        ${descricaoEquipamento ? `<div style="grid-column:1/-1"><span style="color:#666">Descrição:</span> ${descricaoEquipamento}</div>` : ''}
-      </div>
-    </div>
-    <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
-      <div style="font-weight:bold;font-size:11px;text-transform:uppercase;color:#555;margin-bottom:6px">Identificação do Ativo</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-size:11px">
-        <div><span style="color:#666">Placa:</span> ${placa || '—'}</div>
-        <div><span style="color:#666">Renavam:</span> ${renavam || '—'}</div>
-        <div><span style="color:#666">Chassi:</span> ${chassi || '—'}</div>
-        <div><span style="color:#666">Ano Fabricação:</span> ${anoFabricacao || '—'}</div>
-        <div><span style="color:#666">Ano Modelo:</span> ${anoModelo || '—'}</div>
-        <div><span style="color:#666">Patrimônio:</span> ${patrimonio || '—'}</div>
-        <div><span style="color:#666">Exercício:</span> ${exercicio}</div>
-      </div>
-    </div>
-    ${observacoes ? `<div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px"><div style="font-weight:bold;font-size:11px;text-transform:uppercase;color:#555;margin-bottom:6px">Observações</div><p style="font-size:11px;margin:0;white-space:pre-wrap">${observacoes}</p></div>` : ''}
-    <div style="display:flex;justify-content:space-between;margin-top:60px">
-      <div style="text-align:center;width:45%"><hr style="border:0;border-top:1px solid #000;margin-bottom:4px"/><small>Assinatura — Entrega</small></div>
-      <div style="text-align:center;width:45%"><hr style="border:0;border-top:1px solid #000;margin-bottom:4px"/><small>Assinatura — Recebimento</small></div>
-    </div>
-    </div>`;
+    const value = (key: keyof ProtocolTextData) => String(remote[key] || local[key] || '').trim();
+    if (value('empresa_destinataria')) setEmpresaDestinataria(value('empresa_destinataria'));
+    if (value('local_canteiro')) setLocalCanteiro(value('local_canteiro'));
+    if (value('responsavel_recebimento')) setResponsavelRecebimento(value('responsavel_recebimento'));
+    if (value('placa')) setPlaca(normalizeVehiclePlate(value('placa')));
+    if (value('patrimonio')) setPatrimonio(value('patrimonio'));
+    if (value('descricao_ativo')) setDescricaoEquipamento(value('descricao_ativo'));
+    if (value('observacoes')) setObservacoes(value('observacoes'));
+    setParsing(false);
+    toast.success('Texto lido. A placa identificada será sincronizada automaticamente com a Frota.');
   };
 
   const buildProtocolPayload = () => ({
@@ -368,9 +175,9 @@ const ProtocoloPage: React.FC = () => {
     empresa_destinataria: empresaDestinataria,
     local_canteiro: localCanteiro,
     responsavel_recebimento: responsavelRecebimento,
-    data_emissao: normalizeDateInput(dataEmissao),
+    data_emissao: dataEmissao,
     descricao_ativo: descricaoEquipamento,
-    placa,
+    placa: normalizeVehiclePlate(placa),
     renavam,
     chassi,
     ano_fabricacao: anoFabricacao,
@@ -379,259 +186,144 @@ const ProtocoloPage: React.FC = () => {
     exercicio,
     observacoes,
     texto_original: textoColado,
-    pdf_url: pdfUrl,
+    pdf_url: pdfUrl || null,
     ativo_id: matchedAtivo?.id || null,
   });
 
-  const saveProtocol = async ({ silent = false } = {}) => {
-    if (!empresaDestinataria && !descricaoEquipamento && !placa && !patrimonio) {
-      if (!silent) toast.error('Preencha ou leia o texto antes de salvar.');
-      return null;
+  const validateProtocol = () => {
+    const normalized = normalizeVehiclePlate(placa);
+    if (normalized && normalized.length !== 7) {
+      toast.error('Informe uma placa válida.');
+      return false;
     }
+    if (normalized && !matchedAtivo) {
+      toast.error('A placa não está cadastrada na Frota. Cadastre ou corrija o veículo na aba Frota / Documentos.');
+      return false;
+    }
+    if (!normalized && !patrimonio && !descricaoEquipamento) {
+      toast.error('Informe placa, patrimônio ou descrição do equipamento.');
+      return false;
+    }
+    return true;
+  };
 
+  const saveProtocol = async ({ silent = false } = {}) => {
+    if (!validateProtocol()) return null;
     const payload = buildProtocolPayload();
     setSavingProtocol(true);
     try {
-      const { data, error } = await supabase
-        .from('protocolos_documentos')
-        .insert(payload as any)
-        .select('id')
-        .single();
+      const { data, error } = await supabase.from('protocolos_documentos' as any).insert(payload).select('id').single();
       if (error) throw error;
-      const id = (data as any)?.id || null;
+      const id = String((data as any)?.id || '');
       setLastSavedProtocolId(id);
       await registrarAcao({
-        modulo: 'protocolo',
-        entidade: 'protocolos_documentos',
-        entidadeId: id,
-        acao: 'gerou',
-        depois: payload,
+        modulo: 'protocolo', entidade: 'protocolos_documentos', entidadeId: id, acao: 'gerou', depois: payload,
         arquivoUrl: pdfUrl || undefined,
-        observacao: `Protocolo salvo para ${empresaDestinataria || descricaoEquipamento || placa || patrimonio}`,
+        observacao: `Protocolo sincronizado com ${matchedAtivo ? `Frota/${matchedAtivo.id}` : 'equipamento sem placa'}`,
       });
-      if (!silent) toast.success('Protocolo salvo e arquivado no sistema.');
+      if (!silent) toast.success('Protocolo salvo e sincronizado com a Frota.');
       return id;
-    } catch (e) {
-      console.warn('[protocolo] falha ao salvar no Supabase, arquivando localmente', e);
-      const fallbackId = `local-${Date.now()}`;
+    } catch (error) {
+      console.warn('[protocolo] persistência remota indisponível; arquivando localmente.', error);
+      const id = `local-${Date.now()}`;
       const current = JSON.parse(localStorage.getItem('topac_protocolos_documentos') || '[]');
-      localStorage.setItem('topac_protocolos_documentos', JSON.stringify([{ id: fallbackId, ...payload, created_at: new Date().toISOString() }, ...current].slice(0, 200)));
-      setLastSavedProtocolId(fallbackId);
-      if (!silent) toast.warning('Protocolo arquivado localmente. Assim que a tabela estiver ativa, volta a salvar no banco.');
-      return fallbackId;
+      localStorage.setItem('topac_protocolos_documentos', JSON.stringify([{ id, ...payload, created_at: new Date().toISOString() }, ...current].slice(0, 200)));
+      setLastSavedProtocolId(id);
+      if (!silent) toast.warning('Protocolo arquivado localmente.');
+      return id;
     } finally {
       setSavingProtocol(false);
     }
   };
 
+  const buildProtocoloHtml = (via: number) => `<div style="page-break-after:always;padding:15mm;font-family:Arial,sans-serif;font-size:12px;color:#000;box-sizing:border-box">
+    <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:14px">
+      <div><strong>${topac?.name || 'TOPAC MATRIZ'}</strong><br/><span style="font-size:10px">CNPJ: ${topac?.cnpj || ''}</span></div>
+      <div style="font-size:14px;font-weight:bold;text-align:right">PROTOCOLO DE LIBERAÇÃO DE DOCUMENTO<br/><span style="font-size:10px;color:#666">${via}ª Via de 2</span></div>
+    </div>
+    <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
+      <strong>Dados da Liberação</strong><br/>Empresa Destinatária: ${empresaDestinataria || '—'}<br/>Local/Canteiro: ${localCanteiro || '—'}<br/>Responsável: ${responsavelRecebimento || '—'}<br/>Data: ${new Date(`${dataEmissao}T12:00:00`).toLocaleDateString('pt-BR')}<br/>Descrição: ${descricaoEquipamento || '—'}
+    </div>
+    <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
+      <strong>Identificação do Ativo — dados sincronizados da Frota</strong><br/>Placa: ${placa || '—'}<br/>RENAVAM: ${renavam || '—'}<br/>Chassi: ${chassi || '—'}<br/>Ano Fabricação/Modelo: ${anoFabricacao || '—'} / ${anoModelo || '—'}<br/>Patrimônio: ${patrimonio || '—'}<br/>Exercício: ${exercicio}
+    </div>
+    ${observacoes ? `<div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px"><strong>Observações</strong><p style="white-space:pre-wrap">${observacoes}</p></div>` : ''}
+    <div style="display:flex;justify-content:space-between;margin-top:60px"><div style="text-align:center;width:45%"><hr/>Assinatura — Entrega</div><div style="text-align:center;width:45%"><hr/>Assinatura — Recebimento</div></div>
+  </div>`;
+
   const handlePrint = async () => {
-    if (!placa && !patrimonio && !descricaoEquipamento) {
-      toast.error('Informe ao menos placa, patrimônio ou descrição');
-      return;
-    }
-
+    if (!validateProtocol()) return;
     await saveProtocol({ silent: true });
-
-    let fullHtml = buildProtocoloHtml(1, 2) + buildProtocoloHtml(2, 2);
-
+    let content = buildProtocoloHtml(1) + buildProtocoloHtml(2);
     if (pdfUrl) {
       try {
         const { pageUrls } = await renderPdfPagesToDataUrls(pdfUrl, 1.6);
-        fullHtml += pageUrls.map((pageUrl, index) => `
-          <div class="pdf-print-page" style="${index === 0 ? 'page-break-before:always;' : ''}">
-            <img src="${pageUrl}" alt="Documento do veículo página ${index + 1}" style="display:block;width:100%;height:auto" />
-          </div>
-        `).join('');
+        content += pageUrls.map((url, index) => `<div style="${index === 0 ? 'page-break-before:always;' : ''}"><img src="${url}" style="display:block;width:100%;height:auto"/></div>`).join('');
       } catch {
-        toast.error('Não foi possível incorporar o PDF na impressão');
+        toast.warning('O protocolo será impresso, mas o PDF vinculado da Frota não pôde ser incorporado.');
       }
     }
-
-    const html = `<!DOCTYPE html><html><head><title>${titulo}</title>
-    <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif}.pdf-print-page{padding:0;margin:0}.pdf-print-page img{display:block;width:100%;height:auto}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
-    ${fullHtml}
-    </body></html>`;
-    printDocumentInPage(html);
+    printDocumentInPage(`<!DOCTYPE html><html><head><title>Protocolo</title><style>@page{size:A4;margin:0}body{margin:0}</style></head><body>${content}</body></html>`);
   };
 
-  const handleClear = () => {
-    setEmpresaDestinataria(''); setLocalCanteiro(''); setResponsavelRecebimento('');
-    setPlaca(''); setRenavam(''); setChassi(''); setAnoFabricacao(''); setAnoModelo('');
-    setPatrimonio(''); setDescricaoEquipamento(''); setObservacoes('');
-    setTextoColado(''); setPdfFile(null); setPdfUrl('');
-    setMatchedAtivo(null); setShowManualSelect(false);
-    lastMatchedIdRef.current = null;
-    setExercicio(new Date().getFullYear().toString());
-    setDataEmissao(new Date().toISOString().slice(0, 10));
+  const clear = () => {
+    setEmpresaDestinataria(''); setLocalCanteiro(''); setResponsavelRecebimento(''); setPlaca('');
+    setRenavam(''); setChassi(''); setAnoFabricacao(''); setAnoModelo(''); setPatrimonio('');
+    setDescricaoEquipamento(''); setObservacoes(''); setTextoColado(''); setMatchedAtivo(null); setPdfUrl('');
+    setLastSavedProtocolId(null); setDataEmissao(new Date().toISOString().slice(0, 10));
   };
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="card-premium p-6 gradient-primary text-primary-foreground">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-primary-foreground/20 rounded-2xl flex items-center justify-center">
-            <FileCheck className="w-7 h-7" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold font-display">Protocolo / Liberação de Documento</h1>
-            <p className="text-primary-foreground/70 text-sm">Empresa padrão: TOPAC MATRIZ — Localização automática de documentos cadastrados</p>
-          </div>
+      <div className="card-premium gradient-primary p-6 text-primary-foreground">
+        <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-foreground/20"><FileCheck className="h-7 w-7" /></div><div><h1 className="text-2xl font-bold font-display">Protocolo / Liberação de Documento</h1><p className="text-sm text-primary-foreground/70">Dados do veículo sincronizados exclusivamente pela Frota</p></div></div>
+      </div>
+
+      <div className="card-premium space-y-4 p-5">
+        <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-primary" /> Leitura Inteligente de Texto</h2><Button variant="ghost" size="sm" onClick={clear}>Limpar campos</Button></div>
+        <textarea value={textoColado} onChange={(event) => setTextoColado(event.target.value)} placeholder="Cole a mensagem com empresa, local, responsável e placa. Ao identificar a placa, o sistema localizará o cadastro da Frota." className="min-h-32 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm" />
+        <Button variant="outline" onClick={() => void handleParseText()} disabled={parsing}>{parsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}{parsing ? 'Lendo texto...' : 'Ler texto e preencher'}</Button>
+      </div>
+
+      <div className="card-premium space-y-4 p-5">
+        <h2 className="text-sm font-bold">Dados da Liberação</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Field label="Empresa Destinatária" value={empresaDestinataria} onChange={setEmpresaDestinataria} />
+          <Field label="Local / Canteiro" value={localCanteiro} onChange={setLocalCanteiro} />
+          <Field label="Responsável pelo Recebimento" value={responsavelRecebimento} onChange={setResponsavelRecebimento} />
+          <Field label="Data de Emissão" value={dataEmissao} type="date" onChange={setDataEmissao} />
+          <div className="lg:col-span-2"><Field label="Descrição do Ativo / Equipamento" value={descricaoEquipamento} onChange={setDescricaoEquipamento} /></div>
         </div>
       </div>
 
-      {/* Leitura IA */}
-      <div className="card-premium p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" /> Leitura Inteligente de Texto
-          </h2>
-          <Button variant="ghost" size="sm" onClick={handleClear} className="text-xs text-muted-foreground">
-            Limpar Campos
-          </Button>
+      <div className="card-premium space-y-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-bold">Identificação do Ativo</h2>{matchedAtivo && <span className="flex items-center gap-2 rounded-full bg-success/10 px-3 py-1 text-xs text-success"><LinkIcon className="h-3 w-3" /> Sincronizado com Frota: {matchedAtivo.descricao || matchedAtivo.placa}</span>}</div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Field label="Placa" value={placa} onChange={(value) => setPlaca(normalizeVehiclePlate(value))} />
+          <ReadOnlyField label="RENAVAM" value={renavam} />
+          <ReadOnlyField label="Chassi" value={chassi} />
+          <ReadOnlyField label="Ano Fabricação" value={anoFabricacao} />
+          <ReadOnlyField label="Ano Modelo" value={anoModelo} />
+          <ReadOnlyField label="Patrimônio da Frota" value={patrimonio} />
+          <Field label="Exercício" value={exercicio} onChange={setExercicio} />
         </div>
-        <textarea
-          value={textoColado}
-          onChange={e => setTextoColado(e.target.value)}
-          placeholder="Cole aqui o texto de WhatsApp, e-mail ou mensagem com os dados do documento. A IA vai sugerir o preenchimento — você pode revisar e editar tudo antes de salvar ou imprimir."
-          className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[140px] resize-y"
-        />
-        <div className="flex items-center gap-2">
-          <Button onClick={handleParseText} disabled={parsing} variant="outline">
-            {parsing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            {parsing ? 'Lendo texto...' : 'Ler texto e preencher'}
-          </Button>
-          <span className="text-xs text-muted-foreground">Os campos serão preenchidos automaticamente. Revise antes de imprimir.</span>
-        </div>
+        {!matchedAtivo && normalizeVehiclePlate(placa).length === 7 && <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"><span className="font-medium text-warning">Placa não localizada na Frota.</span><Button variant="link" size="sm" onClick={() => setShowManualSelect(true)}>Conferir cadastros</Button></div>}
+        {showManualSelect && <div className="space-y-2 rounded-lg bg-muted/30 p-4"><div className="flex items-center gap-2"><Search className="h-4 w-4" /><Input value={ativoSearch} onChange={(event) => setAtivoSearch(event.target.value)} placeholder="Buscar por placa, patrimônio ou descrição" /><Button variant="ghost" onClick={() => setShowManualSelect(false)}>Fechar</Button></div><div className="max-h-48 overflow-y-auto rounded-lg border">{filteredAtivos.map((vehicle) => <button key={vehicle.id} type="button" onClick={() => { applyVehicle(vehicle); setShowManualSelect(false); }} className="flex w-full justify-between border-b px-3 py-2 text-left text-sm hover:bg-muted/50"><span>{vehicle.descricao || 'Veículo'}</span><span className="text-muted-foreground">{vehicle.placa || vehicle.patrimonio || '—'}</span></button>)}</div></div>}
       </div>
 
-      {/* Dados da liberação */}
-      <div className="card-premium p-5 space-y-4">
-        <h2 className="text-sm font-bold text-foreground">Dados da Liberação</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div><label className="text-xs text-muted-foreground block mb-1">Empresa Destinatária</label>
-            <Input value={empresaDestinataria} onChange={e => setEmpresaDestinataria(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Local / Canteiro</label>
-            <Input value={localCanteiro} onChange={e => setLocalCanteiro(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Responsável pelo Recebimento</label>
-            <Input value={responsavelRecebimento} onChange={e => setResponsavelRecebimento(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Data de Emissão</label>
-            <Input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} /></div>
-          <div className="lg:col-span-2"><label className="text-xs text-muted-foreground block mb-1">Descrição do Ativo / Equipamento</label>
-            <Input value={descricaoEquipamento} onChange={e => setDescricaoEquipamento(e.target.value)} placeholder="Ex: Veículo, Compressor, Equipamento..." /></div>
+      <div className="card-premium space-y-4 p-5">
+        <div><label className="mb-1 block text-xs text-muted-foreground">Observações</label><textarea value={observacoes} onChange={(event) => setObservacoes(event.target.value)} className="min-h-20 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm" /></div>
+        <div className="rounded-lg border p-3">
+          <p className="text-xs font-semibold">Documento da Frota</p>
+          {pdfUrl ? <div className="mt-2 space-y-2"><p className="flex items-center gap-2 text-xs text-success"><LinkIcon className="h-3 w-3" /> PDF vinculado automaticamente. O Protocolo não realiza upload próprio.</p><PdfDocumentViewer source={{ url: pdfUrl, tipo: 'protocolo' }} title="Documento cadastrado na Frota" /></div> : <p className="mt-1 text-xs text-muted-foreground">Nenhum PDF está vinculado ao cadastro correspondente na Frota.</p>}
         </div>
-      </div>
-
-      {/* Identificação do ativo */}
-      <div className="card-premium p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-foreground">Identificação do Ativo</h2>
-          {matchedAtivo && (
-            <div className="flex items-center gap-2 text-xs text-success bg-success/10 px-3 py-1 rounded-full">
-              <LinkIcon className="w-3 h-3" />
-              Documento vinculado: {matchedAtivo.descricao || matchedAtivo.placa}
-            </div>
-          )}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div><label className="text-xs text-muted-foreground block mb-1">Placa</label>
-            <Input value={placa} onChange={e => setPlaca(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Renavam</label>
-            <Input value={renavam} onChange={e => setRenavam(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Chassi</label>
-            <Input value={chassi} onChange={e => setChassi(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Ano Fabricação</label>
-            <Input value={anoFabricacao} onChange={e => setAnoFabricacao(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Ano Modelo</label>
-            <Input value={anoModelo} onChange={e => setAnoModelo(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Patrimônio</label>
-            <Input value={patrimonio} onChange={e => setPatrimonio(e.target.value)} /></div>
-          <div><label className="text-xs text-muted-foreground block mb-1">Exercício</label>
-            <Input value={exercicio} onChange={e => setExercicio(e.target.value)} /></div>
-        </div>
-
-        {!matchedAtivo && (placa || patrimonio || renavam || chassi) && (
-          <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 text-sm">
-            <span className="text-warning font-medium">Nenhum documento correspondente encontrado automaticamente.</span>
-            <Button variant="link" size="sm" className="text-primary ml-2" onClick={() => setShowManualSelect(true)}>
-              Selecionar manualmente
-            </Button>
-          </div>
-        )}
-
-        {showManualSelect && (
-          <div className="bg-muted/30 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Buscar documento por descrição, placa ou patrimônio..."
-                value={ativoSearch} onChange={e => setAtivoSearch(e.target.value)} className="flex-1" />
-              <Button variant="ghost" size="sm" onClick={() => setShowManualSelect(false)}>Fechar</Button>
-            </div>
-            {filteredAtivos.length > 0 && (
-              <div className="border rounded-lg max-h-48 overflow-y-auto">
-                {filteredAtivos.map(a => (
-                  <button key={a.id} onClick={() => handleSelectAtivo(a)}
-                    className="w-full text-left px-3 py-2 hover:bg-muted/50 text-sm flex justify-between items-center border-b last:border-0">
-                    <span className="font-medium">{a.descricao}</span>
-                    <span className="text-xs text-muted-foreground">{a.placa || a.patrimonio || '—'}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Observações + PDF + Imprimir */}
-      <div className="card-premium p-5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Observações</label>
-            <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[80px] resize-y" />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">PDF do Documento</label>
-            {matchedAtivo?.arquivo_url && pdfUrl === matchedAtivo.arquivo_url ? (
-              <div className="text-xs text-success bg-success/10 rounded-lg p-3 flex items-center gap-2">
-                <LinkIcon className="w-3 h-3" />
-                PDF carregado automaticamente de Doc. Veículos
-                <Button variant="ghost" size="sm" className="text-xs ml-auto"
-                  onClick={() => { setPdfUrl(''); setPdfFile(null); }}>Trocar</Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-muted/50 text-sm">
-                  <Upload className="w-4 h-4" />
-                  {pdfFile ? pdfFile.name : 'Selecionar PDF'}
-                  <input type="file" accept=".pdf" className="hidden"
-                    onChange={e => e.target.files?.[0] && handlePdfUpload(e.target.files[0])} />
-                </label>
-              </div>
-            )}
-            {pdfUrl && (
-              <div className="space-y-2 mt-1">
-                <p className="text-xs text-success">✓ PDF vinculado — será impresso como via adicional</p>
-                {loadingPdf && <p className="text-xs text-muted-foreground">Carregando PDF...</p>}
-                <PdfDocumentViewer source={{ url: pdfUrl, tipo: 'protocolo' }} title="PDF do documento" />
-              </div>
-            )}
-            {!pdfUrl && <p className="text-xs text-muted-foreground mt-1">Sem PDF: imprime apenas 2 vias do protocolo</p>}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Button onClick={() => saveProtocol()} disabled={savingProtocol} variant="outline" size="lg">
-            {savingProtocol ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileCheck className="w-4 h-4 mr-2" />}
-            Salvar no sistema
-          </Button>
-          <Button onClick={handlePrint} className="gradient-accent text-accent-foreground font-semibold" size="lg">
-            <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir - {pdfUrl ? '2 vias + Documento Anexo' : '2 vias'}
-          </Button>
-          {lastSavedProtocolId && <span className="self-center text-xs text-success">Arquivado: {lastSavedProtocolId}</span>}
-        </div>
+        <div className="flex flex-wrap gap-3"><Button variant="outline" size="lg" onClick={() => void saveProtocol()} disabled={savingProtocol}>{savingProtocol ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}{savingProtocol ? 'Salvando...' : 'Salvar no sistema'}</Button><Button size="lg" onClick={() => void handlePrint()} className="gradient-accent text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Gerar e imprimir - {pdfUrl ? '2 vias + documento da Frota' : '2 vias'}</Button>{lastSavedProtocolId && <span className="self-center text-xs text-success">Arquivado: {lastSavedProtocolId}</span>}</div>
       </div>
     </div>
   );
 };
 
-export default ProtocoloPage;
+const Field = ({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) => <div><label className="mb-1 block text-xs text-muted-foreground">{label}</label><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
+const ReadOnlyField = ({ label, value }: { label: string; value: string }) => <div><label className="mb-1 block text-xs text-muted-foreground">{label}</label><Input value={value} readOnly className="bg-muted/40" /></div>;
 
+export default ProtocoloPage;
