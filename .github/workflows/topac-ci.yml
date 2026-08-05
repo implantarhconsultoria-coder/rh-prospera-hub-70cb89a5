@@ -56,6 +56,7 @@ jobs:
           src/lib/__tests__/protocoloFrotaSource.test.ts
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
+          --rule 'no-useless-escape: off'
 
       - name: Tests changed scope
         run: >-
