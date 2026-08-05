@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { MecanicoAppProvider, useMecanicoApp } from "./MecanicoAppContext";
+import MechanicLocationTracker from "./MechanicLocationTracker";
 import { LogOut, ArrowLeft, Wrench, Home, ClipboardList, History, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -67,6 +68,7 @@ const MecanicoShell = () => (
   <div className="min-h-screen bg-[#030a14] text-white">
     <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_15%,rgba(6,182,212,0.12),transparent_28%),radial-gradient(circle_at_85%_18%,rgba(217,70,239,0.12),transparent_26%),radial-gradient(circle_at_50%_95%,rgba(99,102,241,0.12),transparent_30%)]" />
     <Header />
+    <MechanicLocationTracker />
     <main className="relative mx-auto w-full max-w-md px-4 pb-28 pt-5">
       <Outlet />
     </main>
