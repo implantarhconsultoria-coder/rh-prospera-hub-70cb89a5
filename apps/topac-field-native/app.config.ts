@@ -7,7 +7,6 @@ const config: ExpoConfig = {
   orientation: "portrait",
   scheme: "topacfield",
   userInterfaceStyle: "automatic",
-  newArchEnabled: true,
   ios: {
     bundleIdentifier: "br.com.implantarh.topacfield",
     supportsTablet: false,
