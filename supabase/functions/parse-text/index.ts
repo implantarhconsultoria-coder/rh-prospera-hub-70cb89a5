@@ -13,7 +13,12 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 const clean = (value: unknown) => String(value || "").replace(/\s+/g, " ").trim();
 const digits = (value: unknown) => String(value || "").replace(/\D/g, "");
-const flatten = (value: unknown) => String(value || "").replace(/\r/g, "").replace(/\n+/g, " | ").replace(/\s+/g, " ").trim();
+const sanitize = (value: unknown) => String(value || "")
+  .replace(/\r/g, "")
+  .replace(/[*_`]/g, "")
+  .replace(/^[\s•●▪◦►▶➤➜✓✔-]+/gm, "")
+  .trim();
+const flatten = (value: unknown) => sanitize(value).replace(/\n+/g, " | ").replace(/\s+/g, " ").trim();
 
 const first = (text: string, patterns: RegExp[]) => {
   for (const pattern of patterns) {
@@ -22,6 +27,11 @@ const first = (text: string, patterns: RegExp[]) => {
   }
   return "";
 };
+
+const trimAtNextLabel = (value: string) => clean(value)
+  .replace(/\s+(?:cpf|rg|identidade|cargo|fun[cç][aã]o|sal[aá]rio|remunera[cç][aã]o|admiss[aã]o|telefone|fone|celular|whatsapp|e-?mail|endere[cç]o|banco|ag[eê]ncia|conta|pix|chave\s+pix|titular)\s*[:=\-].*$/i, "")
+  .replace(/[|;,]+$/g, "")
+  .trim();
 
 const normalizePlate = (value: unknown) => String(value || "")
   .toUpperCase().replace(/[^A-Z0-9]/g, "")
@@ -36,6 +46,27 @@ const normalizeDate = (value: string) => {
   const match = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
   if (match) return `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
   return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
+};
+
+const normalizeCpf = (value: unknown) => {
+  const number = digits(value);
+  return number.length === 11
+    ? `${number.slice(0, 3)}.${number.slice(3, 6)}.${number.slice(6, 9)}-${number.slice(9)}`
+    : clean(value);
+};
+
+const normalizeMoney = (value: unknown) => {
+  const raw = clean(value).replace(/R\$/gi, "").replace(/\s/g, "");
+  if (!raw) return "";
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const amount = Number(normalized.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(amount) ? String(amount) : "";
+};
+
+const splitAccount = (value: unknown) => {
+  const raw = clean(value).replace(/\s/g, "");
+  const match = raw.match(/^(.+?)[-/]([0-9A-Za-z])$/);
+  return { conta: clean(match?.[1] || raw), digito: clean(match?.[2] || "") };
 };
 
 const parseVehicle = (raw: string) => {
@@ -57,22 +88,48 @@ const parseVehicle = (raw: string) => {
   };
 };
 
+const parseBanking = (raw: string) => {
+  const text = flatten(raw);
+  const bank = trimAtNextLabel(first(text, [
+    /\bbanco\s*[:=\-]?\s*(.+?)(?=\s+(?:ag[eê]ncia|conta|pix|chave\s+pix|cpf|titular)\s*[:=\-]|\s*[|;]|$)/i,
+    /\binstitui[cç][aã]o\s*[:=\-]?\s*(.+?)(?=\s+(?:ag[eê]ncia|conta|pix|cpf|titular)\s*[:=\-]|\s*[|;]|$)/i,
+  ]));
+  const accountRaw = trimAtNextLabel(first(text, [
+    /(?:n[uú]mero\s+da\s+conta|conta\s+(?:corrente|poupan[cç]a|sal[aá]rio|pagamento)|c\/c)\s*[:=\-]?\s*([0-9A-Za-z.]+(?:\s*[-/]\s*[0-9A-Za-z])?)/i,
+    /\bconta\s*[:=\-]\s*([0-9A-Za-z.]+(?:\s*[-/]\s*[0-9A-Za-z])?)/i,
+  ]));
+  const account = splitAccount(accountRaw);
+  const pix = trimAtNextLabel(first(text, [
+    /(?:chave\s+pix|pix)\s*[:=\-]?\s*(.+?)(?=\s+(?:tipo\s+(?:da\s+chave\s+)?pix|banco|ag[eê]ncia|conta|cpf|titular)\s*[:=\-]|\s*[|;]|$)/i,
+  ]));
+  return {
+    banco: bank,
+    bancoCodigo: first(text, [/(?:c[oó]digo\s+do\s+banco|c[oó]d\.?\s*banco|banco\s+c[oó]digo)\s*[:=\-]?\s*(\d{3})/i]),
+    agencia: first(text, [/(?:ag[eê]ncia|ag\.)\s*[:=\-]?\s*([0-9A-Za-z.-]{1,15})/i]),
+    conta: account.conta,
+    digito: account.digito || first(text, [/(?:d[ií]gito|d[ií]g\.?|dv)\s*[:=\-]?\s*([0-9A-Za-z])/i]),
+    tipoConta: first(text, [/(?:tipo\s+de\s+conta|conta)\s*[:=\-]?\s*(corrente|poupan[cç]a|sal[aá]rio|pagamento)/i]),
+    titular: trimAtNextLabel(first(text, [/(?:nome\s+do\s+titular|titular|favorecido|benefici[aá]rio)\s*[:=\-]?\s*(.+?)(?=\s+(?:cpf|pix|ag[eê]ncia|conta)\s*[:=\-]|\s*[|;]|$)/i])),
+    cpfTitular: normalizeCpf(first(text, [/(?:cpf(?:\s+do\s+titular)?)\s*[:=\-]?\s*(\d{3}\.?\d{3}\.?\d{3}[-\s]?\d{2}|\d{11})/i])),
+    chavePix: pix,
+    tipoChavePix: first(text, [/(?:tipo\s+da\s+chave\s+pix|tipo\s+pix)\s*[:=\-]?\s*(cpf|cnpj|telefone|celular|e-?mail|aleat[oó]ria|chave\s+aleat[oó]ria)/i]),
+  };
+};
+
 const parseEmployee = (raw: string) => {
   const text = flatten(raw);
   return {
-    nome: first(text, [/(?:NOME\s+COMPLETO|NOME\s+DO\s+(?:FUNCION[AÁ]RIO|COLABORADOR)|FUNCION[AÁ]RIO|COLABORADOR|NOME)\s*[:\-]?\s*([^|]{3,120})/i])
-      .replace(/\s+(?:CPF|RG|CARGO|FUN[CÇ][AÃ]O|SAL[AÁ]RIO|ADMISS[AÃ]O)\b.*$/i, "").trim(),
-    cpf: first(text, [/\bCPF\s*[:\-]?\s*(\d{3}\.?\d{3}\.?\d{3}[-\s]?\d{2}|\d{11})\b/i]),
-    rg: first(text, [/\b(?:RG|IDENTIDADE)\s*[:\-]?\s*([0-9A-Z.\-\/]{4,25})/i]),
-    cargo: first(text, [/(?:CARGO\s*\/\s*FUN[CÇ][AÃ]O|CARGO|FUN[CÇ][AÃ]O)\s*[:\-]?\s*([^|]{2,100})/i])
-      .replace(/\s+(?:SAL[AÁ]RIO|ADMISS[AÃ]O|TELEFONE|CELULAR)\b.*$/i, "").trim(),
-    salario_base: first(text, [/(?:SAL[AÁ]RIO\s+BASE|SAL[AÁ]RIO|REMUNERA[CÇ][AÃ]O)\s*[:\-]?\s*(?:R\$\s*)?([0-9.,]+)/i]),
-    data_admissao: normalizeDate(first(text, [/(?:DATA\s+DE\s+ADMISS[AÃ]O|ADMISS[AÃ]O|ADMITIDO\s+EM)\s*[:\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i])),
-    telefone: first(text, [/(?:TELEFONE|FONE)\s*[:\-]?\s*(\+?\d[\d\s()\-.]{8,20})/i]),
-    celular: first(text, [/(?:CELULAR|WHATSAPP|WHATS)\s*[:\-]?\s*(\+?\d[\d\s()\-.]{8,20})/i]),
-    email: first(text, [/(?:E-?MAIL)\s*[:\-]?\s*([^\s|;,]+@[^\s|;,]+\.[A-Z]{2,})/i]) || text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0] || "",
-    endereco: first(text, [/(?:ENDERE[CÇ]O\s+COMPLETO|ENDERE[CÇ]O|RESID[EÊ]NCIA)\s*[:\-]?\s*([^|]{5,180})/i])
-      .replace(/\s+(?:BANCO|AG[EÊ]NCIA|CONTA|PIX)\b.*$/i, "").trim(),
+    nome: trimAtNextLabel(first(text, [/(?:NOME\s+COMPLETO|NOME\s+DO\s+(?:FUNCION[AÁ]RIO|COLABORADOR)|FUNCION[AÁ]RIO|COLABORADOR|NOME)\s*[:=\-]?\s*(.+?)(?=\s+(?:CPF|RG|CARGO|FUN[CÇ][AÃ]O|SAL[AÁ]RIO|ADMISS[AÃ]O|TELEFONE|CELULAR|E-?MAIL|ENDERE[CÇ]O|BANCO)\s*[:=\-]|\s*[|;]|$)/i])),
+    cpf: normalizeCpf(first(text, [/\bCPF\s*[:=\-]?\s*(\d{3}\.?\d{3}\.?\d{3}[-\s]?\d{2}|\d{11})\b/i])),
+    rg: first(text, [/\b(?:RG|IDENTIDADE)\s*[:=\-]?\s*([0-9A-Z.\-\/]{4,25})/i]),
+    cargo: trimAtNextLabel(first(text, [/(?:CARGO\s*\/\s*FUN[CÇ][AÃ]O|CARGO|FUN[CÇ][AÃ]O)\s*[:=\-]?\s*(.+?)(?=\s+(?:SAL[AÁ]RIO|ADMISS[AÃ]O|TELEFONE|CELULAR|E-?MAIL|ENDERE[CÇ]O|BANCO)\s*[:=\-]|\s*[|;]|$)/i])),
+    salario_base: normalizeMoney(first(text, [/(?:SAL[AÁ]RIO\s+BASE|SAL[AÁ]RIO|REMUNERA[CÇ][AÃ]O)\s*[:=\-]?\s*(?:R\$\s*)?([0-9.,]+)/i])),
+    data_admissao: normalizeDate(first(text, [/(?:DATA\s+DE\s+ADMISS[AÃ]O|ADMISS[AÃ]O|ADMITIDO\s+EM)\s*[:=\-]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}|\d{4}-\d{2}-\d{2})/i])),
+    telefone: first(text, [/(?:TELEFONE|FONE)\s*[:=\-]?\s*(\+?\d[\d\s()\-.]{8,20})/i]),
+    celular: first(text, [/(?:CELULAR|WHATSAPP|WHATS)\s*[:=\-]?\s*(\+?\d[\d\s()\-.]{8,20})/i]),
+    email: first(text, [/(?:E-?MAIL)\s*[:=\-]?\s*([^\s|;,]+@[^\s|;,]+\.[A-Z]{2,})/i]) || text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0] || "",
+    endereco: trimAtNextLabel(first(text, [/(?:ENDERE[CÇ]O\s+COMPLETO|ENDERE[CÇ]O|RESID[EÊ]NCIA)\s*[:=\-]?\s*(.+?)(?=\s+(?:BANCO|AG[EÊ]NCIA|CONTA|PIX)\s*[:=\-]|\s*[|;]|$)/i])),
+    banking: parseBanking(raw),
   };
 };
 
@@ -88,11 +145,20 @@ const parseProtocol = (raw: string) => {
   };
 };
 
+const bankingSchema = {
+  type: "object",
+  properties: {
+    banco: { type: "string" }, bancoCodigo: { type: "string" }, agencia: { type: "string" },
+    conta: { type: "string" }, digito: { type: "string" }, tipoConta: { type: "string" },
+    titular: { type: "string" }, cpfTitular: { type: "string" }, chavePix: { type: "string" }, tipoChavePix: { type: "string" },
+  },
+};
+
 const schemaFor = (type: string) => {
   if (type === "funcionario") return {
     nome: { type: "string" }, cpf: { type: "string" }, rg: { type: "string" }, cargo: { type: "string" },
     salario_base: { type: "string" }, data_admissao: { type: "string" }, telefone: { type: "string" },
-    celular: { type: "string" }, email: { type: "string" }, endereco: { type: "string" },
+    celular: { type: "string" }, email: { type: "string" }, endereco: { type: "string" }, banking: bankingSchema,
   };
   if (type === "protocolo") return {
     empresa_destinataria: { type: "string" }, local_canteiro: { type: "string" }, responsavel_recebimento: { type: "string" },
@@ -109,22 +175,25 @@ const schemaFor = (type: string) => {
 
 const aiExtract = async (type: string, text: string, images: string[]) => {
   const key = Deno.env.get("LOVABLE_API_KEY");
-  if (!key || !images.length) return null;
+  if (!key || (!text.trim() && !images.length)) return null;
+  const content = images.length
+    ? [
+      { type: "text", text: text || "Leia o documento." },
+      ...images.slice(0, 3).map((image) => ({ type: "image_url", image_url: { url: image } })),
+    ]
+    : text;
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [
-        { role: "system", content: "Extraia somente dados visíveis. Não invente valores. Retorne strings vazias quando não localizar." },
-        { role: "user", content: [
-          { type: "text", text: text || "Leia o documento." },
-          ...images.slice(0, 3).map((image) => ({ type: "image_url", image_url: { url: image } })),
-        ] },
+        { role: "system", content: "Extraia somente dados explicitamente visíveis. Respeite cada rótulo e não misture campos. Não invente valores. Retorne string vazia quando não localizar. Para funcionário, separe rigorosamente identidade, contato e dados bancários." },
+        { role: "user", content },
       ],
       tools: [{ type: "function", function: {
         name: "extract_fields",
-        description: "Extrair campos estruturados do documento",
+        description: "Extrair campos estruturados sem inferir informações ausentes",
         parameters: { type: "object", properties: schemaFor(type), required: [] },
       } }],
       tool_choice: { type: "function", function: { name: "extract_fields" } },
@@ -137,11 +206,16 @@ const aiExtract = async (type: string, text: string, images: string[]) => {
   try { return JSON.parse(args); } catch { return null; }
 };
 
-const mergeNonEmpty = (base: Record<string, unknown>, extra: Record<string, unknown> | null) => {
+const mergeFillMissing = (base: Record<string, unknown>, extra: Record<string, unknown> | null): Record<string, unknown> => {
   if (!extra) return base;
-  const output = { ...base };
+  const output: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(extra)) {
-    if (typeof value === "string" && value.trim()) output[key] = value.trim();
+    const current = output[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      output[key] = mergeFillMissing((current && typeof current === "object" ? current : {}) as Record<string, unknown>, value as Record<string, unknown>);
+    } else if ((!current || !String(current).trim()) && typeof value === "string" && value.trim()) {
+      output[key] = value.trim();
+    }
   }
   return output;
 };
@@ -165,21 +239,36 @@ serve(async (req) => {
     else if (type === "protocolo") deterministic = parseProtocol(text);
     else return json({ error: "unsupported_type" }, 400);
 
+    const nonEmptyCount = Object.values(deterministic).filter((value) => typeof value === "string" && value.trim()).length;
     const vehicleMissing = type === "documento_veiculo" && (!deterministic.renavam || !deterministic.chassi);
-    const sparse = Object.values(deterministic).filter((value) => typeof value === "string" && value.trim()).length < 3;
-    const ai = vehicleMissing || sparse ? await aiExtract(type, text, images) : null;
-    const data = mergeNonEmpty(deterministic, ai);
+    const employeeBanking = (deterministic.banking || {}) as Record<string, unknown>;
+    const employeeHasBankSignal = type === "funcionario" && /\b(?:banco|ag[eê]ncia|conta|pix)\b/i.test(text);
+    const employeeMissing = type === "funcionario" && (
+      (!deterministic.nome && !deterministic.cpf) ||
+      (employeeHasBankSignal && (!employeeBanking.banco || !employeeBanking.agencia || !employeeBanking.conta))
+    );
+    const sparse = nonEmptyCount < 3;
+    const ai = vehicleMissing || employeeMissing || sparse ? await aiExtract(type, text, images) : null;
+    const data = mergeFillMissing(deterministic, ai);
 
     if (type === "documento_veiculo") {
       data.placa = normalizePlate(data.placa);
       data.renavam = normalizeRenavam(data.renavam);
       data.chassi = normalizeChassi(data.chassi);
     }
+    if (type === "funcionario") {
+      data.cpf = normalizeCpf(data.cpf);
+      const banking = (data.banking || {}) as Record<string, unknown>;
+      banking.cpfTitular = normalizeCpf(banking.cpfTitular);
+      data.banking = banking;
+    }
 
     const warnings = type === "documento_veiculo"
       ? [!data.renavam ? "RENAVAM não identificado." : "", !data.chassi ? "Chassi não identificado." : ""].filter(Boolean)
-      : [];
-    return json({ data, warnings, source: ai ? "deterministic+vision" : "deterministic" });
+      : type === "funcionario"
+        ? [!data.nome && !data.cpf ? "Identidade do funcionário não confirmada." : ""].filter(Boolean)
+        : [];
+    return json({ data, warnings, source: ai ? "deterministic+ai" : "deterministic" });
   } catch (error) {
     console.error("parse-text error:", error);
     return json({ error: "parse_failed", message: error instanceof Error ? error.message : String(error) }, 500);
