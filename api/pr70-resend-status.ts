@@ -8,7 +8,7 @@ const sendJson = (res: any, status: number, body: unknown) => {
 
 export default async function handler(req: any, res?: any) {
   if ((req?.method || 'GET') !== 'GET') return sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
-  const url = new URL(req?.url || 'https://local.invalid');
+  const url = new URL(String(req?.url || '/'), 'https://local.invalid');
   const id = String(req?.query?.id || url.searchParams.get('id') || '').trim();
   if (!id) return sendJson(res, 400, { ok: false, error: 'missing_id' });
   const apiKey = String(process.env.RESEND_API_KEY || '').trim();
