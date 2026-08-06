@@ -1,0 +1,41 @@
+name: PR70 Final Lifecycle Smoke
+
+on:
+  push:
+    branches: [test/pr70-final-lifecycle-smoke-20260806]
+
+permissions:
+  contents: read
+
+jobs:
+  lifecycle-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_PR_HEAD: 6739eca75a5e8bb3c1a0d20c57f52c2eada62b58
+      PREVIEW_ORIGIN: https://rh-prospera-hub-70cb89a5-69t420szc.vercel.app
+      PREVIEW_SHARE_URL: https://rh-prospera-hub-70cb89a5-69t420szc.vercel.app/?_vercel_share=Agic1CA2LqSXEajmCsCCtl69D4RryDYD
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm exact PR parent
+        run: |
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PR_HEAD"
+      - name: Establish protected preview session
+        run: |
+          curl -sS -L -c vercel.cookies -b vercel.cookies "$PREVIEW_SHARE_URL" -o preview-root.html
+          test -s vercel.cookies
+      - name: Execute expiry sweeper safely
+        run: |
+          STATUS=$(curl -sS -o cleanup-result.json -w '%{http_code}' \
+            -c vercel.cookies -b vercel.cookies \
+            -H 'User-Agent: vercel-cron/1.0' \
+            "$PREVIEW_ORIGIN/api/cleanup-email-attachments")
+          cat cleanup-result.json
+          test "$STATUS" = 200
+          test "$(jq -r '.ok // false' cleanup-result.json)" = true
+      - name: Upload smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr70-final-lifecycle-smoke-${{ github.run_id }}
+          path: cleanup-result.json
+          retention-days: 2
