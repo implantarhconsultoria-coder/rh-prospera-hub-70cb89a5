@@ -1,0 +1,39 @@
+name: TOPAC Apply KM Patch
+
+on:
+  push:
+    branches:
+      - fix/topac-relatorio-km-corporativo-20260806
+    paths:
+      - ".github/km-patch/**"
+      - ".github/workflows/topac-apply-km-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/topac-relatorio-km-corporativo-20260806
+          fetch-depth: 0
+
+      - name: Apply corporate KM report patch
+        run: |
+          cat .github/km-patch/chunk_a* | base64 -d > /tmp/topac-km.patch
+          git apply --check /tmp/topac-km.patch
+          git apply --whitespace=fix /tmp/topac-km.patch
+
+          rm -rf .github/km-patch
+          rm -f .github/workflows/topac-export-km-source.yml
+          rm -f .github/workflows/topac-apply-km-patch.yml
+          rm -f .github/pull_request_template_km.md
+
+          git config user.name "TOPAC Engineering"
+          git config user.email "engineering@topac.local"
+          git add -A
+          git commit -m "fix: reestruturar relatório corporativo de quilometragem"
+          git push origin HEAD:fix/topac-relatorio-km-corporativo-20260806
