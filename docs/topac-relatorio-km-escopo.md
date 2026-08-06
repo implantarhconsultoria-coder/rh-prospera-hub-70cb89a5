@@ -17,11 +17,11 @@ Escopo executivo implementado:
 
 Validação concluída:
 
-- TOPAC CI #58 aprovado;
+- TOPAC CI #59 aprovado;
 - lint do escopo aprovado;
 - testes do escopo aprovados;
 - build completo aprovado;
-- Validate production build #156 aprovado;
+- Validate production build #157 aprovado;
 - dois Previews Vercel em estado READY;
 - migration `topac_relatorio_quilometragem_corporativo` aplicada no Supabase;
 - função disponível somente a usuários autenticados autorizados;
