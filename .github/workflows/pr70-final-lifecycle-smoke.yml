@@ -3,6 +3,8 @@ name: PR70 Final Lifecycle Smoke
 on:
   push:
     branches: [test/pr70-final-lifecycle-smoke-20260806]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -17,9 +19,13 @@ jobs:
       PREVIEW_SHARE_URL: https://rh-prospera-hub-70cb89a5-69t420szc.vercel.app/?_vercel_share=Agic1CA2LqSXEajmCsCCtl69D4RryDYD
     steps:
       - uses: actions/checkout@v4
-      - name: Confirm exact PR parent
+        with:
+          ref: test/pr70-final-lifecycle-smoke-20260806
+          fetch-depth: 0
+      - name: Confirm no functional drift from PR head
         run: |
-          test "$(git rev-parse HEAD^)" = "$EXPECTED_PR_HEAD"
+          git cat-file -e "$EXPECTED_PR_HEAD^{commit}"
+          test -z "$(git diff --name-only "$EXPECTED_PR_HEAD" HEAD -- . ':(exclude).github/workflows/pr70-final-lifecycle-smoke.yml')"
       - name: Establish protected preview session
         run: |
           curl -sS -L -c vercel.cookies -b vercel.cookies "$PREVIEW_SHARE_URL" -o preview-root.html
