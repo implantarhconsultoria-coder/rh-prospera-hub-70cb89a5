@@ -21,16 +21,16 @@ jobs:
           set -euo pipefail
           {
             echo '=== SCREENSHOT/CANVAS/PRINT TERMS ==='
-            rg -n -i --glob '!node_modules/**' --glob '!dist/**' 'html2canvas|toDataURL|screenshot|screen.?shot|capture|window\.print|print\(|getDisplayMedia|canvas|dom-to-image' src api || true
+            grep -RInE --exclude-dir=node_modules --exclude-dir=dist 'html2canvas|toDataURL|screenshot|screen.?shot|capture|window\.print|print\(|getDisplayMedia|canvas|dom-to-image' src api || true
             echo
             echo '=== EMAIL MODAL / HELPER CALL SITES ==='
-            rg -n --glob '!node_modules/**' 'EmailPdfModal|EmailPdfDraft|sendEmailWithPdfAttachment|downloadEmailWithAttachment|attachmentBlob|attachments:' src || true
+            grep -RInE --exclude-dir=node_modules 'EmailPdfModal|EmailPdfDraft|sendEmailWithPdfAttachment|downloadEmailWithAttachment|attachmentBlob|attachments:' src || true
             echo
             echo '=== OBJECT URL / AUTO DOWNLOAD / WINDOW OPEN ==='
-            rg -n --glob '!node_modules/**' 'URL\.createObjectURL|window\.open|location\.href|link\.click|downloadAttachmentFallback|handleManualSend' src || true
+            grep -RInE --exclude-dir=node_modules 'URL\.createObjectURL|window\.open|location\.href|link\.click|downloadAttachmentFallback|handleManualSend' src || true
             echo
             echo '=== BLOB CREATION NEAR EMAIL DRAFTS ==='
-            rg -n -C 4 --glob '!node_modules/**' 'new Blob|output\(.blob|arraybuffer|pdf\.output|attachmentBlob' src || true
+            grep -RInE -C 4 --exclude-dir=node_modules 'new Blob|output\(.blob|arraybuffer|pdf\.output|attachmentBlob' src || true
           } | tee pr70-investigation-report.txt
       - name: Upload report
         uses: actions/upload-artifact@v4
