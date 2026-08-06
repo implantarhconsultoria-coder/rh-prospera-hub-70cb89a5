@@ -1,9 +1,9 @@
 name: TOPAC Export KM Source
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/topac-relatorio-km-corporativo-20260806
+      - main
     paths:
       - ".github/workflows/topac-export-km-source.yml"
 
