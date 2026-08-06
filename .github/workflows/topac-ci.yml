@@ -51,6 +51,7 @@ jobs:
           src/lib/__tests__/bankingParser.test.ts
           src/lib/__tests__/abastecimentoReports.test.ts
           src/lib/__tests__/emailPolicy.test.ts
+          src/lib/__tests__/emailAttachmentTransport.test.ts
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
@@ -64,6 +65,7 @@ jobs:
           src/lib/__tests__/bankingParser.test.ts
           src/lib/__tests__/abastecimentoReports.test.ts
           src/lib/__tests__/emailPolicy.test.ts
+          src/lib/__tests__/emailAttachmentTransport.test.ts
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
