@@ -15,8 +15,21 @@ Escopo executivo implementado:
 - visualização em tela, PDF A4 paisagem, CSV e preparação de e-mail;
 - indicadores para primeira leitura sem base e para KM inconsistente.
 
+Validação concluída:
+
+- TOPAC CI #58 aprovado;
+- lint do escopo aprovado;
+- testes do escopo aprovados;
+- build completo aprovado;
+- Validate production build #156 aprovado;
+- dois Previews Vercel em estado READY;
+- migration `topac_relatorio_quilometragem_corporativo` aplicada no Supabase;
+- função disponível somente a usuários autenticados autorizados;
+- cinco leituras reais e quatro placas processadas na base atual;
+- zero total de KM negativo retornado.
+
 Governança:
 
 - desenvolvimento isolado na PR #69;
-- nenhum merge ou publicação na `main` antes da validação;
-- migration versionada e sujeita à verificação no Supabase antes do aceite.
+- PR permanece em Draft e sem merge;
+- nenhuma alteração foi integrada à `main`.
