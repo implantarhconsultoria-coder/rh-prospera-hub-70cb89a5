@@ -18,5 +18,6 @@ export default async function handler(req: any, res?: any) {
     headers: { authorization: `Bearer ${apiKey}` },
   });
   const data = await response.json().catch(() => ({}));
+  console.log('PR70_RESEND_DELIVERY_STATUS', JSON.stringify({ id, status: response.status, data }));
   return sendJson(res, response.status, { ok: response.ok, data });
 }
