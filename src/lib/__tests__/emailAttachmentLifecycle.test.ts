@@ -22,6 +22,8 @@ describe('ciclo de vida dos anexos temporários', () => {
 
   it('remove uploads abandonados por cron após 24 horas', () => {
     expect(sweeper).toContain('MAX_AGE_MS = 24 * 60 * 60 * 1000');
+    expect(sweeper).toContain('MAX_FILES_PER_RUN = 5000');
+    expect(sweeper).toContain("userAgent.startsWith('vercel-cron/')");
     expect(sweeper).toContain("storage.remove(batch)");
     expect(vercel).toContain('/api/cleanup-email-attachments');
     expect(vercel).toContain('17 3 * * *');
