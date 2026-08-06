@@ -1,0 +1,215 @@
+name: PR70 Close Review Findings
+
+on:
+  push:
+    branches: [test/pr70-screenshot-investigation-20260806]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-pr70:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR70 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/topac-email-anexos-storage-20260806
+          fetch-depth: 0
+
+      - name: Apply lifecycle and MIME fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          api_path = Path('api/send-email-pdf.ts')
+          api = api_path.read_text(encoding='utf-8')
+          old_cleanup = "\n".join([
+              "const cleanupAttachments = async (supabase: SupabaseServer | null, refs: AttachmentReference[]) => {",
+              "  if (!supabase || !refs.length) return;",
+              "  const groups = new Map<string, string[]>();",
+              "  refs.forEach((ref) => groups.set(ref.storageBucket, [...(groups.get(ref.storageBucket) || []), ref.storagePath]));",
+              "  for (const [bucket, paths] of groups) {",
+              "    try { await supabase.storage.from(bucket).remove(paths); } catch (error) { console.error('Falha ao limpar anexos temporários:', error); }",
+              "  }",
+              "};",
+          ])
+          new_cleanup = "\n".join([
+              "type AttachmentCleanupFailure = { bucket: string; paths: string[]; message: string };",
+              "",
+              "const cleanupAttachments = async (supabase: SupabaseServer | null, refs: AttachmentReference[]) => {",
+              "  if (!supabase || !refs.length) return [] as AttachmentCleanupFailure[];",
+              "  const groups = new Map<string, string[]>();",
+              "  refs.forEach((ref) => groups.set(ref.storageBucket, [...(groups.get(ref.storageBucket) || []), ref.storagePath]));",
+              "  const failures: AttachmentCleanupFailure[] = [];",
+              "  for (const [bucket, paths] of groups) {",
+              "    try {",
+              "      const firstAttempt = await supabase.storage.from(bucket).remove(paths);",
+              "      if (!firstAttempt.error) continue;",
+              "      await new Promise((resolve) => setTimeout(resolve, 250));",
+              "      const retryAttempt = await supabase.storage.from(bucket).remove(paths);",
+              "      if (retryAttempt.error) failures.push({ bucket, paths, message: retryAttempt.error.message });",
+              "    } catch (error: any) {",
+              "      failures.push({ bucket, paths, message: String(error?.message || error) });",
+              "    }",
+              "  }",
+              "  if (failures.length) console.error('Falha persistente ao limpar anexos temporários:', JSON.stringify(failures));",
+              "  return failures;",
+              "};",
+          ])
+          if old_cleanup not in api:
+              raise SystemExit('Função de limpeza original não encontrada')
+          api_path.write_text(api.replace(old_cleanup, new_cleanup, 1), encoding='utf-8')
+
+          cleanup_endpoint = Path('api/cleanup-email-attachments.ts')
+          cleanup_endpoint.write_text("""import { createClient } from '@supabase/supabase-js';
+
+          const BUCKET = 'email-anexos-temporarios';
+          const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+          const PAGE_SIZE = 100;
+          const MAX_FILES_PER_RUN = 5000;
+
+          const env = (name: string) => String(process.env[name] || '').trim();
+          const sendJson = (res: any, status: number, body: unknown) => res.status(status).json(body);
+
+          const isAuthorizedCron = (req: any) => {
+            const secret = env('CRON_SECRET');
+            const authorization = String(req?.headers?.authorization || '');
+            const userAgent = String(req?.headers?.['user-agent'] || '').toLowerCase();
+            return Boolean((secret && authorization === `Bearer ${secret}`) || userAgent.startsWith('vercel-cron/'));
+          };
+
+          export default async function handler(req: any, res: any) {
+            if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
+            if (!isAuthorizedCron(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+
+            const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
+            const serviceRole = env('SUPABASE_SERVICE_ROLE_KEY');
+            if (!url || !serviceRole) return sendJson(res, 501, { ok: false, error: 'storage_not_configured' });
+
+            const supabase = createClient(url, serviceRole, { auth: { persistSession: false, autoRefreshToken: false } });
+            const storage = supabase.storage.from(BUCKET);
+            const cutoff = Date.now() - MAX_AGE_MS;
+            const stalePaths: string[] = [];
+            const scanErrors: string[] = [];
+
+            const walk = async (prefix = '', depth = 0): Promise<void> => {
+              if (depth > 4 || stalePaths.length >= MAX_FILES_PER_RUN) return;
+              let offset = 0;
+              while (stalePaths.length < MAX_FILES_PER_RUN) {
+                const { data, error } = await storage.list(prefix, {
+                  limit: PAGE_SIZE,
+                  offset,
+                  sortBy: { column: 'name', order: 'asc' },
+                });
+                if (error) {
+                  scanErrors.push(`${prefix || '/'}: ${error.message}`);
+                  return;
+                }
+                const entries = data || [];
+                for (const entry of entries as any[]) {
+                  const fullPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+                  const isFolder = !entry.id && !entry.metadata;
+                  if (isFolder) await walk(fullPath, depth + 1);
+                  else {
+                    const timestamp = Date.parse(entry.updated_at || entry.created_at || '');
+                    if (Number.isFinite(timestamp) && timestamp < cutoff) stalePaths.push(fullPath);
+                  }
+                  if (stalePaths.length >= MAX_FILES_PER_RUN) break;
+                }
+                if (entries.length < PAGE_SIZE) break;
+                offset += PAGE_SIZE;
+              }
+            };
+
+            await walk();
+            const removed: string[] = [];
+            const removeErrors: string[] = [];
+            for (let index = 0; index < stalePaths.length; index += 100) {
+              const batch = stalePaths.slice(index, index + 100);
+              const { error } = await storage.remove(batch);
+              if (error) removeErrors.push(error.message);
+              else removed.push(...batch);
+            }
+
+            const ok = scanErrors.length === 0 && removeErrors.length === 0;
+            console.log('EMAIL_ATTACHMENT_EXPIRY_SWEEP', JSON.stringify({ ok, scannedStale: stalePaths.length, removed: removed.length, scanErrors, removeErrors }));
+            return sendJson(res, ok ? 200 : 500, { ok, staleFound: stalePaths.length, removed: removed.length, scanErrors, removeErrors });
+          }
+          """, encoding='utf-8')
+
+          migration = Path('supabase/migrations/20260806131500_email_anexos_temporarios_mime.sql')
+          migration.write_text("""-- Amplia formatos de imagem aceitos pelo fluxo e mantém documentos corporativos permitidos.
+          update storage.buckets
+          set allowed_mime_types = array[
+            'application/pdf',
+            'image/*',
+            'text/csv',
+            'text/plain',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/octet-stream'
+          ]::text[]
+          where id = 'email-anexos-temporarios';
+          """, encoding='utf-8')
+
+          vercel_path = Path('vercel.json')
+          vercel = json.loads(vercel_path.read_text(encoding='utf-8'))
+          vercel['crons'] = [cron for cron in vercel.get('crons', []) if cron.get('path') != '/api/cleanup-email-attachments']
+          vercel['crons'].append({'path': '/api/cleanup-email-attachments', 'schedule': '17 3 * * *'})
+          vercel_path.write_text(json.dumps(vercel, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          test_path = Path('src/lib/__tests__/emailAttachmentLifecycle.test.ts')
+          test_path.write_text("""import { readFileSync } from 'node:fs';
+          import { resolve } from 'node:path';
+          import { describe, expect, it } from 'vitest';
+
+          const root = process.cwd();
+          const backend = readFileSync(resolve(root, 'api/send-email-pdf.ts'), 'utf8');
+          const sweeper = readFileSync(resolve(root, 'api/cleanup-email-attachments.ts'), 'utf8');
+          const migration = readFileSync(resolve(root, 'supabase/migrations/20260806131500_email_anexos_temporarios_mime.sql'), 'utf8');
+          const vercel = readFileSync(resolve(root, 'vercel.json'), 'utf8');
+
+          describe('ciclo de vida dos anexos temporários', () => {
+            it('aceita qualquer imagem mantendo os demais tipos corporativos', () => {
+              expect(migration).toContain("'image/*'");
+              expect(migration).toContain("'application/pdf'");
+            });
+
+            it('inspeciona o resultado da remoção, repete e registra falha persistente', () => {
+              expect(backend).toContain('firstAttempt.error');
+              expect(backend).toContain('retryAttempt.error');
+              expect(backend).toContain('Falha persistente ao limpar anexos temporários');
+            });
+
+            it('remove uploads abandonados por cron após 24 horas', () => {
+              expect(sweeper).toContain('MAX_AGE_MS = 24 * 60 * 60 * 1000');
+              expect(sweeper).toContain("storage.remove(batch)");
+              expect(vercel).toContain('/api/cleanup-email-attachments');
+              expect(vercel).toContain('17 3 * * *');
+            });
+          });
+          """, encoding='utf-8')
+          PY
+
+      - name: Validate targeted tests and build
+        run: |
+          npm ci
+          npx vitest run src/lib/__tests__/emailAttachmentTransport.test.ts src/lib/__tests__/emailAttachmentRegression.test.ts src/lib/__tests__/emailAttachmentLifecycle.test.ts
+          npm run build
+
+      - name: Commit fixes to PR70
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Rodrigo de Souza Sabino'
+          git config user.email 'implantarh.consultoria@gmail.com'
+          git add api/send-email-pdf.ts api/cleanup-email-attachments.ts vercel.json supabase/migrations/20260806131500_email_anexos_temporarios_mime.sql src/lib/__tests__/emailAttachmentLifecycle.test.ts
+          git commit -m 'fix: completar ciclo de vida seguro dos anexos'
+          git push origin HEAD:agent/topac-email-anexos-storage-20260806
