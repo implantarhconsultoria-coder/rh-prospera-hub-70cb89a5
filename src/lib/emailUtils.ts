@@ -82,14 +82,6 @@ const contentTypeToExtension = (contentType: string) => {
 
 const hasFileExtension = (value: string) => /\.[a-z0-9]{2,8}$/i.test(value);
 const ensureAttachmentBlob = (blob: Blob, contentType: string) => blob.type === contentType ? blob : new Blob([blob], { type: contentType });
-const ensurePdfBlob = (blob: Blob) => ensureAttachmentBlob(blob, PDF_CONTENT_TYPE);
-
-const openPdfPreview = (blob: Blob) => {
-  const url = URL.createObjectURL(ensurePdfBlob(blob));
-  const win = window.open(url, '_blank', 'noopener,noreferrer');
-  window.setTimeout(() => URL.revokeObjectURL(url), 120000);
-  return Boolean(win);
-};
 
 const randomId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -258,7 +250,6 @@ export const downloadEmailWithAttachment = async ({
     });
     return { ok: true, mode: 'platform_email' };
   } catch (error: any) {
-    openPdfPreview(attachmentBlob);
     throw new Error(error?.message || 'O envio automático pelo servidor não foi concluído.');
   }
 };

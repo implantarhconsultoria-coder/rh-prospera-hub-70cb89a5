@@ -236,8 +236,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       onOpenChange(false);
     } catch (error: any) {
       const friendlyMessage = getFriendlyEmailError(error?.message);
-      handleManualSend(false);
-      toast.warning(`${friendlyMessage} O e-mail manual foi aberto e os anexos foram baixados.`);
+      toast.error(`${friendlyMessage} Nenhuma janela ou download foi aberto automaticamente. Use \"Abrir e-mail manual\" somente se desejar.`);
     } finally {
       setSending(false);
     }
