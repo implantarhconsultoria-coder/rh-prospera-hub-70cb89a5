@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { applyTopacEmailPolicy } from '@/lib/emailPolicy';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -135,15 +134,11 @@ const cleanupStoredAttachments = async (attachments: StoredEmailAttachment[]) =>
 
 const uploadEmailAttachments = async (
   attachments: EmailAttachmentInput[],
-  requestedUserId?: string,
+  userId: string,
 ): Promise<StoredEmailAttachment[]> => {
   if (attachments.length > MAX_EMAIL_ATTACHMENTS) {
     throw new Error(`O envio aceita no máximo ${MAX_EMAIL_ATTACHMENTS} anexos por e-mail.`);
   }
-
-  const { data: sessionData } = await supabase.auth.getSession();
-  const sessionUserId = sessionData.session?.user?.id || '';
-  const userId = sessionUserId || requestedUserId || '';
   if (!userId) throw new Error('Sua sessão expirou. Entre novamente para enviar anexos pela plataforma.');
 
   const uploaded: StoredEmailAttachment[] = [];
@@ -196,6 +191,14 @@ export const sendEmailWithPdfAttachment = async ({
       : [];
   if (!rawAttachments.length) throw new Error('pdf_anexo_vazio');
 
+  const { data: sessionData } = await supabase.auth.getSession();
+  const session = sessionData.session;
+  const effectiveAuthToken = authToken || session?.access_token || '';
+  const authenticatedUserId = session?.user?.id || '';
+  if (!effectiveAuthToken || !authenticatedUserId) {
+    throw new Error('Sua sessão expirou. Entre novamente para enviar anexos pela plataforma.');
+  }
+
   const policy = applyTopacEmailPolicy({
     subject,
     body,
@@ -205,7 +208,7 @@ export const sendEmailWithPdfAttachment = async ({
     attachmentContentTypes: rawAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type || PDF_CONTENT_TYPE),
   });
 
-  const storedAttachments = await uploadEmailAttachments(rawAttachments, senderUserId);
+  const storedAttachments = await uploadEmailAttachments(rawAttachments, authenticatedUserId);
   const documentNames = storedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
   let response: Response;
   try {
@@ -213,7 +216,7 @@ export const sendEmailWithPdfAttachment = async ({
       method: 'POST',
       headers: {
         'content-type': 'application/json; charset=utf-8',
-        ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+        authorization: `Bearer ${effectiveAuthToken}`,
       },
       body: JSON.stringify({
         to,
@@ -221,7 +224,7 @@ export const sendEmailWithPdfAttachment = async ({
         subject,
         body: policy.body,
         attachments: storedAttachments,
-        senderUserId,
+        senderUserId: authenticatedUserId || senderUserId,
         senderName: policy.institutional ? 'Administrador Topac RH PRO Multiempresas' : senderName,
         senderEmail,
         moduleOrigin,
