@@ -23,6 +23,13 @@ describe('transporte de anexos de e-mail', () => {
     expect(requestBlock).not.toContain('attachmentBase64');
   });
 
+  it('propaga a sessão autenticada mesmo quando o módulo não fornece token', () => {
+    expect(frontend).toContain('const effectiveAuthToken = authToken || session?.access_token ||');
+    expect(frontend).toContain('const authenticatedUserId = session?.user?.id ||');
+    expect(frontend).toContain('authorization: `Bearer ${effectiveAuthToken}`');
+    expect(frontend).toContain('uploadEmailAttachments(rawAttachments, authenticatedUserId)');
+  });
+
   it('protege as referências no backend e usa URL remota no Resend', () => {
     expect(backend).toContain("storageBucket !== EMAIL_ATTACHMENT_BUCKET");
     expect(backend).toContain('storagePath.startsWith(`${userId}/`)');
