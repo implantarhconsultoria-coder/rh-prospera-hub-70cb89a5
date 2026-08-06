@@ -12,6 +12,7 @@ describe('regressões do envio de anexos', () => {
     expect(modal).not.toContain('handleManualSend(false)');
     expect(modal).not.toContain('O e-mail manual foi aberto e os anexos foram baixados.');
     expect(modal).toContain('Nenhuma janela ou download foi aberto automaticamente.');
+    expect(modal).toContain('onClick={() => handleManualSend()}');
   });
 
   it('não abre preview automático no helper após falha', () => {
