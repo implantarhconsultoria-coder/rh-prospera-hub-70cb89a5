@@ -226,9 +226,6 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         toast.error('Nenhum e-mail da contabilidade esta cadastrado.');
         return;
       }
-    } else if (!fileName.toLowerCase().endsWith('.pdf')) {
-      toast.error('Este documento ainda nao esta salvo como PDF. Gere o PDF novamente antes de enviar.');
-      return;
     }
     const url = await getDocumentUrl(source);
     if (!url) {
@@ -241,9 +238,6 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       return;
     }
     const originalBlob = await response.blob();
-    const attachmentBlob = originalBlob.type === 'application/pdf'
-      ? originalBlob
-      : new Blob([originalBlob], { type: 'application/pdf' });
     const senderName = String(session.user.user_metadata?.nome_completo || session.user.email || 'TOPAC RH PRO');
     const dataDocumento = new Date(doc.data_documento || doc.created_at).toLocaleDateString('pt-BR');
     const detalheDocumento = [doc.descricao, doc.observacao].filter(Boolean).join(' | ') || 'Sem observacao/descricao.';
@@ -287,7 +281,15 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             documentName: titulo,
           }],
         }
-        : { attachmentBlob, attachmentName: fileName }),
+        : {
+          attachments: [{
+            attachmentBlob: originalBlob,
+            attachmentName: fileName,
+            attachmentContentType: originalBlob.type || 'application/octet-stream',
+            documentId: doc.id,
+            documentName: titulo,
+          }],
+        }),
       senderUserId: session.user.id,
       senderName,
       senderEmail: session.user.email,

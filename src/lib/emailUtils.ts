@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { applyTopacEmailPolicy } from '@/lib/emailPolicy';
+import { supabase } from '@/integrations/supabase/client';
 
 /** Abre o cliente de e-mail padrão ou envia anexos pelo endpoint da plataforma. */
 export interface EmailParams {
@@ -26,6 +26,21 @@ export interface EmailAttachmentInput {
   documentName?: string;
 }
 
+type StoredEmailAttachment = {
+  storageBucket: string;
+  storagePath: string;
+  attachmentName: string;
+  attachmentContentType: string;
+  attachmentSize: number;
+  documentId?: string;
+  documentName: string;
+};
+
+export const EMAIL_ATTACHMENT_BUCKET = 'email-anexos-temporarios';
+export const MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+export const MAX_EMAIL_ATTACHMENTS = 30;
+const PDF_CONTENT_TYPE = 'application/pdf';
+
 export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
   const policy = applyTopacEmailPolicy({ subject, body, cc, moduleOrigin, attachmentNames, attachmentContentTypes });
   const enc = encodeURIComponent;
@@ -36,8 +51,6 @@ export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmen
   window.location.href = `mailto:${to.map(enc).join(',')}?${params.join('&')}`;
 };
 
-const PDF_CONTENT_TYPE = 'application/pdf';
-
 const safeFileName = (value: string) =>
   (value || 'email')
     .normalize('NFD')
@@ -47,6 +60,12 @@ const safeFileName = (value: string) =>
     .replace(/\s+\./g, '.')
     .trim()
     .slice(0, 150);
+
+const safePathSegment = (value: string) =>
+  safeFileName(value)
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .slice(0, 120) || 'anexo';
 
 const contentTypeToExtension = (contentType: string) => {
   const type = contentType.toLowerCase();
@@ -63,30 +82,21 @@ const contentTypeToExtension = (contentType: string) => {
 
 const hasFileExtension = (value: string) => /\.[a-z0-9]{2,8}$/i.test(value);
 const ensureAttachmentBlob = (blob: Blob, contentType: string) => blob.type === contentType ? blob : new Blob([blob], { type: contentType });
-const ensurePdfBlob = (blob: Blob) => ensureAttachmentBlob(blob, PDF_CONTENT_TYPE);
 
-const openPdfPreview = (blob: Blob) => {
-  const url = URL.createObjectURL(ensurePdfBlob(blob));
-  const win = window.open(url, '_blank', 'noopener,noreferrer');
-  window.setTimeout(() => URL.revokeObjectURL(url), 120000);
-  return Boolean(win);
+const randomId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 };
-
-const blobToBase64 = (blob: Blob, contentType = blob.type || PDF_CONTENT_TYPE) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      resolve(result.includes(',') ? result.split(',')[1] || '' : result);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(ensureAttachmentBlob(blob, contentType));
-  });
 
 const parseEmailApiResponse = async (response: Response) => {
   const text = await response.text().catch(() => '');
   if (!text.trim()) return {};
   try { return JSON.parse(text); } catch { return { message: text.slice(0, 400) }; }
+};
+
+const formatBytes = (bytes: number) => {
+  const mb = bytes / (1024 * 1024);
+  return `${mb.toFixed(mb >= 10 ? 0 : 1).replace('.', ',')} MB`;
 };
 
 const buildEmailApiErrorMessage = (data: any, status?: number) => {
@@ -95,11 +105,67 @@ const buildEmailApiErrorMessage = (data: any, status?: number) => {
     return `${data?.message || 'Envio de e-mail não configurado no servidor.'}${missing}`;
   }
   if (data?.error === 'dados_invalidos') return data?.message || 'Preencha destinatário, assunto, mensagem e anexos antes de enviar.';
+  if (data?.error === 'attachment_too_large') return data?.message || 'Um dos anexos ultrapassa o limite permitido para envio.';
+  if (data?.error === 'attachments_total_too_large') return data?.message || 'Os anexos somados ultrapassam o limite do provedor de e-mail.';
+  if (data?.error === 'attachment_reference_invalid') return data?.message || 'A referência temporária de um anexo é inválida. Gere o envio novamente.';
+  if (data?.error === 'attachment_download_failed') return data?.message || 'Não foi possível recuperar um dos anexos temporários. Tente novamente.';
   if (data?.error === 'email_provider_failed') return data?.message || 'Falha no provedor de e-mail configurado.';
   if (data?.error === 'email_send_failed') return data?.message || 'O envio automático pelo servidor não foi concluído.';
+  if (status === 413) return data?.message || 'Os anexos são grandes demais para o envio automático. Reduza os arquivos e tente novamente.';
+  if (status === 401 || status === 403) return data?.message || 'Sua sessão não tem autorização para enviar este e-mail. Entre novamente na plataforma.';
   if (status === 404) return 'A rota de envio de e-mail não foi encontrada na publicação atual.';
-  if (status && status >= 500) return 'O servidor de e-mail respondeu com falha temporária.';
+  if (status && status >= 500) return data?.message || 'O servidor de e-mail respondeu com falha temporária.';
   return data?.message || data?.error || 'O envio automático pelo servidor não foi concluído.';
+};
+
+const cleanupStoredAttachments = async (attachments: StoredEmailAttachment[]) => {
+  const paths = attachments.map((item) => item.storagePath).filter(Boolean);
+  if (!paths.length) return;
+  try { await supabase.storage.from(EMAIL_ATTACHMENT_BUCKET).remove(paths); } catch { /* limpeza defensiva */ }
+};
+
+const uploadEmailAttachments = async (
+  attachments: EmailAttachmentInput[],
+  userId: string,
+): Promise<StoredEmailAttachment[]> => {
+  if (attachments.length > MAX_EMAIL_ATTACHMENTS) {
+    throw new Error(`O envio aceita no máximo ${MAX_EMAIL_ATTACHMENTS} anexos por e-mail.`);
+  }
+  if (!userId) throw new Error('Sua sessão expirou. Entre novamente para enviar anexos pela plataforma.');
+
+  const uploaded: StoredEmailAttachment[] = [];
+  try {
+    for (const attachment of attachments) {
+      const attachmentContentType = attachment.attachmentContentType || attachment.attachmentBlob.type || PDF_CONTENT_TYPE;
+      const normalizedBlob = ensureAttachmentBlob(attachment.attachmentBlob, attachmentContentType);
+      if (!normalizedBlob.size) throw new Error('pdf_anexo_vazio');
+      if (normalizedBlob.size > MAX_EMAIL_ATTACHMENT_BYTES) {
+        throw new Error(`O arquivo ${attachment.attachmentName || 'anexo'} tem ${formatBytes(normalizedBlob.size)}. O limite por arquivo é ${formatBytes(MAX_EMAIL_ATTACHMENT_BYTES)}.`);
+      }
+
+      const safeName = safeFileName(attachment.attachmentName);
+      const cleanAttachmentName = hasFileExtension(safeName) ? safeName : `${safeName}.${contentTypeToExtension(attachmentContentType)}`;
+      const storagePath = `${userId}/${new Date().toISOString().slice(0, 10)}/${randomId()}-${safePathSegment(cleanAttachmentName)}`;
+      const { error } = await supabase.storage
+        .from(EMAIL_ATTACHMENT_BUCKET)
+        .upload(storagePath, normalizedBlob, { contentType: attachmentContentType, upsert: false, cacheControl: '3600' });
+      if (error) throw new Error(`Não foi possível preparar o anexo ${cleanAttachmentName}: ${error.message}`);
+
+      uploaded.push({
+        storageBucket: EMAIL_ATTACHMENT_BUCKET,
+        storagePath,
+        attachmentName: cleanAttachmentName,
+        attachmentContentType,
+        attachmentSize: normalizedBlob.size,
+        documentId: attachment.documentId,
+        documentName: attachment.documentName || cleanAttachmentName,
+      });
+    }
+    return uploaded;
+  } catch (error) {
+    await cleanupStoredAttachments(uploaded);
+    throw error;
+  }
 };
 
 export const sendEmailWithPdfAttachment = async ({
@@ -117,60 +183,57 @@ export const sendEmailWithPdfAttachment = async ({
       : [];
   if (!rawAttachments.length) throw new Error('pdf_anexo_vazio');
 
-  const normalizedAttachments = await Promise.all(rawAttachments.map(async (attachment) => {
-    const attachmentContentType = attachment.attachmentContentType || attachment.attachmentBlob.type || PDF_CONTENT_TYPE;
-    const normalizedBlob = ensureAttachmentBlob(attachment.attachmentBlob, attachmentContentType);
-    const attachmentBase64 = await blobToBase64(normalizedBlob, attachmentContentType);
-    if (!attachmentBase64) throw new Error('pdf_anexo_vazio');
-    const safeName = safeFileName(attachment.attachmentName);
-    const cleanAttachmentName = hasFileExtension(safeName) ? safeName : `${safeName}.${contentTypeToExtension(attachmentContentType)}`;
-    return {
-      attachmentName: cleanAttachmentName,
-      attachmentBase64,
-      attachmentContentType,
-      attachmentSize: normalizedBlob.size,
-      documentId: attachment.documentId,
-      documentName: attachment.documentName || cleanAttachmentName,
-    };
-  }));
+  const { data: sessionData } = await supabase.auth.getSession();
+  const session = sessionData.session;
+  const effectiveAuthToken = authToken || session?.access_token || '';
+  const authenticatedUserId = session?.user?.id || '';
+  if (!effectiveAuthToken || !authenticatedUserId) {
+    throw new Error('Sua sessão expirou. Entre novamente para enviar anexos pela plataforma.');
+  }
 
   const policy = applyTopacEmailPolicy({
     subject,
     body,
     cc,
     moduleOrigin,
-    attachmentNames: normalizedAttachments.map((item) => item.attachmentName),
-    attachmentContentTypes: normalizedAttachments.map((item) => item.attachmentContentType),
+    attachmentNames: rawAttachments.map((item) => item.attachmentName),
+    attachmentContentTypes: rawAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type || PDF_CONTENT_TYPE),
   });
-  const firstAttachment = normalizedAttachments[0];
-  const documentNames = normalizedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
 
-  const response = await fetch('/api/send-email-pdf', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: JSON.stringify({
-      to,
-      cc: policy.cc,
-      subject,
-      body: policy.body,
-      attachments: normalizedAttachments,
-      attachmentName: firstAttachment.attachmentName,
-      attachmentBase64: firstAttachment.attachmentBase64,
-      attachmentContentType: firstAttachment.attachmentContentType,
-      attachmentSize: firstAttachment.attachmentSize,
-      senderUserId,
-      senderName: policy.institutional ? 'Administrador Topac RH PRO Multiempresas' : senderName,
-      senderEmail,
-      moduleOrigin,
-      documentId: documentId || firstAttachment.documentId,
-      documentName: documentName || documentNames,
-    }),
-  });
+  const storedAttachments = await uploadEmailAttachments(rawAttachments, authenticatedUserId);
+  const documentNames = storedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
+  let response: Response;
+  try {
+    response = await fetch('/api/send-email-pdf', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        authorization: `Bearer ${effectiveAuthToken}`,
+      },
+      body: JSON.stringify({
+        to,
+        cc: policy.cc,
+        subject,
+        body: policy.body,
+        attachments: storedAttachments,
+        senderUserId: authenticatedUserId || senderUserId,
+        senderName: policy.institutional ? 'Administrador Topac RH PRO Multiempresas' : senderName,
+        senderEmail,
+        moduleOrigin,
+        documentId: documentId || storedAttachments[0]?.documentId,
+        documentName: documentName || documentNames,
+      }),
+    });
+  } catch (error) {
+    await cleanupStoredAttachments(storedAttachments);
+    throw error;
+  }
+
   const data = await parseEmailApiResponse(response);
-  if (!response.ok || data?.ok === false) throw new Error(buildEmailApiErrorMessage(data, response.status));
+  if (!response.ok || data?.ok === false) {
+    await cleanupStoredAttachments(storedAttachments);
+    throw new Error(buildEmailApiErrorMessage(data, response.status));
+  }
   return data;
 };
 
@@ -187,7 +250,6 @@ export const downloadEmailWithAttachment = async ({
     });
     return { ok: true, mode: 'platform_email' };
   } catch (error: any) {
-    openPdfPreview(attachmentBlob);
     throw new Error(error?.message || 'O envio automático pelo servidor não foi concluído.');
   }
 };
