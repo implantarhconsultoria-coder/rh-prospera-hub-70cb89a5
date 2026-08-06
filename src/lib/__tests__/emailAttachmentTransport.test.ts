@@ -41,11 +41,12 @@ describe('transporte de anexos de e-mail', () => {
     expect(frontend).toContain('uploadEmailAttachments(rawAttachments, authenticatedUserId)');
   });
 
-  it('protege as referências no backend e usa URL remota no Resend', () => {
+  it('protege as referências e incorpora o anexo no Resend antes da limpeza', () => {
     expect(backend).toContain("storageBucket !== EMAIL_ATTACHMENT_BUCKET");
     expect(backend).toContain('storagePath.startsWith(`${userId}/`)');
     expect(backend).toContain('createSignedUrl');
-    expect(backend).toContain('path: attachment.signedUrl');
+    expect(backend).toContain('content: attachment.attachmentBase64');
+    expect(backend).toContain('await loadAttachmentBase64(supabase, attachment)');
     expect(backend).toContain("error: 'unauthorized'");
   });
 

@@ -374,9 +374,10 @@ const sendWithSmtp = async (payload: any, supabase: SupabaseServer) => {
   } finally { socket.destroy(); }
   return { provider: 'smtp' };
 };
-const sendWithResend = async (payload: any) => {
+const sendWithResend = async (payload: any, supabase: SupabaseServer) => {
   const apiKey = env('RESEND_API_KEY');
   if (!apiKey) return null;
+  for (const attachment of payload.attachments) await loadAttachmentBase64(supabase, attachment);
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -387,7 +388,10 @@ const sendWithResend = async (payload: any) => {
       cc: payload.cc,
       subject: payload.subject,
       text: payload.body,
-      attachments: payload.attachments.map((attachment: ResolvedAttachment) => ({ filename: attachment.attachmentName, path: attachment.signedUrl })),
+      attachments: payload.attachments.map((attachment: ResolvedAttachment) => ({
+        filename: attachment.attachmentName,
+        content: attachment.attachmentBase64,
+      })),
     }),
   });
   const data = await response.json().catch(() => ({}));
@@ -472,7 +476,7 @@ export default async function handler(req: any, res?: any) {
     if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length) throw new EmailRequestError('dados_invalidos', 'Informe destinatário, assunto, mensagem e anexos antes de enviar.', 400);
 
     const result = provider === 'resend'
-      ? await sendWithResend(payload)
+      ? await sendWithResend(payload, supabase)
       : provider === 'smtp'
         ? await sendWithSmtp(payload, supabase)
         : provider === 'sendgrid'
