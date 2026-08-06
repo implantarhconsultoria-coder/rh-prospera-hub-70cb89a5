@@ -1,32 +1,38 @@
-name: TOPAC Export KM Source
+name: TOPAC Finalize KM Report
 
 on:
   pull_request:
     branches:
       - main
     paths:
+      - ".github/km-page/**"
       - ".github/workflows/topac-export-km-source.yml"
 
+permissions:
+  contents: write
+
 jobs:
-  export-source:
+  finalize-km-report:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@v4
-
-      - name: Package source files
-        run: |
-          zip -r topac-km-source.zip \
-            src/pages/admin/CombustivelQRAdminPage.tsx \
-            src/lib/abastecimentoReports.ts \
-            src/lib/__tests__/abastecimentoReports.test.ts \
-            src/App.tsx \
-            src/components/AppSidebar.tsx \
-            supabase/migrations/20260804113000_topac_relatorios_abastecimento_dados_bancarios.sql
-
-      - name: Upload source bundle
-        uses: actions/upload-artifact@v4
         with:
-          name: topac-km-source
-          path: topac-km-source.zip
-          retention-days: 1
+          ref: fix/topac-relatorio-km-corporativo-20260806
+          fetch-depth: 0
+
+      - name: Decode final interface and clean temporary preparation
+        run: |
+          cat .github/km-page/chunk_* | base64 -d > src/pages/admin/CombustivelQRAdminPage.tsx
+
+          rm -rf .github/km-page
+          rm -rf .github/km-patch
+          rm -f .github/workflows/topac-apply-km-patch.yml
+          rm -f .github/workflows/topac-export-km-source.yml
+          rm -f .github/pull_request_template_km.md
+
+          git config user.name "TOPAC Engineering"
+          git config user.email "engineering@topac.local"
+          git add -A
+          git commit -m "fix: finalizar interface corporativa do relatório de KM"
+          git push origin HEAD:fix/topac-relatorio-km-corporativo-20260806
