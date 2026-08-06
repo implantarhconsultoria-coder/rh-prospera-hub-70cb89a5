@@ -2,8 +2,7 @@ name: PR70 E2E Real
 
 on:
   push:
-    branches:
-      - test/pr70-e2e-real-20260806
+    branches: [test/pr70-e2e-real-20260806]
 
 permissions:
   contents: read
@@ -29,238 +28,121 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TEST_EMAIL="implantarh.consultoria+topac-pr70-${GITHUB_RUN_ID}@gmail.com"
+          TEST_EMAIL="implantarh.consultoria+topac-pr70-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@gmail.com"
           TEST_PASSWORD="$(openssl rand -hex 24)Aa1!"
           echo "::add-mask::$TEST_PASSWORD"
-
-          SIGNUP_BODY=$(python3 - <<PY
-          import json
-          print(json.dumps({
-            "email": "${TEST_EMAIL}",
-            "password": "${TEST_PASSWORD}",
-            "data": {"nome_completo": "Teste Técnico PR70", "origem": "pr70-e2e"}
-          }))
-          PY
-          )
-
-          curl -sS -o signup.json -w '%{http_code}' \
-            -X POST "$SUPABASE_URL/auth/v1/signup" \
-            -H "apikey: $SUPABASE_KEY" \
-            -H "content-type: application/json" \
-            --data "$SIGNUP_BODY" > signup.status
-
-          USER_ID=$(jq -r '.user.id // empty' signup.json)
-          if [ -z "$USER_ID" ]; then
-            echo "Signup não criou usuário."
-            cat signup.json
-            exit 1
-          fi
-
+          SIGNUP_BODY=$(python3 -c 'import json,os; print(json.dumps({"email":os.environ["TEST_EMAIL"],"password":os.environ["TEST_PASSWORD"],"data":{"nome_completo":"Teste Técnico PR70","origem":"pr70-e2e"}}))' TEST_EMAIL="$TEST_EMAIL" TEST_PASSWORD="$TEST_PASSWORD")
+          curl -sS -o signup.json -X POST "$SUPABASE_URL/auth/v1/signup" -H "apikey: $SUPABASE_KEY" -H "content-type: application/json" --data "$SIGNUP_BODY"
+          USER_ID=$(jq -r '.user.id // .id // empty' signup.json)
+          test -n "$USER_ID" || { echo 'Signup não criou usuário'; cat signup.json; exit 1; }
           ACCESS_TOKEN=$(jq -r '.access_token // empty' signup.json)
-          for attempt in $(seq 1 90); do
-            if [ -n "$ACCESS_TOKEN" ]; then break; fi
-            sleep 5
-            TOKEN_BODY=$(python3 - <<PY
-          import json
-          print(json.dumps({"email": "${TEST_EMAIL}", "password": "${TEST_PASSWORD}"}))
-          PY
-            )
-            curl -sS -o token.json \
-              -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
-              -H "apikey: $SUPABASE_KEY" \
-              -H "content-type: application/json" \
-              --data "$TOKEN_BODY"
+          TOKEN_BODY=$(python3 -c 'import json,os; print(json.dumps({"email":os.environ["TEST_EMAIL"],"password":os.environ["TEST_PASSWORD"]}))' TEST_EMAIL="$TEST_EMAIL" TEST_PASSWORD="$TEST_PASSWORD")
+          for attempt in $(seq 1 120); do
+            [ -n "$ACCESS_TOKEN" ] && break
+            sleep 3
+            curl -sS -o token.json -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" -H "apikey: $SUPABASE_KEY" -H "content-type: application/json" --data "$TOKEN_BODY"
             ACCESS_TOKEN=$(jq -r '.access_token // empty' token.json)
           done
-
-          if [ -z "$ACCESS_TOKEN" ]; then
-            echo "Usuário criado, mas não confirmado dentro da janela do teste."
-            echo "test_email=$TEST_EMAIL" >> "$GITHUB_OUTPUT"
-            echo "user_id=$USER_ID" >> "$GITHUB_OUTPUT"
-            exit 2
-          fi
-
+          test -n "$ACCESS_TOKEN" || { echo 'Usuário não confirmado'; exit 2; }
           echo "::add-mask::$ACCESS_TOKEN"
           printf '%s' "$ACCESS_TOKEN" > access_token.txt
-          printf '%s' "$TEST_PASSWORD" > test_password.txt
           echo "test_email=$TEST_EMAIL" >> "$GITHUB_OUTPUT"
           echo "user_id=$USER_ID" >> "$GITHUB_OUTPUT"
           echo "Usuário técnico autenticado: $USER_ID"
+        env:
+          TEST_EMAIL: placeholder
+          TEST_PASSWORD: placeholder
 
-      - name: Generate valid PNG above Vercel payload limit
+      - name: Generate valid PNG above 4.5 MiB
         id: file
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib, json, struct, zlib
+          import hashlib,json,struct,zlib
           from pathlib import Path
-
-          width, height = 1600, 1200
-          pixels = hashlib.shake_256(b'TOPAC-RH-PRO-PR70-E2E-REAL').digest(width * height * 3)
-          rows = bytearray()
-          stride = width * 3
-          for y in range(height):
-              rows.append(0)
-              rows.extend(pixels[y * stride:(y + 1) * stride])
-
-          def chunk(kind: bytes, data: bytes) -> bytes:
-              return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
-
-          png = (
-              b'\x89PNG\r\n\x1a\n'
-              + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
-              + chunk(b'IDAT', zlib.compress(bytes(rows), level=0))
-              + chunk(b'IEND', b'')
-          )
-          path = Path('topac-pr70-e2e-real.png')
-          path.write_bytes(png)
-          digest = hashlib.sha256(png).hexdigest()
-          meta = {
-              'filename': path.name,
-              'size_bytes': len(png),
-              'sha256': digest,
-              'width': width,
-              'height': height,
-              'valid_png_signature': png.startswith(b'\x89PNG\r\n\x1a\n'),
-          }
-          Path('file_meta.json').write_text(json.dumps(meta, indent=2), encoding='utf-8')
+          w,h=1600,1200
+          pixels=hashlib.shake_256(b'TOPAC-RH-PRO-PR70-E2E-REAL').digest(w*h*3)
+          raw=bytearray()
+          stride=w*3
+          for y in range(h): raw.append(0); raw.extend(pixels[y*stride:(y+1)*stride])
+          def chunk(t,d): return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
+          png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(bytes(raw),0))+chunk(b'IEND',b'')
+          Path('topac-pr70-e2e-real.png').write_bytes(png)
+          meta={'filename':'topac-pr70-e2e-real.png','size_bytes':len(png),'sha256':hashlib.sha256(png).hexdigest(),'width':w,'height':h,'valid_png_signature':png.startswith(b'\x89PNG\r\n\x1a\n')}
+          Path('file_meta.json').write_text(json.dumps(meta,indent=2))
           print(json.dumps(meta))
-          if len(png) <= 4_718_592:
-              raise SystemExit('Arquivo não ultrapassou 4,5 MiB')
-          if len(png) > 20 * 1024 * 1024:
-              raise SystemExit('Arquivo ultrapassou 20 MiB')
+          assert len(png)>4718592 and len(png)<=20*1024*1024
           PY
           echo "size_bytes=$(jq -r .size_bytes file_meta.json)" >> "$GITHUB_OUTPUT"
           echo "sha256=$(jq -r .sha256 file_meta.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Upload file to private Storage with authenticated session
+      - name: Upload to private Storage
         id: upload
         shell: bash
         run: |
           set -euo pipefail
-          ACCESS_TOKEN=$(cat access_token.txt)
-          USER_ID='${{ steps.auth.outputs.user_id }}'
-          STORAGE_PATH="$USER_ID/2026-08-06/topac-pr70-e2e-${GITHUB_RUN_ID}.png"
-          UPLOAD_STATUS=$(curl -sS -o upload.json -w '%{http_code}' \
-            -X POST "$SUPABASE_URL/storage/v1/object/$STORAGE_BUCKET/$STORAGE_PATH" \
-            -H "apikey: $SUPABASE_KEY" \
-            -H "authorization: Bearer $ACCESS_TOKEN" \
-            -H "content-type: image/png" \
-            -H "x-upsert: false" \
-            --data-binary @topac-pr70-e2e-real.png)
-          if [ "$UPLOAD_STATUS" != "200" ]; then
-            echo "Upload falhou com HTTP $UPLOAD_STATUS"
-            cat upload.json
-            exit 1
-          fi
-          echo "storage_path=$STORAGE_PATH" >> "$GITHUB_OUTPUT"
-          echo "Upload autenticado concluído: $STORAGE_PATH"
+          TOKEN=$(cat access_token.txt)
+          PATH_VALUE='${{ steps.auth.outputs.user_id }}/2026-08-06/topac-pr70-e2e-${{ github.run_id }}.png'
+          STATUS=$(curl -sS -o upload.json -w '%{http_code}' -X POST "$SUPABASE_URL/storage/v1/object/$STORAGE_BUCKET/$PATH_VALUE" -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN" -H 'content-type: image/png' -H 'x-upsert: false' --data-binary @topac-pr70-e2e-real.png)
+          [ "$STATUS" = 200 ] || { cat upload.json; exit 1; }
+          echo "storage_path=$PATH_VALUE" >> "$GITHUB_OUTPUT"
 
-      - name: Establish Vercel preview access cookie
+      - name: Establish preview access
         shell: bash
         run: |
           set -euo pipefail
           curl -sS -L -c vercel.cookies -b vercel.cookies "$PREVIEW_SHARE_URL" -o preview-root.html
           test -s vercel.cookies
-          echo "Cookie de homologação estabelecido."
 
       - name: Send real email through PR70 Function
         id: send
         shell: bash
         run: |
           set -euo pipefail
-          ACCESS_TOKEN=$(cat access_token.txt)
+          TOKEN=$(cat access_token.txt)
           SUBJECT="TOPAC PR70 E2E REAL ${GITHUB_RUN_ID}"
-          STORAGE_PATH='${{ steps.upload.outputs.storage_path }}'
-          SIZE_BYTES='${{ steps.file.outputs.size_bytes }}'
-          TEST_EMAIL='${{ steps.auth.outputs.test_email }}'
-
           python3 - <<PY
           import json
-          payload = {
-            "to": ["${RECIPIENT}"],
-            "cc": [],
-            "subject": "${SUBJECT}",
-            "body": "Homologação real da PR #70. Anexo PNG válido acima de 4,5 MB enviado pelo motor TOPAC RH PRO via Supabase Storage e URL assinada.",
-            "attachments": [{
-              "storageBucket": "${STORAGE_BUCKET}",
-              "storagePath": "${STORAGE_PATH}",
-              "attachmentName": "topac-pr70-e2e-real.png",
-              "attachmentContentType": "image/png",
-              "attachmentSize": int("${SIZE_BYTES}"),
-              "documentName": "Homologação PR70 E2E"
-            }],
-            "senderName": "Teste Técnico PR70",
-            "senderEmail": "${TEST_EMAIL}",
-            "moduleOrigin": "homologacao_pr70",
-            "documentName": "Homologação PR70 E2E"
+          payload={
+            'to':['${RECIPIENT}'],'cc':[],'subject':'${SUBJECT}',
+            'body':'Homologação real da PR #70. Anexo PNG válido acima de 4,5 MB enviado pelo motor TOPAC RH PRO via Supabase Storage e URL assinada.',
+            'attachments':[{'storageBucket':'${STORAGE_BUCKET}','storagePath':'${{ steps.upload.outputs.storage_path }}','attachmentName':'topac-pr70-e2e-real.png','attachmentContentType':'image/png','attachmentSize':int('${{ steps.file.outputs.size_bytes }}'),'documentName':'Homologação PR70 E2E'}],
+            'senderName':'Teste Técnico PR70','senderEmail':'${{ steps.auth.outputs.test_email }}','moduleOrigin':'homologacao_pr70','documentName':'Homologação PR70 E2E'
           }
-          open('request.json', 'w', encoding='utf-8').write(json.dumps(payload, ensure_ascii=False))
+          open('request.json','w').write(json.dumps(payload,ensure_ascii=False))
           PY
-
-          SEND_STATUS=$(curl -sS -o send-response.json -w '%{http_code}' \
-            -X POST "$PREVIEW_ORIGIN/api/send-email-pdf" \
-            -c vercel.cookies -b vercel.cookies \
-            -H "content-type: application/json; charset=utf-8" \
-            -H "authorization: Bearer $ACCESS_TOKEN" \
-            --data-binary @request.json)
+          STATUS=$(curl -sS -o send-response.json -w '%{http_code}' -X POST "$PREVIEW_ORIGIN/api/send-email-pdf" -c vercel.cookies -b vercel.cookies -H 'content-type: application/json; charset=utf-8' -H "authorization: Bearer $TOKEN" --data-binary @request.json)
           cat send-response.json
-          if [ "$SEND_STATUS" != "200" ] || [ "$(jq -r '.ok // false' send-response.json)" != "true" ]; then
-            echo "Function retornou HTTP $SEND_STATUS"
-            exit 1
-          fi
+          [ "$STATUS" = 200 ] && [ "$(jq -r '.ok // false' send-response.json)" = true ] || exit 1
           echo "subject=$SUBJECT" >> "$GITHUB_OUTPUT"
-          echo "send_status=$SEND_STATUS" >> "$GITHUB_OUTPUT"
-          echo "Envio aceito pela Function e pelo provedor."
+          echo "send_status=$STATUS" >> "$GITHUB_OUTPUT"
 
-      - name: Confirm automatic Storage cleanup
+      - name: Confirm automatic cleanup
         id: cleanup
         shell: bash
         run: |
           set -euo pipefail
-          ACCESS_TOKEN=$(cat access_token.txt)
-          STORAGE_PATH='${{ steps.upload.outputs.storage_path }}'
-          CLEANUP_STATUS=$(curl -sS -o cleanup-response.bin -w '%{http_code}' \
-            "$SUPABASE_URL/storage/v1/object/$STORAGE_BUCKET/$STORAGE_PATH" \
-            -H "apikey: $SUPABASE_KEY" \
-            -H "authorization: Bearer $ACCESS_TOKEN")
-          echo "cleanup_http_status=$CLEANUP_STATUS" >> "$GITHUB_OUTPUT"
-          if [ "$CLEANUP_STATUS" != "400" ] && [ "$CLEANUP_STATUS" != "404" ]; then
-            echo "Objeto ainda acessível; HTTP $CLEANUP_STATUS"
-            exit 1
-          fi
-          echo "Objeto temporário removido automaticamente."
+          TOKEN=$(cat access_token.txt)
+          STATUS=$(curl -sS -o cleanup-response.bin -w '%{http_code}' "$SUPABASE_URL/storage/v1/object/$STORAGE_BUCKET/${{ steps.upload.outputs.storage_path }}" -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN")
+          echo "cleanup_http_status=$STATUS" >> "$GITHUB_OUTPUT"
+          [ "$STATUS" = 400 ] || [ "$STATUS" = 404 ]
 
-      - name: Build evidence metadata
+      - name: Build evidence
         if: always()
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, os
+          import json,os
           from pathlib import Path
-          meta = {}
-          if Path('file_meta.json').exists():
-              meta.update(json.loads(Path('file_meta.json').read_text()))
-          meta.update({
-              'run_id': os.environ.get('GITHUB_RUN_ID'),
-              'commit_sha': os.environ.get('GITHUB_SHA'),
-              'recipient': os.environ.get('RECIPIENT'),
-              'test_email': '${{ steps.auth.outputs.test_email }}',
-              'user_id': '${{ steps.auth.outputs.user_id }}',
-              'storage_path': '${{ steps.upload.outputs.storage_path }}',
-              'subject': '${{ steps.send.outputs.subject }}',
-              'send_http_status': '${{ steps.send.outputs.send_status }}',
-              'cleanup_http_status': '${{ steps.cleanup.outputs.cleanup_http_status }}',
-          })
-          if Path('send-response.json').exists():
-              try: meta['provider_response'] = json.loads(Path('send-response.json').read_text())
-              except Exception: pass
-          Path('e2e-evidence.json').write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding='utf-8')
-          print(json.dumps(meta, ensure_ascii=False))
+          meta=json.loads(Path('file_meta.json').read_text()) if Path('file_meta.json').exists() else {}
+          meta.update({'run_id':os.environ.get('GITHUB_RUN_ID'),'commit_sha':os.environ.get('GITHUB_SHA'),'recipient':os.environ.get('RECIPIENT'),'test_email':'${{ steps.auth.outputs.test_email }}','user_id':'${{ steps.auth.outputs.user_id }}','storage_path':'${{ steps.upload.outputs.storage_path }}','subject':'${{ steps.send.outputs.subject }}','send_http_status':'${{ steps.send.outputs.send_status }}','cleanup_http_status':'${{ steps.cleanup.outputs.cleanup_http_status }}'})
+          if Path('send-response.json').exists(): meta['provider_response']=json.loads(Path('send-response.json').read_text())
+          Path('e2e-evidence.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2))
+          print(json.dumps(meta,ensure_ascii=False))
           PY
 
-      - name: Upload test evidence
+      - name: Upload evidence artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
