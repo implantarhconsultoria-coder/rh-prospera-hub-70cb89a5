@@ -1,0 +1,32 @@
+name: TOPAC Export KM Source
+
+on:
+  push:
+    branches:
+      - fix/topac-relatorio-km-corporativo-20260806
+    paths:
+      - ".github/workflows/topac-export-km-source.yml"
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package source files
+        run: |
+          zip -r topac-km-source.zip \
+            src/pages/admin/CombustivelQRAdminPage.tsx \
+            src/lib/abastecimentoReports.ts \
+            src/lib/__tests__/abastecimentoReports.test.ts \
+            src/App.tsx \
+            src/components/AppSidebar.tsx \
+            supabase/migrations/20260804113000_topac_relatorios_abastecimento_dados_bancarios.sql
+
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: topac-km-source
+          path: topac-km-source.zip
+          retention-days: 1
