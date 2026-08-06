@@ -273,13 +273,26 @@ const loadAttachmentBase64 = async (supabase: SupabaseServer, attachment: Resolv
   return attachment.attachmentBase64;
 };
 
+type AttachmentCleanupFailure = { bucket: string; paths: string[]; message: string };
+
 const cleanupAttachments = async (supabase: SupabaseServer | null, refs: AttachmentReference[]) => {
-  if (!supabase || !refs.length) return;
+  if (!supabase || !refs.length) return [] as AttachmentCleanupFailure[];
   const groups = new Map<string, string[]>();
   refs.forEach((ref) => groups.set(ref.storageBucket, [...(groups.get(ref.storageBucket) || []), ref.storagePath]));
+  const failures: AttachmentCleanupFailure[] = [];
   for (const [bucket, paths] of groups) {
-    try { await supabase.storage.from(bucket).remove(paths); } catch (error) { console.error('Falha ao limpar anexos temporários:', error); }
+    try {
+      const firstAttempt = await supabase.storage.from(bucket).remove(paths);
+      if (!firstAttempt.error) continue;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const retryAttempt = await supabase.storage.from(bucket).remove(paths);
+      if (retryAttempt.error) failures.push({ bucket, paths, message: retryAttempt.error.message });
+    } catch (error: any) {
+      failures.push({ bucket, paths, message: String(error?.message || error) });
+    }
   }
+  if (failures.length) console.error('Falha persistente ao limpar anexos temporários:', JSON.stringify(failures));
+  return failures;
 };
 
 const encodeHeader = (value: string) => `=?UTF-8?B?${Buffer.from(String(value || ''), 'utf8').toString('base64')}?=`;
