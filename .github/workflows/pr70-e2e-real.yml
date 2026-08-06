@@ -1,4 +1,4 @@
-name: PR70 E2E Real
+name: PR70 Resend Delivery Status
 
 on:
   push:
@@ -8,150 +8,34 @@ permissions:
   contents: read
 
 jobs:
-  real-email-e2e:
+  resend-delivery-status:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     env:
-      SUPABASE_URL: https://djfjnxmbvjgweqzjvqtr.supabase.co
-      SUPABASE_KEY: sb_publishable_DHu9U7RSOV8uPwW2XXtH8A_ek7QfU_Z
-      STORAGE_BUCKET: email-anexos-temporarios
-      PREVIEW_ORIGIN: https://rh-prospera-hub-70cb89a5-dbow4q3qx.vercel.app
-      PREVIEW_SHARE_URL: https://rh-prospera-hub-70cb89a5-dbow4q3qx.vercel.app/?_vercel_share=fE7VExX8LOsQ95Q6aEXm3wzkNIA84Nfn
-      RECIPIENT: implantarh.consultoria@gmail.com
+      PREVIEW_ORIGIN: https://rh-prospera-hub-70cb89a5-873bon8x9.vercel.app
+      PREVIEW_SHARE_URL: https://rh-prospera-hub-70cb89a5-873bon8x9.vercel.app/?_vercel_share=6VS8gdnXtd2CrzzJUS7bl9edtPrEmpKG
+      RESEND_EMAIL_ID: 9c811c04-11da-424a-8de9-766f8810a61e
 
     steps:
-      - name: Checkout exact PR code
-        uses: actions/checkout@v4
-
-      - name: Create authenticated technical user
-        id: auth
-        shell: bash
-        run: |
-          set -euo pipefail
-          TEST_EMAIL="implantarh.consultoria+topac-pr70-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}@gmail.com"
-          TEST_PASSWORD="$(openssl rand -hex 24)Aa1!"
-          echo "::add-mask::$TEST_PASSWORD"
-          SIGNUP_BODY=$(python3 -c 'import json,os; print(json.dumps({"email":os.environ["TEST_EMAIL"],"password":os.environ["TEST_PASSWORD"],"data":{"nome_completo":"Teste Técnico PR70","origem":"pr70-e2e"}}))' TEST_EMAIL="$TEST_EMAIL" TEST_PASSWORD="$TEST_PASSWORD")
-          curl -sS -o signup.json -X POST "$SUPABASE_URL/auth/v1/signup" -H "apikey: $SUPABASE_KEY" -H "content-type: application/json" --data "$SIGNUP_BODY"
-          USER_ID=$(jq -r '.user.id // .id // empty' signup.json)
-          test -n "$USER_ID" || { echo 'Signup não criou usuário'; cat signup.json; exit 1; }
-          ACCESS_TOKEN=$(jq -r '.access_token // empty' signup.json)
-          TOKEN_BODY=$(python3 -c 'import json,os; print(json.dumps({"email":os.environ["TEST_EMAIL"],"password":os.environ["TEST_PASSWORD"]}))' TEST_EMAIL="$TEST_EMAIL" TEST_PASSWORD="$TEST_PASSWORD")
-          for attempt in $(seq 1 120); do
-            [ -n "$ACCESS_TOKEN" ] && break
-            sleep 3
-            curl -sS -o token.json -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" -H "apikey: $SUPABASE_KEY" -H "content-type: application/json" --data "$TOKEN_BODY"
-            ACCESS_TOKEN=$(jq -r '.access_token // empty' token.json)
-          done
-          test -n "$ACCESS_TOKEN" || { echo 'Usuário não confirmado'; exit 2; }
-          echo "::add-mask::$ACCESS_TOKEN"
-          printf '%s' "$ACCESS_TOKEN" > access_token.txt
-          echo "test_email=$TEST_EMAIL" >> "$GITHUB_OUTPUT"
-          echo "user_id=$USER_ID" >> "$GITHUB_OUTPUT"
-          echo "Usuário técnico autenticado: $USER_ID"
-        env:
-          TEST_EMAIL: placeholder
-          TEST_PASSWORD: placeholder
-
-      - name: Generate valid PNG above 4.5 MiB
-        id: file
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib,json,struct,zlib
-          from pathlib import Path
-          w,h=1600,1200
-          pixels=hashlib.shake_256(b'TOPAC-RH-PRO-PR70-E2E-REAL').digest(w*h*3)
-          raw=bytearray()
-          stride=w*3
-          for y in range(h): raw.append(0); raw.extend(pixels[y*stride:(y+1)*stride])
-          def chunk(t,d): return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
-          png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(bytes(raw),0))+chunk(b'IEND',b'')
-          Path('topac-pr70-e2e-real.png').write_bytes(png)
-          meta={'filename':'topac-pr70-e2e-real.png','size_bytes':len(png),'sha256':hashlib.sha256(png).hexdigest(),'width':w,'height':h,'valid_png_signature':png.startswith(b'\x89PNG\r\n\x1a\n')}
-          Path('file_meta.json').write_text(json.dumps(meta,indent=2))
-          print(json.dumps(meta))
-          assert len(png)>4718592 and len(png)<=20*1024*1024
-          PY
-          echo "size_bytes=$(jq -r .size_bytes file_meta.json)" >> "$GITHUB_OUTPUT"
-          echo "sha256=$(jq -r .sha256 file_meta.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Upload to private Storage
-        id: upload
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOKEN=$(cat access_token.txt)
-          PATH_VALUE='${{ steps.auth.outputs.user_id }}/2026-08-06/topac-pr70-e2e-${{ github.run_id }}.png'
-          STATUS=$(curl -sS -o upload.json -w '%{http_code}' -X POST "$SUPABASE_URL/storage/v1/object/$STORAGE_BUCKET/$PATH_VALUE" -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN" -H 'content-type: image/png' -H 'x-upsert: false' --data-binary @topac-pr70-e2e-real.png)
-          [ "$STATUS" = 200 ] || { cat upload.json; exit 1; }
-          echo "storage_path=$PATH_VALUE" >> "$GITHUB_OUTPUT"
-
-      - name: Establish preview access
-        shell: bash
+      - name: Establish protected preview session
         run: |
           set -euo pipefail
           curl -sS -L -c vercel.cookies -b vercel.cookies "$PREVIEW_SHARE_URL" -o preview-root.html
           test -s vercel.cookies
 
-      - name: Send real email through PR70 Function
-        id: send
-        shell: bash
+      - name: Read delivery state from Resend
         run: |
           set -euo pipefail
-          TOKEN=$(cat access_token.txt)
-          SUBJECT="TOPAC PR70 E2E REAL ${GITHUB_RUN_ID}"
-          python3 - <<PY
-          import json
-          payload={
-            'to':['${RECIPIENT}'],'cc':[],'subject':'${SUBJECT}',
-            'body':'Homologação real da PR #70. Anexo PNG válido acima de 4,5 MB enviado pelo motor TOPAC RH PRO via Supabase Storage e URL assinada.',
-            'attachments':[{'storageBucket':'${STORAGE_BUCKET}','storagePath':'${{ steps.upload.outputs.storage_path }}','attachmentName':'topac-pr70-e2e-real.png','attachmentContentType':'image/png','attachmentSize':int('${{ steps.file.outputs.size_bytes }}'),'documentName':'Homologação PR70 E2E'}],
-            'senderName':'Teste Técnico PR70','senderEmail':'${{ steps.auth.outputs.test_email }}','moduleOrigin':'homologacao_pr70','documentName':'Homologação PR70 E2E'
-          }
-          open('request.json','w').write(json.dumps(payload,ensure_ascii=False))
-          PY
-          STATUS=$(curl -sS -o send-response.json -w '%{http_code}' -X POST "$PREVIEW_ORIGIN/api/send-email-pdf" -c vercel.cookies -b vercel.cookies -H 'content-type: application/json; charset=utf-8' -H "authorization: Bearer $TOKEN" --data-binary @request.json)
-          cat send-response.json
-          [ "$STATUS" = 200 ] && [ "$(jq -r '.ok // false' send-response.json)" = true ] || exit 1
-          echo "subject=$SUBJECT" >> "$GITHUB_OUTPUT"
-          echo "send_status=$STATUS" >> "$GITHUB_OUTPUT"
+          STATUS=$(curl -sS -o resend-status.json -w '%{http_code}' \
+            -c vercel.cookies -b vercel.cookies \
+            "$PREVIEW_ORIGIN/api/pr70-resend-status?id=$RESEND_EMAIL_ID")
+          cat resend-status.json
+          test "$STATUS" = 200
+          test "$(jq -r '.ok // false' resend-status.json)" = true
 
-      - name: Confirm automatic cleanup
-        id: cleanup
-        shell: bash
-        run: |
-          set -euo pipefail
-          TOKEN=$(cat access_token.txt)
-          STATUS=$(curl -sS -o cleanup-response.bin -w '%{http_code}' "$SUPABASE_URL/storage/v1/object/$STORAGE_BUCKET/${{ steps.upload.outputs.storage_path }}" -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN")
-          echo "cleanup_http_status=$STATUS" >> "$GITHUB_OUTPUT"
-          [ "$STATUS" = 400 ] || [ "$STATUS" = 404 ]
-
-      - name: Build evidence
-        if: always()
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json,os
-          from pathlib import Path
-          meta=json.loads(Path('file_meta.json').read_text()) if Path('file_meta.json').exists() else {}
-          meta.update({'run_id':os.environ.get('GITHUB_RUN_ID'),'commit_sha':os.environ.get('GITHUB_SHA'),'recipient':os.environ.get('RECIPIENT'),'test_email':'${{ steps.auth.outputs.test_email }}','user_id':'${{ steps.auth.outputs.user_id }}','storage_path':'${{ steps.upload.outputs.storage_path }}','subject':'${{ steps.send.outputs.subject }}','send_http_status':'${{ steps.send.outputs.send_status }}','cleanup_http_status':'${{ steps.cleanup.outputs.cleanup_http_status }}'})
-          if Path('send-response.json').exists(): meta['provider_response']=json.loads(Path('send-response.json').read_text())
-          Path('e2e-evidence.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2))
-          print(json.dumps(meta,ensure_ascii=False))
-          PY
-
-      - name: Upload evidence artifact
-        if: always()
+      - name: Upload delivery evidence
         uses: actions/upload-artifact@v4
         with:
-          name: pr70-e2e-real-evidence-${{ github.run_id }}
-          path: |
-            topac-pr70-e2e-real.png
-            file_meta.json
-            request.json
-            send-response.json
-            e2e-evidence.json
-          if-no-files-found: warn
+          name: pr70-resend-delivery-status-${{ github.run_id }}
+          path: resend-status.json
           retention-days: 2
