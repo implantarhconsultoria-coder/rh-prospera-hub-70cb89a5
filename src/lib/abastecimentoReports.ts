@@ -29,6 +29,37 @@ export type FuelReportRecord = {
   created_at: string | null;
 };
 
+export type KmReportRecord = {
+  id: string;
+  funcionario_id: string | null;
+  funcionario_nome: string;
+  empresa_id: string | null;
+  empresa_nome: string;
+  empresa: string | null;
+  filial: string | null;
+  placa: string;
+  data: string;
+  hora: string | null;
+  km_inicial: number | null;
+  km_final: number | null;
+  total_rodado: number | null;
+  motivo_rota: string;
+  fonte_km: 'sequencia' | 'registrado' | 'sem_base' | 'inconsistente';
+  status: string | null;
+  created_at: string | null;
+};
+
+export type KmReportGroup = {
+  groupKey: string;
+  empresaId: string;
+  empresaNome: string;
+  funcionarioId: string;
+  funcionarioNome: string;
+  placa: string;
+  records: KmReportRecord[];
+  totalRodado: number;
+};
+
 export type RegisteredCompany = {
   id: string;
   nome: string;
@@ -324,4 +355,151 @@ export const generateDetailedFuelPdf = (
   doc.text(formatMoney(totalValue), 285, y + 6, { align: 'right' });
 
   return outputPdf(doc, `Relatorio_Detalhado_Abastecimentos_${fileSuffix}.pdf`);
+};
+
+const compareKmRecords = (a: KmReportRecord, b: KmReportRecord) => {
+  const company = a.empresa_nome.localeCompare(b.empresa_nome, 'pt-BR');
+  if (company !== 0) return company;
+  const employee = a.funcionario_nome.localeCompare(b.funcionario_nome, 'pt-BR');
+  if (employee !== 0) return employee;
+  const plate = a.placa.localeCompare(b.placa, 'pt-BR');
+  if (plate !== 0) return plate;
+  const date = a.data.localeCompare(b.data);
+  if (date !== 0) return date;
+  const time = String(a.hora || '').localeCompare(String(b.hora || ''));
+  if (time !== 0) return time;
+  return String(a.created_at || a.id).localeCompare(String(b.created_at || b.id));
+};
+
+export const buildKmReportGroups = (records: KmReportRecord[]): KmReportGroup[] => {
+  const groups = new Map<string, KmReportGroup>();
+
+  [...records].sort(compareKmRecords).forEach((record) => {
+    const companyKey = record.empresa_id || `empresa:${normalize(record.empresa_nome || record.empresa || record.filial)}`;
+    const employeeKey = record.funcionario_id || `funcionario:${normalize(record.funcionario_nome)}`;
+    const plateKey = normalize(record.placa);
+    const groupKey = `${companyKey}|${employeeKey}|${plateKey}`;
+
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        groupKey,
+        empresaId: companyKey,
+        empresaNome: record.empresa_nome || record.empresa || record.filial || 'Empresa não identificada',
+        funcionarioId: employeeKey,
+        funcionarioNome: record.funcionario_nome || 'Colaborador não identificado',
+        placa: record.placa || 'SEM PLACA',
+        records: [],
+        totalRodado: 0,
+      });
+    }
+
+    const group = groups.get(groupKey)!;
+    group.records.push(record);
+    if (record.total_rodado != null && record.total_rodado >= 0) {
+      group.totalRodado += Number(record.total_rodado);
+    }
+  });
+
+  return Array.from(groups.values()).sort((a, b) => {
+    const company = a.empresaNome.localeCompare(b.empresaNome, 'pt-BR');
+    if (company !== 0) return company;
+    const employee = a.funcionarioNome.localeCompare(b.funcionarioNome, 'pt-BR');
+    if (employee !== 0) return employee;
+    return a.placa.localeCompare(b.placa, 'pt-BR');
+  });
+};
+
+const addKmGroupHeader = (doc: jsPDF, group: KmReportGroup, y: number) => {
+  const width = doc.internal.pageSize.getWidth();
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(12, y, width - 24, 16, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(group.funcionarioNome, 16, y + 6);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text(group.empresaNome, 16, y + 11.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text(`PLACA ${group.placa}`, width - 16, y + 6.5, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text(`${group.records.length} registro(s)`, width - 16, y + 12, { align: 'right' });
+  return y + 19;
+};
+
+export const generateKmReportPdf = (
+  groups: KmReportGroup[],
+  periodLabel: string,
+  fileSuffix: string,
+) => {
+  const title = 'RELATÓRIO CORPORATIVO DE QUILOMETRAGEM';
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+  const columns = [
+    { label: 'Data', x: 12, width: 27 },
+    { label: 'Placa', x: 41, width: 22 },
+    { label: 'KM Inicial', x: 65, width: 27, align: 'right' as const },
+    { label: 'KM Final', x: 95, width: 27, align: 'right' as const },
+    { label: 'Total rodado', x: 125, width: 29, align: 'right' as const },
+    { label: 'Motivo / Rota', x: 158, width: 127 },
+  ];
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let page = 1;
+
+  const startGroupPage = (group: KmReportGroup, addPage: boolean) => {
+    if (addPage) {
+      doc.addPage('a4', 'landscape');
+      page += 1;
+    }
+    addPageHeader(doc, title, periodLabel, page);
+    let nextY = addKmGroupHeader(doc, group, 32);
+    nextY = drawTableHeader(doc, nextY, columns);
+    return nextY;
+  };
+
+  if (!groups.length) {
+    addPageHeader(doc, title, periodLabel, page);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text('Nenhum registro de quilometragem localizado para o período.', 12, 40);
+    return outputPdf(doc, `Relatorio_Quilometragem_${fileSuffix}.pdf`);
+  }
+
+  groups.forEach((group, groupIndex) => {
+    let y = startGroupPage(group, groupIndex > 0);
+
+    group.records.forEach((record) => {
+      const route = String(record.motivo_rota || 'Não informado');
+      const routeLines = doc.splitTextToSize(route, columns[5].width - 2) as string[];
+      const rowHeight = Math.max(9, routeLines.length * 4 + 3);
+
+      if (y + rowHeight > pageHeight - 16) {
+        y = startGroupPage(group, true);
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      const dateLines = [formatDateBr(record.data), String(record.hora || '').slice(0, 5)].filter(Boolean);
+      doc.text(dateLines, columns[0].x, y + 5);
+      doc.text(record.placa || '-', columns[1].x, y + 5);
+      doc.text(record.km_inicial == null ? '-' : formatNumber(record.km_inicial, 0), columns[2].x + columns[2].width, y + 5, { align: 'right' });
+      doc.text(record.km_final == null ? '-' : formatNumber(record.km_final, 0), columns[3].x + columns[3].width, y + 5, { align: 'right' });
+      doc.text(record.total_rodado == null ? '-' : formatNumber(record.total_rodado, 0), columns[4].x + columns[4].width, y + 5, { align: 'right' });
+      doc.text(routeLines, columns[5].x, y + 5);
+      doc.setDrawColor(218, 223, 230);
+      doc.line(12, y + rowHeight, doc.internal.pageSize.getWidth() - 12, y + rowHeight);
+      y += rowHeight;
+    });
+
+    if (y + 10 > pageHeight - 14) {
+      y = startGroupPage(group, true);
+    }
+    doc.setFillColor(248, 250, 252);
+    doc.rect(12, y, doc.internal.pageSize.getWidth() - 24, 9, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text(`Total rodado no grupo: ${formatNumber(group.totalRodado, 0)} km`, doc.internal.pageSize.getWidth() - 16, y + 6, { align: 'right' });
+  });
+
+  return outputPdf(doc, `Relatorio_Quilometragem_${fileSuffix}.pdf`);
 };
