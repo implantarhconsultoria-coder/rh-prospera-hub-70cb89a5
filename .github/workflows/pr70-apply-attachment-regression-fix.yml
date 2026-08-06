@@ -1,0 +1,147 @@
+name: PR70 Apply Attachment Regression Fix
+
+on:
+  push:
+    branches: [test/pr70-screenshot-investigation-20260806]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-pr70:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR70 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/topac-email-anexos-storage-20260806
+          fetch-depth: 0
+      - name: Patch automatic fallback and MIME corruption
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          modal_path = Path('src/components/EmailPdfModal.tsx')
+          modal = modal_path.read_text(encoding='utf-8')
+          old = """    } catch (error: any) {
+                const friendlyMessage = getFriendlyEmailError(error?.message);
+                handleManualSend(false);
+                toast.warning(`${friendlyMessage} O e-mail manual foi aberto e os anexos foram baixados.`);
+              } finally {
+          """
+          new = """    } catch (error: any) {
+                const friendlyMessage = getFriendlyEmailError(error?.message);
+                toast.error(`${friendlyMessage} Nenhuma janela ou download foi aberto automaticamente. Use \"Abrir e-mail manual\" somente se desejar.`);
+              } finally {
+          """
+          if old not in modal:
+              raise SystemExit('Bloco automático do modal não encontrado')
+          modal_path.write_text(modal.replace(old, new, 1), encoding='utf-8')
+
+          email_path = Path('src/lib/emailUtils.ts')
+          email = email_path.read_text(encoding='utf-8')
+          preview_block = """const ensurePdfBlob = (blob: Blob) => ensureAttachmentBlob(blob, PDF_CONTENT_TYPE);
+
+          const openPdfPreview = (blob: Blob) => {
+            const url = URL.createObjectURL(ensurePdfBlob(blob));
+            const win = window.open(url, '_blank', 'noopener,noreferrer');
+            window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+            return Boolean(win);
+          };
+
+          """
+          if preview_block not in email:
+              raise SystemExit('Helper de preview automático não encontrado')
+          email = email.replace(preview_block, '', 1)
+          old_catch = """  } catch (error: any) {
+              openPdfPreview(attachmentBlob);
+              throw new Error(error?.message || 'O envio automático pelo servidor não foi concluído.');
+            }
+          """
+          new_catch = """  } catch (error: any) {
+              throw new Error(error?.message || 'O envio automático pelo servidor não foi concluído.');
+            }
+          """
+          if old_catch not in email:
+              raise SystemExit('Fallback automático do helper não encontrado')
+          email_path.write_text(email.replace(old_catch, new_catch, 1), encoding='utf-8')
+
+          history_path = Path('src/components/HistoricoDocumentalFuncionario.tsx')
+          history = history_path.read_text(encoding='utf-8')
+          fake_pdf = """    const attachmentBlob = originalBlob.type === 'application/pdf'
+                ? originalBlob
+                : new Blob([originalBlob], { type: 'application/pdf' });
+          """
+          if fake_pdf not in history:
+              raise SystemExit('Conversão MIME artificial não encontrada')
+          history = history.replace(fake_pdf, '', 1)
+          old_attachment = """      ...(isAtestado
+                ? {
+                  attachments: [{
+                    attachmentBlob: originalBlob,
+                    attachmentName: fileName,
+                    attachmentContentType: originalBlob.type || 'application/octet-stream',
+                    documentId: doc.id,
+                    documentName: titulo,
+                  }],
+                }
+                : { attachmentBlob, attachmentName: fileName }),
+          """
+          new_attachment = """      attachments: [{
+                attachmentBlob: originalBlob,
+                attachmentName: fileName,
+                attachmentContentType: originalBlob.type || 'application/octet-stream',
+                documentId: doc.id,
+                documentName: titulo,
+              }],
+          """
+          if old_attachment not in history:
+              raise SystemExit('Montagem condicional do anexo não encontrada')
+          history_path.write_text(history.replace(old_attachment, new_attachment, 1), encoding='utf-8')
+
+          test_path = Path('src/lib/__tests__/emailAttachmentRegression.test.ts')
+          test_path.write_text("""import { readFileSync } from 'node:fs';
+          import { resolve } from 'node:path';
+          import { describe, expect, it } from 'vitest';
+
+          const root = process.cwd();
+          const modal = readFileSync(resolve(root, 'src/components/EmailPdfModal.tsx'), 'utf8');
+          const helper = readFileSync(resolve(root, 'src/lib/emailUtils.ts'), 'utf8');
+          const history = readFileSync(resolve(root, 'src/components/HistoricoDocumentalFuncionario.tsx'), 'utf8');
+
+          describe('regressões do envio de anexos', () => {
+            it('não abre cliente de e-mail nem baixa arquivos automaticamente quando o envio falha', () => {
+              expect(modal).not.toContain('handleManualSend(false)');
+              expect(modal).not.toContain('O e-mail manual foi aberto e os anexos foram baixados.');
+              expect(modal).toContain('Nenhuma janela ou download foi aberto automaticamente.');
+            });
+
+            it('não abre preview automático no helper após falha', () => {
+              expect(helper).not.toContain('openPdfPreview(attachmentBlob)');
+              expect(helper).not.toContain("window.open(url, '_blank', 'noopener,noreferrer')");
+            });
+
+            it('preserva o Blob e o MIME reais do documento histórico', () => {
+              expect(history).not.toContain("new Blob([originalBlob], { type: 'application/pdf' })");
+              expect(history).toContain('attachmentBlob: originalBlob');
+              expect(history).toContain("attachmentContentType: originalBlob.type || 'application/octet-stream'");
+            });
+          });
+          """, encoding='utf-8')
+          PY
+      - name: Validate targeted tests
+        run: |
+          npm ci
+          npx vitest run src/lib/__tests__/emailAttachmentTransport.test.ts src/lib/__tests__/emailAttachmentRegression.test.ts
+      - name: Commit fix to PR70
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Rodrigo de Souza Sabino'
+          git config user.email 'implantarh.consultoria@gmail.com'
+          git add src/components/EmailPdfModal.tsx src/lib/emailUtils.ts src/components/HistoricoDocumentalFuncionario.tsx src/lib/__tests__/emailAttachmentRegression.test.ts
+          git commit -m 'fix: remover fallback automático e preservar anexo real'
+          git push origin HEAD:agent/topac-email-anexos-storage-20260806
