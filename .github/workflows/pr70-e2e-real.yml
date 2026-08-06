@@ -1,41 +1,83 @@
-name: PR70 Resend Delivery Status
+name: Patch PR70 Resend Attachment
 
 on:
   push:
     branches: [test/pr70-e2e-real-20260806]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  resend-delivery-status:
+  patch-pr70:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      PREVIEW_ORIGIN: https://rh-prospera-hub-70cb89a5-nijse9iun.vercel.app
-      PREVIEW_SHARE_URL: https://rh-prospera-hub-70cb89a5-nijse9iun.vercel.app/?_vercel_share=2TgF5TyBVjvZ1HuMKVqtGiHt8ddtxMZk
-      RESEND_EMAIL_ID: 9c811c04-11da-424a-8de9-766f8810a61e
-
+    timeout-minutes: 10
     steps:
-      - name: Establish protected preview session
-        run: |
-          set -euo pipefail
-          curl -sS -L -c vercel.cookies -b vercel.cookies "$PREVIEW_SHARE_URL" -o preview-root.html
-          test -s vercel.cookies
-
-      - name: Read delivery state from Resend
-        run: |
-          set -euo pipefail
-          STATUS=$(curl -sS -o resend-status.json -w '%{http_code}' \
-            -c vercel.cookies -b vercel.cookies \
-            "$PREVIEW_ORIGIN/api/pr70-resend-status?id=$RESEND_EMAIL_ID")
-          cat resend-status.json
-          test "$STATUS" = 200
-          test "$(jq -r '.ok // false' resend-status.json)" = true
-
-      - name: Upload delivery evidence
-        uses: actions/upload-artifact@v4
+      - name: Checkout PR70 branch
+        uses: actions/checkout@v4
         with:
-          name: pr70-resend-delivery-status-${{ github.run_id }}
-          path: resend-status.json
-          retention-days: 2
+          ref: agent/topac-email-anexos-storage-20260806
+          fetch-depth: 0
+
+      - name: Replace remote URL attachment with server-loaded content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          api_path = Path('api/send-email-pdf.ts')
+          text = api_path.read_text(encoding='utf-8')
+          pattern = re.compile(r"const sendWithResend = async \(payload: any\) => \{.*?\n\};\nconst sendWithSendGrid", re.S)
+          replacement = """const sendWithResend = async (payload: any, supabase: SupabaseServer) => {
+            const apiKey = env('RESEND_API_KEY');
+            if (!apiKey) return null;
+            for (const attachment of payload.attachments) await loadAttachmentBase64(supabase, attachment);
+            const response = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+              body: JSON.stringify({
+                from: payload.from || ensureFromConfigured('resend'),
+                reply_to: payload.replyTo || getEmailReplyTo(),
+                to: payload.to,
+                cc: payload.cc,
+                subject: payload.subject,
+                text: payload.body,
+                attachments: payload.attachments.map((attachment: ResolvedAttachment) => ({
+                  filename: attachment.attachmentName,
+                  content: attachment.attachmentBase64,
+                })),
+              }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error((data as any)?.message || (data as any)?.error || 'resend_failed');
+            return { provider: 'resend', data };
+          };
+          const sendWithSendGrid"""
+          updated, count = pattern.subn(replacement, text)
+          if count != 1:
+              raise SystemExit(f'Função sendWithResend não localizada de forma única: {count}')
+          updated = updated.replace('? await sendWithResend(payload)\n', '? await sendWithResend(payload, supabase)\n')
+          if updated == text:
+              raise SystemExit('Nenhuma alteração aplicada em api/send-email-pdf.ts')
+          api_path.write_text(updated, encoding='utf-8')
+
+          test_path = Path('src/lib/__tests__/emailAttachmentTransport.test.ts')
+          tests = test_path.read_text(encoding='utf-8')
+          tests = tests.replace("it('protege as referências no backend e usa URL remota no Resend', () => {", "it('protege as referências e incorpora o anexo no Resend antes da limpeza', () => {")
+          tests = tests.replace("expect(backend).toContain('path: attachment.signedUrl');", "expect(backend).toContain('content: attachment.attachmentBase64');\n    expect(backend).toContain('await loadAttachmentBase64(supabase, attachment)');")
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+
+          git diff --check
+          git diff -- api/send-email-pdf.ts src/lib/__tests__/emailAttachmentTransport.test.ts
+
+      - name: Commit and push PR correction
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Rodrigo de Souza Sabino'
+          git config user.email 'implantarh.consultoria@gmail.com'
+          git add api/send-email-pdf.ts src/lib/__tests__/emailAttachmentTransport.test.ts
+          git commit -m 'fix: incorporar anexo no Resend antes da limpeza'
+          git push origin HEAD:agent/topac-email-anexos-storage-20260806
