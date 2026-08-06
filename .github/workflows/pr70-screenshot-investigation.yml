@@ -3,6 +3,8 @@ name: PR70 Screenshot Investigation
 on:
   push:
     branches: [test/pr70-screenshot-investigation-20260806]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
