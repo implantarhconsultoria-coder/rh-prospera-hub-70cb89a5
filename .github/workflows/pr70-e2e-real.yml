@@ -12,8 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      PREVIEW_ORIGIN: https://rh-prospera-hub-70cb89a5-9kezi9q8o.vercel.app
-      PREVIEW_SHARE_URL: https://rh-prospera-hub-70cb89a5-9kezi9q8o.vercel.app/?_vercel_share=Ja5GuuxMG0Wq4XUQQihVWGitxi2d8Mgp
+      PREVIEW_ORIGIN: https://rh-prospera-hub-70cb89a5-nijse9iun.vercel.app
+      PREVIEW_SHARE_URL: https://rh-prospera-hub-70cb89a5-nijse9iun.vercel.app/?_vercel_share=2TgF5TyBVjvZ1HuMKVqtGiHt8ddtxMZk
       RESEND_EMAIL_ID: 9c811c04-11da-424a-8de9-766f8810a61e
 
     steps:
