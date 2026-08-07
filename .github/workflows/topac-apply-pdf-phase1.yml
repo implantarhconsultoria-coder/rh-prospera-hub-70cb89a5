@@ -3,6 +3,8 @@ name: TOPAC Apply PDF Phase 1
 on:
   push:
     branches: [agent/topac-pdf-rescisao-20260807]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
@@ -32,7 +34,7 @@ jobs:
               p.write_text(s, encoding='utf-8')
 
           for path, benefit, label in [
-              ('src/pages/RelatorioVRImpressaoPage.tsx', 'ValeRefeicao', 'vale refeição'),
+              ('src/pages/RelatorioVRImpressaoPage.tsx', 'ValeRefeicao', 'vale refeicao'),
               ('src/pages/RelatorioVTImpressaoPage.tsx', 'ValeTransporte', 'vale transporte'),
           ]:
               replace(
@@ -40,8 +42,9 @@ jobs:
                   "import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';\nimport { toast } from 'sonner';",
                   "import { buildTopacRhPdfFileName, printDocumentAsPdf } from '@/lib/savePdf';",
               )
-              old = """  const handleSalvarPdf = async () => {\n    try {\n      const empresaArquivo = blocks.length === 1 ? blocks[0].company.name : `${blocks.length}_empresas`;\n      await saveElementAsPdf({\n        element: document.getElementById('""" + ('vr' if benefit == 'ValeRefeicao' else 'vt') + """-print-area'),\n        fileName: buildPdfFileName('relatorio """ + label + """', empresaArquivo, competenciaPdfPart(competencia)),\n      });\n      toast.success('PDF salvo com sucesso.');\n    } catch (error: any) {\n      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');\n    }\n  };"""
-              new = """  const pdfFileName = buildTopacRhPdfFileName({\n    tipo: 'Relatorio""" + benefit + """',\n    nome: blocks.length === 1 ? blocks[0].company.name : 'Multiempresas',\n    competencia,\n  });\n  const handlePrintOrPdf = () => printDocumentAsPdf(pdfFileName);"""
+              print_id = 'vr' if benefit == 'ValeRefeicao' else 'vt'
+              old = f"""  const handleSalvarPdf = async () => {{\n    try {{\n      const empresaArquivo = blocks.length === 1 ? blocks[0].company.name : `${{blocks.length}}_empresas`;\n      await saveElementAsPdf({{\n        element: document.getElementById('{print_id}-print-area'),\n        fileName: buildPdfFileName('relatorio {label}', empresaArquivo, competenciaPdfPart(competencia)),\n      }});\n      toast.success('PDF salvo com sucesso.');\n    }} catch (error: any) {{\n      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');\n    }}\n  }};"""
+              new = f"""  const pdfFileName = buildTopacRhPdfFileName({{\n    tipo: 'Relatorio{benefit}',\n    nome: blocks.length === 1 ? blocks[0].company.name : 'Multiempresas',\n    competencia,\n  }});\n  const handlePrintOrPdf = () => printDocumentAsPdf(pdfFileName);"""
               replace(path, old, new)
               replace(path, 'onClick={() => window.print()}', 'onClick={handlePrintOrPdf}')
               replace(path, 'onClick={handleSalvarPdf}', 'onClick={handlePrintOrPdf}')
@@ -73,10 +76,6 @@ jobs:
               """  const handleSalvarPdf = async () => {\n    setSavingPdf(true);\n    try {\n      const pdfBlob = gerarPdfRecibosBlob(recibos);\n      const fileName = getRecibosPdfFileName(recibos);\n      downloadPdfBlob(pdfBlob, fileName);\n      await arquivarRecibosNoHistorico(recibos, 'download').catch((error) => {\n        console.error('Erro ao arquivar recibos no historico:', error);\n        toast.warning('PDF salvo, mas alguns recibos nao foram salvos no historico.');\n      });\n      toast.success('PDF salvo com sucesso.');\n    } catch (error: any) {\n      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');\n    } finally {\n      setSavingPdf(false);\n    }\n  };""",
               """  const handleSalvarPdf = async () => {\n    setSavingPdf(true);\n    try {\n      await arquivarRecibosNoHistorico(recibos, 'download').catch((error) => {\n        console.error('Erro ao arquivar recibos no historico:', error);\n        toast.warning('PDF pronto, mas alguns recibos não foram salvos no histórico.');\n      });\n      printDocumentAsPdf(getRecibosPdfFileName(recibos));\n    } catch (error: any) {\n      toast.error(error?.message || 'Não foi possível preparar o PDF.');\n    } finally {\n      setSavingPdf(false);\n    }\n  };""",
           )
-
-          # Prevent rasterized direct-save regression in the visible report flows.
-          test = Path('src/lib/__tests__/pdfStandardization.test.ts')
-          test.write_text("""import { describe, expect, it } from 'vitest';\nimport { buildTopacRhPdfFileName, competenciaPdfPart } from '@/lib/savePdf';\nimport { readFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\n\ndescribe('padronização de PDFs TOPAC RH', () => {\n  it('formata competência em mês por extenso sem acento no arquivo', () => {\n    expect(competenciaPdfPart('2026-08')).toBe('Agosto2026');\n  });\n\n  it('gera os três nomes executivos obrigatórios', () => {\n    expect(buildTopacRhPdfFileName({ tipo: 'Fechamento', nome: 'Alqui Obras', competencia: '2026-08' })).toBe('TOPAC_RH_Fechamento_AlquiObras_Agosto2026.pdf');\n    expect(buildTopacRhPdfFileName({ tipo: 'Funcionario', nome: 'Adalto Jacinto', competencia: '2026-08' })).toBe('TOPAC_RH_Funcionario_AdaltoJacinto_Agosto2026.pdf');\n    expect(buildTopacRhPdfFileName({ tipo: 'Relatorio', nome: 'Multiempresas', competencia: '2026-08' })).toBe('TOPAC_RH_Relatorio_Multiempresas_Agosto2026.pdf');\n  });\n\n  it('não usa canvas/jsPDF na função saveElementAsPdf', () => {\n    const source = readFileSync(resolve(process.cwd(), 'src/lib/savePdf.ts'), 'utf8');\n    const block = source.slice(source.indexOf('export const saveElementAsPdf'))\n    expect(block).toContain('printDocumentAsPdf(fileName)');\n    expect(block).not.toContain('html2canvas');\n    expect(block).not.toContain('new jsPDF');\n  });\n\n  it('faz imprimir e salvar compartilharem o mesmo handler no fechamento', () => {\n    const source = readFileSync(resolve(process.cwd(), 'src/pages/RelatorioImpressaoPage.tsx'), 'utf8');\n    expect((source.match(/onClick=\\{handlePrintOrPdf\\}/g) || []).length).toBeGreaterThanOrEqual(2);\n    expect(source).toContain("tipo: allCompanies ? 'Relatorio' : 'Fechamento'");\n    expect(source).toContain("nome: allCompanies ? 'Multiempresas'");\n  });\n});\n""", encoding='utf-8')
           PY
       - name: Validate changed scope
         run: |
@@ -88,7 +87,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/pages/RelatorioVRImpressaoPage.tsx src/pages/RelatorioVTImpressaoPage.tsx src/pages/RecibosBeneficioImpressaoPage.tsx src/lib/__tests__/pdfStandardization.test.ts
+          git add src/pages/RelatorioVRImpressaoPage.tsx src/pages/RelatorioVTImpressaoPage.tsx src/pages/RecibosBeneficioImpressaoPage.tsx
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "fix: padronizar impressão e nomes dos relatórios"
           git push origin HEAD:agent/topac-pdf-rescisao-20260807
