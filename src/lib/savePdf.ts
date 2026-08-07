@@ -17,7 +17,7 @@ export const sanitizePdfFileName = (value: string) =>
   (value || 'TOPAC_RH_Documento')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, ' ')
+    .replace(/[<>:"/\\|?*]+/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\s+\./g, '.')
     .trim() || 'TOPAC_RH_Documento';
@@ -114,8 +114,6 @@ export const printDocumentAsPdf = (fileName: string) => {
   document.title = titleForPrint;
   window.addEventListener('afterprint', restoreTitle, { once: true });
 
-  // requestAnimationFrame garante que o novo title e o CSS @media print
-  // estejam aplicados antes de abrir a caixa nativa de impressão/PDF.
   window.requestAnimationFrame(() => {
     window.print();
     window.setTimeout(restoreTitle, 1500);
