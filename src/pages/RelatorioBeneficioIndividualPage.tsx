@@ -5,8 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { getFirstBusinessDayOfNextMonth, getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
 import { buildIndividualBenefitData, getPreviousCompetencia } from '@/lib/benefitReports';
-import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
-import { toast } from 'sonner';
+import { buildTopacRhPdfFileName, printDocumentAsPdf } from '@/lib/savePdf';
 
 const RelatorioBeneficioIndividualPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
@@ -41,17 +40,12 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
   const vrData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vr' }), [emp, entry, descontoEntry, diasUteis]);
   const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vt' }), [emp, entry, descontoEntry, diasUteis]);
 
-  const handleSalvarPdf = async () => {
-    try {
-      await saveElementAsPdf({
-        element: document.getElementById('benefit-individual-print'),
-        fileName: buildPdfFileName('ficha beneficios vr vt', company?.name, emp?.name || 'funcionario', competenciaPdfPart(competencia)),
-      });
-      toast.success('PDF salvo com sucesso.');
-    } catch (error: any) {
-      toast.error(error?.message || 'Nao foi possivel salvar o PDF.');
-    }
-  };
+  const pdfFileName = buildTopacRhPdfFileName({
+    tipo: 'Funcionario',
+    nome: emp?.name || 'Funcionario',
+    competencia,
+  });
+  const handlePrintOrPdf = () => printDocumentAsPdf(pdfFileName);
 
   if (loading || dataLoading || (isAuthenticated && (companies.length === 0 || employees.length === 0))) {
     return (
@@ -67,9 +61,9 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
   const renderBenefitTable = (label: string, data: typeof vrData) => {
     if (!data) return null;
     return (
-      <div className="mb-6">
+      <div className="mb-6 report-section">
         <h3 className="text-sm font-bold mb-2 bg-gray-200 px-2 py-1">{label}</h3>
-        <table className="w-full border-collapse" style={{ fontSize: '10px' }}>
+        <table className="w-full border-collapse" style={{ fontSize: '10px', tableLayout: 'fixed' }}>
           <tbody>
             <tr><td className="border border-gray-300 px-2 py-1 font-medium w-1/2">Valor Diário</td><td className="border border-gray-300 px-2 py-1 text-right">{formatCurrency(data.valorDiario)}</td></tr>
             <tr><td className="border border-gray-300 px-2 py-1 font-medium">Dias Previstos</td><td className="border border-gray-300 px-2 py-1 text-right">{data.diasPrevistos}</td></tr>
@@ -87,11 +81,13 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
     <>
       <style>{`
         @page { size: A4; margin: 15mm; }
+        .report-section { break-inside: avoid; page-break-inside: avoid; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
           body * { visibility: hidden !important; }
           #benefit-individual-print, #benefit-individual-print * { visibility: visible !important; }
-          #benefit-individual-print { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+          #benefit-individual-print { position: absolute; left: 0; top: 0; width: 100%; max-width: none !important; margin: 0; padding: 0; }
+          .report-section { break-inside: avoid !important; page-break-inside: avoid !important; }
           .no-print, .no-print *, iframe, nav, aside,
           [role="dialog"], [aria-modal="true"],
           [class*="lovable"], [id*="lovable"] { display: none !important; }
@@ -99,38 +95,32 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
       `}</style>
 
       <div className="bg-white text-black min-h-screen" style={{ fontFamily: "'Segoe UI', Arial, sans-serif" }}>
-        <div className="no-print flex items-center gap-3 px-8 py-3 bg-gray-100 border-b">
+        <div className="no-print flex flex-wrap items-center gap-3 px-8 py-3 bg-gray-100 border-b">
           <button onClick={() => window.history.back()}
             className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
             ← Voltar
           </button>
-          <button onClick={() => window.print()}
+          <button onClick={handlePrintOrPdf}
             className="px-4 py-2 text-sm font-medium bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
-            🖨 Imprimir / PDF
+            🖨 Imprimir
           </button>
-          <button onClick={handleSalvarPdf}
+          <button onClick={handlePrintOrPdf}
             className="px-4 py-2 text-sm font-medium bg-slate-700 text-white rounded-lg hover:bg-slate-800 transition-colors">
             Salvar PDF
           </button>
+          <span className="text-xs text-gray-600">Nome sugerido: <strong>{pdfFileName}</strong></span>
         </div>
 
-        <div id="benefit-individual-print" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
-          <div className="border-b-2 border-black pb-3 mb-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-lg font-bold">{company.name}</h1>
-                <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-bold">FICHA INDIVIDUAL DE BENEFÍCIOS</p>
-                <p className="text-xs">Competência: {competenciaLabel}</p>
-                <p className="text-xs">Emissão: {emissaoDate}</p>
-                {dataFechamento && <p className="text-xs">Fechamento: {new Date(dataFechamento).toLocaleDateString('pt-BR')}</p>}
-              </div>
-            </div>
+        <div id="benefit-individual-print" className="max-w-[210mm] mx-auto px-8 py-6 print:px-0 print:py-0" style={{ fontSize: '11px' }}>
+          <div className="border-b-2 border-black pb-3 mb-4 text-center report-section">
+            <h1 className="text-lg font-bold">{company.name}</h1>
+            <p className="text-xs text-gray-600">CNPJ: {company.cnpj}</p>
+            <p className="text-sm font-bold mt-2">FICHA INDIVIDUAL DE BENEFÍCIOS</p>
+            <p className="text-xs">Competência: {competenciaLabel} · Emissão: {emissaoDate}</p>
+            {dataFechamento && <p className="text-xs">Fechamento: {new Date(dataFechamento).toLocaleDateString('pt-BR')}</p>}
           </div>
 
-          <div className="border border-gray-400 rounded p-3 mb-4" style={{ fontSize: '10px' }}>
+          <div className="border border-gray-400 rounded p-3 mb-4 report-section" style={{ fontSize: '10px' }}>
             <div className="grid grid-cols-2 gap-1">
               <p><strong>Nome:</strong> {emp.name}</p>
               <p><strong>Cargo:</strong> {emp.cargo}</p>
@@ -144,14 +134,10 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
           {renderBenefitTable('VALE REFEIÇÃO (VR)', vrData)}
           {renderBenefitTable('VALE TRANSPORTE (VT)', vtData)}
 
-          <div className="mt-12 mb-6">
+          <div className="mt-12 mb-6 report-section">
             <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
             <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
             <p className="text-center text-xs mt-1">Data: ____/____/________</p>
-          </div>
-
-          <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">
-            {' '}
           </div>
         </div>
       </div>

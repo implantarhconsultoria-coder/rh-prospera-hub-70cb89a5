@@ -1,36 +1,124 @@
-import { jsPDF } from 'jspdf';
+const MESES_PT_BR = [
+  'Janeiro',
+  'Fevereiro',
+  'Marco',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+] as const;
 
 export const sanitizePdfFileName = (value: string) =>
-  (value || 'documento')
+  (value || 'TOPAC_RH_Documento')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, ' ')
+    .replace(/[<>:"/\\|?*]+/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\s+\./g, '.')
-    .trim() || 'documento';
+    .trim() || 'TOPAC_RH_Documento';
 
 export const pdfNamePart = (value?: string | number | null) =>
   sanitizePdfFileName(String(value ?? ''))
     .replace(/\.pdf$/i, '')
     .slice(0, 80);
 
+const compactMetadataPart = (value?: string | number | null) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('')
+    .slice(0, 90);
+
 export const competenciaPdfPart = (competencia?: string | null) => {
   const value = String(competencia || '').trim();
   const match = value.match(/^(\d{4})-(\d{2})/);
-  if (match) return `${match[1]}-${match[2]}`;
-  return pdfNamePart(value);
+  if (match) {
+    const month = Number(match[2]);
+    const monthLabel = MESES_PT_BR[month - 1];
+    if (monthLabel) return `${monthLabel}${match[1]}`;
+  }
+  return compactMetadataPart(value);
 };
 
 export const buildPdfFileName = (...parts: Array<string | number | null | undefined | false>) => {
-  const base = parts
+  const normalized = parts
     .filter((part) => part !== false && part !== null && part !== undefined && String(part).trim() !== '')
-    .map((part) => pdfNamePart(part as string | number))
-    .filter(Boolean)
-    .join('_');
-  return `${base || 'documento'}.pdf`;
+    .map((part) => compactMetadataPart(part as string | number))
+    .filter(Boolean);
+  const body = normalized.join('_') || 'Documento';
+  return `TOPAC_RH_${body}.pdf`;
+};
+
+export const buildTopacRhPdfFileName = ({
+  tipo,
+  nome,
+  competencia,
+}: {
+  tipo: string;
+  nome: string;
+  competencia?: string | null;
+}) => {
+  const tipoPart = compactMetadataPart(tipo) || 'Documento';
+  const nomePart = compactMetadataPart(nome) || 'Topac';
+  const competenciaPart = competenciaPdfPart(competencia) || compactMetadataPart(new Date().toISOString().slice(0, 7));
+  return `TOPAC_RH_${tipoPart}_${nomePart}_${competenciaPart}.pdf`;
+};
+
+/**
+ * Unifica o caminho de "Imprimir" e "Salvar PDF".
+ *
+ * O navegador renderiza a mesma árvore HTML/CSS usada na impressão; não existe
+ * uma segunda captura por canvas/jsPDF. O título temporário define o nome
+ * sugerido quando Chrome/Edge usam "Salvar como PDF".
+ */
+export const printDocumentAsPdf = (fileName: string) => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    throw new Error('Impressao indisponivel fora do navegador.');
+  }
+
+  const safeName = sanitizePdfFileName(fileName);
+  const finalName = safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+  const titleForPrint = finalName.replace(/\.pdf$/i, '');
+  const previousTitle = document.title;
+  let restored = false;
+
+  const restoreTitle = () => {
+    if (restored) return;
+    restored = true;
+    document.title = previousTitle;
+    window.removeEventListener('afterprint', restoreTitle);
+  };
+
+  document.title = titleForPrint;
+  window.addEventListener('afterprint', restoreTitle, { once: true });
+
+  window.requestAnimationFrame(() => {
+    window.print();
+    window.setTimeout(restoreTitle, 1500);
+  });
+
+  return finalName;
 };
 
 export const downloadPdfBlob = (blob: Blob, fileName: string) => {
+  // A tela de recibos possui HTML de impressão aprovado. Quando ela solicita
+  // "Salvar PDF", usamos a mesma renderização do botão Imprimir e preservamos
+  // o blob apenas para e-mail/histórico interno.
+  if (typeof document !== 'undefined' && document.getElementById('recibos-print')) {
+    printDocumentAsPdf(fileName);
+    return;
+  }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -45,9 +133,6 @@ export const downloadPdfBlob = (blob: Blob, fileName: string) => {
 export const saveElementAsPdf = async ({
   element,
   fileName,
-  orientation = 'portrait',
-  margin = 8,
-  windowWidth,
 }: {
   element: HTMLElement | null;
   fileName: string;
@@ -56,30 +141,5 @@ export const saveElementAsPdf = async ({
   windowWidth?: number;
 }) => {
   if (!element) throw new Error('Conteudo do PDF nao encontrado.');
-
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation });
-  const safeName = sanitizePdfFileName(fileName);
-  const finalName = safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`;
-
-  await new Promise<void>((resolve, reject) => {
-    try {
-      (pdf as any).html(element, {
-        callback: (doc: jsPDF) => {
-          doc.save(finalName);
-          resolve();
-        },
-        margin,
-        autoPaging: 'text',
-        html2canvas: {
-          backgroundColor: '#ffffff',
-          scale: 0.72,
-          useCORS: true,
-          logging: false,
-        },
-        windowWidth: windowWidth || element.scrollWidth || element.clientWidth || 794,
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
+  return printDocumentAsPdf(fileName);
 };
