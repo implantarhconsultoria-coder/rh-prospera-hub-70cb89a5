@@ -60,6 +60,7 @@ jobs:
           src/lib/__tests__/emailAttachmentTransport.test.ts
           src/lib/__tests__/pdfStandardization.test.ts
           src/lib/__tests__/rescisaoCalc.test.ts
+          src/lib/__tests__/rescisaoIntegration.test.ts
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
@@ -76,6 +77,7 @@ jobs:
           src/lib/__tests__/emailAttachmentTransport.test.ts
           src/lib/__tests__/pdfStandardization.test.ts
           src/lib/__tests__/rescisaoCalc.test.ts
+          src/lib/__tests__/rescisaoIntegration.test.ts
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
