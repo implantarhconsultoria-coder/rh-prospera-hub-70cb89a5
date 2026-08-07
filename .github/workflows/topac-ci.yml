@@ -40,6 +40,8 @@ jobs:
           src/lib/smartTextParser.ts
           src/lib/vehicleSync.ts
           src/lib/savePdf.ts
+          src/lib/rescisaoCalc.ts
+          src/lib/rescisaoPdf.ts
           src/components/BankingDataEditor.tsx
           src/components/EmailPdfModal.tsx
           src/components/EmployeeSmartTextPanel.tsx
@@ -50,12 +52,14 @@ jobs:
           src/pages/ProtocoloPage.tsx
           src/pages/RelatorioImpressaoPage.tsx
           src/pages/RelatorioBeneficioIndividualPage.tsx
+          src/pages/RescisaoPage.tsx
           src/pages/admin/CombustivelQRAdminPage.tsx
           src/lib/__tests__/bankingParser.test.ts
           src/lib/__tests__/abastecimentoReports.test.ts
           src/lib/__tests__/emailPolicy.test.ts
           src/lib/__tests__/emailAttachmentTransport.test.ts
           src/lib/__tests__/pdfStandardization.test.ts
+          src/lib/__tests__/rescisaoCalc.test.ts
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
@@ -71,6 +75,7 @@ jobs:
           src/lib/__tests__/emailPolicy.test.ts
           src/lib/__tests__/emailAttachmentTransport.test.ts
           src/lib/__tests__/pdfStandardization.test.ts
+          src/lib/__tests__/rescisaoCalc.test.ts
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
