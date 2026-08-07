@@ -92,6 +92,10 @@ export interface RescisaoInput {
   feriasOverrides?: FeriasPeriodoOverrideInput[];
   usuarioCalculo?: string;
   calculadoEm?: string;
+  /** Compatibilidade temporária com registros antigos; a tela nova usa descontos detalhados. */
+  outrosDescontos?: number;
+  /** Campo legado descontinuado. Mantido apenas para leitura/compilação de versões antigas. */
+  feriasVencidasMeses?: number;
 }
 
 export interface FeriasPeriodoResultado {
@@ -470,7 +474,16 @@ export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
   const baseRemuneracao = round2(salarioBase + mediaHorasExtras + mediaComissao + adicionaisMedia);
   const dependentes = Math.max(0, Math.floor(Number(i.dependentes) || 0));
   const overrides = i.overrides || [];
-  const descontos = (i.descontos || []).map((item) => ({ ...item, valor: round2(Math.max(0, Number(item.valor) || 0)) }));
+  const detailed = (i.descontos || []).map((item) => ({ ...item, valor: round2(Math.max(0, Number(item.valor) || 0)) }));
+  if ((Number(i.outrosDescontos) || 0) > 0 && !detailed.some((item) => item.id === 'legado-outros')) {
+    detailed.push({
+      id: 'legado-outros',
+      tipo: 'outros',
+      descricao: 'Outros descontos (legado)',
+      valor: round2(Number(i.outrosDescontos) || 0),
+      observacao: 'Valor migrado do campo genérico antigo.',
+    });
+  }
 
   const years = completedYears(admission, dismissal);
   const proportionalNoticeDays = Math.min(90, 30 + years * 3);
@@ -538,7 +551,7 @@ export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
   const thirteenthAutomatic = (baseRemuneracao / 12) * thirteenthTwelfths;
   const thirteenthOverride = getOverride(overrides, 'decimoTerceiroBruto', thirteenthAutomatic);
   const thirteenthGross = thirteenthOverride.value;
-  const thirteenthAdvance = round2(descontos.filter((item) => item.tipo === 'adiantamento_13').reduce((sum, item) => sum + item.valor, 0));
+  const thirteenthAdvance = round2(detailed.filter((item) => item.tipo === 'adiantamento_13').reduce((sum, item) => sum + item.valor, 0));
   const thirteenthFinal = round2(Math.max(0, thirteenthGross - thirteenthAdvance));
 
   const inssMonth = calcInss2026(salaryBalance);
@@ -566,13 +579,11 @@ export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
     automatico: true,
   } : null;
   const allDiscounts = automaticNoticeDiscount
-    ? [...descontos.filter((item) => item.tipo !== 'aviso_previo_descontado'), automaticNoticeDiscount]
-    : descontos;
+    ? [...detailed.filter((item) => item.tipo !== 'aviso_previo_descontado'), automaticNoticeDiscount]
+    : detailed;
   const detailedDiscountTotal = round2(allDiscounts.reduce((sum, item) => sum + item.valor, 0));
 
   const totalEarnings = round2(salaryBalance + noticeValue + totalVacation + thirteenthGross);
-  // O adiantamento de 13º já está dentro de descontosDetalhados, portanto o bruto
-  // permanece em proventos e o adiantamento aparece separadamente em descontos.
   const totalDiscounts = round2(inss + irrf + detailedDiscountTotal);
   const net = round2(Math.max(0, totalEarnings - totalDiscounts));
 
