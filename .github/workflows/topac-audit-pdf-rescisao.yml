@@ -14,25 +14,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Inventory PDF and print code
+      - name: Vacation source map
         shell: bash
         run: |
-          echo '=== PDF / PRINT FILES ==='
-          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' \
-            'window\.print|print\(|Salvar PDF|salvar pdf|download=|\.pdf|html2canvas|jspdf|jsPDF|pdfMake|react-to-print|@media print|Content-Disposition' \
-            src api supabase 2>/dev/null | head -n 1200 || true
-          echo '=== CLOSING / REPORT FILES ==='
-          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' \
-            'Fechamento|fechamento|Relat[oó]rio|relatorio|Multiempresas|funcion[aá]rio' \
-            src api supabase 2>/dev/null | head -n 1200 || true
-      - name: Inventory termination and vacation code
-        shell: bash
-        run: |
-          echo '=== RESCISAO / FERIAS FILES ==='
-          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' \
-            'Rescis|rescis|F[eé]rias|ferias|aquisitiv|aviso.pr[eé]vio|FGTS|13.o|d[eé]cimo terceiro|desligamento|meses.*vencid' \
-            src api supabase 2>/dev/null | head -n 1600 || true
-          echo '=== TABLE REFERENCES ==='
-          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' \
-            "from\('|from\(\"|\.from\('|\.from\(\"|create table|alter table" \
-            src supabase 2>/dev/null | grep -Ei 'func|feria|rescis|fech|folha|holerite|salario|empresa' | head -n 1200 || true
+          echo '=== FERIAS_AVISOS EXACT REFERENCES ==='
+          grep -RIn --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' 'ferias_avisos' src api supabase 2>/dev/null || true
+          echo '=== VACATION PERIOD FIELDS ==='
+          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' 'periodo_aquisitivo_inicio|periodo_aquisitivo_fim|periodo_gozo_inicio|periodo_gozo_fim|dias_ferias|status_pagamento|opcao_adiantamento_13' src api supabase 2>/dev/null || true
+          echo '=== RESCISAO REFERENCES ==='
+          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' 'rescisao|Rescisao|rescisão|Rescisão|feriasVencidasMeses|avisoPrevioTipo|fgtsSaldo' src api supabase 2>/dev/null || true
+          echo '=== ROUTES ==='
+          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.map' 'RescisaoPage|FeriasPage|/rescis|/ferias' src 2>/dev/null || true
