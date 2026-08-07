@@ -85,9 +85,11 @@ export const buildRescisaoHtml = (data: RescisaoPdfData) => {
     <table><tbody>
       <tr><td>Saldo de salário (${result.diasSaldoSalario} dias / divisor ${result.divisorSaldoSalario})</td><td class="n">${money(result.saldoSalario)}</td></tr>
       <tr><td>Aviso-prévio (${result.diasAviso} dias)</td><td class="n">${money(result.avisoPrevioValor)}</td></tr>
-      <tr><td>Férias de períodos completos / vencidos</td><td class="n">${money(result.feriasVencidas)}</td></tr>
+      <tr><td>Férias vencidas</td><td class="n">${money(result.feriasVencidas)}</td></tr>
+      <tr><td>Férias adquiridas em aberto</td><td class="n">${money(result.feriasEmAberto)}</td></tr>
       <tr><td>Férias proporcionais</td><td class="n">${money(result.feriasProporcionais)}</td></tr>
-      <tr><td>1/3 férias completas/vencidas</td><td class="n">${money(result.tercoFeriasVencidas)}</td></tr>
+      <tr><td>1/3 férias vencidas</td><td class="n">${money(result.tercoFeriasVencidas)}</td></tr>
+      <tr><td>1/3 férias em aberto</td><td class="n">${money(result.tercoFeriasEmAberto)}</td></tr>
       <tr><td>1/3 férias proporcionais</td><td class="n">${money(result.tercoFeriasProporcionais)}</td></tr>
       <tr><td>13º proporcional (${result.decimoTerceiroAvos}/12)</td><td class="n">${money(result.decimoTerceiroBruto)}</td></tr>
       <tr class="total"><td>TOTAL DE PROVENTOS</td><td class="n">${money(result.totalProventos)}</td></tr>
@@ -191,7 +193,8 @@ export const gerarRescisaoPdf = (data: RescisaoPdfData) => {
   title('PROVENTOS');
   line(`Saldo de salario - ${result.diasSaldoSalario} dias`, money(result.saldoSalario));
   line(`Aviso previo - ${result.diasAviso} dias`, money(result.avisoPrevioValor));
-  line('Ferias periodos completos/vencidos', money(result.feriasVencidas));
+  line('Ferias vencidas', money(result.feriasVencidas));
+  line('Ferias adquiridas em aberto', money(result.feriasEmAberto));
   line('Ferias proporcionais', money(result.feriasProporcionais));
   line('1/3 constitucional', money(result.tercoFerias));
   line(`13o proporcional - ${result.decimoTerceiroAvos}/12`, money(result.decimoTerceiroBruto));

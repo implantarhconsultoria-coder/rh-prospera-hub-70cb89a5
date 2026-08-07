@@ -137,6 +137,7 @@ export interface RescisaoResultado {
   feriasProporcionais: number;
   feriasEmDobroAdicional: number;
   tercoFeriasVencidas: number;
+  tercoFeriasEmAberto: number;
   tercoFeriasProporcionais: number;
   tercoFerias: number;
   totalFerias: number;
@@ -539,13 +540,16 @@ export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
 
   const fullVacationPeriods = vacationPeriods.filter((period) => period.avos === null && period.situacao !== 'Quitado');
   const proportionalVacationPeriods = vacationPeriods.filter((period) => period.situacao === 'Férias proporcionais');
-  const vacationCompletedValue = round2(fullVacationPeriods.reduce((sum, period) => sum + period.valorFerias, 0));
+  const expiredVacationPeriods = fullVacationPeriods.filter((period) => period.situacao === 'Férias vencidas');
+  const openVacationPeriods = fullVacationPeriods.filter((period) => period.situacao !== 'Férias vencidas');
+  const vacationExpiredValue = round2(expiredVacationPeriods.reduce((sum, period) => sum + period.valorFerias, 0));
+  const vacationOpenValue = round2(openVacationPeriods.reduce((sum, period) => sum + period.valorFerias, 0));
   const vacationProportionalValue = round2(proportionalVacationPeriods.reduce((sum, period) => sum + period.valorFerias, 0));
-  const vacationOpenValue = round2(fullVacationPeriods.filter((period) => period.situacao !== 'Férias vencidas').reduce((sum, period) => sum + period.valorFerias, 0));
-  const vacationDoubleAdditional = round2(fullVacationPeriods.reduce((sum, period) => sum + period.adicionalDobro, 0));
-  const thirdCompleted = round2(fullVacationPeriods.reduce((sum, period) => sum + period.tercoConstitucional, 0));
+  const vacationDoubleAdditional = round2(expiredVacationPeriods.reduce((sum, period) => sum + period.adicionalDobro, 0));
+  const thirdExpired = round2(expiredVacationPeriods.reduce((sum, period) => sum + period.tercoConstitucional, 0));
+  const thirdOpen = round2(openVacationPeriods.reduce((sum, period) => sum + period.tercoConstitucional, 0));
   const thirdProportional = round2(proportionalVacationPeriods.reduce((sum, period) => sum + period.tercoConstitucional, 0));
-  const totalVacation = round2(vacationCompletedValue + vacationProportionalValue + thirdCompleted + thirdProportional);
+  const totalVacation = round2(vacationExpiredValue + vacationOpenValue + vacationProportionalValue + thirdExpired + thirdOpen + thirdProportional);
 
   const thirteenthTwelfths = i.tipo === 'justa_causa' ? 0 : countThirteenthTwelfths(admission, projected);
   const thirteenthAutomatic = (baseRemuneracao / 12) * thirteenthTwelfths;
@@ -612,13 +616,14 @@ export const calcularRescisao = (i: RescisaoInput): RescisaoResultado => {
     avisoPrevioValor: round2(noticeValue),
     avisoPrevioDesconto: round2(noticeDiscount),
     periodosFerias: vacationPeriods,
-    feriasVencidas: vacationCompletedValue,
+    feriasVencidas: vacationExpiredValue,
     feriasEmAberto: vacationOpenValue,
     feriasProporcionais: vacationProportionalValue,
     feriasEmDobroAdicional: vacationDoubleAdditional,
-    tercoFeriasVencidas: thirdCompleted,
+    tercoFeriasVencidas: thirdExpired,
+    tercoFeriasEmAberto: thirdOpen,
     tercoFeriasProporcionais: thirdProportional,
-    tercoFerias: round2(thirdCompleted + thirdProportional),
+    tercoFerias: round2(thirdExpired + thirdOpen + thirdProportional),
     totalFerias: totalVacation,
     decimoTerceiroAvos: thirteenthTwelfths,
     decimoTerceiroBruto: round2(thirteenthGross),

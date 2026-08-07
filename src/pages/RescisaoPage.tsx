@@ -72,7 +72,8 @@ const legacyResultFromRow = (row: any): RescisaoResultado => {
     feriasEmAberto: Number(row.ferias_em_aberto) || 0,
     feriasProporcionais,
     feriasEmDobroAdicional: Number(row.ferias_em_dobro_adicional) || 0,
-    tercoFeriasVencidas: Number(row.terco_ferias_vencidas) || terco,
+    tercoFeriasVencidas: Number(row.terco_ferias_vencidas) || 0,
+    tercoFeriasEmAberto: Number(row.snapshot_json?.tercoFeriasEmAberto) || Math.max(0, terco - (Number(row.terco_ferias_vencidas) || 0) - (Number(row.terco_ferias_proporcionais) || 0)),
     tercoFeriasProporcionais: Number(row.terco_ferias_proporcionais) || 0,
     tercoFerias: terco,
     totalFerias: feriasVencidas + feriasProporcionais + terco,
@@ -325,7 +326,7 @@ const RescisaoPage: React.FC = () => {
 
   const proportionalPeriod = resultado?.periodosFerias.find((period) => period.situacao === 'Férias proporcionais');
   const overdueDays = resultado?.periodosFerias
-    .filter((period) => period.situacao === 'Férias vencidas' || period.situacao === 'Em aberto' || period.situacao === 'Parcialmente usufruído')
+    .filter((period) => period.situacao === 'Férias vencidas')
     .reduce((sum, period) => sum + period.saldoDias, 0) || 0;
 
   const addDiscount = () => setDescontos((current) => [...current, {
@@ -618,8 +619,12 @@ const RescisaoPage: React.FC = () => {
             </div>
 
             {emp && resultado && <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
-                <Card className="p-3"><p className="text-xs text-muted-foreground">FÉRIAS VENCIDAS / EM ABERTO</p><p className="text-xl font-bold">{overdueDays.toLocaleString('pt-BR')} dias</p><p className="text-xs">{formatCurrency(resultado.feriasVencidas + resultado.tercoFeriasVencidas)}</p></Card>
+              <div className="mt-2">
+                <div className="font-bold text-base">Férias calculadas automaticamente</div>
+                <div className="text-xs text-muted-foreground">Períodos aquisitivos cruzados com o histórico do módulo de Férias.</div>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <Card className="p-3"><p className="text-xs text-muted-foreground">FÉRIAS VENCIDAS</p><p className="text-xl font-bold">{overdueDays.toLocaleString('pt-BR')} dias</p><p className="text-xs">{formatCurrency(resultado.feriasVencidas + resultado.tercoFeriasVencidas)}</p></Card>
                 <Card className="p-3"><p className="text-xs text-muted-foreground">FÉRIAS PROPORCIONAIS</p><p className="text-xl font-bold">{proportionalPeriod?.avos || 0}/12 · {proportionalPeriod?.saldoDias || 0} dias</p><p className="text-xs">{formatCurrency(resultado.feriasProporcionais)}</p></Card>
                 <Card className="p-3"><p className="text-xs text-muted-foreground">1/3 CONSTITUCIONAL</p><p className="text-xl font-bold">{formatCurrency(resultado.tercoFerias)}</p><p className="text-xs">Todos os períodos devidos</p></Card>
                 <Card className="p-3"><p className="text-xs text-muted-foreground">TOTAL DE FÉRIAS</p><p className="text-xl font-bold text-primary">{formatCurrency(resultado.totalFerias)}</p><p className="text-xs">Inclui dobra quando aplicável</p></Card>
@@ -665,7 +670,8 @@ const RescisaoPage: React.FC = () => {
                 <div className="font-bold text-base mb-2">Resumo da rescisão</div>
                 <div className="flex justify-between"><span>Saldo de salário</span><span>{formatCurrency(resultado.saldoSalario)}</span></div>
                 <div className="flex justify-between"><span>Aviso-prévio</span><span>{formatCurrency(resultado.avisoPrevioValor)}</span></div>
-                <div className="flex justify-between"><span>Férias períodos completos/vencidos + 1/3</span><span>{formatCurrency(resultado.feriasVencidas + resultado.tercoFeriasVencidas)}</span></div>
+                <div className="flex justify-between"><span>Férias vencidas + 1/3</span><span>{formatCurrency(resultado.feriasVencidas + resultado.tercoFeriasVencidas)}</span></div>
+                <div className="flex justify-between"><span>Férias adquiridas em aberto + 1/3</span><span>{formatCurrency(resultado.feriasEmAberto + resultado.tercoFeriasEmAberto)}</span></div>
                 <div className="flex justify-between"><span>Férias proporcionais + 1/3</span><span>{formatCurrency(resultado.feriasProporcionais + resultado.tercoFeriasProporcionais)}</span></div>
                 <div className="flex justify-between"><span>13º proporcional bruto</span><span>{formatCurrency(resultado.decimoTerceiroBruto)}</span></div>
                 <div className="flex justify-between font-bold border-t pt-1"><span>TOTAL DE PROVENTOS</span><span>{formatCurrency(resultado.totalProventos)}</span></div>
