@@ -74,18 +74,6 @@ export const buildTopacRhPdfFileName = ({
   return `TOPAC_RH_${tipoPart}_${nomePart}_${competenciaPart}.pdf`;
 };
 
-export const downloadPdfBlob = (blob: Blob, fileName: string) => {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  const safeName = sanitizePdfFileName(fileName);
-  link.download = safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
-
 /**
  * Unifica o caminho de "Imprimir" e "Salvar PDF".
  *
@@ -120,6 +108,26 @@ export const printDocumentAsPdf = (fileName: string) => {
   });
 
   return finalName;
+};
+
+export const downloadPdfBlob = (blob: Blob, fileName: string) => {
+  // A tela de recibos possui HTML de impressão aprovado. Quando ela solicita
+  // "Salvar PDF", usamos a mesma renderização do botão Imprimir e preservamos
+  // o blob apenas para e-mail/histórico interno.
+  if (typeof document !== 'undefined' && document.getElementById('recibos-print')) {
+    printDocumentAsPdf(fileName);
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const safeName = sanitizePdfFileName(fileName);
+  link.download = safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 export const saveElementAsPdf = async ({
