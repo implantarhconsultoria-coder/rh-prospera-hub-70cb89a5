@@ -24,6 +24,39 @@ jobs:
           from pathlib import Path
           p = Path('scripts/temp-crlv-vision-patch.py')
           s = p.read_text(encoding='utf-8')
+
+          # Replace brittle exact normalizeChassi marker with structural slicing.
+          start = s.index("chassi_marker = '''")
+          end = s.index('\n\nvehicle_fn =', start)
+          replacement = r'''chassi_start = s.index('const normalizeChassi = (value: unknown)')
+          chassi_end = s.index('\n\nconst normalizeDate', chassi_start)
+          helpers = r'''
+          const normalizeVehicleYear = (value: unknown) => {
+            const match = String(value || "").match(/\b((?:19|20)\d{2})\b/);
+            if (!match) return "";
+            const year = Number(match[1]);
+            return year >= 1900 && year <= 2100 ? match[1] : "";
+          };
+
+          const normalizeVehicleDate = (value: unknown) => {
+            const raw = clean(value);
+            let match = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+            if (match) return `${match[1].padStart(2, "0")}/${match[2].padStart(2, "0")}/${match[3]}`;
+            match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+            return "";
+          };
+
+          const splitBrandModel = (value: unknown) => {
+            const full = clean(value).toUpperCase();
+            const slashBrand = full.match(/^([A-Z0-9.-]+\/[A-Z0-9.-]+)\s+(.{2,})$/);
+            return slashBrand ? { marca: clean(slashBrand[1]), modelo: clean(slashBrand[2]) } : { marca: "", modelo: "" };
+          };
+          '''
+          s = s[:chassi_end] + helpers + s[chassi_end:]'''
+          s = s[:start] + replacement + s[end:]
+
+          # Repair migration source block to valid Python triple-quoted SQL.
           start = s.index('Path("supabase/migrations/20260811155100_add_vehicle_document_vision_fields.sql").write_text(')
           end_marker = '\n\n\n# -----------------------------------------------------------------------------\n# Regression tests.'
           end = s.index(end_marker, start)
@@ -37,7 +70,8 @@ jobs:
           """,
               encoding="utf-8",
           )'''
-          p.write_text(s[:start] + replacement + s[end:], encoding='utf-8')
+          s = s[:start] + replacement + s[end:]
+          p.write_text(s, encoding='utf-8')
           PY
           python -m py_compile scripts/temp-crlv-vision-patch.py
           python scripts/temp-crlv-vision-patch.py
