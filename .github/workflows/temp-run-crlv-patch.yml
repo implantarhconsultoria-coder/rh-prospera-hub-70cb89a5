@@ -1,0 +1,62 @@
+name: Temporary run CRLV vision patch
+
+on:
+  push:
+    branches:
+      - agent/fix-crlv-vision-20260811
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/fix-crlv-vision-20260811
+          fetch-depth: 0
+
+      - name: Fix temporary patch script and execute
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/temp-crlv-vision-patch.py')
+          s = p.read_text(encoding='utf-8')
+          start = s.index('Path("supabase/migrations/20260811155100_add_vehicle_document_vision_fields.sql").write_text(')
+          end_marker = '\n\n\n# -----------------------------------------------------------------------------\n# Regression tests.'
+          end = s.index(end_marker, start)
+          replacement = '''Path("supabase/migrations/20260811155100_add_vehicle_document_vision_fields.sql").write_text(
+              """alter table public.ativos
+            add column if not exists marca_modelo_versao text,
+            add column if not exists tipo_documento_veiculo text,
+            add column if not exists especie text,
+            add column if not exists exercicio_documento text,
+            add column if not exists data_documento date;
+          """,
+              encoding="utf-8",
+          )'''
+          p.write_text(s[:start] + replacement + s[end:], encoding='utf-8')
+          PY
+          python -m py_compile scripts/temp-crlv-vision-patch.py
+          python scripts/temp-crlv-vision-patch.py
+          rm -f .github/workflows/temp-run-crlv-patch.yml
+
+      - name: Validate changes
+        shell: bash
+        run: |
+          npm install --legacy-peer-deps
+          npm test
+          npm run lint
+          npm run build
+          git diff --check
+
+      - name: Commit validated patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: leitura CRLV por visão multimodal sem alterar layout"
+          git push origin HEAD:agent/fix-crlv-vision-20260811
