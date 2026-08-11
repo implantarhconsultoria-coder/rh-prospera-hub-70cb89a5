@@ -22,54 +22,19 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import base64
           p = Path('scripts/temp-crlv-vision-patch.py')
           s = p.read_text(encoding='utf-8')
 
-          # Replace brittle exact normalizeChassi marker with structural slicing.
           start = s.index("chassi_marker = '''")
           end = s.index('\n\nvehicle_fn =', start)
-          replacement = r'''chassi_start = s.index('const normalizeChassi = (value: unknown)')
-          chassi_end = s.index('\n\nconst normalizeDate', chassi_start)
-          helpers = r'''
-          const normalizeVehicleYear = (value: unknown) => {
-            const match = String(value || "").match(/\b((?:19|20)\d{2})\b/);
-            if (!match) return "";
-            const year = Number(match[1]);
-            return year >= 1900 && year <= 2100 ? match[1] : "";
-          };
-
-          const normalizeVehicleDate = (value: unknown) => {
-            const raw = clean(value);
-            let match = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
-            if (match) return `${match[1].padStart(2, "0")}/${match[2].padStart(2, "0")}/${match[3]}`;
-            match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-            if (match) return `${match[3]}/${match[2]}/${match[1]}`;
-            return "";
-          };
-
-          const splitBrandModel = (value: unknown) => {
-            const full = clean(value).toUpperCase();
-            const slashBrand = full.match(/^([A-Z0-9.-]+\/[A-Z0-9.-]+)\s+(.{2,})$/);
-            return slashBrand ? { marca: clean(slashBrand[1]), modelo: clean(slashBrand[2]) } : { marca: "", modelo: "" };
-          };
-          '''
-          s = s[:chassi_end] + helpers + s[chassi_end:]'''
+          replacement = base64.b64decode('Y2hhc3NpX3N0YXJ0ID0gcy5pbmRleCgnY29uc3Qgbm9ybWFsaXplQ2hhc3NpID0gKHZhbHVlOiB1bmtub3duKScpCmNoYXNzaV9lbmQgPSBzLmluZGV4KCdcblxuY29uc3Qgbm9ybWFsaXplRGF0ZScsIGNoYXNzaV9zdGFydCkKaGVscGVycyA9IHInJycKY29uc3Qgbm9ybWFsaXplVmVoaWNsZVllYXIgPSAodmFsdWU6IHVua25vd24pID0+IHsKICBjb25zdCBtYXRjaCA9IFN0cmluZyh2YWx1ZSB8fCAiIikubWF0Y2goL1xiKCg/OjE5fDIwKVxkezJ9KVxiLyk7CiAgaWYgKCFtYXRjaCkgcmV0dXJuICIiOwogIGNvbnN0IHllYXIgPSBOdW1iZXIobWF0Y2hbMV0pOwogIHJldHVybiB5ZWFyID49IDE5MDAgJiYgeWVhciA8PSAyMTAwID8gbWF0Y2hbMV0gOiAiIjsKfTsKCmNvbnN0IG5vcm1hbGl6ZVZlaGljbGVEYXRlID0gKHZhbHVlOiB1bmtub3duKSA9PiB7CiAgY29uc3QgcmF3ID0gY2xlYW4odmFsdWUpOwogIGxldCBtYXRjaCA9IHJhdy5tYXRjaCgvXihcZHsxLDJ9KVtcLy5cLV0oXGR7MSwyfSlbXC8uXC1dKFxkezR9KSQvKTsKICBpZiAobWF0Y2gpIHJldHVybiBgJHttYXRjaFsxXS5wYWRTdGFydCgyLCAiMCIpfS8ke21hdGNoWzJdLnBhZFN0YXJ0KDIsICIwIil9LyR7bWF0Y2hbM119YDsKICBtYXRjaCA9IHJhdy5tYXRjaCgvXihcZHs0fSktKFxkezJ9KS0oXGR7Mn0pJC8pOwogIGlmIChtYXRjaCkgcmV0dXJuIGAke21hdGNoWzNdfS8ke21hdGNoWzJdfS8ke21hdGNoWzFdfWA7CiAgcmV0dXJuICIiOwp9OwoKY29uc3Qgc3BsaXRCcmFuZE1vZGVsID0gKHZhbHVlOiB1bmtub3duKSA9PiB7CiAgY29uc3QgZnVsbCA9IGNsZWFuKHZhbHVlKS50b1VwcGVyQ2FzZSgpOwogIGNvbnN0IHNsYXNoQnJhbmQgPSBmdWxsLm1hdGNoKC9eKFtBLVowLTkuLV0rXC9bQS1aMC05Li1dKylccysoLnsyLH0pJC8pOwogIHJldHVybiBzbGFzaEJyYW5kID8geyBtYXJjYTogY2xlYW4oc2xhc2hCcmFuZFsxXSksIG1vZGVsbzogY2xlYW4oc2xhc2hCcmFuZFsyXSkgfSA6IHsgbWFyY2E6ICIiLCBtb2RlbG86ICIiIH07Cn07CicnJwpzID0gc1s6Y2hhc3NpX2VuZF0gKyBoZWxwZXJzICsgc1tjaGFzc2lfZW5kOl0=').decode('utf-8')
           s = s[:start] + replacement + s[end:]
 
-          # Repair migration source block to valid Python triple-quoted SQL.
           start = s.index('Path("supabase/migrations/20260811155100_add_vehicle_document_vision_fields.sql").write_text(')
           end_marker = '\n\n\n# -----------------------------------------------------------------------------\n# Regression tests.'
           end = s.index(end_marker, start)
-          replacement = '''Path("supabase/migrations/20260811155100_add_vehicle_document_vision_fields.sql").write_text(
-              """alter table public.ativos
-            add column if not exists marca_modelo_versao text,
-            add column if not exists tipo_documento_veiculo text,
-            add column if not exists especie text,
-            add column if not exists exercicio_documento text,
-            add column if not exists data_documento date;
-          """,
-              encoding="utf-8",
-          )'''
+          replacement = base64.b64decode('UGF0aCgic3VwYWJhc2UvbWlncmF0aW9ucy8yMDI2MDgxMTE1NTEwMF9hZGRfdmVoaWNsZV9kb2N1bWVudF92aXNpb25fZmllbGRzLnNxbCIpLndyaXRlX3RleHQoCiAgICAiIiJhbHRlciB0YWJsZSBwdWJsaWMuYXRpdm9zCiAgYWRkIGNvbHVtbiBpZiBub3QgZXhpc3RzIG1hcmNhX21vZGVsb192ZXJzYW8gdGV4dCwKICBhZGQgY29sdW1uIGlmIG5vdCBleGlzdHMgdGlwb19kb2N1bWVudG9fdmVpY3VsbyB0ZXh0LAogIGFkZCBjb2x1bW4gaWYgbm90IGV4aXN0cyBlc3BlY2llIHRleHQsCiAgYWRkIGNvbHVtbiBpZiBub3QgZXhpc3RzIGV4ZXJjaWNpb19kb2N1bWVudG8gdGV4dCwKICBhZGQgY29sdW1uIGlmIG5vdCBleGlzdHMgZGF0YV9kb2N1bWVudG8gZGF0ZTsKIiIiLAogICAgZW5jb2Rpbmc9InV0Zi04IiwKKQ==').decode('utf-8')
           s = s[:start] + replacement + s[end:]
           p.write_text(s, encoding='utf-8')
           PY
