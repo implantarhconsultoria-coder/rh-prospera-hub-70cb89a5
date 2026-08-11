@@ -248,11 +248,11 @@ const DocumentosVeiculosPage: React.FC = () => {
   });
 
   const fetchAtivos = async () => {
-    const { data, error } = await supabase.from('ativos').select('*').eq('tipo', 'veiculo').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('ativos').select('*').in('tipo', ['veiculo', 'equipamento']).order('created_at', { ascending: false });
     if (error) {
       if (isMissingSchema(error)) {
-        setAtivosErro('Tabela de veiculos ainda nao existe no Supabase. Os PDFs serao guardados localmente ate a base ser aplicada.');
-        setAtivos(readLocalList<Ativo>(VEICULOS_LOCAL_KEY).map(normalizeAtivoForDisplay));
+        setAtivosErro('A base da Frota não está disponível no Supabase. Nenhum documento será persistido localmente.');
+        setAtivos([]);
       } else {
         setAtivosErro(error.message || 'Erro ao carregar documentos de veiculos.');
       }
@@ -317,91 +317,118 @@ const DocumentosVeiculosPage: React.FC = () => {
   };
 
   const uploadDocumentoVeiculo = async (file: File, basePath: string) => {
-    const { error: uploadError } = await supabase.storage
-      .from('documentos-ativos')
-      .upload(basePath, file, { contentType: file.type || 'application/pdf', upsert: false });
+  const { error: uploadError } = await supabase.storage
+    .from('documentos-ativos')
+    .upload(basePath, file, { contentType: file.type || 'application/pdf', upsert: false });
 
-    if (!uploadError) {
-      const { data: urlData } = supabase.storage.from('documentos-ativos').getPublicUrl(basePath);
-      return { url: urlData.publicUrl, fallback: false };
-    }
+  if (uploadError) {
+    throw new Error(`Falha no Supabase Storage: ${uploadError.message}`);
+  }
 
-    console.warn('Falha no storage documentos-ativos, salvando PDF embutido no registro:', uploadError);
-    return { url: await fileToDataUrl(file), fallback: true };
+  const { data: urlData } = supabase.storage.from('documentos-ativos').getPublicUrl(basePath);
+  return { url: urlData.publicUrl };
+};
+
+const upsertDirectCloudAsset = async (file: File, extracted: any) => {
+  if (!session?.user?.id) throw new Error('Sessão expirada.');
+  const ext = file.name.split('.').pop() || 'pdf';
+  const path = `${session.user.id}/frota/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const upload = await uploadDocumentoVeiculo(file, path);
+  const context = `${extracted?.descricao || ''} ${extracted?.tipo_veiculo || ''}`.toUpperCase();
+  const tipo = /(COMPRESSOR|GERADOR|EQUIPAMENTO|PLATAFORMA|BOMBA|TORRE)/.test(context) ? 'equipamento' : 'veiculo';
+  const now = new Date().toISOString();
+  const record: any = {
+    user_id: session.user.id,
+    tipo,
+    descricao: extracted?.descricao || file.name.replace(/\.[^/.]+$/, ''),
+    placa: extracted?.placa || '',
+    patrimonio: extracted?.patrimonio || '',
+    empresa: extracted?.empresa || 'TOPAC MATRIZ',
+    observacao: extracted?.observacao || '',
+    arquivo_url: upload.url,
+    renavam: extracted?.renavam || '',
+    chassi: extracted?.chassi || '',
+    ano_fabricacao: extracted?.ano_fabricacao || '',
+    ano_modelo: extracted?.ano_modelo || '',
+    status: 'ativo',
+    marca: extracted?.marca || '',
+    modelo: extracted?.modelo || extracted?.marca_modelo || '',
+    cor: extracted?.cor || '',
+    categoria_veiculo: extracted?.categoria_veiculo || '',
+    tipo_veiculo: extracted?.tipo_veiculo || (tipo === 'equipamento' ? 'equipamento' : 'carro'),
+    documento_url: upload.url,
+    documento_nome: file.name,
+    documento_atualizado_em: now,
   };
 
-  const handleMultiUpload = async (files: FileList) => {
-    if (!session?.user?.id) { toast.error('Faca login primeiro'); return; }
-    setUploading(true);
-    let success = 0;
-    let fallbackCount = 0;
-    for (const file of Array.from(files)) {
-      const ext = file.name.split('.').pop();
-      const path = `${session.user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      let arquivo_url = '';
-      try {
-        const upload = await uploadDocumentoVeiculo(file, path);
-        arquivo_url = upload.url;
-        if (upload.fallback) fallbackCount++;
-      } catch (uploadError: any) {
-        toast.error(`Erro no upload de ${file.name}: ${uploadError?.message || uploadError}`);
-        continue;
+  let existing: any = null;
+  if (record.placa) {
+    const { data } = await supabase.from('ativos').select('id').eq('placa', record.placa).maybeSingle();
+    existing = data;
+  }
+  if (!existing && record.patrimonio) {
+    const { data } = await supabase.from('ativos').select('id').eq('patrimonio', record.patrimonio).maybeSingle();
+    existing = data;
+  }
+
+  if (existing?.id) {
+    const { error } = await supabase.from('ativos').update({ ...record, updated_at: now } as any).eq('id', existing.id);
+    if (error) throw error;
+    return 'atualizado';
+  }
+
+  const { error } = await supabase.from('ativos').insert(record as any);
+  if (error) throw error;
+  return 'cadastrado';
+};
+
+const handleMultiUpload = async (files: FileList) => {
+  if (!session?.user?.id || !session?.access_token) { toast.error('Faca login primeiro'); return; }
+  const pdfs = Array.from(files).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
+  if (!pdfs.length) { toast.error('Selecione arquivos PDF.'); return; }
+
+  setUploading(true);
+  let success = 0;
+  let failed = 0;
+  let directCloud = 0;
+
+  for (const file of pdfs) {
+    try {
+      const extracted = await analyzeVehiclePdf(file, file.name).catch(() => ({}));
+
+      if (file.size <= 4_000_000) {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        form.append('extracted', JSON.stringify(extracted));
+        const response = await fetch('/api/frota-upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: form,
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || `Falha HTTP ${response.status}`);
+      } else {
+        await upsertDirectCloudAsset(file, extracted);
+        directCloud += 1;
       }
 
-      let extracted: any = {};
-      try {
-        extracted = await analyzeVehiclePdf(file, file.name);
-      } catch {}
+      success += 1;
+    } catch (error: any) {
+      failed += 1;
+      toast.error(`${file.name}: ${error?.message || 'Falha no processamento'}`);
+    }
+  }
 
-      const { error } = await supabase.from('ativos').insert({
-        user_id: session.user.id,
-        tipo: 'veiculo',
-        descricao: extracted.descricao || file.name.replace(/\.[^/.]+$/, ''),
-        placa: extracted.placa || '',
-        patrimonio: extracted.patrimonio || '',
-        empresa: extracted.empresa || 'TOPAC MATRIZ',
-        observacao: extracted.observacao || '',
-        arquivo_url,
-        renavam: extracted.renavam || '',
-        chassi: extracted.chassi || '',
-        ano_fabricacao: extracted.ano_fabricacao || '',
-        ano_modelo: extracted.ano_modelo || '',
-        status: 'ativo',
-      } as any);
-      if (!error) success++;
-      else if (isMissingSchema(error)) {
-        const localAtivo: Ativo = {
-          id: newLocalId(),
-          tipo: 'veiculo',
-          descricao: extracted.descricao || file.name.replace(/\.[^/.]+$/, ''),
-          placa: extracted.placa || '',
-          patrimonio: extracted.patrimonio || '',
-          empresa: extracted.empresa || 'TOPAC MATRIZ',
-          arquivo_url,
-          observacao: extracted.observacao || 'Salvo localmente. Aplicar base Frota no Supabase para persistir oficialmente.',
-          status: 'ativo',
-          renavam: extracted.renavam || '',
-          chassi: extracted.chassi || '',
-          ano_fabricacao: extracted.ano_fabricacao || '',
-          ano_modelo: extracted.ano_modelo || '',
-          vencimento_ipva: null,
-          vencimento_licenciamento: null,
-        };
-        const local = [localAtivo, ...readLocalList<Ativo>(VEICULOS_LOCAL_KEY)];
-        writeLocalList(VEICULOS_LOCAL_KEY, local);
-        success++;
-        setAtivosErro('Tabela de veiculos ainda nao existe no Supabase. Documento salvo localmente por enquanto.');
-      } else toast.error(`Erro ao cadastrar ${file.name}: ${error.message}`);
+  if (success) {
+    toast.success(`${success} PDF(s) processado(s) e persistido(s) no Supabase.`);
+    if (directCloud) {
+      toast.info(`${directCloud} arquivo(s) maior(es) foram enviados direto ao Supabase Storage para respeitar o limite do Vercel.`);
     }
-    if (success > 0) {
-      toast.success(`${success} documento(s) cadastrado(s)!`);
-      if (fallbackCount > 0) {
-        toast.warning(`${fallbackCount} PDF(s) foram salvos direto no historico porque o storage nao aceitou o upload.`);
-      }
-      fetchAtivos();
-    }
-    setUploading(false);
-  };
+    await fetchAtivos();
+  }
+  if (failed) toast.warning(`${failed} PDF(s) não foram cadastrados e precisam ser reenviados.`);
+  setUploading(false);
+};
 
   const handleDelete = async (id: string) => {
     if (id.startsWith('local-') || readLocalList<Ativo>(VEICULOS_LOCAL_KEY).some(a => a.id === id)) {
@@ -584,7 +611,7 @@ const DocumentosVeiculosPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display">Documentos de Veiculos</h1>
-            <p className="text-primary-foreground/70 text-sm">Upload multiplo de PDFs com leitura automatica por IA - Alertas de IPVA e Licenciamento</p>
+            <p className="text-primary-foreground/70 text-sm">Upload em massa de PDFs em nuvem - Vercel Functions + Supabase Storage</p>
           </div>
         </div>
       </div>
@@ -653,7 +680,7 @@ const DocumentosVeiculosPage: React.FC = () => {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground flex items-center gap-1">
-          <Sparkles className="w-3 h-3" /> Ao subir PDFs, a IA tenta extrair placa, renavam, chassi e outros dados. Dados reaproveitados no Protocolo.
+          <Sparkles className="w-3 h-3" /> PDFs são processados por buffer em memória e persistidos somente no Supabase. Arquivos maiores seguem direto ao Storage para respeitar o limite do Vercel.
         </p>
         {ativosErro && (
           <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
