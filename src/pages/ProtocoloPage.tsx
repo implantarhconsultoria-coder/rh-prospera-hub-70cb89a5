@@ -70,6 +70,23 @@ const esc = (value: unknown) =>
 
 const pdfOf = (asset: AtivoDoc | null) => String(asset?.documento_url || asset?.arquivo_url || '').trim();
 
+const findVehicleByPlate = (assets: AtivoDoc[], plate: unknown) => {
+  const normalized = normalizePlate(plate);
+  return normalized ? assets.find((asset) => normalizePlate(asset.placa) === normalized) || null : null;
+};
+
+const toProtocolVehicleFields = (asset: AtivoDoc | null) => ({
+  descricao_ativo: asset?.descricao || null,
+  placa: normalizePlate(asset?.placa) || null,
+  renavam: asset?.renavam || null,
+  chassi: asset?.chassi || null,
+  ano_fabricacao: asset?.ano_fabricacao || null,
+  ano_modelo: asset?.ano_modelo || null,
+  patrimonio: asset?.patrimonio || null,
+  pdf_url: pdfOf(asset) || null,
+  ativo_id: asset?.id || null,
+});
+
 const ProtocoloPage: React.FC = () => {
   const { companies, session } = useApp();
   const topac = companies.find((company) => company.id === 'topac-matriz');
@@ -108,7 +125,7 @@ const ProtocoloPage: React.FC = () => {
     const plate = normalizePlate(item.placa);
     const patrimonio = normalizePatrimonio(item.patrimonio);
     if (plate) {
-      const byPlate = ativos.find((asset) => normalizePlate(asset.placa) === plate);
+      const byPlate = findVehicleByPlate(ativos, plate);
       if (byPlate) return byPlate;
     }
     if (patrimonio) {
@@ -243,24 +260,20 @@ const ProtocoloPage: React.FC = () => {
     try {
       const payload = groups.flatMap((group) => group.itens.map((item) => {
         const asset = item.ativo!;
+        const vehicleFields = toProtocolVehicleFields(asset);
         return {
           empresa_origem: topac?.name || 'TOPAC MATRIZ',
           empresa_destinataria: group.cliente,
           local_canteiro: group.local,
           responsavel_recebimento: group.responsavel || null,
           data_emissao: dataEmissao,
-          descricao_ativo: asset.descricao || item.descricao || null,
-          placa: normalizePlate(asset.placa || item.placa) || null,
-          renavam: asset.renavam || null,
-          chassi: asset.chassi || null,
-          ano_fabricacao: asset.ano_fabricacao || null,
-          ano_modelo: asset.ano_modelo || null,
-          patrimonio: asset.patrimonio || item.patrimonio || null,
+          ...vehicleFields,
+          descricao_ativo: vehicleFields.descricao_ativo || item.descricao || null,
+          placa: vehicleFields.placa || normalizePlate(item.placa) || null,
+          patrimonio: vehicleFields.patrimonio || item.patrimonio || null,
           exercicio: new Date(`${dataEmissao}T12:00:00`).getFullYear().toString(),
           observacoes: `Grupo automático: ${group.cliente} / ${group.local}`,
           texto_original: textoColado,
-          pdf_url: pdfOf(asset),
-          ativo_id: asset.id,
           criado_por: session.user.id,
         };
       }));
@@ -452,7 +465,7 @@ const ProtocoloPage: React.FC = () => {
                           <td className="px-3 py-3">{normalizePlate(item.ativo?.placa || item.placa) || '—'}</td>
                           <td className="px-3 py-3">
                             {item.ativo && url ? (
-                              <span className="inline-flex items-center gap-2 text-xs font-medium text-success"><CheckCircle2 className="h-4 w-4" /> PDF vinculado</span>
+                              <span className="inline-flex items-center gap-2 text-xs font-medium text-success"><CheckCircle2 className="h-4 w-4" /> PDF vinculado automaticamente</span>
                             ) : (
                               <span className="inline-flex items-center gap-2 text-xs font-medium text-destructive"><AlertTriangle className="h-4 w-4" /> Documento faltando</span>
                             )}
