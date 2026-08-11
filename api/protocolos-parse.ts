@@ -1,16 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
+const sendJson = (res: any, status: number, body: unknown) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(status).json(body);
+};
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-
-const FALLBACK_SUPABASE_URL = 'https://djfjnxmbvjgweqzjvqtr.supabase.co';
-const FALLBACK_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_DHu9U7RSOV8uPwW2XXtH8A_ek7QfU_Z';
-const env = (name: string) => String(process.env[name] || '').trim();
-const bearer = (request: Request) =>
-  String(request.headers.get('authorization') || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
+const bearer = (req: any) =>
+  String(req?.headers?.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
 
 const normalize = (value: unknown) =>
   String(value || '')
@@ -23,7 +17,7 @@ const normalize = (value: unknown) =>
 export const normalizeProtocolPlate = (value: unknown) =>
   normalize(value).replace(/[^A-Z0-9]/g, '').match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/)?.[0] || '';
 
-const normalizePatrimonio = (value: unknown) =>
+export const normalizeProtocolPatrimonio = (value: unknown) =>
   normalize(value).replace(/[^A-Z0-9./-]/g, '').replace(/^[-./]+|[-./]+$/g, '');
 
 const cleanEntity = (value: unknown) =>
@@ -33,42 +27,31 @@ const cleanEntity = (value: unknown) =>
     .trim();
 
 const cleanLocal = (value: unknown) =>
-  cleanEntity(value)
-    .replace(/^(?:DA|DE|DO)\s+/i, '')
-    .trim();
+  cleanEntity(value).replace(/^(?:DA|DE|DO)\s+/i, '').trim();
 
 type Context = { cliente: string; local: string; responsavel: string };
 export type ProtocolParsedItem = { placa: string; patrimonio: string; descricao: string };
 export type ProtocolParsedGroup = Context & { itens: ProtocolParsedItem[] };
 type Item = ProtocolParsedItem & Context;
 
-const getSupabase = (accessToken: string) => {
-  const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL') || FALLBACK_SUPABASE_URL;
-  const key = env('SUPABASE_PUBLISHABLE_KEY') || env('VITE_SUPABASE_PUBLISHABLE_KEY') || env('VITE_SUPABASE_ANON_KEY') || FALLBACK_SUPABASE_PUBLISHABLE_KEY;
-  return createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  });
-};
-
 export const parseProtocolContext = (line: string): Partial<Context> => {
   const compact = String(line || '').replace(/\s+/g, ' ').trim();
 
   const cliente = cleanEntity(
     compact.match(
-      /(?:\bempresa\b|\bcliente\b|\bdestinat[aá]ri[oa]\b)\s*[:\-]?\s*([A-ZÀ-ÿ0-9][^,;.\n]+?)(?=\s+(?:canteiro|local|obra|aos?\s+cuidados?|a\/c|respons[aá]vel|destinat[aá]ri[oa]|recebedor)\b|[,;.]|$)/i,
+      /(?:\b(?:a|para)\s+empresa\b|\bempresa\b|\bcliente\b)\s*[:\-]?\s*([A-ZÀ-ÿ0-9][^,;.\n]+?)(?=\s+(?:canteiro|local|obra|destino|aos?\s+cuidados?|a\/c|respons[aá]vel|recebedor)\b|[,;.]|$)/i,
     )?.[1] || '',
   );
 
   const local = cleanLocal(
     compact.match(
-      /(?:\bcanteiro\b(?:\s+(?:da|de|do))?|\blocal\b(?:\s+(?:da|de|do))?|\bobra\b(?:\s+(?:da|de|do))?|\bdestino\b)\s*[:\-]?\s*([A-ZÀ-ÿ0-9][^,;.\n]+?)(?=\s+(?:aos?\s+cuidados?|a\/c|respons[aá]vel|destinat[aá]ri[oa]|recebedor)\b|[,;.]|$)/i,
+      /(?:\bcanteiro\b(?:\s+(?:da|de|do))?|\blocal\b(?:\s+(?:da|de|do))?|\bobra\b(?:\s+(?:da|de|do))?|\bdestino\b)\s*[:\-]?\s*([A-ZÀ-ÿ0-9][^,;.\n]+?)(?=\s+(?:aos?\s+cuidados?|a\/c|respons[aá]vel|recebedor)\b|[,;.]|$)/i,
     )?.[1] || '',
   );
 
   const responsavel = cleanEntity(
     compact.match(
-      /(?:aos?\s+cuidados?\s*(?:do|da|de)?|cuidados?\s*(?:do|da|de)|a\/c|respons[aá]vel(?:\s+pelo\s+recebimento)?|recebedor|destinat[aá]ri[oa])\s*[:\-]?\s*([A-ZÀ-ÿ][^,;.\n]*?)(?=\s+(?:atenciosamente|att\.?|obrigad[oa])\b|[,;.]|$)/i,
+      /(?:aos?\s+cuidados?\s*(?:do|da|de)?|cuidados?\s*(?:do|da|de)?|a\/c|respons[aá]vel(?:\s+pelo\s+recebimento)?|recebedor)\s*[:\-]?\s*([A-ZÀ-ÿ][^,;.\n]*?)(?=\s+(?:atenciosamente|atenciosamente,|att\.?|obrigad[oa])\b|[,;.]|$)/i,
     )?.[1] || '',
   );
 
@@ -80,30 +63,30 @@ export const parseProtocolContext = (line: string): Partial<Context> => {
 };
 
 export const parseProtocolItem = (line: string): ProtocolParsedItem | null => {
-  const plate = normalizeProtocolPlate(
-    line.match(/\b(?:placa\s*[:\-]?\s*)?([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/i)?.[1] || '',
+  const raw = String(line || '').trim();
+  const placa = normalizeProtocolPlate(
+    raw.match(/\b(?:placa\s*[:\-]?\s*)?([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/i)?.[1] || '',
+  );
+  const patrimonio = normalizeProtocolPatrimonio(
+    raw.match(/\b(?:patrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*)?([A-Z]\d{1,3}\.\d{1,5})\b/i)?.[1] ||
+      raw.match(/\bpatrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*([A-Z0-9][A-Z0-9./-]{1,29})\b/i)?.[1] ||
+      '',
   );
 
-  const patrimonio = normalizePatrimonio(
-    line.match(/\b(?:patrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*)?([A-Z]\d{1,3}\.\d{1,5})\b/i)?.[1] ||
-    line.match(/\bpatrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*([A-Z0-9][A-Z0-9./-]{1,29})\b/i)?.[1] ||
-    '',
-  );
-
-  if (!plate && !patrimonio) return null;
+  if (!placa && !patrimonio) return null;
 
   const descricao = cleanEntity(
-    line
-      .replace(/\bplaca\s*[:\-]?\s*[A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2}\b/i, '')
+    raw
+      .replace(/\bplaca\s*[:\-]?\s*[A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2}\b/i, '')
       .replace(/\b(?:patrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*)?[A-Z]\d{1,3}\.\d{1,5}\b/i, '')
       .replace(/^[\s\-–—:]+|[\s\-–—:]+$/g, ''),
   );
 
-  return { placa: plate, patrimonio, descricao };
+  return { placa, patrimonio, descricao };
 };
 
-const applyContextToPending = (items: Item[], pending: number[], context: Context) => {
-  for (const index of pending) {
+const applyContext = (items: Item[], indexes: number[], context: Context) => {
+  for (const index of indexes) {
     items[index] = {
       ...items[index],
       cliente: items[index].cliente || context.cliente,
@@ -113,8 +96,15 @@ const applyContextToPending = (items: Item[], pending: number[], context: Contex
   }
 };
 
+const incompleteIndexes = (items: Item[]) =>
+  items
+    .map((item, index) => (!item.cliente || !item.local || !item.responsavel ? index : -1))
+    .filter((index) => index >= 0);
+
 export const parseProtocolMessage = (rawText: string): ProtocolParsedGroup[] => {
   const text = String(rawText || '').replace(/\r/g, '').trim();
+  if (!text) return [];
+
   const lines = text
     .split(/\n+/)
     .map((line) => line.trim())
@@ -126,7 +116,6 @@ export const parseProtocolMessage = (rawText: string): ProtocolParsedGroup[] => 
 
   for (const line of lines) {
     const foundContext = parseProtocolContext(line);
-    const hasContext = Boolean(foundContext.cliente || foundContext.local || foundContext.responsavel);
     const item = parseProtocolItem(line);
 
     if (item) {
@@ -135,98 +124,109 @@ export const parseProtocolMessage = (rawText: string): ProtocolParsedGroup[] => 
       if (!next.cliente || !next.local || !next.responsavel) pending.push(items.length - 1);
     }
 
-    if (hasContext) {
+    if (foundContext.cliente || foundContext.local || foundContext.responsavel) {
       current = {
         cliente: foundContext.cliente || current.cliente,
         local: foundContext.local || current.local,
         responsavel: foundContext.responsavel || current.responsavel,
       };
-
-      // Mensagens operacionais normalmente trazem a lista de patrimônios primeiro
-      // e o destino no fim. Repassamos o contexto encontrado para esses itens.
       if (pending.length) {
-        applyContextToPending(items, pending, current);
-        pending = items
-          .map((candidate, index) => (!candidate.cliente || !candidate.local || !candidate.responsavel ? index : -1))
-          .filter((index) => index >= 0);
+        applyContext(items, pending, current);
+        pending = incompleteIndexes(items);
       }
     }
   }
 
-  if (pending.length) applyContextToPending(items, pending, current);
+  const compact = text.replace(/\s+/g, ' ');
+  const globalContext = parseProtocolContext(compact);
+  current = {
+    cliente: globalContext.cliente || current.cliente,
+    local: globalContext.local || current.local,
+    responsavel: globalContext.responsavel || current.responsavel,
+  };
 
-  // Fallback para mensagem em uma única linha ou texto sem quebras previsíveis.
+  if (items.length && pending.length) applyContext(items, pending, current);
+
   if (!items.length) {
-    const compact = text.replace(/\s+/g, ' ');
-    const globalContext = parseProtocolContext(compact);
-    const context: Context = {
-      cliente: globalContext.cliente || '',
-      local: globalContext.local || '',
-      responsavel: globalContext.responsavel || '',
-    };
-
-    const pairRegex = /\b([A-Z]\d{1,3}\.\d{1,5})\b\s*[-–—]?\s*(?:placa\s*[:\-]?\s*)?([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/gi;
+    const pairRegex = /\b([A-Z]\d{1,3}\.\d{1,5})\b\s*[-–—]?\s*(?:placa\s*[:\-]?\s*)?([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/gi;
     for (const match of compact.matchAll(pairRegex)) {
       items.push({
-        patrimonio: normalizePatrimonio(match[1]),
+        patrimonio: normalizeProtocolPatrimonio(match[1]),
         placa: normalizeProtocolPlate(match[2]),
         descricao: '',
-        ...context,
+        ...current,
       });
     }
+  }
 
-    if (!items.length) {
-      const plateMatches = [...compact.matchAll(/\b([A-Z]{3}[-\s]?[0-9][A-Z0-9][0-9]{2})\b/gi)];
-      for (const match of plateMatches) {
-        items.push({ placa: normalizeProtocolPlate(match[1]), patrimonio: '', descricao: '', ...context });
-      }
+  if (!items.length) {
+    for (const match of compact.matchAll(/\b([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/gi)) {
+      items.push({ placa: normalizeProtocolPlate(match[1]), patrimonio: '', descricao: '', ...current });
     }
   }
 
   const groups = new Map<string, ProtocolParsedGroup>();
   for (const item of items) {
     const key = `${normalize(item.cliente)}|${normalize(item.local)}`;
-    const existing = groups.get(key) || {
+    const group = groups.get(key) || {
       cliente: item.cliente,
       local: item.local,
       responsavel: item.responsavel,
       itens: [],
     };
 
-    if (!existing.responsavel && item.responsavel) existing.responsavel = item.responsavel;
-    const duplicate = existing.itens.some((candidate) =>
+    if (!group.responsavel && item.responsavel) group.responsavel = item.responsavel;
+    const duplicate = group.itens.some((candidate) =>
       (item.placa && normalizeProtocolPlate(candidate.placa) === item.placa) ||
-      (item.patrimonio && normalizePatrimonio(candidate.patrimonio) === item.patrimonio),
+      (item.patrimonio && normalizeProtocolPatrimonio(candidate.patrimonio) === item.patrimonio),
     );
-    if (!duplicate) existing.itens.push({ placa: item.placa, patrimonio: item.patrimonio, descricao: item.descricao });
-    groups.set(key, existing);
+    if (!duplicate) group.itens.push({ placa: item.placa, patrimonio: item.patrimonio, descricao: item.descricao });
+    groups.set(key, group);
   }
 
   return [...groups.values()];
 };
 
-export default async function handler(request: Request) {
-  if (request.method !== 'POST') return json({ error: 'Método não permitido.' }, 405);
+const parseBody = (req: any) => {
+  if (req?.body == null) return {};
+  if (Buffer.isBuffer(req.body)) return JSON.parse(req.body.toString('utf8') || '{}');
+  if (typeof req.body === 'string') return JSON.parse(req.body || '{}');
+  if (typeof req.body === 'object') return req.body;
+  return {};
+};
 
-  const token = bearer(request);
-  if (!token) return json({ error: 'Sessão não informada.' }, 401);
-
-  const supabase = getSupabase(token);
-  const { data: auth, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !auth?.user) return json({ error: 'Sessão inválida ou expirada.' }, 401);
-
-  let body: any = {};
+export default async function handler(req: any, res: any) {
   try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'Corpo JSON inválido.' }, 400);
+    if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Método não permitido.' });
+    if (!bearer(req)) return sendJson(res, 401, { ok: false, error: 'Sessão não informada. Faça login novamente.' });
+
+    let body: any;
+    try {
+      body = parseBody(req);
+    } catch (error: any) {
+      console.error('[protocolos-parse] JSON inválido:', error?.message || error);
+      return sendJson(res, 400, { ok: false, error: 'A mensagem não pôde ser lida porque o corpo JSON é inválido.' });
+    }
+
+    const text = String(body?.text || '').trim();
+    if (!text) return sendJson(res, 400, { ok: false, error: 'Cole a mensagem para gerar os protocolos.' });
+    if (text.length > 60_000) return sendJson(res, 413, { ok: false, error: 'A mensagem é muito grande para processamento.' });
+
+    const groups = parseProtocolMessage(text);
+    if (!groups.length) {
+      return sendJson(res, 422, {
+        ok: false,
+        error: 'Nenhuma placa ou patrimônio foi identificado. Use formatos como A10.245 - placa GCO-6C26.',
+      });
+    }
+
+    console.log('[protocolos-parse] processado', JSON.stringify({ groups: groups.length, items: groups.reduce((sum, group) => sum + group.itens.length, 0) }));
+    return sendJson(res, 200, { ok: true, groups, originalText: text, groupingRule: 'cliente+local' });
+  } catch (error: any) {
+    console.error('[protocolos-parse] erro inesperado:', error?.stack || error?.message || error);
+    return sendJson(res, 500, {
+      ok: false,
+      error: `Falha interna ao interpretar a mensagem: ${error?.message || 'erro desconhecido'}`,
+    });
   }
-
-  const text = String(body?.text || '').trim();
-  if (!text) return json({ error: 'Cole a mensagem para gerar os protocolos.' }, 400);
-
-  const groups = parseProtocolMessage(text);
-  if (!groups.length) return json({ error: 'Nenhuma placa ou patrimônio foi identificado na mensagem.' }, 422);
-
-  return json({ ok: true, groups, originalText: text, groupingRule: 'cliente+local' });
 }
