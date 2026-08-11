@@ -1,23 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileCheck, LinkIcon, Loader2, Printer, Search, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileCheck, LinkIcon, Loader2, Printer, Sparkles } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
 import { registrarAcao } from '@/lib/acoesLog';
-import {
-  findVehicleByPlate,
-  normalizeVehiclePlate,
-  toProtocolVehicleFields,
-  vehicleIdentityWarnings,
-  type VehicleSyncRecord,
-} from '@/lib/vehicleSync';
 import { toast } from 'sonner';
 
-interface AtivoDoc extends VehicleSyncRecord {
+interface AtivoDoc {
+  id: string;
+  tipo?: string | null;
+  descricao?: string | null;
+  placa?: string | null;
   patrimonio?: string | null;
   renavam?: string | null;
   chassi?: string | null;
@@ -26,304 +24,496 @@ interface AtivoDoc extends VehicleSyncRecord {
   empresa?: string | null;
   arquivo_url?: string | null;
   documento_url?: string | null;
+  documento_nome?: string | null;
   observacao?: string | null;
 }
 
-type ProtocolTextData = {
-  empresa_destinataria?: string;
-  local_canteiro?: string;
-  responsavel_recebimento?: string;
-  placa?: string;
-  patrimonio?: string;
-  descricao_ativo?: string;
-  observacoes?: string;
+interface ParsedItem {
+  placa: string;
+  patrimonio: string;
+  descricao: string;
+}
+
+interface ProtocolItem extends ParsedItem {
+  ativo: AtivoDoc | null;
+}
+
+interface ProtocolGroup {
+  key: string;
+  cliente: string;
+  local: string;
+  responsavel: string;
+  itens: ProtocolItem[];
+}
+
+const normalize = (value: unknown) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const normalizePlate = (value: unknown) =>
+  normalize(value).replace(/[^A-Z0-9]/g, '').match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/)?.[0] || '';
+
+const normalizePatrimonio = (value: unknown) =>
+  normalize(value).replace(/\s+/g, '').replace(/[^A-Z0-9./-]/g, '');
+
+const esc = (value: unknown) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+const pdfOf = (asset: AtivoDoc | null) => String(asset?.documento_url || asset?.arquivo_url || '').trim();
+
+const findVehicleByPlate = (assets: AtivoDoc[], plate: unknown) => {
+  const normalized = normalizePlate(plate);
+  return normalized ? assets.find((asset) => normalizePlate(asset.placa) === normalized) || null : null;
 };
 
-const extractProtocolLocally = (rawText: string): ProtocolTextData => {
-  const text = String(rawText || '').replace(/\r/g, '').trim();
-  const flat = text.replace(/\s+/g, ' ');
-  const pick = (patterns: RegExp[]) => {
-    for (const pattern of patterns) {
-      const match = flat.match(pattern) || text.match(pattern);
-      if (match?.[1]) return match[1].trim();
-    }
-    return '';
-  };
-  return {
-    placa: normalizeVehiclePlate(pick([/\bplaca\s*[:-]?\s*([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2}|[A-Z]{3}[-\s]?\d{4})\b/i])),
-    patrimonio: pick([/\bpatrim[oô]nio\s*(?:n[ºo.]*)?\s*[:-]?\s*([A-Z0-9./-]{2,30})\b/i]),
-    empresa_destinataria: pick([/(?:empresa destinat[aá]ria|empresa)\s*[:-]?\s*([^,;|]{2,80})/i]),
-    local_canteiro: pick([/(?:local|canteiro|obra)\s*[:-]?\s*([^,;|]{2,80})/i]),
-    responsavel_recebimento: pick([/(?:respons[aá]vel(?: pelo recebimento)?|a\/c)\s*[:-]?\s*([^,;|]{2,60})/i]),
-    descricao_ativo: pick([/(?:descri[cç][aã]o|equipamento|ativo)\s*[:-]?\s*([^,;|]{2,100})/i]),
-    observacoes: text,
-  };
-};
+const toProtocolVehicleFields = (asset: AtivoDoc | null) => ({
+  descricao_ativo: asset?.descricao || null,
+  placa: normalizePlate(asset?.placa) || null,
+  renavam: asset?.renavam || null,
+  chassi: asset?.chassi || null,
+  ano_fabricacao: asset?.ano_fabricacao || null,
+  ano_modelo: asset?.ano_modelo || null,
+  patrimonio: asset?.patrimonio || null,
+  pdf_url: pdfOf(asset) || null,
+  ativo_id: asset?.id || null,
+});
 
 const ProtocoloPage: React.FC = () => {
-  const { companies } = useApp();
+  const { companies, session } = useApp();
   const topac = companies.find((company) => company.id === 'topac-matriz');
-
-  const [empresaDestinataria, setEmpresaDestinataria] = useState('');
-  const [localCanteiro, setLocalCanteiro] = useState('');
-  const [responsavelRecebimento, setResponsavelRecebimento] = useState('');
-  const [placa, setPlaca] = useState('');
-  const [renavam, setRenavam] = useState('');
-  const [chassi, setChassi] = useState('');
-  const [anoFabricacao, setAnoFabricacao] = useState('');
-  const [anoModelo, setAnoModelo] = useState('');
-  const [patrimonio, setPatrimonio] = useState('');
-  const [exercicio, setExercicio] = useState(new Date().getFullYear().toString());
-  const [descricaoEquipamento, setDescricaoEquipamento] = useState('');
-  const [observacoes, setObservacoes] = useState('');
-  const [dataEmissao, setDataEmissao] = useState(new Date().toISOString().slice(0, 10));
   const [textoColado, setTextoColado] = useState('');
+  const [dataEmissao, setDataEmissao] = useState(new Date().toISOString().slice(0, 10));
+  const [ativos, setAtivos] = useState<AtivoDoc[]>([]);
+  const [groups, setGroups] = useState<ProtocolGroup[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(true);
   const [parsing, setParsing] = useState(false);
-  const [savingProtocol, setSavingProtocol] = useState(false);
-  const [lastSavedProtocolId, setLastSavedProtocolId] = useState<string | null>(null);
-  const [ativosCache, setAtivosCache] = useState<AtivoDoc[]>([]);
-  const [matchedAtivo, setMatchedAtivo] = useState<AtivoDoc | null>(null);
-  const [ativoSearch, setAtivoSearch] = useState('');
-  const [showManualSelect, setShowManualSelect] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [lastSavedIds, setLastSavedIds] = useState<string[]>([]);
+
+  const loadAssets = async () => {
+    setLoadingAssets(true);
+    const { data, error } = await supabase
+      .from('ativos')
+      .select('id,tipo,descricao,placa,patrimonio,renavam,chassi,ano_fabricacao,ano_modelo,empresa,arquivo_url,documento_url,documento_nome,observacao')
+      .in('tipo', ['veiculo', 'equipamento'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setAtivos([]);
+      toast.error(`Não foi possível carregar a Frota do Supabase: ${error.message}`);
+    } else {
+      setAtivos((data as unknown as AtivoDoc[]) || []);
+    }
+    setLoadingAssets(false);
+  };
 
   useEffect(() => {
-    const load = async () => {
-      const { data, error } = await supabase
-        .from('ativos')
-        .select('id,descricao,placa,patrimonio,renavam,chassi,ano_fabricacao,ano_modelo,empresa,arquivo_url,documento_url,observacao')
-        .eq('tipo', 'veiculo')
-        .order('created_at', { ascending: false });
-      if (error) {
-        toast.error(`Não foi possível carregar a Frota: ${error.message}`);
-        return;
-      }
-      setAtivosCache((data as AtivoDoc[]) || []);
-    };
-    void load();
+    void loadAssets();
   }, []);
 
-  const applyVehicle = (vehicle: AtivoDoc) => {
-    const data = toProtocolVehicleFields(vehicle);
-    setMatchedAtivo(vehicle);
-    setPlaca(data.placa);
-    setPatrimonio(data.patrimonio);
-    setRenavam(data.renavam);
-    setChassi(data.chassi);
-    setAnoFabricacao(data.anoFabricacao);
-    setAnoModelo(data.anoModelo);
-    if (data.empresa) setEmpresaDestinataria(data.empresa);
-    if (data.descricao) setDescricaoEquipamento(data.descricao);
-    if (data.observacao && !observacoes.trim()) setObservacoes(data.observacao);
-    setPdfUrl(data.pdfUrl);
-    const warnings = vehicleIdentityWarnings(vehicle);
-    if (warnings.length) toast.warning(`Veículo legado localizado. Atualize a Frota: ${warnings.join(' ')}`);
+  const resolveAsset = (item: ParsedItem) => {
+    const plate = normalizePlate(item.placa);
+    const patrimonio = normalizePatrimonio(item.patrimonio);
+    if (plate) {
+      const byPlate = findVehicleByPlate(ativos, plate);
+      if (byPlate) return byPlate;
+    }
+    if (patrimonio) {
+      const byPatrimonio = ativos.find((asset) => normalizePatrimonio(asset.patrimonio) === patrimonio);
+      if (byPatrimonio) return byPatrimonio;
+    }
+    return null;
   };
 
-  useEffect(() => {
-    const normalized = normalizeVehiclePlate(placa);
-    if (normalized.length !== 7) {
-      setMatchedAtivo(null);
-      setPdfUrl('');
-      return;
-    }
-    const match = findVehicleByPlate(ativosCache, normalized);
-    if (!match) {
-      setMatchedAtivo(null);
-      setPdfUrl('');
-      return;
-    }
-    if (matchedAtivo?.id !== match.id) {
-      applyVehicle(match);
-      toast.success(`Veículo sincronizado com a Frota: ${match.descricao || normalized}.`);
-    }
-  }, [placa, ativosCache, matchedAtivo?.id]);
-
-  const filteredAtivos = useMemo(() => {
-    const query = ativoSearch.trim().toLowerCase();
-    if (!query) return ativosCache.slice(0, 30);
-    return ativosCache.filter((vehicle) => `${vehicle.descricao || ''} ${vehicle.placa || ''} ${vehicle.patrimonio || ''}`.toLowerCase().includes(query)).slice(0, 50);
-  }, [ativosCache, ativoSearch]);
-
-  const handleParseText = async () => {
-    if (!textoColado.trim()) return toast.error('Cole o texto antes de iniciar a leitura.');
+  const readMessage = async () => {
+    if (!textoColado.trim()) return toast.error('Cole a mensagem antes de iniciar a leitura.');
+    if (!session?.access_token) return toast.error('Sessão expirada. Entre novamente.');
     setParsing(true);
-    const local = extractProtocolLocally(textoColado);
-    let remote: ProtocolTextData = {};
     try {
-      const { data, error } = await supabase.functions.invoke('parse-text', {
-        body: { type: 'protocolo', text: textoColado },
+      const response = await fetch('/api/protocolos-parse', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ text: textoColado }),
       });
-      if (!error) remote = data?.data || {};
-    } catch (error) {
-      console.warn('[protocolo] parser remoto indisponível; leitura local mantida.', error);
-    }
-    const value = (key: keyof ProtocolTextData) => String(remote[key] || local[key] || '').trim();
-    if (value('empresa_destinataria')) setEmpresaDestinataria(value('empresa_destinataria'));
-    if (value('local_canteiro')) setLocalCanteiro(value('local_canteiro'));
-    if (value('responsavel_recebimento')) setResponsavelRecebimento(value('responsavel_recebimento'));
-    if (value('placa')) setPlaca(normalizeVehiclePlate(value('placa')));
-    if (value('patrimonio')) setPatrimonio(value('patrimonio'));
-    if (value('descricao_ativo')) setDescricaoEquipamento(value('descricao_ativo'));
-    if (value('observacoes')) setObservacoes(value('observacoes'));
-    setParsing(false);
-    toast.success('Texto lido. A placa identificada será sincronizada automaticamente com a Frota.');
-  };
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || 'Não foi possível interpretar a mensagem.');
 
-  const buildProtocolPayload = () => ({
-    empresa_origem: topac?.name || 'TOPAC MATRIZ',
-    empresa_destinataria: empresaDestinataria,
-    local_canteiro: localCanteiro,
-    responsavel_recebimento: responsavelRecebimento,
-    data_emissao: dataEmissao,
-    descricao_ativo: descricaoEquipamento,
-    placa: normalizeVehiclePlate(placa),
-    renavam,
-    chassi,
-    ano_fabricacao: anoFabricacao,
-    ano_modelo: anoModelo,
-    patrimonio,
-    exercicio,
-    observacoes,
-    texto_original: textoColado,
-    pdf_url: pdfUrl || null,
-    ativo_id: matchedAtivo?.id || null,
-  });
+      const nextGroups: ProtocolGroup[] = (payload.groups || []).map((group: any, index: number) => ({
+        key: `${Date.now()}-${index}`,
+        cliente: String(group.cliente || '').trim(),
+        local: String(group.local || '').trim(),
+        responsavel: String(group.responsavel || '').trim(),
+        itens: (group.itens || []).map((item: ParsedItem) => ({
+          placa: normalizePlate(item.placa),
+          patrimonio: String(item.patrimonio || '').trim(),
+          descricao: String(item.descricao || '').trim(),
+          ativo: resolveAsset(item),
+        })),
+      }));
 
-  const validateProtocol = () => {
-    const normalized = normalizeVehiclePlate(placa);
-    if (normalized && normalized.length !== 7) {
-      toast.error('Informe uma placa válida.');
-      return false;
-    }
-    if (normalized && !matchedAtivo) {
-      toast.error('A placa não está cadastrada na Frota. Cadastre ou corrija o veículo na aba Frota / Documentos.');
-      return false;
-    }
-    if (!normalized && !patrimonio && !descricaoEquipamento) {
-      toast.error('Informe placa, patrimônio ou descrição do equipamento.');
-      return false;
-    }
-    return true;
-  };
-
-  const saveProtocol = async ({ silent = false } = {}) => {
-    if (!validateProtocol()) return null;
-    const payload = buildProtocolPayload();
-    setSavingProtocol(true);
-    try {
-      const { data, error } = await supabase.from('protocolos_documentos' as any).insert(payload).select('id').single();
-      if (error) throw error;
-      const id = String((data as any)?.id || '');
-      setLastSavedProtocolId(id);
-      await registrarAcao({
-        modulo: 'protocolo', entidade: 'protocolos_documentos', entidadeId: id, acao: 'gerou', depois: payload,
-        arquivoUrl: pdfUrl || undefined,
-        observacao: `Protocolo sincronizado com ${matchedAtivo ? `Frota/${matchedAtivo.id}` : 'equipamento sem placa'}`,
-      });
-      if (!silent) toast.success('Protocolo salvo e sincronizado com a Frota.');
-      return id;
-    } catch (error) {
-      console.warn('[protocolo] persistência remota indisponível; arquivando localmente.', error);
-      const id = `local-${Date.now()}`;
-      const current = JSON.parse(localStorage.getItem('topac_protocolos_documentos') || '[]');
-      localStorage.setItem('topac_protocolos_documentos', JSON.stringify([{ id, ...payload, created_at: new Date().toISOString() }, ...current].slice(0, 200)));
-      setLastSavedProtocolId(id);
-      if (!silent) toast.warning('Protocolo arquivado localmente.');
-      return id;
-    } finally {
-      setSavingProtocol(false);
-    }
-  };
-
-  const buildProtocoloHtml = (via: number) => `<div style="page-break-after:always;padding:15mm;font-family:Arial,sans-serif;font-size:12px;color:#000;box-sizing:border-box">
-    <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:14px">
-      <div><strong>${topac?.name || 'TOPAC MATRIZ'}</strong><br/><span style="font-size:10px">CNPJ: ${topac?.cnpj || ''}</span></div>
-      <div style="font-size:14px;font-weight:bold;text-align:right">PROTOCOLO DE LIBERAÇÃO DE DOCUMENTO<br/><span style="font-size:10px;color:#666">${via}ª Via de 2</span></div>
-    </div>
-    <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
-      <strong>Dados da Liberação</strong><br/>Empresa Destinatária: ${empresaDestinataria || '—'}<br/>Local/Canteiro: ${localCanteiro || '—'}<br/>Responsável: ${responsavelRecebimento || '—'}<br/>Data: ${new Date(`${dataEmissao}T12:00:00`).toLocaleDateString('pt-BR')}<br/>Descrição: ${descricaoEquipamento || '—'}
-    </div>
-    <div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px">
-      <strong>Identificação do Ativo — dados sincronizados da Frota</strong><br/>Placa: ${placa || '—'}<br/>RENAVAM: ${renavam || '—'}<br/>Chassi: ${chassi || '—'}<br/>Ano Fabricação/Modelo: ${anoFabricacao || '—'} / ${anoModelo || '—'}<br/>Patrimônio: ${patrimonio || '—'}<br/>Exercício: ${exercicio}
-    </div>
-    ${observacoes ? `<div style="border:1px solid #ccc;border-radius:4px;padding:10px;margin-bottom:12px"><strong>Observações</strong><p style="white-space:pre-wrap">${observacoes}</p></div>` : ''}
-    <div style="display:flex;justify-content:space-between;margin-top:60px"><div style="text-align:center;width:45%"><hr/>Assinatura — Entrega</div><div style="text-align:center;width:45%"><hr/>Assinatura — Recebimento</div></div>
-  </div>`;
-
-  const handlePrint = async () => {
-    if (!validateProtocol()) return;
-    await saveProtocol({ silent: true });
-    let content = buildProtocoloHtml(1) + buildProtocoloHtml(2);
-    if (pdfUrl) {
-      try {
-        const { pageUrls } = await renderPdfPagesToDataUrls(pdfUrl, 1.6);
-        content += pageUrls.map((url, index) => `<div style="${index === 0 ? 'page-break-before:always;' : ''}"><img src="${url}" style="display:block;width:100%;height:auto"/></div>`).join('');
-      } catch {
-        toast.warning('O protocolo será impresso, mas o PDF vinculado da Frota não pôde ser incorporado.');
+      setGroups(nextGroups);
+      setLastSavedIds([]);
+      const missing = nextGroups.flatMap((group) => group.itens).filter((item) => !item.ativo || !pdfOf(item.ativo)).length;
+      if (missing) {
+        toast.warning(`${missing} item(ns) ainda não possuem documento correspondente na Frota.`);
+      } else {
+        toast.success(`${nextGroups.length} protocolo(s) agrupado(s) por cliente/local com documentos vinculados.`);
       }
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível interpretar a mensagem.');
+    } finally {
+      setParsing(false);
     }
-    printDocumentInPage(`<!DOCTYPE html><html><head><title>Protocolo</title><style>@page{size:A4;margin:0}body{margin:0}</style></head><body>${content}</body></html>`);
   };
 
-  const clear = () => {
-    setEmpresaDestinataria(''); setLocalCanteiro(''); setResponsavelRecebimento(''); setPlaca('');
-    setRenavam(''); setChassi(''); setAnoFabricacao(''); setAnoModelo(''); setPatrimonio('');
-    setDescricaoEquipamento(''); setObservacoes(''); setTextoColado(''); setMatchedAtivo(null); setPdfUrl('');
-    setLastSavedProtocolId(null); setDataEmissao(new Date().toISOString().slice(0, 10));
+  const updateGroup = (key: string, field: 'cliente' | 'local' | 'responsavel', value: string) => {
+    setGroups((current) => current.map((group) => group.key === key ? { ...group, [field]: value } : group));
+  };
+
+  const relink = () => {
+    setGroups((current) => current.map((group) => ({
+      ...group,
+      itens: group.itens.map((item) => ({ ...item, ativo: resolveAsset(item) })),
+    })));
+    toast.success('Vínculos refeitos com a Frota atual.');
+  };
+
+  const readiness = useMemo(() => {
+    const items = groups.flatMap((group) => group.itens);
+    const missingContext = groups.filter((group) => !group.cliente.trim() || !group.local.trim()).length;
+    const missingDocs = items.filter((item) => !item.ativo || !pdfOf(item.ativo)).length;
+    return {
+      totalGroups: groups.length,
+      totalItems: items.length,
+      missingContext,
+      missingDocs,
+      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0,
+    };
+  }, [groups]);
+
+  const buildRows = (group: ProtocolGroup) => group.itens.map((item, index) => {
+    const asset = item.ativo;
+    return `<tr>
+      <td>${index + 1}</td>
+      <td>${esc(asset?.descricao || item.descricao || 'Equipamento / veículo')}</td>
+      <td>${esc(asset?.patrimonio || item.patrimonio || '—')}</td>
+      <td>${esc(normalizePlate(asset?.placa || item.placa) || '—')}</td>
+      <td>${esc(asset?.renavam || '—')}</td>
+      <td>${esc(asset?.chassi || '—')}</td>
+    </tr>`;
+  }).join('');
+
+  const buildProtocolHtml = (group: ProtocolGroup, via: number) => `
+    <section class="protocol-page">
+      <header class="protocol-header">
+        <div>
+          <strong>${esc(topac?.name || 'TOPAC MATRIZ')}</strong>
+          <span>CNPJ: ${esc(topac?.cnpj || '')}</span>
+        </div>
+        <div class="protocol-title">
+          PROTOCOLO DE LIBERAÇÃO DE DOCUMENTOS
+          <small>${via}ª VIA DE 2</small>
+        </div>
+      </header>
+      <div class="context-grid">
+        <div><small>CLIENTE</small><strong>${esc(group.cliente)}</strong></div>
+        <div><small>LOCAL / CANTEIRO</small><strong>${esc(group.local)}</strong></div>
+        <div><small>RESPONSÁVEL</small><strong>${esc(group.responsavel || '—')}</strong></div>
+        <div><small>DATA</small><strong>${esc(new Date(`${dataEmissao}T12:00:00`).toLocaleDateString('pt-BR'))}</strong></div>
+      </div>
+      <h2>DOCUMENTOS ENTREGUES</h2>
+      <table>
+        <thead><tr><th>#</th><th>Ativo / Equipamento</th><th>Patrimônio</th><th>Placa</th><th>RENAVAM</th><th>Chassi</th></tr></thead>
+        <tbody>${buildRows(group)}</tbody>
+      </table>
+      <p class="protocol-note">Os itens acima pertencem ao mesmo cliente e local e, por regra operacional, integram este mesmo protocolo.</p>
+      <div class="signatures">
+        <div><hr/>Assinatura — Entrega</div>
+        <div><hr/>Assinatura — Recebimento</div>
+      </div>
+    </section>`;
+
+  const persistProtocols = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!readiness.ready) {
+      toast.error('Complete Cliente/Local e vincule todos os PDFs antes de salvar ou imprimir.');
+      return null;
+    }
+    if (!session?.user?.id) {
+      toast.error('Sessão expirada. Entre novamente.');
+      return null;
+    }
+
+    setSaving(true);
+    try {
+      const payload = groups.flatMap((group) => group.itens.map((item) => {
+        const asset = item.ativo!;
+        const vehicleFields = toProtocolVehicleFields(asset);
+        return {
+          empresa_origem: topac?.name || 'TOPAC MATRIZ',
+          empresa_destinataria: group.cliente,
+          local_canteiro: group.local,
+          responsavel_recebimento: group.responsavel || null,
+          data_emissao: dataEmissao,
+          ...vehicleFields,
+          descricao_ativo: vehicleFields.descricao_ativo || item.descricao || null,
+          placa: vehicleFields.placa || normalizePlate(item.placa) || null,
+          patrimonio: vehicleFields.patrimonio || item.patrimonio || null,
+          exercicio: new Date(`${dataEmissao}T12:00:00`).getFullYear().toString(),
+          observacoes: `Grupo automático: ${group.cliente} / ${group.local}`,
+          texto_original: textoColado,
+          criado_por: session.user.id,
+        };
+      }));
+
+      const { data, error } = await supabase
+        .from('protocolos_documentos' as any)
+        .insert(payload as any)
+        .select('id');
+      if (error) throw error;
+
+      const ids = ((data as any[]) || []).map((row) => String(row.id));
+      setLastSavedIds(ids);
+      await registrarAcao({
+        modulo: 'protocolo',
+        entidade: 'protocolos_documentos',
+        entidadeId: ids[0] || undefined,
+        acao: 'gerou',
+        depois: {
+          grupos: groups.map((group) => ({
+            cliente: group.cliente,
+            local: group.local,
+            responsavel: group.responsavel,
+            ativos: group.itens.map((item) => item.ativo?.id),
+          })),
+          ids,
+        },
+        observacao: `${groups.length} protocolo(s), agrupamento obrigatório por cliente/local, ${payload.length} documento(s).`,
+      });
+
+      if (!silent) toast.success(`${groups.length} protocolo(s) salvo(s) no Supabase.`);
+      return ids;
+    } catch (error: any) {
+      toast.error(`Falha ao salvar os protocolos no Supabase: ${error?.message || error}`);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const printPackage = async () => {
+    if (!readiness.ready) {
+      toast.error('Impressão bloqueada: complete Cliente/Local e vincule todos os documentos da Frota.');
+      return;
+    }
+    setPrinting(true);
+    try {
+      const saved = await persistProtocols({ silent: true });
+      if (!saved) return;
+
+      let content = '';
+      for (const group of groups) {
+        content += buildProtocolHtml(group, 1);
+        content += buildProtocolHtml(group, 2);
+
+        const uniqueDocs = new Map<string, string>();
+        group.itens.forEach((item) => {
+          const url = pdfOf(item.ativo);
+          if (url && !uniqueDocs.has(url)) uniqueDocs.set(url, item.ativo?.documento_nome || item.ativo?.descricao || 'Documento');
+        });
+
+        for (const [url] of uniqueDocs) {
+          const { pageUrls } = await renderPdfPagesToDataUrls(url, 1.45);
+          content += pageUrls.map((pageUrl) => `
+            <section class="document-page">
+              <img src="${pageUrl}" alt="Documento vinculado" />
+            </section>`).join('');
+        }
+      }
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Protocolos TOPAC</title><style>
+        @page{size:A4;margin:0}
+        *{box-sizing:border-box}
+        body{margin:0;font-family:Arial,sans-serif;color:#111;background:#fff}
+        .protocol-page{width:210mm;min-height:297mm;padding:14mm;page-break-after:always}
+        .protocol-header{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #111;padding-bottom:10px}
+        .protocol-header>div:first-child{display:flex;flex-direction:column;gap:4px;font-size:11px}
+        .protocol-header>div:first-child strong{font-size:16px}
+        .protocol-title{text-align:right;font-weight:800;font-size:15px;max-width:90mm}
+        .protocol-title small{display:block;margin-top:5px;font-size:10px;color:#666}
+        .context-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+        .context-grid>div{border:1px solid #bbb;padding:9px;min-height:48px}
+        .context-grid small{display:block;font-size:8px;font-weight:700;color:#666;margin-bottom:4px}
+        .context-grid strong{font-size:12px}
+        h2{font-size:12px;margin:18px 0 8px}
+        table{width:100%;border-collapse:collapse}
+        th,td{border:1px solid #aaa;padding:6px;font-size:9px;text-align:left;vertical-align:top}
+        th{background:#f1f1f1;text-transform:uppercase}
+        .protocol-note{font-size:9px;color:#555;margin-top:10px}
+        .signatures{display:flex;justify-content:space-between;gap:30px;margin-top:58px;text-align:center;font-size:10px}
+        .signatures>div{width:45%}
+        .document-page{width:210mm;min-height:297mm;display:flex;align-items:flex-start;justify-content:center;page-break-after:always;background:#fff}
+        .document-page img{width:210mm;max-height:297mm;object-fit:contain;display:block}
+      </style></head><body>${content}</body></html>`;
+
+      printDocumentInPage(html);
+      toast.success('Pacote pronto: 2 vias de cada protocolo + 1 via de cada documento vinculado.');
+    } catch (error: any) {
+      toast.error(`Não foi possível montar o pacote de impressão: ${error?.message || error}`);
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const clearAll = () => {
+    setTextoColado('');
+    setGroups([]);
+    setLastSavedIds([]);
+    setDataEmissao(new Date().toISOString().slice(0, 10));
   };
 
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="card-premium gradient-primary p-6 text-primary-foreground">
-        <div className="flex items-center gap-4"><div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-foreground/20"><FileCheck className="h-7 w-7" /></div><div><h1 className="text-2xl font-bold font-display">Protocolo / Liberação de Documento</h1><p className="text-sm text-primary-foreground/70">Dados do veículo sincronizados exclusivamente pela Frota</p></div></div>
-      </div>
-
-      <div className="card-premium space-y-4 p-5">
-        <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-primary" /> Leitura Inteligente de Texto</h2><Button variant="ghost" size="sm" onClick={clear}>Limpar campos</Button></div>
-        <textarea value={textoColado} onChange={(event) => setTextoColado(event.target.value)} placeholder="Cole a mensagem com empresa, local, responsável e placa. Ao identificar a placa, o sistema localizará o cadastro da Frota." className="min-h-32 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm" />
-        <Button variant="outline" onClick={() => void handleParseText()} disabled={parsing}>{parsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}{parsing ? 'Lendo texto...' : 'Ler texto e preencher'}</Button>
-      </div>
-
-      <div className="card-premium space-y-4 p-5">
-        <h2 className="text-sm font-bold">Dados da Liberação</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <Field label="Empresa Destinatária" value={empresaDestinataria} onChange={setEmpresaDestinataria} />
-          <Field label="Local / Canteiro" value={localCanteiro} onChange={setLocalCanteiro} />
-          <Field label="Responsável pelo Recebimento" value={responsavelRecebimento} onChange={setResponsavelRecebimento} />
-          <Field label="Data de Emissão" value={dataEmissao} type="date" onChange={setDataEmissao} />
-          <div className="lg:col-span-2"><Field label="Descrição do Ativo / Equipamento" value={descricaoEquipamento} onChange={setDescricaoEquipamento} /></div>
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-foreground/20">
+            <FileCheck className="h-7 w-7" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold font-display">Protocolos Inteligentes</h1>
+            <p className="text-sm text-primary-foreground/70">Agrupamento obrigatório por Cliente + Local, com PDFs puxados automaticamente da Frota</p>
+          </div>
         </div>
       </div>
 
       <div className="card-premium space-y-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-bold">Identificação do Ativo</h2>{matchedAtivo && <span className="flex items-center gap-2 rounded-full bg-success/10 px-3 py-1 text-xs text-success"><LinkIcon className="h-3 w-3" /> Sincronizado com Frota: {matchedAtivo.descricao || matchedAtivo.placa}</span>}</div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Field label="Placa" value={placa} onChange={(value) => setPlaca(normalizeVehiclePlate(value))} />
-          <ReadOnlyField label="RENAVAM" value={renavam} />
-          <ReadOnlyField label="Chassi" value={chassi} />
-          <ReadOnlyField label="Ano Fabricação" value={anoFabricacao} />
-          <ReadOnlyField label="Ano Modelo" value={anoModelo} />
-          <ReadOnlyField label="Patrimônio da Frota" value={patrimonio} />
-          <Field label="Exercício" value={exercicio} onChange={setExercicio} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-primary" /> Mensagem Inteligente</h2>
+          <div className="flex gap-2">
+            <Input type="date" value={dataEmissao} onChange={(event) => setDataEmissao(event.target.value)} className="w-40" />
+            <Button variant="ghost" size="sm" onClick={clearAll}>Limpar</Button>
+          </div>
         </div>
-        {!matchedAtivo && normalizeVehiclePlate(placa).length === 7 && <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"><span className="font-medium text-warning">Placa não localizada na Frota.</span><Button variant="link" size="sm" onClick={() => setShowManualSelect(true)}>Conferir cadastros</Button></div>}
-        {showManualSelect && <div className="space-y-2 rounded-lg bg-muted/30 p-4"><div className="flex items-center gap-2"><Search className="h-4 w-4" /><Input value={ativoSearch} onChange={(event) => setAtivoSearch(event.target.value)} placeholder="Buscar por placa, patrimônio ou descrição" /><Button variant="ghost" onClick={() => setShowManualSelect(false)}>Fechar</Button></div><div className="max-h-48 overflow-y-auto rounded-lg border">{filteredAtivos.map((vehicle) => <button key={vehicle.id} type="button" onClick={() => { applyVehicle(vehicle); setShowManualSelect(false); }} className="flex w-full justify-between border-b px-3 py-2 text-left text-sm hover:bg-muted/50"><span>{vehicle.descricao || 'Veículo'}</span><span className="text-muted-foreground">{vehicle.placa || vehicle.patrimonio || '—'}</span></button>)}</div></div>}
+        <textarea
+          value={textoColado}
+          onChange={(event) => setTextoColado(event.target.value)}
+          placeholder="Cole a mensagem completa. O sistema identifica patrimônios/placas e separa automaticamente por cliente e local."
+          className="min-h-40 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm"
+        />
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={() => void readMessage()} disabled={parsing || loadingAssets}>
+            {parsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            {parsing ? 'Interpretando...' : 'Interpretar e montar protocolos'}
+          </Button>
+          <Button variant="outline" onClick={relink} disabled={!groups.length || loadingAssets}>
+            <LinkIcon className="mr-2 h-4 w-4" /> Refazer vínculos com Frota
+          </Button>
+          <Button variant="outline" onClick={() => void loadAssets()} disabled={loadingAssets}>
+            {loadingAssets ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Atualizar Frota
+          </Button>
+        </div>
       </div>
 
-      <div className="card-premium space-y-4 p-5">
-        <div><label className="mb-1 block text-xs text-muted-foreground">Observações</label><textarea value={observacoes} onChange={(event) => setObservacoes(event.target.value)} className="min-h-20 w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm" /></div>
-        <div className="rounded-lg border p-3">
-          <p className="text-xs font-semibold">Documento da Frota</p>
-          {pdfUrl ? <div className="mt-2 space-y-2"><p className="flex items-center gap-2 text-xs text-success"><LinkIcon className="h-3 w-3" /> PDF vinculado automaticamente. O Protocolo não realiza upload próprio.</p><PdfDocumentViewer source={{ url: pdfUrl, tipo: 'protocolo' }} title="Documento cadastrado na Frota" /></div> : <p className="mt-1 text-xs text-muted-foreground">Nenhum PDF está vinculado ao cadastro correspondente na Frota.</p>}
+      {groups.length > 0 && (
+        <div className="card-premium space-y-4 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">Protocolos encontrados</h2>
+              <p className="text-xs text-muted-foreground">{readiness.totalGroups} grupo(s) • {readiness.totalItems} item(ns) • regra: Cliente + Local</p>
+            </div>
+            <Badge variant={readiness.ready ? 'default' : 'outline'}>
+              {readiness.ready ? 'Pronto para imprimir' : `${readiness.missingDocs + readiness.missingContext} pendência(s)`}
+            </Badge>
+          </div>
+
+          {groups.map((group, groupIndex) => (
+            <section key={group.key} className="space-y-4 rounded-xl border border-border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-bold">Protocolo {groupIndex + 1}</h3>
+                <Badge variant="outline">{group.itens.length} item(ns)</Badge>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div><label className="mb-1 block text-xs text-muted-foreground">Cliente</label><Input value={group.cliente} onChange={(event) => updateGroup(group.key, 'cliente', event.target.value)} placeholder="Cliente" /></div>
+                <div><label className="mb-1 block text-xs text-muted-foreground">Local / Canteiro</label><Input value={group.local} onChange={(event) => updateGroup(group.key, 'local', event.target.value)} placeholder="Local" /></div>
+                <div><label className="mb-1 block text-xs text-muted-foreground">Responsável</label><Input value={group.responsavel} onChange={(event) => updateGroup(group.key, 'responsavel', event.target.value)} placeholder="Responsável pelo recebimento" /></div>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead className="bg-muted/50">
+                    <tr><th className="px-3 py-2 text-left">Ativo</th><th className="px-3 py-2 text-left">Patrimônio</th><th className="px-3 py-2 text-left">Placa</th><th className="px-3 py-2 text-left">Documento</th></tr>
+                  </thead>
+                  <tbody>
+                    {group.itens.map((item, itemIndex) => {
+                      const url = pdfOf(item.ativo);
+                      return (
+                        <tr key={`${group.key}-${itemIndex}`} className="border-t">
+                          <td className="px-3 py-3"><strong>{item.ativo?.descricao || item.descricao || 'Ativo não localizado'}</strong></td>
+                          <td className="px-3 py-3">{item.ativo?.patrimonio || item.patrimonio || '—'}</td>
+                          <td className="px-3 py-3">{normalizePlate(item.ativo?.placa || item.placa) || '—'}</td>
+                          <td className="px-3 py-3">
+                            {item.ativo && url ? (
+                              <span className="inline-flex items-center gap-2 text-xs font-medium text-success"><CheckCircle2 className="h-4 w-4" /> PDF vinculado automaticamente</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-2 text-xs font-medium text-destructive"><AlertTriangle className="h-4 w-4" /> Documento faltando</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {group.itens.map((item, itemIndex) => {
+                const url = pdfOf(item.ativo);
+                return url ? (
+                  <details key={`pdf-${group.key}-${itemIndex}`} className="rounded-lg border p-3">
+                    <summary className="cursor-pointer text-xs font-semibold">Visualizar {item.ativo?.documento_nome || item.ativo?.descricao || url}</summary>
+                    <div className="mt-3"><PdfDocumentViewer source={{ url, tipo: 'protocolo' }} title={item.ativo?.descricao || 'Documento da Frota'} /></div>
+                  </details>
+                ) : null;
+              })}
+            </section>
+          ))}
         </div>
-        <div className="flex flex-wrap gap-3"><Button variant="outline" size="lg" onClick={() => void saveProtocol()} disabled={savingProtocol}>{savingProtocol ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}{savingProtocol ? 'Salvando...' : 'Salvar no sistema'}</Button><Button size="lg" onClick={() => void handlePrint()} className="gradient-accent text-accent-foreground"><Printer className="mr-2 h-4 w-4" /> Gerar e imprimir - {pdfUrl ? '2 vias + documento da Frota' : '2 vias'}</Button>{lastSavedProtocolId && <span className="self-center text-xs text-success">Arquivado: {lastSavedProtocolId}</span>}</div>
-      </div>
+      )}
+
+      {groups.length > 0 && (
+        <div className="card-premium space-y-4 p-5">
+          {!readiness.ready && (
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning">
+              A impressão fica bloqueada enquanto existir Cliente/Local vazio ou item sem PDF vinculado na Frota.
+            </div>
+          )}
+          <div className="flex flex-wrap gap-3">
+            <Button variant="outline" size="lg" disabled={saving || !readiness.ready} onClick={() => void persistProtocols()}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}
+              {saving ? 'Salvando...' : 'Salvar protocolos'}
+            </Button>
+            <Button size="lg" disabled={printing || saving || !readiness.ready} onClick={() => void printPackage()} className="gradient-accent text-accent-foreground">
+              {printing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
+              {printing ? 'Montando pacote...' : 'Gerar pacote e imprimir'}
+            </Button>
+            {lastSavedIds.length > 0 && <span className="self-center text-xs text-success">Arquivado no Supabase: {lastSavedIds.length} registro(s)</span>}
+          </div>
+          <p className="text-xs text-muted-foreground">Saída obrigatória: 2 vias de cada protocolo e, em seguida, 1 via de cada PDF correspondente. A impressão é disparada pelo navegador.</p>
+        </div>
+      )}
     </div>
   );
 };
-
-const Field = ({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) => <div><label className="mb-1 block text-xs text-muted-foreground">{label}</label><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
-const ReadOnlyField = ({ label, value }: { label: string; value: string }) => <div><label className="mb-1 block text-xs text-muted-foreground">{label}</label><Input value={value} readOnly className="bg-muted/40" /></div>;
 
 export default ProtocoloPage;
