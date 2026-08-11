@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseVehiclePdfText } from '../../../api/frota-upload';
+import { parseMultipartFormData, parseVehiclePdfText } from '../../../api/frota-upload';
 import { parseProtocolMessage } from '../../../api/protocolos-parse';
 
 describe('Frota PDF parsing', () => {
@@ -36,6 +36,25 @@ describe('Frota PDF parsing', () => {
     expect(parsed.placa).toBe('CUI4B29');
     expect(parsed.ano).toBe('2024');
   });
+
+  it('lê multipart/form-data binário sem depender de Web Request.formData()', () => {
+    const boundary = '----topac-test-boundary-123456';
+    const pdf = Buffer.from('%PDF-1.7\nTOPAC-PDF-TEST\n%%EOF', 'utf8');
+    const extracted = JSON.stringify({ placa: 'GCO6C26', patrimonio: 'A10.245' });
+    const raw = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="extracted"\r\n\r\n${extracted}\r\n`, 'utf8'),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="A10.245.pdf"\r\nContent-Type: application/pdf\r\n\r\n`, 'utf8'),
+      pdf,
+      Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'),
+    ]);
+
+    const parsed = parseMultipartFormData(raw, `multipart/form-data; boundary=${boundary}`);
+    expect(parsed.fields.extracted).toBe(extracted);
+    expect(parsed.files).toHaveLength(1);
+    expect(parsed.files[0].filename).toBe('A10.245.pdf');
+    expect(parsed.files[0].contentType).toBe('application/pdf');
+    expect(parsed.files[0].data.equals(pdf)).toBe(true);
+  });
 });
 
 describe('Mensagem Inteligente de Protocolos', () => {
@@ -58,6 +77,30 @@ Atenciosamente,
       { patrimonio: 'A10.245', placa: 'GCO6C26', descricao: '' },
       { patrimonio: 'A10.192', placa: 'FVL9H73', descricao: '' },
       { patrimonio: 'A10.149', placa: 'CUI4B29', descricao: '' },
+    ]);
+  });
+
+  it('interpreta exatamente a mensagem exibida no erro de produção', () => {
+    const groups = parseProtocolMessage(`
+A10.149 - placa CUI-4B29
+A10.153 - placa FVB-0084
+
+A mesma será encaminhada a empresa Construtech canteiro da Campinas aos cuidados do Lucas.
+
+Atenciosamente,
+
+VAI FICAR ASSIM CORRETO ??
+    `);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      cliente: 'Construtech',
+      local: 'Campinas',
+      responsavel: 'Lucas',
+    });
+    expect(groups[0].itens).toEqual([
+      { patrimonio: 'A10.149', placa: 'CUI4B29', descricao: '' },
+      { patrimonio: 'A10.153', placa: 'FVB0084', descricao: '' },
     ]);
   });
 
