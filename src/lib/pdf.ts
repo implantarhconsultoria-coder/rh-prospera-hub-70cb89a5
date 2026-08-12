@@ -1,5 +1,6 @@
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { loadPdfDocumentForRender } from '@/lib/pdfRenderConfig';
 
 if (typeof window !== 'undefined' && GlobalWorkerOptions.workerSrc !== pdfWorkerSrc) {
   GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
@@ -103,7 +104,7 @@ export const renderPdfPagesToDataUrls = async (
 ): Promise<{ bytes: Uint8Array; pageCount: number; pageUrls: string[] }> => {
   const bytes = await getPdfBytes(source);
   const pdfBytes = clonePdfBytes(bytes);
-  const pdf = await getDocument({ data: pdfBytes }).promise;
+  const pdf = await loadPdfDocumentForRender(pdfBytes);
   const pageUrls: string[] = [];
   const pagesToRender = Math.min(pdf.numPages, maxPages);
 
