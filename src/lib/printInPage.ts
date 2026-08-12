@@ -25,7 +25,6 @@ export const printInPage = (html: string, title = 'Documento') => {
   doc.write(`<!DOCTYPE html><html><head><title>${title}</title></head><body>${html}</body></html>`);
   doc.close();
 
-  // Aguarda render antes de imprimir
   const trigger = () => {
     try {
       iframe.contentWindow?.focus();
@@ -33,16 +32,64 @@ export const printInPage = (html: string, title = 'Documento') => {
     } catch (e) {
       console.error('print failed', e);
     }
-    // Remove depois de um tempo (Chrome precisa que fique vivo durante o diálogo)
     window.setTimeout(() => iframe.remove(), 60_000);
   };
 
-  // Pequeno delay para imagens/fontes
   window.setTimeout(trigger, 350);
 };
 
+const waitForImageReady = async (img: HTMLImageElement) => {
+  if (!img.complete) {
+    await new Promise<void>((resolve) => {
+      img.addEventListener('load', () => resolve(), { once: true });
+      img.addEventListener('error', () => resolve(), { once: true });
+    });
+  }
+
+  // `complete` não significa necessariamente que os pixels já foram decodificados.
+  // Isso é crítico em impressão de PDFs convertidos para data URL dentro de iframe.
+  if (typeof img.decode === 'function' && img.naturalWidth > 0) {
+    try {
+      await img.decode();
+    } catch {
+      // Alguns navegadores rejeitam decode() mesmo com a imagem utilizável.
+    }
+  }
+};
+
+const waitForPrintAssets = async (doc: Document) => {
+  const images = Array.from(doc.images || []);
+  const imagePromise = Promise.all(images.map(waitForImageReady));
+  const timeoutPromise = new Promise<void>((resolve) => window.setTimeout(resolve, 12_000));
+
+  await Promise.race([imagePromise.then(() => undefined), timeoutPromise]);
+
+  const fonts = (doc as Document & { fonts?: FontFaceSet }).fonts;
+  if (fonts?.ready) {
+    try {
+      await Promise.race([
+        fonts.ready.then(() => undefined),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 3_000)),
+      ]);
+    } catch {
+      // A impressão não deve ser bloqueada por uma fonte opcional.
+    }
+  }
+};
+
+const waitForPaint = (win: Window) =>
+  new Promise<void>((resolve) => {
+    win.requestAnimationFrame(() => {
+      win.requestAnimationFrame(() => {
+        window.setTimeout(resolve, 120);
+      });
+    });
+  });
+
 /**
  * Variante para HTML completo (com <html><head>...</head><body>...</body></html>).
+ * Aguarda imagens/fontes e a decodificação dos pixels antes de chamar print(),
+ * evitando páginas em branco na impressão de PDFs renderizados em canvas.
  */
 export const printDocumentInPage = (fullHtml: string) => {
   const existing = document.getElementById('__lov_print_iframe__') as HTMLIFrameElement | null;
@@ -68,33 +115,22 @@ export const printDocumentInPage = (fullHtml: string) => {
   const trigger = async () => {
     if (didPrint) return;
     didPrint = true;
+
     try {
       const printDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (printDoc) {
-        const images = Array.from(printDoc.images || []);
-        await Promise.all(images.map((img) => {
-          if (img.complete) return Promise.resolve();
-          return new Promise<void>((resolve) => {
-            img.addEventListener('load', () => resolve(), { once: true });
-            img.addEventListener('error', () => resolve(), { once: true });
-          });
-        }));
-      }
+      const printWindow = iframe.contentWindow;
+      if (!printDoc || !printWindow) return;
 
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          try {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-          } catch (e) {
-            console.error('print failed', e);
-          }
-        });
-      });
+      await waitForPrintAssets(printDoc);
+      await waitForPaint(printWindow);
+
+      printWindow.focus();
+      printWindow.print();
     } catch (e) {
       console.error('print failed', e);
     }
 
+    // Chrome precisa que o iframe permaneça vivo durante todo o diálogo de impressão.
     window.setTimeout(() => iframe.remove(), 60_000);
   };
 
@@ -106,7 +142,8 @@ export const printDocumentInPage = (fullHtml: string) => {
   doc.write(fullHtml);
   doc.close();
 
+  // Fallback para navegadores que não disparam onload de forma confiável em iframe escrito via document.write.
   window.setTimeout(() => {
     void trigger();
-  }, 1200);
+  }, 1500);
 };
