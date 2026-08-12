@@ -235,45 +235,75 @@ const ProtocoloPage: React.FC = () => {
     };
   }, [groups]);
 
-  const buildRows = (group: ProtocolGroup) => group.itens.map((item, index) => {
+  const buildObservationItems = (group: ProtocolGroup) => group.itens.map((item) => {
     const asset = item.ativo;
-    return `<tr>
-      <td>${index + 1}</td>
-      <td>${escapeHtml(asset?.descricao || item.descricao || 'Equipamento / veículo')}</td>
-      <td>${escapeHtml(asset?.patrimonio || item.patrimonio || '—')}</td>
-      <td>${escapeHtml(normalizePlate(asset?.placa || item.placa) || '—')}</td>
-      <td>${escapeHtml(asset?.renavam || '—')}</td>
-      <td>${escapeHtml(asset?.chassi || '—')}</td>
-    </tr>`;
+    const patrimonio = asset?.patrimonio || item.patrimonio || '—';
+    const placa = normalizePlate(asset?.placa || item.placa) || '—';
+    const descricao = asset?.descricao || item.descricao || '';
+    const complemento = descricao ? ` — ${descricao}` : '';
+    return `<li><strong>${escapeHtml(patrimonio)}</strong> — placa ${escapeHtml(placa)}${escapeHtml(complemento)}</li>`;
   }).join('');
 
-  // As duas vias usam exatamente o mesmo HTML para permanecerem idênticas.
-  const buildProtocolHtml = (group: ProtocolGroup) => `
-    <section class="protocol-page">
-      <header class="protocol-header">
-        <div>
-          <strong>${escapeHtml(topac?.name || 'TOPAC MATRIZ')}</strong>
-          <span>CNPJ: ${escapeHtml(topac?.cnpj || '')}</span>
+  // Modelo oficial de impressão: folha detalhada, no padrão físico aprovado pelo usuário.
+  // A identificação principal utiliza o primeiro ativo do grupo e os demais permanecem listados em Observações.
+  const buildProtocolHtml = (group: ProtocolGroup, copyNumber: 1 | 2) => {
+    const primaryItem = group.itens[0];
+    const asset = primaryItem?.ativo;
+    const placa = normalizePlate(asset?.placa || primaryItem?.placa) || '—';
+    const patrimonio = asset?.patrimonio || primaryItem?.patrimonio || '—';
+    const dataFormatada = new Date(`${dataEmissao}T12:00:00`).toLocaleDateString('pt-BR');
+    const exercicio = new Date(`${dataEmissao}T12:00:00`).getFullYear().toString();
+    const destination = [group.cliente, group.local].filter(Boolean).join(' — ');
+
+    return `
+      <section class="protocol-page">
+        <div class="page-number">Página ${copyNumber} de 2</div>
+        <header class="protocol-header">
+          <div class="company-block">
+            <strong>${escapeHtml(topac?.name || 'TOPAC MATRIZ')}</strong>
+            <span>CNPJ: ${escapeHtml(topac?.cnpj || '')}</span>
+          </div>
+          <div class="protocol-title">PROTOCOLO DE LIBERAÇÃO DE DOCUMENTO</div>
+        </header>
+
+        <section class="protocol-box release-box">
+          <div class="section-title">DADOS DA LIBERAÇÃO</div>
+          <div class="detail-grid release-grid">
+            <div class="field"><small>EMPRESA</small><strong>${escapeHtml(group.cliente || '—')}</strong></div>
+            <div class="field"><small>LOCAL / CLIENTE</small><strong>${escapeHtml(group.local || '—')}</strong></div>
+            <div class="field"><small>RESPONSÁVEL RECEBIMENTO</small><strong>${escapeHtml(group.responsavel || '—')}</strong></div>
+            <div class="field"><small>DATA</small><strong>${escapeHtml(dataFormatada)}</strong></div>
+          </div>
+        </section>
+
+        <section class="protocol-box asset-box">
+          <div class="section-title">IDENTIFICAÇÃO DO ATIVO</div>
+          <div class="detail-grid asset-grid">
+            <div class="field"><small>PATRIMÔNIO</small><strong>${escapeHtml(patrimonio)}</strong></div>
+            <div class="field"><small>PLACA</small><strong>${escapeHtml(placa)}</strong></div>
+            <div class="field"><small>RENAVAM</small><strong>${escapeHtml(asset?.renavam || '—')}</strong></div>
+            <div class="field field-wide"><small>CHASSI</small><strong>${escapeHtml(asset?.chassi || '—')}</strong></div>
+            <div class="field"><small>ANO FABRICAÇÃO</small><strong>${escapeHtml(asset?.ano_fabricacao || '—')}</strong></div>
+            <div class="field"><small>ANO MODELO</small><strong>${escapeHtml(asset?.ano_modelo || '—')}</strong></div>
+            <div class="field"><small>EXERCÍCIO</small><strong>${escapeHtml(exercicio)}</strong></div>
+          </div>
+        </section>
+
+        <section class="protocol-box observations-box">
+          <div class="section-title">OBSERVAÇÕES</div>
+          <div class="observations-content">
+            <p>Por favor, acondicionar os protocolos de documentos referentes aos equipamentos/veículos e patrimônios:</p>
+            <ul>${buildObservationItems(group)}</ul>
+            <p>A remessa será encaminhada para <strong>${escapeHtml(destination || group.cliente)}</strong>${group.responsavel ? `, aos cuidados de <strong>${escapeHtml(group.responsavel)}</strong>` : ''}.</p>
+          </div>
+        </section>
+
+        <div class="signatures">
+          <div><span></span><p>Assinatura — Entrega</p></div>
+          <div><span></span><p>Assinatura — Recebimento</p></div>
         </div>
-        <div class="protocol-title">PROTOCOLO DE LIBERAÇÃO DE DOCUMENTOS</div>
-      </header>
-      <div class="context-grid">
-        <div><small>CLIENTE</small><strong>${escapeHtml(group.cliente)}</strong></div>
-        <div><small>LOCAL / CANTEIRO</small><strong>${escapeHtml(group.local)}</strong></div>
-        <div><small>RESPONSÁVEL</small><strong>${escapeHtml(group.responsavel || '—')}</strong></div>
-        <div><small>DATA</small><strong>${escapeHtml(new Date(`${dataEmissao}T12:00:00`).toLocaleDateString('pt-BR'))}</strong></div>
-      </div>
-      <h2>DOCUMENTOS ENTREGUES</h2>
-      <table>
-        <thead><tr><th>#</th><th>Ativo / Equipamento</th><th>Patrimônio</th><th>Placa</th><th>RENAVAM</th><th>Chassi</th></tr></thead>
-        <tbody>${buildRows(group)}</tbody>
-      </table>
-      <p class="protocol-note">Todos os itens deste protocolo pertencem ao mesmo Cliente + Local.</p>
-      <div class="signatures">
-        <div><hr/>Assinatura — Entrega</div>
-        <div><hr/>Assinatura — Recebimento</div>
-      </div>
-    </section>`;
+      </section>`;
+  };
 
   const persistProtocols = async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!readiness.ready) {
@@ -356,9 +386,8 @@ const ProtocoloPage: React.FC = () => {
 
       let content = '';
       for (const group of groups) {
-        const protocolHtml = buildProtocolHtml(group);
-        content += protocolHtml; // 1ª via
-        content += protocolHtml; // 2ª via idêntica
+        content += buildProtocolHtml(group, 1);
+        content += buildProtocolHtml(group, 2);
 
         const uniqueDocs = new Map<string, string>();
         group.itens.forEach((item) => {
@@ -368,11 +397,14 @@ const ProtocoloPage: React.FC = () => {
           }
         });
 
-        for (const [url] of uniqueDocs) {
-          const { pageUrls } = await renderPdfPagesToDataUrls(url, 1.45);
-          content += pageUrls.map((pageUrl) => `
-            <section class="document-page">
-              <img src="${pageUrl}" alt="Documento vinculado" />
+        for (const [url, documentName] of uniqueDocs) {
+          const { pageUrls } = await renderPdfPagesToDataUrls(url, 1.55);
+          if (!pageUrls.length) {
+            throw new Error(`O documento ${documentName} não possui páginas renderizáveis.`);
+          }
+          content += pageUrls.map((pageUrl, pageIndex) => `
+            <section class="document-page" data-document="${escapeHtml(documentName)}" data-page="${pageIndex + 1}">
+              <img src="${pageUrl}" alt="${escapeHtml(documentName)} — página ${pageIndex + 1}" loading="eager" decoding="sync" />
             </section>`).join('');
         }
       }
@@ -380,30 +412,43 @@ const ProtocoloPage: React.FC = () => {
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Protocolos TOPAC</title><style>
         @page{size:A4;margin:0}
         *{box-sizing:border-box}
-        body{margin:0;font-family:Arial,sans-serif;color:#111;background:#fff}
-        .protocol-page{width:210mm;min-height:297mm;padding:14mm;page-break-after:always}
-        .protocol-header{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #111;padding-bottom:10px}
-        .protocol-header>div:first-child{display:flex;flex-direction:column;gap:4px;font-size:11px}
-        .protocol-header>div:first-child strong{font-size:16px}
-        .protocol-title{text-align:right;font-weight:800;font-size:15px;max-width:90mm}
-        .context-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
-        .context-grid>div{border:1px solid #bbb;padding:9px;min-height:48px}
-        .context-grid small{display:block;font-size:8px;font-weight:700;color:#666;margin-bottom:4px}
-        .context-grid strong{font-size:12px}
-        h2{font-size:12px;margin:18px 0 8px}
-        table{width:100%;border-collapse:collapse}
-        th,td{border:1px solid #aaa;padding:6px;font-size:9px;text-align:left;vertical-align:top}
-        th{background:#f1f1f1;text-transform:uppercase}
-        .protocol-note{font-size:9px;color:#555;margin-top:10px}
-        .signatures{display:flex;justify-content:space-between;gap:30px;margin-top:58px;text-align:center;font-size:10px}
-        .signatures>div{width:45%}
-        .document-page{width:210mm;min-height:297mm;display:flex;align-items:flex-start;justify-content:center;page-break-after:always;background:#fff}
-        .document-page img{width:210mm;max-height:297mm;object-fit:contain;display:block}
+        html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .protocol-page{position:relative;width:210mm;height:297mm;padding:13mm 14mm 12mm;background:#fff;page-break-after:always;overflow:hidden}
+        .page-number{position:absolute;right:14mm;top:7mm;font-size:8.5px;color:#555}
+        .protocol-header{display:grid;grid-template-columns:1fr 1.15fr;align-items:start;gap:12mm;padding-top:3mm;padding-bottom:5mm;border-bottom:1.4px solid #222}
+        .company-block{display:flex;flex-direction:column;gap:2px;font-size:9px;line-height:1.25}
+        .company-block strong{font-size:13px;letter-spacing:.15px}
+        .protocol-title{text-align:right;font-size:12.5px;line-height:1.2;font-weight:800;text-transform:uppercase}
+        .protocol-box{margin-top:6mm;border:1px solid #aaa;background:#fff}
+        .section-title{padding:2.2mm 3mm;border-bottom:1px solid #aaa;background:#f1f1f1;font-size:9px;font-weight:800;letter-spacing:.35px;text-transform:uppercase}
+        .detail-grid{display:grid;background:#fff}
+        .release-grid{grid-template-columns:1fr 1fr}
+        .asset-grid{grid-template-columns:1fr 1fr 1fr}
+        .field{min-height:16mm;padding:3mm;border-right:1px solid #c7c7c7;border-bottom:1px solid #c7c7c7;display:flex;flex-direction:column;gap:1.5mm}
+        .release-grid .field:nth-child(2n),.asset-grid .field:nth-child(3n){border-right:0}
+        .release-grid .field:nth-last-child(-n+2),.asset-grid .field:nth-last-child(-n+3){border-bottom:0}
+        .field-wide{grid-column:span 3;border-right:0!important}
+        .field small{font-size:7.5px;font-weight:700;color:#555;letter-spacing:.2px}
+        .field strong{font-size:10.5px;line-height:1.25;font-weight:600;word-break:break-word}
+        .observations-box{min-height:63mm}
+        .observations-content{padding:4mm 5mm;font-size:9.2px;line-height:1.45}
+        .observations-content p{margin:0 0 3mm}
+        .observations-content ul{margin:0 0 4mm 4.5mm;padding-left:4mm}
+        .observations-content li{margin:1.1mm 0}
+        .signatures{display:grid;grid-template-columns:1fr 1fr;gap:18mm;margin-top:22mm;text-align:center;font-size:9px}
+        .signatures>div span{display:block;border-top:1px solid #444;width:100%;height:2mm}
+        .signatures p{margin:0}
+        .document-page{width:210mm;height:297mm;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff;page-break-after:always;break-after:page}
+        .document-page img{display:block;width:100%;height:100%;max-width:210mm;max-height:297mm;object-fit:contain;background:#fff}
+        @media print{
+          .protocol-page,.document-page{page-break-after:always;break-after:page}
+          .protocol-page:last-child,.document-page:last-child{page-break-after:auto}
+        }
       </style></head><body>${content}</body></html>`;
 
-      // printDocumentInPage usa Window.print() no contexto do iframe do navegador.
+      // printDocumentInPage aguarda carregamento + decode das imagens antes de chamar Window.print().
       printDocumentInPage(html);
-      toast.success('Impressão aberta: 2 vias idênticas do protocolo + 1 via de cada documento vinculado.');
+      toast.success('Impressão aberta: 2 vias no modelo detalhado + 1 via completa de cada documento vinculado.');
     } catch (error: any) {
       toast.error(`Não foi possível montar a impressão: ${error?.message || error}`);
     } finally {
@@ -577,7 +622,7 @@ const ProtocoloPage: React.FC = () => {
             {lastSavedIds.length > 0 && <span className="self-center text-xs text-success">Arquivado no Supabase: {lastSavedIds.length} registro(s)</span>}
           </div>
 
-          <p className="text-xs text-muted-foreground">Impressão unificada: 2 vias idênticas do protocolo no início + 1 via completa de cada documento vinculado em sequência. A janela de impressão é aberta pelo navegador.</p>
+          <p className="text-xs text-muted-foreground">Impressão unificada: 2 vias no modelo detalhado do protocolo + 1 via completa de cada documento vinculado em sequência. A janela de impressão é aberta pelo navegador.</p>
         </section>
       )}
     </div>
