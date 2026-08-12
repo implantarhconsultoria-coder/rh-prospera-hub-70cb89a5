@@ -1,0 +1,1 @@
+No functional scope outside PDF print rendering.
