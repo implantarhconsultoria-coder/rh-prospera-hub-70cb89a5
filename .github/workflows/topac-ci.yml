@@ -42,17 +42,20 @@ jobs:
           src/lib/savePdf.ts
           src/lib/rescisaoCalc.ts
           src/lib/rescisaoPdf.ts
+          src/lib/epiRules.ts
           src/components/BankingDataEditor.tsx
           src/components/EmailPdfModal.tsx
           src/components/EmployeeSmartTextPanel.tsx
           src/components/EmployeeSmartEditOverlay.tsx
           src/components/AppLayout.tsx
           src/components/FilialLayout.tsx
+          src/components/EpiSemestralAlert.tsx
           src/pages/FuncionariosPage.tsx
           src/pages/ProtocoloPage.tsx
           src/pages/RelatorioImpressaoPage.tsx
           src/pages/RelatorioBeneficioIndividualPage.tsx
           src/pages/RescisaoPage.tsx
+          src/pages/EPIPage.tsx
           src/pages/admin/CombustivelQRAdminPage.tsx
           src/lib/__tests__/bankingParser.test.ts
           src/lib/__tests__/abastecimentoReports.test.ts
@@ -64,6 +67,7 @@ jobs:
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
+          src/lib/__tests__/epiRules.test.ts
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
@@ -81,6 +85,7 @@ jobs:
           src/lib/__tests__/smartTextParser.test.ts
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
+          src/lib/__tests__/epiRules.test.ts
 
       - name: Build
         run: npm run build
