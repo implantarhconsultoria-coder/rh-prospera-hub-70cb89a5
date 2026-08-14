@@ -8,7 +8,6 @@ const DIRECTOR_ALLOWED_ADMIN_PREFIXES = [
   '/admin/relatorio',
   '/admin/relatorio-vr',
   '/admin/relatorio-vt',
-  '/admin/epi',
 ];
 
 const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
@@ -19,6 +18,7 @@ const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
   '/admin/fechamento',
   '/admin/fechamento-ponto',
   '/admin/fechamentos-filiais',
+  '/admin/epi',
   '/admin/uniformes',
   '/admin/aso',
   '/admin/prestadores',
@@ -59,5 +59,5 @@ export const isDirectorRouteAllowed = (pathname: string) => {
 
 export const diretorPodeEditarModulo = (modulo: string) => {
   const normalized = modulo.toLowerCase();
-  return normalized === 'financeiro' || normalized === 'faturamento' || normalized === 'contas_pagar' || normalized === 'prestacao_contas' || normalized === 'epi_aprovacao';
+  return normalized === 'financeiro' || normalized === 'faturamento' || normalized === 'contas_pagar' || normalized === 'prestacao_contas';
 };
