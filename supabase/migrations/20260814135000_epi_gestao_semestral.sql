@@ -159,7 +159,7 @@ on conflict (codigo) do update set
 -- Se existir resíduo de catálogo antigo com capacete, ele não participa deste módulo.
 update public.epi_catalogo
 set ativo = false, updated_at = now()
-where lower(unaccent(nome)) like '%capacete%';
+where lower(nome) like '%capacete%';
 
 create or replace function public.epi_mecanicos_externos()
 returns table(funcionario_id uuid)
