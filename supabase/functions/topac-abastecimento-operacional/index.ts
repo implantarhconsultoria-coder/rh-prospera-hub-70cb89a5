@@ -1,5 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-const BACKEND_KEY_SHA256='c6e8e42ec618ab6eaf844349f910962ad0e58479e7bbfeac79f3bcbe58a04236';
+const BACKEND_KEY_SHA256='a7ce4883bfe9c951e0ec008450ae8f4a595a1fd002a2c02ce0fa3131b6995838';
 const norm=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
 const reply=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 async function digest(value:string){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('')}
