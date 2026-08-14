@@ -90,17 +90,12 @@ const statusClass = (status: string) => {
 };
 
 const EPIPage: React.FC = () => {
-  const { companies, employees, session } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const fichaId = searchParams.get('ficha');
   const solicitacaoId = searchParams.get('solicitacao');
 
-  if (fichaId) {
-    return <EpiFichaPersistida id={fichaId} onBack={() => setSearchParams({})} />;
-  }
-  if (solicitacaoId) {
-    return <EpiSolicitacaoRelatorio id={solicitacaoId} onBack={() => setSearchParams({})} />;
-  }
+  if (fichaId) return <EpiFichaPersistida id={fichaId} onBack={() => setSearchParams({})} />;
+  if (solicitacaoId) return <EpiSolicitacaoRelatorio id={solicitacaoId} onBack={() => setSearchParams({})} />;
 
   return <EpiGestaoHome onOpenFicha={(id) => setSearchParams({ ficha: id })} onOpenSolicitacao={(id) => setSearchParams({ solicitacao: id })} />;
 };
@@ -112,7 +107,8 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
   const [deliveries, setDeliveries] = useState<EpiEntrega[]>([]);
   const [requests, setRequests] = useState<EpiSolicitacao[]>([]);
   const [tab, setTab] = useState<'solicitacao' | 'entregas' | 'historico'>('solicitacao');
-  const [companyFilter, setCompanyFilter] = useState('all');
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[] | null>(null);
+  const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [deliveryDate, setDeliveryDate] = useState(todayIso());
   const [loading, setLoading] = useState(true);
@@ -147,6 +143,30 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
   useEffect(() => { reload(); }, [reload]);
 
   const companyMap = useMemo(() => new Map(companies.map((company) => [company.id, company])), [companies]);
+  const selectedCompanyNames = useMemo(() => {
+    if (selectedCompanyIds === null) return companies.map((company) => company.name);
+    const selected = new Set(selectedCompanyIds);
+    return companies.filter((company) => selected.has(company.id)).map((company) => company.name);
+  }, [companies, selectedCompanyIds]);
+
+  const companyPickerLabel = useMemo(() => {
+    if (selectedCompanyIds === null) return 'Todas as empresas';
+    if (selectedCompanyIds.length === 0) return 'Nenhuma empresa selecionada';
+    if (selectedCompanyIds.length === 1) return selectedCompanyNames[0] || '1 empresa selecionada';
+    return `${selectedCompanyIds.length} empresas selecionadas`;
+  }, [selectedCompanyIds, selectedCompanyNames]);
+
+  const toggleCompany = (companyId: string) => {
+    setSelectedCompanyIds((current) => {
+      if (current === null) return [companyId];
+      if (current.includes(companyId)) return current.filter((id) => id !== companyId);
+      return [...current, companyId];
+    });
+  };
+
+  const companyIsSelected = (companyId: string) => selectedCompanyIds !== null && selectedCompanyIds.includes(companyId);
+  const companyAllowed = (companyId: string) => selectedCompanyIds === null || selectedCompanyIds.includes(companyId);
+
   const eligible = useMemo<EpiEligibleEmployeeSnapshot[]>(() => employees
     .filter((employee) => employee.status === 'ativo' && classifyEpiRole(employee.cargo).eligible)
     .map((employee) => {
@@ -165,16 +185,18 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
     .filter((employee) => employee.items.length > 0), [employees, companyMap, externalIds, catalog]);
 
   const filteredEligible = useMemo(() => eligible.filter((employee) => {
-    if (companyFilter !== 'all' && employee.companyId !== companyFilter) return false;
+    if (!companyAllowed(employee.companyId)) return false;
     const q = employeeSearch.trim().toLowerCase();
     if (q && !`${employee.employeeName} ${employee.cargo} ${employee.companyName}`.toLowerCase().includes(q)) return false;
     return true;
-  }), [eligible, companyFilter, employeeSearch]);
+  }), [eligible, selectedCompanyIds, employeeSearch]);
 
   const consolidated = useMemo(() => consolidateEpiNeeds(filteredEligible), [filteredEligible]);
   const latestRequest = requests.find((request) => request.status !== 'cancelada') || null;
   const today = todayIso();
   const renewalAlerts = deliveries.filter((delivery) => delivery.status === 'entregue' && (isEpiRenewalAlert(delivery.proxima_reposicao, today) || isEpiRenewalOverdue(delivery.proxima_reposicao, today)));
+  const filteredRenewalAlerts = renewalAlerts.filter((delivery) => companyAllowed(delivery.company_id));
+  const filteredDeliveries = deliveries.filter((delivery) => companyAllowed(delivery.company_id));
 
   const lastDeliveryByEmployee = useMemo(() => {
     const map = new Map<string, EpiEntrega>();
@@ -216,17 +238,20 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
   };
 
   const generateRequest = async () => {
-    if (!filteredEligible.length) return toast.error('Não há funcionários elegíveis neste filtro.');
+    if (!filteredEligible.length) return toast.error('Não há funcionários elegíveis nas empresas selecionadas.');
     if (!session?.user) return toast.error('Sessão inválida. Entre novamente.');
     setSaving(true);
     try {
       const db = supabase as any;
+      const scopeText = selectedCompanyIds === null
+        ? 'Consolidação multiempresas para entrega semestral de EPI.'
+        : `Consolidação das empresas selecionadas para entrega semestral de EPI: ${selectedCompanyNames.join(', ')}.`;
       const { data: request, error } = await db.from('epi_solicitacoes').insert({
         data_referencia: deliveryDate,
         status: 'para_aprovacao',
         criado_por: session.user.id,
         criado_por_nome: userNameFrom(session),
-        observacoes: companyFilter === 'all' ? 'Consolidação multiempresas para entrega semestral de EPI.' : 'Consolidação por empresa para entrega semestral de EPI.',
+        observacoes: scopeText,
       }).select('*').single();
       if (error) throw error;
 
@@ -263,7 +288,7 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
       })));
 
       await reload();
-      toast.success('Solicitação consolidada gerada e vinculada aos perfis elegíveis.');
+      toast.success('Solicitação consolidada gerada somente para as empresas selecionadas.');
       onOpenSolicitacao(request.id);
     } catch (error: any) {
       console.error(error);
@@ -333,9 +358,7 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
         nomeArquivo: buildPdfFileName('Ficha EPI', employee.companyName, employee.employeeName, deliveryDate),
         dataDocumento: new Date().toISOString(),
       });
-      if ((doc as any)?.id) {
-        await db.from('epi_entregas').update({ documento_funcionario_id: (doc as any).id }).eq('id', delivery.id);
-      }
+      if ((doc as any)?.id) await db.from('epi_entregas').update({ documento_funcionario_id: (doc as any).id }).eq('id', delivery.id);
     }
     await reload();
     if (open) onOpenFicha(delivery.id);
@@ -343,7 +366,7 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
   };
 
   const generateAllFichas = async () => {
-    if (!filteredEligible.length) return toast.error('Não há funcionários elegíveis neste filtro.');
+    if (!filteredEligible.length) return toast.error('Não há funcionários elegíveis nas empresas selecionadas.');
     setSaving(true);
     try {
       for (const employee of filteredEligible) await createFicha(employee, latestRequest?.id || null, false);
@@ -375,15 +398,15 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
         </div>
       </div>
 
-      {renewalAlerts.length > 0 && (
+      {filteredRenewalAlerts.length > 0 && (
         <div className="rounded-xl border border-warning/40 bg-warning/10 p-4">
           <div className="flex items-start gap-3">
             <CalendarClock className="w-5 h-5 text-warning mt-0.5" />
             <div className="flex-1">
               <p className="font-semibold text-foreground">Organizar nova entrega semestral</p>
-              <p className="text-sm text-muted-foreground">{renewalAlerts.length} colaborador(es) já estão no prazo de 7 dias ou com reposição vencida.</p>
+              <p className="text-sm text-muted-foreground">{filteredRenewalAlerts.length} colaborador(es) das empresas selecionadas já estão no prazo de 7 dias ou com reposição vencida.</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {renewalAlerts.slice(0, 8).map((delivery) => (
+                {filteredRenewalAlerts.slice(0, 8).map((delivery) => (
                   <button key={delivery.id} className="text-xs border rounded-full px-3 py-1 bg-background" onClick={() => onOpenFicha(delivery.id)}>
                     {delivery.funcionario_nome} · {dateBr(delivery.proxima_reposicao)}
                   </button>
@@ -395,10 +418,10 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Metric icon={<Users className="w-4 h-4" />} label="Elegíveis ativos" value={eligible.length} />
-        <Metric icon={<ShoppingCart className="w-4 h-4" />} label="Itens consolidados" value={consolidateEpiNeeds(eligible).reduce((sum, item) => sum + item.quantidade, 0)} />
-        <Metric icon={<ShieldCheck className="w-4 h-4" />} label="Mecânicos externos" value={eligible.filter((employee) => employee.mecanicoExterno).length} />
-        <Metric icon={<AlertTriangle className="w-4 h-4" />} label="Alertas semestrais" value={renewalAlerts.length} />
+        <Metric icon={<Users className="w-4 h-4" />} label="Elegíveis ativos" value={filteredEligible.length} />
+        <Metric icon={<ShoppingCart className="w-4 h-4" />} label="Itens consolidados" value={consolidated.reduce((sum, item) => sum + item.quantidade, 0)} />
+        <Metric icon={<ShieldCheck className="w-4 h-4" />} label="Mecânicos externos" value={filteredEligible.filter((employee) => employee.mecanicoExterno).length} />
+        <Metric icon={<AlertTriangle className="w-4 h-4" />} label="Alertas semestrais" value={filteredRenewalAlerts.length} />
       </div>
 
       <div className="card-premium overflow-hidden">
@@ -409,17 +432,36 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="grid md:grid-cols-[1fr_260px_190px] gap-3 items-end no-print">
+          <div className="grid md:grid-cols-[1fr_300px_190px] gap-3 items-end no-print">
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Buscar funcionário / função / empresa</label>
               <div className="relative"><Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" /><Input className="pl-9" value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Buscar..." /></div>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
-              <select value={companyFilter} onChange={(event) => setCompanyFilter(event.target.value)} className="w-full border rounded-lg px-3 py-2 bg-background text-foreground text-sm">
-                <option value="all">Todas as empresas</option>
-                {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-              </select>
+            <div className="relative">
+              <label className="text-xs text-muted-foreground block mb-1">Empresas</label>
+              <button type="button" onClick={() => setCompanyPickerOpen((open) => !open)} className="w-full min-h-10 border rounded-lg px-3 py-2 bg-background text-foreground text-sm text-left flex items-center justify-between gap-2">
+                <span className="truncate">{companyPickerLabel}</span>
+                <span className="text-muted-foreground">▾</span>
+              </button>
+              {companyPickerOpen && (
+                <div className="absolute z-50 mt-1 w-full rounded-xl border bg-background shadow-xl p-2 max-h-72 overflow-y-auto">
+                  <button type="button" onClick={() => setSelectedCompanyIds(null)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left hover:bg-muted ${selectedCompanyIds === null ? 'bg-primary/10 text-primary font-semibold' : ''}`}>
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${selectedCompanyIds === null ? 'bg-primary text-primary-foreground border-primary' : 'border-border'}`}>{selectedCompanyIds === null ? '✓' : ''}</span>
+                    Todas as empresas
+                  </button>
+                  <div className="my-1 border-t" />
+                  {companies.map((company) => (
+                    <button key={company.id} type="button" onClick={() => toggleCompany(company.id)} className={`w-full flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-left hover:bg-muted ${companyIsSelected(company.id) ? 'bg-primary/5' : ''}`}>
+                      <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${companyIsSelected(company.id) ? 'bg-primary text-primary-foreground border-primary' : 'border-border'}`}>{companyIsSelected(company.id) ? '✓' : ''}</span>
+                      <span className="truncate">{company.name}</span>
+                    </button>
+                  ))}
+                  <div className="pt-2 mt-1 border-t flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-muted-foreground">Selecione 1, 2, 3 ou mais empresas</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setCompanyPickerOpen(false)}>Concluir</Button>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Data da entrega / referência</label>
@@ -427,12 +469,24 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
             </div>
           </div>
 
+          {selectedCompanyIds !== null && selectedCompanyIds.length > 0 && (
+            <div className="no-print flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Empresas selecionadas:</span>
+              {selectedCompanyNames.map((name) => <Badge key={name} variant="outline">{name}</Badge>)}
+              <button type="button" onClick={() => setSelectedCompanyIds(null)} className="text-primary hover:underline">Limpar seleção</button>
+            </div>
+          )}
+
+          {selectedCompanyIds !== null && selectedCompanyIds.length === 0 && (
+            <div className="no-print rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">Selecione pelo menos uma empresa para gerar a solicitação ou as fichas.</div>
+          )}
+
           {tab === 'solicitacao' && (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="font-bold text-foreground">Necessidade consolidada</h2>
-                  <p className="text-xs text-muted-foreground">Calculada apenas para Mecânicos, Pintores e funções da Oficina. Capacete não integra o catálogo.</p>
+                  <p className="text-xs text-muted-foreground">Calculada somente para as empresas marcadas e para Mecânicos, Pintores e funções da Oficina. Capacete não integra o catálogo.</p>
                 </div>
                 <div className="flex flex-wrap gap-2 no-print">
                   <Button variant="outline" disabled={saving || !filteredEligible.length} onClick={generateAllFichas}><FileText className="w-4 h-4 mr-2" />Preparar fichas nominais</Button>
@@ -454,7 +508,7 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
                         <td className="p-3 text-xs text-muted-foreground">{Object.entries(item.empresas).map(([company, qty]) => `${company}: ${qty}`).join(' · ')}</td>
                       </tr>
                     ))}
-                    {!consolidated.length && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum funcionário elegível para o filtro atual.</td></tr>}
+                    {!consolidated.length && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum funcionário elegível para as empresas selecionadas.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -476,7 +530,7 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
 
           {tab === 'entregas' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between"><div><h2 className="font-bold">Fichas nominais</h2><p className="text-xs text-muted-foreground">A data pode ser definida na emissão e oficializada somente quando o kit novo for entregue fisicamente.</p></div><Button variant="outline" disabled={saving || !filteredEligible.length} onClick={generateAllFichas}><PackageCheck className="w-4 h-4 mr-2" />Preparar todas</Button></div>
+              <div className="flex items-center justify-between"><div><h2 className="font-bold">Fichas nominais</h2><p className="text-xs text-muted-foreground">A lista abaixo respeita exatamente as empresas selecionadas.</p></div><Button variant="outline" disabled={saving || !filteredEligible.length} onClick={generateAllFichas}><PackageCheck className="w-4 h-4 mr-2" />Preparar todas</Button></div>
               <div className="divide-y border rounded-xl">
                 {filteredEligible.map((employee) => {
                   const last = lastDeliveryByEmployee.get(employee.employeeId);
@@ -490,16 +544,16 @@ const EpiGestaoHome: React.FC<{ onOpenFicha: (id: string) => void; onOpenSolicit
                     </div>
                   );
                 })}
-                {!filteredEligible.length && <p className="p-8 text-center text-sm text-muted-foreground">Nenhum funcionário elegível encontrado.</p>}
+                {!filteredEligible.length && <p className="p-8 text-center text-sm text-muted-foreground">Nenhum funcionário elegível encontrado nas empresas selecionadas.</p>}
               </div>
             </div>
           )}
 
           {tab === 'historico' && (
             <div className="space-y-3">
-              <div><h2 className="font-bold">Histórico de fichas e ciclos</h2><p className="text-xs text-muted-foreground">Todos os registros ficam associados ao funcionário e à empresa de origem.</p></div>
+              <div><h2 className="font-bold">Histórico de fichas e ciclos</h2><p className="text-xs text-muted-foreground">O histórico também acompanha a seleção múltipla de empresas.</p></div>
               <div className="overflow-x-auto border rounded-xl">
-                <table className="w-full text-sm min-w-[850px]"><thead className="bg-muted/60 text-xs"><tr><th className="p-3 text-left">Funcionário</th><th className="p-3 text-left">Empresa</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Data entrega</th><th className="p-3 text-left">Próxima reposição</th><th className="p-3 text-center">Itens</th><th className="p-3"></th></tr></thead><tbody className="divide-y">{deliveries.filter((delivery) => companyFilter === 'all' || delivery.company_id === companyFilter).map((delivery) => <tr key={delivery.id}><td className="p-3 font-medium">{delivery.funcionario_nome}<span className="block text-xs text-muted-foreground">{delivery.cargo}</span></td><td className="p-3">{delivery.empresa_nome}</td><td className="p-3"><Badge className={statusClass(delivery.status)}>{statusLabel[delivery.status]}</Badge></td><td className="p-3">{dateBr(delivery.data_entrega || delivery.data_prevista)}</td><td className="p-3">{dateBr(delivery.proxima_reposicao)}</td><td className="p-3 text-center">{delivery.itens.length}</td><td className="p-3 text-right"><Button size="sm" variant="outline" onClick={() => onOpenFicha(delivery.id)}>Abrir</Button></td></tr>)}{!deliveries.length && <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma ficha EPI persistida.</td></tr>}</tbody></table>
+                <table className="w-full text-sm min-w-[850px]"><thead className="bg-muted/60 text-xs"><tr><th className="p-3 text-left">Funcionário</th><th className="p-3 text-left">Empresa</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Data entrega</th><th className="p-3 text-left">Próxima reposição</th><th className="p-3 text-center">Itens</th><th className="p-3"></th></tr></thead><tbody className="divide-y">{filteredDeliveries.map((delivery) => <tr key={delivery.id}><td className="p-3 font-medium">{delivery.funcionario_nome}<span className="block text-xs text-muted-foreground">{delivery.cargo}</span></td><td className="p-3">{delivery.empresa_nome}</td><td className="p-3"><Badge className={statusClass(delivery.status)}>{statusLabel[delivery.status]}</Badge></td><td className="p-3">{dateBr(delivery.data_entrega || delivery.data_prevista)}</td><td className="p-3">{dateBr(delivery.proxima_reposicao)}</td><td className="p-3 text-center">{delivery.itens.length}</td><td className="p-3 text-right"><Button size="sm" variant="outline" onClick={() => onOpenFicha(delivery.id)}>Abrir</Button></td></tr>)}{!filteredDeliveries.length && <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Nenhuma ficha EPI nas empresas selecionadas.</td></tr>}</tbody></table>
               </div>
             </div>
           )}
