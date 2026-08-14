@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, CalendarClock, ChevronRight, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { daysBetweenIsoDates } from '@/lib/epiRules';
+import { useApp } from '@/context/AppContext';
 
 const todayIso = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const dateBr = (value?: string | null) => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—';
@@ -16,11 +17,17 @@ type AlertRow = {
 
 const EpiSemestralAlert: React.FC = () => {
   const navigate = useNavigate();
+  const { userRole } = useApp();
   const [rows, setRows] = useState<AlertRow[]>([]);
   const [loading, setLoading] = useState(true);
   const today = todayIso();
 
   const load = useCallback(async () => {
+    if (userRole !== 'admin') {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const limit = new Date(`${today}T12:00:00`);
     limit.setDate(limit.getDate() + 7);
@@ -35,13 +42,14 @@ const EpiSemestralAlert: React.FC = () => {
       .limit(30);
     if (!error) setRows((data || []) as AlertRow[]);
     setLoading(false);
-  }, [today]);
+  }, [today, userRole]);
 
   useEffect(() => { load(); }, [load]);
 
   const overdue = useMemo(() => rows.filter((row) => daysBetweenIsoDates(today, row.proxima_reposicao) < 0), [rows, today]);
   const upcoming = rows.length - overdue.length;
 
+  if (userRole !== 'admin') return null;
   if (loading) {
     return <div className="mb-5 no-print rounded-xl border border-border/60 bg-card/60 px-4 py-3 text-xs text-muted-foreground flex items-center gap-2"><RefreshCw className="w-3.5 h-3.5 animate-spin" />Verificando ciclo semestral de EPI...</div>;
   }
