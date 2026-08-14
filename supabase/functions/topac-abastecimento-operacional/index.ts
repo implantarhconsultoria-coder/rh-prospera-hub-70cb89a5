@@ -1,10 +1,12 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-const BACKEND_KEY='q0zUQTxXwXSnB5r4RxQJ4AMPZIjjZVlZgCNLCe3NIog';
+const BACKEND_KEY_SHA256='c6e8e42ec618ab6eaf844349f910962ad0e58479e7bbfeac79f3bcbe58a04236';
 const norm=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
 const reply=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
+async function digest(value:string){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return reply({message:'Método não permitido.'},405);
-  if((req.headers.get('x-topac-backend-key')||'')!==BACKEND_KEY)return reply({message:'Origem não autorizada.'},403);
+  const supplied=req.headers.get('x-topac-backend-key')||'';
+  if(!supplied||await digest(supplied)!==BACKEND_KEY_SHA256)return reply({message:'Origem não autorizada.'},403);
   const url=Deno.env.get('SUPABASE_URL')!,key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,headers={apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'};
   const rest=async(path:string,init:RequestInit={})=>{const r=await fetch(`${url}/rest/v1/${path}`,{...init,headers:{...headers,...(init.headers||{})}}),text=await r.text();if(!r.ok)throw new Error(`${path}:${r.status}:${text}`);return text?JSON.parse(text):null};
   const context=async(body:any)=>{
