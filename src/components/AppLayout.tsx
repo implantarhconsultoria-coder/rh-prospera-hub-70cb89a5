@@ -4,6 +4,7 @@ import AppSidebar from '@/components/AppSidebar';
 import AdminMobileLayout from '@/components/AdminMobileLayout';
 import AssistenteFab from '@/components/assistente/AssistenteFab';
 import EmployeeSmartEditOverlay from '@/components/EmployeeSmartEditOverlay';
+import EpiSemestralAlert from '@/components/EpiSemestralAlert';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -39,7 +40,7 @@ const AppLayout: React.FC = () => {
     const moduleResults = [
       ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionarios', '/admin/funcionarios'],
       ['Pre-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
-      ['Fechamento', '/admin/fechamento'],
+      ['Fechamento', '/admin/fechamento'], ['EPI', '/admin/epi'],
       ['Faturamento', '/admin/faturamento'],
       ['Financeiro', '/admin/financeiro'], ['Frota / Documentos', '/admin/documentos-ativos'],
       ['Almoxarifado', '/admin/almoxarifado'], ['Abastecimento QR Code', '/admin/abastecimento-qrcode'],
@@ -104,6 +105,8 @@ const AppLayout: React.FC = () => {
     return <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>;
   }
 
+  const showEpiAlert = location.pathname === '/admin' || location.pathname === '/admin/diretoria';
+
   return (
     <div className={cn(layoutMode === 'premium' && 'admin-command', 'min-h-screen bg-background text-foreground')}>
       <AppSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
@@ -120,6 +123,7 @@ const AppLayout: React.FC = () => {
           </div>
         </header>
         <div className="p-7 max-w-[1600px] mx-auto">
+          {showEpiAlert && <EpiSemestralAlert />}
           <ErrorBoundary>{isDirector && !isDirectorRouteAllowed(location.pathname) ? <DirectorBlocked /> : <Outlet />}</ErrorBoundary>
         </div>
       </main>
