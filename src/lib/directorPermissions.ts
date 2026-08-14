@@ -2,7 +2,6 @@ export const DIRECTOR_BLOCKED_MESSAGE = 'Edicao bloqueada para este perfil. Soli
 
 const DIRECTOR_ALLOWED_ADMIN_PREFIXES = [
   '/admin/diretoria',
-  '/admin/epi',
   '/admin/faturamento',
   '/admin/faturamento/migracao-dn4',
   '/admin/financeiro',
@@ -19,6 +18,7 @@ const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
   '/admin/fechamento',
   '/admin/fechamento-ponto',
   '/admin/fechamentos-filiais',
+  '/admin/epi',
   '/admin/uniformes',
   '/admin/aso',
   '/admin/prestadores',
