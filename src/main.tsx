@@ -5,6 +5,7 @@ import "./styles/topac-platform.css";
 import "./styles/hide-vercel-toolbar.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PayrollPdfConsolidatorMount from "@/components/PayrollPdfConsolidator";
+import EpiBulkPrintEnhancer from "@/components/EpiBulkPrintEnhancer";
 
 const MOBILE_BUILD_TAG = "20260605-acesso-final-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
@@ -50,5 +51,6 @@ createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
     <App />
     <PayrollPdfConsolidatorMount />
+    <EpiBulkPrintEnhancer />
   </ErrorBoundary>
 );
