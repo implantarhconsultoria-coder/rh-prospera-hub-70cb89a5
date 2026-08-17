@@ -135,6 +135,7 @@ const isNoiseLine = (value: string) => {
 const cleanRole = (value: string) => {
   let role = normalize(value)
     .replace(/\bADMISS[AÃ]O\s*:?.*$/i, '')
+    .replace(/\b(PIS|CTPS|CPF)\s*:?.*$/i, '')
     .replace(/\b\d{5,6}\b.*$/, '')
     .replace(/^\d+\s+/, '')
     .trim();
@@ -151,7 +152,9 @@ const extractEmployeeAndRole = (lines: PdfLine[]) => {
     const upper = normalizeUpper(line);
     if (isNoiseLine(line)) continue;
 
-    const nameMatch = line.match(/^\s*\d{1,4}\s+([A-ZÀ-Ý][A-ZÀ-Ý' .-]{5,}?)(?=\s+\d{5,6}\b|\s*$)/);
+    const nameMatch =
+      line.match(/^\s*\d{1,4}\s+([A-ZÀ-Ý][A-ZÀ-Ý' .-]{5,}?)(?=\s+\d{5,6}\b|\s*$)/) ||
+      line.match(/^\s*\d{1,4}\s+([A-ZÀ-Ý][A-ZÀ-Ý' .-]{5,}?)(?=\s+\d{1,3}(?:\s+\d{1,3}){0,4}\s*$)/);
     if (!nameMatch) continue;
 
     const employee = nameMatch[1].replace(/\s+/g, ' ').trim();
@@ -194,7 +197,8 @@ const amountFromKeyword = (lines: PdfLine[], keywords: RegExp[]) => {
       return currentValues[currentValues.length - 1];
     }
 
-    for (let step = 1; step <= 2; step += 1) {
+    // Dependendo do emissor, o valor pode estar visualmente antes ou depois do rótulo.
+    for (const step of [-1, 1, -2, 2]) {
       const values = extractMoneyValues(lines[i + step]?.text || '');
       if (values.length) return values[values.length - 1];
     }
