@@ -1,13 +1,15 @@
+import { Suspense, lazy, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import "./styles/topac-platform.css";
 import "./styles/hide-vercel-toolbar.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import PayrollPdfConsolidatorMount from "@/components/PayrollPdfConsolidator";
-import EpiBulkPrintEnhancer from "@/components/EpiBulkPrintEnhancer";
 
-const MOBILE_BUILD_TAG = "20260605-acesso-final-1";
+const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
+const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
+
+const MOBILE_BUILD_TAG = "20260817-performance-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 
 async function clearLegacyMobileCache() {
@@ -47,10 +49,33 @@ window.addEventListener('error', (e) => {
   });
 });
 
+const RouteEnhancers = () => {
+  const [path, setPath] = useState(() => window.location.pathname);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const next = window.location.pathname;
+      setPath(current => current === next ? current : next);
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const isFechamento = path.includes('/admin/fechamento');
+  const isEpi = path.includes('/admin/epi');
+
+  if (!isFechamento && !isEpi) return null;
+
+  return (
+    <Suspense fallback={null}>
+      {isFechamento && <PayrollPdfConsolidatorMount />}
+      {isEpi && <EpiBulkPrintEnhancer />}
+    </Suspense>
+  );
+};
+
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
     <App />
-    <PayrollPdfConsolidatorMount />
-    <EpiBulkPrintEnhancer />
+    <RouteEnhancers />
   </ErrorBoundary>
 );
