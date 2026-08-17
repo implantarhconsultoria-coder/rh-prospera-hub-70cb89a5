@@ -14,18 +14,19 @@ const findFichasSection = () => {
   const section = heading.closest('.space-y-3') as HTMLElement | null;
   if (!section) return null;
   const list = Array.from(section.children).find(child => child instanceof HTMLElement && child.classList.contains('divide-y')) as HTMLElement | undefined;
-  return list ? { heading, section, list } : null;
+  return list ? { section, list } : null;
 };
 
 const EpiBulkPrintEnhancer = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedRef = useRef<Set<string>>(new Set());
   const loadingDataRef = useRef(false);
   const loadedRef = useRef(false);
-
-  useEffect(() => { selectedRef.current = new Set(selectedIds); }, [selectedIds]);
+  const observedListRef = useRef<HTMLElement | null>(null);
+  const listObserverRef = useRef<MutationObserver | null>(null);
+  const syncTimerRef = useRef<number | null>(null);
+  const syncRef = useRef<() => void>(() => {});
 
   const loadData = useCallback(async () => {
     if (loadingDataRef.current || loadedRef.current) return;
@@ -44,6 +45,22 @@ const EpiBulkPrintEnhancer = () => {
       console.error('Falha ao carregar dados para impressão em lote de EPI:', error);
     } finally {
       loadingDataRef.current = false;
+    }
+  }, []);
+
+  const updateSelectionUi = useCallback(() => {
+    document.querySelectorAll<HTMLInputElement>('input[data-epi-bulk-select="true"]').forEach(input => {
+      input.checked = selectedRef.current.has(String(input.dataset.employeeId || ''));
+    });
+    const toolbar = document.querySelector<HTMLElement>('[data-epi-bulk-toolbar="true"]');
+    if (!toolbar) return;
+    const counter = toolbar.querySelector<HTMLElement>('[data-epi-bulk-counter="true"]');
+    const printButton = toolbar.querySelector<HTMLButtonElement>('[data-epi-bulk-print="true"]');
+    const total = selectedRef.current.size;
+    if (counter) counter.textContent = `${total} funcionário(s) selecionado(s)`;
+    if (printButton) {
+      printButton.textContent = `Imprimir selecionados (${total})`;
+      printButton.disabled = total === 0;
     }
   }, []);
 
@@ -138,110 +155,118 @@ const EpiBulkPrintEnhancer = () => {
     }
   }, [companies, employees]);
 
-  useEffect(() => {
-    const cleanupInjected = () => {
-      document.querySelectorAll('[data-epi-bulk-control="true"]').forEach(node => node.remove());
-      document.querySelectorAll('[data-epi-bulk-toolbar="true"]').forEach(node => node.remove());
-    };
+  const scheduleSync = useCallback(() => {
+    if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = window.setTimeout(() => {
+      syncTimerRef.current = null;
+      syncRef.current();
+    }, 80);
+  }, []);
 
-    const sync = () => {
-      const found = findFichasSection();
-      if (!found) return;
-      void loadData();
-      if (!employees.length) return;
+  const sync = useCallback(() => {
+    if (!window.location.pathname.includes('/admin/epi')) return;
+    const found = findFichasSection();
+    if (!found) return;
 
-      const companyNameById = new Map(companies.map(company => [company.id, company.name]));
-      const employeesByKey = new Map<string, any>();
-      employees.forEach(employee => {
-        const companyName = companyNameById.get(employee.companyId) || '';
-        employeesByKey.set(`${normalizeText(employee.name)}|${normalizeText(companyName)}`, employee);
-      });
+    void loadData();
+    if (!employees.length) return;
 
-      Array.from(found.list.children).forEach(child => {
-        if (!(child instanceof HTMLElement)) return;
-        const nameNode = child.querySelector('p.font-semibold');
-        const metaNode = nameNode?.nextElementSibling as HTMLElement | null;
-        const name = String(nameNode?.textContent || '').trim();
-        const companyName = String(metaNode?.textContent || '').split('·')[0]?.trim() || '';
-        const employee = employeesByKey.get(`${normalizeText(name)}|${normalizeText(companyName)}`) || employees.find(item => normalizeText(item.name) === normalizeText(name));
-        if (!employee) return;
+    if (observedListRef.current !== found.list) {
+      listObserverRef.current?.disconnect();
+      observedListRef.current = found.list;
+      listObserverRef.current = new MutationObserver(() => scheduleSync());
+      listObserverRef.current.observe(found.list, { childList: true });
+    }
 
-        let control = child.querySelector('[data-epi-bulk-control="true"]') as HTMLLabelElement | null;
-        if (!control) {
-          control = document.createElement('label');
-          control.dataset.epiBulkControl = 'true';
-          control.className = 'no-print flex shrink-0 items-center justify-center self-stretch px-1 cursor-pointer';
-          const input = document.createElement('input');
-          input.type = 'checkbox';
-          input.dataset.employeeId = employee.id;
-          input.setAttribute('aria-label', `Selecionar ${employee.name} para impressão`);
-          input.className = 'h-5 w-5 cursor-pointer accent-[hsl(var(--primary))]';
-          input.addEventListener('change', () => {
-            setSelectedIds(current => {
-              const next = new Set(current);
-              if (input.checked) next.add(employee.id); else next.delete(employee.id);
-              return Array.from(next);
-            });
-          });
-          control.appendChild(input);
-          child.insertBefore(control, child.firstChild);
-        }
-        const input = control.querySelector('input') as HTMLInputElement | null;
-        if (input) input.checked = selectedRef.current.has(employee.id);
-      });
+    const companyNameById = new Map(companies.map(company => [company.id, company.name]));
+    const employeesByKey = new Map<string, any>();
+    employees.forEach(employee => {
+      const companyName = companyNameById.get(employee.companyId) || '';
+      employeesByKey.set(`${normalizeText(employee.name)}|${normalizeText(companyName)}`, employee);
+    });
 
-      let toolbar = found.section.querySelector('[data-epi-bulk-toolbar="true"]') as HTMLDivElement | null;
-      if (!toolbar) {
-        toolbar = document.createElement('div');
-        toolbar.dataset.epiBulkToolbar = 'true';
-        toolbar.className = 'no-print flex flex-col gap-2 rounded-xl border border-border bg-muted/20 px-3 py-3 sm:flex-row sm:items-center sm:justify-between';
-        found.list.insertAdjacentElement('beforebegin', toolbar);
+    Array.from(found.list.children).forEach(child => {
+      if (!(child instanceof HTMLElement)) return;
+      const nameNode = child.querySelector('p.font-semibold');
+      const metaNode = nameNode?.nextElementSibling as HTMLElement | null;
+      const name = String(nameNode?.textContent || '').trim();
+      const companyName = String(metaNode?.textContent || '').split('·')[0]?.trim() || '';
+      const employee = employeesByKey.get(`${normalizeText(name)}|${normalizeText(companyName)}`) || employees.find(item => normalizeText(item.name) === normalizeText(name));
+      if (!employee) return;
+
+      let control = child.querySelector('[data-epi-bulk-control="true"]') as HTMLLabelElement | null;
+      if (!control) {
+        control = document.createElement('label');
+        control.dataset.epiBulkControl = 'true';
+        control.className = 'no-print flex shrink-0 items-center justify-center self-stretch px-1 cursor-pointer';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.dataset.epiBulkSelect = 'true';
+        input.dataset.employeeId = employee.id;
+        input.setAttribute('aria-label', `Selecionar ${employee.name} para impressão`);
+        input.className = 'h-5 w-5 cursor-pointer accent-[hsl(var(--primary))]';
+        input.addEventListener('change', () => {
+          const id = String(input.dataset.employeeId || '');
+          if (!id) return;
+          if (input.checked) selectedRef.current.add(id); else selectedRef.current.delete(id);
+          updateSelectionUi();
+        });
+        control.appendChild(input);
+        child.insertBefore(control, child.firstChild);
       }
+      const input = control.querySelector('input') as HTMLInputElement | null;
+      if (input) {
+        input.dataset.employeeId = employee.id;
+        input.checked = selectedRef.current.has(employee.id);
+      }
+    });
 
-      toolbar.innerHTML = '';
-      const counter = document.createElement('div');
-      counter.className = 'text-sm font-semibold text-foreground';
-      counter.textContent = `${selectedRef.current.size} funcionário(s) selecionado(s)`;
+    let toolbar = found.section.querySelector('[data-epi-bulk-toolbar="true"]') as HTMLDivElement | null;
+    if (!toolbar) {
+      toolbar = document.createElement('div');
+      toolbar.dataset.epiBulkToolbar = 'true';
+      toolbar.className = 'no-print flex flex-col gap-2 rounded-xl border border-border bg-muted/20 px-3 py-3 sm:flex-row sm:items-center sm:justify-between';
+      toolbar.innerHTML = '<div data-epi-bulk-counter="true" class="text-sm font-semibold text-foreground"></div><div class="flex flex-wrap gap-2"><button type="button" data-epi-bulk-select-all="true" class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground">Selecionar todos visíveis</button><button type="button" data-epi-bulk-clear="true" class="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground">Limpar seleção</button><button type="button" data-epi-bulk-print="true" class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"></button></div>';
+      found.list.insertAdjacentElement('beforebegin', toolbar);
+    }
 
-      const actions = document.createElement('div');
-      actions.className = 'flex flex-wrap gap-2';
-      const makeButton = (label: string, primary = false) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = primary
-          ? 'inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50'
-          : 'inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
-        button.textContent = label;
-        return button;
-      };
+    const selectAll = toolbar.querySelector<HTMLButtonElement>('[data-epi-bulk-select-all="true"]');
+    const clear = toolbar.querySelector<HTMLButtonElement>('[data-epi-bulk-clear="true"]');
+    const print = toolbar.querySelector<HTMLButtonElement>('[data-epi-bulk-print="true"]');
 
-      const selectVisible = makeButton('Selecionar todos visíveis');
-      selectVisible.onclick = () => {
-        const ids = Array.from(found.list.querySelectorAll<HTMLInputElement>('input[data-employee-id]')).map(input => input.dataset.employeeId).filter(Boolean) as string[];
-        setSelectedIds(ids);
-      };
-      const clear = makeButton('Limpar seleção');
-      clear.onclick = () => setSelectedIds([]);
-      const print = makeButton(`Imprimir selecionados (${selectedRef.current.size})`, true);
-      print.disabled = selectedRef.current.size === 0;
-      print.onclick = () => void printSelected();
-
-      actions.append(selectVisible, clear, print);
-      toolbar.append(counter, actions);
+    if (selectAll) selectAll.onclick = () => {
+      const ids = Array.from(found.list.querySelectorAll<HTMLInputElement>('input[data-epi-bulk-select="true"]')).map(input => String(input.dataset.employeeId || '')).filter(Boolean);
+      selectedRef.current = new Set(ids);
+      updateSelectionUi();
     };
-
-    sync();
-    const observer = new MutationObserver(sync);
-    const root = document.getElementById('root') || document.body;
-    observer.observe(root, { childList: true, subtree: true });
-    const interval = window.setInterval(sync, 800);
-
-    return () => {
-      observer.disconnect();
-      window.clearInterval(interval);
-      cleanupInjected();
+    if (clear) clear.onclick = () => {
+      selectedRef.current.clear();
+      updateSelectionUi();
     };
-  }, [companies, employees, loadData, printSelected, selectedIds]);
+    if (print) print.onclick = () => void printSelected();
+
+    updateSelectionUi();
+  }, [companies, employees, loadData, printSelected, scheduleSync, updateSelectionUi]);
+
+  useEffect(() => {
+    syncRef.current = sync;
+    scheduleSync();
+  }, [sync, scheduleSync]);
+
+  useEffect(() => {
+    const onDocumentClick = () => {
+      if (window.location.pathname.includes('/admin/epi')) scheduleSync();
+    };
+    document.addEventListener('click', onDocumentClick, true);
+    return () => document.removeEventListener('click', onDocumentClick, true);
+  }, [scheduleSync]);
+
+  useEffect(() => () => {
+    if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+    listObserverRef.current?.disconnect();
+    document.querySelectorAll('[data-epi-bulk-control="true"]').forEach(node => node.remove());
+    document.querySelectorAll('[data-epi-bulk-toolbar="true"]').forEach(node => node.remove());
+  }, []);
 
   return null;
 };
