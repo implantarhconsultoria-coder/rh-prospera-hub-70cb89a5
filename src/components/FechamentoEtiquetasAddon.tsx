@@ -75,14 +75,15 @@ const FechamentoEtiquetasAddon: React.FC = () => {
 
   const shortName = (employee: typeof activeEmployees[number]) => {
     const parts = employee.name.trim().split(/\s+/).filter(Boolean);
-    const first = parts[0] || employee.name;
+    const rawFirst = parts[0] || employee.name;
+    const first = rawFirst.toLocaleUpperCase('pt-BR');
     const sameFirst = activeEmployees.filter((item) => {
       const itemFirst = item.name.trim().split(/\s+/)[0] || '';
-      return itemFirst.localeCompare(first, 'pt-BR', { sensitivity: 'base' }) === 0;
+      return itemFirst.localeCompare(rawFirst, 'pt-BR', { sensitivity: 'base' }) === 0;
     });
     if (sameFirst.length <= 1 || parts.length < 2) return first;
     const surname = parts.find((part, index) => index > 0 && !['DE', 'DA', 'DO', 'DAS', 'DOS', 'E'].includes(part.toUpperCase())) || parts[parts.length - 1];
-    return `${first} ${surname.charAt(0).toUpperCase()}.`;
+    return `${first} ${surname.charAt(0).toLocaleUpperCase('pt-BR')}.`;
   };
 
   const printFolderLabels = () => {
@@ -110,14 +111,30 @@ const FechamentoEtiquetasAddon: React.FC = () => {
     .toolbar button { border:0; border-radius:8px; padding:8px 12px; background:#111827; color:#fff; font-weight:700; cursor:pointer; }
     .toolbar span { font-size:12px; color:#374151; }
     .sheet { display:grid; grid-template-columns:repeat(6,25mm); gap:3mm 5mm; justify-content:center; align-content:start; }
-    .folder-label { width:25mm; height:10mm; border:.6pt solid #777; border-radius:1.5mm; display:flex; align-items:center; justify-content:center; padding:.8mm .8mm; text-align:center; overflow:hidden; break-inside:avoid; page-break-inside:avoid; }
-    .folder-label strong { font-size:9pt; line-height:1; font-weight:800; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+    .folder-label { width:25mm; height:10mm; border:.6pt solid #777; border-radius:1.5mm; display:flex; align-items:center; justify-content:center; padding:.65mm .55mm; text-align:center; overflow:hidden; break-inside:avoid; page-break-inside:avoid; }
+    .folder-label strong { display:block; width:100%; font-size:14pt; line-height:1; font-weight:900; white-space:nowrap; overflow:hidden; text-align:center; }
     @media print { .toolbar { display:none; } }
   </style>
 </head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${activeEmployees.length} funcionários • etiqueta 2,5 × 1 cm • ordem alfabética • vínculo automático com RH</span></div>
+  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${activeEmployees.length} funcionários • etiqueta 2,5 × 1 cm • nome ajustado automaticamente • ordem alfabética</span></div>
   <main class="sheet">${labels}</main>
+  <script>
+    (() => {
+      const fitNames = () => {
+        document.querySelectorAll('.folder-label strong').forEach((el) => {
+          let size = 14;
+          el.style.fontSize = size + 'pt';
+          while (el.scrollWidth > el.clientWidth && size > 7) {
+            size -= 0.25;
+            el.style.fontSize = size + 'pt';
+          }
+        });
+      };
+      fitNames();
+      window.addEventListener('beforeprint', fitNames);
+    })();
+  </script>
 </body>
 </html>`);
     win.document.close();
