@@ -1,0 +1,148 @@
+name: Patch etiquetas pasta RH
+
+on:
+  push:
+    branches:
+      - agent/etiquetas-pasta-rh-dinamicas-20260818
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    if: ${{ !contains(github.event.head_commit.message, 'feat(rh): vincular etiquetas de pasta ao RH') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/etiquetas-pasta-rh-dinamicas-20260818
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Aplicar patch cirurgico
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/pages/FechamentoPage.tsx')
+          s = p.read_text(encoding='utf-8')
+
+          s = s.replace(
+            "import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';",
+            "import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';\nimport ArchiveCoverDialog from '@/components/ArchiveCoverDialog';"
+          )
+
+          s = s.replace(
+            "  const [etiquetaSelecionados, setEtiquetaSelecionados] = useState<string[]>([]);",
+            "  const [etiquetaSelecionados, setEtiquetaSelecionados] = useState<string[]>([]);\n  const [archiveCoverOpen, setArchiveCoverOpen] = useState(false);"
+          )
+
+          s = s.replace(
+            "  const compEmps = employees.filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional');",
+            "  const compEmps = useMemo(() => employees\n    .filter(e => e.companyId === selectedCompany && e.status === 'ativo' && e.categoria === 'operacional')\n    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })), [employees, selectedCompany]);"
+          )
+
+          s = s.replace(
+            "  const novosFuncionarios = compEmps.filter(e => (e.dataAdmissao || '').startsWith(competencia));\n\n  useEffect(() => {\n    if (etiquetaModo === 'manual') return;\n    const base = etiquetaModo === 'novos' ? novosFuncionarios : compEmps;\n    setEtiquetaSelecionados(base.map(e => e.id));\n  }, [selectedCompany, competencia, etiquetaModo, compEmps.length, novosFuncionarios.length]);",
+            "  const novosFuncionarios = compEmps.filter(e => (e.dataAdmissao || '').startsWith(competencia));\n  const compEmpIdsKey = compEmps.map(e => e.id).join('|');\n  const novosIdsKey = novosFuncionarios.map(e => e.id).join('|');\n\n  useEffect(() => {\n    if (etiquetaModo === 'manual') {\n      setEtiquetaSelecionados(prev => prev.filter(id => compEmps.some(e => e.id === id)));\n      return;\n    }\n    const base = etiquetaModo === 'novos' ? novosFuncionarios : compEmps;\n    setEtiquetaSelecionados(base.map(e => e.id));\n  }, [selectedCompany, competencia, etiquetaModo, compEmpIdsKey, novosIdsKey]);"
+          )
+
+          anchor = "  const imprimirEtiquetas = () => {\n"
+          if anchor not in s:
+            raise SystemExit('anchor imprimirEtiquetas nao encontrado')
+
+          folder_fn = r'''  const nomeCurtoPasta = (emp: typeof compEmps[0]) => {
+    const partes = emp.name.trim().split(/\s+/).filter(Boolean);
+    const primeiro = partes[0] || emp.name;
+    const iguais = compEmps.filter(item => (item.name.trim().split(/\s+/)[0] || '').localeCompare(primeiro, 'pt-BR', { sensitivity: 'base' }) === 0);
+    if (iguais.length <= 1 || partes.length < 2) return primeiro;
+    const sobrenome = partes.find((parte, index) => index > 0 && !['DE','DA','DO','DAS','DOS','E'].includes(parte.toUpperCase())) || partes[partes.length - 1];
+    return `${primeiro} ${sobrenome.charAt(0).toUpperCase()}.`;
+  };
+
+  const imprimirEtiquetasPasta = () => {
+    if (!funcionariosParaEtiqueta.length) {
+      toast.error('Selecione pelo menos um funcionario para imprimir as etiquetas da pasta.');
+      return;
+    }
+
+    const ordenados = [...funcionariosParaEtiqueta].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    const etiquetas = ordenados.map(emp => `<section class="folder-label"><strong>${escapeHtml(nomeCurtoPasta(emp))}</strong></section>`).join('');
+    const win = window.open('', '_blank');
+    if (!win) {
+      toast.error('O navegador bloqueou a janela de impressao. Libere pop-ups para continuar.');
+      return;
+    }
+
+    win.document.write(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Etiquetas para pasta - ${escapeHtml(selectedCompanyData?.name || 'Empresa')}</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
+    .toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: 10px 14px; background: #f3f4f6; border-bottom: 1px solid #d1d5db; }
+    .toolbar button { border: 0; border-radius: 8px; padding: 8px 12px; background: #111827; color: #fff; font-weight: 700; cursor: pointer; }
+    .toolbar span { font-size: 12px; color: #374151; }
+    .sheet { display: grid; grid-template-columns: repeat(4, 42mm); gap: 4mm 5mm; justify-content: center; align-content: start; }
+    .folder-label { width: 42mm; height: 14mm; border: .6pt solid #777; border-radius: 1.5mm; display: flex; align-items: center; justify-content: center; padding: 1.5mm 2mm; text-align: center; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
+    .folder-label strong { font-size: 12pt; line-height: 1; font-weight: 800; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    @media print { .toolbar { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${ordenados.length} etiquetas para pasta - ordem alfabetica - somente funcionarios ativos</span></div>
+  <main class="sheet">${etiquetas}</main>
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+  };
+
+'''
+          s = s.replace(anchor, folder_fn + anchor)
+
+          old_buttons = "            <Button type=\"button\" size=\"sm\" variant=\"outline\" onClick={() => { setEtiquetaModo('manual'); setEtiquetaSelecionados(compEmps.map(e => e.id)); }}>Selecionar todos</Button>\n            <Button type=\"button\" size=\"sm\" variant=\"outline\" onClick={imprimirEtiquetas}><Printer className=\"w-3.5 h-3.5 mr-1\" />Imprimir etiquetas</Button>"
+          new_buttons = "            <Button type=\"button\" size=\"sm\" variant=\"outline\" onClick={() => { setEtiquetaModo('manual'); setEtiquetaSelecionados(compEmps.map(e => e.id)); }}>Selecionar todos</Button>\n            <Button type=\"button\" size=\"sm\" variant=\"outline\" onClick={() => setArchiveCoverOpen(true)}><FileText className=\"w-3.5 h-3.5 mr-1\" />Capa para arquivar</Button>\n            <Button type=\"button\" size=\"sm\" variant=\"outline\" onClick={imprimirEtiquetasPasta}><Tags className=\"w-3.5 h-3.5 mr-1\" />Etiqueta pasta</Button>\n            <Button type=\"button\" size=\"sm\" variant=\"outline\" onClick={imprimirEtiquetas}><Printer className=\"w-3.5 h-3.5 mr-1\" />Imprimir etiquetas</Button>"
+          if old_buttons not in s:
+            raise SystemExit('bloco de botoes nao encontrado')
+          s = s.replace(old_buttons, new_buttons)
+
+          old_note = "        <p className=\"text-[11px] text-muted-foreground\">A impressao usa sempre o mes selecionado acima e separa pelo filtro de empresa escolhido no fechamento. Cada funcionario sai em duas etiquetas iguais, lado a lado, para dobrar e colocar no cartao de ponto.</p>"
+          new_note = "        <p className=\"text-[11px] text-muted-foreground\">Lista vinculada ao cadastro real do RH e ordenada de A a Z. Funcionarios desligados saem automaticamente; novos funcionarios ativos entram automaticamente. A etiqueta de pasta imprime somente o nome curto, seguindo a selecao acima.</p>"
+          if old_note not in s:
+            raise SystemExit('nota de etiquetas nao encontrada')
+          s = s.replace(old_note, new_note)
+
+          old_end = "      <div className=\"card-premium p-4 space-y-3\"><label className=\"text-xs text-muted-foreground\">Observacao do Fechamento</label><textarea value={fechamento.observacoes} onChange={e => updateFechamento(selectedCompany, competencia, { observacoes: e.target.value }, { persist: false })} className=\"w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[60px]\" placeholder=\"Observacoes gerais...\" /><div className=\"flex gap-3 flex-wrap\"><Button onClick={handleSalvarFechamento} className=\"gradient-primary text-primary-foreground\"><Save className=\"w-4 h-4 mr-2\" />Salvar Fechamento</Button><Button onClick={handleMarcarFechado} variant=\"outline\"><Lock className=\"w-4 h-4 mr-2\" />Marcar como Fechado</Button><Button onClick={() => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`)} variant=\"outline\"><FileText className=\"w-4 h-4 mr-2\" />Relatorio para Impressao</Button><Button onClick={imprimirEtiquetas} variant=\"outline\"><Tags className=\"w-4 h-4 mr-2\" />Etiquetas</Button></div></div>\n    </div>"
+          new_end = "      <div className=\"card-premium p-4 space-y-3\"><label className=\"text-xs text-muted-foreground\">Observacao do Fechamento</label><textarea value={fechamento.observacoes} onChange={e => updateFechamento(selectedCompany, competencia, { observacoes: e.target.value }, { persist: false })} className=\"w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground min-h-[60px]\" placeholder=\"Observacoes gerais...\" /><div className=\"flex gap-3 flex-wrap\"><Button onClick={handleSalvarFechamento} className=\"gradient-primary text-primary-foreground\"><Save className=\"w-4 h-4 mr-2\" />Salvar Fechamento</Button><Button onClick={handleMarcarFechado} variant=\"outline\"><Lock className=\"w-4 h-4 mr-2\" />Marcar como Fechado</Button><Button onClick={() => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`)} variant=\"outline\"><FileText className=\"w-4 h-4 mr-2\" />Relatorio para Impressao</Button><Button onClick={imprimirEtiquetas} variant=\"outline\"><Tags className=\"w-4 h-4 mr-2\" />Etiquetas</Button></div></div>\n      <ArchiveCoverDialog open={archiveCoverOpen} onOpenChange={setArchiveCoverOpen} />\n    </div>"
+          if old_end not in s:
+            raise SystemExit('final da pagina nao encontrado')
+          s = s.replace(old_end, new_end)
+
+          p.write_text(s, encoding='utf-8')
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Testes
+        run: npm test -- --run
+
+      - name: Build
+        run: npm run build
+
+      - name: Verificar diff
+        run: git diff --check && git diff -- src/pages/FechamentoPage.tsx
+
+      - name: Commitar patch validado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/FechamentoPage.tsx
+          git commit -m "feat(rh): vincular etiquetas de pasta ao RH"
+          git push origin HEAD:agent/etiquetas-pasta-rh-dinamicas-20260818
