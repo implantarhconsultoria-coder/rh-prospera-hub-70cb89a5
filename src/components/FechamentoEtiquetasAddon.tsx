@@ -109,14 +109,14 @@ const FechamentoEtiquetasAddon: React.FC = () => {
     .toolbar { position:sticky; top:0; z-index:2; display:flex; gap:8px; align-items:center; padding:10px 14px; background:#f3f4f6; border-bottom:1px solid #d1d5db; }
     .toolbar button { border:0; border-radius:8px; padding:8px 12px; background:#111827; color:#fff; font-weight:700; cursor:pointer; }
     .toolbar span { font-size:12px; color:#374151; }
-    .sheet { display:grid; grid-template-columns:repeat(4,42mm); gap:4mm 5mm; justify-content:center; align-content:start; }
-    .folder-label { width:42mm; height:14mm; border:.6pt solid #777; border-radius:1.5mm; display:flex; align-items:center; justify-content:center; padding:1.5mm 2mm; text-align:center; overflow:hidden; break-inside:avoid; page-break-inside:avoid; }
-    .folder-label strong { font-size:12pt; line-height:1; font-weight:800; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+    .sheet { display:grid; grid-template-columns:repeat(6,25mm); gap:4mm 5mm; justify-content:center; align-content:start; }
+    .folder-label { width:25mm; height:14mm; border:.6pt solid #777; border-radius:1.5mm; display:flex; align-items:center; justify-content:center; padding:1.5mm 1mm; text-align:center; overflow:hidden; break-inside:avoid; page-break-inside:avoid; }
+    .folder-label strong { font-size:10pt; line-height:1; font-weight:800; white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
     @media print { .toolbar { display:none; } }
   </style>
 </head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${activeEmployees.length} funcionários • ordem alfabética • vínculo automático com RH</span></div>
+  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${activeEmployees.length} funcionários • etiqueta 2,5 cm • ordem alfabética • vínculo automático com RH</span></div>
   <main class="sheet">${labels}</main>
 </body>
 </html>`);
