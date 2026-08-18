@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, Tags } from 'lucide-react';
+import { Building2, FileText, Layers3, Search, Tags, UserRound } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import ArchiveCoverDialog from '@/components/ArchiveCoverDialog';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 
 const normalize = (value: unknown) => String(value || '').trim().toLocaleLowerCase('pt-BR');
@@ -16,12 +18,19 @@ const escapeHtml = (value: unknown) => String(value ?? '')
   .replace(/\"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
+type FolderPrintMode = 'employee' | 'company' | 'all';
+
 const FechamentoEtiquetasAddon: React.FC = () => {
   const location = useLocation();
   const { employees, companies } = useApp();
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
   const [companyId, setCompanyId] = useState('');
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderMode, setFolderMode] = useState<FolderPrintMode>('company');
+  const [folderQuery, setFolderQuery] = useState('');
+  const [folderEmployeeId, setFolderEmployeeId] = useState('');
+  const [folderCompanyId, setFolderCompanyId] = useState('');
 
   useEffect(() => {
     if (location.pathname !== '/admin/fechamento') {
@@ -67,19 +76,41 @@ const FechamentoEtiquetasAddon: React.FC = () => {
     };
   }, [companies, location.pathname]);
 
-  const activeRhEmployees = useMemo(() => employees
-    .filter((employee) => !['desligado', 'excluido'].includes(employee.status))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })), [employees]);
+  const sortedCompanies = useMemo(() => [...companies]
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })), [companies]);
 
-  const activeEmployees = useMemo(() => activeRhEmployees
-    .filter((employee) => employee.companyId === companyId)
-    .filter((employee) => employee.categoria === 'operacional'), [activeRhEmployees, companyId]);
+  const printableRhEmployees = useMemo(() => employees
+    .filter((employee) => !['desligado', 'excluido'].includes(String(employee.status || '').toLowerCase()))
+    .filter((employee) => employee.categoria === 'operacional')
+    .filter((employee) => !!employee.companyId && companies.some((company) => company.id === employee.companyId))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })), [companies, employees]);
 
-  const shortName = (employee: typeof activeEmployees[number]) => {
+  const selectedFolderEmployee = printableRhEmployees.find((employee) => employee.id === folderEmployeeId) || null;
+
+  const folderCandidates = useMemo(() => {
+    const term = normalize(folderQuery);
+    if (!term) return [];
+    return printableRhEmployees
+      .filter((employee) => {
+        const company = companies.find((item) => item.id === employee.companyId);
+        return normalize(`${employee.name} ${employee.cpf || ''} ${employee.cargo || ''} ${company?.name || ''}`).includes(term);
+      })
+      .slice(0, 20);
+  }, [companies, folderQuery, printableRhEmployees]);
+
+  const targetFolderEmployees = useMemo(() => {
+    if (folderMode === 'employee') return selectedFolderEmployee ? [selectedFolderEmployee] : [];
+    if (folderMode === 'company') return folderCompanyId
+      ? printableRhEmployees.filter((employee) => employee.companyId === folderCompanyId)
+      : [];
+    return printableRhEmployees;
+  }, [folderCompanyId, folderMode, printableRhEmployees, selectedFolderEmployee]);
+
+  const shortName = (employee: typeof printableRhEmployees[number]) => {
     const parts = employee.name.trim().split(/\s+/).filter(Boolean);
     const rawFirst = parts[0] || employee.name;
     const first = rawFirst.toLocaleUpperCase('pt-BR');
-    const sameFirst = activeRhEmployees.filter((item) => {
+    const sameFirst = printableRhEmployees.filter((item) => {
       const itemFirst = item.name.trim().split(/\s+/)[0] || '';
       return itemFirst.localeCompare(rawFirst, 'pt-BR', { sensitivity: 'base' }) === 0;
     });
@@ -88,15 +119,41 @@ const FechamentoEtiquetasAddon: React.FC = () => {
     return `${first} ${surname.charAt(0).toLocaleUpperCase('pt-BR')}.`;
   };
 
-  const printFolderLabels = () => {
-    if (!companyId) return toast.error('Selecione uma empresa no fechamento.');
-    if (!activeEmployees.length) return toast.error('Nenhum funcionário vinculado ao RH para esta empresa.');
+  const openFolderDialog = () => {
+    setFolderMode('company');
+    setFolderCompanyId(companyId || '');
+    setFolderQuery('');
+    setFolderEmployeeId('');
+    setFolderOpen(true);
+  };
 
-    const labels = activeEmployees.map((employee) => `
+  const changeFolderMode = (mode: FolderPrintMode) => {
+    setFolderMode(mode);
+    setFolderQuery('');
+    setFolderEmployeeId('');
+    if (mode === 'company' && !folderCompanyId) setFolderCompanyId(companyId || '');
+  };
+
+  const printFolderLabels = () => {
+    if (!targetFolderEmployees.length) {
+      if (folderMode === 'employee') return toast.error('Selecione um funcionário.');
+      if (folderMode === 'company') return toast.error('Selecione uma empresa com funcionários ativos.');
+      return toast.error('Nenhum funcionário ativo disponível para imprimir.');
+    }
+
+    const ordered = [...targetFolderEmployees]
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    const labels = ordered.map((employee) => `
       <section class="folder-label"><strong>${escapeHtml(shortName(employee))}</strong></section>
     `).join('');
 
-    const company = companies.find((item) => item.id === companyId)?.name || 'Empresa';
+    const selectedCompanyName = companies.find((item) => item.id === folderCompanyId)?.name || 'Empresa';
+    const title = folderMode === 'employee'
+      ? `Etiqueta pasta - ${ordered[0]?.name || 'Funcionário'}`
+      : folderMode === 'company'
+        ? `Etiquetas pasta - ${selectedCompanyName}`
+        : 'Etiquetas pasta - Todos os funcionários';
+
     const win = window.open('', '_blank');
     if (!win) return toast.error('O navegador bloqueou a janela de impressão. Libere pop-ups para continuar.');
 
@@ -104,9 +161,9 @@ const FechamentoEtiquetasAddon: React.FC = () => {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Etiquetas pasta - ${escapeHtml(company)}</title>
+  <title>${escapeHtml(title)}</title>
   <style>
-    @page { size: A4 portrait; margin: 12mm; }
+    @page { size: A4 portrait; margin: 20mm 12mm 12mm; }
     * { box-sizing: border-box; }
     html,body { margin:0; padding:0; background:#fff; color:#000; font-family:Arial,Helvetica,sans-serif; }
     .toolbar { position:sticky; top:0; z-index:2; display:flex; gap:8px; align-items:center; padding:10px 14px; background:#f3f4f6; border-bottom:1px solid #d1d5db; }
@@ -119,7 +176,7 @@ const FechamentoEtiquetasAddon: React.FC = () => {
   </style>
 </head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${activeEmployees.length} funcionários • etiqueta 2,5 × 1 cm • nomes iguais diferenciados pelo RH completo • ordem alfabética</span></div>
+  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${ordered.length} etiqueta(s) • 2,5 × 1 cm • ordem alfabética • margem superior ampliada</span></div>
   <main class="sheet">${labels}</main>
   <script>
     (() => {
@@ -141,9 +198,103 @@ const FechamentoEtiquetasAddon: React.FC = () => {
 </html>`);
     win.document.close();
     win.focus();
+    setFolderOpen(false);
   };
 
-  if (!portalHost) return <ArchiveCoverDialog open={archiveOpen} onOpenChange={setArchiveOpen} />;
+  const folderDialog = (
+    <Dialog open={folderOpen} onOpenChange={setFolderOpen}>
+      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Tags className="h-5 w-5" /> Etiqueta pasta A-Z</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <button type="button" onClick={() => changeFolderMode('employee')} className={`rounded-lg border p-3 text-left transition ${folderMode === 'employee' ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}>
+              <UserRound className="mb-2 h-5 w-5" />
+              <strong className="block text-sm">Por funcionário</strong>
+              <span className="text-xs text-muted-foreground">Digite e imprima uma pessoa</span>
+            </button>
+            <button type="button" onClick={() => changeFolderMode('company')} className={`rounded-lg border p-3 text-left transition ${folderMode === 'company' ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}>
+              <Building2 className="mb-2 h-5 w-5" />
+              <strong className="block text-sm">Por empresa</strong>
+              <span className="text-xs text-muted-foreground">Todos da empresa em A-Z</span>
+            </button>
+            <button type="button" onClick={() => changeFolderMode('all')} className={`rounded-lg border p-3 text-left transition ${folderMode === 'all' ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}>
+              <Layers3 className="mb-2 h-5 w-5" />
+              <strong className="block text-sm">Todas</strong>
+              <span className="text-xs text-muted-foreground">RH completo em uma sequência A-Z</span>
+            </button>
+          </div>
+
+          {folderMode === 'employee' && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground">Procurar funcionário</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={folderQuery}
+                  onChange={(event) => {
+                    setFolderQuery(event.target.value);
+                    setFolderEmployeeId('');
+                  }}
+                  placeholder="Digite o nome do funcionário"
+                  autoFocus
+                />
+              </div>
+              {!selectedFolderEmployee && folderCandidates.length > 0 && (
+                <div className="max-h-56 overflow-y-auto rounded-lg border bg-background p-1">
+                  {folderCandidates.map((employee) => {
+                    const company = companies.find((item) => item.id === employee.companyId);
+                    return (
+                      <button key={employee.id} type="button" onClick={() => { setFolderEmployeeId(employee.id); setFolderQuery(employee.name); }} className="flex w-full items-start justify-between rounded-md px-3 py-2 text-left hover:bg-muted">
+                        <span>
+                          <span className="block text-sm font-semibold">{employee.name}</span>
+                          <span className="block text-xs text-muted-foreground">{company?.name || 'Empresa não informada'} • {employee.cargo || 'Cargo não informado'}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {selectedFolderEmployee && <p className="text-xs text-muted-foreground">Será impressa somente a etiqueta de <strong>{selectedFolderEmployee.name}</strong>.</p>}
+            </div>
+          )}
+
+          {folderMode === 'company' && (
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground">Empresa</label>
+              <select value={folderCompanyId} onChange={(event) => setFolderCompanyId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
+                <option value="">Selecione a empresa</option>
+                {sortedCompanies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+              </select>
+              {!!folderCompanyId && <p className="text-xs text-muted-foreground"><strong>{targetFolderEmployees.length}</strong> funcionário(s) ativos serão impressos em ordem alfabética.</p>}
+            </div>
+          )}
+
+          {folderMode === 'all' && (
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+              <strong>{targetFolderEmployees.length} funcionários ativos</strong> serão reunidos em uma única sequência alfabética, sem separar por empresa, para aproveitar melhor as folhas.
+            </div>
+          )}
+
+          <div className="rounded-lg border p-3 text-xs text-muted-foreground">
+            Medida fixa: <strong>2,5 × 1 cm</strong>. Nomes iguais continuam diferenciados pela inicial do sobrenome em todo o RH. A impressão começa mais abaixo na folha para evitar corte no topo.
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setFolderOpen(false)}>Cancelar</Button>
+          <Button type="button" onClick={printFolderLabels}>Imprimir etiquetas</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (!portalHost) {
+    return <><ArchiveCoverDialog open={archiveOpen} onOpenChange={setArchiveOpen} />{folderDialog}</>;
+  }
 
   return (
     <>
@@ -151,11 +302,12 @@ const FechamentoEtiquetasAddon: React.FC = () => {
         <Button type="button" size="sm" variant="outline" onClick={() => setArchiveOpen(true)}>
           <FileText className="mr-1 h-3.5 w-3.5" /> Capa para arquivar
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={printFolderLabels}>
+        <Button type="button" size="sm" variant="outline" onClick={openFolderDialog}>
           <Tags className="mr-1 h-3.5 w-3.5" /> Etiqueta pasta A-Z
         </Button>
       </>, portalHost)}
       <ArchiveCoverDialog open={archiveOpen} onOpenChange={setArchiveOpen} />
+      {folderDialog}
     </>
   );
 };
