@@ -6,6 +6,7 @@ import AssistenteFab from '@/components/assistente/AssistenteFab';
 import EmployeeSmartEditOverlay from '@/components/EmployeeSmartEditOverlay';
 import EpiSemestralAlert from '@/components/EpiSemestralAlert';
 import ArchiveCoverDialog from '@/components/ArchiveCoverDialog';
+import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -146,6 +147,7 @@ const AppLayout: React.FC = () => {
           </div>
         </div>
       )}
+      <FechamentoEtiquetasAddon />
       <ArchiveCoverDialog open={archiveCoverOpen} onOpenChange={setArchiveCoverOpen} />
       <EmployeeSmartEditOverlay />
       <AssistenteFab />
