@@ -67,17 +67,19 @@ const FechamentoEtiquetasAddon: React.FC = () => {
     };
   }, [companies, location.pathname]);
 
-  const activeEmployees = useMemo(() => employees
-    .filter((employee) => employee.companyId === companyId)
-    .filter((employee) => employee.categoria === 'operacional')
+  const activeRhEmployees = useMemo(() => employees
     .filter((employee) => !['desligado', 'excluido'].includes(employee.status))
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })), [companyId, employees]);
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })), [employees]);
+
+  const activeEmployees = useMemo(() => activeRhEmployees
+    .filter((employee) => employee.companyId === companyId)
+    .filter((employee) => employee.categoria === 'operacional'), [activeRhEmployees, companyId]);
 
   const shortName = (employee: typeof activeEmployees[number]) => {
     const parts = employee.name.trim().split(/\s+/).filter(Boolean);
     const rawFirst = parts[0] || employee.name;
     const first = rawFirst.toLocaleUpperCase('pt-BR');
-    const sameFirst = activeEmployees.filter((item) => {
+    const sameFirst = activeRhEmployees.filter((item) => {
       const itemFirst = item.name.trim().split(/\s+/)[0] || '';
       return itemFirst.localeCompare(rawFirst, 'pt-BR', { sensitivity: 'base' }) === 0;
     });
@@ -117,7 +119,7 @@ const FechamentoEtiquetasAddon: React.FC = () => {
   </style>
 </head>
 <body>
-  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${activeEmployees.length} funcionários • etiqueta 2,5 × 1 cm • nome ajustado automaticamente • ordem alfabética</span></div>
+  <div class="toolbar"><button onclick="window.print()">Imprimir / salvar PDF</button><span>${activeEmployees.length} funcionários • etiqueta 2,5 × 1 cm • nomes iguais diferenciados pelo RH completo • ordem alfabética</span></div>
   <main class="sheet">${labels}</main>
   <script>
     (() => {
