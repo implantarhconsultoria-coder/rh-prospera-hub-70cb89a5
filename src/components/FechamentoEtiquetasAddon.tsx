@@ -30,7 +30,7 @@ const FechamentoEtiquetasAddon: React.FC = () => {
   const [folderMode, setFolderMode] = useState<FolderPrintMode>('company');
   const [folderQuery, setFolderQuery] = useState('');
   const [folderEmployeeId, setFolderEmployeeId] = useState('');
-  const [folderCompanyId, setFolderCompanyId] = useState('');
+  const [folderCompanyIds, setFolderCompanyIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (location.pathname !== '/admin/fechamento') {
@@ -98,13 +98,25 @@ const FechamentoEtiquetasAddon: React.FC = () => {
       .slice(0, 20);
   }, [companies, folderQuery, printableRhEmployees]);
 
+  const companyEmployeeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    printableRhEmployees.forEach((employee) => {
+      if (employee.companyId) counts[employee.companyId] = (counts[employee.companyId] || 0) + 1;
+    });
+    return counts;
+  }, [printableRhEmployees]);
+
+  const selectableCompanyIds = useMemo(() => sortedCompanies
+    .filter((company) => (companyEmployeeCounts[company.id] || 0) > 0)
+    .map((company) => company.id), [companyEmployeeCounts, sortedCompanies]);
+
   const targetFolderEmployees = useMemo(() => {
     if (folderMode === 'employee') return selectedFolderEmployee ? [selectedFolderEmployee] : [];
-    if (folderMode === 'company') return folderCompanyId
-      ? printableRhEmployees.filter((employee) => employee.companyId === folderCompanyId)
+    if (folderMode === 'company') return folderCompanyIds.length
+      ? printableRhEmployees.filter((employee) => !!employee.companyId && folderCompanyIds.includes(employee.companyId))
       : [];
     return printableRhEmployees;
-  }, [folderCompanyId, folderMode, printableRhEmployees, selectedFolderEmployee]);
+  }, [folderCompanyIds, folderMode, printableRhEmployees, selectedFolderEmployee]);
 
   const shortName = (employee: typeof printableRhEmployees[number]) => {
     const parts = employee.name.trim().split(/\s+/).filter(Boolean);
@@ -121,7 +133,7 @@ const FechamentoEtiquetasAddon: React.FC = () => {
 
   const openFolderDialog = () => {
     setFolderMode('company');
-    setFolderCompanyId(companyId || '');
+    setFolderCompanyIds(companyId && selectableCompanyIds.includes(companyId) ? [companyId] : []);
     setFolderQuery('');
     setFolderEmployeeId('');
     setFolderOpen(true);
@@ -131,13 +143,21 @@ const FechamentoEtiquetasAddon: React.FC = () => {
     setFolderMode(mode);
     setFolderQuery('');
     setFolderEmployeeId('');
-    if (mode === 'company' && !folderCompanyId) setFolderCompanyId(companyId || '');
+    if (mode === 'company' && folderCompanyIds.length === 0 && companyId && selectableCompanyIds.includes(companyId)) {
+      setFolderCompanyIds([companyId]);
+    }
+  };
+
+  const toggleFolderCompany = (selectedCompanyId: string) => {
+    setFolderCompanyIds((current) => current.includes(selectedCompanyId)
+      ? current.filter((id) => id !== selectedCompanyId)
+      : [...current, selectedCompanyId]);
   };
 
   const printFolderLabels = () => {
     if (!targetFolderEmployees.length) {
       if (folderMode === 'employee') return toast.error('Selecione um funcionário.');
-      if (folderMode === 'company') return toast.error('Selecione uma empresa com funcionários ativos.');
+      if (folderMode === 'company') return toast.error('Selecione uma ou mais empresas com funcionários ativos.');
       return toast.error('Nenhum funcionário ativo disponível para imprimir.');
     }
 
@@ -147,11 +167,14 @@ const FechamentoEtiquetasAddon: React.FC = () => {
       <section class="folder-label"><strong>${escapeHtml(shortName(employee))}</strong></section>
     `).join('');
 
-    const selectedCompanyName = companies.find((item) => item.id === folderCompanyId)?.name || 'Empresa';
+    const selectedCompanies = sortedCompanies.filter((company) => folderCompanyIds.includes(company.id));
+    const selectedCompanyTitle = selectedCompanies.length === 1
+      ? selectedCompanies[0].name
+      : `${selectedCompanies.length} empresas`;
     const title = folderMode === 'employee'
       ? `Etiqueta pasta - ${ordered[0]?.name || 'Funcionário'}`
       : folderMode === 'company'
-        ? `Etiquetas pasta - ${selectedCompanyName}`
+        ? `Etiquetas pasta - ${selectedCompanyTitle}`
         : 'Etiquetas pasta - Todos os funcionários';
 
     const win = window.open('', '_blank');
@@ -217,8 +240,8 @@ const FechamentoEtiquetasAddon: React.FC = () => {
             </button>
             <button type="button" onClick={() => changeFolderMode('company')} className={`rounded-lg border p-3 text-left transition ${folderMode === 'company' ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}>
               <Building2 className="mb-2 h-5 w-5" />
-              <strong className="block text-sm">Por empresa</strong>
-              <span className="text-xs text-muted-foreground">Todos da empresa em A-Z</span>
+              <strong className="block text-sm">Por empresas</strong>
+              <span className="text-xs text-muted-foreground">Marque 1, 2, 3 ou mais empresas</span>
             </button>
             <button type="button" onClick={() => changeFolderMode('all')} className={`rounded-lg border p-3 text-left transition ${folderMode === 'all' ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}>
               <Layers3 className="mb-2 h-5 w-5" />
@@ -263,13 +286,38 @@ const FechamentoEtiquetasAddon: React.FC = () => {
           )}
 
           {folderMode === 'company' && (
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-muted-foreground">Empresa</label>
-              <select value={folderCompanyId} onChange={(event) => setFolderCompanyId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
-                <option value="">Selecione a empresa</option>
-                {sortedCompanies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-              </select>
-              {!!folderCompanyId && <p className="text-xs text-muted-foreground"><strong>{targetFolderEmployees.length}</strong> funcionário(s) ativos serão impressos em ordem alfabética.</p>}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-muted-foreground">Selecione uma ou mais empresas</label>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => setFolderCompanyIds(selectableCompanyIds)}>Selecionar todas</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setFolderCompanyIds([])}>Limpar</Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {sortedCompanies.map((company) => {
+                  const count = companyEmployeeCounts[company.id] || 0;
+                  const checked = folderCompanyIds.includes(company.id);
+                  return (
+                    <label key={company.id} className={`flex items-center gap-3 rounded-lg border p-3 ${count ? 'cursor-pointer hover:bg-muted/50' : 'cursor-not-allowed opacity-50'} ${checked ? 'border-primary bg-primary/5' : ''}`}>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={checked}
+                        disabled={!count}
+                        onChange={() => toggleFolderCompany(company.id)}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-sm">{company.name}</strong>
+                        <span className="text-xs text-muted-foreground">{count} funcionário(s) ativo(s)</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                <strong>{folderCompanyIds.length}</strong> empresa(s) selecionada(s) • <strong>{targetFolderEmployees.length}</strong> funcionário(s) serão reunidos em uma única sequência A-Z.
+              </p>
             </div>
           )}
 
