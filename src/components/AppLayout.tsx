@@ -5,11 +5,12 @@ import AdminMobileLayout from '@/components/AdminMobileLayout';
 import AssistenteFab from '@/components/assistente/AssistenteFab';
 import EmployeeSmartEditOverlay from '@/components/EmployeeSmartEditOverlay';
 import EpiSemestralAlert from '@/components/EpiSemestralAlert';
+import ArchiveCoverDialog from '@/components/ArchiveCoverDialog';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
-import { Search, RefreshCw, Circle, X, Building2, User, FileText } from 'lucide-react';
+import { Archive, Search, RefreshCw, Circle, X, Building2, User, FileText } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import StableLoading from '@/components/StableLoading';
@@ -25,6 +26,7 @@ const AppLayout: React.FC = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [archiveCoverOpen, setArchiveCoverOpen] = useState(false);
   const { session, userRole, userRoles, roleLoading, companies, employees, refreshData, refreshEntries } = useApp();
   const isMobile = useIsMobile();
   const location = useLocation();
@@ -118,6 +120,7 @@ const AppLayout: React.FC = () => {
           </div>
           <div className="flex items-center gap-4 text-[11px] text-sky-100/80">
             <button onClick={() => setSearchOpen(true)} className="inline-flex items-center gap-2 hover:text-emerald-300"><Search className="h-3.5 w-3.5" />Buscar / executar</button>
+            {userRole === 'admin' && <button onClick={() => setArchiveCoverOpen(true)} className="inline-flex items-center gap-2 hover:text-emerald-300"><Archive className="h-3.5 w-3.5" />Capa para arquivar</button>}
             <button onClick={handleRefresh} disabled={refreshing} className="inline-flex items-center gap-2 hover:text-emerald-300 disabled:opacity-60"><RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />Atualizar</button>
             <ModuleSwitcher />
           </div>
@@ -143,6 +146,7 @@ const AppLayout: React.FC = () => {
           </div>
         </div>
       )}
+      <ArchiveCoverDialog open={archiveCoverOpen} onOpenChange={setArchiveCoverOpen} />
       <EmployeeSmartEditOverlay />
       <AssistenteFab />
     </div>
