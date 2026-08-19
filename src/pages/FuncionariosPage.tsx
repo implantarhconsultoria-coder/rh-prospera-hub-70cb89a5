@@ -10,6 +10,7 @@ import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { formatCurrency } from '@/lib/calculations';
 import { upsertFuncionarioBase, onlyDigits } from '@/lib/funcionariosBase';
 import BankingDataEditor from '@/components/BankingDataEditor';
+import BulkBankingDataEditor from '@/components/BulkBankingDataEditor';
 import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
 import { emptyBankingData, type BankingData } from '@/lib/bankingParser';
 import type { EmployeeSmartData } from '@/lib/smartTextParser';
@@ -83,6 +84,7 @@ const FuncionariosPage: React.FC = () => {
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [newEmp, setNewEmp] = useState(emptyEmployee());
+  const [bulkBankOpen, setBulkBankOpen] = useState(false);
 
   const [bankEmployeeId, setBankEmployeeId] = useState<string | null>(null);
   const [bankData, setBankData] = useState<BankingData>(emptyBankingData());
@@ -237,9 +239,12 @@ const FuncionariosPage: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1>
-        <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground"><UserPlus className="mr-2 h-4 w-4" /> Novo Funcionário</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => setBulkBankOpen(true)}><Landmark className="mr-2 h-4 w-4" /> Dados bancários em massa</Button>
+          <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground"><UserPlus className="mr-2 h-4 w-4" /> Novo Funcionário</Button>
+        </div>
       </div>
 
       {showNew && (
@@ -281,6 +286,8 @@ const FuncionariosPage: React.FC = () => {
         })}
       </div>
       {!filtered.length && <div className="card-premium p-10 text-center text-sm text-muted-foreground">Nenhum funcionário encontrado.</div>}
+
+      <BulkBankingDataEditor open={bulkBankOpen} onOpenChange={setBulkBankOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
 
       <Dialog open={!!bankEmployeeId} onOpenChange={(open) => !open && setBankEmployeeId(null)}>
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto"><DialogHeader><DialogTitle>Dados bancários — {bankEmployee?.name}</DialogTitle></DialogHeader>{loadingBank ? <div className="p-10 text-center">Carregando...</div> : <BankingDataEditor value={bankData} onChange={setBankData} defaultHolder={bankEmployee?.name} defaultCpf={bankEmployee?.cpf} />}<DialogFooter><Button variant="outline" onClick={() => setBankEmployeeId(null)}>Cancelar</Button><Button onClick={() => void saveBanking()} disabled={savingBank}><Save className="mr-2 h-4 w-4" /> {savingBank ? 'Salvando...' : 'Salvar após revisão'}</Button></DialogFooter></DialogContent>
