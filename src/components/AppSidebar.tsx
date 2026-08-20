@@ -17,6 +17,7 @@ interface MenuItem { label: string; icon: React.ElementType; path: string }
 const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
+  { label: 'Funcionarios', icon: Users, path: '/admin/funcionarios' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
   { label: 'Fechamentos das Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
