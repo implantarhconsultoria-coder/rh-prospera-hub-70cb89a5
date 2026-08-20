@@ -9,7 +9,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
 const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
 const CabinetLabelsAddon = lazy(() => import("@/components/CabinetLabelsAddon"));
-const TicketVrPortalAddon = lazy(() => import("@/components/TicketVrPortalAddon"));
+const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPageAddon"));
 
 const MOBILE_BUILD_TAG = "20260817-performance-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
@@ -63,15 +63,16 @@ const RouteEnhancers = () => {
   }, []);
 
   const isFechamento = path.includes('/admin/fechamento');
+  const isRelatorioVr = path.includes('/admin/relatorio-vr');
   const isEpi = path.includes('/admin/epi');
 
-  if (!isFechamento && !isEpi) return null;
+  if (!isFechamento && !isRelatorioVr && !isEpi) return null;
 
   return (
     <Suspense fallback={null}>
       {isFechamento && <PayrollPdfConsolidatorMount />}
       {isFechamento && <CabinetLabelsAddon />}
-      {isFechamento && <TicketVrPortalAddon />}
+      {isRelatorioVr && <TicketVrReportPageAddon />}
       {isEpi && <EpiBulkPrintEnhancer />}
     </Suspense>
   );
