@@ -97,6 +97,98 @@ export const extractPdfLines = async (source: Uint8Array | string): Promise<stri
 export const extractPdfTextByLines = async (source: Uint8Array | string): Promise<string> =>
   (await extractPdfLines(source)).join('\n').trim();
 
+export type EmployeeRowCrop = { pageNumber: number; order: number; dataUrl: string };
+
+/**
+ * Rasteriza cada linha de funcionário do relatório "Funcionários Gerais" em alta
+ * resolução. A camada de texto é usada apenas para localizar a linha; os valores
+ * visuais de CPF e nascimento são capturados da imagem renderizada do PDF.
+ * O recorte inclui nome + nascimento + CPF para manter a associação correta.
+ */
+export const renderPdfEmployeeRowCrops = async (
+  source: Uint8Array | string,
+  scale = 4.5,
+  maxPages = 12,
+): Promise<EmployeeRowCrop[]> => {
+  const bytes = await getPdfBytes(source);
+  const pdf = await loadPdfDocumentForRender(clonePdfBytes(bytes));
+  const crops: EmployeeRowCrop[] = [];
+  const pagesToRender = Math.min(pdf.numPages, maxPages);
+  let order = 0;
+
+  for (let pageNumber = 1; pageNumber <= pagesToRender; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const items = (textContent.items as any[]) || [];
+
+    const buckets = new Map<string, Array<{ x: number; y: number; text: string; height: number }>>();
+    for (const item of items) {
+      const text = ('str' in item ? String(item.str || '') : '').trim();
+      if (!text) continue;
+      const x = Number(item.transform?.[4] ?? 0);
+      const y = Number(item.transform?.[5] ?? 0);
+      const height = Math.abs(Number(item.transform?.[3] ?? 10)) || 10;
+      const key = (Math.round(y * 2) / 2).toFixed(1);
+      const list = buckets.get(key) || [];
+      list.push({ x, y, text, height });
+      buckets.set(key, list);
+    }
+
+    const lines = [...buckets.entries()]
+      .map(([key, grouped]) => {
+        const sorted = grouped.slice().sort((a, b) => a.x - b.x);
+        return {
+          y: Number(key),
+          height: Math.max(...sorted.map((entry) => entry.height), 8),
+          text: sorted.map((entry) => entry.text).join(' ').replace(/\s+/g, ' ').trim(),
+          items: sorted,
+        };
+      })
+      .filter((line) => /Nome\s*:/i.test(line.text) && /Data\s+de\s+Nascimento\s*:/i.test(line.text))
+      .sort((a, b) => b.y - a.y);
+
+    if (!lines.length) continue;
+
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Não foi possível renderizar o PDF');
+
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    await page.render({ canvasContext: context, viewport, canvas } as any).promise;
+
+    for (const line of lines) {
+      const firstX = Math.min(...line.items.map((entry) => entry.x));
+      const [cropLeft, cropCenterY] = viewport.convertToViewportPoint
+        ? viewport.convertToViewportPoint(firstX, line.y)
+        : [firstX * scale, viewport.height - line.y * scale];
+
+      const bandHeight = Math.max(line.height * scale * 2.8, 86);
+      const top = Math.max(0, Math.round(cropCenterY - bandHeight * 0.72));
+      const height = Math.min(canvas.height - top, Math.round(bandHeight));
+      const left = Math.max(0, Math.round(cropLeft - 10 * scale));
+      const width = Math.max(1, canvas.width - left);
+      if (height <= 2 || width <= 2) continue;
+
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = width;
+      cropCanvas.height = height;
+      const cropContext = cropCanvas.getContext('2d');
+      if (!cropContext) continue;
+
+      cropContext.fillStyle = '#ffffff';
+      cropContext.fillRect(0, 0, width, height);
+      cropContext.drawImage(canvas, left, top, width, height, 0, 0, width, height);
+
+      order += 1;
+      crops.push({ pageNumber, order, dataUrl: cropCanvas.toDataURL('image/png') });
+    }
+  }
+
+  return crops;
+};
+
 export const renderPdfPagesToDataUrls = async (
   source: Uint8Array | string,
   scale = 1.35,
@@ -105,6 +197,28 @@ export const renderPdfPagesToDataUrls = async (
   const bytes = await getPdfBytes(source);
   const pdfBytes = clonePdfBytes(bytes);
   const pdf = await loadPdfDocumentForRender(pdfBytes);
+
+  // Para o relatório de funcionários, OCR da página inteira perde justamente os
+  // números pequenos. Quando as linhas forem detectadas, entregamos ao OCR uma
+  // imagem de alta resolução por funcionário. O importador existente continua
+  // fazendo a associação em ordem e só preenche campos que estiverem vazios.
+  try {
+    const employeeRows = await renderPdfEmployeeRowCrops(
+      bytes,
+      Math.max(4.5, scale),
+      Math.min(Number.isFinite(maxPages) ? maxPages : pdf.numPages, 12),
+    );
+    if (employeeRows.length > 0) {
+      return {
+        bytes,
+        pageCount: pdf.numPages,
+        pageUrls: employeeRows.map((row) => row.dataUrl),
+      };
+    }
+  } catch {
+    // Se o documento não for deste modelo, preserva o comportamento genérico.
+  }
+
   const pageUrls: string[] = [];
   const pagesToRender = Math.min(pdf.numPages, maxPages);
 
@@ -130,98 +244,4 @@ export const renderPdfPagesToDataUrls = async (
     pageCount: pdf.numPages,
     pageUrls,
   };
-};
-
-export type EmployeeRowCrop = { pageNumber: number; order: number; dataUrl: string };
-
-/**
- * Rasteriza APENAS as faixas horizontais das linhas de funcionários do relatório
- * "Funcionários Gerais". Usa a camada de texto (que contém os rótulos "Nome:" e
- * "Data de Nascimento:") como âncora de posição, e recorta a imagem da página
- * renderizada em alta escala a partir do rótulo "Data de Nascimento" até a borda
- * direita — região onde os números aparecem desenhados como vetores.
- * Retorna os recortes em ordem visual: página por página, de cima para baixo.
- */
-export const renderPdfEmployeeRowCrops = async (
-  source: Uint8Array | string,
-  scale = 4,
-  maxPages = 12,
-): Promise<EmployeeRowCrop[]> => {
-  const bytes = await getPdfBytes(source);
-  const pdf = await loadPdfDocumentForRender(clonePdfBytes(bytes));
-  const crops: EmployeeRowCrop[] = [];
-  const pagesToRender = Math.min(pdf.numPages, maxPages);
-  let order = 0;
-
-  for (let pageNumber = 1; pageNumber <= pagesToRender; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const items = (textContent.items as any[]) || [];
-
-    // agrupa itens por baseline Y (PDF coords, y-up)
-    const buckets = new Map<string, Array<{ x: number; y: number; text: string; height: number }>>();
-    for (const item of items) {
-      const text = ('str' in item ? String(item.str || '') : '').trim();
-      if (!text) continue;
-      const x = Number(item.transform?.[4] ?? 0);
-      const y = Number(item.transform?.[5] ?? 0);
-      const height = Math.abs(Number(item.transform?.[3] ?? 10)) || 10;
-      const key = (Math.round(y * 2) / 2).toFixed(1);
-      const list = buckets.get(key) || [];
-      list.push({ x, y, text, height });
-      buckets.set(key, list);
-    }
-
-    const lines = [...buckets.entries()]
-      .map(([key, grouped]) => {
-        const sorted = grouped.slice().sort((a, b) => a.x - b.x);
-        return {
-          y: Number(key),
-          height: Math.max(...sorted.map((entry) => entry.height), 8),
-          text: sorted.map((entry) => entry.text).join(' ').replace(/\s+/g, ' ').trim(),
-          items: sorted,
-        };
-      })
-      .filter((line) => /Nome\s*:/i.test(line.text) && /Data\s+de\s+Nascimento\s*:/i.test(line.text))
-      .sort((a, b) => b.y - a.y); // topo -> base
-
-    if (!lines.length) continue;
-
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Não foi possível renderizar o PDF');
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    await page.render({ canvasContext: context, viewport, canvas } as any).promise;
-
-    for (const line of lines) {
-      const anchor = line.items.find((entry) => /Data\s*de\s*Nascimento/i.test(entry.text))
-        || line.items.find((entry) => /Nascimento/i.test(entry.text));
-      const startXPdf = anchor ? anchor.x : 0;
-      const [cropLeft, cropCenterY] = viewport.convertToViewportPoint
-        ? viewport.convertToViewportPoint(startXPdf, line.y)
-        : [startXPdf * scale, viewport.height - line.y * scale];
-
-      const bandHeight = Math.max(line.height * scale * 2.2, 34 * (scale / 2));
-      const top = Math.max(0, Math.round(cropCenterY - bandHeight * 0.72));
-      const height = Math.min(canvas.height - top, Math.round(bandHeight));
-      const left = Math.max(0, Math.round(cropLeft - 6 * scale));
-      const width = Math.max(1, canvas.width - left);
-      if (height <= 2 || width <= 2) continue;
-
-      const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = width;
-      cropCanvas.height = height;
-      const cropContext = cropCanvas.getContext('2d');
-      if (!cropContext) continue;
-      cropContext.fillStyle = '#ffffff';
-      cropContext.fillRect(0, 0, width, height);
-      cropContext.drawImage(canvas, left, top, width, height, 0, 0, width, height);
-      order += 1;
-      crops.push({ pageNumber, order, dataUrl: cropCanvas.toDataURL('image/png') });
-    }
-  }
-
-  return crops;
 };
