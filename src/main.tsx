@@ -9,6 +9,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
 const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
 const CabinetLabelsAddon = lazy(() => import("@/components/CabinetLabelsAddon"));
+const TicketVrPortalAddon = lazy(() => import("@/components/TicketVrPortalAddon"));
 
 const MOBILE_BUILD_TAG = "20260817-performance-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
@@ -70,6 +71,7 @@ const RouteEnhancers = () => {
     <Suspense fallback={null}>
       {isFechamento && <PayrollPdfConsolidatorMount />}
       {isFechamento && <CabinetLabelsAddon />}
+      {isFechamento && <TicketVrPortalAddon />}
       {isEpi && <EpiBulkPrintEnhancer />}
     </Suspense>
   );
