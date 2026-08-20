@@ -439,8 +439,10 @@ const BulkEmployeeDataImporter: React.FC<Props> = ({ open, onOpenChange, employe
     setProcessing(false);
     setProgress('');
 
-    if (pendingRows.length) {
-      toast.success(`${pendingRows.length} cadastro(s) com dados prontos para preencher.`);
+    const prontos = nextRows.filter((row) => row.matchStatus === 'matched' && (row.cpfAction === 'fill' || row.birthAction === 'fill')).length;
+
+    if (prontos) {
+      toast.success(`${prontos} cadastro(s) com dados prontos para preencher.`);
     } else if (nextRows.length || completeCount) {
       toast.success('Leitura concluída. Confira os dados encontrados.');
     }
