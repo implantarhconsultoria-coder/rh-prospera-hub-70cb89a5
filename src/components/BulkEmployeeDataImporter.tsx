@@ -32,6 +32,7 @@ type Props = {
 
 type TesseractWorker = {
   recognize: (image: string) => Promise<{ data: { text: string } }>;
+  setParameters?: (params: Record<string, unknown>) => Promise<unknown>;
   terminate: () => Promise<unknown>;
 };
 
