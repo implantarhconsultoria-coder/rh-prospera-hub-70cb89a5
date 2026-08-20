@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Check, KeyRound, Landmark, Save, Search, ShieldCheck, UserPlus, X } from 'lucide-react';
+import { Check, KeyRound, Landmark, Save, Search, ShieldCheck, Upload, UserPlus, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { upsertFuncionarioBase, onlyDigits } from '@/lib/funcionariosBase';
 import BankingDataEditor from '@/components/BankingDataEditor';
 import BulkBankingDataEditor from '@/components/BulkBankingDataEditor';
+import BulkEmployeeDataImporter from '@/components/BulkEmployeeDataImporter';
 import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
 import { emptyBankingData, type BankingData } from '@/lib/bankingParser';
 import type { EmployeeSmartData } from '@/lib/smartTextParser';
@@ -85,6 +86,7 @@ const FuncionariosPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [newEmp, setNewEmp] = useState(emptyEmployee());
   const [bulkBankOpen, setBulkBankOpen] = useState(false);
+  const [bulkEmployeeOpen, setBulkEmployeeOpen] = useState(false);
 
   const [bankEmployeeId, setBankEmployeeId] = useState<string | null>(null);
   const [bankData, setBankData] = useState<BankingData>(emptyBankingData());
@@ -242,6 +244,7 @@ const FuncionariosPage: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1>
         <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => setBulkEmployeeOpen(true)}><Upload className="mr-2 h-4 w-4" /> Upload para atualizar cadastros</Button>
           <Button type="button" variant="outline" onClick={() => setBulkBankOpen(true)}><Landmark className="mr-2 h-4 w-4" /> Dados bancários em massa</Button>
           <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground"><UserPlus className="mr-2 h-4 w-4" /> Novo Funcionário</Button>
         </div>
@@ -287,6 +290,7 @@ const FuncionariosPage: React.FC = () => {
       </div>
       {!filtered.length && <div className="card-premium p-10 text-center text-sm text-muted-foreground">Nenhum funcionário encontrado.</div>}
 
+      <BulkEmployeeDataImporter open={bulkEmployeeOpen} onOpenChange={setBulkEmployeeOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
       <BulkBankingDataEditor open={bulkBankOpen} onOpenChange={setBulkBankOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
 
       <Dialog open={!!bankEmployeeId} onOpenChange={(open) => !open && setBankEmployeeId(null)}>
@@ -294,7 +298,7 @@ const FuncionariosPage: React.FC = () => {
       </Dialog>
 
       <Dialog open={!!accessEmployeeId} onOpenChange={(open) => !open && setAccessEmployeeId(null)}>
-        <DialogContent className="max-w-xl"><DialogHeader><DialogTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Módulos — {accessEmployee?.name}</DialogTitle></DialogHeader>{loadingAccess ? <div className="p-10 text-center">Carregando...</div> : <div className="space-y-2">{MODULOS.map((item) => { const active = activeModules.includes(item.modulo); return <button key={item.modulo} type="button" onClick={() => setActiveModules((current) => active ? current.filter((value) => value !== item.modulo) : [...current, item.modulo])} className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left ${active ? 'border-primary bg-primary/5' : ''}`}><span className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border ${active ? 'border-primary bg-primary text-primary-foreground' : ''}`}>{active && <Check className="h-3.5 w-3.5" />}</span><span><span className="block text-sm font-semibold">{item.label}</span><span className="text-xs text-muted-foreground">{item.descricao}</span></span></button>; })}</div>}<DialogFooter><Button variant="outline" onClick={() => setAccessEmployeeId(null)}>Cancelar</Button><Button onClick={() => void saveAccess()} disabled={savingAccess}>{savingAccess ? 'Salvando...' : 'Salvar módulos'}</Button></DialogFooter></DialogContent>
+        <DialogContent className="max-w-xl"><DialogHeader><DialogTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Módulos — {accessEmployee?.name}</DialogTitle></DialogHeader>{loadingAccess ? <div className="p-10 text-center">Carregando...</div> : <div className="space-y-2">{MODULOS.map((item) => { const active = activeModules.includes(item.modulo); return <button key={item.modulo} type="button" onClick={() => setActiveModules((current) => active ? current.filter((value) => value !== item.modulo) : [...current, item.modulo])} className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left ${active ? 'border-primary bg-primary text-primary-foreground' : ''}`}><span className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border ${active ? 'border-primary bg-primary text-primary-foreground' : ''}`}>{active && <Check className="h-3.5 w-3.5" />}</span><span><span className="block text-sm font-semibold">{item.label}</span><span className="text-xs text-muted-foreground">{item.descricao}</span></span></button>; })}</div>}<DialogFooter><Button variant="outline" onClick={() => setAccessEmployeeId(null)}>Cancelar</Button><Button onClick={() => void saveAccess()} disabled={savingAccess}>{savingAccess ? 'Salvando...' : 'Salvar módulos'}</Button></DialogFooter></DialogContent>
       </Dialog>
     </div>
   );
