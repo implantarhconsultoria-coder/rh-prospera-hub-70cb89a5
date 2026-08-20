@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { extractPdfTextByLines, renderPdfPagesToDataUrls } from '@/lib/pdf';
+import { extractPdfTextByLines, renderPdfEmployeeRowCrops, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import type { Company, Employee } from '@/types/database';
 import { toast } from 'sonner';
 
@@ -32,6 +32,7 @@ type Props = {
 
 type TesseractWorker = {
   recognize: (image: string) => Promise<{ data: { text: string } }>;
+  setParameters?: (params: Record<string, unknown>) => Promise<unknown>;
   terminate: () => Promise<unknown>;
 };
 
@@ -230,6 +231,28 @@ const mergeLocalOcr = (base: ParsedPerson[], ocrText: string): ParsedPerson[] =>
     birthDate: person.birthDate || (datesAligned ? dates[index] || '' : ''),
   }));
 };
+
+// Extrai de UM recorte de linha exatamente uma data plausível e um CPF válido.
+const parseRowCropText = (text: string) => {
+  const flat = String(text || '').replace(/\s+/g, ' ');
+  let birthDate = '';
+  for (const raw of flat.match(/\b\d{1,2}\s*[\/.\-]\s*\d{1,2}\s*[\/.\-]\s*\d{4}\b/g) || []) {
+    const iso = normalizeDate(raw.replace(/\s+/g, ''));
+    if (isPlausibleBirth(iso)) { birthDate = iso; break; }
+  }
+  let cpf = '';
+  for (const raw of flat.match(/\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}\b/g) || []) {
+    const value = formatCpf(raw);
+    if (value) { cpf = value; break; }
+  }
+  return { birthDate, cpf };
+};
+
+// Nome de empresa sem sufixos societários: "ALQUI OBRAS LTDA" casa com "ALQUI OBRAS".
+const normalizeCompanyName = (value: unknown) => normalizeText(value)
+  .replace(/\b(LTDA|ME|EPP|EIRELI|S A|SA|SS|CIA|COMPANHIA)\b/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
 
 const actionForCpf = (current: string, source: string): ImportRow['cpfAction'] => current ? 'same' : source ? 'fill' : 'missing-source';
