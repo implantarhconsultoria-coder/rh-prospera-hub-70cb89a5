@@ -232,6 +232,28 @@ const mergeLocalOcr = (base: ParsedPerson[], ocrText: string): ParsedPerson[] =>
   }));
 };
 
+// Extrai de UM recorte de linha exatamente uma data plausível e um CPF válido.
+const parseRowCropText = (text: string) => {
+  const flat = String(text || '').replace(/\s+/g, ' ');
+  let birthDate = '';
+  for (const raw of flat.match(/\b\d{1,2}\s*[\/.\-]\s*\d{1,2}\s*[\/.\-]\s*\d{4}\b/g) || []) {
+    const iso = normalizeDate(raw.replace(/\s+/g, ''));
+    if (isPlausibleBirth(iso)) { birthDate = iso; break; }
+  }
+  let cpf = '';
+  for (const raw of flat.match(/\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}\b/g) || []) {
+    const value = formatCpf(raw);
+    if (value) { cpf = value; break; }
+  }
+  return { birthDate, cpf };
+};
+
+// Nome de empresa sem sufixos societários: "ALQUI OBRAS LTDA" casa com "ALQUI OBRAS".
+const normalizeCompanyName = (value: unknown) => normalizeText(value)
+  .replace(/\b(LTDA|ME|EPP|EIRELI|S A|SA|SS|CIA|COMPANHIA)\b/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 
 const actionForCpf = (current: string, source: string): ImportRow['cpfAction'] => current ? 'same' : source ? 'fill' : 'missing-source';
 const actionForBirth = (current: string, source: string): ImportRow['birthAction'] => current ? 'same' : source ? 'fill' : 'missing-source';
