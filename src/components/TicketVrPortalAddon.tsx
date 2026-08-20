@@ -27,7 +27,18 @@ const TicketVrPortalAddon: React.FC = () => {
   }, []);
 
   if (!host) return null;
-  return createPortal(<TicketVrModule />, host);
+  return createPortal(
+    <div className="space-y-2">
+      <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+        <p className="text-xs font-bold uppercase text-primary">Saída da Plataforma TOPAC</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          A Plataforma TOPAC gera o relatório PDF e o arquivo TXT no modelo oficial da Ticket para você exportar. Não existe importação de arquivo Ticket para dentro da TOPAC neste fluxo.
+        </p>
+      </div>
+      <TicketVrModule />
+    </div>,
+    host,
+  );
 };
 
 export default TicketVrPortalAddon;
