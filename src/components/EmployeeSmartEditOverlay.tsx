@@ -50,41 +50,37 @@ const EmployeeSmartEditOverlay: React.FC = () => {
 
   useEffect(() => {
     setBirthDate(String((employee as any)?.dataNascimento || ''));
-  }, [employeeId, (employee as any)?.dataNascimento]);
+  }, [employeeId, employee]);
 
   useEffect(() => {
-    if (!employeeId) {
-      setBirthTarget(null);
-      return;
-    }
+    setBirthTarget(null);
+    if (!employeeId) return;
 
-    const ensureBirthSlot = () => {
+    let disposed = false;
+    const findCpfField = () => {
+      if (disposed) return false;
       const cpfLabel = Array.from(document.querySelectorAll('label')).find((node) =>
         node.textContent?.trim() === 'CPF' && Boolean(node.closest('.card-premium')),
       );
-      const cpfField = cpfLabel?.parentElement;
-      const grid = cpfField?.parentElement;
-      if (!cpfField || !grid) return;
-
-      let slot = grid.querySelector<HTMLElement>('[data-employee-birth-date-slot="true"]');
-      if (!slot) {
-        slot = document.createElement('div');
-        slot.dataset.employeeBirthDateSlot = 'true';
-        grid.insertBefore(slot, cpfField.nextSibling);
-      }
-      setBirthTarget(slot);
+      const cpfField = cpfLabel?.parentElement as HTMLElement | null;
+      if (!cpfField) return false;
+      setBirthTarget(cpfField);
+      return true;
     };
 
-    ensureBirthSlot();
-    const observer = new MutationObserver(ensureBirthSlot);
+    if (findCpfField()) return () => { disposed = true; setBirthTarget(null); };
+
+    const observer = new MutationObserver(() => {
+      if (findCpfField()) observer.disconnect();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
+      disposed = true;
       observer.disconnect();
-      document.querySelectorAll('[data-employee-birth-date-slot="true"]').forEach((node) => node.remove());
       setBirthTarget(null);
     };
-  }, [employeeId]);
+  }, [employeeId, location.pathname]);
 
   const saveBirthDate = async () => {
     if (!employeeId || !employee || savingBirthDate) return;
@@ -243,7 +239,7 @@ const EmployeeSmartEditOverlay: React.FC = () => {
   return (
     <>
       {birthTarget && createPortal(
-        <>
+        <div className="mt-3" data-employee-birth-date="true">
           <label className="text-xs text-muted-foreground block mb-1">Data de Nascimento</label>
           <Input
             type="date"
@@ -253,7 +249,7 @@ const EmployeeSmartEditOverlay: React.FC = () => {
             disabled={savingBirthDate}
             className="text-sm"
           />
-        </>,
+        </div>,
         birthTarget,
       )}
       <Button type="button" onClick={() => setOpen(true)} className="fixed bottom-6 right-24 z-40 gap-2 shadow-xl no-print">
