@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AppProvider } from '@/context/AppContext';
 import TicketVrModule from '@/components/TicketVrModule';
 
 const TicketVrPortalAddon: React.FC = () => {
@@ -28,7 +27,7 @@ const TicketVrPortalAddon: React.FC = () => {
   }, []);
 
   if (!host) return null;
-  return createPortal(<AppProvider><TicketVrModule /></AppProvider>, host);
+  return createPortal(<TicketVrModule />, host);
 };
 
 export default TicketVrPortalAddon;
