@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { extractPdfTextByLines, renderPdfPagesToDataUrls } from '@/lib/pdf';
+import { extractPdfTextByLines, renderPdfEmployeeRowCrops, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import type { Company, Employee } from '@/types/database';
 import { toast } from 'sonner';
 
