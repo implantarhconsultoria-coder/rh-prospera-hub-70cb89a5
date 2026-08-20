@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { RotateCcw, Sparkles, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
 import { useApp } from '@/context/AppContext';
 import type { EmployeeSmartData } from '@/lib/smartTextParser';
@@ -24,6 +26,9 @@ const EmployeeSmartEditOverlay: React.FC = () => {
   const [undoAvailable, setUndoAvailable] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [clearingBanking, setClearingBanking] = useState(false);
+  const [birthTarget, setBirthTarget] = useState<HTMLElement | null>(null);
+  const [birthDate, setBirthDate] = useState('');
+  const [savingBirthDate, setSavingBirthDate] = useState(false);
   const employeeId = useMemo(() => location.pathname.match(/\/funcionarios\/([0-9a-f-]{36})\/?$/i)?.[1] || '', [location.pathname]);
   const employee = employees.find((item) => item.id === employeeId) || null;
 
@@ -42,6 +47,66 @@ const EmployeeSmartEditOverlay: React.FC = () => {
   useEffect(() => {
     void refreshUndoAvailability();
   }, [employeeId]);
+
+  useEffect(() => {
+    setBirthDate(String((employee as any)?.dataNascimento || ''));
+  }, [employeeId, (employee as any)?.dataNascimento]);
+
+  useEffect(() => {
+    if (!employeeId) {
+      setBirthTarget(null);
+      return;
+    }
+
+    const ensureBirthSlot = () => {
+      const cpfLabel = Array.from(document.querySelectorAll('label')).find((node) =>
+        node.textContent?.trim() === 'CPF' && Boolean(node.closest('.card-premium')),
+      );
+      const cpfField = cpfLabel?.parentElement;
+      const grid = cpfField?.parentElement;
+      if (!cpfField || !grid) return;
+
+      let slot = grid.querySelector<HTMLElement>('[data-employee-birth-date-slot="true"]');
+      if (!slot) {
+        slot = document.createElement('div');
+        slot.dataset.employeeBirthDateSlot = 'true';
+        grid.insertBefore(slot, cpfField.nextSibling);
+      }
+      setBirthTarget(slot);
+    };
+
+    ensureBirthSlot();
+    const observer = new MutationObserver(ensureBirthSlot);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      document.querySelectorAll('[data-employee-birth-date-slot="true"]').forEach((node) => node.remove());
+      setBirthTarget(null);
+    };
+  }, [employeeId]);
+
+  const saveBirthDate = async () => {
+    if (!employeeId || !employee || savingBirthDate) return;
+    const current = String((employee as any).dataNascimento || '');
+    if (birthDate === current) return;
+
+    setSavingBirthDate(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('funcionarios')
+        .update({ data_nascimento: birthDate || null })
+        .eq('id', employeeId);
+      if (error) throw new Error(error.message);
+      await refreshData();
+      toast.success(`Data de nascimento de ${employee.name} atualizada.`);
+    } catch (error) {
+      setBirthDate(current);
+      toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a data de nascimento.');
+    } finally {
+      setSavingBirthDate(false);
+    }
+  };
 
   if (!employeeId || !employee) return null;
 
@@ -177,6 +242,20 @@ const EmployeeSmartEditOverlay: React.FC = () => {
 
   return (
     <>
+      {birthTarget && createPortal(
+        <>
+          <label className="text-xs text-muted-foreground block mb-1">Data de Nascimento</label>
+          <Input
+            type="date"
+            value={birthDate}
+            onChange={(event) => setBirthDate(event.target.value)}
+            onBlur={() => void saveBirthDate()}
+            disabled={savingBirthDate}
+            className="text-sm"
+          />
+        </>,
+        birthTarget,
+      )}
       <Button type="button" onClick={() => setOpen(true)} className="fixed bottom-6 right-24 z-40 gap-2 shadow-xl no-print">
         <Sparkles className="h-4 w-4" /> Edição inteligente
       </Button>
