@@ -143,7 +143,39 @@ const extractBirthFromBlock = (block: string) => {
   return '';
 };
 
-const mergeLocalOcr = (base: ParsedPerson[], ocrText: string): ParsedPerson[] => {
+const PLAUSIBLE_MIN_AGE = 14;
+const PLAUSIBLE_MAX_AGE = 100;
+
+const isPlausibleBirth = (isoDate: string) => {
+  if (!isoDate) return false;
+  const year = Number(isoDate.slice(0, 4));
+  const age = new Date().getFullYear() - year;
+  return age >= PLAUSIBLE_MIN_AGE && age <= PLAUSIBLE_MAX_AGE;
+};
+
+// Sequência visual: datas de nascimento plausíveis, na ordem em que aparecem na página.
+const collectOrderedBirthDates = (text: string) => {
+  const found: string[] = [];
+  const matches = text.match(/\b\d{1,2}\s*[\/.\-]\s*\d{1,2}\s*[\/.\-]\s*\d{4}\b/g) || [];
+  for (const raw of matches) {
+    const iso = normalizeDate(raw.replace(/\s+/g, ''));
+    if (isPlausibleBirth(iso)) found.push(iso);
+  }
+  return found;
+};
+
+// Sequência visual: CPFs válidos pelo algoritmo, na ordem em que aparecem na página.
+const collectOrderedCpfs = (text: string) => {
+  const found: string[] = [];
+  const matches = text.match(/\b\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}\b/g) || [];
+  for (const raw of matches) {
+    const cpf = formatCpf(raw);
+    if (cpf) found.push(cpf);
+  }
+  return found;
+};
+
+const mergeByName = (base: ParsedPerson[], ocrText: string): ParsedPerson[] => {
   const lines = ocrText
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
@@ -175,6 +207,30 @@ const mergeLocalOcr = (base: ParsedPerson[], ocrText: string): ParsedPerson[] =>
     };
   });
 };
+
+/**
+ * Leitura visual: o relatório é tabular e a ordem visual das linhas é a mesma
+ * ordem dos nomes extraídos da camada textual. Quando a quantidade de datas
+ * (ou de CPFs) encontrada bate com a quantidade de nomes, associa por ORDEM —
+ * mais robusto que depender do OCR acertar o nome inteiro. Caso contrário,
+ * cai no fallback por similaridade de nome/linha.
+ */
+const mergeLocalOcr = (base: ParsedPerson[], ocrText: string): ParsedPerson[] => {
+  const byName = mergeByName(base, ocrText);
+  const dates = collectOrderedBirthDates(ocrText);
+  const cpfs = collectOrderedCpfs(ocrText);
+  const datesAligned = dates.length === base.length;
+  const cpfsAligned = cpfs.length === base.length;
+
+  if (!datesAligned && !cpfsAligned) return byName;
+
+  return byName.map((person, index) => ({
+    name: person.name,
+    cpf: person.cpf || (cpfsAligned ? cpfs[index] || '' : ''),
+    birthDate: person.birthDate || (datesAligned ? dates[index] || '' : ''),
+  }));
+};
+
 
 const actionForCpf = (current: string, source: string): ImportRow['cpfAction'] => current ? 'same' : source ? 'fill' : 'missing-source';
 const actionForBirth = (current: string, source: string): ImportRow['birthAction'] => current ? 'same' : source ? 'fill' : 'missing-source';
@@ -383,8 +439,10 @@ const BulkEmployeeDataImporter: React.FC<Props> = ({ open, onOpenChange, employe
     setProcessing(false);
     setProgress('');
 
-    if (pendingRows.length) {
-      toast.success(`${pendingRows.length} cadastro(s) com dados prontos para preencher.`);
+    const prontos = nextRows.filter((row) => row.matchStatus === 'matched' && (row.cpfAction === 'fill' || row.birthAction === 'fill')).length;
+
+    if (prontos) {
+      toast.success(`${prontos} cadastro(s) com dados prontos para preencher.`);
     } else if (nextRows.length || completeCount) {
       toast.success('Leitura concluída. Confira os dados encontrados.');
     }
