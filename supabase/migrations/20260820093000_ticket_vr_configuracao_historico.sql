@@ -1,0 +1,14 @@
+create table if not exists public.ticket_vr_configuracoes (
+  id uuid primary key default gen_random_uuid(), company_id uuid not null unique references public.empresas(id) on delete cascade,
+  codigo_cliente_ticket text not null default '', unidade_entrega text not null default '', departamento text not null default 'DEPARTAMENTO', tipo_logradouro text not null default 'R', logradouro text not null default '', numero text not null default '', cidade text not null default '', bairro text not null default '', cep text not null default '', uf text not null default '', interlocutor text not null default '', ddd text not null default '', telefone text not null default '', atualizado_por uuid null, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create table if not exists public.ticket_vr_geracoes (
+  id uuid primary key default gen_random_uuid(), company_id uuid not null references public.empresas(id) on delete restrict, empresa_nome text not null, cnpj text not null, competencia text not null, versao integer not null default 1, status text not null check (status in ('RASCUNHO','CONFERIDO','APROVADO','TXT GERADO')), total_funcionarios integer not null default 0, total_dias_vr integer not null default 0, valor_total numeric(14,2) not null default 0, snapshot jsonb not null default '{}'::jsonb, nome_arquivo text, checksum_sha256 text, txt_conteudo text, gerado_por_user_id uuid, gerado_por_nome text, aprovado_em timestamptz, txt_gerado_em timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique(company_id, competencia, versao)
+);
+create index if not exists ticket_vr_geracoes_company_comp_idx on public.ticket_vr_geracoes(company_id, competencia, versao desc);
+alter table public.ticket_vr_configuracoes enable row level security;
+alter table public.ticket_vr_geracoes enable row level security;
+drop policy if exists ticket_vr_config_admin_all on public.ticket_vr_configuracoes;
+create policy ticket_vr_config_admin_all on public.ticket_vr_configuracoes for all to authenticated using (topac_has_any_role(array['admin'::text,'diretor_geral'::text], auth.uid())) with check (topac_has_any_role(array['admin'::text,'diretor_geral'::text], auth.uid()));
+drop policy if exists ticket_vr_geracoes_admin_all on public.ticket_vr_geracoes;
+create policy ticket_vr_geracoes_admin_all on public.ticket_vr_geracoes for all to authenticated using (topac_has_any_role(array['admin'::text,'diretor_geral'::text], auth.uid())) with check (topac_has_any_role(array['admin'::text,'diretor_geral'::text], auth.uid()));
