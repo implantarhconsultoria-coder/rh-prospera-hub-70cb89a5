@@ -45,7 +45,7 @@ const detectedCnpj = (companyLabel: string) => {
   const upper = normalize(companyLabel);
   if (upper.includes('ALQUI')) return '14464586000150';
   if (upper.includes('LMT')) return '21967711000100';
-  if (upper.includes('MATRIZ') || upper === 'TOPAC COMERCIO DE EQUIP. INDUSTRIAIS LTDA') return '07291648000103';
+  if (upper.includes('MATRIZ')) return '07291648000103';
   return '';
 };
 
