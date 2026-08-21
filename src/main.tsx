@@ -15,6 +15,7 @@ const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePu
 
 const MOBILE_BUILD_TAG = "20260817-performance-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
+const isPayrollPublicPortal = window.location.pathname === '/holerite' || window.location.pathname === '/holerite/';
 
 async function clearLegacyMobileCache() {
   if (typeof window === "undefined") return;
@@ -43,7 +44,7 @@ async function clearLegacyMobileCache() {
   }
 }
 
-if (!window.location.pathname.startsWith('/holerite/')) {
+if (!isPayrollPublicPortal) {
   void clearLegacyMobileCache();
 }
 
@@ -84,7 +85,7 @@ const RouteEnhancers = () => {
 };
 
 const root = createRoot(document.getElementById("root")!);
-if (window.location.pathname.startsWith('/holerite/')) {
+if (isPayrollPublicPortal) {
   root.render(
     <ErrorBoundary>
       <Suspense fallback={<div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center">Carregando acesso seguro...</div>}>
