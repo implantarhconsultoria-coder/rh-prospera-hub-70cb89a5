@@ -15,7 +15,7 @@ import {
   sha256,
   signedUrl,
   userAgent,
-} from '../src/server/payrollServer';
+} from '../src/server/payrollServer.js';
 
 const AUTH_METHOD = 'CPF_NASCIMENTO_CELULAR4';
 const SESSION_MINUTES = 30;
