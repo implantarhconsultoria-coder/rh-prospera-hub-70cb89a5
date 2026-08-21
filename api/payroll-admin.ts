@@ -5,7 +5,7 @@ import {
   requireAdmin,
   sendJson,
   signedUrl,
-} from '../src/server/payrollServer';
+} from '../src/server/payrollServer.js';
 
 const loadDocument = async (service: any, documentId: string) => {
   const { data, error } = await service.from('payroll_documents').select('*').eq('id', documentId).single();
