@@ -167,15 +167,18 @@ export const parsePayrollPdf = async ({ file, employees, kind, netAmountByEmploy
   kind: 'HOLERITE' | 'COMPROVANTE';
   netAmountByEmployee?: Map<string, number>;
 }): Promise<ParsedPayrollPdf[]> => {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const pages = await extractPdfPages(bytes);
+  // PDF.js transfere o ArrayBuffer para o Worker. O buffer enviado pode ficar "detached".
+  // Por isso cada etapa que entrega bytes ao Worker recebe uma cópia nova do arquivo.
+  const scanBytes = new Uint8Array(await file.arrayBuffer());
+  const pages = await extractPdfPages(scanBytes);
+  const originalBytes = new Uint8Array(await file.arrayBuffer());
   const wholeText = pages.map(p => p.text).join(' ');
   const wholeAmount = extractLikelyAmount(wholeText);
   const wholeMatch = findEmployee(wholeText, employees, kind === 'COMPROVANTE' ? wholeAmount : null, netAmountByEmployee);
 
   if (pages.length === 1 || wholeMatch.employee) {
     return [{
-      bytes,
+      bytes: originalBytes,
       filename: file.name,
       text: wholeText,
       employeeId: wholeMatch.employee?.id || null,
@@ -218,7 +221,8 @@ export const parsePayrollPdf = async ({ file, employees, kind, netAmountByEmploy
 
   const output: ParsedPayrollPdf[] = [];
   for (const group of groups.values()) {
-    const split = await pagesToPdfBytes(bytes, group.pages);
+    const splitSource = new Uint8Array(await file.arrayBuffer());
+    const split = await pagesToPdfBytes(splitSource, group.pages);
     const suffix = group.employeeName ? normalize(group.employeeName).replace(/\s+/g, '_') : `NAO_IDENTIFICADO_P${group.pages[0]}`;
     output.push({
       bytes: split,

@@ -6,6 +6,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { useApp } from '@/context/AppContext';
+import { ingestPaymentHoleritesFromConsolidator } from '@/lib/payrollAutoIngest';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -244,6 +246,7 @@ const parseFile = async (file: File, type: ReportType): Promise<{ records: Payro
     records.push({ company, employee, role, amount, competence, source: file.name, page: pageNumber });
   }
 
+  await pdf.destroy();
   return { records, warnings };
 };
 
@@ -349,6 +352,7 @@ const generatePdf = (records: PayrollRecord[], type: ReportType) => {
 };
 
 const PayrollPdfConsolidator: React.FC = () => {
+  const { companies, employees } = useApp();
   const [type, setType] = useState<ReportType>('adiantamento');
   const [files, setFiles] = useState<File[]>([]);
   const [records, setRecords] = useState<PayrollRecord[]>([]);
@@ -398,6 +402,32 @@ const PayrollPdfConsolidator: React.FC = () => {
 
       generatePdf(clean, type);
       toast.success(`Relatório gerado: ${clean.length} funcionário(s), ${new Set(clean.map(record => record.company)).size} empresa(s).`);
+
+      if (type === 'pagamento') {
+        const ingest = await ingestPaymentHoleritesFromConsolidator({
+          files,
+          records: allRecords,
+          companies,
+          employees,
+        });
+
+        if (ingest.created > 0) {
+          toast.success(`${ingest.created} holerite(s) já lançado(s) em Pagamento. Não precisa subir de novo.`);
+        } else if (ingest.duplicates > 0 && !ingest.skippedFiles) {
+          toast.info('Esses holerites já estavam lançados em Pagamento. Nenhum duplicado foi criado.');
+        }
+
+        if (ingest.pending > 0) {
+          toast.warning(`${ingest.pending} holerite(s) ficaram aguardando vínculo manual do funcionário em Pagamento.`);
+        }
+        if (ingest.advanceFiles > 0) {
+          toast.warning('Recibo de ADIANTAMENTO detectado: ele não foi enviado para assinatura de holerite.');
+        }
+        if (ingest.errors.length > 0) {
+          console.warn('Conferência do lançamento automático em Pagamento:', ingest.errors);
+          toast.warning(`${ingest.errors.length} arquivo(s) precisam de conferência antes de entrar em Pagamento.`);
+        }
+      }
     } catch (error) {
       console.error('Erro ao consolidar PDFs da folha:', error);
       toast.error('Falha ao ler os PDFs. Verifique os arquivos e tente novamente.');
@@ -442,6 +472,12 @@ const PayrollPdfConsolidator: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-4">
+        {type === 'pagamento' && (
+          <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-200">
+            <strong>Pagamento integrado:</strong> ao gerar o relatório, os holerites de TOPAC Matriz, ALQUI e LMT também são lançados automaticamente no módulo Pagamento para conferência e assinatura. Não precisa subir o mesmo PDF duas vezes.
+          </div>
+        )}
+
         <input
           ref={inputRef}
           type="file"
@@ -508,7 +544,7 @@ const PayrollPdfConsolidator: React.FC = () => {
           )}
           <Button type="button" onClick={process} disabled={processing || files.length === 0}>
             {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
-            {processing ? 'Lendo PDFs...' : `Gerar relatório de ${type === 'adiantamento' ? 'adiantamento' : 'pagamento'}`}
+            {processing ? 'Lendo PDFs...' : type === 'pagamento' ? 'Gerar relatório de pagamento + lançar holerites' : 'Gerar relatório de adiantamento'}
           </Button>
         </div>
       </div>
