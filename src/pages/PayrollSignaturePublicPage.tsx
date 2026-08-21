@@ -169,7 +169,7 @@ const PayrollSignaturePublicPage: React.FC = () => {
         </div>
 
         {error && <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
-        <Button className="mt-5 h-13 w-full text-base font-bold" disabled={busy || !canAuthenticate} onClick={()=>void authenticate()}>{busy ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <ShieldCheck className="mr-2 h-5 w-5"/>}ACESSAR HOLERITE</Button>
+        <Button className="mt-5 h-14 w-full text-base font-bold" disabled={busy || !canAuthenticate} onClick={()=>void authenticate()}>{busy ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <ShieldCheck className="mr-2 h-5 w-5"/>}ACESSAR HOLERITE</Button>
         <div className="mt-5 rounded-xl border border-slate-700/80 bg-slate-950/40 p-3 text-xs leading-5 text-slate-400"><b className="text-slate-300">Segurança:</b> o CPF sozinho não libera nenhum documento. O acesso exige também data de nascimento e conferência dos últimos dígitos do telefone já registrado no RH.</div>
       </section>}
 
@@ -197,7 +197,7 @@ const PayrollSignaturePublicPage: React.FC = () => {
       </section>}
     </main>
 
-    {confirmOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"><div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"><h3 className="text-lg font-bold">Confirmar assinatura eletrônica</h3><p className="mt-3 text-sm leading-6 text-slate-300">Confirmo que me identifiquei com meus dados pessoais, visualizei e conferi este holerite e desejo registrar minha assinatura eletrônica neste documento.</p><p className="mt-3 text-xs leading-5 text-slate-400">O registro inclui data/hora, evidências técnicas e integridade SHA-256 do documento.</p><div className="mt-5 grid grid-cols-2 gap-2"><Button variant="outline" disabled={busy} onClick={()=>setConfirmOpen(false)}>CANCELAR</Button><Button disabled={busy} onClick={()=>void sign()}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>CONFIRMAR ASSINATURA</Button></div></div></div>}
+    {confirmOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"><div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"><h3 className="text-lg font-bold">Confirmar assinatura eletrônica</h3><p className="mt-3 text-sm leading-6 text-slate-300">Confirmo que me identifiquei com meus dados pessoais, visualizei e conferi este holerite e desejo registrar minha assinatura eletrônica neste documento.</p><p className="mt-3 text-xs leading-5 text-slate-400">O registro inclui data/hora, evidências técnicas e integridade SHA-256 do documento.</p><div className="mt-5 grid grid-cols-2 gap-2"><Button variant="outline" disabled={busy} onClick={()=>setConfirmOpen(false)}>CANCELAR</Button><Button disabled={busy} onClick={()=>void sign()}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}CONFIRMAR ASSINATURA</Button></div></div></div>}
   </div>;
 };
 
