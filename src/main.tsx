@@ -5,6 +5,7 @@ import "./index.css";
 import "./styles/topac-platform.css";
 import "./styles/hide-vercel-toolbar.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { AppProvider } from "@/context/AppContext";
 
 const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
 const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
@@ -13,7 +14,7 @@ const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPa
 const FechamentoPagamentoAddon = lazy(() => import("@/components/FechamentoPagamentoAddon"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
-const MOBILE_BUILD_TAG = "20260817-performance-1";
+const MOBILE_BUILD_TAG = "20260821-fechamento-context-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 const isPayrollPublicPortal = window.location.pathname === '/holerite' || window.location.pathname === '/holerite/';
 
@@ -97,7 +98,9 @@ if (isPayrollPublicPortal) {
   root.render(
     <ErrorBoundary>
       <App />
-      <RouteEnhancers />
+      <AppProvider>
+        <RouteEnhancers />
+      </AppProvider>
     </ErrorBoundary>
   );
 }
