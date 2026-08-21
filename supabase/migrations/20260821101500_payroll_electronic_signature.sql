@@ -331,6 +331,18 @@ drop trigger if exists payroll_events_no_update_trg on public.payroll_signature_
 create trigger payroll_events_no_update_trg before update or delete on public.payroll_signature_events
 for each row execute function public.payroll_block_event_mutation();
 
+create or replace function public.payroll_block_signature_mutation()
+returns trigger
+language plpgsql
+as $$
+begin
+  raise exception 'Assinatura eletrônica é imutável.';
+end;
+$$;
+drop trigger if exists payroll_signatures_no_mutation_trg on public.payroll_signatures;
+create trigger payroll_signatures_no_mutation_trg before update or delete on public.payroll_signatures
+for each row execute function public.payroll_block_signature_mutation();
+
 create or replace function public.payroll_block_signed_document_mutation()
 returns trigger
 language plpgsql
@@ -355,5 +367,5 @@ drop trigger if exists payroll_signed_document_guard_trg on public.payroll_docum
 create trigger payroll_signed_document_guard_trg before update on public.payroll_documents
 for each row execute function public.payroll_block_signed_document_mutation();
 
--- Updated-at
-foreach_dummy: begin end;
+-- updated_at reutiliza função já existente na TOPAC
+for_update_triggers: begin end;
