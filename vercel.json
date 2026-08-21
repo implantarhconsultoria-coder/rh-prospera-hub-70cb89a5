@@ -37,10 +37,6 @@
     {
       "path": "/api/cleanup-email-attachments",
       "schedule": "17 3 * * *"
-    },
-    {
-      "path": "/api/payroll-cron",
-      "schedule": "0 * * * *"
     }
   ]
 }
