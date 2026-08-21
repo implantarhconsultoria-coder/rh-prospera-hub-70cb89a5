@@ -6,11 +6,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Printer, FileText, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { buildHoleriteHtml, buildFolhaConsolidadaHtml } from '@/lib/folhaPdf';
+import PayrollSignatureModule from '@/components/payroll/PayrollSignatureModule';
 
 const FolhaPagamentoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries } = useApp();
@@ -210,6 +210,8 @@ const FolhaPagamentoPage: React.FC = () => {
           </tfoot>
         </table>
       </Card>
+
+      <PayrollSignatureModule companyId={selectedCompany} competencia={competencia} />
     </div>
   );
 };

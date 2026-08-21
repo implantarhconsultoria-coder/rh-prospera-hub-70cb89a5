@@ -10,9 +10,12 @@ const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfCo
 const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
 const CabinetLabelsAddon = lazy(() => import("@/components/CabinetLabelsAddon"));
 const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPageAddon"));
+const FechamentoPagamentoAddon = lazy(() => import("@/components/FechamentoPagamentoAddon"));
+const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
 const MOBILE_BUILD_TAG = "20260817-performance-1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
+const isPayrollPublicPortal = window.location.pathname === '/holerite' || window.location.pathname === '/holerite/';
 
 async function clearLegacyMobileCache() {
   if (typeof window === "undefined") return;
@@ -41,7 +44,9 @@ async function clearLegacyMobileCache() {
   }
 }
 
-void clearLegacyMobileCache();
+if (!isPayrollPublicPortal) {
+  void clearLegacyMobileCache();
+}
 
 window.addEventListener('error', (e) => {
   fetch('https://hook.implantarh.dev/erros', {
@@ -62,7 +67,7 @@ const RouteEnhancers = () => {
     return () => window.clearInterval(timer);
   }, []);
 
-  const isFechamento = path.includes('/admin/fechamento');
+  const isFechamento = path === '/admin/fechamento';
   const isRelatorioVr = path.includes('/admin/relatorio-vr');
   const isEpi = path.includes('/admin/epi');
 
@@ -72,15 +77,27 @@ const RouteEnhancers = () => {
     <Suspense fallback={null}>
       {isFechamento && <PayrollPdfConsolidatorMount />}
       {isFechamento && <CabinetLabelsAddon />}
+      {isFechamento && <FechamentoPagamentoAddon />}
       {isRelatorioVr && <TicketVrReportPageAddon />}
       {isEpi && <EpiBulkPrintEnhancer />}
     </Suspense>
   );
 };
 
-createRoot(document.getElementById("root")!).render(
-  <ErrorBoundary>
-    <App />
-    <RouteEnhancers />
-  </ErrorBoundary>
-);
+const root = createRoot(document.getElementById("root")!);
+if (isPayrollPublicPortal) {
+  root.render(
+    <ErrorBoundary>
+      <Suspense fallback={<div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center">Carregando acesso seguro...</div>}>
+        <PayrollSignaturePublicPage />
+      </Suspense>
+    </ErrorBoundary>
+  );
+} else {
+  root.render(
+    <ErrorBoundary>
+      <App />
+      <RouteEnhancers />
+    </ErrorBoundary>
+  );
+}
