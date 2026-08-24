@@ -1,16 +1,18 @@
 import { PDFDocument } from 'pdf-lib';
 import { supabase } from '@/integrations/supabase/client';
 import {
+  extractPayrollDocumentMetadata as extractPayrollDocumentMetadataLegacy,
   parsePayrollPdf as parsePayrollPdfLegacy,
   readBlobBytes,
   type ParsedPayrollPdf,
   type PayrollEmployeeMatch,
+  type PayrollDocumentMetadata,
 } from './payrollDocumentsV2Legacy';
+import { extractSalaryAdvancePayableAmount } from './payrollIdentityEngine';
 
 export {
   extractCpf,
   extractLikelyAmount,
-  extractPayrollDocumentMetadata,
   extractPdfFilesFromZip,
   extractPdfPages,
   extractReceiptMetadata,
@@ -27,21 +29,33 @@ export type {
   PayrollEmployeeMatch,
 } from './payrollDocumentsV2Legacy';
 
+/**
+ * Para ADTO, o valor efetivamente transferido pelo banco é o lançamento
+ * "Adiantamento Crédito". O "Total Líquido" pode sofrer arredondamento e não
+ * deve ser usado para formar o par RECIBO -> COMPROVANTE.
+ */
+export const extractPayrollDocumentMetadata = (text: string, lines?: string[]): PayrollDocumentMetadata => {
+  const metadata = extractPayrollDocumentMetadataLegacy(text, lines);
+  if (metadata.documentType !== 'SALARY_ADVANCE') return metadata;
+  const payable = extractSalaryAdvancePayableAmount(text);
+  return {
+    ...metadata,
+    netAmountDetected: payable ?? metadata.netAmountDetected,
+  };
+};
+
 const MIN_SPLIT_PDF_BYTES = 1024;
 
 export async function copyPdfPagesToBytes(
   sourcePdfBytes: Uint8Array,
   pageNumbers: number[],
 ): Promise<Uint8Array> {
-  if (!pageNumbers.length) {
-    throw new Error('Falha no fatiamento do comprovante: nenhuma página selecionada.');
-  }
+  if (!pageNumbers.length) throw new Error('Falha no fatiamento do comprovante: nenhuma página selecionada.');
 
   const sourcePdf = await PDFDocument.load(sourcePdfBytes, {
     updateMetadata: false,
     ignoreEncryption: false,
   });
-
   const outputPdf = await PDFDocument.create();
   const pageIndexes = pageNumbers.map((pageNumber) => {
     const pageIndex = pageNumber - 1;
@@ -50,60 +64,25 @@ export async function copyPdfPagesToBytes(
     }
     return pageIndex;
   });
-
   const copiedPages = await outputPdf.copyPages(sourcePdf, pageIndexes);
   copiedPages.forEach((page) => outputPdf.addPage(page));
+  const splitPdfBytes = new Uint8Array(await outputPdf.save({ addDefaultPage: false, useObjectStreams: false }));
 
-  const savedPdf = await outputPdf.save({
-    addDefaultPage: false,
-    useObjectStreams: false,
-  });
-  const splitPdfBytes = new Uint8Array(savedPdf);
-
-  console.info('[payroll][receipt-pdf-split]', {
-    pages: pageNumbers,
-    pageCount: copiedPages.length,
-    bytes: splitPdfBytes.byteLength,
-  });
-
+  console.info('[payroll][receipt-pdf-split]', { pages: pageNumbers, pageCount: copiedPages.length, bytes: splitPdfBytes.byteLength });
   if (splitPdfBytes.byteLength < MIN_SPLIT_PDF_BYTES) {
-    throw new Error(
-      `Falha no fatiamento do comprovante: PDF gerado possui apenas ${splitPdfBytes.byteLength} bytes.`,
-    );
+    throw new Error(`Falha no fatiamento do comprovante: PDF gerado possui apenas ${splitPdfBytes.byteLength} bytes.`);
   }
-
   return splitPdfBytes;
 }
 
-export async function uploadReceiptPdf(
-  bucket: string,
-  storagePath: string,
-  splitPageBytes: Uint8Array,
-) {
-  console.info('[payroll][receipt-pdf-upload]', {
-    bucket,
-    storagePath,
-    bytes: splitPageBytes.byteLength,
-  });
-
+export async function uploadReceiptPdf(bucket: string, storagePath: string, splitPageBytes: Uint8Array) {
+  console.info('[payroll][receipt-pdf-upload]', { bucket, storagePath, bytes: splitPageBytes.byteLength });
   if (splitPageBytes.byteLength < MIN_SPLIT_PDF_BYTES) {
-    throw new Error(
-      `Upload cancelado: comprovante fatiado possui apenas ${splitPageBytes.byteLength} bytes.`,
-    );
+    throw new Error(`Upload cancelado: comprovante fatiado possui apenas ${splitPageBytes.byteLength} bytes.`);
   }
-
   const pdfBlob = new Blob([splitPageBytes as any], { type: 'application/pdf' });
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(storagePath, pdfBlob, {
-      contentType: 'application/pdf',
-      upsert: true,
-    });
-
-  if (error) {
-    throw new Error(`Falha ao salvar comprovante PDF no Supabase: ${error.message}`);
-  }
-
+  const { data, error } = await supabase.storage.from(bucket).upload(storagePath, pdfBlob, { contentType: 'application/pdf', upsert: true });
+  if (error) throw new Error(`Falha ao salvar comprovante PDF no Supabase: ${error.message}`);
   return data;
 }
 
@@ -118,19 +97,10 @@ export const parsePayrollPdf = async ({
   kind: 'HOLERITE' | 'COMPROVANTE';
   netAmountByEmployee?: Map<string, number>;
 }): Promise<ParsedPayrollPdf[]> => {
-  const parsed = await parsePayrollPdfLegacy({
-    file,
-    employees,
-    kind,
-    netAmountByEmployee,
-  });
-
+  const parsed = await parsePayrollPdfLegacy({ file, employees, kind, netAmountByEmployee });
   if (kind !== 'COMPROVANTE' || !parsed.length) return parsed;
 
-  // Releitura independente: nunca reutilizar o buffer entregue ao PDF.js.
-  // Cada comprovante recebe uma cópia vetorial da(s) página(s) original(is).
   const sourcePdfBytes = await readBlobBytes(file);
-
   return Promise.all(parsed.map(async (item) => ({
     ...item,
     bytes: await copyPdfPagesToBytes(sourcePdfBytes, item.pageNumbers),
