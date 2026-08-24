@@ -45,27 +45,70 @@ const similarity = (a: string, b: string) => {
   return union.size ? intersection.length / union.size : 0;
 };
 
-/**
- * Lê explicitamente o campo bancário "nome do recebedor".
- * OCR pode cortar o último sobrenome; o match abaixo aceita prefixo inequívoco,
- * mas nunca escolhe automaticamente entre dois candidatos próximos.
- */
-const receiverNameFromReceipt = (text: string) => {
-  const lines = String(text || '').split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  for (const line of lines) {
-    const match = line.match(/NOME\s+DO\s+RECEBEDOR\s*[:\-]?\s*(.+)$/i);
-    if (match?.[1]) return match[1].trim();
-  }
-
-  const flat = String(text || '').replace(/\s+/g, ' ');
-  const match = flat.match(/NOME\s+DO\s+RECEBEDOR\s*[:\-]?\s*(.+?)(?=\s+(?:CPF\s*\/\s*CNPJ|CPF|CNPJ|CHAVE|INSTITUI[CÇ][AÃ]O|AG[ÊE]NCIA|CONTA|TIPO\s+DE\s+CONTA|DADOS\s+DA\s+TRANSA[CÇ][AÃ]O|VALOR)\b|$)/i);
-  return match?.[1]?.trim() || null;
+const tokenMatches = (candidate: string, employee: string) => {
+  if (candidate === employee) return true;
+  if (candidate.length === 1) return employee.startsWith(candidate);
+  if (employee.length === 1) return candidate.startsWith(employee);
+  if (candidate.length >= 4 && employee.length >= 4) return candidate.startsWith(employee) || employee.startsWith(candidate);
+  return false;
 };
 
-const employeeByReceiverName = (receiverName: string | null, employees: PayrollEmployeeMatch[]) => {
-  if (!receiverName) return null;
+const nameCompatibility = (candidate: string, employeeName: string) => {
+  const a = normalize(candidate);
+  const b = normalize(employeeName);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return Math.min(a.length, b.length) / Math.max(a.length, b.length);
+
+  const ignore = new Set(['DE', 'DA', 'DO', 'DAS', 'DOS', 'E']);
+  const candidateTokens = a.split(' ').filter(Boolean).filter(token => !ignore.has(token));
+  const employeeTokens = b.split(' ').filter(Boolean).filter(token => !ignore.has(token));
+  if (!candidateTokens.length || !employeeTokens.length) return similarity(a, b);
+
+  let matched = 0;
+  for (const token of candidateTokens) {
+    if (employeeTokens.some(employeeToken => tokenMatches(token, employeeToken))) matched += 1;
+  }
+  const coverage = matched / candidateTokens.length;
+  const firstMatches = tokenMatches(candidateTokens[0], employeeTokens[0]);
+  const lastMatches = tokenMatches(candidateTokens[candidateTokens.length - 1], employeeTokens[employeeTokens.length - 1]);
+
+  if (firstMatches && lastMatches && coverage >= 0.66) return Math.max(0.92, coverage);
+  if (firstMatches && coverage >= 0.8) return Math.max(0.88, coverage * 0.96);
+  return Math.max(similarity(a, b), coverage * 0.82);
+};
+
+const receiverNameCandidatesFromReceipt = (text: string) => {
+  const source = String(text || '').replace(/\u00a0/g, ' ');
+  const lines = source.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const candidates: string[] = [];
+  const push = (value?: string | null) => {
+    const clean = String(value || '').replace(/\s+/g, ' ').trim().replace(/[|;]+$/g, '').trim();
+    if (clean && normalize(clean).length >= 5) candidates.push(clean);
+  };
+
+  for (const line of lines) {
+    push(line.match(/NOME\s+DO\s+RECEBEDOR\s*[:\-]?\s*(.+)$/i)?.[1]);
+    push(line.match(/FAVORECIDO\s*[:\-]?\s*(.+)$/i)?.[1]);
+    push(line.match(/PAGO\s+PARA\s*[:\-]?\s*(.+)$/i)?.[1]);
+  }
+
+  const flat = source.replace(/\s+/g, ' ');
+  const stop = '(?=\\s+(?:CPF\\s*\\/\\s*CNPJ|CPF|CNPJ|CHAVE|INSTITUI[CÇ][AÃ]O|AG[ÊE]NCIA|CONTA|NR\\.?\\s*DOCUMENTO|VALOR|DEBITO|D[ÉE]BITO|DATA|DOCUMENTO|AUTENTICA[CÇ][AÃ]O|$))';
+  const patterns = [
+    new RegExp(`NOME\\s+DO\\s+RECEBEDOR\\s*[:\\-]?\\s*(.+?)${stop}`, 'i'),
+    new RegExp(`FAVORECIDO\\s*[:\\-]?\\s*(.+?)${stop}`, 'i'),
+    new RegExp(`PAGO\\s+PARA\\s*[:\\-]?\\s*(.+?)${stop}`, 'i'),
+    new RegExp(`TRANSFERIDO\\s+PARA\\s*:?\\s*(?:CLIENTE\\s*[:\\-]?\\s*)?(.+?)${stop}`, 'i'),
+  ];
+  for (const pattern of patterns) push(flat.match(pattern)?.[1]);
+
+  return Array.from(new Map(candidates.map(candidate => [normalize(candidate), candidate])).values());
+};
+
+const bestEmployeeByCandidate = (candidate: string, employees: PayrollEmployeeMatch[]) => {
   const ranked = employees
-    .map(employee => ({ employee, score: similarity(receiverName, employee.name) }))
+    .map(employee => ({ employee, score: nameCompatibility(candidate, employee.name) }))
     .filter(item => item.score >= 0.78)
     .sort((a, b) => b.score - a.score);
 
@@ -74,20 +117,48 @@ const employeeByReceiverName = (receiverName: string | null, employees: PayrollE
   return ranked[0];
 };
 
-const amountConfirms = (employeeId: string, paid: number | null | undefined, netAmountByEmployee?: Map<string, number>) => {
-  if (paid == null || !netAmountByEmployee?.has(employeeId)) return true;
-  const expected = Number(netAmountByEmployee.get(employeeId) || 0);
-  const tolerance = Math.max(1, Math.abs(expected) * 0.001);
-  return Math.abs(expected - Number(paid)) <= tolerance;
+const employeeMentionedInReceiptText = (text: string, employees: PayrollEmployeeMatch[]) => {
+  const compact = normalize(text);
+  const ranked = employees
+    .map(employee => {
+      const employeeName = normalize(employee.name);
+      if (employeeName.length >= 7 && compact.includes(employeeName)) return { employee, score: 1 };
+      const tokens = employeeName.split(' ').filter(token => token.length > 2 && !['DOS', 'DAS'].includes(token));
+      if (tokens.length < 2) return { employee, score: 0 };
+      const matched = tokens.filter(token => compact.includes(token)).length;
+      const coverage = matched / tokens.length;
+      const firstPresent = compact.includes(tokens[0]);
+      const lastPresent = compact.includes(tokens[tokens.length - 1]);
+      const score = firstPresent && lastPresent && coverage >= 0.66 ? 0.86 + coverage * 0.12 : 0;
+      return { employee, score };
+    })
+    .filter(item => item.score >= 0.86)
+    .sort((a, b) => b.score - a.score);
+
+  if (!ranked[0]) return null;
+  if (ranked.length > 1 && ranked[0].score - ranked[1].score < 0.1) return null;
+  return ranked[0];
+};
+
+const employeeByReceiptText = (text: string, employees: PayrollEmployeeMatch[]) => {
+  const candidates = receiverNameCandidatesFromReceipt(text);
+  const ranked = candidates
+    .map(candidate => ({ candidate, match: bestEmployeeByCandidate(candidate, employees) }))
+    .filter(item => item.match)
+    .sort((a, b) => Number(b.match?.score || 0) - Number(a.match?.score || 0));
+  if (ranked[0]?.match) return ranked[0].match;
+  return employeeMentionedInReceiptText(text, employees);
 };
 
 /**
- * Compatibilidade para os consumidores antigos deste módulo.
- *
- * Comprovantes bancários podem ser PDFs escaneados. Para COMPROVANTE, o V2
- * executa OCR quando não há texto nativo e a vinculação principal passa a ser
- * o campo "nome do recebedor". Valor é validação secundária, com tolerância
- * bancária pequena para diferenças de centavos.
+ * Comprovantes bancários podem vir como PDF escaneado. O fluxo usa OCR e
+ * reconhece automaticamente, por nome inequívoco dentro da empresa selecionada,
+ * os formatos já usados pela TOPAC/LMT:
+ * - Itaú/Sispag: "nome do recebedor";
+ * - Banco do Brasil TED: "FAVORECIDO" ou "TRANSFERIDO PARA / CLIENTE";
+ * - Banco do Brasil PIX: "PAGO PARA".
+ * O valor continua sendo extraído e gravado, mas não impede o vínculo quando o
+ * nome do recebedor bate de forma única com o cadastro do funcionário.
  */
 export const parsePayrollPdf = async ({
   file,
@@ -104,7 +175,6 @@ export const parsePayrollPdf = async ({
     return parsePayrollPdfV2({ file, employees, kind, netAmountByEmployee });
   }
 
-  // Não deixar a diferença de centavos eliminar um nome válido no parser-base.
   const parsed = await parsePayrollPdfV2({
     file,
     employees,
@@ -116,23 +186,19 @@ export const parsePayrollPdf = async ({
     let employee = item.employeeId ? employees.find(emp => emp.id === item.employeeId) || null : null;
     let confidence = Number(item.confidence || 0);
 
-    // PDFs bancários escaneados/truncados: procurar explicitamente o recebedor.
     if (!employee) {
-      const ranked = employeeByReceiverName(receiverNameFromReceipt(item.text), employees);
+      const ranked = employeeByReceiptText(item.text, employees);
       employee = ranked?.employee || null;
-      confidence = ranked ? Math.max(88, Math.round(ranked.score * 100)) : 0;
+      confidence = ranked ? Math.max(92, Math.round(ranked.score * 100)) : 0;
     }
 
     if (!employee) return item;
-    if (!amountConfirms(employee.id, item.amountDetected, netAmountByEmployee)) return item;
 
     return {
       ...item,
       employeeId: employee.id,
       employeeName: employee.name,
-      // O componente administrativo já considera NOME_VALOR elegível para
-      // vinculação automática; aqui significa nome inequívoco + valor compatível.
-      matchMethod: 'NOME_VALOR' as const,
+      matchMethod: item.matchMethod === 'CPF' ? 'CPF' as const : 'NOME_UNICO' as const,
       confidence: Math.max(92, confidence),
     };
   });
