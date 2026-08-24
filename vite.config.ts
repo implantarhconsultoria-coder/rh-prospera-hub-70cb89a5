@@ -20,6 +20,10 @@ export default defineConfig(() => ({
         replacement: path.resolve(__dirname, "./src/lib/payrollDocumentsV3.ts"),
       },
       {
+        find: "@/lib/payrollPageDocuments",
+        replacement: path.resolve(__dirname, "./src/lib/payrollPageDocumentsCompat.ts"),
+      },
+      {
         find: "@/lib/pdfGenerator",
         replacement: path.resolve(__dirname, "./src/lib/pdfGeneratorPraia.ts"),
       },
