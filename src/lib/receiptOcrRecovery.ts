@@ -44,14 +44,64 @@ const employeeScore = (text: string, employeeName: string) => {
   return 0;
 };
 
-const findUniqueEmployee = (text: string, employees: PayrollEmployeeMatch[]) => {
+const rankEmployees = (text: string, employees: PayrollEmployeeMatch[], minScore = 0.86, minGap = 0.08) => {
   const ranked = employees
     .map(employee => ({ employee, score: employeeScore(text, employee.name) }))
-    .filter(item => item.score >= 0.86)
+    .filter(item => item.score >= minScore)
     .sort((a, b) => b.score - a.score);
   if (!ranked[0]) return null;
-  if (ranked[1] && ranked[0].score - ranked[1].score < 0.08) return null;
+  if (ranked[1] && ranked[0].score - ranked[1].score < minGap) return null;
   return ranked[0];
+};
+
+const receiverCandidates = (text: string) => {
+  const source = String(text || '').replace(/\u00a0/g, ' ');
+  const lines = source.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const candidates: string[] = [];
+  const push = (value?: string | null) => {
+    const clean = String(value || '')
+      .replace(/^[:.\-\s]+/, '')
+      .replace(/[|;]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (normalize(clean).length >= 5) candidates.push(clean);
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const patterns = [
+      /NOME\s+DO\s+RECEBEDOR\.?\s*[:\-]?\s*(.*)$/i,
+      /FAVORECIDO\.?\s*[:\-]?\s*(.*)$/i,
+      /PAGO\s+PARA\.?\s*[:\-]?\s*(.*)$/i,
+      /TRANSFERIDO\s+PARA\.?\s*[:\-]?\s*(?:CLIENTE\s*[:\-]?\s*)?(.*)$/i,
+    ];
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      if (!match) continue;
+      if (match[1]?.trim()) push(match[1]);
+      else if (lines[i + 1]) push(lines[i + 1]);
+    }
+  }
+
+  const flat = source.replace(/\s+/g, ' ');
+  const stop = '(?=\\s+(?:CPF\\s*\\/\\s*CNPJ|CPF|CNPJ|CHAVE|INSTITUI[CÇ][AÃ]O|AG[ÊE]NCIA|CONTA|BANCO|NR\\.?\\s*DOCUMENTO|VALOR|DEBITO|D[ÉE]BITO|DATA|DOCUMENTO|AUTENTICA[CÇ][AÃ]O|FINALIDADE|TIPO\\s+DE\\s+CONTA|$))';
+  const flatPatterns = [
+    new RegExp(`NOME\\s+DO\\s+RECEBEDOR\\.?\\s*[:\\-]?\\s*(.+?)${stop}`, 'i'),
+    new RegExp(`FAVORECIDO\\.?\\s*[:\\-]?\\s*(.+?)${stop}`, 'i'),
+    new RegExp(`PAGO\\s+PARA\\.?\\s*[:\\-]?\\s*(.+?)${stop}`, 'i'),
+    new RegExp(`TRANSFERIDO\\s+PARA\\.?\\s*[:\\-]?\\s*(?:CLIENTE\\s*[:\\-]?\\s*)?(.+?)${stop}`, 'i'),
+  ];
+  for (const pattern of flatPatterns) push(flat.match(pattern)?.[1]);
+
+  return Array.from(new Map(candidates.map(candidate => [normalize(candidate), candidate])).values());
+};
+
+const findUniqueEmployee = (text: string, employees: PayrollEmployeeMatch[]) => {
+  for (const candidate of receiverCandidates(text)) {
+    const direct = rankEmployees(candidate, employees, 0.72, 0.05);
+    if (direct) return direct;
+  }
+  return rankEmployees(text, employees, 0.86, 0.08);
 };
 
 const money = (raw: string) => {
@@ -148,8 +198,9 @@ const ocrPdfBytes = async (bytes: Uint8Array) => {
 
 /**
  * Segunda leitura exclusivamente para comprovantes que o parser normal não conseguiu vincular.
- * Usa OCR em alta resolução e compara o texto contra TODOS os nomes da empresa selecionada.
- * Valor é evidência adicional e nunca bloqueia um nome completo/inequívoco.
+ * Usa OCR em alta resolução e primeiro procura o nome no campo real do recebedor
+ * (Nome do recebedor, Favorecido, Pago para, Transferido para). Só depois usa o
+ * texto inteiro como fallback. Valor é evidência adicional e nunca bloqueia nome inequívoco.
  */
 export const recoverUnmatchedReceipt = async (
   item: ParsedPayrollPdf,
