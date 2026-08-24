@@ -3,19 +3,11 @@ import {
   extractCpf,
   extractPayrollDocumentMetadata,
   extractPdfPages,
-  onlyDigits,
   readBlobBytes,
   sha256Browser,
   type PayrollDocumentType,
   type PayrollEmployeeMatch,
 } from './payrollDocumentsV2';
-
-/**
- * Regra absoluta deste leitor:
- *   1 página física = 1 funcionário = 1 documento.
- * Um recibo com duas vias idênticas na MESMA página continua sendo UM documento,
- * e a página é preservada inteira (as duas vias) via cópia de página com pdf-lib.
- */
 
 export type PayrollPageStatus = 'IDENTIFICADO' | 'PENDENTE' | 'ERRO';
 
@@ -80,10 +72,6 @@ const safeFileName = (value: string) => stripAccents(value)
   .replace(/[^A-Za-z0-9._-]+/g, '_')
   .slice(0, 100);
 
-/**
- * Safari/iOS antigo (e qualquer contexto não seguro) não expõe `crypto.randomUUID`.
- * Nunca chamar randomUUID diretamente no fluxo de upload.
- */
 export const safeUuid = (): string => {
   const cryptoRef: any = typeof globalThis !== 'undefined' ? (globalThis as any).crypto : undefined;
   if (cryptoRef && typeof cryptoRef.randomUUID === 'function') return cryptoRef.randomUUID();
@@ -97,11 +85,11 @@ export const safeUuid = (): string => {
 };
 
 export const employeesOnPage = (text: string, employees: PayrollEmployeeMatch[]) => {
-  const compact = normalize(text);
+  const compact = ` ${normalize(text)} `;
   const found = new Map<string, PayrollEmployeeMatch>();
   for (const employee of employees) {
     const name = normalize(employee.name);
-    if (name.length >= 7 && compact.includes(name)) found.set(employee.id, employee);
+    if (name.length >= 5 && compact.includes(` ${name} `)) found.set(employee.id, employee);
   }
   return Array.from(found.values());
 };
@@ -116,46 +104,23 @@ export type PageMatchResult = {
 };
 
 /**
- * Vinculação isolada por empresa (a lista `employees` já vem filtrada pela empresa selecionada).
- * Qualquer dúvida vira PENDENTE DE VINCULAÇÃO — nunca há chute automático.
+ * Matching limpo: a lista de employees já vem filtrada pela empresa selecionada.
+ * Nome completo é a única chave automática desta etapa. CPF é somente evidência.
+ * O campo confidence permanece apenas por compatibilidade de schema e nunca é gate.
  */
 export const matchEmployeeForPage = (
   text: string,
-  lines: string[],
+  _lines: string[],
   employees: PayrollEmployeeMatch[],
 ): PageMatchResult => {
   const cpf = extractCpf(text);
   const namesFound = employeesOnPage(text, employees);
-  const cpfMatches = cpf ? employees.filter(employee => onlyDigits(employee.cpf) === cpf) : [];
-
-  if (cpfMatches.length === 1) {
-    const byCpf = cpfMatches[0];
-    const nameConfirms = namesFound.some(employee => employee.id === byCpf.id);
-    if (namesFound.length > 1 && !nameConfirms) {
-      return { employee: null, method: 'NAO_IDENTIFICADO', confidence: 0, cpf, status: 'PENDENTE', message: 'CPF e nomes divergentes na mesma página.' };
-    }
-    return {
-      employee: byCpf,
-      method: nameConfirms ? 'CPF_NOME' : 'CPF',
-      confidence: nameConfirms ? 100 : 96,
-      cpf,
-      status: 'IDENTIFICADO',
-      message: null,
-    };
-  }
-
-  if (cpf && cpfMatches.length > 1) {
-    return { employee: null, method: 'NAO_IDENTIFICADO', confidence: 0, cpf, status: 'PENDENTE', message: 'CPF cadastrado em mais de um funcionário da empresa.' };
-  }
 
   if (namesFound.length === 1) {
-    const employee = namesFound[0];
-    const metadata = extractPayrollDocumentMetadata(text, lines);
-    const codeConfirms = Boolean(metadata.employeeCodeDetected);
     return {
-      employee,
-      method: codeConfirms ? 'CODIGO_NOME' : 'NOME_UNICO',
-      confidence: codeConfirms ? 90 : 85,
+      employee: namesFound[0],
+      method: 'NOME_UNICO',
+      confidence: 100,
       cpf,
       status: 'IDENTIFICADO',
       message: null,
@@ -169,7 +134,7 @@ export const matchEmployeeForPage = (
       confidence: 0,
       cpf,
       status: 'PENDENTE',
-      message: `Página com ${namesFound.length} funcionários diferentes: vinculação manual necessária.`,
+      message: `Página contém ${namesFound.length} nomes cadastrados na empresa. Revisão manual necessária.`,
     };
   }
 
@@ -179,13 +144,10 @@ export const matchEmployeeForPage = (
     confidence: 0,
     cpf,
     status: 'PENDENTE',
-    message: 'Nenhum funcionário ativo da empresa foi reconhecido nesta página.',
+    message: 'Nome do funcionário não foi localizado entre os funcionários da empresa selecionada.',
   };
 };
 
-/**
- * Extrai a PÁGINA FÍSICA INTEIRA (com as duas vias) preservando o conteúdo vetorial original.
- */
 const extractPhysicalPage = async (sourceDoc: PDFDocument, pageIndex: number) => {
   const out = await PDFDocument.create();
   const [copied] = await out.copyPages(sourceDoc, [pageIndex]);
@@ -236,7 +198,6 @@ export const analyzePayrollFile = async ({
 
   let pages: Awaited<ReturnType<typeof extractPdfPages>>;
   try {
-    // PDF.js pode transferir/destacar o buffer: recebe sempre uma cópia independente.
     pages = await extractPdfPages(new Uint8Array(sourceBytes));
     analysis.totalPages = pages.length;
   } catch (error) {
@@ -261,9 +222,7 @@ export const analyzePayrollFile = async ({
   let sourceDoc: PDFDocument;
   try {
     sourceDoc = await PDFDocument.load(new Uint8Array(sourceBytes), { ignoreEncryption: true });
-    if (sourceDoc.getPageCount() !== pages.length) {
-      throw new Error(`Contagem divergente: PDF.js=${pages.length}, pdf-lib=${sourceDoc.getPageCount()}`);
-    }
+    if (sourceDoc.getPageCount() !== pages.length) throw new Error(`Contagem divergente: PDF.js=${pages.length}, pdf-lib=${sourceDoc.getPageCount()}`);
   } catch (error) {
     const entry = log('preparar-separacao-paginas', null, error);
     analysis.fatalError = `PREPARAÇÃO DAS PÁGINAS: ${entry.error}`;
@@ -276,9 +235,7 @@ export const analyzePayrollFile = async ({
       const metadata = extractPayrollDocumentMetadata(page.text, page.lines);
       const match = matchEmployeeForPage(page.text, page.lines, employees);
       const bytes = await extractPhysicalPage(sourceDoc, page.page - 1);
-      const suffix = match.employee
-        ? normalize(match.employee.name).replace(/\s+/g, '_')
-        : `PENDENTE_P${page.page}`;
+      const suffix = match.employee ? normalize(match.employee.name).replace(/\s+/g, '_') : `PENDENTE_P${page.page}`;
       const filename = safeFileName(`${baseName}_P${String(page.page).padStart(2, '0')}_${suffix}.pdf`);
       analysis.documents.push({
         key: `${analysis.sourceSha256}:${page.page}`,
@@ -309,7 +266,6 @@ export const analyzePayrollFile = async ({
         usedOcr: page.usedOcr,
       });
     } catch (error) {
-      // Uma página com problema NÃO invalida as demais.
       const entry = log('extrair-pagina', page.page, error);
       analysis.documents.push({
         key: `${analysis.sourceSha256}:${page.page}`,
