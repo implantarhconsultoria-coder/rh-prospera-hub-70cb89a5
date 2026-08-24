@@ -16,6 +16,10 @@ export default defineConfig(() => ({
   resolve: {
     alias: [
       {
+        find: "@/lib/payrollDocuments",
+        replacement: path.resolve(__dirname, "./src/lib/payrollDocumentsV3.ts"),
+      },
+      {
         find: "@/lib/pdfGenerator",
         replacement: path.resolve(__dirname, "./src/lib/pdfGeneratorPraia.ts"),
       },
