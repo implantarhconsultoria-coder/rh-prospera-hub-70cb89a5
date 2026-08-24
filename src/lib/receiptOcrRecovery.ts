@@ -26,11 +26,21 @@ const tokenCompatible = (a: string, b: string) => {
   return false;
 };
 
+const exactEmployeeMention = (text: string, employees: PayrollEmployeeMatch[]) => {
+  const haystack = ` ${normalize(text)} `;
+  if (!haystack.trim()) return null;
+  const exact = employees.filter(employee => {
+    const target = normalize(employee.name);
+    return target.length >= 5 && haystack.includes(` ${target} `);
+  });
+  return exact.length === 1 ? { employee: exact[0], score: 1 } : null;
+};
+
 const employeeScore = (text: string, employeeName: string) => {
   const haystack = normalize(text);
   const target = normalize(employeeName);
   if (!haystack || !target) return 0;
-  if (haystack.includes(target)) return 1;
+  if (` ${haystack} `.includes(` ${target} `)) return 1;
 
   const tokens = nameTokens(employeeName);
   if (tokens.length < 2) return 0;
@@ -45,6 +55,8 @@ const employeeScore = (text: string, employeeName: string) => {
 };
 
 const rankEmployees = (text: string, employees: PayrollEmployeeMatch[], minScore = 0.86, minGap = 0.08) => {
+  const exact = exactEmployeeMention(text, employees);
+  if (exact) return exact;
   const ranked = employees
     .map(employee => ({ employee, score: employeeScore(text, employee.name) }))
     .filter(item => item.score >= minScore)
@@ -97,7 +109,11 @@ const receiverCandidates = (text: string) => {
 };
 
 const findUniqueEmployee = (text: string, employees: PayrollEmployeeMatch[]) => {
+  const exact = exactEmployeeMention(text, employees);
+  if (exact) return exact;
   for (const candidate of receiverCandidates(text)) {
+    const directExact = exactEmployeeMention(candidate, employees);
+    if (directExact) return directExact;
     const direct = rankEmployees(candidate, employees, 0.72, 0.05);
     if (direct) return direct;
   }
@@ -127,6 +143,27 @@ const extractAmount = (text: string) => {
     if (value != null && value > 0) return value;
   }
   return null;
+};
+
+const extractNativePdfText = async (bytes: Uint8Array) => {
+  const loading = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
+  const pdf = await loading.promise;
+  const parts: string[] = [];
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const text = (content.items || [])
+        .map((item: any) => String(item?.str || '').trim())
+        .filter(Boolean)
+        .join(' ');
+      if (text) parts.push(text);
+    }
+  } finally {
+    try { await pdf.destroy(); } catch { /* noop */ }
+    try { await loading.destroy?.(); } catch { /* noop */ }
+  }
+  return parts.join('\n');
 };
 
 let workerPromise: Promise<any> | null = null;
@@ -197,10 +234,10 @@ const ocrPdfBytes = async (bytes: Uint8Array) => {
 };
 
 /**
- * Segunda leitura exclusivamente para comprovantes que o parser normal não conseguiu vincular.
- * Usa OCR em alta resolução e primeiro procura o nome no campo real do recebedor
- * (Nome do recebedor, Favorecido, Pago para, Transferido para). Só depois usa o
- * texto inteiro como fallback. Valor é evidência adicional e nunca bloqueia nome inequívoco.
+ * Recuperação exclusivamente para comprovantes ainda sem vínculo.
+ * A lista recebida já é da empresa selecionada no Fechamento.
+ * Ordem: texto já extraído -> camada nativa do PDF -> OCR.
+ * Nome completo exato dentro da empresa é chave definitiva; CPF e valor não bloqueiam.
  */
 export const recoverUnmatchedReceipt = async (
   item: ParsedPayrollPdf,
@@ -208,9 +245,35 @@ export const recoverUnmatchedReceipt = async (
 ): Promise<ParsedPayrollPdf> => {
   if (item.employeeId || !item.bytes?.byteLength) return item;
   try {
+    const existingText = String(item.text || '').trim();
+    let ranked = existingText ? findUniqueEmployee(existingText, employees) : null;
+    if (ranked) {
+      return {
+        ...item,
+        employeeId: ranked.employee.id,
+        employeeName: ranked.employee.name,
+        matchMethod: 'NOME_UNICO',
+        confidence: 100,
+      };
+    }
+
+    const nativeText = await extractNativePdfText(item.bytes);
+    ranked = nativeText ? findUniqueEmployee(nativeText, employees) : null;
+    if (ranked) {
+      return {
+        ...item,
+        text: nativeText,
+        employeeId: ranked.employee.id,
+        employeeName: ranked.employee.name,
+        matchMethod: 'NOME_UNICO',
+        confidence: 100,
+        amountDetected: extractAmount(nativeText) ?? item.amountDetected,
+      };
+    }
+
     const ocrText = await ocrPdfBytes(item.bytes);
-    if (!normalize(ocrText)) return item;
-    const ranked = findUniqueEmployee(ocrText, employees);
+    if (!normalize(ocrText)) return nativeText ? { ...item, text: nativeText } : item;
+    ranked = findUniqueEmployee(ocrText, employees);
     if (!ranked) return { ...item, text: ocrText, usedOcr: true };
     return {
       ...item,
@@ -218,7 +281,7 @@ export const recoverUnmatchedReceipt = async (
       employeeId: ranked.employee.id,
       employeeName: ranked.employee.name,
       matchMethod: 'NOME_UNICO',
-      confidence: Math.max(94, Math.round(ranked.score * 100)),
+      confidence: ranked.score === 1 ? 100 : Math.max(94, Math.round(ranked.score * 100)),
       amountDetected: extractAmount(ocrText) ?? item.amountDetected,
       usedOcr: true,
     };
