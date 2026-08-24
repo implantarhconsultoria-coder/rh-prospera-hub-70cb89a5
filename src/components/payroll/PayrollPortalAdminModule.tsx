@@ -163,7 +163,10 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         onLog: entry => console.error('[payroll-upload-diagnostic]', entry),
       }));
       const summary = summarizeAnalyses(analyses);
-      if (!summary.pages) throw new Error('Nenhuma página de PDF pôde ser analisada.');
+      if (!summary.pages) {
+        const fatal = analyses.map(analysis => analysis.fatalError).filter(Boolean).join(' | ');
+        throw new Error(fatal || 'Nenhuma página de PDF pôde ser analisada.');
+      }
       setPreviewAnalyses(analyses);
       setPreviewOpen(true);
       toast.success(`Análise concluída: ${summary.pages} página(s), ${summary.documents} documento(s). Revise antes de importar.`);
