@@ -55,7 +55,8 @@ $$;
 alter table public.payroll_signature_requests alter column receipt_id drop not null;
 alter table public.payroll_signatures alter column receipt_id drop not null;
 
--- Mantém exatamente a ordem das colunas já existentes e acrescenta document_type ao final.
+-- Esta view é EXCLUSIVA do painel administrativo de holerites.
+-- Os recibos VR/VT usam consultas pelo document_type e nunca entram neste fluxo bancário.
 create or replace view public.payroll_admin_status_v
 with (security_invoker = true)
 as
@@ -113,6 +114,7 @@ left join lateral (
 ) r on true
 left join public.payroll_signature_requests sr on sr.document_id = d.id
 left join public.payroll_signatures s on s.request_id = sr.id
-where d.is_current = true;
+where d.is_current = true
+  and d.document_type = 'HOLERITE';
 
 grant select on public.payroll_admin_status_v to authenticated;
