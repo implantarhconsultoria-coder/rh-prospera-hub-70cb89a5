@@ -4,6 +4,7 @@ import {
   type ParsedPayrollPdf,
   type PayrollEmployeeMatch,
 } from './payrollDocumentsV2';
+import { recoverUnmatchedReceipts } from './receiptOcrRecovery';
 
 export {
   extractCpf,
@@ -183,14 +184,11 @@ const employeeByReceiptText = (text: string, employees: PayrollEmployeeMatch[]) 
 };
 
 /**
- * Comprovantes bancários podem vir como PDF escaneado. O fluxo usa OCR e
- * reconhece automaticamente, por nome inequívoco dentro da empresa selecionada,
- * os formatos já usados pela TOPAC/LMT:
- * - Itaú/Sispag: "nome do recebedor";
- * - Banco do Brasil TED: "FAVORECIDO" ou "TRANSFERIDO PARA / CLIENTE";
- * - Banco do Brasil PIX: "PAGO PARA".
- * O valor continua sendo extraído e gravado, mas não impede o vínculo quando o
- * nome do recebedor bate de forma única com o cadastro do funcionário.
+ * Comprovantes bancários podem vir como PDF escaneado. O fluxo usa duas camadas:
+ * 1) parser normal (texto nativo/OCR legado);
+ * 2) OCR dedicado em alta resolução para qualquer página ainda não identificada.
+ * Nome completo/inequívoco dentro da empresa é chave forte. Valor complementa a
+ * auditoria, mas nunca bloqueia um vínculo inequívoco pelo nome do recebedor.
  */
 export const parsePayrollPdf = async ({
   file,
@@ -207,12 +205,13 @@ export const parsePayrollPdf = async ({
     return parsePayrollPdfV2({ file, employees, kind, netAmountByEmployee });
   }
 
-  const parsed = await parsePayrollPdfV2({
+  const base = await parsePayrollPdfV2({
     file,
     employees,
     kind,
     netAmountByEmployee: undefined,
   });
+  const parsed = await recoverUnmatchedReceipts(base, employees);
 
   return parsed.map(item => {
     let employee = item.employeeId ? employees.find(emp => emp.id === item.employeeId) || null : null;
@@ -231,7 +230,7 @@ export const parsePayrollPdf = async ({
       employeeId: employee.id,
       employeeName: employee.name,
       matchMethod: item.matchMethod === 'CPF' ? 'CPF' as const : 'NOME_UNICO' as const,
-      confidence: Math.max(92, confidence),
+      confidence: Math.max(item.usedOcr ? 94 : 92, confidence),
     };
   });
 };
