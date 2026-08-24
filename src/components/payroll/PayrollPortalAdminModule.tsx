@@ -22,7 +22,6 @@ import {
   type PayrollPageDocument,
 } from '@/lib/payrollPageDocuments';
 
-
 const BUCKET = 'payroll-private';
 const ALLOWED_CODES = new Set(['topac-matriz', 'alqui', 'lmt']);
 const ALLOWED_CNPJS = new Set(['07291648000103','14464586000150','21967711000100']);
@@ -30,9 +29,10 @@ const digits = (value: unknown) => String(value || '').replace(/\D/g, '');
 const safeFile = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 100);
 const brDateTime = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
 const currency = (value?: number | null) => value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const humanStatus = (value: unknown) => String(value || '').replace(/_/g, ' ');
 
 const statusClass = (status: string) => {
-  if (status === 'ASSINADO' || status === 'LIBERADO NO PORTAL' || status === 'PAGAMENTO CONFIRMADO') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+  if (status === 'ASSINADO' || status === 'LIBERADO NO PORTAL' || status === 'PAGAMENTO CONFIRMADO' || status === 'IDENTIFICADO') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
   if (status.includes('ERRO') || status.includes('INVALIDO') || status.includes('NÃO') || status.includes('NAO')) return 'bg-red-500/15 text-red-400 border-red-500/30';
   if (status.includes('PENDENTE') || status.includes('AGUARDANDO')) return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
   return 'bg-sky-500/15 text-sky-300 border-sky-500/30';
@@ -41,8 +41,15 @@ const statusClass = (status: string) => {
 const displayStatus = (row: any) => {
   if (row.signature_status === 'ASSINADO') return 'ASSINADO';
   if (row.holerite_confirmed && row.payment_confirmed) return 'LIBERADO NO PORTAL';
-  if (row.payment_status) return String(row.payment_status).replaceAll('_', ' ');
-  return String(row.holerite_status || 'HOLERITE PENDENTE').replaceAll('_', ' ');
+  if (row.payment_status) return humanStatus(row.payment_status);
+  return humanStatus(row.holerite_status || 'HOLERITE PENDENTE');
+};
+
+const documentTypeLabel = (doc: PayrollPageDocument) => {
+  if (doc.documentType === 'SALARY_ADVANCE') return doc.documentSubtype || 'ADIANTAMENTO / ADTO';
+  if (doc.documentType === 'PAYSLIP') return doc.documentSubtype || 'HOLERITE';
+  if (doc.documentType === 'PAYMENT_RECEIPT') return doc.documentSubtype || 'RECIBO DE PAGAMENTO';
+  return doc.documentSubtype || 'NÃO IDENTIFICADO';
 };
 
 const apiCall = async (action: string, payload: Record<string, unknown>) => {
@@ -82,6 +89,8 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timeline, setTimeline] = useState<any>({ events: [], messages: [], employee: '' });
   const [consolidatedFilter, setConsolidatedFilter] = useState<'assinados'|'todos'|'pendentes'>('assinados');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewAnalyses, setPreviewAnalyses] = useState<PayrollFileAnalysis[]>([]);
   const holeriteInput = useRef<HTMLInputElement>(null);
   const receiptInput = useRef<HTMLInputElement>(null);
 
@@ -106,46 +115,182 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
 
   const netByEmployee = new Map<string, number>(rows.filter(r => r.employee_id && r.net_amount != null).map(r => [r.employee_id, Number(r.net_amount)]));
   const documentByEmployee = new Map<string, any>(rows.filter(r => r.employee_id).map(r => [r.employee_id, r]));
+  const previewSummary = summarizeAnalyses(previewAnalyses);
+  const previewDocuments = previewAnalyses.flatMap(analysis => analysis.documents.map(document => ({ analysis, document })));
 
   const copyPortal = async () => {
     try { await navigator.clipboard.writeText(portalUrl); toast.success('Link único do Portal de Holerite copiado.'); }
     catch { window.prompt('Copie o link do Portal de Holerite:', portalUrl); }
   };
 
+  const applyScopeValidation = (analyses: PayrollFileAnalysis[]) => {
+    const expectedCnpj = digits(company?.cnpj);
+    for (const analysis of analyses) {
+      for (const doc of analysis.documents) {
+        if (doc.status === 'ERRO') continue;
+        const detectedCnpj = digits(doc.cnpjDetected);
+        if (detectedCnpj && expectedCnpj && detectedCnpj !== expectedCnpj) {
+          doc.status = 'PENDENTE';
+          doc.employeeId = null;
+          doc.employeeName = null;
+          doc.matchMethod = 'NAO_IDENTIFICADO';
+          doc.confidence = 0;
+          doc.message = `CNPJ do documento (${doc.cnpjDetected}) não corresponde à empresa selecionada.`;
+          continue;
+        }
+        if (doc.competenciaDetected && competencia && doc.competenciaDetected !== competencia) {
+          doc.status = 'PENDENTE';
+          doc.employeeId = null;
+          doc.employeeName = null;
+          doc.matchMethod = 'NAO_IDENTIFICADO';
+          doc.confidence = 0;
+          doc.message = `Competência detectada (${doc.competenciaDetected}) difere da competência selecionada (${competencia}).`;
+        }
+      }
+    }
+    return analyses;
+  };
+
   const uploadHolerites = async (files: File[]) => {
     if (!files.length) return;
     setUploading(true);
     try {
-      let created = 0; let pending = 0;
-      for (const file of files) {
-        if (!/\.pdf$/i.test(file.name)) continue;
-        const parsed = await parsePayrollPdf({ file, employees: scopedEmployees, kind: 'HOLERITE' });
-        const sourceHash = await sha256Browser(file);
-        for (const item of parsed) {
-          const hash = await sha256Browser(item.bytes);
-          const { data: duplicate } = await (supabase as any).from('payroll_documents').select('id').eq('company_id', companyId).eq('competencia', competencia).eq('document_sha256', hash).maybeSingle();
-          if (duplicate) continue;
-          const path = `${companyId}/${competencia}/holerites/${crypto.randomUUID()}-${safeFile(item.filename)}`;
+      const pdfFiles = files.filter(file => /\.pdf$/i.test(file.name));
+      if (!pdfFiles.length) throw new Error('Selecione pelo menos um arquivo PDF.');
+      const analyses = applyScopeValidation(await analyzePayrollFiles({
+        files: pdfFiles,
+        employees: scopedEmployees,
+        onLog: entry => console.error('[payroll-upload-diagnostic]', entry),
+      }));
+      const summary = summarizeAnalyses(analyses);
+      if (!summary.pages) throw new Error('Nenhuma página de PDF pôde ser analisada.');
+      setPreviewAnalyses(analyses);
+      setPreviewOpen(true);
+      toast.success(`Análise concluída: ${summary.pages} página(s), ${summary.documents} documento(s). Revise antes de importar.`);
+    } catch (error: any) {
+      console.error('[payroll-upload-fatal]', { fileCount: files.length, message: error?.message, stack: error?.stack, at: new Date().toISOString() });
+      toast.error(`Falha ao analisar holerites: ${error?.message || error}`);
+    } finally {
+      setUploading(false);
+      if (holeriteInput.current) holeriteInput.current.value = '';
+    }
+  };
+
+  const openPreviewDocument = (doc: PayrollPageDocument) => {
+    if (!doc.bytes?.byteLength) return toast.error('Esta página não gerou um PDF válido para visualização.');
+    const blob = new Blob([doc.bytes as any], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    if (!opened) toast.info('O navegador bloqueou a nova aba. Permita pop-ups para visualizar o documento.');
+  };
+
+  const confirmHoleriteImport = async () => {
+    if (!previewAnalyses.length) return;
+    setUploading(true);
+    try {
+      let created = 0;
+      let pending = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      for (const analysis of previewAnalyses) {
+        for (const item of analysis.documents) {
+          if (item.status === 'ERRO' || !item.bytes.byteLength || !item.sha256) {
+            errors += 1;
+            continue;
+          }
+
+          const { data: sourceDuplicate, error: sourceDuplicateError } = await (supabase as any)
+            .from('payroll_documents')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('competencia', competencia)
+            .eq('source_sha256', analysis.sourceSha256)
+            .eq('source_page_start', item.pageNumber)
+            .maybeSingle();
+          if (sourceDuplicateError) throw sourceDuplicateError;
+          if (sourceDuplicate) {
+            skipped += 1;
+            continue;
+          }
+
+          const { data: hashDuplicate, error: hashDuplicateError } = await (supabase as any)
+            .from('payroll_documents')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('competencia', competencia)
+            .eq('document_sha256', item.sha256)
+            .maybeSingle();
+          if (hashDuplicateError) throw hashDuplicateError;
+          if (hashDuplicate) {
+            skipped += 1;
+            continue;
+          }
+
+          const path = `${companyId}/${competencia}/holerites/${safeUuid()}-${safeFile(item.filename)}`;
           const blob = new Blob([item.bytes as any], { type: 'application/pdf' });
           const { error: storageError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
           if (storageError) throw storageError;
+
           const { error: insertError } = await (supabase as any).from('payroll_documents').insert({
-            company_id: companyId, employee_id: item.employeeId, competencia, storage_path: path,
-            original_filename: item.filename, mime_type: 'application/pdf', file_size: item.bytes.byteLength,
-            document_sha256: hash, source_sha256: sourceHash,
-            source_page_start: item.pageNumbers[0] || null, source_page_end: item.pageNumbers[item.pageNumbers.length - 1] || null,
-            net_amount: item.amountDetected, match_confidence: item.confidence,
-            extracted_data: { cpf_detectado: item.cpfDetected, metodo_vinculo: item.matchMethod, paginas: item.pageNumbers },
+            company_id: companyId,
+            employee_id: item.employeeId,
+            competencia,
+            storage_path: path,
+            original_filename: item.filename,
+            mime_type: 'application/pdf',
+            file_size: item.bytes.byteLength,
+            document_sha256: item.sha256,
+            source_sha256: analysis.sourceSha256,
+            source_page_start: item.pageNumber,
+            source_page_end: item.pageNumber,
+            net_amount: item.amountDetected,
+            match_confidence: item.confidence,
+            extracted_data: {
+              pagina_fisica: item.pageNumber,
+              paginas: [item.pageNumber],
+              cpf_detectado: item.cpfDetected,
+              metodo_vinculo: item.matchMethod,
+              status_analise: item.status === 'PENDENTE' ? 'PENDENTE_DE_VINCULACAO' : 'IDENTIFICADO',
+              motivo_pendencia: item.message,
+              nome_detectado: item.employeeNameDetected,
+              codigo_detectado: item.employeeCodeDetected,
+              cargo_detectado: item.jobTitleDetected,
+              cbo_detectado: item.cboDetected,
+              empresa_detectada: item.companyNameDetected,
+              cnpj_detectado: item.cnpjDetected,
+              competencia_detectada: item.competenciaDetected,
+              tipo_documento_detectado: item.documentType,
+              subtipo_documento_detectado: item.documentSubtype,
+              valor_liquido_detectado: item.amountDetected,
+              vias_na_mesma_pagina: item.duplicateCopiesDetected,
+              usou_ocr: item.usedOcr,
+              regra_importacao: '1_PAGINA_FISICA_1_DOCUMENTO',
+            },
             status: 'HOLERITE_PENDENTE',
           });
-          if (insertError) { await supabase.storage.from(BUCKET).remove([path]); throw insertError; }
-          created += 1; if (!item.employeeId) pending += 1;
+
+          if (insertError) {
+            await supabase.storage.from(BUCKET).remove([path]);
+            throw insertError;
+          }
+
+          created += 1;
+          if (!item.employeeId) pending += 1;
         }
       }
-      toast.success(`${created} holerite(s) recebido(s).${pending ? ` ${pending} aguardando identificação manual.` : ''}`);
+
+      setPreviewOpen(false);
+      setPreviewAnalyses([]);
+      toast.success(`${created} documento(s) importado(s).${pending ? ` ${pending} pendente(s) de vinculação.` : ''}${skipped ? ` ${skipped} duplicado(s) ignorado(s).` : ''}${errors ? ` ${errors} página(s) com erro não importada(s).` : ''}`);
       await load();
-    } catch (error: any) { toast.error(`Falha ao subir holerites: ${error?.message || error}`); }
-    finally { setUploading(false); if (holeriteInput.current) holeriteInput.current.value = ''; }
+    } catch (error: any) {
+      console.error('[payroll-import-fatal]', { message: error?.message, stack: error?.stack, at: new Date().toISOString() });
+      toast.error(`Falha ao confirmar importação: ${error?.message || error}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const uploadReceipts = async (incoming: File[]) => {
@@ -170,7 +315,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           const idempotencyKey = `receipt:${companyId}:${competencia}:${hash}:${doc?.document_id || 'unmatched'}`;
           const { data: duplicate } = await (supabase as any).from('payroll_payment_receipts').select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
           if (duplicate) continue;
-          const path = `${companyId}/${competencia}/comprovantes/${crypto.randomUUID()}-${safeFile(item.filename)}`;
+          const path = `${companyId}/${competencia}/comprovantes/${safeUuid()}-${safeFile(item.filename)}`;
           const blob = new Blob([item.bytes as any], { type: 'application/pdf' });
           const { error: storageError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
           if (storageError) throw storageError;
@@ -289,7 +434,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[1250px] text-xs"><thead className="bg-muted/50"><tr>{['Funcionário','Holerite','Pagamento','Portal','Visualização','Assinatura','Status','Ações'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.document_id} className="border-t align-top">
       <td className="px-3 py-3"><b>{row.employee_name||'NÃO IDENTIFICADO'}</b><div className="text-muted-foreground">{row.employee_role||'—'}</div>{!row.employee_id&&<div className="mt-2 flex gap-1"><select className="max-w-56 rounded border bg-background px-2 py-1" value={assignDoc[row.document_id]||''} onChange={e=>setAssignDoc(prev=>({...prev,[row.document_id]:e.target.value}))}><option value="">Selecionar funcionário</option>{scopedEmployees.map(emp=><option key={emp.id} value={emp.id}>{emp.name}</option>)}</select><Button size="sm" variant="outline" onClick={()=>void assignDocument(row)}>Vincular</Button></div>}</td>
       <td className="px-3 py-3">{row.holerite_confirmed?<span className="text-emerald-400">CONFERIDO</span>:'Pendente'}<div className="text-muted-foreground">V{row.document_version}</div></td>
-      <td className="px-3 py-3">{row.payment_confirmed?<span className="text-emerald-400">CONFIRMADO · {currency(row.payment_amount)}</span>:row.payment_status?String(row.payment_status).replaceAll('_',' '):'Pendente'}</td>
+      <td className="px-3 py-3">{row.payment_confirmed?<span className="text-emerald-400">CONFIRMADO · {currency(row.payment_amount)}</span>:row.payment_status?humanStatus(row.payment_status):'Pendente'}</td>
       <td className="px-3 py-3">{row.holerite_confirmed&&row.payment_confirmed?(row.opened_at?<span className="text-cyan-300">Acessado<br/>{brDateTime(row.opened_at)}</span>:<span className="text-emerald-400">LIBERADO</span>):<span className="text-muted-foreground">Bloqueado</span>}</td>
       <td className="px-3 py-3">{brDateTime(row.viewed_at)}</td><td className="px-3 py-3">{brDateTime(row.signed_at)}</td>
       <td className="px-3 py-3"><Badge variant="outline" className={statusClass(displayStatus(row))}>{displayStatus(row)}</Badge></td>
@@ -299,6 +444,41 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3"><FileArchive className="h-4 w-4"/><b className="text-xs">GERAR PDF CONSOLIDADO</b><select value={consolidatedFilter} onChange={e=>setConsolidatedFilter(e.target.value as any)} className="rounded border bg-background px-2 py-1.5 text-xs"><option value="assinados">Somente assinados</option><option value="todos">Todos</option><option value="pendentes">Somente pendentes</option></select><Button size="sm" variant="outline" onClick={()=>void consolidated()}>Gerar consolidado</Button></div>
 
     {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando documentos reais...</b><p className="mt-1 text-xs text-muted-foreground">Leitura, separação, SHA-256 e vínculo seguro.</p></div></div>}
+
+    <Dialog open={previewOpen} onOpenChange={open=>{ if (!uploading) setPreviewOpen(open); }}>
+      <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Arquivo processado — prévia antes da importação</DialogTitle></DialogHeader>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <Kpi label="Páginas" value={previewSummary.pages}/>
+          <Kpi label="Documentos" value={previewSummary.documents}/>
+          <Kpi label="Identificados" value={previewSummary.identified} success/>
+          <Kpi label="Pendentes" value={previewSummary.pending}/>
+          <Kpi label="Erros" value={previewSummary.errors} danger/>
+        </div>
+        <p className="text-xs text-muted-foreground">Regra aplicada: 1 página física = 1 documento. Duas vias do mesmo recibo dentro da página permanecem juntas e não geram duplicidade.</p>
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="w-full min-w-[980px] text-xs">
+            <thead className="bg-muted/50"><tr>{['Arquivo / Página','Funcionário','Empresa','Competência','Tipo','Líquido','Status','Ação'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead>
+            <tbody>
+              {previewDocuments.map(({ analysis, document }) => <tr key={document.key} className="border-t align-top">
+                <td className="px-3 py-3"><b>{analysis.filename}</b><div className="text-muted-foreground">Página física {document.pageNumber} · {document.duplicateCopiesDetected > 1 ? `${document.duplicateCopiesDetected} vias na mesma página` : '1 via'}</div></td>
+                <td className="px-3 py-3"><b>{document.employeeName || document.employeeNameDetected || 'NÃO IDENTIFICADO'}</b><div className="text-muted-foreground">{document.jobTitleDetected || '—'}{document.cboDetected ? ` · CBO ${document.cboDetected}` : ''}</div></td>
+                <td className="px-3 py-3">{document.companyNameDetected || company?.name || '—'}<div className="text-muted-foreground">{document.cnpjDetected || '—'}</div></td>
+                <td className="px-3 py-3">{document.competenciaLabelDetected || document.competenciaDetected || competencia}</td>
+                <td className="px-3 py-3">{documentTypeLabel(document)}</td>
+                <td className="px-3 py-3">{currency(document.amountDetected)}</td>
+                <td className="px-3 py-3"><Badge variant="outline" className={statusClass(document.status === 'PENDENTE' ? 'PENDENTE DE VINCULAÇÃO' : document.status)}>{document.status === 'PENDENTE' ? 'PENDENTE DE VINCULAÇÃO' : document.status}</Badge>{document.message&&<div className="mt-1 max-w-72 text-[11px] text-muted-foreground">{document.message}</div>}</td>
+                <td className="px-3 py-3"><Button size="sm" variant="outline" disabled={!document.bytes.byteLength} onClick={()=>openPreviewDocument(document)}><ExternalLink className="mr-1 h-3 w-3"/>VER DOCUMENTO</Button></td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" disabled={uploading} onClick={()=>{setPreviewOpen(false); setPreviewAnalyses([]);}}>Cancelar</Button>
+          <Button disabled={uploading || previewSummary.documents === 0} onClick={()=>void confirmHoleriteImport()}><FileCheck2 className="mr-2 h-4 w-4"/>CONFIRMAR IMPORTAÇÃO</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}><DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto"><DialogHeader><DialogTitle>Histórico — {timeline.employee}</DialogTitle></DialogHeader><div className="space-y-2">{[...(timeline.events||[]).map((e:any)=>({...e,_kind:'evento'})),...(timeline.messages||[]).map((m:any)=>({...m,_kind:'mensagem'}))].sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime()).map((item:any,index:number)=><div key={`${item._kind}-${item.id}-${index}`} className="rounded-lg border p-3 text-xs"><div className="flex justify-between gap-3"><b>{item.event_type||item.message_kind}</b><span className="text-muted-foreground">{brDateTime(item.created_at)}</span></div><div className="mt-1 text-muted-foreground">{item._kind==='mensagem'?`${item.status} · ${item.channel}${item.error?` · ${item.error}`:''}`:JSON.stringify(item.payload||{})}</div></div>)}</div></DialogContent></Dialog>
   </div>;
