@@ -2,6 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import { supabase } from '@/integrations/supabase/client';
 import {
   extractPayrollDocumentMetadata as extractPayrollDocumentMetadataLegacy,
+  mergePdfUrls as mergePdfUrlsLegacy,
   parsePayrollPdf as parsePayrollPdfLegacy,
   readBlobBytes,
   type ParsedPayrollPdf,
@@ -9,6 +10,7 @@ import {
   type PayrollDocumentMetadata,
 } from './payrollDocumentsV2Legacy';
 import { extractSalaryAdvancePayableAmount } from './payrollIdentityEngine';
+import { recoverUnmatchedReceipts } from './receiptOcrRecovery';
 
 export {
   extractCpf,
@@ -16,7 +18,6 @@ export {
   extractPdfFilesFromZip,
   extractPdfPages,
   extractReceiptMetadata,
-  mergePdfUrls,
   onlyDigits,
   readBlobBytes,
   sha256Browser,
@@ -86,6 +87,19 @@ export async function uploadReceiptPdf(bucket: string, storagePath: string, spli
   return data;
 }
 
+const pendingReceiptFilename = (file: File, item: ParsedPayrollPdf) => {
+  if (item.employeeId) return item.filename;
+  const page = item.pageNumbers[0] || 1;
+  return `${file.name.replace(/\.pdf$/i, '')}_P${String(page).padStart(2, '0')}_PENDENTE.pdf`;
+};
+
+/**
+ * Fluxo direto de comprovantes:
+ * - o parser legado apenas separa/extrai as páginas;
+ * - nenhuma divergência de valor/confidence pode bloquear o nome;
+ * - em seguida toda página passa pelo matcher contextual + releitura nativa + OCR;
+ * - o arquivo continua preservado mesmo quando não houver correspondência.
+ */
 export const parsePayrollPdf = async ({
   file,
   employees,
@@ -97,12 +111,100 @@ export const parsePayrollPdf = async ({
   kind: 'HOLERITE' | 'COMPROVANTE';
   netAmountByEmployee?: Map<string, number>;
 }): Promise<ParsedPayrollPdf[]> => {
-  const parsed = await parsePayrollPdfLegacy({ file, employees, kind, netAmountByEmployee });
+  const parsed = await parsePayrollPdfLegacy({
+    file,
+    employees,
+    kind,
+    // O legado não decide comprovante por valor. Nome/empresa são resolvidos
+    // no matcher contextual abaixo e o valor é usado depois no emparelhamento.
+    netAmountByEmployee: kind === 'COMPROVANTE' ? undefined : netAmountByEmployee,
+  });
   if (kind !== 'COMPROVANTE' || !parsed.length) return parsed;
 
   const sourcePdfBytes = await readBlobBytes(file);
-  return Promise.all(parsed.map(async (item) => ({
+  const preserved = await Promise.all(parsed.map(async (item) => ({
     ...item,
+    filename: pendingReceiptFilename(file, item),
     bytes: await copyPdfPagesToBytes(sourcePdfBytes, item.pageNumbers),
   })));
+
+  return recoverUnmatchedReceipts(preserved, employees);
+};
+
+const PAYROLL_BUCKET = 'payroll-private';
+
+const storagePathFromSignedUrl = (url: string) => {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const marker = `/storage/v1/object/sign/${PAYROLL_BUCKET}/`;
+    const index = parsed.pathname.indexOf(marker);
+    if (index < 0) return null;
+    return decodeURIComponent(parsed.pathname.slice(index + marker.length));
+  } catch {
+    return null;
+  }
+};
+
+const receiptUrlForHoleriteUrl = async (holeriteUrl: string) => {
+  const storagePath = storagePathFromSignedUrl(holeriteUrl);
+  if (!storagePath) return null;
+
+  const { data: document, error: documentError } = await (supabase as any)
+    .from('payroll_documents')
+    .select('id')
+    .eq('storage_path', storagePath)
+    .maybeSingle();
+  if (documentError || !document?.id) return null;
+
+  const { data: receipt, error: receiptError } = await (supabase as any)
+    .from('payroll_payment_receipts')
+    .select('storage_path')
+    .eq('document_id', document.id)
+    .eq('confirmed', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (receiptError || !receipt?.storage_path) return null;
+
+  const { data: signed, error: signedError } = await supabase.storage
+    .from(PAYROLL_BUCKET)
+    .createSignedUrl(receipt.storage_path, 300);
+  if (signedError || !signed?.signedUrl) return null;
+  return signed.signedUrl;
+};
+
+/**
+ * O consolidado administrativo passa a usar exatamente a montagem validada:
+ * [RECIBO/HOLERITE][COMPROVANTE DO BANCO] para cada funcionário, em sequência.
+ * Outros usos de mergePdfUrls (ex.: dossiê individual) permanecem intactos.
+ */
+export const mergePdfUrls = async (sources: Array<{ url: string; label?: string }>, filename: string) => {
+  if (!/^HOLERITES_/i.test(filename) && !/^PAGAMENTOS_CONSOLIDADOS_/i.test(filename)) {
+    return mergePdfUrlsLegacy(sources, filename);
+  }
+
+  const pairedSources: Array<{ url: string; label?: string }> = [];
+  for (const source of sources) {
+    pairedSources.push({ ...source, label: source.label ? `${source.label} · RECIBO/HOLERITE` : 'RECIBO/HOLERITE' });
+    const receiptUrl = await receiptUrlForHoleriteUrl(source.url);
+    if (receiptUrl) {
+      pairedSources.push({
+        url: receiptUrl,
+        label: source.label ? `${source.label} · COMPROVANTE DO BANCO` : 'COMPROVANTE DO BANCO',
+      });
+    } else {
+      console.warn('[payroll-consolidated-pair]', {
+        label: source.label || null,
+        decision: 'SEM_COMPROVANTE_VINCULADO',
+        action: 'HOLERITE_PRESERVADO_NO_CONSOLIDADO_E_COMPROVANTE_MANTIDO_NA_FILA',
+      });
+    }
+  }
+
+  console.info('[payroll-consolidated-pair]', {
+    holerites: sources.length,
+    totalArquivosIntercalados: pairedSources.length,
+    ordem: 'RECIBO_HOLERITE -> COMPROVANTE_BANCO',
+  });
+  return mergePdfUrlsLegacy(pairedSources, filename);
 };
