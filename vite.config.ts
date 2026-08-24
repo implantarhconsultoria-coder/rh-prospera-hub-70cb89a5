@@ -17,7 +17,7 @@ export default defineConfig(() => ({
     alias: [
       {
         find: "@/lib/payrollDocuments",
-        replacement: path.resolve(__dirname, "./src/lib/payrollDocumentsV2.ts"),
+        replacement: path.resolve(__dirname, "./src/lib/payrollDocumentsV3.ts"),
       },
       {
         find: "@/lib/pdfGenerator",
