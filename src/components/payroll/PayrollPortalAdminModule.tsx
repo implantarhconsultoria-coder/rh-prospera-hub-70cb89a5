@@ -141,7 +141,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
             const parsed = await parsePayrollPdf({ file: receiptFile, employees: scopedEmployees, kind: 'COMPROVANTE' });
             if (parsed.length !== 1) continue;
             const item = parsed[0];
-            const autoAllowed = Boolean(item.employeeId) && item.confidence >= 85 && AUTO_MATCH_METHODS.has(item.matchMethod);
+            const autoAllowed = Boolean(item.employeeId) && AUTO_MATCH_METHODS.has(item.matchMethod);
             if (!autoAllowed || !item.employeeId) continue;
             const doc = docsByEmployee.get(item.employeeId);
 
@@ -415,7 +415,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         const parsed = await parsePayrollPdf({ file, employees: scopedEmployees, kind: 'COMPROVANTE', netAmountByEmployee: netByEmployee });
         const sourceHash = await sha256Browser(file);
         for (const item of parsed) {
-          const autoAllowed = Boolean(item.employeeId) && item.confidence >= 85 && AUTO_MATCH_METHODS.has(item.matchMethod);
+          const autoAllowed = Boolean(item.employeeId) && AUTO_MATCH_METHODS.has(item.matchMethod);
           const employeeId = autoAllowed ? item.employeeId : null;
           if (!employeeId) {
             rejected += 1;
