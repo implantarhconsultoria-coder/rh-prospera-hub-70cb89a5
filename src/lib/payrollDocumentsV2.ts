@@ -94,11 +94,8 @@ const pendingReceiptFilename = (file: File, item: ParsedPayrollPdf) => {
 };
 
 /**
- * Fluxo direto de comprovantes:
- * - o parser legado apenas separa/extrai as páginas;
- * - nenhuma divergência de valor/confidence pode bloquear o nome;
- * - em seguida toda página passa pelo matcher contextual + releitura nativa + OCR;
- * - o arquivo continua preservado mesmo quando não houver correspondência.
+ * Fluxo legado de comprovante isolado mantido apenas para compatibilidade técnica.
+ * O Fechamento principal não usa mais esse caminho: ele recebe pares sequenciais.
  */
 export const parsePayrollPdf = async ({
   file,
@@ -115,8 +112,6 @@ export const parsePayrollPdf = async ({
     file,
     employees,
     kind,
-    // O legado não decide comprovante por valor. Nome/empresa são resolvidos
-    // no matcher contextual abaixo e o valor é usado depois no emparelhamento.
     netAmountByEmployee: kind === 'COMPROVANTE' ? undefined : netAmountByEmployee,
   });
   if (kind !== 'COMPROVANTE' || !parsed.length) return parsed;
@@ -151,10 +146,13 @@ const receiptUrlForHoleriteUrl = async (holeriteUrl: string) => {
 
   const { data: document, error: documentError } = await (supabase as any)
     .from('payroll_documents')
-    .select('id')
+    .select('id,extracted_data')
     .eq('storage_path', storagePath)
     .maybeSingle();
   if (documentError || !document?.id) return null;
+
+  // O novo documento já contém [RECIBO][COMPROVANTE]. Não anexar o comprovante outra vez.
+  if (document?.extracted_data?.includes_bank_proof === true) return null;
 
   const { data: receipt, error: receiptError } = await (supabase as any)
     .from('payroll_payment_receipts')
@@ -174,9 +172,9 @@ const receiptUrlForHoleriteUrl = async (holeriteUrl: string) => {
 };
 
 /**
- * O consolidado administrativo passa a usar exatamente a montagem validada:
- * [RECIBO/HOLERITE][COMPROVANTE DO BANCO] para cada funcionário, em sequência.
- * Outros usos de mergePdfUrls (ex.: dossiê individual) permanecem intactos.
+ * Consolidado administrativo:
+ * - documentos novos já chegam como [RECIBO][COMPROVANTE] e entram uma única vez;
+ * - documentos antigos ainda podem receber o comprovante vinculado como segunda página.
  */
 export const mergePdfUrls = async (sources: Array<{ url: string; label?: string }>, filename: string) => {
   if (!/^HOLERITES_/i.test(filename) && !/^PAGAMENTOS_CONSOLIDADOS_/i.test(filename)) {
@@ -185,26 +183,20 @@ export const mergePdfUrls = async (sources: Array<{ url: string; label?: string 
 
   const pairedSources: Array<{ url: string; label?: string }> = [];
   for (const source of sources) {
-    pairedSources.push({ ...source, label: source.label ? `${source.label} · RECIBO/HOLERITE` : 'RECIBO/HOLERITE' });
+    pairedSources.push({ ...source, label: source.label ? `${source.label} · DOCUMENTO` : 'DOCUMENTO' });
     const receiptUrl = await receiptUrlForHoleriteUrl(source.url);
     if (receiptUrl) {
       pairedSources.push({
         url: receiptUrl,
         label: source.label ? `${source.label} · COMPROVANTE DO BANCO` : 'COMPROVANTE DO BANCO',
       });
-    } else {
-      console.warn('[payroll-consolidated-pair]', {
-        label: source.label || null,
-        decision: 'SEM_COMPROVANTE_VINCULADO',
-        action: 'HOLERITE_PRESERVADO_NO_CONSOLIDADO_E_COMPROVANTE_MANTIDO_NA_FILA',
-      });
     }
   }
 
   console.info('[payroll-consolidated-pair]', {
-    holerites: sources.length,
-    totalArquivosIntercalados: pairedSources.length,
-    ordem: 'RECIBO_HOLERITE -> COMPROVANTE_BANCO',
+    documentos: sources.length,
+    totalArquivos: pairedSources.length,
+    regra: 'SEM_DUPLICAR_COMPROVANTE_EM_DOCUMENTO_SEQUENCIAL',
   });
   return mergePdfUrlsLegacy(pairedSources, filename);
 };
