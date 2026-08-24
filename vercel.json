@@ -9,6 +9,10 @@
       "destination": "/api/frota-upload-v2"
     },
     {
+      "source": "/api/payroll-public",
+      "destination": "/api/payroll-public-v2"
+    },
+    {
       "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|sw.js|placeholder.svg).*)",
       "destination": "/index.html"
     }
