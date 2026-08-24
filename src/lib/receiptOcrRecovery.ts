@@ -12,60 +12,6 @@ const normalize = (value: unknown) => String(value || '')
   .replace(/\s+/g, ' ')
   .trim();
 
-const STOP_WORDS = new Set(['DE', 'DA', 'DO', 'DAS', 'DOS', 'E']);
-
-const nameTokens = (value: string) => normalize(value)
-  .split(' ')
-  .filter(token => token && !STOP_WORDS.has(token));
-
-const tokenCompatible = (a: string, b: string) => {
-  if (a === b) return true;
-  if (a.length === 1) return b.startsWith(a);
-  if (b.length === 1) return a.startsWith(b);
-  if (Math.min(a.length, b.length) >= 4) return a.startsWith(b) || b.startsWith(a);
-  return false;
-};
-
-const exactEmployeeMention = (text: string, employees: PayrollEmployeeMatch[]) => {
-  const haystack = ` ${normalize(text)} `;
-  if (!haystack.trim()) return null;
-  const exact = employees.filter(employee => {
-    const target = normalize(employee.name);
-    return target.length >= 5 && haystack.includes(` ${target} `);
-  });
-  return exact.length === 1 ? { employee: exact[0], score: 1 } : null;
-};
-
-const employeeScore = (text: string, employeeName: string) => {
-  const haystack = normalize(text);
-  const target = normalize(employeeName);
-  if (!haystack || !target) return 0;
-  if (` ${haystack} `.includes(` ${target} `)) return 1;
-
-  const tokens = nameTokens(employeeName);
-  if (tokens.length < 2) return 0;
-  const words = haystack.split(' ').filter(Boolean);
-  const matched = tokens.filter(token => words.some(word => tokenCompatible(token, word))).length;
-  const coverage = matched / tokens.length;
-  const first = words.some(word => tokenCompatible(tokens[0], word));
-  const last = words.some(word => tokenCompatible(tokens[tokens.length - 1], word));
-  if (first && last && coverage >= 0.66) return 0.90 + Math.min(0.09, coverage * 0.09);
-  if (first && coverage >= 0.80) return 0.86 + Math.min(0.08, coverage * 0.08);
-  return 0;
-};
-
-const rankEmployees = (text: string, employees: PayrollEmployeeMatch[], minScore = 0.86, minGap = 0.08) => {
-  const exact = exactEmployeeMention(text, employees);
-  if (exact) return exact;
-  const ranked = employees
-    .map(employee => ({ employee, score: employeeScore(text, employee.name) }))
-    .filter(item => item.score >= minScore)
-    .sort((a, b) => b.score - a.score);
-  if (!ranked[0]) return null;
-  if (ranked[1] && ranked[0].score - ranked[1].score < minGap) return null;
-  return ranked[0];
-};
-
 const receiverCandidates = (text: string) => {
   const source = String(text || '').replace(/\u00a0/g, ' ');
   const lines = source.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
@@ -80,7 +26,6 @@ const receiverCandidates = (text: string) => {
   };
 
   for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
     const patterns = [
       /NOME\s+DO\s+RECEBEDOR\.?\s*[:\-]?\s*(.*)$/i,
       /FAVORECIDO\.?\s*[:\-]?\s*(.*)$/i,
@@ -88,7 +33,7 @@ const receiverCandidates = (text: string) => {
       /TRANSFERIDO\s+PARA\.?\s*[:\-]?\s*(?:CLIENTE\s*[:\-]?\s*)?(.*)$/i,
     ];
     for (const pattern of patterns) {
-      const match = line.match(pattern);
+      const match = lines[i].match(pattern);
       if (!match) continue;
       if (match[1]?.trim()) push(match[1]);
       else if (lines[i + 1]) push(lines[i + 1]);
@@ -105,19 +50,27 @@ const receiverCandidates = (text: string) => {
   ];
   for (const pattern of flatPatterns) push(flat.match(pattern)?.[1]);
 
-  return Array.from(new Map(candidates.map(candidate => [normalize(candidate), candidate])).values());
+  return Array.from(new Set(candidates.map(normalize))).filter(Boolean);
 };
 
-const findUniqueEmployee = (text: string, employees: PayrollEmployeeMatch[]) => {
-  const exact = exactEmployeeMention(text, employees);
-  if (exact) return exact;
-  for (const candidate of receiverCandidates(text)) {
-    const directExact = exactEmployeeMention(candidate, employees);
-    if (directExact) return directExact;
-    const direct = rankEmployees(candidate, employees, 0.72, 0.05);
-    if (direct) return direct;
+const findEmployeeByName = (text: string, employees: PayrollEmployeeMatch[]) => {
+  const normalizedText = ` ${normalize(text)} `;
+
+  // Regra 1: nome completo do funcionário aparece no documento.
+  const exactInText = employees.filter(employee => {
+    const name = normalize(employee.name);
+    return name.length >= 5 && normalizedText.includes(` ${name} `);
+  });
+  if (exactInText.length === 1) return exactInText[0];
+
+  // Regra 2: campo explícito de recebedor/favorecido é igual ao nome cadastrado.
+  const candidates = receiverCandidates(text);
+  for (const candidate of candidates) {
+    const exact = employees.filter(employee => normalize(employee.name) === candidate);
+    if (exact.length === 1) return exact[0];
   }
-  return rankEmployees(text, employees, 0.86, 0.08);
+
+  return null;
 };
 
 const money = (raw: string) => {
@@ -153,10 +106,7 @@ const extractNativePdfText = async (bytes: Uint8Array) => {
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const page = await pdf.getPage(pageNumber);
       const content = await page.getTextContent();
-      const text = (content.items || [])
-        .map((item: any) => String(item?.str || '').trim())
-        .filter(Boolean)
-        .join(' ');
+      const text = (content.items || []).map((item: any) => String(item?.str || '').trim()).filter(Boolean).join(' ');
       if (text) parts.push(text);
     }
   } finally {
@@ -167,24 +117,13 @@ const extractNativePdfText = async (bytes: Uint8Array) => {
 };
 
 let workerPromise: Promise<any> | null = null;
-
 const getWorker = async () => {
   if (!workerPromise) {
     workerPromise = import('tesseract.js').then(async mod => {
       const worker = await mod.createWorker('eng');
-      try {
-        await worker.setParameters({
-          tessedit_pageseg_mode: '11',
-          preserve_interword_spaces: '1',
-        } as any);
-      } catch {
-        // parâmetros são melhoria, não requisito para leitura.
-      }
+      try { await worker.setParameters({ tessedit_pageseg_mode: '11', preserve_interword_spaces: '1' } as any); } catch { /* noop */ }
       return worker;
-    }).catch(error => {
-      workerPromise = null;
-      throw error;
-    });
+    }).catch(error => { workerPromise = null; throw error; });
   }
   return workerPromise;
 };
@@ -197,10 +136,7 @@ const preprocess = (canvas: HTMLCanvasElement) => {
   for (let i = 0; i < data.length; i += 4) {
     const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
     const contrasted = gray < 185 ? Math.max(0, gray - 35) : Math.min(255, gray + 30);
-    data[i] = contrasted;
-    data[i + 1] = contrasted;
-    data[i + 2] = contrasted;
-    data[i + 3] = 255;
+    data[i] = contrasted; data[i + 1] = contrasted; data[i + 2] = contrasted; data[i + 3] = 255;
   }
   ctx.putImageData(image, 0, 0);
   return canvas;
@@ -215,8 +151,7 @@ const ocrPdfBytes = async (bytes: Uint8Array) => {
       const page = await pdf.getPage(pageNumber);
       const viewport = page.getViewport({ scale: 2.55 });
       const canvas = document.createElement('canvas');
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
+      canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
       const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
       if (!ctx) continue;
       await page.render({ canvasContext: ctx, viewport, canvas }).promise;
@@ -234,67 +169,58 @@ const ocrPdfBytes = async (bytes: Uint8Array) => {
 };
 
 /**
- * Recuperação exclusivamente para comprovantes ainda sem vínculo.
- * A lista recebida já é da empresa selecionada no Fechamento.
- * Ordem: texto já extraído -> camada nativa do PDF -> OCR.
- * Nome completo exato dentro da empresa é chave definitiva; CPF e valor não bloqueiam.
+ * Matching determinístico, sem score/confidence como regra.
+ * A lista de employees já chega filtrada pela empresa selecionada.
  */
 export const recoverUnmatchedReceipt = async (
   item: ParsedPayrollPdf,
   employees: PayrollEmployeeMatch[],
 ): Promise<ParsedPayrollPdf> => {
-  if (item.employeeId || !item.bytes?.byteLength) return item;
+  if (!item.bytes?.byteLength) return item;
   try {
+    const sources: Array<{ text: string; usedOcr: boolean }> = [];
     const existingText = String(item.text || '').trim();
-    let ranked = existingText ? findUniqueEmployee(existingText, employees) : null;
-    if (ranked) {
-      return {
-        ...item,
-        employeeId: ranked.employee.id,
-        employeeName: ranked.employee.name,
-        matchMethod: 'NOME_UNICO',
-        confidence: 100,
-      };
-    }
+    if (existingText) sources.push({ text: existingText, usedOcr: false });
 
     const nativeText = await extractNativePdfText(item.bytes);
-    ranked = nativeText ? findUniqueEmployee(nativeText, employees) : null;
-    if (ranked) {
-      return {
+    if (normalize(nativeText) && normalize(nativeText) !== normalize(existingText)) sources.push({ text: nativeText, usedOcr: false });
+
+    for (const source of sources) {
+      const employee = findEmployeeByName(source.text, employees);
+      if (employee) return {
         ...item,
-        text: nativeText,
-        employeeId: ranked.employee.id,
-        employeeName: ranked.employee.name,
+        text: source.text,
+        employeeId: employee.id,
+        employeeName: employee.name,
         matchMethod: 'NOME_UNICO',
         confidence: 100,
-        amountDetected: extractAmount(nativeText) ?? item.amountDetected,
+        amountDetected: extractAmount(source.text) ?? item.amountDetected,
+        usedOcr: source.usedOcr,
       };
     }
 
     const ocrText = await ocrPdfBytes(item.bytes);
-    if (!normalize(ocrText)) return nativeText ? { ...item, text: nativeText } : item;
-    ranked = findUniqueEmployee(ocrText, employees);
-    if (!ranked) return { ...item, text: ocrText, usedOcr: true };
+    if (!normalize(ocrText)) return nativeText ? { ...item, text: nativeText, confidence: 0 } : { ...item, confidence: 0 };
+    const employee = findEmployeeByName(ocrText, employees);
+    if (!employee) return { ...item, text: ocrText, employeeId: null, employeeName: null, matchMethod: 'NAO_IDENTIFICADO', confidence: 0, usedOcr: true };
+
     return {
       ...item,
       text: ocrText,
-      employeeId: ranked.employee.id,
-      employeeName: ranked.employee.name,
+      employeeId: employee.id,
+      employeeName: employee.name,
       matchMethod: 'NOME_UNICO',
-      confidence: ranked.score === 1 ? 100 : Math.max(94, Math.round(ranked.score * 100)),
+      confidence: 100,
       amountDetected: extractAmount(ocrText) ?? item.amountDetected,
       usedOcr: true,
     };
   } catch (error) {
     console.error('[receipt-ocr-recovery]', error);
-    return item;
+    return { ...item, employeeId: null, employeeName: null, matchMethod: 'NAO_IDENTIFICADO', confidence: 0 };
   }
 };
 
-export const recoverUnmatchedReceipts = async (
-  items: ParsedPayrollPdf[],
-  employees: PayrollEmployeeMatch[],
-) => {
+export const recoverUnmatchedReceipts = async (items: ParsedPayrollPdf[], employees: PayrollEmployeeMatch[]) => {
   const output: ParsedPayrollPdf[] = [];
   for (const item of items) output.push(await recoverUnmatchedReceipt(item, employees));
   return output;
