@@ -21,6 +21,10 @@ const AUTH_METHOD = 'CPF_NASCIMENTO_CELULAR4';
 const SESSION_MINUTES = 30;
 const MAX_IP_ATTEMPTS_15M = 8;
 const MAX_CPF_ATTEMPTS_15M = 5;
+const HOLERITE = 'HOLERITE';
+const BENEFICIO = 'BENEFICIO_VR_VT';
+
+const documentLabel = (type: string) => type === BENEFICIO ? 'Recibo VR / VT' : 'Holerite';
 
 const genericIdentityError = (res: any, status = 401) =>
   sendJson(res, { ok: false, error: 'identity_not_validated' }, status);
@@ -69,13 +73,14 @@ const validatePublicSession = async (service: any, rawSession: string) => {
 const availableDocuments = async (service: any, employeeId: string, companyId: string) => {
   const { data: docs, error: docsError } = await service
     .from('payroll_documents')
-    .select('id,company_id,employee_id,competencia,document_version,net_amount,confirmed,status,is_current,created_at')
+    .select('id,company_id,employee_id,competencia,document_type,document_version,net_amount,confirmed,status,is_current,created_at')
     .eq('employee_id', employeeId)
     .eq('company_id', companyId)
     .eq('is_current', true)
     .eq('confirmed', true)
-    .eq('status', 'AGUARDANDO_PAGAMENTO')
-    .order('competencia', { ascending: false });
+    .in('status', ['AGUARDANDO_PAGAMENTO','AGUARDANDO_ASSINATURA'])
+    .order('competencia', { ascending: false })
+    .order('document_type', { ascending: true });
   if (docsError) throw docsError;
   if (!docs?.length) return [];
 
@@ -94,15 +99,18 @@ const availableDocuments = async (service: any, employeeId: string, companyId: s
   const requestByDoc = new Map((requests || []).map((row: any) => [row.document_id, row]));
 
   return docs
-    .filter((doc: any) => receiptByDoc.has(doc.id))
+    .filter((doc: any) => doc.document_type !== HOLERITE || receiptByDoc.has(doc.id))
     .map((doc: any) => {
       const receipt: any = receiptByDoc.get(doc.id);
       const signature: any = signatureByDoc.get(doc.id);
       const request: any = requestByDoc.get(doc.id);
       return {
         document_id: doc.id,
+        document_type: doc.document_type,
+        document_label: documentLabel(doc.document_type),
         competencia: doc.competencia,
         document_version: doc.document_version,
+        amount: doc.net_amount,
         payment_at: receipt?.paid_at || null,
         signed: Boolean(signature),
         signed_at: signature?.signed_at || null,
@@ -121,20 +129,26 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
     .eq('company_id', sessionRow.company_id)
     .eq('is_current', true)
     .eq('confirmed', true)
-    .eq('status', 'AGUARDANDO_PAGAMENTO')
+    .in('status', ['AGUARDANDO_PAGAMENTO','AGUARDANDO_ASSINATURA'])
     .maybeSingle();
   if (docError || !doc) throw Object.assign(new Error('document_not_available'), { status: 404 });
 
-  const { data: receipt, error: receiptError } = await service
-    .from('payroll_payment_receipts')
-    .select('*')
-    .eq('document_id', doc.id)
-    .eq('employee_id', sessionRow.employee_id)
-    .eq('company_id', sessionRow.company_id)
-    .eq('status', 'PAGAMENTO_CONFIRMADO')
-    .eq('confirmed', true)
-    .maybeSingle();
-  if (receiptError || !receipt) throw Object.assign(new Error('payment_not_confirmed'), { status: 409 });
+  let receipt: any = null;
+  if (doc.document_type === HOLERITE) {
+    const result = await service
+      .from('payroll_payment_receipts')
+      .select('*')
+      .eq('document_id', doc.id)
+      .eq('employee_id', sessionRow.employee_id)
+      .eq('company_id', sessionRow.company_id)
+      .eq('status', 'PAGAMENTO_CONFIRMADO')
+      .eq('confirmed', true)
+      .maybeSingle();
+    if (result.error || !result.data) throw Object.assign(new Error('payment_not_confirmed'), { status: 409 });
+    receipt = result.data;
+  } else if (doc.document_type !== BENEFICIO) {
+    throw Object.assign(new Error('document_not_available'), { status: 404 });
+  }
 
   const { data: employee, error: employeeError } = await service
     .from('funcionarios')
@@ -158,7 +172,7 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
     }
     if (existing.status !== 'ASSINADO') {
       const { data: updated, error } = await service.from('payroll_signature_requests').update({
-        receipt_id: receipt.id,
+        receipt_id: receipt?.id || null,
         phone_snapshot: phone,
         status: 'ASSINATURA_PENDENTE',
         identity_validated_at: now,
@@ -181,7 +195,7 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
     company_id: sessionRow.company_id,
     employee_id: sessionRow.employee_id,
     document_id: doc.id,
-    receipt_id: receipt.id,
+    receipt_id: receipt?.id || null,
     competencia: doc.competencia,
     phone_snapshot: phone,
     public_token_hash: sha256(internalToken),
@@ -202,8 +216,8 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
     companyId: sessionRow.company_id,
     employeeId: sessionRow.employee_id,
     requestId: created.id,
-    eventType: 'HOLERITE_LIBERADO_NO_PORTAL',
-    payload: { document_id: doc.id, competencia: doc.competencia, authentication_method: AUTH_METHOD },
+    eventType: 'DOCUMENTO_LIBERADO_NO_PORTAL',
+    payload: { document_id: doc.id, document_type: doc.document_type, competencia: doc.competencia, authentication_method: AUTH_METHOD },
   });
   return { requestRow: created, doc, receipt, employee };
 };
@@ -327,8 +341,8 @@ export default async function handler(req: any, res?: any) {
           companyId: sessionRow.company_id,
           employeeId: sessionRow.employee_id,
           requestId: requestRow.id,
-          eventType: 'HOLERITE_ABERTO_NO_PORTAL',
-          payload: { document_id: doc.id, competencia: doc.competencia },
+          eventType: 'DOCUMENTO_ABERTO_NO_PORTAL',
+          payload: { document_id: doc.id, document_type: doc.document_type, competencia: doc.competencia },
         });
         requestRow.opened_at = openedAt;
       }
@@ -336,6 +350,8 @@ export default async function handler(req: any, res?: any) {
       return sendJson(res, {
         ok: true,
         document_id: doc.id,
+        document_type: doc.document_type,
+        document_label: documentLabel(doc.document_type),
         document_url: await signedUrl(service, doc.storage_path, 300),
         document_expires_seconds: 300,
         employee_name: employee.nome,
@@ -357,7 +373,7 @@ export default async function handler(req: any, res?: any) {
           employeeId: sessionRow.employee_id,
           requestId: requestRow.id,
           eventType: 'DOCUMENTO_VISUALIZADO_E_CONFERIDO',
-          payload: { document_id: doc.id, viewed_at: viewedAt },
+          payload: { document_id: doc.id, document_type: doc.document_type, viewed_at: viewedAt },
         });
       }
       return sendJson(res, { ok: true });
@@ -404,9 +420,11 @@ export default async function handler(req: any, res?: any) {
         employee_role: employee.cargo || '',
         competencia: doc.competencia,
         document_id: doc.id,
-        receipt_id: receipt.id,
+        document_type: doc.document_type,
+        document_label: documentLabel(doc.document_type),
+        receipt_id: receipt?.id || null,
         net_amount: doc.net_amount,
-        payment_at: receipt.paid_at,
+        payment_at: receipt?.paid_at || null,
         identity_validated_at: requestRow.identity_validated_at,
         opened_at: requestRow.opened_at,
         viewed_at: requestRow.viewed_at,
@@ -433,7 +451,7 @@ export default async function handler(req: any, res?: any) {
         company_id: sessionRow.company_id,
         employee_id: sessionRow.employee_id,
         document_id: doc.id,
-        receipt_id: receipt.id,
+        receipt_id: receipt?.id || null,
         competencia: doc.competencia,
         employee_name: employee.nome,
         employee_cpf: employee.cpf,
@@ -442,7 +460,7 @@ export default async function handler(req: any, res?: any) {
         company_cnpj: company.cnpj,
         employee_role: employee.cargo || '',
         net_amount: doc.net_amount,
-        payment_at: receipt.paid_at,
+        payment_at: receipt?.paid_at || null,
         link_sent_at: null,
         opened_at: requestRow.opened_at,
         otp_validated_at: null,
@@ -474,7 +492,7 @@ export default async function handler(req: any, res?: any) {
       await service.from('payroll_terms_acceptances').insert({
         company_id: sessionRow.company_id,
         employee_id: sessionRow.employee_id,
-        term_version: 'payroll-signature-v1',
+        term_version: doc.document_type === BENEFICIO ? 'benefit-signature-v1' : 'payroll-signature-v1',
         accepted: true,
         authentication_method: AUTH_METHOD,
         accepted_at: signedAt,
@@ -495,7 +513,7 @@ export default async function handler(req: any, res?: any) {
         employeeId: sessionRow.employee_id,
         requestId: requestRow.id,
         eventType: 'ASSINATURA_CONCLUIDA',
-        payload: { signature_id: signatureId, authentication_method: AUTH_METHOD, certificate_sha256: certificateHash, document_sha256: recomputedHash },
+        payload: { signature_id: signatureId, document_type: doc.document_type, authentication_method: AUTH_METHOD, certificate_sha256: certificateHash, document_sha256: recomputedHash },
       });
       await addEvent(service, {
         request_id: requestRow.id,
@@ -503,7 +521,7 @@ export default async function handler(req: any, res?: any) {
         employee_id: sessionRow.employee_id,
         event_type: 'DOCUMENTO_SELADO',
         actor_type: 'SYSTEM',
-        payload: { signature_id: signatureId, document_sha256: recomputedHash, certificate_sha256: certificateHash },
+        payload: { signature_id: signatureId, document_type: doc.document_type, document_sha256: recomputedHash, certificate_sha256: certificateHash },
       });
       return sendJson(res, { ok: true, signed: true, signature_id: signatureId, signed_at: signedAt });
     }

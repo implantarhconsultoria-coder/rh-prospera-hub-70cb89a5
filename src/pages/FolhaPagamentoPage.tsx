@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { buildHoleriteHtml, buildFolhaConsolidadaHtml } from '@/lib/folhaPdf';
 import PayrollSignatureModule from '@/components/payroll/PayrollSignatureModule';
+import BenefitSignatureGenerator from '@/components/payroll/BenefitSignatureGenerator';
 
 const FolhaPagamentoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries } = useApp();
@@ -212,6 +213,7 @@ const FolhaPagamentoPage: React.FC = () => {
       </Card>
 
       <PayrollSignatureModule companyId={selectedCompany} competencia={competencia} />
+      <BenefitSignatureGenerator companyId={selectedCompany} competencia={competencia} />
     </div>
   );
 };

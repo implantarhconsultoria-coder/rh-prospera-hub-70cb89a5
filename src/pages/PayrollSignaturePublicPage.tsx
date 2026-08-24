@@ -28,10 +28,10 @@ const errorText = (error: any) => {
     invalid_session: 'Sua sessão segura não é mais válida. Faça a identificação novamente.',
     session_required: 'Faça a identificação novamente para continuar.',
     session_expired: 'Sua sessão segura expirou. Faça a identificação novamente.',
-    document_not_available: 'Este holerite não está disponível para assinatura.',
-    payment_not_confirmed: 'O pagamento ainda não foi liberado pelo RH.',
+    document_not_available: 'Este documento não está disponível para assinatura.',
+    payment_not_confirmed: 'O pagamento do holerite ainda não foi liberado pelo RH.',
     document_integrity_failed: 'O documento não passou na validação de integridade. A assinatura foi bloqueada.',
-    document_not_acknowledged: 'Confirme primeiro que leu e conferiu o holerite.',
+    document_not_acknowledged: 'Confirme primeiro que leu e conferiu o documento.',
     signature_confirmation_required: 'Confirme a assinatura para continuar.',
   };
   return map[code] || 'Não foi possível concluir esta etapa. Tente novamente.';
@@ -144,6 +144,7 @@ const PayrollSignaturePublicPage: React.FC = () => {
   };
 
   const canAuthenticate = cpf.replace(/\D/g, '').length === 11 && Boolean(birthDate) && phoneLast4.length === 4;
+  const activeLabel = doc?.document_label || 'Documento';
 
   return <div className="min-h-screen bg-slate-950 text-slate-100">
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 py-6 sm:px-6">
@@ -151,7 +152,7 @@ const PayrollSignaturePublicPage: React.FC = () => {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/95"><img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC" className="h-11 w-11 object-contain"/></div>
-            <div><p className="text-xs font-bold tracking-widest text-cyan-300">TOPAC RH PRO</p><h1 className="text-lg font-bold">Portal de Holerite</h1></div>
+            <div><p className="text-xs font-bold tracking-widest text-cyan-300">TOPAC RH PRO</p><h1 className="text-lg font-bold">Portal de Holerite e Recibos</h1></div>
           </div>
           {session && <Button size="sm" variant="outline" onClick={()=>void logout()}><LogOut className="mr-2 h-4 w-4"/>Sair</Button>}
         </div>
@@ -159,8 +160,8 @@ const PayrollSignaturePublicPage: React.FC = () => {
 
       {!session && <section className="mx-auto w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-5 sm:p-7">
         <LockKeyhole className="mb-3 h-8 w-8 text-cyan-300"/>
-        <h2 className="text-xl font-bold">Acesso seguro ao seu holerite</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-400">Informe os mesmos dados cadastrados no RH. Nenhum documento é exibido antes da validação.</p>
+        <h2 className="text-xl font-bold">Acesso seguro aos seus documentos</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-400">Informe os mesmos dados cadastrados no RH. Nenhum holerite ou recibo é exibido antes da validação.</p>
 
         <div className="mt-6 space-y-4">
           <label className="block"><span className="mb-1.5 block text-sm font-semibold">CPF</span><Input inputMode="numeric" autoComplete="off" value={cpf} onChange={e=>setCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" className="h-12"/></label>
@@ -169,7 +170,7 @@ const PayrollSignaturePublicPage: React.FC = () => {
         </div>
 
         {error && <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
-        <Button className="mt-5 h-14 w-full text-base font-bold" disabled={busy || !canAuthenticate} onClick={()=>void authenticate()}>{busy ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <ShieldCheck className="mr-2 h-5 w-5"/>}ACESSAR HOLERITE</Button>
+        <Button className="mt-5 h-14 w-full text-base font-bold" disabled={busy || !canAuthenticate} onClick={()=>void authenticate()}>{busy ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <ShieldCheck className="mr-2 h-5 w-5"/>}ACESSAR DOCUMENTOS</Button>
         <div className="mt-5 rounded-xl border border-slate-700/80 bg-slate-950/40 p-3 text-xs leading-5 text-slate-400"><b className="text-slate-300">Segurança:</b> o CPF sozinho não libera nenhum documento. O acesso exige também data de nascimento e conferência dos últimos dígitos do telefone já registrado no RH.</div>
       </section>}
 
@@ -179,25 +180,25 @@ const PayrollSignaturePublicPage: React.FC = () => {
           <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-bold">{profile.employee_name}</h2><p className="text-sm text-slate-400">{profile.company_name}{profile.employee_role ? ` · ${profile.employee_role}` : ''}</p></div><Button size="sm" variant="outline" disabled={busy} onClick={()=>void refreshList()}><RefreshCw className={`mr-2 h-4 w-4 ${busy ? 'animate-spin' : ''}`}/>Atualizar</Button></div>
         </div>
 
-        {documents.length > 1 && <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4"><p className="mb-3 text-sm font-bold">Holerites disponíveis</p><div className="grid gap-2 sm:grid-cols-2">{documents.map(item=><button key={item.document_id} onClick={()=>void openDocument(item.document_id)} className={`rounded-xl border p-3 text-left transition ${doc?.document_id===item.document_id ? 'border-cyan-400/60 bg-cyan-400/10' : 'border-slate-700 hover:border-slate-500'}`}><span className="font-bold">Competência {competenceLabel(item.competencia)}</span><span className={`mt-1 block text-xs ${item.signed ? 'text-emerald-300' : 'text-slate-400'}`}>{item.signed ? `Assinado em ${brDateTime(item.signed_at)}` : 'Disponível para conferência'}</span></button>)}</div></div>}
+        {documents.length > 1 && <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4"><p className="mb-3 text-sm font-bold">Documentos disponíveis</p><div className="grid gap-2 sm:grid-cols-2">{documents.map(item=><button key={item.document_id} onClick={()=>void openDocument(item.document_id)} className={`rounded-xl border p-3 text-left transition ${doc?.document_id===item.document_id ? 'border-cyan-400/60 bg-cyan-400/10' : 'border-slate-700 hover:border-slate-500'}`}><span className="font-bold">{item.document_label || 'Documento'} · {competenceLabel(item.competencia)}</span><span className={`mt-1 block text-xs ${item.signed ? 'text-emerald-300' : 'text-slate-400'}`}>{item.signed ? `Assinado em ${brDateTime(item.signed_at)}` : 'Disponível para conferência'}</span></button>)}</div></div>}
 
         {busy && !doc && <div className="flex min-h-40 items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-cyan-300"/></div>}
 
         {doc && <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4"><p className="text-xs uppercase tracking-wide text-cyan-300">Holerite — {competenceLabel(doc.competencia)}</p><p className="mt-1 text-sm text-slate-400">Documento individual liberado pelo RH.</p></div>
-          <div className="overflow-hidden rounded-2xl border border-slate-700 bg-white"><iframe title="Holerite" src={doc.document_url} className="h-[62vh] min-h-[520px] w-full bg-white"/></div>
+          <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4"><p className="text-xs uppercase tracking-wide text-cyan-300">{activeLabel} — {competenceLabel(doc.competencia)}</p><p className="mt-1 text-sm text-slate-400">Documento individual liberado pelo RH.</p></div>
+          <div className="overflow-hidden rounded-2xl border border-slate-700 bg-white"><iframe title={activeLabel} src={doc.document_url} className="h-[62vh] min-h-[520px] w-full bg-white"/></div>
           <Button className="w-full" variant="outline" disabled={busy} onClick={()=>void openDocument(doc.document_id)}><RefreshCw className="mr-2 h-4 w-4"/>Atualizar visualização segura</Button>
 
           {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
 
-          {doc.signed || signedInfo ? <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-emerald-300"/><h3 className="mt-3 text-xl font-bold">Holerite assinado</h3><p className="mt-1 text-sm text-emerald-100/80">Assinatura registrada em {brDateTime(signedInfo?.signed_at || doc.signed_at)}.</p></div>
+          {doc.signed || signedInfo ? <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-center"><CheckCircle2 className="mx-auto h-10 w-10 text-emerald-300"/><h3 className="mt-3 text-xl font-bold">Documento assinado</h3><p className="mt-1 text-sm text-emerald-100/80">Assinatura registrada em {brDateTime(signedInfo?.signed_at || doc.signed_at)}.</p></div>
           : !acknowledged ? <Button className="h-14 w-full text-base font-bold" disabled={busy} onClick={()=>void acknowledge()}><FileCheck2 className="mr-2 h-5 w-5"/>LI E CONFERI</Button>
           : <><div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200"><CheckCircle2 className="h-5 w-5"/>Leitura e conferência registradas.</div><Button className="h-14 w-full text-base font-bold" disabled={busy} onClick={()=>setConfirmOpen(true)}><FileSignature className="mr-2 h-5 w-5"/>ASSINAR ELETRONICAMENTE</Button></>}
         </div>}
       </section>}
     </main>
 
-    {confirmOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"><div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"><h3 className="text-lg font-bold">Confirmar assinatura eletrônica</h3><p className="mt-3 text-sm leading-6 text-slate-300">Confirmo que me identifiquei com meus dados pessoais, visualizei e conferi este holerite e desejo registrar minha assinatura eletrônica neste documento.</p><p className="mt-3 text-xs leading-5 text-slate-400">O registro inclui data/hora, evidências técnicas e integridade SHA-256 do documento.</p><div className="mt-5 grid grid-cols-2 gap-2"><Button variant="outline" disabled={busy} onClick={()=>setConfirmOpen(false)}>CANCELAR</Button><Button disabled={busy} onClick={()=>void sign()}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}CONFIRMAR ASSINATURA</Button></div></div></div>}
+    {confirmOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"><div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"><h3 className="text-lg font-bold">Confirmar assinatura eletrônica</h3><p className="mt-3 text-sm leading-6 text-slate-300">Confirmo que me identifiquei com meus dados pessoais, visualizei e conferi este documento e desejo registrar minha assinatura eletrônica.</p><p className="mt-3 text-xs leading-5 text-slate-400">O registro inclui data/hora, evidências técnicas e integridade SHA-256 do documento.</p><div className="mt-5 grid grid-cols-2 gap-2"><Button variant="outline" disabled={busy} onClick={()=>setConfirmOpen(false)}>CANCELAR</Button><Button disabled={busy} onClick={()=>void sign()}>{busy && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}CONFIRMAR ASSINATURA</Button></div></div></div>}
   </div>;
 };
 
