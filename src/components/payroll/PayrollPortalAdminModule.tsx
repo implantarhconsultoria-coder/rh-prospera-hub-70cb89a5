@@ -18,7 +18,6 @@ import {
   analyzePayrollFiles,
   safeUuid,
   type PayrollFileAnalysis,
-  type PayrollPageDocument,
 } from '@/lib/payrollPageDocuments';
 
 const BUCKET = 'payroll-private';
@@ -83,12 +82,8 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);
 
   const [rows, setRows] = useState<any[]>([]);
-  const [reviewReceipts, setReviewReceipts] = useState<any[]>([]);
-  const [reviewDocuments, setReviewDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [assignReceipt, setAssignReceipt] = useState<Record<string,string>>({});
-  const [assignDoc, setAssignDoc] = useState<Record<string,string>>({});
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timeline, setTimeline] = useState<any>({ events: [], messages: [], employee: '' });
   const [consolidatedFilter, setConsolidatedFilter] = useState<'assinados'|'todos'|'pendentes'>('assinados');
@@ -111,6 +106,50 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     };
   };
 
+  const retryUnmatchedDocuments = async (documents: any[]) => {
+    let changed = false;
+    for (const document of documents) {
+      if (!document.storage_path) continue;
+      try {
+        const { data: blob, error: downloadError } = await supabase.storage.from(BUCKET).download(document.storage_path);
+        if (downloadError || !blob) throw downloadError || new Error('Documento sem arquivo no storage.');
+        const file = new File([blob], document.original_filename || 'recibo.pdf', { type: 'application/pdf' });
+        const analyses = await analyzePayrollFiles({ files: [file], employees: scopedEmployees });
+        const item = analyses[0]?.documents?.[0];
+        if (!item?.employeeId || item.status !== 'IDENTIFICADO') {
+          console.warn('[payroll-auto-retry-document]', {
+            documentId: document.id,
+            companyId,
+            competencia,
+            decision: item?.status || 'TEXT_NOT_FOUND',
+            nameDetected: item?.employeeNameDetected || null,
+            amountDetected: item?.amountDetected || null,
+          });
+          continue;
+        }
+        const { error: updateError } = await (supabase as any).from('payroll_documents').update({
+          employee_id: item.employeeId,
+          net_amount: item.amountDetected ?? document.net_amount,
+          match_confidence: 100,
+          extracted_data: {
+            ...(document.extracted_data || {}),
+            nome_detectado: item.employeeNameDetected || item.employeeName,
+            metodo_vinculo: item.matchMethod,
+            status_analise: 'IDENTIFICADO_AUTOMATICAMENTE',
+            reprocessamento_automatico: true,
+            usou_ocr: item.usedOcr,
+          },
+        }).eq('id', document.id);
+        if (updateError) throw updateError;
+        await apiCall('confirm-document', { document_id: document.id });
+        changed = true;
+      } catch (error: any) {
+        console.error('[payroll-auto-retry-document]', { documentId: document.id, companyId, competencia, error: error?.message || error });
+      }
+    }
+    return changed;
+  };
+
   const reconcilePayments = async (statusRows: any[], receipts: any[]) => {
     if (reconcilingRef.current) return false;
     reconcilingRef.current = true;
@@ -124,10 +163,9 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         try {
           let employeeId: string | null = receipt.employee_id || null;
           let matchMethod = String(receipt.extracted_data?.metodo_vinculo || 'NAO_IDENTIFICADO');
-          let confidence = Number(receipt.match_confidence || 0);
           let receiptAmount = receipt.amount == null ? null : Number(receipt.amount);
 
-          // Se ainda não houver funcionário, releia o PDF preservado usando SOMENTE a empresa selecionada.
+          // Toda pendência é reprocessada automaticamente: texto existente -> camada nativa -> OCR alternativo.
           if (!employeeId && receipt.storage_path) {
             const { data: blob, error: downloadError } = await supabase.storage.from(BUCKET).download(receipt.storage_path);
             if (downloadError || !blob) throw downloadError || new Error('Comprovante sem arquivo no storage.');
@@ -137,7 +175,6 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
               const item = parsed[0];
               employeeId = item.employeeId || null;
               matchMethod = item.matchMethod;
-              confidence = Number(item.confidence || 0);
               const metadata = extractReceiptMetadata(item.text);
               receiptAmount = metadata.amount ?? item.amountDetected ?? receiptAmount;
             }
@@ -146,19 +183,33 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           const doc = employeeId ? docsByEmployee.get(employeeId) : null;
           const nameAndAmountMatch = Boolean(employeeId && doc?.document_id && amountMatches(receiptAmount, doc.net_amount));
 
+          console.info('[payroll-auto-reconcile]', {
+            companyId,
+            competencia,
+            receiptId: receipt.id,
+            employeeId,
+            employeeName: employeeId ? scopedEmployees.find(employee => employee.id === employeeId)?.name || null : null,
+            receiptAmount,
+            documentAmount: doc?.net_amount ?? null,
+            nameMatch: Boolean(employeeId),
+            amountMatch: Boolean(doc?.document_id && amountMatches(receiptAmount, doc.net_amount)),
+            decision: nameAndAmountMatch ? 'AUTO_MATCH' : !employeeId ? 'NO_EMPLOYEE_MATCH_RETRY_SCHEDULED' : !doc?.document_id ? 'RECEIPT_NOT_FOUND_RETRY_SCHEDULED' : 'VALUE_NOT_FOUND_RETRY_SCHEDULED',
+          });
+
           if (nameAndAmountMatch) {
             const { error: updateError } = await (supabase as any).from('payroll_payment_receipts').update({
               employee_id: employeeId,
               document_id: doc.document_id,
               amount: receiptAmount,
               status: 'PAGAMENTO_IDENTIFICADO',
-              match_confidence: Math.max(100, confidence),
+              match_confidence: 100,
               extracted_data: {
                 ...(receipt.extracted_data || {}),
                 metodo_vinculo: 'NOME_VALOR',
                 reconhecimento_automatico: true,
                 nome_e_valor_conferidos: true,
-                aguardando_associacao_manual: false,
+                reprocessamento_automatico: false,
+                motivo_tecnico: null,
               },
             }).eq('id', receipt.id);
             if (updateError) throw updateError;
@@ -168,28 +219,33 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
             continue;
           }
 
-          // Nome reconhecido sem par financeiro: preserva o candidato, mas NÃO confirma.
-          if (employeeId && (employeeId !== receipt.employee_id || receiptAmount !== receipt.amount)) {
-            const { error: updateError } = await (supabase as any).from('payroll_payment_receipts').update({
-              employee_id: employeeId,
-              document_id: null,
-              amount: receiptAmount,
-              status: 'PAGAMENTO_IDENTIFICADO',
-              match_confidence: confidence,
-              extracted_data: {
-                ...(receipt.extracted_data || {}),
-                metodo_vinculo: matchMethod,
-                reconhecimento_automatico: true,
-                nome_e_valor_conferidos: false,
-                aguardando_associacao_manual: true,
-                motivo_revisao: doc?.document_id ? 'VALOR_NAO_CORRESPONDE_AO_LIQUIDO' : 'HOLERITE_AINDA_NAO_ENCONTRADO',
-              },
-            }).eq('id', receipt.id);
-            if (updateError) throw updateError;
-            changed = true;
-          }
+          const technicalReason = !employeeId
+            ? 'NO_EMPLOYEE_MATCH'
+            : !doc?.document_id
+              ? 'RECEIPT_NOT_FOUND'
+              : receiptAmount == null
+                ? 'VALUE_NOT_FOUND'
+                : 'VALUE_MISMATCH';
+
+          const { error: updateError } = await (supabase as any).from('payroll_payment_receipts').update({
+            employee_id: employeeId,
+            document_id: null,
+            amount: receiptAmount,
+            status: employeeId ? 'PAGAMENTO_IDENTIFICADO' : 'PAGAMENTO_NAO_IDENTIFICADO',
+            match_confidence: employeeId ? 100 : 0,
+            extracted_data: {
+              ...(receipt.extracted_data || {}),
+              metodo_vinculo: matchMethod,
+              reconhecimento_automatico: Boolean(employeeId),
+              nome_e_valor_conferidos: false,
+              reprocessamento_automatico: true,
+              motivo_tecnico: technicalReason,
+            },
+          }).eq('id', receipt.id);
+          if (updateError) throw updateError;
+          changed = true;
         } catch (error: any) {
-          console.warn('[payroll-reconcile]', { receiptId: receipt.id, error: error?.message || error });
+          console.error('[payroll-auto-reconcile]', { receiptId: receipt.id, companyId, competencia, decision: 'OCR_FAILED', error: error?.message || error });
         }
       }
     } finally {
@@ -203,11 +259,11 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     setLoading(true);
     try {
       let snapshot = await fetchSnapshot();
-      const changed = await reconcilePayments(snapshot.statusRows, snapshot.pendingReceipts);
-      if (changed) snapshot = await fetchSnapshot();
+      const documentsChanged = await retryUnmatchedDocuments(snapshot.pendingDocuments);
+      if (documentsChanged) snapshot = await fetchSnapshot();
+      const receiptsChanged = await reconcilePayments(snapshot.statusRows, snapshot.pendingReceipts);
+      if (receiptsChanged) snapshot = await fetchSnapshot();
       setRows(snapshot.statusRows);
-      setReviewReceipts(snapshot.pendingReceipts);
-      setReviewDocuments(snapshot.pendingDocuments);
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível carregar o fechamento.');
     } finally {
@@ -235,7 +291,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         doc.status = 'PENDENTE';
         doc.matchMethod = 'NAO_IDENTIFICADO';
         doc.confidence = 0;
-        doc.message = `Documento pertence a outro CNPJ (${doc.cnpjDetected}). Mantido para revisão; nunca será cruzado com ${company?.name}.`;
+        doc.message = `Documento pertence a outro CNPJ (${doc.cnpjDetected}). Preservado internamente e impedido de cruzar com ${company?.name}.`;
       }
     }
     return analysis;
@@ -243,11 +299,13 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
 
   const persistPayrollAnalysis = async (analysis: PayrollFileAnalysis) => {
     let created = 0;
-    let review = 0;
+    let technicalPending = 0;
     let duplicates = 0;
     for (const item of analysis.documents) {
-      // Se houve falha real de geração de bytes, não há PDF válido para armazenar.
-      if (!item.bytes.byteLength || !item.sha256) continue;
+      if (!item.bytes.byteLength || !item.sha256) {
+        console.error('[payroll-document-persist]', { companyId, competencia, page: item.pageNumber, decision: 'PDF_BYTES_NOT_FOUND' });
+        continue;
+      }
 
       const { data: duplicate, error: duplicateError } = await (supabase as any).from('payroll_documents')
         .select('id').eq('company_id', companyId).eq('competencia', competencia).eq('document_sha256', item.sha256).maybeSingle();
@@ -273,14 +331,14 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         source_page_start: item.pageNumber,
         source_page_end: item.pageNumber,
         net_amount: item.amountDetected,
-        match_confidence: item.confidence,
+        match_confidence: employeeId ? 100 : 0,
         extracted_data: {
           pagina_fisica: item.pageNumber,
           paginas: [item.pageNumber],
           cpf_detectado: item.cpfDetected,
           nome_detectado: item.employeeNameDetected,
           metodo_vinculo: item.matchMethod,
-          status_analise: employeeId ? 'IDENTIFICADO' : 'AGUARDANDO_ASSOCIACAO_MANUAL',
+          status_analise: employeeId ? 'IDENTIFICADO' : 'REPROCESSAMENTO_AUTOMATICO',
           empresa_detectada: item.companyNameDetected,
           cnpj_detectado: item.cnpjDetected,
           competencia_detectada: item.competenciaDetected,
@@ -289,6 +347,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           valor_liquido_detectado: item.amountDetected,
           vias_na_mesma_pagina: item.duplicateCopiesDetected,
           usou_ocr: item.usedOcr,
+          reprocessamento_automatico: !employeeId,
           regra_importacao: 'ZERO_DESCARTE_1_PAGINA_1_DOCUMENTO',
         },
         status: 'HOLERITE_PENDENTE',
@@ -299,20 +358,23 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       }
       created += 1;
       if (employeeId) await apiCall('confirm-document', { document_id: inserted.id });
-      else review += 1;
+      else technicalPending += 1;
     }
-    return { created, review, duplicates };
+    return { created, technicalPending, duplicates };
   };
 
   const persistBankFile = async (file: File) => {
     const parsed = await parsePayrollPdf({ file, employees: scopedEmployees, kind: 'COMPROVANTE' });
     const sourceHash = await sha256Browser(file);
     let created = 0;
-    let review = 0;
+    let technicalPending = 0;
     let duplicates = 0;
 
     for (const item of parsed) {
-      if (!item.bytes.byteLength) continue;
+      if (!item.bytes.byteLength) {
+        console.error('[payroll-receipt-persist]', { companyId, competencia, pages: item.pageNumbers, decision: 'PDF_BYTES_NOT_FOUND' });
+        continue;
+      }
       const hash = await sha256Browser(item.bytes);
       const metadata = extractReceiptMetadata(item.text);
       const { data: duplicate, error: duplicateError } = await (supabase as any).from('payroll_payment_receipts')
@@ -328,6 +390,16 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       const blob = new Blob([item.bytes as any], { type: 'application/pdf' });
       const { error: storageError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
       if (storageError) throw storageError;
+
+      const technicalReason = !employeeId
+        ? 'NO_EMPLOYEE_MATCH'
+        : !doc?.document_id
+          ? 'RECEIPT_NOT_FOUND'
+          : amount == null
+            ? 'VALUE_NOT_FOUND'
+            : !amountMatches(amount, doc.net_amount)
+              ? 'VALUE_MISMATCH'
+              : null;
 
       const { data: inserted, error: insertError } = await (supabase as any).from('payroll_payment_receipts').insert({
         company_id: companyId,
@@ -348,7 +420,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         transaction_id: metadata.transactionId,
         bank_authentication: metadata.bankAuthentication,
         payer_name: metadata.payerName,
-        match_confidence: item.confidence,
+        match_confidence: employeeId ? 100 : 0,
         extracted_data: {
           cpf_detectado: item.cpfDetected,
           nome_detectado: item.employeeName || null,
@@ -356,8 +428,8 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           paginas: item.pageNumbers,
           reconhecimento_automatico: Boolean(employeeId),
           nome_e_valor_conferidos: exactPair,
-          aguardando_associacao_manual: !exactPair,
-          motivo_revisao: !employeeId ? 'NOME_NAO_RECONHECIDO' : !doc?.document_id ? 'HOLERITE_AINDA_NAO_ENCONTRADO' : !amountMatches(amount, doc.net_amount) ? 'VALOR_NAO_CORRESPONDE_AO_LIQUIDO' : null,
+          reprocessamento_automatico: !exactPair,
+          motivo_tecnico: technicalReason,
         },
         status: employeeId ? 'PAGAMENTO_IDENTIFICADO' : 'PAGAMENTO_NAO_IDENTIFICADO',
         idempotency_key: `receipt:${companyId}:${competencia}:${hash}`,
@@ -368,14 +440,25 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       }
       created += 1;
 
+      console.info('[payroll-bank-match]', {
+        companyId,
+        competencia,
+        pages: item.pageNumbers,
+        nameDetected: item.employeeName,
+        amountDetected: amount,
+        employeeId,
+        expectedAmount: doc?.net_amount ?? null,
+        decision: exactPair ? 'AUTO_MATCH' : `${technicalReason}_RETRY_SCHEDULED`,
+      });
+
       if (exactPair) {
         if (!doc.holerite_confirmed) await apiCall('confirm-document', { document_id: doc.document_id });
         await apiCall('confirm-payment', { receipt_id: inserted.id, override_reason: AUTO_OVERRIDE_REASON });
       } else {
-        review += 1;
+        technicalPending += 1;
       }
     }
-    return { created, review, duplicates };
+    return { created, technicalPending, duplicates };
   };
 
   const uploadUnified = async (incoming: File[]) => {
@@ -391,10 +474,9 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
 
       let payrollCreated = 0;
       let receiptCreated = 0;
-      let review = 0;
+      let technicalPending = 0;
       let duplicates = 0;
 
-      // Cada arquivo é classificado isoladamente. Pode selecionar holerites e comprovantes juntos.
       for (const file of pdfFiles) {
         const analyses = await analyzePayrollFiles({ files: [file], employees: scopedEmployees });
         const analysis = analyses[0] ? enforceCompanyScope(analyses[0]) : null;
@@ -403,19 +485,19 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         if (payrollLike && analysis) {
           const result = await persistPayrollAnalysis(analysis);
           payrollCreated += result.created;
-          review += result.review;
+          technicalPending += result.technicalPending;
           duplicates += result.duplicates;
         } else {
           const result = await persistBankFile(file);
           receiptCreated += result.created;
-          review += result.review;
+          technicalPending += result.technicalPending;
           duplicates += result.duplicates;
         }
       }
 
-      // Atualiza o estado e executa o cruzamento final em lote, independentemente da ordem dos arquivos.
       await load();
-      toast.success(`${payrollCreated} recibo/holerite(s) salvo(s), ${receiptCreated} comprovante(s) bancário(s) salvo(s). Cruzamento automático por nome + valor executado.${review ? ` ${review} item(ns) ficaram para revisão, sem descarte.` : ''}${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);
+      console.info('[payroll-unified-upload-summary]', { companyId, competencia, payrollCreated, receiptCreated, technicalPending, duplicates, operationalInterventions: 0 });
+      toast.success(`${payrollCreated} recibo/holerite(s) e ${receiptCreated} comprovante(s) processados. Cruzamento automático concluído.${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);
     } catch (error: any) {
       console.error('[payroll-unified-upload]', error);
       toast.error(`Falha no processamento: ${error?.message || error}`);
@@ -423,54 +505,6 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       setUploading(false);
       if (unifiedInput.current) unifiedInput.current.value = '';
     }
-  };
-
-  const openStoredFile = async (path: string) => {
-    try {
-      const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 300);
-      if (error || !data?.signedUrl) throw error || new Error('Arquivo indisponível.');
-      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
-    } catch (error: any) { toast.error(error?.message || 'Não foi possível abrir o PDF.'); }
-  };
-
-  const assignUnmatchedDocument = async (document: any) => {
-    const employeeId = assignDoc[document.id];
-    if (!employeeId) return toast.error('Selecione o funcionário.');
-    try {
-      const { error } = await (supabase as any).from('payroll_documents').update({
-        employee_id: employeeId,
-        match_confidence: 100,
-        extracted_data: { ...(document.extracted_data || {}), metodo_vinculo: 'RH_MANUAL', status_analise: 'IDENTIFICADO_MANUALMENTE' },
-      }).eq('id', document.id);
-      if (error) throw error;
-      await apiCall('confirm-document', { document_id: document.id });
-      toast.success('Recibo/holerite associado ao funcionário. O cruzamento com comprovantes será refeito automaticamente.');
-      await load();
-    } catch (error: any) { toast.error(error.message); }
-  };
-
-  const assignUnmatchedReceipt = async (receipt: any) => {
-    const employeeId = assignReceipt[receipt.id] || receipt.employee_id;
-    if (!employeeId) return toast.error('Selecione o funcionário.');
-    const doc = documentByEmployee.get(employeeId);
-    try {
-      const { error } = await (supabase as any).from('payroll_payment_receipts').update({
-        employee_id: employeeId,
-        document_id: doc?.document_id || null,
-        status: 'PAGAMENTO_IDENTIFICADO',
-        match_confidence: 100,
-        extracted_data: { ...(receipt.extracted_data || {}), metodo_vinculo: 'RH_MANUAL', reconhecimento_automatico: false, aguardando_associacao_manual: false },
-      }).eq('id', receipt.id);
-      if (error) throw error;
-      if (doc?.document_id) {
-        if (!doc.holerite_confirmed) await apiCall('confirm-document', { document_id: doc.document_id });
-        await apiCall('confirm-payment', { receipt_id: receipt.id, override_reason: 'ASSOCIACAO_MANUAL_RH' });
-        toast.success('Comprovante associado e pagamento confirmado manualmente.');
-      } else {
-        toast.success('Comprovante associado. Aguardando o recibo/holerite correspondente.');
-      }
-      await load();
-    } catch (error: any) { toast.error(error.message); }
   };
 
   const openAdminFile = async (row: any, kind: 'holerite'|'receipt'|'certificate') => {
@@ -526,7 +560,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       <div>
         <p className="text-xs uppercase tracking-wide text-emerald-400">Fechamento → Pagamento</p>
         <h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Recibos, comprovantes e assinatura eletrônica</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Empresa isolada: {company?.name}. Envie recibos/holerites e comprovantes bancários juntos ou em etapas. O sistema cruza nome + valor líquido e confirma o lote automaticamente.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Empresa isolada: {company?.name}. Envie recibos/holerites e comprovantes bancários juntos ou em etapas. O sistema lê, cruza nome + valor e confirma automaticamente.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button onClick={()=>unifiedInput.current?.click()} disabled={uploading}><FileUp className="mr-2 h-4 w-4"/>SUBIR RECIBOS + COMPROVANTES</Button>
@@ -541,37 +575,18 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       </div>
     </div>
 
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Kpi label="Recibos/Holerites" value={rows.length}/>
       <Kpi label="Pagamentos confirmados" value={rows.filter(r=>r.payment_confirmed).length}/>
       <Kpi label="Liberados no portal" value={releasedCount}/>
       <Kpi label="Assinados" value={rows.filter(r=>r.signature_status==='ASSINADO').length} success/>
-      <Kpi label="Revisão manual" value={reviewReceipts.length + reviewDocuments.length} danger/>
     </div>
 
-    {(reviewDocuments.length > 0 || reviewReceipts.length > 0) && <div className="space-y-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3">
-      <div><p className="text-xs font-bold text-amber-300">EXCEÇÕES PARA REVISÃO MANUAL</p><p className="mt-1 text-xs text-muted-foreground">Somente itens sem par automático nome + valor aparecem aqui. Todos os PDFs permanecem armazenados.</p></div>
-
-      {reviewDocuments.map(doc => <div key={`doc-${doc.id}`} className="flex flex-col gap-2 rounded-lg border border-amber-500/20 p-3 lg:flex-row lg:items-center">
-        <div className="min-w-0 flex-1 text-xs"><b className="break-all">RECIBO/HOLERITE · {doc.original_filename}</b><div className="text-muted-foreground">Líquido {currency(doc.net_amount)} · página {doc.source_page_start || '—'}</div></div>
-        <Button size="sm" variant="outline" onClick={()=>void openStoredFile(doc.storage_path)}><ExternalLink className="mr-1 h-3 w-3"/>VER PDF</Button>
-        <select value={assignDoc[doc.id] || ''} onChange={e=>setAssignDoc(current=>({ ...current, [doc.id]: e.target.value }))} className="min-w-[240px] rounded border bg-background px-2 py-2 text-xs"><option value="">Selecionar funcionário...</option>{scopedEmployees.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}</select>
-        <Button size="sm" onClick={()=>void assignUnmatchedDocument(doc)}>ASSOCIAR</Button>
-      </div>)}
-
-      {reviewReceipts.map(receipt => <div key={`receipt-${receipt.id}`} className="flex flex-col gap-2 rounded-lg border border-amber-500/20 p-3 lg:flex-row lg:items-center">
-        <div className="min-w-0 flex-1 text-xs"><b className="break-all">COMPROVANTE · {receipt.original_filename}</b><div className="text-muted-foreground">Valor {currency(receipt.amount)} · {receipt.extracted_data?.motivo_revisao ? humanStatus(receipt.extracted_data.motivo_revisao) : 'aguardando par'}</div></div>
-        <Button size="sm" variant="outline" onClick={()=>void openStoredFile(receipt.storage_path)}><ExternalLink className="mr-1 h-3 w-3"/>VER PDF</Button>
-        <select value={assignReceipt[receipt.id] || receipt.employee_id || ''} onChange={e=>setAssignReceipt(current=>({ ...current, [receipt.id]: e.target.value }))} className="min-w-[240px] rounded border bg-background px-2 py-2 text-xs"><option value="">Selecionar funcionário...</option>{scopedEmployees.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}</select>
-        <Button size="sm" onClick={()=>void assignUnmatchedReceipt(receipt)}>ASSOCIAR</Button>
-      </div>)}
-    </div>}
-
     <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[1250px] text-xs"><thead className="bg-muted/50"><tr>{['Funcionário','Recibo/Holerite','Pagamento','Portal','Visualização','Assinatura','Status','Ações'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.document_id} className="border-t align-top">
-      <td className="px-3 py-3"><b>{row.employee_name||'NÃO IDENTIFICADO'}</b><div className="text-muted-foreground">{row.employee_role||'—'}</div></td>
+      <td className="px-3 py-3"><b>{row.employee_name||'—'}</b><div className="text-muted-foreground">{row.employee_role||'—'}</div></td>
       <td className="px-3 py-3">{row.holerite_confirmed?<span className="text-emerald-400">CONFERIDO</span>:'Aguardando'}<div className="text-muted-foreground">{currency(row.net_amount)}</div></td>
-      <td className="px-3 py-3">{row.payment_confirmed?<span className="text-emerald-400">CONFIRMADO · {currency(row.payment_amount)}</span>:row.payment_status?humanStatus(row.payment_status):'Aguardando comprovante'}</td>
-      <td className="px-3 py-3">{row.holerite_confirmed&&row.payment_confirmed?(row.opened_at?<span className="text-cyan-300">Acessado<br/>{brDateTime(row.opened_at)}</span>:<span className="text-emerald-400">LIBERADO</span>):<span className="text-muted-foreground">Bloqueado</span>}</td>
+      <td className="px-3 py-3">{row.payment_confirmed?<span className="text-emerald-400">CONFIRMADO · {currency(row.payment_amount)}</span>:row.payment_status?humanStatus(row.payment_status):'Processando comprovante'}</td>
+      <td className="px-3 py-3">{row.holerite_confirmed&&row.payment_confirmed?(row.opened_at?<span className="text-cyan-300">Acessado<br/>{brDateTime(row.opened_at)}</span>:<span className="text-emerald-400">LIBERADO</span>):<span className="text-muted-foreground">Processando</span>}</td>
       <td className="px-3 py-3">{brDateTime(row.viewed_at)}</td><td className="px-3 py-3">{brDateTime(row.signed_at)}</td>
       <td className="px-3 py-3"><Badge variant="outline" className={statusClass(displayStatus(row))}>{displayStatus(row)}</Badge></td>
       <td className="px-3 py-3"><div className="flex max-w-[480px] flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'holerite')}>Holerite</Button>{row.receipt_id&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'receipt')}>Comprovante</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'certificate')}>Certificado</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="outline" onClick={()=>void dossier(row)}><FileArchive className="mr-1 h-3 w-3"/>Dossiê</Button>}{row.request_id&&<Button size="sm" variant="ghost" onClick={()=>void openTimeline(row)}><Clock3 className="mr-1 h-3 w-3"/>Histórico</Button>}</div></td>
@@ -579,12 +594,12 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3"><FileArchive className="h-4 w-4"/><b className="text-xs">GERAR PDF CONSOLIDADO</b><select value={consolidatedFilter} onChange={e=>setConsolidatedFilter(e.target.value as any)} className="rounded border bg-background px-2 py-1.5 text-xs"><option value="assinados">Somente assinados</option><option value="todos">Todos</option><option value="pendentes">Somente pendentes</option></select><Button size="sm" variant="outline" onClick={()=>void consolidated()}>Gerar consolidado</Button></div>
 
-    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando lote...</b><p className="mt-1 text-xs text-muted-foreground">Fatiando PDFs, preservando arquivos e cruzando nome + valor dentro de {company?.name}.</p></div></div>}
+    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando lote...</b><p className="mt-1 text-xs text-muted-foreground">Fatiando PDFs e cruzando automaticamente nome + valor dentro de {company?.name}.</p></div></div>}
 
     <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}><DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto"><DialogHeader><DialogTitle>Histórico — {timeline.employee}</DialogTitle></DialogHeader><div className="space-y-2">{[...(timeline.events||[]).map((e:any)=>({...e,_kind:'evento'})),...(timeline.messages||[]).map((m:any)=>({...m,_kind:'mensagem'}))].sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime()).map((item:any,index:number)=><div key={`${item._kind}-${item.id}-${index}`} className="rounded-lg border p-3 text-xs"><div className="flex justify-between gap-3"><b>{item.event_type||item.message_kind}</b><span className="text-muted-foreground">{brDateTime(item.created_at)}</span></div><div className="mt-1 text-muted-foreground">{item._kind==='mensagem'?`${item.status} · ${item.channel}${item.error?` · ${item.error}`:''}`:JSON.stringify(item.payload||{})}</div></div>)}</div></DialogContent></Dialog>
   </div>;
 };
 
-const Kpi = ({ label, value, success=false, danger=false }: { label:string; value:number; success?:boolean; danger?:boolean }) => <div className="rounded-xl border p-3"><p className="text-[10px] uppercase text-muted-foreground">{label}</p><p className={`text-xl font-bold ${success?'text-emerald-400':''} ${danger?'text-red-400':''}`}>{value}</p></div>;
+const Kpi = ({ label, value, success=false }: { label:string; value:number; success?:boolean }) => <div className="rounded-xl border p-3"><p className="text-[10px] uppercase text-muted-foreground">{label}</p><p className={`text-xl font-bold ${success?'text-emerald-400':''}`}>{value}</p></div>;
 
 export default PayrollPortalAdminModule;
