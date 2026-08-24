@@ -14,7 +14,7 @@ const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPa
 const FechamentoPagamentoAddon = lazy(() => import("@/components/FechamentoPagamentoAddon"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
-const MOBILE_BUILD_TAG = "20260821-fechamento-context-1";
+const MOBILE_BUILD_TAG = "20260824-holerite-safari-2";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 const isPayrollPublicPortal = window.location.pathname === '/holerite' || window.location.pathname === '/holerite/';
 
