@@ -14,6 +14,14 @@ import {
   sha256Browser,
   type PayrollEmployeeMatch,
 } from '@/lib/payrollDocuments';
+import {
+  analyzePayrollFiles,
+  safeUuid,
+  summarizeAnalyses,
+  type PayrollFileAnalysis,
+  type PayrollPageDocument,
+} from '@/lib/payrollPageDocuments';
+
 
 const BUCKET = 'payroll-private';
 const ALLOWED_CODES = new Set(['topac-matriz', 'alqui', 'lmt']);
