@@ -55,7 +55,7 @@ $$;
 alter table public.payroll_signature_requests alter column receipt_id drop not null;
 alter table public.payroll_signatures alter column receipt_id drop not null;
 
--- Expor o tipo para o painel administrativo sem quebrar os nomes existentes.
+-- Mantém exatamente a ordem das colunas já existentes e acrescenta document_type ao final.
 create or replace view public.payroll_admin_status_v
 with (security_invoker = true)
 as
@@ -70,7 +70,6 @@ select
   f.cargo as employee_role,
   coalesce(nullif(f.celular,''), nullif(f.telefone,'')) as employee_phone,
   d.competencia,
-  d.document_type,
   d.document_version,
   d.original_filename as holerite_filename,
   d.storage_path as holerite_storage_path,
@@ -100,7 +99,8 @@ select
   sr.send_error,
   s.id as signature_id,
   s.certificate_path,
-  s.certificate_sha256
+  s.certificate_sha256,
+  d.document_type
 from public.payroll_documents d
 join public.empresas c on c.id = d.company_id
 left join public.funcionarios f on f.id = d.employee_id
