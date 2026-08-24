@@ -23,13 +23,15 @@ import {
 } from '@/lib/payrollPageDocuments';
 
 const BUCKET = 'payroll-private';
-const ALLOWED_CODES = new Set(['topac-matriz', 'alqui', 'lmt']);
-const ALLOWED_CNPJS = new Set(['07291648000103','14464586000150','21967711000100']);
+const ALLOWED_CODES = new Set(['topac-matriz', 'topac-pg', 'topac-gyn', 'alqui', 'lmt']);
+const ALLOWED_CNPJS = new Set(['07291648000103','07291648000294','07291648000375','14464586000150','21967711000100']);
 const digits = (value: unknown) => String(value || '').replace(/\D/g, '');
 const safeFile = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 100);
 const brDateTime = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
 const currency = (value?: number | null) => value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const humanStatus = (value: unknown) => String(value || '').replace(/_/g, ' ');
+const AUTO_MATCH_METHODS = new Set(['CPF', 'NOME_VALOR', 'NOME_UNICO']);
+const AUTO_OVERRIDE_REASON = 'AUTORIZACAO_AUTOMATICA_POR_NOME_DO_FUNCIONARIO';
 
 const statusClass = (status: string) => {
   if (status === 'ASSINADO' || status === 'LIBERADO NO PORTAL' || status === 'PAGAMENTO CONFIRMADO' || status === 'IDENTIFICADO') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
@@ -93,24 +95,84 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const [previewAnalyses, setPreviewAnalyses] = useState<PayrollFileAnalysis[]>([]);
   const holeriteInput = useRef<HTMLInputElement>(null);
   const receiptInput = useRef<HTMLInputElement>(null);
+  const autoRepairKeyRef = useRef('');
 
   const load = async () => {
     if (!enabled || !companyId || !competencia) return;
     setLoading(true);
     try {
-      const [{ data: statusRows, error: statusError }, { data: receiptRows, error: receiptError }] = await Promise.all([
-        (supabase as any).from('payroll_admin_status_v').select('*').eq('company_id', companyId).eq('competencia', competencia).order('employee_name', { ascending: true, nullsFirst: false }),
-        (supabase as any).from('payroll_payment_receipts').select('*').eq('company_id', companyId).eq('competencia', competencia).or('document_id.is.null,employee_id.is.null,status.eq.PAGAMENTO_NAO_IDENTIFICADO').order('created_at', { ascending: false }),
-      ]);
-      if (statusError) throw statusError;
-      if (receiptError) throw receiptError;
-      setRows(statusRows || []);
-      setUnmatchedReceipts(receiptRows || []);
+      const fetchSnapshot = async () => {
+        const [{ data: statusRows, error: statusError }, { data: receiptRows, error: receiptError }] = await Promise.all([
+          (supabase as any).from('payroll_admin_status_v').select('*').eq('company_id', companyId).eq('competencia', competencia).order('employee_name', { ascending: true, nullsFirst: false }),
+          (supabase as any).from('payroll_payment_receipts').select('*').eq('company_id', companyId).eq('competencia', competencia).eq('status', 'PAGAMENTO_NAO_IDENTIFICADO').is('employee_id', null).order('created_at', { ascending: false }),
+        ]);
+        if (statusError) throw statusError;
+        if (receiptError) throw receiptError;
+        return { statusRows: statusRows || [], receiptRows: receiptRows || [] };
+      };
+
+      let { statusRows, receiptRows } = await fetchSnapshot();
+      let changed = false;
+
+      for (const row of statusRows) {
+        try {
+          if (row.document_id && row.employee_id && !row.holerite_confirmed) {
+            await apiCall('confirm-document', { document_id: row.document_id });
+            changed = true;
+          }
+          if (row.receipt_id && row.employee_id && !row.payment_confirmed) {
+            await apiCall('confirm-payment', { receipt_id: row.receipt_id, override_reason: AUTO_OVERRIDE_REASON });
+            changed = true;
+          }
+        } catch (error: any) {
+          console.warn('[payroll-auto-authorize-existing]', { documentId: row.document_id, receiptId: row.receipt_id, error: error?.message || error });
+        }
+      }
+
+      const autoRepairKey = `${companyId}:${competencia}`;
+      if (autoRepairKeyRef.current !== autoRepairKey && receiptRows.length) {
+        autoRepairKeyRef.current = autoRepairKey;
+        const docsByEmployee = new Map<string, any>(statusRows.filter((row: any) => row.employee_id && row.document_id).map((row: any) => [row.employee_id, row]));
+        for (const receipt of receiptRows) {
+          try {
+            const { data: receiptBlob, error: downloadError } = await supabase.storage.from(BUCKET).download(receipt.storage_path);
+            if (downloadError || !receiptBlob) throw downloadError || new Error('Comprovante sem arquivo no storage.');
+            const receiptFile = new File([receiptBlob], receipt.original_filename || 'comprovante.pdf', { type: 'application/pdf' });
+            const parsed = await parsePayrollPdf({ file: receiptFile, employees: scopedEmployees, kind: 'COMPROVANTE' });
+            if (parsed.length !== 1) continue;
+            const item = parsed[0];
+            const autoAllowed = Boolean(item.employeeId) && item.confidence >= 85 && AUTO_MATCH_METHODS.has(item.matchMethod);
+            if (!autoAllowed || !item.employeeId) continue;
+            const doc = docsByEmployee.get(item.employeeId);
+
+            const { error: updateError } = await (supabase as any).from('payroll_payment_receipts').update({
+              employee_id: item.employeeId,
+              document_id: doc?.document_id || null,
+              status: 'PAGAMENTO_IDENTIFICADO',
+              match_confidence: item.confidence,
+              extracted_data: { ...(receipt.extracted_data || {}), metodo_vinculo: item.matchMethod, reconhecimento_automatico: true },
+            }).eq('id', receipt.id);
+            if (updateError) throw updateError;
+
+            if (doc?.document_id) {
+              if (!doc.holerite_confirmed) await apiCall('confirm-document', { document_id: doc.document_id });
+              await apiCall('confirm-payment', { receipt_id: receipt.id, override_reason: AUTO_OVERRIDE_REASON });
+            }
+            changed = true;
+          } catch (error: any) {
+            console.warn('[payroll-auto-repair-receipt]', { receiptId: receipt.id, file: receipt.original_filename, error: error?.message || error });
+          }
+        }
+      }
+
+      if (changed) ({ statusRows, receiptRows } = await fetchSnapshot());
+      setRows(statusRows);
+      setUnmatchedReceipts(receiptRows);
     } catch (error: any) { toast.error(error?.message || 'Não foi possível carregar os holerites.'); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { void load(); }, [companyId, competencia, enabled]);
+  useEffect(() => { autoRepairKeyRef.current = ''; void load(); }, [companyId, competencia, enabled]);
   if (!enabled) return null;
 
   const netByEmployee = new Map<string, number>(rows.filter(r => r.employee_id && r.net_amount != null).map(r => [r.employee_id, Number(r.net_amount)]));
@@ -169,7 +231,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       }
       setPreviewAnalyses(analyses);
       setPreviewOpen(true);
-      toast.success(`Análise concluída: ${summary.pages} página(s), ${summary.documents} documento(s). Revise antes de importar.`);
+      toast.success(`Análise concluída: ${summary.pages} página(s), ${summary.documents} documento(s). O que não for reconhecido não será salvo.`);
     } catch (error: any) {
       console.error('[payroll-upload-fatal]', { fileCount: files.length, message: error?.message, stack: error?.stack, at: new Date().toISOString() });
       toast.error(`Falha ao analisar holerites: ${error?.message || error}`);
@@ -188,12 +250,32 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     if (!opened) toast.info('O navegador bloqueou a nova aba. Permita pop-ups para visualizar o documento.');
   };
 
+  const removePreviewDocument = (key: string) => {
+    setPreviewAnalyses(current => current
+      .map(analysis => ({ ...analysis, documents: analysis.documents.filter(document => document.key !== key) }))
+      .filter(analysis => analysis.documents.length > 0));
+  };
+
+  const discardUnmatchedReceipts = async () => {
+    if (!unmatchedReceipts.length) return;
+    setUploading(true);
+    try {
+      const result = await apiCall('discard-unmatched-receipts', { company_id: companyId, competencia });
+      toast.success(`${Number(result.discarded || 0)} comprovante(s) não reconhecido(s) descartado(s).`);
+      await load();
+    } catch (error: any) {
+      toast.error(`Falha ao descartar comprovantes: ${error?.message || error}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const confirmHoleriteImport = async () => {
     if (!previewAnalyses.length) return;
     setUploading(true);
     try {
       let created = 0;
-      let pending = 0;
+      let rejected = 0;
       let skipped = 0;
       let errors = 0;
 
@@ -201,6 +283,10 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         for (const item of analysis.documents) {
           if (item.status === 'ERRO' || !item.bytes.byteLength || !item.sha256) {
             errors += 1;
+            continue;
+          }
+          if (!item.employeeId || item.status === 'PENDENTE') {
+            rejected += 1;
             continue;
           }
 
@@ -236,7 +322,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           const { error: storageError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
           if (storageError) throw storageError;
 
-          const { error: insertError } = await (supabase as any).from('payroll_documents').insert({
+          const { data: insertedDocument, error: insertError } = await (supabase as any).from('payroll_documents').insert({
             company_id: companyId,
             employee_id: item.employeeId,
             competencia,
@@ -255,8 +341,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
               paginas: [item.pageNumber],
               cpf_detectado: item.cpfDetected,
               metodo_vinculo: item.matchMethod,
-              status_analise: item.status === 'PENDENTE' ? 'PENDENTE_DE_VINCULACAO' : 'IDENTIFICADO',
-              motivo_pendencia: item.message,
+              status_analise: 'IDENTIFICADO',
               nome_detectado: item.employeeNameDetected,
               codigo_detectado: item.employeeCodeDetected,
               cargo_detectado: item.jobTitleDetected,
@@ -272,7 +357,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
               regra_importacao: '1_PAGINA_FISICA_1_DOCUMENTO',
             },
             status: 'HOLERITE_PENDENTE',
-          });
+          }).select('id').single();
 
           if (insertError) {
             await supabase.storage.from(BUCKET).remove([path]);
@@ -280,13 +365,33 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           }
 
           created += 1;
-          if (!item.employeeId) pending += 1;
+          await apiCall('confirm-document', { document_id: insertedDocument.id });
+
+          const { data: receiptCandidates, error: receiptCandidateError } = await (supabase as any)
+            .from('payroll_payment_receipts')
+            .select('id,document_id,status')
+            .eq('company_id', companyId)
+            .eq('competencia', competencia)
+            .eq('employee_id', item.employeeId)
+            .eq('confirmed', false)
+            .eq('status', 'PAGAMENTO_IDENTIFICADO')
+            .limit(2);
+          if (receiptCandidateError) throw receiptCandidateError;
+          const eligibleReceipts = (receiptCandidates || []).filter((receipt: any) => !receipt.document_id || receipt.document_id === insertedDocument.id);
+          if (eligibleReceipts.length === 1) {
+            const receipt = eligibleReceipts[0];
+            if (!receipt.document_id) {
+              const { error: receiptLinkError } = await (supabase as any).from('payroll_payment_receipts').update({ document_id: insertedDocument.id }).eq('id', receipt.id);
+              if (receiptLinkError) throw receiptLinkError;
+            }
+            await apiCall('confirm-payment', { receipt_id: receipt.id, override_reason: AUTO_OVERRIDE_REASON });
+          }
         }
       }
 
       setPreviewOpen(false);
       setPreviewAnalyses([]);
-      toast.success(`${created} documento(s) importado(s).${pending ? ` ${pending} pendente(s) de vinculação.` : ''}${skipped ? ` ${skipped} duplicado(s) ignorado(s).` : ''}${errors ? ` ${errors} página(s) com erro não importada(s).` : ''}`);
+      toast.success(`${created} holerite(s) salvo(s) e conferido(s) automaticamente.${rejected ? ` ${rejected} não reconhecido(s) descartado(s) sem salvar.` : ''}${skipped ? ` ${skipped} duplicado(s) ignorado(s).` : ''}${errors ? ` ${errors} página(s) com erro descartada(s).` : ''}`);
       await load();
     } catch (error: any) {
       console.error('[payroll-import-fatal]', { message: error?.message, stack: error?.stack, at: new Date().toISOString() });
@@ -305,39 +410,53 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         if (/\.zip$/i.test(file.name)) files.push(...await extractPdfFilesFromZip(file));
         else if (/\.pdf$/i.test(file.name)) files.push(file);
       }
-      let created = 0; let pending = 0;
+      let created = 0; let rejected = 0; let authorized = 0; let waitingHolerite = 0; let duplicates = 0;
       for (const file of files) {
         const parsed = await parsePayrollPdf({ file, employees: scopedEmployees, kind: 'COMPROVANTE', netAmountByEmployee: netByEmployee });
         const sourceHash = await sha256Browser(file);
         for (const item of parsed) {
+          const autoAllowed = Boolean(item.employeeId) && item.confidence >= 85 && AUTO_MATCH_METHODS.has(item.matchMethod);
+          const employeeId = autoAllowed ? item.employeeId : null;
+          if (!employeeId) {
+            rejected += 1;
+            continue;
+          }
+
           const hash = await sha256Browser(item.bytes);
           const metadata = extractReceiptMetadata(item.text);
-          const autoAllowed = item.matchMethod === 'CPF' || item.matchMethod === 'NOME_VALOR';
-          const employeeId = autoAllowed ? item.employeeId : null;
-          const doc = employeeId ? documentByEmployee.get(employeeId) : null;
-          const idempotencyKey = `receipt:${companyId}:${competencia}:${hash}:${doc?.document_id || 'unmatched'}`;
-          const { data: duplicate } = await (supabase as any).from('payroll_payment_receipts').select('id').eq('idempotency_key', idempotencyKey).maybeSingle();
-          if (duplicate) continue;
+          const doc = documentByEmployee.get(employeeId);
+          const idempotencyKey = `receipt:${companyId}:${competencia}:${hash}`;
+          const { data: duplicateRows, error: duplicateError } = await (supabase as any).from('payroll_payment_receipts').select('id').eq('company_id', companyId).eq('competencia', competencia).eq('receipt_sha256', hash).limit(1);
+          if (duplicateError) throw duplicateError;
+          if (duplicateRows?.length) { duplicates += 1; continue; }
           const path = `${companyId}/${competencia}/comprovantes/${safeUuid()}-${safeFile(item.filename)}`;
           const blob = new Blob([item.bytes as any], { type: 'application/pdf' });
           const { error: storageError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'application/pdf', upsert: false });
           if (storageError) throw storageError;
-          const { error: insertError } = await (supabase as any).from('payroll_payment_receipts').insert({
+          const { data: insertedReceipt, error: insertError } = await (supabase as any).from('payroll_payment_receipts').insert({
             company_id: companyId, employee_id: employeeId, document_id: doc?.document_id || null, competencia,
             storage_path: path, original_filename: item.filename, mime_type: 'application/pdf', file_size: item.bytes.byteLength,
             receipt_sha256: hash, source_sha256: sourceHash,
             source_page_start: item.pageNumbers[0] || null, source_page_end: item.pageNumbers[item.pageNumbers.length - 1] || null,
             amount: metadata.amount ?? item.amountDetected, paid_at: metadata.paidAt, bank_name: metadata.bankName,
             transaction_id: metadata.transactionId, bank_authentication: metadata.bankAuthentication, payer_name: metadata.payerName,
-            match_confidence: autoAllowed ? item.confidence : 0,
-            extracted_data: { cpf_detectado: item.cpfDetected, metodo_vinculo: autoAllowed ? item.matchMethod : 'REVISAO_MANUAL', paginas: item.pageNumbers },
-            status: employeeId && doc ? 'PAGAMENTO_IDENTIFICADO' : 'PAGAMENTO_NAO_IDENTIFICADO', idempotency_key: idempotencyKey,
-          });
+            match_confidence: item.confidence,
+            extracted_data: { cpf_detectado: item.cpfDetected, metodo_vinculo: item.matchMethod, paginas: item.pageNumbers, reconhecimento_automatico: true },
+            status: 'PAGAMENTO_IDENTIFICADO', idempotency_key: idempotencyKey,
+          }).select('id').single();
           if (insertError) { await supabase.storage.from(BUCKET).remove([path]); throw insertError; }
-          created += 1; if (!employeeId || !doc) pending += 1;
+          created += 1;
+
+          if (doc?.document_id) {
+            if (!doc.holerite_confirmed) await apiCall('confirm-document', { document_id: doc.document_id });
+            await apiCall('confirm-payment', { receipt_id: insertedReceipt.id, override_reason: AUTO_OVERRIDE_REASON });
+            authorized += 1;
+          } else {
+            waitingHolerite += 1;
+          }
         }
       }
-      toast.success(`${created} comprovante(s) recebido(s).${pending ? ` ${pending} para conferência do RH.` : ''}`);
+      toast.success(`${created} comprovante(s) reconhecido(s) e salvo(s). ${authorized} pagamento(s) confirmado(s) automaticamente.${waitingHolerite ? ` ${waitingHolerite} reconhecido(s) aguardando o holerite correspondente.` : ''}${rejected ? ` ${rejected} não reconhecido(s) descartado(s) sem salvar.` : ''}${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);
       await load();
     } catch (error: any) { toast.error(`Falha ao subir comprovantes: ${error?.message || error}`); }
     finally { setUploading(false); if (receiptInput.current) receiptInput.current.value = ''; }
@@ -426,39 +545,39 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     <input ref={holeriteInput} type="file" accept="application/pdf,.pdf" multiple className="hidden" onChange={e=>void uploadHolerites(Array.from(e.target.files || []))}/>
     <input ref={receiptInput} type="file" accept="application/pdf,.pdf,.zip,application/zip" multiple className="hidden" onChange={e=>void uploadReceipts(Array.from(e.target.files || []))}/>
 
-    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"><div><p className="text-xs uppercase tracking-wide text-emerald-400">Fechamento → Pagamento</p><h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Assinatura eletrônica de holerites</h2><p className="mt-1 text-xs text-muted-foreground">O holerite só aparece no portal após HOLERITE CONFERIDO + PAGAMENTO CONFIRMADO.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>holeriteInput.current?.click()} disabled={uploading}><FileUp className="mr-2 h-4 w-4"/>SUBIR HOLERITES</Button><Button variant="outline" onClick={()=>receiptInput.current?.click()} disabled={uploading}><ReceiptText className="mr-2 h-4 w-4"/>SUBIR COMPROVANTES</Button><Button variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</Button></div></div>
+    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"><div><p className="text-xs uppercase tracking-wide text-emerald-400">Fechamento → Pagamento</p><h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Assinatura eletrônica de holerites</h2><p className="mt-1 text-xs text-muted-foreground">Reconhecimento automático por funcionário: bateu o nome/CPF, autoriza. Não reconheceu, não salva.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>holeriteInput.current?.click()} disabled={uploading}><FileUp className="mr-2 h-4 w-4"/>SUBIR HOLERITES</Button><Button variant="outline" onClick={()=>receiptInput.current?.click()} disabled={uploading}><ReceiptText className="mr-2 h-4 w-4"/>SUBIR COMPROVANTES</Button><Button variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</Button></div></div>
 
     <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><p className="flex items-center gap-2 text-xs font-bold uppercase text-cyan-300"><ShieldCheck className="h-4 w-4"/>Portal único de holerite</p><p className="mt-2 break-all font-mono text-sm">{portalUrl}</p><p className="mt-2 text-xs text-muted-foreground">O mesmo link serve para todos. O funcionário se identifica com CPF + data de nascimento + últimos 4 números do celular cadastrado. Não usa WhatsApp API, SMS ou OTP.</p></div><div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={()=>void copyPortal()}><Copy className="mr-2 h-4 w-4"/>Copiar link</Button><Button variant="outline" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className="mr-2 h-4 w-4"/>Abrir portal</Button></div></div></div>
 
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Kpi label="Holerites" value={rows.length}/><Kpi label="Pagamentos confirmados" value={rows.filter(r=>r.payment_confirmed).length}/><Kpi label="Liberados no portal" value={releasedCount}/><Kpi label="Assinados" value={rows.filter(r=>r.signature_status==='ASSINADO').length} success/><Kpi label="Não identificados" value={rows.filter(r=>!r.employee_id).length + unmatchedReceipts.length} danger/></div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Kpi label="Holerites" value={rows.length}/><Kpi label="Pagamentos confirmados" value={rows.filter(r=>r.payment_confirmed).length}/><Kpi label="Liberados no portal" value={releasedCount}/><Kpi label="Assinados" value={rows.filter(r=>r.signature_status==='ASSINADO').length} success/><Kpi label="Não reconhecidos antigos" value={unmatchedReceipts.length} danger/></div>
 
-    {unmatchedReceipts.length > 0 && <div className="rounded-xl border border-red-500/25 p-3"><p className="mb-2 text-xs font-bold text-red-300">PAGAMENTOS NÃO IDENTIFICADOS — conferência obrigatória do RH</p><div className="space-y-2">{unmatchedReceipts.map(r=><div key={r.id} className="flex flex-wrap items-center gap-2 text-xs"><span className="min-w-48 flex-1">{r.original_filename} · {currency(r.amount)}</span><select className="rounded border bg-background px-2 py-1.5" value={assignReceipt[r.id]||''} onChange={e=>setAssignReceipt(prev=>({...prev,[r.id]:e.target.value}))}><option value="">Selecionar funcionário</option>{scopedEmployees.filter(emp=>documentByEmployee.has(emp.id)).map(emp=><option key={emp.id} value={emp.id}>{emp.name}</option>)}</select><Button size="sm" variant="outline" onClick={()=>void assignUnmatchedReceipt(r)}>Vincular</Button></div>)}</div></div>}
+    {unmatchedReceipts.length > 0 && <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold text-amber-300">ARQUIVOS ANTIGOS NÃO RECONHECIDOS</p><p className="mt-1 text-xs text-muted-foreground">Esses arquivos são de tentativas anteriores. Novos arquivos não reconhecidos não são mais salvos.</p></div><Button size="sm" variant="destructive" disabled={uploading} onClick={()=>void discardUnmatchedReceipts()}>DESCARTAR NÃO LIDOS</Button></div><div className="mt-2 space-y-1">{unmatchedReceipts.map(r=><div key={r.id} className="text-xs"><span>{r.original_filename} · {currency(r.amount)}</span></div>)}</div></div>}
 
     <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[1250px] text-xs"><thead className="bg-muted/50"><tr>{['Funcionário','Holerite','Pagamento','Portal','Visualização','Assinatura','Status','Ações'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.document_id} className="border-t align-top">
-      <td className="px-3 py-3"><b>{row.employee_name||'NÃO IDENTIFICADO'}</b><div className="text-muted-foreground">{row.employee_role||'—'}</div>{!row.employee_id&&<div className="mt-2 flex gap-1"><select className="max-w-56 rounded border bg-background px-2 py-1" value={assignDoc[row.document_id]||''} onChange={e=>setAssignDoc(prev=>({...prev,[row.document_id]:e.target.value}))}><option value="">Selecionar funcionário</option>{scopedEmployees.map(emp=><option key={emp.id} value={emp.id}>{emp.name}</option>)}</select><Button size="sm" variant="outline" onClick={()=>void assignDocument(row)}>Vincular</Button></div>}</td>
-      <td className="px-3 py-3">{row.holerite_confirmed?<span className="text-emerald-400">CONFERIDO</span>:'Pendente'}<div className="text-muted-foreground">V{row.document_version}</div></td>
-      <td className="px-3 py-3">{row.payment_confirmed?<span className="text-emerald-400">CONFIRMADO · {currency(row.payment_amount)}</span>:row.payment_status?humanStatus(row.payment_status):'Pendente'}</td>
+      <td className="px-3 py-3"><b>{row.employee_name||'NÃO IDENTIFICADO'}</b><div className="text-muted-foreground">{row.employee_role||'—'}</div></td>
+      <td className="px-3 py-3">{row.holerite_confirmed?<span className="text-emerald-400">CONFERIDO AUTOMATICAMENTE</span>:'Processando'}<div className="text-muted-foreground">V{row.document_version}</div></td>
+      <td className="px-3 py-3">{row.payment_confirmed?<span className="text-emerald-400">CONFIRMADO · {currency(row.payment_amount)}</span>:row.payment_status?humanStatus(row.payment_status):'Aguardando comprovante'}</td>
       <td className="px-3 py-3">{row.holerite_confirmed&&row.payment_confirmed?(row.opened_at?<span className="text-cyan-300">Acessado<br/>{brDateTime(row.opened_at)}</span>:<span className="text-emerald-400">LIBERADO</span>):<span className="text-muted-foreground">Bloqueado</span>}</td>
       <td className="px-3 py-3">{brDateTime(row.viewed_at)}</td><td className="px-3 py-3">{brDateTime(row.signed_at)}</td>
       <td className="px-3 py-3"><Badge variant="outline" className={statusClass(displayStatus(row))}>{displayStatus(row)}</Badge></td>
-      <td className="px-3 py-3"><div className="flex max-w-[480px] flex-wrap gap-1">{!row.holerite_confirmed&&row.employee_id&&<Button size="sm" variant="outline" onClick={()=>void confirmDocument(row)}><FileCheck2 className="mr-1 h-3 w-3"/>Confirmar holerite</Button>}{row.holerite_confirmed&&row.receipt_id&&!row.payment_confirmed&&<Button size="sm" variant="outline" onClick={()=>void confirmPayment(row)}><CheckCircle2 className="mr-1 h-3 w-3"/>Confirmar pagamento</Button>}<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'holerite')}>Holerite</Button>{row.receipt_id&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'receipt')}>Comprovante</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'certificate')}>Certificado</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="outline" onClick={()=>void dossier(row)}><FileArchive className="mr-1 h-3 w-3"/>Dossiê</Button>}{row.request_id&&<Button size="sm" variant="ghost" onClick={()=>void openTimeline(row)}><Clock3 className="mr-1 h-3 w-3"/>Histórico</Button>}</div></td>
+      <td className="px-3 py-3"><div className="flex max-w-[480px] flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'holerite')}>Holerite</Button>{row.receipt_id&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'receipt')}>Comprovante</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'certificate')}>Certificado</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="outline" onClick={()=>void dossier(row)}><FileArchive className="mr-1 h-3 w-3"/>Dossiê</Button>}{row.request_id&&<Button size="sm" variant="ghost" onClick={()=>void openTimeline(row)}><Clock3 className="mr-1 h-3 w-3"/>Histórico</Button>}</div></td>
     </tr>)}{!rows.length&&<tr><td colSpan={8} className="p-8 text-center text-muted-foreground">Nenhum holerite recebido nesta competência.</td></tr>}</tbody></table></div>
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3"><FileArchive className="h-4 w-4"/><b className="text-xs">GERAR PDF CONSOLIDADO</b><select value={consolidatedFilter} onChange={e=>setConsolidatedFilter(e.target.value as any)} className="rounded border bg-background px-2 py-1.5 text-xs"><option value="assinados">Somente assinados</option><option value="todos">Todos</option><option value="pendentes">Somente pendentes</option></select><Button size="sm" variant="outline" onClick={()=>void consolidated()}>Gerar consolidado</Button></div>
 
-    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando documentos reais...</b><p className="mt-1 text-xs text-muted-foreground">Leitura, separação, SHA-256 e vínculo seguro.</p></div></div>}
+    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando documentos reais...</b><p className="mt-1 text-xs text-muted-foreground">Leitura, separação, OCR, SHA-256, reconhecimento e autorização automática.</p></div></div>}
 
     <Dialog open={previewOpen} onOpenChange={open=>{ if (!uploading) setPreviewOpen(open); }}>
       <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Arquivo processado — prévia antes da importação</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Arquivo processado — prévia do lote</DialogTitle></DialogHeader>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           <Kpi label="Páginas" value={previewSummary.pages}/>
           <Kpi label="Documentos" value={previewSummary.documents}/>
           <Kpi label="Identificados" value={previewSummary.identified} success/>
-          <Kpi label="Pendentes" value={previewSummary.pending}/>
+          <Kpi label="Não reconhecidos" value={previewSummary.pending}/>
           <Kpi label="Erros" value={previewSummary.errors} danger/>
         </div>
-        <p className="text-xs text-muted-foreground">Regra aplicada: 1 página física = 1 documento. Duas vias do mesmo recibo dentro da página permanecem juntas e não geram duplicidade.</p>
+        <p className="text-xs text-muted-foreground">Regra: bateu o funcionário, salva e confere automaticamente. Não reconheceu ou deu erro, não salva.</p>
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[980px] text-xs">
             <thead className="bg-muted/50"><tr>{['Arquivo / Página','Funcionário','Empresa','Competência','Tipo','Líquido','Status','Ação'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead>
@@ -470,15 +589,15 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
                 <td className="px-3 py-3">{document.competenciaLabelDetected || document.competenciaDetected || competencia}</td>
                 <td className="px-3 py-3">{documentTypeLabel(document)}</td>
                 <td className="px-3 py-3">{currency(document.amountDetected)}</td>
-                <td className="px-3 py-3"><Badge variant="outline" className={statusClass(document.status === 'PENDENTE' ? 'PENDENTE DE VINCULAÇÃO' : document.status)}>{document.status === 'PENDENTE' ? 'PENDENTE DE VINCULAÇÃO' : document.status}</Badge>{document.message&&<div className="mt-1 max-w-72 text-[11px] text-muted-foreground">{document.message}</div>}</td>
-                <td className="px-3 py-3"><Button size="sm" variant="outline" disabled={!document.bytes.byteLength} onClick={()=>openPreviewDocument(document)}><ExternalLink className="mr-1 h-3 w-3"/>VER DOCUMENTO</Button></td>
+                <td className="px-3 py-3"><Badge variant="outline" className={statusClass(document.status === 'PENDENTE' ? 'NÃO RECONHECIDO' : document.status)}>{document.status === 'PENDENTE' ? 'NÃO RECONHECIDO' : document.status}</Badge>{document.message&&<div className="mt-1 max-w-72 text-[11px] text-muted-foreground">{document.message}</div>}</td>
+                <td className="px-3 py-3"><div className="flex flex-wrap gap-1"><Button size="sm" variant="outline" disabled={!document.bytes.byteLength} onClick={()=>openPreviewDocument(document)}><ExternalLink className="mr-1 h-3 w-3"/>VER DOCUMENTO</Button>{(!document.employeeId || document.status === 'PENDENTE' || document.status === 'ERRO')&&<Button size="sm" variant="destructive" onClick={()=>removePreviewDocument(document.key)}>REMOVER</Button>}</div></td>
               </tr>)}
             </tbody>
           </table>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" disabled={uploading} onClick={()=>{setPreviewOpen(false); setPreviewAnalyses([]);}}>Cancelar</Button>
-          <Button disabled={uploading || previewSummary.documents === 0} onClick={()=>void confirmHoleriteImport()}><FileCheck2 className="mr-2 h-4 w-4"/>CONFIRMAR IMPORTAÇÃO</Button>
+          <Button disabled={uploading || previewSummary.documents === 0} onClick={()=>void confirmHoleriteImport()}><FileCheck2 className="mr-2 h-4 w-4"/>IMPORTAR RECONHECIDOS</Button>
         </div>
       </DialogContent>
     </Dialog>

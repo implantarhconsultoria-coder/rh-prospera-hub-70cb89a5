@@ -1,6 +1,7 @@
 import {
   addEvent,
   assertCompanyEnabled,
+  PAYROLL_BUCKET,
   readBody,
   requireAdmin,
   sendJson,
@@ -49,6 +50,42 @@ export default async function handler(req: any, res?: any) {
 
     if (['release-send','resend-link','manual-reminder'].includes(action)) {
       return sendJson(res, { ok: false, error: 'legacy_message_flow_disabled', public_portal: '/holerite' }, 410);
+    }
+
+    if (action === 'discard-unmatched-receipts') {
+      const companyId = String(body.company_id || '');
+      const competencia = String(body.competencia || '');
+      if (!companyId || !competencia) return sendJson(res, { ok: false, error: 'missing_scope' }, 400);
+      await assertCompanyEnabled(service, companyId);
+
+      const { data: receipts, error: listError } = await service
+        .from('payroll_payment_receipts')
+        .select('id,storage_path')
+        .eq('company_id', companyId)
+        .eq('competencia', competencia)
+        .eq('status', 'PAGAMENTO_NAO_IDENTIFICADO')
+        .is('employee_id', null);
+      if (listError) throw listError;
+
+      const ids = (receipts || []).map((row: any) => row.id).filter(Boolean);
+      const paths = (receipts || []).map((row: any) => row.storage_path).filter(Boolean);
+      if (ids.length) {
+        const { error: deleteError } = await service.from('payroll_payment_receipts').delete().in('id', ids);
+        if (deleteError) throw deleteError;
+      }
+      if (paths.length) {
+        const { error: storageDeleteError } = await service.storage.from(PAYROLL_BUCKET).remove(paths);
+        if (storageDeleteError) console.warn('[payroll-discard-storage]', storageDeleteError);
+      }
+
+      await addEvent(service, {
+        company_id: companyId,
+        event_type: 'COMPROVANTES_NAO_RECONHECIDOS_DESCARTADOS',
+        actor_type: 'ADMIN',
+        actor_user_id: user.id,
+        payload: { competencia, quantidade: ids.length },
+      });
+      return sendJson(res, { ok: true, discarded: ids.length });
     }
 
     if (action === 'confirm-document') {
