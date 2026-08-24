@@ -150,7 +150,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
               document_id: doc?.document_id || null,
               status: 'PAGAMENTO_IDENTIFICADO',
               match_confidence: item.confidence,
-              extracted_data: { ...(receipt.extracted_data || {}), metodo_vinculo: item.matchMethod, reconhecimento_automatico: true },
+              extracted_data: { ...(receipt.extracted_data || {}), metodo_vinculo: item.matchMethod, reconhecimento_automatico: true, aguardando_associacao_manual: false },
             }).eq('id', receipt.id);
             if (updateError) throw updateError;
 
@@ -254,20 +254,6 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     setPreviewAnalyses(current => current
       .map(analysis => ({ ...analysis, documents: analysis.documents.filter(document => document.key !== key) }))
       .filter(analysis => analysis.documents.length > 0));
-  };
-
-  const discardUnmatchedReceipts = async () => {
-    if (!unmatchedReceipts.length) return;
-    setUploading(true);
-    try {
-      const result = await apiCall('discard-unmatched-receipts', { company_id: companyId, competencia });
-      toast.success(`${Number(result.discarded || 0)} comprovante(s) não reconhecido(s) descartado(s).`);
-      await load();
-    } catch (error: any) {
-      toast.error(`Falha ao descartar comprovantes: ${error?.message || error}`);
-    } finally {
-      setUploading(false);
-    }
   };
 
   const confirmHoleriteImport = async () => {
@@ -410,21 +396,16 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         if (/\.zip$/i.test(file.name)) files.push(...await extractPdfFilesFromZip(file));
         else if (/\.pdf$/i.test(file.name)) files.push(file);
       }
-      let created = 0; let rejected = 0; let authorized = 0; let waitingHolerite = 0; let duplicates = 0;
+      let created = 0; let pendingReview = 0; let authorized = 0; let waitingHolerite = 0; let duplicates = 0;
       for (const file of files) {
         const parsed = await parsePayrollPdf({ file, employees: scopedEmployees, kind: 'COMPROVANTE', netAmountByEmployee: netByEmployee });
         const sourceHash = await sha256Browser(file);
         for (const item of parsed) {
           const autoAllowed = Boolean(item.employeeId) && AUTO_MATCH_METHODS.has(item.matchMethod);
           const employeeId = autoAllowed ? item.employeeId : null;
-          if (!employeeId) {
-            rejected += 1;
-            continue;
-          }
-
           const hash = await sha256Browser(item.bytes);
           const metadata = extractReceiptMetadata(item.text);
-          const doc = documentByEmployee.get(employeeId);
+          const doc = employeeId ? documentByEmployee.get(employeeId) : null;
           const idempotencyKey = `receipt:${companyId}:${competencia}:${hash}`;
           const { data: duplicateRows, error: duplicateError } = await (supabase as any).from('payroll_payment_receipts').select('id').eq('company_id', companyId).eq('competencia', competencia).eq('receipt_sha256', hash).limit(1);
           if (duplicateError) throw duplicateError;
@@ -441,12 +422,23 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
             amount: metadata.amount ?? item.amountDetected, paid_at: metadata.paidAt, bank_name: metadata.bankName,
             transaction_id: metadata.transactionId, bank_authentication: metadata.bankAuthentication, payer_name: metadata.payerName,
             match_confidence: item.confidence,
-            extracted_data: { cpf_detectado: item.cpfDetected, metodo_vinculo: item.matchMethod, paginas: item.pageNumbers, reconhecimento_automatico: true },
-            status: 'PAGAMENTO_IDENTIFICADO', idempotency_key: idempotencyKey,
+            extracted_data: {
+              cpf_detectado: item.cpfDetected,
+              nome_detectado: item.employeeNameDetected || null,
+              metodo_vinculo: item.matchMethod,
+              paginas: item.pageNumbers,
+              reconhecimento_automatico: Boolean(employeeId),
+              aguardando_associacao_manual: !employeeId,
+            },
+            status: employeeId ? 'PAGAMENTO_IDENTIFICADO' : 'PAGAMENTO_NAO_IDENTIFICADO', idempotency_key: idempotencyKey,
           }).select('id').single();
           if (insertError) { await supabase.storage.from(BUCKET).remove([path]); throw insertError; }
           created += 1;
 
+          if (!employeeId) {
+            pendingReview += 1;
+            continue;
+          }
           if (doc?.document_id) {
             if (!doc.holerite_confirmed) await apiCall('confirm-document', { document_id: doc.document_id });
             await apiCall('confirm-payment', { receipt_id: insertedReceipt.id, override_reason: AUTO_OVERRIDE_REASON });
@@ -456,7 +448,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           }
         }
       }
-      toast.success(`${created} comprovante(s) reconhecido(s) e salvo(s). ${authorized} pagamento(s) confirmado(s) automaticamente.${waitingHolerite ? ` ${waitingHolerite} reconhecido(s) aguardando o holerite correspondente.` : ''}${rejected ? ` ${rejected} não reconhecido(s) descartado(s) sem salvar.` : ''}${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);
+      toast.success(`${created} comprovante(s) preservado(s) e salvo(s). ${authorized} pagamento(s) confirmado(s) automaticamente.${waitingHolerite ? ` ${waitingHolerite} identificado(s) aguardando o holerite correspondente.` : ''}${pendingReview ? ` ${pendingReview} aguardando associação manual.` : ''}${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);
       await load();
     } catch (error: any) { toast.error(`Falha ao subir comprovantes: ${error?.message || error}`); }
     finally { setUploading(false); if (receiptInput.current) receiptInput.current.value = ''; }
@@ -487,16 +479,32 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     } catch (error: any) { toast.error(error.message); }
   };
 
+  const openUnmatchedReceipt = async (receipt: any) => {
+    try {
+      const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(receipt.storage_path, 300);
+      if (error || !data?.signedUrl) throw error || new Error('Não foi possível abrir o comprovante.');
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (error: any) { toast.error(error?.message || 'Não foi possível abrir o comprovante.'); }
+  };
+
   const assignUnmatchedReceipt = async (receipt: any) => {
     const employeeId = assignReceipt[receipt.id];
-    const doc = employeeId ? documentByEmployee.get(employeeId) : null;
-    if (!employeeId || !doc) return toast.error('Selecione um funcionário que já possua holerite nesta competência.');
+    if (!employeeId) return toast.error('Selecione o funcionário.');
+    const doc = documentByEmployee.get(employeeId);
     try {
       const { error } = await (supabase as any).from('payroll_payment_receipts').update({
-        employee_id: employeeId, document_id: doc.document_id, status: 'PAGAMENTO_IDENTIFICADO', match_confidence: 100,
-        extracted_data: { ...(receipt.extracted_data || {}), metodo_vinculo: 'RH_MANUAL' },
+        employee_id: employeeId, document_id: doc?.document_id || null, status: 'PAGAMENTO_IDENTIFICADO', match_confidence: 100,
+        extracted_data: { ...(receipt.extracted_data || {}), metodo_vinculo: 'RH_MANUAL', reconhecimento_automatico: false, aguardando_associacao_manual: false },
       }).eq('id', receipt.id);
-      if (error) throw error; toast.success('Comprovante vinculado. Confirme o pagamento após a conferência.'); await load();
+      if (error) throw error;
+      if (doc?.document_id) {
+        if (!doc.holerite_confirmed) await apiCall('confirm-document', { document_id: doc.document_id });
+        await apiCall('confirm-payment', { receipt_id: receipt.id, override_reason: 'ASSOCIACAO_MANUAL_RH' });
+        toast.success('Comprovante associado e pagamento confirmado.');
+      } else {
+        toast.success('Comprovante associado ao funcionário. Aguardando o holerite desta competência.');
+      }
+      await load();
     } catch (error: any) { toast.error(error.message); }
   };
 
@@ -545,13 +553,13 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     <input ref={holeriteInput} type="file" accept="application/pdf,.pdf" multiple className="hidden" onChange={e=>void uploadHolerites(Array.from(e.target.files || []))}/>
     <input ref={receiptInput} type="file" accept="application/pdf,.pdf,.zip,application/zip" multiple className="hidden" onChange={e=>void uploadReceipts(Array.from(e.target.files || []))}/>
 
-    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"><div><p className="text-xs uppercase tracking-wide text-emerald-400">Fechamento → Pagamento</p><h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Assinatura eletrônica de holerites</h2><p className="mt-1 text-xs text-muted-foreground">Reconhecimento automático por funcionário: bateu o nome/CPF, autoriza. Não reconheceu, não salva.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>holeriteInput.current?.click()} disabled={uploading}><FileUp className="mr-2 h-4 w-4"/>SUBIR HOLERITES</Button><Button variant="outline" onClick={()=>receiptInput.current?.click()} disabled={uploading}><ReceiptText className="mr-2 h-4 w-4"/>SUBIR COMPROVANTES</Button><Button variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</Button></div></div>
+    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between"><div><p className="text-xs uppercase tracking-wide text-emerald-400">Fechamento → Pagamento</p><h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Assinatura eletrônica de holerites</h2><p className="mt-1 text-xs text-muted-foreground">Reconhecimento automático por funcionário: bateu o nome/CPF, autoriza. Não reconheceu, preserva o PDF e envia para associação manual.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={()=>holeriteInput.current?.click()} disabled={uploading}><FileUp className="mr-2 h-4 w-4"/>SUBIR HOLERITES</Button><Button variant="outline" onClick={()=>receiptInput.current?.click()} disabled={uploading}><ReceiptText className="mr-2 h-4 w-4"/>SUBIR COMPROVANTES</Button><Button variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</Button></div></div>
 
     <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><p className="flex items-center gap-2 text-xs font-bold uppercase text-cyan-300"><ShieldCheck className="h-4 w-4"/>Portal único de holerite</p><p className="mt-2 break-all font-mono text-sm">{portalUrl}</p><p className="mt-2 text-xs text-muted-foreground">O mesmo link serve para todos. O funcionário se identifica com CPF + data de nascimento + últimos 4 números do celular cadastrado. Não usa WhatsApp API, SMS ou OTP.</p></div><div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={()=>void copyPortal()}><Copy className="mr-2 h-4 w-4"/>Copiar link</Button><Button variant="outline" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className="mr-2 h-4 w-4"/>Abrir portal</Button></div></div></div>
 
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Kpi label="Holerites" value={rows.length}/><Kpi label="Pagamentos confirmados" value={rows.filter(r=>r.payment_confirmed).length}/><Kpi label="Liberados no portal" value={releasedCount}/><Kpi label="Assinados" value={rows.filter(r=>r.signature_status==='ASSINADO').length} success/><Kpi label="Não reconhecidos antigos" value={unmatchedReceipts.length} danger/></div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Kpi label="Holerites" value={rows.length}/><Kpi label="Pagamentos confirmados" value={rows.filter(r=>r.payment_confirmed).length}/><Kpi label="Liberados no portal" value={releasedCount}/><Kpi label="Assinados" value={rows.filter(r=>r.signature_status==='ASSINADO').length} success/><Kpi label="Aguardando associação" value={unmatchedReceipts.length} danger/></div>
 
-    {unmatchedReceipts.length > 0 && <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold text-amber-300">ARQUIVOS ANTIGOS NÃO RECONHECIDOS</p><p className="mt-1 text-xs text-muted-foreground">Esses arquivos são de tentativas anteriores. Novos arquivos não reconhecidos não são mais salvos.</p></div><Button size="sm" variant="destructive" disabled={uploading} onClick={()=>void discardUnmatchedReceipts()}>DESCARTAR NÃO LIDOS</Button></div><div className="mt-2 space-y-1">{unmatchedReceipts.map(r=><div key={r.id} className="text-xs"><span>{r.original_filename} · {currency(r.amount)}</span></div>)}</div></div>}
+    {unmatchedReceipts.length > 0 && <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3"><div><p className="text-xs font-bold text-amber-300">COMPROVANTES AGUARDANDO ASSOCIAÇÃO MANUAL</p><p className="mt-1 text-xs text-muted-foreground">Nenhum arquivo é descartado por falha de OCR. Abra o PDF fatiado, confira e associe ao funcionário correto.</p></div><div className="mt-3 space-y-2">{unmatchedReceipts.map(r=><div key={r.id} className="flex flex-col gap-2 rounded-lg border border-amber-500/20 p-3 lg:flex-row lg:items-center"><div className="min-w-0 flex-1 text-xs"><b className="break-all">{r.original_filename}</b><div className="text-muted-foreground">{currency(r.amount)} · página(s) {Array.isArray(r.extracted_data?.paginas) ? r.extracted_data.paginas.join(', ') : `${r.source_page_start || '—'}${r.source_page_end && r.source_page_end !== r.source_page_start ? `–${r.source_page_end}` : ''}`}</div></div><Button size="sm" variant="outline" onClick={()=>void openUnmatchedReceipt(r)}><ExternalLink className="mr-1 h-3 w-3"/>VER PDF</Button><select value={assignReceipt[r.id] || ''} onChange={e=>setAssignReceipt(current=>({ ...current, [r.id]: e.target.value }))} className="min-w-[240px] rounded border bg-background px-2 py-2 text-xs"><option value="">Selecionar funcionário...</option>{scopedEmployees.map(employee=><option key={employee.id} value={employee.id}>{employee.name}</option>)}</select><Button size="sm" onClick={()=>void assignUnmatchedReceipt(r)}>ASSOCIAR</Button></div>)}</div></div>}
 
     <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[1250px] text-xs"><thead className="bg-muted/50"><tr>{['Funcionário','Holerite','Pagamento','Portal','Visualização','Assinatura','Status','Ações'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.document_id} className="border-t align-top">
       <td className="px-3 py-3"><b>{row.employee_name||'NÃO IDENTIFICADO'}</b><div className="text-muted-foreground">{row.employee_role||'—'}</div></td>
@@ -565,7 +573,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3"><FileArchive className="h-4 w-4"/><b className="text-xs">GERAR PDF CONSOLIDADO</b><select value={consolidatedFilter} onChange={e=>setConsolidatedFilter(e.target.value as any)} className="rounded border bg-background px-2 py-1.5 text-xs"><option value="assinados">Somente assinados</option><option value="todos">Todos</option><option value="pendentes">Somente pendentes</option></select><Button size="sm" variant="outline" onClick={()=>void consolidated()}>Gerar consolidado</Button></div>
 
-    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando documentos reais...</b><p className="mt-1 text-xs text-muted-foreground">Leitura, separação, OCR, SHA-256, reconhecimento e autorização automática.</p></div></div>}
+    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando documentos reais...</b><p className="mt-1 text-xs text-muted-foreground">Leitura, separação, OCR, SHA-256, preservação e associação automática ou manual.</p></div></div>}
 
     <Dialog open={previewOpen} onOpenChange={open=>{ if (!uploading) setPreviewOpen(open); }}>
       <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
@@ -577,7 +585,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
           <Kpi label="Não reconhecidos" value={previewSummary.pending}/>
           <Kpi label="Erros" value={previewSummary.errors} danger/>
         </div>
-        <p className="text-xs text-muted-foreground">Regra: bateu o funcionário, salva e confere automaticamente. Não reconheceu ou deu erro, não salva.</p>
+        <p className="text-xs text-muted-foreground">Regra dos holerites: bateu o funcionário, salva e confere automaticamente. Não reconheceu ou deu erro, não importa o holerite.</p>
         <div className="overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[980px] text-xs">
             <thead className="bg-muted/50"><tr>{['Arquivo / Página','Funcionário','Empresa','Competência','Tipo','Líquido','Status','Ação'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead>
