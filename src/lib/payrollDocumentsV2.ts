@@ -1,7 +1,25 @@
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import pdfWorkerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { jsPDF } from 'jspdf';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+// PDF.js 5 usa Promise.withResolvers em partes do runtime. Alguns WebViews/Safari
+// ainda não expõem a função mesmo quando o restante da aplicação funciona.
+const PromiseCtor = Promise as any;
+if (typeof PromiseCtor.withResolvers !== 'function') {
+  PromiseCtor.withResolvers = () => {
+    let resolve!: (value?: unknown) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
+// Vite resolve o worker como asset real no build. Evita montar URL a partir de
+// um bare specifier em runtime, comportamento que varia entre WebKit/WebView.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 type PdfTextItem = {
   str?: string;
@@ -82,14 +100,81 @@ const normalizeKeepPunctuation = (value: unknown) => stripAccents(value)
 
 export const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
 
+export const readBlobBytes = async (blob: Blob): Promise<Uint8Array> => {
+  if (typeof (blob as any).arrayBuffer === 'function') {
+    return new Uint8Array(await (blob as any).arrayBuffer());
+  }
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('Falha ao ler o arquivo no navegador.'));
+    reader.onload = () => {
+      if (!(reader.result instanceof ArrayBuffer)) return reject(new Error('Leitura do arquivo não retornou bytes válidos.'));
+      resolve(new Uint8Array(reader.result));
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+};
+
+const sha256PureJs = (bytes: Uint8Array) => {
+  const K = [
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
+  ];
+  const h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const byteLength = bytes.length;
+  const paddedLength = Math.ceil((byteLength + 9) / 64) * 64;
+  const data = new Uint8Array(paddedLength);
+  data.set(bytes);
+  data[byteLength] = 0x80;
+  const bitLength = byteLength * 8;
+  const view = new DataView(data.buffer);
+  view.setUint32(paddedLength - 8, Math.floor(bitLength / 0x100000000), false);
+  view.setUint32(paddedLength - 4, bitLength >>> 0, false);
+  const w = new Uint32Array(64);
+  const rotr = (value: number, shift: number) => ((value >>> shift) | (value << (32 - shift))) >>> 0;
+
+  for (let offset = 0; offset < paddedLength; offset += 64) {
+    for (let i = 0; i < 16; i += 1) w[i] = view.getUint32(offset + i * 4, false);
+    for (let i = 16; i < 64; i += 1) {
+      const s0 = (rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3)) >>> 0;
+      const s1 = (rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10)) >>> 0;
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+    let [a,b,c,d,e,f,g,hh] = h;
+    for (let i = 0; i < 64; i += 1) {
+      const S1 = (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) >>> 0;
+      const ch = ((e & f) ^ (~e & g)) >>> 0;
+      const t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0;
+      const S0 = (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) >>> 0;
+      const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const t2 = (S0 + maj) >>> 0;
+      hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0; h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
+    h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0; h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+  }
+  return h.map(value => value.toString(16).padStart(8, '0')).join('');
+};
+
 export const sha256Browser = async (input: Blob | ArrayBuffer | Uint8Array) => {
   const bytes = input instanceof Blob
-    ? new Uint8Array(await input.arrayBuffer())
+    ? await readBlobBytes(input)
     : input instanceof Uint8Array
       ? input
       : new Uint8Array(input);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const cryptoRef: any = typeof globalThis !== 'undefined' ? (globalThis as any).crypto : undefined;
+  const subtle = cryptoRef?.subtle || cryptoRef?.webkitSubtle;
+  if (subtle && typeof subtle.digest === 'function') {
+    const digest = await subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return sha256PureJs(bytes);
 };
 
 const moneyNumber = (raw: string) => {
@@ -363,16 +448,24 @@ const textForPage = async (page: any): Promise<{ text: string; lines: string[]; 
 };
 
 export const extractPdfPages = async (bytes: Uint8Array): Promise<StructuredPdfPage[]> => {
-  const loading = pdfjsLib.getDocument({ data: bytes });
-  const pdf = await loading.promise;
-  const pages: StructuredPdfPage[] = [];
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const extracted = await textForPage(page);
-    pages.push({ page: pageNumber, ...extracted });
+  let loading: any;
+  let pdf: any;
+  try {
+    loading = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
+    pdf = await loading.promise;
+    const pages: StructuredPdfPage[] = [];
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const extracted = await textForPage(page);
+      pages.push({ page: pageNumber, ...extracted });
+    }
+    return pages;
+  } catch (error: any) {
+    throw new Error(`PDF.js não conseguiu abrir/ler o arquivo: ${String(error?.message || error)}`);
+  } finally {
+    try { await loading?.destroy?.(); } catch { /* diagnóstico principal já preservado */ }
+    try { await pdf?.destroy?.(); } catch { /* diagnóstico principal já preservado */ }
   }
-  await loading.destroy();
-  return pages;
 };
 
 const similarity = (a: string, b: string) => {
@@ -440,7 +533,7 @@ const findEmployee = (
 };
 
 const pagesToPdfBytes = async (source: Uint8Array, pageNumbers: number[]) => {
-  const pdf = await pdfjsLib.getDocument({ data: source }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(source) }).promise;
   let out: jsPDF | null = null;
   for (const pageNumber of pageNumbers) {
     const page = await pdf.getPage(pageNumber);
@@ -513,7 +606,7 @@ export const parsePayrollPdf = async ({ file, employees, kind, netAmountByEmploy
   netAmountByEmployee?: Map<string, number>;
 }): Promise<ParsedPayrollPdf[]> => {
   // PDF.js pode transferir/destacar buffers para o worker: sempre use cópias independentes.
-  const scanBytes = new Uint8Array(await file.arrayBuffer());
+  const scanBytes = await readBlobBytes(file);
   const pages = await extractPdfPages(scanBytes);
   if (!pages.length) return [];
 
@@ -522,7 +615,7 @@ export const parsePayrollPdf = async ({ file, employees, kind, netAmountByEmploy
     const page = pages[0];
     const amount = extractLikelyAmount(page.text);
     const match = findEmployee(page.text, page.lines, employees, kind === 'COMPROVANTE' ? amount : null, netAmountByEmployee);
-    const originalBytes = new Uint8Array(await file.arrayBuffer());
+    const originalBytes = await readBlobBytes(file);
     return [parsedResult({
       bytes: originalBytes,
       filename: file.name,
@@ -589,7 +682,7 @@ export const parsePayrollPdf = async ({ file, employees, kind, netAmountByEmploy
 
   const output: ParsedPayrollPdf[] = [];
   for (const group of groups.values()) {
-    const splitSource = new Uint8Array(await file.arrayBuffer());
+    const splitSource = await readBlobBytes(file);
     const split = await pagesToPdfBytes(splitSource, group.pages);
     const suffix = group.employeeName
       ? normalize(group.employeeName).replace(/\s+/g, '_')
@@ -619,7 +712,7 @@ const readU16 = (view: DataView, offset: number) => view.getUint16(offset, true)
 const readU32 = (view: DataView, offset: number) => view.getUint32(offset, true);
 
 export const extractPdfFilesFromZip = async (file: File): Promise<File[]> => {
-  const source = new Uint8Array(await file.arrayBuffer());
+  const source = await readBlobBytes(file);
   const view = new DataView(source.buffer, source.byteOffset, source.byteLength);
   const decoder = new TextDecoder();
   const results: File[] = [];
@@ -658,7 +751,7 @@ export const mergePdfUrls = async (sources: Array<{ url: string; label?: string 
     const response = await fetch(source.url, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Falha ao carregar ${source.label || 'PDF'}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(bytes) }).promise;
     for (let p = 1; p <= pdf.numPages; p += 1) {
       const page = await pdf.getPage(p);
       const { canvas, viewport } = await canvasForPage(page);
