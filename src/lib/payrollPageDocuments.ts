@@ -4,6 +4,7 @@ import {
   extractPayrollDocumentMetadata,
   extractPdfPages,
   onlyDigits,
+  readBlobBytes,
   sha256Browser,
   type PayrollDocumentType,
   type PayrollEmployeeMatch,
@@ -81,7 +82,7 @@ const safeFileName = (value: string) => stripAccents(value)
 
 /**
  * Safari/iOS antigo (e qualquer contexto não seguro) não expõe `crypto.randomUUID`.
- * Chamar direto produz exatamente `undefined is not a function`.
+ * Nunca chamar randomUUID diretamente no fluxo de upload.
  */
 export const safeUuid = (): string => {
   const cryptoRef: any = typeof globalThis !== 'undefined' ? (globalThis as any).crypto : undefined;
@@ -224,92 +225,121 @@ export const analyzePayrollFile = async ({
     fatalError: null,
   };
 
+  let sourceBytes: Uint8Array;
   try {
-    analysis.sourceSha256 = await sha256Browser(new Uint8Array(await file.arrayBuffer()));
-    // pdf.js pode transferir/destacar o buffer: cada consumidor recebe uma cópia própria.
-    const pages = await extractPdfPages(new Uint8Array(await file.arrayBuffer()));
+    sourceBytes = await readBlobBytes(file);
+  } catch (error) {
+    const entry = log('ler-bytes-arquivo', null, error);
+    analysis.fatalError = `LEITURA DO ARQUIVO: ${entry.error}`;
+    return analysis;
+  }
+
+  let pages: Awaited<ReturnType<typeof extractPdfPages>>;
+  try {
+    // PDF.js pode transferir/destacar o buffer: recebe sempre uma cópia independente.
+    pages = await extractPdfPages(new Uint8Array(sourceBytes));
     analysis.totalPages = pages.length;
-    if (!pages.length) {
-      analysis.fatalError = 'Não foi possível ler nenhuma página deste PDF.';
-      return analysis;
-    }
+  } catch (error) {
+    const entry = log('abrir-pdf-e-extrair-texto', null, error);
+    analysis.fatalError = `ABERTURA/LEITURA DO PDF: ${entry.error}`;
+    return analysis;
+  }
 
-    const sourceDoc = await PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { ignoreEncryption: true });
+  if (!pages.length) {
+    analysis.fatalError = 'ABERTURA/LEITURA DO PDF: o leitor retornou zero páginas.';
+    return analysis;
+  }
 
-    for (const page of pages) {
-      const baseName = file.name.replace(/\.pdf$/i, '');
-      try {
-        const metadata = extractPayrollDocumentMetadata(page.text, page.lines);
-        const match = matchEmployeeForPage(page.text, page.lines, employees);
-        const bytes = await extractPhysicalPage(sourceDoc, page.page - 1);
-        const suffix = match.employee
-          ? normalize(match.employee.name).replace(/\s+/g, '_')
-          : `PENDENTE_P${page.page}`;
-        const filename = safeFileName(`${baseName}_P${String(page.page).padStart(2, '0')}_${suffix}.pdf`);
-        analysis.documents.push({
-          key: `${analysis.sourceSha256}:${page.page}`,
-          pageNumber: page.page,
-          filename,
-          bytes,
-          sha256: await sha256Browser(bytes),
-          text: page.text,
-          status: match.status,
-          message: match.message,
-          employeeId: match.employee?.id || null,
-          employeeName: match.employee?.name || null,
-          employeeNameDetected: metadata.employeeNameDetected,
-          employeeCodeDetected: metadata.employeeCodeDetected,
-          jobTitleDetected: metadata.jobTitleDetected || match.employee?.cargo || null,
-          cboDetected: metadata.cboDetected,
-          matchMethod: match.method,
-          confidence: match.confidence,
-          cpfDetected: match.cpf,
-          amountDetected: metadata.netAmountDetected,
-          documentType: metadata.documentType,
-          documentSubtype: metadata.documentSubtype,
-          competenciaDetected: metadata.competenciaDetected,
-          competenciaLabelDetected: metadata.competenciaLabelDetected,
-          companyNameDetected: metadata.companyNameDetected,
-          cnpjDetected: metadata.cnpjDetected,
-          duplicateCopiesDetected: metadata.duplicateCopiesDetected,
-          usedOcr: page.usedOcr,
-        });
-      } catch (error) {
-        // Uma página com problema NÃO invalida as demais.
-        const entry = log('extrair-pagina', page.page, error);
-        analysis.documents.push({
-          key: `${analysis.sourceSha256}:${page.page}`,
-          pageNumber: page.page,
-          filename: safeFileName(`${file.name.replace(/\.pdf$/i, '')}_P${page.page}_ERRO.pdf`),
-          bytes: new Uint8Array(0),
-          sha256: '',
-          text: page.text || '',
-          status: 'ERRO',
-          message: `Falha ao preparar a página ${page.page}: ${entry.error}`,
-          employeeId: null,
-          employeeName: null,
-          employeeNameDetected: null,
-          employeeCodeDetected: null,
-          jobTitleDetected: null,
-          cboDetected: null,
-          matchMethod: 'NAO_IDENTIFICADO',
-          confidence: 0,
-          cpfDetected: null,
-          amountDetected: null,
-          documentType: 'UNKNOWN',
-          documentSubtype: null,
-          competenciaDetected: null,
-          competenciaLabelDetected: null,
-          companyNameDetected: null,
-          cnpjDetected: null,
-          duplicateCopiesDetected: 1,
-          usedOcr: page.usedOcr,
-        });
-      }
+  try {
+    analysis.sourceSha256 = await sha256Browser(sourceBytes);
+  } catch (error) {
+    const entry = log('sha256-arquivo', null, error);
+    analysis.fatalError = `SHA-256 DO ARQUIVO: ${entry.error}`;
+    return analysis;
+  }
+
+  let sourceDoc: PDFDocument;
+  try {
+    sourceDoc = await PDFDocument.load(new Uint8Array(sourceBytes), { ignoreEncryption: true });
+    if (sourceDoc.getPageCount() !== pages.length) {
+      throw new Error(`Contagem divergente: PDF.js=${pages.length}, pdf-lib=${sourceDoc.getPageCount()}`);
     }
   } catch (error) {
-    const entry = log('ler-arquivo', null, error);
-    analysis.fatalError = entry.error;
+    const entry = log('preparar-separacao-paginas', null, error);
+    analysis.fatalError = `PREPARAÇÃO DAS PÁGINAS: ${entry.error}`;
+    return analysis;
+  }
+
+  for (const page of pages) {
+    const baseName = file.name.replace(/\.pdf$/i, '');
+    try {
+      const metadata = extractPayrollDocumentMetadata(page.text, page.lines);
+      const match = matchEmployeeForPage(page.text, page.lines, employees);
+      const bytes = await extractPhysicalPage(sourceDoc, page.page - 1);
+      const suffix = match.employee
+        ? normalize(match.employee.name).replace(/\s+/g, '_')
+        : `PENDENTE_P${page.page}`;
+      const filename = safeFileName(`${baseName}_P${String(page.page).padStart(2, '0')}_${suffix}.pdf`);
+      analysis.documents.push({
+        key: `${analysis.sourceSha256}:${page.page}`,
+        pageNumber: page.page,
+        filename,
+        bytes,
+        sha256: await sha256Browser(bytes),
+        text: page.text,
+        status: match.status,
+        message: match.message,
+        employeeId: match.employee?.id || null,
+        employeeName: match.employee?.name || null,
+        employeeNameDetected: metadata.employeeNameDetected,
+        employeeCodeDetected: metadata.employeeCodeDetected,
+        jobTitleDetected: metadata.jobTitleDetected || match.employee?.cargo || null,
+        cboDetected: metadata.cboDetected,
+        matchMethod: match.method,
+        confidence: match.confidence,
+        cpfDetected: match.cpf,
+        amountDetected: metadata.netAmountDetected,
+        documentType: metadata.documentType,
+        documentSubtype: metadata.documentSubtype,
+        competenciaDetected: metadata.competenciaDetected,
+        competenciaLabelDetected: metadata.competenciaLabelDetected,
+        companyNameDetected: metadata.companyNameDetected,
+        cnpjDetected: metadata.cnpjDetected,
+        duplicateCopiesDetected: metadata.duplicateCopiesDetected,
+        usedOcr: page.usedOcr,
+      });
+    } catch (error) {
+      // Uma página com problema NÃO invalida as demais.
+      const entry = log('extrair-pagina', page.page, error);
+      analysis.documents.push({
+        key: `${analysis.sourceSha256}:${page.page}`,
+        pageNumber: page.page,
+        filename: safeFileName(`${file.name.replace(/\.pdf$/i, '')}_P${page.page}_ERRO.pdf`),
+        bytes: new Uint8Array(0),
+        sha256: '',
+        text: page.text || '',
+        status: 'ERRO',
+        message: `Falha ao preparar a página ${page.page}: ${entry.error}`,
+        employeeId: null,
+        employeeName: null,
+        employeeNameDetected: null,
+        employeeCodeDetected: null,
+        jobTitleDetected: null,
+        cboDetected: null,
+        matchMethod: 'NAO_IDENTIFICADO',
+        confidence: 0,
+        cpfDetected: null,
+        amountDetected: null,
+        documentType: 'UNKNOWN',
+        documentSubtype: null,
+        competenciaDetected: null,
+        competenciaLabelDetected: null,
+        companyNameDetected: null,
+        cnpjDetected: null,
+        duplicateCopiesDetected: 1,
+        usedOcr: page.usedOcr,
+      });
+    }
   }
 
   return analysis;
