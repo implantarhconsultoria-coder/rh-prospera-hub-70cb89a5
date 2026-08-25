@@ -16,7 +16,7 @@ const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePu
 
 const MOBILE_BUILD_TAG = "20260824-holerite-server-3";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
-const isPayrollPublicPortal = window.location.pathname === '/holerite' || window.location.pathname === '/holerite/';
+const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(window.location.pathname);
 
 async function clearLegacyMobileCache() {
   if (typeof window === "undefined") return;
