@@ -3,9 +3,15 @@ import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/emp
 
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
+export const TOPAC_GYN_COMPANY_ID = 'c7a040f2-34b3-42a6-8a3a-f4bb64140ec6';
+
+export const getHoraExtraSemanalPercentual = (companyId?: string | null) =>
+  companyId === TOPAC_GYN_COMPANY_ID ? 60 : 50;
+
 export const valorHora = (salario: number) => salario / 220;
 
-export const calcHE50 = (salario: number, horas: number) => valorHora(salario) * 1.5 * horas;
+export const calcHE50 = (salario: number, horas: number, percentual: number = 50) =>
+  valorHora(salario) * (1 + percentual / 100) * horas;
 export const calcHE100 = (salario: number, horas: number) => valorHora(salario) * 2 * horas;
 export const calcFalta = (salario: number, dias: number) => (salario / 30) * dias;
 export const calcAtraso = (salario: number, horas: number) => valorHora(salario) * horas;
@@ -182,7 +188,8 @@ export const calcPayrollBreakdown = (
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const valorHora = (emp.salarioBase + insVal + periculosidadeVal) / 220;
-  const he50Val = round2(valorHora * 1.5 * (entry.he50 || 0));
+  const heSemanalPct = getHoraExtraSemanalPercentual(emp.companyId);
+  const he50Val = round2(valorHora * (1 + heSemanalPct / 100) * (entry.he50 || 0));
   const he100Val = round2(valorHora * 2 * (entry.he100 || 0));
   const totalHE = round2(he50Val + he100Val);
   const dsrHE = diasUteis > 0 ? round2((totalHE / diasUteis) * domingosFeriados) : 0;
@@ -255,7 +262,7 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const baseHora = emp.salarioBase + insVal + periculosidadeVal;
-  const he50Val = calcHE50(baseHora, entry.he50);
+  const he50Val = calcHE50(baseHora, entry.he50, getHoraExtraSemanalPercentual(emp.companyId));
   const he100Val = calcHE100(baseHora, entry.he100);
   const totalHE = he50Val + he100Val;
   const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
