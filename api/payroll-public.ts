@@ -24,6 +24,16 @@ const MAX_CPF_ATTEMPTS_15M = 5;
 const HOLERITE = 'HOLERITE';
 const BENEFICIO = 'BENEFICIO_VR_VT';
 
+const COMPANY_SCOPE_CNPJS: Record<string, string> = {
+  'topac-matriz': '07291648000103',
+  'topac-pg': '07291648000294',
+  'topac-gyn': '07291648000375',
+  alqui: '14464586000150',
+  lmt: '21967711000100',
+};
+
+const normalizeCompanyScope = (value: unknown) => String(value || '').trim().toLowerCase();
+
 const documentLabel = (type: string) => type === BENEFICIO ? 'Recibo VR / VT' : 'Holerite';
 
 const genericIdentityError = (res: any, status = 401) =>
@@ -49,7 +59,20 @@ const assertCompanyEnabled = async (service: any, companyId: string) => {
   if (error || !data) throw Object.assign(new Error('company_not_enabled'), { status: 403 });
 };
 
-const validatePublicSession = async (service: any, rawSession: string) => {
+const resolveCompanyScope = async (service: any, rawScope: unknown) => {
+  const scope = normalizeCompanyScope(rawScope);
+  const expectedCnpj = COMPANY_SCOPE_CNPJS[scope];
+  if (!expectedCnpj) throw Object.assign(new Error('invalid_company_scope'), { status: 404 });
+
+  const { data: companies, error } = await service.from('empresas').select('id,nome,cnpj');
+  if (error) throw error;
+  const company = (companies || []).find((row: any) => digits(row.cnpj) === expectedCnpj);
+  if (!company) throw Object.assign(new Error('invalid_company_scope'), { status: 404 });
+  await assertCompanyEnabled(service, company.id);
+  return { scope, companyId: company.id, companyName: company.nome, cnpj: expectedCnpj };
+};
+
+const validatePublicSession = async (service: any, rawSession: string, expectedCompanyId: string) => {
   if (!rawSession || rawSession.length < 32 || rawSession.length > 256) {
     throw Object.assign(new Error('session_required'), { status: 401 });
   }
@@ -64,6 +87,9 @@ const validatePublicSession = async (service: any, rawSession: string) => {
   if (new Date(data.expires_at).getTime() <= Date.now()) {
     await service.from('payroll_public_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', data.id);
     throw Object.assign(new Error('session_expired'), { status: 401 });
+  }
+  if (data.company_id !== expectedCompanyId) {
+    throw Object.assign(new Error('invalid_session'), { status: 401 });
   }
   await assertCompanyEnabled(service, data.company_id);
   await service.from('payroll_public_sessions').update({ last_used_at: new Date().toISOString() }).eq('id', data.id);
@@ -222,12 +248,12 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
   return { requestRow: created, doc, receipt, employee };
 };
 
-const authenticate = async (service: any, req: any, res: any, body: any) => {
+const authenticate = async (service: any, req: any, res: any, body: any, scopedCompany: any) => {
   const cpf = digits(body.cpf);
   const birth = String(body.birth_date || '').trim();
   const phoneLast4 = digits(body.phone_last4).slice(-4);
   const ip = clientIp(req) || 'unknown';
-  const identifierHash = sha256(`payroll-identity:${cpf || 'invalid'}`);
+  const identifierHash = sha256(`payroll-identity:${scopedCompany.companyId}:${cpf || 'invalid'}`);
   const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
 
   const [{ count: ipCount }, { count: cpfCount }] = await Promise.all([
@@ -250,27 +276,29 @@ const authenticate = async (service: any, req: any, res: any, body: any) => {
     p_phone_last4: phoneLast4,
   });
   if (matchError) throw matchError;
-  if (!matches || matches.length !== 1) {
-    await service.from('payroll_public_access_attempts').insert({ identifier_hash: identifierHash, ip, success: false, failure_reason: 'NO_UNIQUE_MATCH' });
+  const scopedMatches = (matches || []).filter((row: any) => row.company_id === scopedCompany.companyId);
+  if (scopedMatches.length !== 1) {
+    await service.from('payroll_public_access_attempts').insert({ identifier_hash: identifierHash, ip, success: false, failure_reason: 'NO_MATCH_IN_COMPANY_SCOPE' });
     return genericIdentityError(res);
   }
 
-  const match = matches[0];
-  await assertCompanyEnabled(service, match.company_id);
-  const [{ data: employee, error: employeeError }, { data: company, error: companyError }] = await Promise.all([
-    service.from('funcionarios').select('id,nome,cargo').eq('id', match.employee_id).single(),
-    service.from('empresas').select('id,nome').eq('id', match.company_id).single(),
-  ]);
-  if (employeeError || !employee || companyError || !company) return genericIdentityError(res);
+  const match = scopedMatches[0];
+  const { data: employee, error: employeeError } = await service
+    .from('funcionarios')
+    .select('id,nome,cargo')
+    .eq('id', match.employee_id)
+    .eq('empresa_id', scopedCompany.companyId)
+    .single();
+  if (employeeError || !employee) return genericIdentityError(res);
 
-  const documents = await availableDocuments(service, match.employee_id, match.company_id);
+  const documents = await availableDocuments(service, match.employee_id, scopedCompany.companyId);
   if (!documents.length) return genericIdentityError(res);
 
   const rawSession = randomToken();
   const sessionHash = sha256(rawSession);
   const expiresAt = new Date(Date.now() + SESSION_MINUTES * 60_000).toISOString();
   const { data: sessionRow, error: sessionError } = await service.from('payroll_public_sessions').insert({
-    company_id: match.company_id,
+    company_id: scopedCompany.companyId,
     employee_id: match.employee_id,
     session_hash: sessionHash,
     auth_method: AUTH_METHOD,
@@ -284,14 +312,14 @@ const authenticate = async (service: any, req: any, res: any, body: any) => {
     identifier_hash: identifierHash,
     ip,
     success: true,
-    company_id: match.company_id,
+    company_id: scopedCompany.companyId,
     employee_id: match.employee_id,
   });
   await appendPublicEvent(service, req, {
-    companyId: match.company_id,
+    companyId: scopedCompany.companyId,
     employeeId: match.employee_id,
     eventType: 'PORTAL_IDENTIDADE_VALIDADA',
-    payload: { auth_method: AUTH_METHOD, session_id: sessionRow.id, expires_at: expiresAt },
+    payload: { auth_method: AUTH_METHOD, session_id: sessionRow.id, expires_at: expiresAt, company_scope: scopedCompany.scope },
   });
 
   return sendJson(res, {
@@ -300,7 +328,7 @@ const authenticate = async (service: any, req: any, res: any, body: any) => {
     session_expires_at: expiresAt,
     employee_name: employee.nome,
     employee_role: employee.cargo || '',
-    company_name: company.nome,
+    company_name: scopedCompany.companyName,
     documents,
   });
 };
@@ -312,10 +340,11 @@ export default async function handler(req: any, res?: any) {
     const service = getServiceClient();
     const body = readBody(req);
     const action = String(body.action || '');
+    const scopedCompany = await resolveCompanyScope(service, body.company_scope);
 
-    if (action === 'authenticate') return authenticate(service, req, res, body);
+    if (action === 'authenticate') return authenticate(service, req, res, body, scopedCompany);
 
-    const sessionRow = await validatePublicSession(service, String(body.session || ''));
+    const sessionRow = await validatePublicSession(service, String(body.session || ''), scopedCompany.companyId);
 
     if (action === 'list') {
       const [{ data: employee }, { data: company }] = await Promise.all([
@@ -535,7 +564,7 @@ export default async function handler(req: any, res?: any) {
   } catch (error: any) {
     const message = String(error?.message || error);
     const status = Number(error?.status || 500);
-    const safeMessage = ['invalid_session','session_required','session_expired','document_not_available','payment_not_confirmed','document_not_acknowledged','signature_confirmation_required','document_integrity_failed','company_not_enabled'].includes(message)
+    const safeMessage = ['invalid_session','session_required','session_expired','document_not_available','payment_not_confirmed','document_not_acknowledged','signature_confirmation_required','document_integrity_failed','company_not_enabled','invalid_company_scope'].includes(message)
       ? message
       : 'request_failed';
     return sendJson(res, { ok: false, error: safeMessage }, status);
