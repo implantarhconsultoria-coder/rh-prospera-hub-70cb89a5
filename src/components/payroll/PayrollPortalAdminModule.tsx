@@ -76,8 +76,10 @@ const apiCall = async (action: string, payload: Record<string, unknown>) => {
 const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: string }> = ({ companyId, competencia }) => {
   const { companies, employees } = useApp();
   const company = companies.find(c => c.id === companyId);
-  const enabled = Boolean(company && ALLOWED_CODES.has(String((company as any).codigo || '').toLowerCase()) && ALLOWED_CNPJS.has(digits(company.cnpj)));
-  const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/holerite` : '/holerite';
+  const portalSlug = String((company as any)?.codigo || '').trim().toLowerCase();
+  const enabled = Boolean(company && ALLOWED_CODES.has(portalSlug) && ALLOWED_CNPJS.has(digits(company.cnpj)));
+  const portalPath = portalSlug ? `/holerite/${encodeURIComponent(portalSlug)}` : '/holerite';
+  const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}${portalPath}` : portalPath;
 
   const scopedEmployees = useMemo<PayrollEmployeeMatch[]>(() => employees
     .filter(e => e.companyId === companyId && e.status === 'ativo')
@@ -115,8 +117,8 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   if (!enabled) return null;
 
   const copyPortal = async () => {
-    try { await navigator.clipboard.writeText(portalUrl); toast.success('Link único do Portal de Holerite copiado.'); }
-    catch { window.prompt('Copie o link do Portal de Holerite:', portalUrl); }
+    try { await navigator.clipboard.writeText(portalUrl); toast.success(`Link do portal da ${company?.name || 'empresa'} copiado.`); }
+    catch { window.prompt('Copie o link do Portal de Holerite desta empresa:', portalUrl); }
   };
 
   const persistSequentialPayrollAnalysis = async (analysis: PayrollFileAnalysis) => {
@@ -392,7 +394,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
 
     <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div><p className="flex items-center gap-2 text-xs font-bold uppercase text-cyan-300"><ShieldCheck className="h-4 w-4"/>Portal único de holerite</p><p className="mt-2 break-all font-mono text-sm">{portalUrl}</p><p className="mt-2 text-xs text-muted-foreground">O funcionário recebe o documento completo do par para visualizar e assinar.</p></div>
+        <div><p className="flex items-center gap-2 text-xs font-bold uppercase text-cyan-300"><ShieldCheck className="h-4 w-4"/>Portal de holerite desta empresa</p><p className="mt-2 break-all font-mono text-sm">{portalUrl}</p><p className="mt-2 text-xs text-muted-foreground">Este link aceita somente funcionários vinculados a {company?.name}. O documento completo do par segue para visualizar e assinar.</p></div>
         <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={()=>void copyPortal()}><Copy className="mr-2 h-4 w-4"/>Copiar link</Button><Button variant="outline" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className="mr-2 h-4 w-4"/>Abrir portal</Button></div>
       </div>
     </div>
