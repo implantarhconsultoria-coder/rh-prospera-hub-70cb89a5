@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { formatCurrency } from '@/lib/calculations';
+import { formatCurrency, getHoraExtraSemanalPercentual } from '@/lib/calculations';
 import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
 import { Input } from '@/components/ui/input';
 import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
@@ -45,6 +45,7 @@ const LancamentosPage: React.FC = () => {
   );
 
   const empresaNome = companies.find(c => c.id === selectedCompany)?.name || '';
+  const heSemanalPct = getHoraExtraSemanalPercentual(selectedCompany);
 
   const stats = useMemo(() => ({
     manual: compEntries.filter(e => (e.origem || 'manual') === 'manual').length,
@@ -153,7 +154,7 @@ const LancamentosPage: React.FC = () => {
                 <th className="px-4 py-3.5 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Salário</th>
                 <th className="px-4 py-3.5 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Faltas (d)</th>
                 <th className="px-4 py-3.5 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Atrasos (h)</th>
-                <th className="px-4 py-3.5 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">HE 50%</th>
+                <th className="px-4 py-3.5 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">HE {heSemanalPct}%</th>
                 <th className="px-4 py-3.5 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">HE 100%</th>
                 <th className="px-4 py-3.5 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Adicionais</th>
                 <th className="px-4 py-3.5 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Descontos</th>
