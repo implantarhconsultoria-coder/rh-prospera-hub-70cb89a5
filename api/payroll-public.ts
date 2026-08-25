@@ -287,7 +287,6 @@ const authenticate = async (service: any, req: any, res: any, body: any, scopedC
     .from('funcionarios')
     .select('id,nome,cargo')
     .eq('id', match.employee_id)
-    .eq('empresa_id', scopedCompany.companyId)
     .single();
   if (employeeError || !employee) return genericIdentityError(res);
 
