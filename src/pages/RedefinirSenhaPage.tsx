@@ -25,13 +25,16 @@ const RedefinirSenhaPage: React.FC = () => {
     }
     setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       toast.error(error.message);
-    } else {
-      toast.success('Senha redefinida com sucesso!');
-      navigate('/');
+      return;
     }
+
+    await supabase.auth.signOut();
+    setLoading(false);
+    toast.success('Senha redefinida com sucesso! Entre com a nova senha.');
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -43,6 +46,7 @@ const RedefinirSenhaPage: React.FC = () => {
             <Building2 className="w-8 h-8 text-accent-foreground" />
           </div>
           <h1 className="text-xl font-bold font-display text-foreground">Redefinir Senha</h1>
+          <p className="text-sm text-muted-foreground mt-2">Crie sua nova senha de acesso à TOPAC RH.</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
