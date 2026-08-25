@@ -3,12 +3,26 @@ import { CheckCircle2, FileCheck2, FileSignature, Loader2, LockKeyhole, LogOut, 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+const COMPANY_SCOPE_LABELS: Record<string, string> = {
+  'topac-matriz': 'TOPAC Matriz',
+  'topac-pg': 'TOPAC Praia Grande',
+  'topac-gyn': 'TOPAC Goiânia',
+  'alqui': 'ALQUI',
+  'lmt': 'LMT',
+};
+
+const getCompanyScope = () => {
+  if (typeof window === 'undefined') return '';
+  const match = window.location.pathname.match(/^\/holerite\/([^/]+)\/?$/i);
+  return String(match?.[1] || '').trim().toLowerCase();
+};
+
 const publicCall = async (action: string, payload: Record<string, unknown> = {}) => {
   const response = await fetch('/api/payroll-public', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     cache: 'no-store',
-    body: JSON.stringify({ action, ...payload }),
+    body: JSON.stringify({ action, company_scope: getCompanyScope(), ...payload }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.ok) {
@@ -24,6 +38,7 @@ const errorText = (error: any) => {
   const code = error?.payload?.error || error?.message;
   const map: Record<string,string> = {
     identity_not_validated: 'Não foi possível validar o acesso. Confira os dados informados e tente novamente.',
+    invalid_company_scope: 'Este link do portal não identifica uma empresa válida. Solicite ao RH o link correto da sua empresa.',
     too_many_attempts: 'Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.',
     invalid_session: 'Sua sessão segura não é mais válida. Faça a identificação novamente.',
     session_required: 'Faça a identificação novamente para continuar.',
@@ -55,6 +70,8 @@ const brDateTime = (value?: string | null) => value
   : '';
 
 const PayrollSignaturePublicPage: React.FC = () => {
+  const companyScope = getCompanyScope();
+  const companyLabel = COMPANY_SCOPE_LABELS[companyScope] || '';
   const [cpf, setCpf] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [phoneLast4, setPhoneLast4] = useState('');
@@ -146,13 +163,17 @@ const PayrollSignaturePublicPage: React.FC = () => {
   const canAuthenticate = cpf.replace(/\D/g, '').length === 11 && Boolean(birthDate) && phoneLast4.length === 4;
   const activeLabel = doc?.document_label || 'Documento';
 
+  if (!companyLabel) {
+    return <div className="min-h-screen bg-slate-950 text-slate-100"><main className="mx-auto flex min-h-screen w-full max-w-xl items-center px-4"><section className="w-full rounded-2xl border border-red-500/30 bg-slate-900 p-6 text-center"><LockKeyhole className="mx-auto h-9 w-9 text-red-300"/><h1 className="mt-4 text-xl font-bold">Link do portal inválido</h1><p className="mt-2 text-sm leading-6 text-slate-400">Este endereço não identifica uma empresa. Solicite ao RH o link específico da sua empresa.</p></section></main></div>;
+  }
+
   return <div className="min-h-screen bg-slate-950 text-slate-100">
     <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 py-6 sm:px-6">
       <header className="mb-5 rounded-2xl border border-cyan-400/20 bg-slate-900 p-4 shadow-xl">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white/95"><img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC" className="h-11 w-11 object-contain"/></div>
-            <div><p className="text-xs font-bold tracking-widest text-cyan-300">TOPAC RH PRO</p><h1 className="text-lg font-bold">Portal de Holerite e Recibos</h1></div>
+            <div><p className="text-xs font-bold tracking-widest text-cyan-300">TOPAC RH PRO · {companyLabel}</p><h1 className="text-lg font-bold">Portal de Holerite e Recibos</h1></div>
           </div>
           {session && <Button size="sm" variant="outline" onClick={()=>void logout()}><LogOut className="mr-2 h-4 w-4"/>Sair</Button>}
         </div>
@@ -161,7 +182,7 @@ const PayrollSignaturePublicPage: React.FC = () => {
       {!session && <section className="mx-auto w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-5 sm:p-7">
         <LockKeyhole className="mb-3 h-8 w-8 text-cyan-300"/>
         <h2 className="text-xl font-bold">Acesso seguro aos seus documentos</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-400">Informe os mesmos dados cadastrados no RH. Nenhum holerite ou recibo é exibido antes da validação.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-400">Informe os mesmos dados cadastrados no RH da {companyLabel}. Nenhum holerite ou recibo é exibido antes da validação.</p>
 
         <div className="mt-6 space-y-4">
           <label className="block"><span className="mb-1.5 block text-sm font-semibold">CPF</span><Input inputMode="numeric" autoComplete="off" value={cpf} onChange={e=>setCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" className="h-12"/></label>
