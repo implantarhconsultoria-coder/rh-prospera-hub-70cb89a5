@@ -41,14 +41,26 @@ export const MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 export const MAX_EMAIL_ATTACHMENTS = 30;
 const PDF_CONTENT_TYPE = 'application/pdf';
 
+export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;
+const EMAIL_GOIANIA_ANTIGO = 'gyn@topac.com.br';
+
+export const normalizeTopacRecipients = (emails: readonly string[] = []): string[] =>
+  Array.from(new Set(
+    emails
+      .map((email) => String(email || '').trim().toLowerCase())
+      .filter(Boolean)
+      .map((email) => email === EMAIL_GOIANIA_ANTIGO ? EMAIL_GOIANIA : email),
+  ));
+
 export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
   const policy = applyTopacEmailPolicy({ subject, body, cc, moduleOrigin, attachmentNames, attachmentContentTypes });
+  const normalizedTo = normalizeTopacRecipients(to);
   const enc = encodeURIComponent;
   const params: string[] = [];
   if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
   params.push(`subject=${enc(subject)}`);
   params.push(`body=${enc(policy.body)}`);
-  window.location.href = `mailto:${to.map(enc).join(',')}?${params.join('&')}`;
+  window.location.href = `mailto:${normalizedTo.map(enc).join(',')}?${params.join('&')}`;
 };
 
 const safeFileName = (value: string) =>
@@ -202,6 +214,7 @@ export const sendEmailWithPdfAttachment = async ({
 
   const storedAttachments = await uploadEmailAttachments(rawAttachments, authenticatedUserId);
   const documentNames = storedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
+  const normalizedTo = normalizeTopacRecipients(to);
   let response: Response;
   try {
     response = await fetch('/api/send-email-pdf', {
@@ -211,7 +224,7 @@ export const sendEmailWithPdfAttachment = async ({
         authorization: `Bearer ${effectiveAuthToken}`,
       },
       body: JSON.stringify({
-        to,
+        to: normalizedTo,
         cc: policy.cc,
         subject,
         body: policy.body,
