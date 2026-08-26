@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { applyTopacEmailPolicy } from '@/lib/emailPolicy';
-import { openEmailClient, sendEmailWithPdfAttachment } from '@/lib/emailUtils';
+import { normalizeTopacRecipients, openEmailClient, sendEmailWithPdfAttachment } from '@/lib/emailUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -167,7 +167,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       attachmentNames: preparedAttachments.map((item) => item.attachmentName),
       attachmentContentTypes: preparedAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type),
     });
-    setTo(formatEmails(atestado ? ATESTADO_TO : draft.to));
+    setTo(formatEmails(normalizeTopacRecipients(atestado ? ATESTADO_TO : draft.to)));
     setCc(formatEmails(policy.cc));
     setSubject(draft.subject || '');
     setBody(policy.body);
@@ -175,7 +175,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
 
   const getPreparedEmail = () => {
     const atestado = isAtestadoSubject(subject);
-    const toList = atestado ? [...ATESTADO_TO] : parseEmails(to);
+    const toList = normalizeTopacRecipients(atestado ? [...ATESTADO_TO] : parseEmails(to));
     const inputCc = atestado ? [...ATESTADO_CC] : parseEmails(cc);
     const policy = applyPolicy(body, inputCc);
     return { toList, ccList: policy.cc, preparedBody: policy.body, attachments: preparedAttachments };
