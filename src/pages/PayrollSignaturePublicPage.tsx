@@ -48,6 +48,7 @@ const errorText = (error: any) => {
     document_integrity_failed: 'O documento não passou na validação de integridade. A assinatura foi bloqueada.',
     document_not_acknowledged: 'Confirme primeiro que leu e conferiu o documento.',
     signature_confirmation_required: 'Confirme a assinatura para continuar.',
+    signature_confirmation_pending: 'A assinatura foi enviada, mas a confirmação do servidor ainda não foi carregada. Atualize a visualização segura antes de tentar novamente.',
   };
   return map[code] || 'Não foi possível concluir esta etapa. Tente novamente.';
 };
@@ -141,11 +142,18 @@ const PayrollSignaturePublicPage: React.FC = () => {
     if (!doc?.document_id || !session) return;
     setBusy(true); setError('');
     try {
-      const data = await publicCall('sign', { session, document_id: doc.document_id, confirm: true });
+      const submitted = await publicCall('sign', { session, document_id: doc.document_id, confirm: true });
+      const verified = await publicCall('document', { session, document_id: doc.document_id });
+      if (!verified?.signed || !verified?.signed_at) {
+        const pending: any = new Error('signature_confirmation_pending');
+        pending.payload = { error: 'signature_confirmation_pending' };
+        throw pending;
+      }
       setConfirmOpen(false);
-      setSignedInfo({ signature_id: data.signature_id, signed_at: data.signed_at });
-      setDoc((current: any) => current ? { ...current, signed: true, signed_at: data.signed_at } : current);
-      setDocuments(current => current.map(item => item.document_id === doc.document_id ? { ...item, signed: true, signed_at: data.signed_at } : item));
+      setSignedInfo({ signature_id: submitted.signature_id, signed_at: verified.signed_at });
+      setDoc(verified);
+      setAcknowledged(Boolean(verified.already_acknowledged));
+      setDocuments(current => current.map(item => item.document_id === doc.document_id ? { ...item, signed: true, signed_at: verified.signed_at } : item));
     } catch (e: any) { setConfirmOpen(false); setError(errorText(e)); }
     finally { setBusy(false); }
   };
