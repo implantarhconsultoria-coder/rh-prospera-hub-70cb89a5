@@ -24,6 +24,7 @@ const BUCKET = 'payroll-private';
 const ALLOWED_CODES = new Set(['topac-matriz', 'topac-pg', 'topac-gyn', 'alqui', 'lmt']);
 const ALLOWED_CNPJS = new Set(['07291648000103','07291648000294','07291648000375','14464586000150','21967711000100']);
 const SEQUENTIAL_OVERRIDE_REASON = 'IMPORTACAO_SEQUENCIAL_RECIBO_COMPROVANTE_SEM_VALIDACAO';
+const AUTO_REFRESH_MS = 6000;
 
 const digits = (value: unknown) => String(value || '').replace(/\D/g, '');
 const safeFile = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 100);
@@ -93,10 +94,13 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const [timeline, setTimeline] = useState<any>({ events: [], messages: [], employee: '' });
   const [consolidatedFilter, setConsolidatedFilter] = useState<'assinados'|'todos'|'pendentes'>('assinados');
   const unifiedInput = useRef<HTMLInputElement>(null);
+  const autoRefreshRunning = useRef(false);
 
-  const load = async () => {
+  const load = async (silent = false) => {
     if (!enabled || !companyId || !competencia) return;
-    setLoading(true);
+    if (silent && autoRefreshRunning.current) return;
+    if (silent) autoRefreshRunning.current = true;
+    else setLoading(true);
     try {
       const { data, error } = await (supabase as any)
         .from('payroll_admin_status_v')
@@ -107,13 +111,22 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       if (error) throw error;
       setRows(data || []);
     } catch (error: any) {
-      toast.error(error?.message || 'Não foi possível carregar o fechamento.');
+      if (!silent) toast.error(error?.message || 'Não foi possível carregar o fechamento.');
+      else console.warn('[payroll-auto-refresh]', error?.message || error);
     } finally {
-      setLoading(false);
+      if (silent) autoRefreshRunning.current = false;
+      else setLoading(false);
     }
   };
 
-  useEffect(() => { void load(); }, [companyId, competencia, enabled]);
+  useEffect(() => {
+    void load();
+    if (!enabled || !companyId || !competencia) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && !uploading) void load(true);
+    }, AUTO_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [companyId, competencia, enabled, uploading]);
   if (!enabled) return null;
 
   const copyPortal = async () => {
