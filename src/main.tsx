@@ -13,6 +13,7 @@ const CabinetLabelsAddon = lazy(() => import("@/components/CabinetLabelsAddon"))
 const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPageAddon"));
 const FechamentoPagamentoAddon = lazy(() => import("@/components/FechamentoPagamentoAddon"));
 const PreCadastroFsePrintAddon = lazy(() => import("@/components/PreCadastroFsePrintAddon"));
+const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastroFseButtonPlacement"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
 const MOBILE_BUILD_TAG = "20260824-holerite-server-3";
@@ -84,6 +85,7 @@ const RouteEnhancers = () => {
       {isRelatorioVr && <TicketVrReportPageAddon />}
       {isEpi && <EpiBulkPrintEnhancer />}
       {isPreCadastro && <PreCadastroFsePrintAddon />}
+      {isPreCadastro && <PreCadastroFseButtonPlacement />}
     </Suspense>
   );
 };
