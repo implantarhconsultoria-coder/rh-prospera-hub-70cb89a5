@@ -1,5 +1,6 @@
 // Edge function: ocr-pre-cadastro
-// Le documentos pessoais e fichas admissionais sem confundir rotulos, QR codes e textos de validacao com dados do colaborador.
+// Le documentos pessoais e a Ficha de Solicitacao de Emprego TOPAC (padrao FSE-2026).
+// Regra central: extrair somente o que estiver legivel; nunca inventar informacao.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,36 +17,120 @@ type Resultado = {
   campos?: Record<string, Campo>;
   pendencias?: string[];
   log?: string[];
+  modelo_documento?: string;
+  modelo_reconhecido?: boolean;
 };
 
-const SYSTEM_PROMPT = `Voce e um conferente de documentos admissionais brasileiros.
-Recebera texto extraido e imagens de RG, CNH, CPF, titulo eleitoral, certidao, comprovante de endereco, boleto, ficha cadastral ou outros documentos pessoais.
+const SYSTEM_PROMPT = `Voce e um conferente de documentos admissionais brasileiros da TOPAC RH PRO.
+Recebera texto extraido e/ou imagens de documentos pessoais e, principalmente, da Ficha de Solicitacao de Emprego TOPAC.
 
-OBJETIVO PRINCIPAL:
-Preencher somente dados reais da pessoa: nome completo, CPF, RG, data de nascimento e endereco residencial.
+PADRAO OFICIAL DA FICHA:
+- Nome do modelo: Ficha de Solicitacao de Emprego TOPAC.
+- Codigo logico: FSE-2026.
+- O papel pode manter o timbre/logotipo TOPAC e o layout pode variar.
+- Reconheca o modelo pelos titulos e campos, nao apenas pelo posicionamento visual.
+
+SEQUENCIA LOGICA DO MODELO FSE-2026:
+1. Vaga pretendida / Cargo pretendido.
+2. Dados pessoais: nome, pai, mae, estado civil, data de nascimento, dependentes, filhos menores, naturalidade, UF e nacionalidade.
+3. Documentos: RG/UF, CPF, CTPS/serie, titulo/zona/secao, PIS, reservista, CNH/UF/validade/categoria/primeira habilitacao.
+4. Endereco e contato: logradouro, numero, bairro, CEP, cidade, estado, telefone, celular e recados.
+5. Formacao escolar.
+6. Formacao tecnica.
+7. Experiencia profissional das 3 ultimas empresas.
+8. Referencias pessoais.
+9. Dados para EPI: camisa, calca e bota.
+10. Principais atribuicoes.
+11. Outras informacoes.
+12. Declaracao e assinatura.
 
 REGRAS CRITICAS:
-- Nunca use rotulos como NOME DO ELEITOR, DO ELEITOR, PAGADOR, BENEFICIARIO, FILIACAO ou DATA DE NASCIMENTO como valor.
-- Nunca use URL, site, codigo de validacao, texto de autenticidade, QR Code, assinatura digital ou orientacoes do documento como endereco.
-- Endereco so pode ser preenchido quando houver logradouro residencial real, preferencialmente com numero, bairro, cidade, UF ou CEP.
-- CPF deve ter 11 digitos e pertencer a pessoa identificada no documento.
-- Data de nascimento deve ser uma data real da pessoa, nunca data de emissao, expedicao, vencimento, casamento ou impressao.
-- Nome precisa ter pelo menos nome e sobrenome e nao pode conter numeros, URL ou rotulos documentais.
-- Se o dado nao estiver claramente legivel, deixe vazio. Nao invente.
-- Quando o documento for comprovante de endereco, extraia o endereco do pagador/titular, nao o endereco do beneficiario/empresa.
+- Nunca invente, complete por contexto ou presuma um valor.
+- Se estiver vazio, ilegivel, rasurado, cortado ou duvidoso, devolva valor vazio e inclua a pendencia.
+- O logotipo/timbre TOPAC identifica o formulario, mas NAO significa que "empresa" do candidato deva ser preenchida como TOPAC.
+- Nunca use rotulos como NOME, PAI, MAE, FILIACAO, DATA DE NASCIMENTO, PAGADOR, BENEFICIARIO ou NOME DO ELEITOR como valor.
+- Nunca use URL, site, QR Code, codigo de validacao, assinatura digital ou instrucoes como dado pessoal.
+- CPF deve ter 11 digitos e pertencer a pessoa identificada.
+- Data de nascimento deve ser da pessoa, nunca emissao, expedicao, vencimento, casamento ou impressao.
+- Nome deve ter nome e sobrenome e nao conter numeros, URL ou rotulos.
+- Endereco deve ser residencial real.
+- Nao confunda "cargo pretendido" com cargo de experiencias anteriores.
+- Nao confunda referencias pessoais com filiacao.
+- Nao transforme tamanhos de EPI em numeros de documentos.
+- Preserve listas (filhos, cursos, experiencias e referencias) em texto compacto e legivel.
+- Para cada campo use confianca de 0 a 1.
+- Confianca abaixo de 0.75 deve gerar item em "pendencias".
+- Se reconhecer a Ficha TOPAC, use modelo_documento = "FSE-2026" e modelo_reconhecido = true.
+
+COMPATIBILIDADE COM O FORMULARIO ATUAL:
+Alem dos campos detalhados, preencha estes campos agregados quando houver dados seguros:
+- funcao = cargo_pretendido.
+- filiacao = "Pai: ... | Mae: ...".
+- endereco = endereco residencial completo.
+- escolaridade = resumo da formacao escolar + tecnica.
+- experiencia = resumo numerado das ate 3 ultimas empresas.
+- epi = "Camisa: ... | Calca: ... | Bota: ...".
+- responsavel_contato = resumo das referencias pessoais.
+- celular = celular do candidato.
+- empresa, salario e data_admissao so podem ser preenchidos se estiverem explicitamente indicados como dados da admissao atual; nao use o timbre.
 
 Devolva APENAS JSON valido neste formato:
 {
   "ok": true,
+  "modelo_documento": "FSE-2026 ou outro/nao identificado",
+  "modelo_reconhecido": true,
   "confianca_geral": 0.0,
   "texto_bruto": "resumo do que foi realmente lido, maximo 4000 caracteres",
   "campos": {
     "nome": {"valor": "", "confianca": 0.0, "observacao": ""},
     "cpf": {"valor": "", "confianca": 0.0, "observacao": ""},
     "rg": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "rg_uf": {"valor": "", "confianca": 0.0, "observacao": ""},
     "data_nascimento": {"valor": "YYYY-MM-DD ou vazio", "confianca": 0.0, "observacao": ""},
-    "endereco": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "cargo_pretendido": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "pai": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "mae": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "estado_civil": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "numero_dependentes": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "filhos_menores": {"valor": "", "confianca": 0.0, "observacao": "Formato: Nome - DD/MM/AAAA; ..."},
+    "naturalidade": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "uf_naturalidade": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "nacionalidade": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "ctps": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "ctps_serie": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "titulo_eleitor": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "zona_eleitoral": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "secao_eleitoral": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "pis": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "reservista": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "cnh": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "cnh_uf": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "cnh_validade": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "cnh_categoria": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "primeira_habilitacao": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "logradouro": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "numero_endereco": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "bairro": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "cep": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "cidade": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "uf_endereco": {"valor": "", "confianca": 0.0, "observacao": ""},
     "telefone": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "celular": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "recados": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "escolaridade_nivel": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "escolaridade_ano": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "estuda": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "horario_estudo": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "formacao_tecnica": {"valor": "", "confianca": 0.0, "observacao": "Curso - ano; ..."},
+    "experiencia": {"valor": "", "confianca": 0.0, "observacao": "Empresa | cidade/UF | fone | admissao | demissao | salario | cargo | iniciativa | justificativa"},
+    "referencias": {"valor": "", "confianca": 0.0, "observacao": "Nome - fone; ..."},
+    "epi_camisa": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "epi_calca": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "epi_bota": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "principais_atribuicoes": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "outras_informacoes": {"valor": "", "confianca": 0.0, "observacao": ""},
+
+    "endereco": {"valor": "", "confianca": 0.0, "observacao": ""},
     "funcao": {"valor": "", "confianca": 0.0, "observacao": ""},
     "empresa": {"valor": "", "confianca": 0.0, "observacao": ""},
     "salario": {"valor": "", "confianca": 0.0, "observacao": ""},
@@ -54,14 +139,14 @@ Devolva APENAS JSON valido neste formato:
     "documentos_anexados": {"valor": "", "confianca": 0.0, "observacao": ""},
     "filiacao": {"valor": "", "confianca": 0.0, "observacao": ""},
     "escolaridade": {"valor": "", "confianca": 0.0, "observacao": ""},
-    "experiencia": {"valor": "", "confianca": 0.0, "observacao": ""},
     "epi": {"valor": "", "confianca": 0.0, "observacao": ""},
     "beneficios": {"valor": "", "confianca": 0.0, "observacao": ""},
     "insalubridade": {"valor": "", "confianca": 0.0, "observacao": ""},
     "setor_ghe": {"valor": "", "confianca": 0.0, "observacao": ""},
     "obra_local": {"valor": "", "confianca": 0.0, "observacao": ""},
     "jornada": {"valor": "", "confianca": 0.0, "observacao": ""},
-    "responsavel_contato": {"valor": "", "confianca": 0.0, "observacao": ""}
+    "responsavel_contato": {"valor": "", "confianca": 0.0, "observacao": ""},
+    "email": {"valor": "", "confianca": 0.0, "observacao": ""}
   },
   "pendencias": [],
   "log": []
@@ -72,6 +157,8 @@ const cleanJson = (value: string) => value.replace(/```json/gi, "").replace(/```
 const digits = (value: unknown) => String(value || "").replace(/\D/g, "");
 const compact = (value: unknown) => String(value || "").replace(/\s+/g, " ").trim();
 const stripDiacritics = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const fieldValue = (campos: Record<string, Campo>, key: string) => compact(campos[key]?.valor);
+const fieldConfidence = (campos: Record<string, Campo>, key: string) => Number(campos[key]?.confianca || 0);
 
 const cpfValido = (value: unknown) => {
   const cpf = digits(value);
@@ -117,11 +204,23 @@ const dataNascimentoValida = (value: unknown) => {
 const enderecoValido = (value: unknown) => {
   const endereco = compact(value);
   const normal = stripDiacritics(endereco).toUpperCase();
-  if (endereco.length < 10) return false;
+  if (endereco.length < 8) return false;
   if (/HTTP|WWW|VALIDA|AUTENTICIDADE|QR.?CODE|CODIGO DE VALIDACAO|ASSINADO DIGITALMENTE|ORIENTACOES|TSE\.JUS|SERPRO|ICP BRASIL/.test(normal)) return false;
   const temLogradouro = /\b(RUA|R\.|AVENIDA|AV\.|ALAMEDA|TRAVESSA|ESTRADA|RODOVIA|PRACA|VIELA|LARGO)\b/.test(normal);
   const temCep = /\b\d{5}-?\d{3}\b/.test(endereco);
   return temLogradouro || temCep;
+};
+
+const modelDetectedFromText = (text: string) => {
+  const normal = stripDiacritics(text).toUpperCase();
+  const checks = [
+    /FICHA DE SOLICITACAO DE EMPREGO/.test(normal),
+    /CARGO PRETENDIDO/.test(normal),
+    /FORMACAO ESCOLAR/.test(normal),
+    /DADOS PARA EPI/.test(normal),
+    /EXPERIENCIA PROFISSIONAL/.test(normal),
+  ];
+  return checks.filter(Boolean).length >= 2;
 };
 
 const extractFromText = (text: string) => {
@@ -141,7 +240,7 @@ const extractFromText = (text: string) => {
       cpf = candidatos.map(formatCpf).find(Boolean) || "";
     }
 
-    if (!nome && /(NOME DO ELEITOR|NOME COMPLETO|NOME DO TITULAR|NOME:)/.test(n)) {
+    if (!nome && /(NOME DO ELEITOR|NOME COMPLETO|NOME DO TITULAR|^NOME:)/.test(n)) {
       const apos = compact(linha.replace(/^.*?(NOME DO ELEITOR|NOME COMPLETO|NOME DO TITULAR|NOME:)\s*/i, ""));
       const candidato = nomeValido(apos) ? apos : linhas[i + 1];
       if (nomeValido(candidato)) nome = compact(candidato);
@@ -166,23 +265,83 @@ const extractFromText = (text: string) => {
     }
   }
 
-  if (!nome) {
-    nome = linhas.find((linha) => nomeValido(linha) && linha === linha.toUpperCase()) || "";
-  }
+  if (!nome) nome = linhas.find((linha) => nomeValido(linha) && linha === linha.toUpperCase()) || "";
   if (!dataNascimento) {
     const datas = text.match(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}\b/g) || [];
     dataNascimento = datas.map(dataNascimentoValida).find(Boolean) || "";
   }
-  if (!endereco) {
-    const candidato = linhas.find((linha) => enderecoValido(linha)) || "";
-    endereco = candidato;
-  }
+  if (!endereco) endereco = linhas.find((linha) => enderecoValido(linha)) || "";
 
   return { nome, cpf, data_nascimento: dataNascimento, endereco };
 };
 
+const joinSafe = (parts: Array<string | undefined | null>, separator = " | ") =>
+  parts.map((item) => compact(item)).filter(Boolean).join(separator);
+
+const aggregateFseFields = (campos: Record<string, Campo>) => {
+  const cargo = fieldValue(campos, "cargo_pretendido");
+  if (!fieldValue(campos, "funcao") && cargo) {
+    campos.funcao = { valor: cargo, confianca: fieldConfidence(campos, "cargo_pretendido"), observacao: "Cargo pretendido da ficha FSE-2026" };
+  }
+
+  if (!fieldValue(campos, "filiacao")) {
+    const pai = fieldValue(campos, "pai");
+    const mae = fieldValue(campos, "mae");
+    const valor = joinSafe([pai ? `Pai: ${pai}` : "", mae ? `Mae: ${mae}` : ""]);
+    if (valor) {
+      const confs = [fieldConfidence(campos, "pai"), fieldConfidence(campos, "mae")].filter((n) => n > 0);
+      campos.filiacao = { valor, confianca: confs.length ? Math.min(...confs) : 0.7, observacao: "Filiacao consolidada da ficha" };
+    }
+  }
+
+  if (!fieldValue(campos, "endereco")) {
+    const logradouro = fieldValue(campos, "logradouro");
+    const numero = fieldValue(campos, "numero_endereco");
+    const bairro = fieldValue(campos, "bairro");
+    const cep = fieldValue(campos, "cep");
+    const cidade = fieldValue(campos, "cidade");
+    const uf = fieldValue(campos, "uf_endereco");
+    const valor = joinSafe([
+      joinSafe([logradouro, numero], ", "),
+      bairro,
+      joinSafe([cidade, uf], "/"),
+      cep ? `CEP ${cep}` : "",
+    ]);
+    if (enderecoValido(valor)) campos.endereco = { valor, confianca: 0.8, observacao: "Endereco consolidado da ficha" };
+  }
+
+  if (!fieldValue(campos, "escolaridade")) {
+    const nivel = fieldValue(campos, "escolaridade_nivel");
+    const ano = fieldValue(campos, "escolaridade_ano");
+    const tecnica = fieldValue(campos, "formacao_tecnica");
+    const estuda = fieldValue(campos, "estuda");
+    const horario = fieldValue(campos, "horario_estudo");
+    const valor = joinSafe([
+      joinSafe([nivel, ano ? `Ano: ${ano}` : ""]),
+      tecnica ? `Tecnica: ${tecnica}` : "",
+      estuda ? `Estuda: ${estuda}${horario ? ` - ${horario}` : ""}` : "",
+    ]);
+    if (valor) campos.escolaridade = { valor, confianca: 0.78, observacao: "Formacao consolidada da ficha" };
+  }
+
+  if (!fieldValue(campos, "epi")) {
+    const camisa = fieldValue(campos, "epi_camisa");
+    const calca = fieldValue(campos, "epi_calca");
+    const bota = fieldValue(campos, "epi_bota");
+    const valor = joinSafe([camisa ? `Camisa: ${camisa}` : "", calca ? `Calca: ${calca}` : "", bota ? `Bota: ${bota}` : ""]);
+    if (valor) campos.epi = { valor, confianca: 0.8, observacao: "Tamanhos de EPI consolidados da ficha" };
+  }
+
+  if (!fieldValue(campos, "responsavel_contato")) {
+    const referencias = fieldValue(campos, "referencias");
+    if (referencias) campos.responsavel_contato = { valor: referencias, confianca: fieldConfidence(campos, "referencias"), observacao: "Referencias pessoais da ficha" };
+  }
+
+  return campos;
+};
+
 const sanitizeResult = (result: Resultado, text: string): Resultado => {
-  const campos = { ...(result.campos || {}) };
+  const campos = aggregateFseFields({ ...(result.campos || {}) });
   const deterministicos = extractFromText(text);
 
   const nomeAi = compact(campos.nome?.valor);
@@ -206,12 +365,28 @@ const sanitizeResult = (result: Resultado, text: string): Resultado => {
   if (!dataNascimento) pendencias.push("Data de nascimento precisa de conferencia");
   if (!endereco) pendencias.push("Endereco residencial precisa de conferencia");
 
+  for (const [key, campo] of Object.entries(campos)) {
+    const valor = compact(campo?.valor);
+    const confianca = Number(campo?.confianca || 0);
+    if (valor && confianca > 0 && confianca < 0.75) pendencias.push(`${key} precisa de conferencia`);
+  }
+
+  const fsePorTexto = modelDetectedFromText(text);
+  const fsePorAi = result.modelo_reconhecido === true || String(result.modelo_documento || "").toUpperCase().includes("FSE-2026");
+  const modeloReconhecido = fsePorTexto || fsePorAi;
+
   return {
     ...result,
     ok: true,
+    modelo_documento: modeloReconhecido ? "FSE-2026" : (result.modelo_documento || "nao identificado"),
+    modelo_reconhecido: modeloReconhecido,
     campos,
     pendencias: [...new Set(pendencias)],
-    log: [...(result.log || []), "Campos principais passaram por validacao local para bloquear rotulos, URLs e textos de QR Code."],
+    log: [
+      ...(result.log || []),
+      modeloReconhecido ? "Ficha TOPAC reconhecida no padrao FSE-2026." : "Documento processado sem confirmacao do padrao FSE-2026.",
+      "Campos principais passaram por validacao local; valores de baixa confianca foram marcados para conferencia.",
+    ],
   };
 };
 
@@ -220,8 +395,8 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const text = String(body.text || "").slice(0, 16000);
-    const images = Array.isArray(body.images) ? body.images.filter((img: unknown) => typeof img === "string").slice(0, 3) : [];
+    const text = String(body.text || "").slice(0, 24000);
+    const images = Array.isArray(body.images) ? body.images.filter((img: unknown) => typeof img === "string").slice(0, 4) : [];
     const fileName = String(body.fileName || "");
 
     if (!text && images.length === 0) {
@@ -247,7 +422,8 @@ Deno.serve(async (req: Request) => {
           "Texto extraido do documento:",
           text || "(sem texto extraido; use OCR visual)",
           "",
-          "Identifique o tipo do documento e extraia somente dados pessoais reais. Nao copie rotulos, URLs, QR codes ou instrucoes de validacao.",
+          "Se for a Ficha de Solicitacao de Emprego TOPAC, reconheca como FSE-2026 mesmo que o layout tenha sido reorganizado, desde que timbre/titulo/campos sejam compativeis.",
+          "Extraia somente dados realmente preenchidos. Campo vazio ou duvidoso deve permanecer vazio e ser marcado em pendencias.",
         ].join("\n"),
       },
       ...images.map((url: string) => ({ type: "image_url", image_url: { url } })),
@@ -276,12 +452,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload = await resp.json();
-    const content = cleanJson(payload?.choices?.[0]?.message?.content || "{}");
+    const messageContent = payload?.choices?.[0]?.message?.content;
+    const rawContent = typeof messageContent === "string" ? messageContent : JSON.stringify(messageContent || {});
+    const cleaned = cleanJson(rawContent);
     let parsed: Resultado;
+
     try {
-      parsed = JSON.parse(content);
+      parsed = JSON.parse(cleaned);
     } catch {
-      return new Response(JSON.stringify({ error: "json_invalido", raw: content }), {
+      return new Response(JSON.stringify({ error: "json_invalido", raw: cleaned.slice(0, 4000) }), {
         status: 422,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
