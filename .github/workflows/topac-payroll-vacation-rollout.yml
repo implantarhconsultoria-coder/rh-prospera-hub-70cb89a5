@@ -24,7 +24,7 @@ jobs:
 
       - name: Validate build
         run: |
-          npm ci
+          npm install --no-audit --no-fund
           npm run build
 
       - name: Commit rollout
