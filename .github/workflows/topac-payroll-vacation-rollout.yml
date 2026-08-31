@@ -175,3 +175,5 @@ import VacationProgrammingReport from '@/components/ferias/VacationProgrammingRe
           git add api/payroll-public.ts api/payroll-archive.ts src/components/payroll/PayrollPortalAdminModule.tsx src/pages/AvisoFeriasPage.tsx
           git commit -m "feat: integrar assinatura multidocumento e programação de férias"
           git push origin HEAD:main
+
+# rollout-trigger-2026-08-31
