@@ -144,7 +144,6 @@ const RescisaoPage: React.FC = () => {
   const [manualFields, setManualFields] = useState<OverrideState>(emptyOverrideState);
   const [feriasManualEnabled, setFeriasManualEnabled] = useState<Record<string, boolean>>({});
   const [feriasManualValues, setFeriasManualValues] = useState<Record<string, { diasUtilizados: number; diasAbono: number; quitado: boolean; motivo: string }>>({});
-  const [confirmouFerias, setConfirmouFerias] = useState(false);
 
   const fetchList = async () => {
     setLoading(true);
@@ -416,7 +415,6 @@ const RescisaoPage: React.FC = () => {
     setManualFields(emptyOverrideState());
     setFeriasManualEnabled({});
     setFeriasManualValues({});
-    setConfirmouFerias(false);
     setMemoryOpen(false);
   };
 
@@ -442,6 +440,8 @@ const RescisaoPage: React.FC = () => {
     return [
       'Segue Memória de Cálculo da Rescisão gerada pelo TOPAC RH PRO:',
       '',
+      'IMPORTANTE: esta memória é uma estimativa interna para apoio e conferência. O cálculo rescisório oficial, valores finais e encargos serão apurados/validados pela contabilidade.',
+      '',
       `Funcionário: ${row.funcionario_nome || ''}`,
       `CPF: ${row.cpf || ''}`,
       `Cargo: ${row.cargo || ''}`,
@@ -464,7 +464,7 @@ const RescisaoPage: React.FC = () => {
       `Saldo FGTS informado/importado: ${formatCurrency(result.saldoFgtsConsiderado)}`,
       `Multa FGTS: ${formatCurrency(result.multaFgts)}`,
       '',
-      result.revisaoFeriasNecessaria ? 'ATENÇÃO: a memória contém período(s) de férias que exigem conferência histórica.' : '',
+      result.revisaoFeriasNecessaria ? 'OBSERVAÇÃO: há período(s) de férias com histórico incompleto/inferido. Isso não impede o envio; a validação final será feita pela contabilidade.' : '',
       'Detalhamento completo em anexo.',
     ].filter(Boolean).join('\n');
   };
@@ -538,11 +538,6 @@ const RescisaoPage: React.FC = () => {
     const invalidVacation = Object.entries(feriasManualEnabled).find(([period, enabled]) => enabled && !feriasManualValues[period]?.motivo?.trim());
     if (invalidVacation) {
       toast.error('Informe o motivo do ajuste manual do período de férias.');
-      return false;
-    }
-    if (resultado?.revisaoFeriasNecessaria && !confirmouFerias) {
-      toast.error('Revise os períodos de férias destacados e confirme a conferência antes de finalizar.');
-      setMemoryOpen(true);
       return false;
     }
     return true;
@@ -701,7 +696,7 @@ const RescisaoPage: React.FC = () => {
               <div className="flex items-center gap-3 flex-wrap">
                 <Button type="button" variant="outline" onClick={() => setMemoryOpen(true)}><Calculator className="w-4 h-4 mr-2" />Ver memória de cálculo</Button>
                 {feriasLoading && <span className="text-xs text-muted-foreground"><Loader2 className="w-3 h-3 inline animate-spin mr-1" />Carregando férias...</span>}
-                {resultado.revisaoFeriasNecessaria && <Badge variant="outline" className="border-warning text-warning"><AlertTriangle className="w-3 h-3 mr-1" />Histórico de férias exige conferência</Badge>}
+                {resultado.revisaoFeriasNecessaria && <Badge variant="outline" className="border-warning text-warning"><AlertTriangle className="w-3 h-3 mr-1" />Férias com dados estimados — validar com a contabilidade</Badge>}
               </div>
 
               <Card className="p-4 space-y-3">
@@ -763,7 +758,7 @@ const RescisaoPage: React.FC = () => {
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Memória de cálculo — períodos aquisitivos</DialogTitle></DialogHeader>
           {resultado && <div className="space-y-3">
-            {resultado.revisaoFeriasNecessaria && <div className="border-l-4 border-warning bg-warning/10 p-3 text-sm"><b>Conferência necessária.</b> Registros legados sem período aquisitivo são inferidos e períodos sem histórico aparecem como pendentes até confirmação.</div>}
+            {resultado.revisaoFeriasNecessaria && <div className="border-l-4 border-warning bg-warning/10 p-3 text-sm"><b>Aviso informativo.</b> Alguns períodos de férias foram inferidos por falta de histórico completo. A memória pode ser salva e enviada normalmente; a validação e o cálculo oficial são da contabilidade.</div>}
             <div className="overflow-x-auto"><table className="w-full text-xs border-collapse"><thead className="bg-muted"><tr><th className="p-2 text-left">Período aquisitivo</th><th className="p-2 text-left">Situação</th><th className="p-2 text-right">Direito</th><th className="p-2 text-right">Usados</th><th className="p-2 text-right">Abono</th><th className="p-2 text-right">Saldo</th><th className="p-2 text-right">Férias</th><th className="p-2 text-right">1/3</th><th className="p-2 text-right">Total</th></tr></thead><tbody>
               {resultado.periodosFerias.map((period) => <React.Fragment key={period.periodoAquisitivoInicio}><tr className="border-t"><td className="p-2">{period.periodoAquisitivoInicio} a {period.periodoAquisitivoFim}<div className="text-[10px] text-muted-foreground">Limite: {period.dataLimiteConcessiva} · {period.origemPeriodo}</div></td><td className="p-2"><Badge variant="outline">{period.situacao}</Badge>{period.avos != null && <div>{period.avos}/12</div>}{period.revisaoNecessaria && <div className="text-warning text-[10px] mt-1">Revisar</div>}</td><td className="p-2 text-right">{period.diasDireito}</td><td className="p-2 text-right">{period.diasJaUtilizados}</td><td className="p-2 text-right">{period.diasAbono}</td><td className="p-2 text-right font-bold">{period.saldoDias}</td><td className="p-2 text-right">{formatCurrency(period.valorFerias)}</td><td className="p-2 text-right">{formatCurrency(period.tercoConstitucional)}</td><td className="p-2 text-right font-bold">{formatCurrency(period.totalPeriodo)}</td></tr>
                 <tr className="border-t bg-muted/20"><td colSpan={9} className="p-2"><div className="flex flex-wrap gap-3 items-center"><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(feriasManualEnabled[period.periodoAquisitivoInicio])} onChange={(e) => { const enabled = e.target.checked; setFeriasManualEnabled((current) => ({ ...current, [period.periodoAquisitivoInicio]: enabled })); if (enabled) setFeriasManualValues((current) => ({ ...current, [period.periodoAquisitivoInicio]: current[period.periodoAquisitivoInicio] || { diasUtilizados: period.diasJaUtilizados, diasAbono: period.diasAbono, quitado: false, motivo: '' } })); }} />Ajustar manualmente este período</label>{feriasManualEnabled[period.periodoAquisitivoInicio] && <><label>Usados <DecimalInput value={feriasManualValues[period.periodoAquisitivoInicio]?.diasUtilizados || 0} decimals={0} onValueChange={(value) => setFeriasManualValues((current) => ({ ...current, [period.periodoAquisitivoInicio]: { ...current[period.periodoAquisitivoInicio], diasUtilizados: value } }))} /></label><label>Abono <DecimalInput value={feriasManualValues[period.periodoAquisitivoInicio]?.diasAbono || 0} decimals={0} onValueChange={(value) => setFeriasManualValues((current) => ({ ...current, [period.periodoAquisitivoInicio]: { ...current[period.periodoAquisitivoInicio], diasAbono: value } }))} /></label><label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(feriasManualValues[period.periodoAquisitivoInicio]?.quitado)} onChange={(e) => setFeriasManualValues((current) => ({ ...current, [period.periodoAquisitivoInicio]: { ...current[period.periodoAquisitivoInicio], quitado: e.target.checked } }))} />Marcar quitado</label><Input className="min-w-[280px]" value={feriasManualValues[period.periodoAquisitivoInicio]?.motivo || ''} onChange={(e) => setFeriasManualValues((current) => ({ ...current, [period.periodoAquisitivoInicio]: { ...current[period.periodoAquisitivoInicio], motivo: e.target.value } }))} placeholder="Motivo obrigatório" /><span className="text-warning font-medium">Valor alterado manualmente</span></>}</div>{period.observacao && <div className="text-[10px] text-muted-foreground mt-2">{period.observacao}</div>}</td></tr></React.Fragment>)}

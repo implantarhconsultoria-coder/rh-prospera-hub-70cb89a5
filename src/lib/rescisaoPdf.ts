@@ -76,7 +76,8 @@ export const buildRescisaoHtml = (data: RescisaoPdfData) => {
       <div><b>Tipo:</b> ${escapeHtml(tipoRescisaoLabel(data.tipo))}</div><div><b>Aviso:</b> ${escapeHtml(data.aviso)} · ${result.diasAviso} dias</div>
       <div><b>Remuneração de cálculo:</b> ${money(result.baseRemuneracao)}</div><div><b>Projeção do contrato:</b> ${dateBr(result.dataProjetadaContrato)}</div>
     </div>
-    ${result.revisaoFeriasNecessaria ? '<div class="warn"><b>Atenção:</b> há períodos de férias inferidos ou sem histórico completo. Conferir a memória antes de utilizar como valor definitivo.</div>' : ''}
+    <div class="warn"><b>PRÉVIA ESTIMATIVA:</b> esta memória é apenas referência interna. O cálculo rescisório oficial, valores finais, encargos e validações são de responsabilidade da contabilidade.</div>
+    ${result.revisaoFeriasNecessaria ? '<div class="warn"><b>Observação:</b> há períodos de férias inferidos ou sem histórico completo. Esta condição não impede o envio para conferência contábil.</div>' : ''}
 
     <h2>Férias por período aquisitivo</h2>
     <table><thead><tr><th>Período aquisitivo</th><th>Situação</th><th>Direito</th><th>Usados</th><th>Abono</th><th>Saldo</th><th>Avos</th><th>Férias</th><th>1/3</th><th>Total</th></tr></thead><tbody>${periodRows || '<tr><td colspan="10">Sem períodos calculados.</td></tr>'}</tbody></table>
@@ -124,7 +125,7 @@ export const buildRescisaoHtml = (data: RescisaoPdfData) => {
     </div>
     ${data.motivo ? `<div class="box"><b>Motivo:</b> ${escapeHtml(data.motivo)}</div>` : ''}
     ${data.observacoes ? `<div class="box"><b>Observações:</b> ${escapeHtml(data.observacoes)}</div>` : ''}
-    <p class="small">Cálculo estimativo gerado pelo TOPAC RH PRO. Conferir convenção coletiva, eventos de folha e particularidades do vínculo antes da quitação.</p>
+    <p class="small"><b>PRÉVIA ESTIMATIVA.</b> Documento de apoio gerado pelo TOPAC RH PRO. O cálculo rescisório oficial, valores finais, encargos, convenção coletiva e particularidades do vínculo devem ser apurados e validados pela contabilidade antes da quitação.</p>
   </body></html>`;
 };
 
@@ -165,6 +166,11 @@ export const gerarRescisaoPdf = (data: RescisaoPdfData) => {
   doc.setFontSize(9);
   doc.text(data.empresa, 105, y, { align: 'center' });
   y += 7;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  const estimateNotice = doc.splitTextToSize('PREVIA ESTIMATIVA - memoria de apoio interno. O calculo rescisorio oficial, valores finais e encargos devem ser apurados e validados pela contabilidade.', width);
+  doc.text(estimateNotice, margin, y);
+  y += estimateNotice.length * 4 + 4;
 
   line('Funcionario', data.funcionario);
   line('CPF', data.cpf);
