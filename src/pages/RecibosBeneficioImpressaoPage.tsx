@@ -8,7 +8,6 @@ import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, buildVTReportRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
-import { arquivarDocumentoFuncionario } from '@/lib/documentoHistorico';
 import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
 import { CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { toast } from 'sonner';
@@ -262,29 +261,10 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
     });
     return doc.output('blob');
   };
-  const getNomeUsuarioAtual = async () => session?.user?.email || 'Sistema TOPAC RH';
-
-  const arquivarRecibosNoHistorico = async (items: ReciboItem[], origem: 'impressao' | 'email' | 'download') => {
-    if (!session?.user) return;
-    const nomeUsuario = await getNomeUsuarioAtual();
-    for (const item of items) {
-      const pdfBlob = gerarPdfRecibosBlob([item]);
-      await arquivarDocumentoFuncionario({
-        funcionarioId: item.emp.id,
-        funcionarioNome: item.emp.name,
-        companyId: item.company.id,
-        empresaNome: item.company.name || '',
-        tipoDocumento: `Recibo ${formatoLabel}`,
-        competencia,
-        descricao: `Recibo ${formatoLabel} - ${competenciaLabel} - ${origem} - Pagamento: ${dataPagamento}`,
-        conteudo: pdfBlob,
-        extensao: 'pdf',
-        storageTipo: `recibo-${formatoLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-        geradoPorUserId: session.user.id,
-        geradoPorNome: nomeUsuario,
-        unidade: item.company.name || '',
-      });
-    }
+  // Regra definitiva: gerar, visualizar, imprimir, baixar ou enviar o recibo NAO cria Historico.
+  // O documento so entra no Historico do funcionario pelo trigger do banco depois da assinatura eletrônica.
+  const arquivarRecibosNoHistorico = async (_items: ReciboItem[], _origem: 'impressao' | 'email' | 'download') => {
+    return;
   };
 
   const handleImprimirPdf = async () => {

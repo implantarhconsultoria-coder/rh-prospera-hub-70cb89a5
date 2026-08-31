@@ -129,7 +129,8 @@ const addReceipt = (doc: jsPDF, block: VTPackageBlock, row: BenefitReportRow, op
   doc.text('RECIBO INDIVIDUAL DE VALE-TRANSPORTE', right, 22, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.text(`Competência: ${competenciaLabel(options.competencia)}`, right, 28, { align: 'right' });
-  doc.text(`Pagamento: ${options.dataPagamento ? dataBr(options.dataPagamento) : '—'}`, right, 34, { align: 'right' });
+  const receiptPaymentDate = (row as any).dataPagamentoCorrecao || options.dataPagamento;
+  doc.text(`Pagamento: ${receiptPaymentDate ? dataBr(receiptPaymentDate) : '—'}`, right, 34, { align: 'right' });
   doc.line(left, 40, right, 40);
 
   doc.roundedRect(left, 48, width, 24, 1, 1);

@@ -132,12 +132,15 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
 
   useEffect(() => { void load(); }, [companyId, competencia]);
 
-  const availableVr = eligible.filter((employee: any) => employee.vrAtivo && latestSources.has(sourceKey(employee.id, 'vr'))).length;
-  const availableVt = eligible.filter((employee: any) => employee.vtAtivo && latestSources.has(sourceKey(employee.id, 'vt'))).length;
+  const hasPortalDoc = (employeeId: string, kind: 'vr' | 'vt') => docs.some((row: any) =>
+    row.employee_id === employeeId && row.document_type === (kind === 'vr' ? VR_TYPE : VT_TYPE) && row.is_current !== false
+  );
+  const availableVr = eligible.filter((employee: any) => employee.vrAtivo && (hasPortalDoc(employee.id, 'vr') || latestSources.has(sourceKey(employee.id, 'vr')))).length;
+  const availableVt = eligible.filter((employee: any) => employee.vtAtivo && (hasPortalDoc(employee.id, 'vt') || latestSources.has(sourceKey(employee.id, 'vt')))).length;
   const missing = eligible.flatMap((employee: any) => {
     const out: string[] = [];
-    if (employee.vrAtivo && !latestSources.has(sourceKey(employee.id, 'vr'))) out.push(`${employee.name} — VR`);
-    if (employee.vtAtivo && !latestSources.has(sourceKey(employee.id, 'vt'))) out.push(`${employee.name} — VT`);
+    if (employee.vrAtivo && !hasPortalDoc(employee.id, 'vr') && !latestSources.has(sourceKey(employee.id, 'vr'))) out.push(`${employee.name} — VR`);
+    if (employee.vtAtivo && !hasPortalDoc(employee.id, 'vt') && !latestSources.has(sourceKey(employee.id, 'vt'))) out.push(`${employee.name} — VT`);
     return out;
   });
 
@@ -257,12 +260,12 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
       <div>
         <p className="text-xs uppercase tracking-wide text-cyan-400">Assinatura digital de benefícios</p>
         <h3 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Recibos VR e VT já gerados</h3>
-        <p className="mt-1 text-xs text-muted-foreground">Não recalcula e não exige upload. Puxa o recibo individual que já foi gerado e arquivado na TOPAC RH PRO.</p>
+        <p className="mt-1 text-xs text-muted-foreground">VT gerado no módulo de Vale-Transporte entra aqui automaticamente. A sincronização abaixo fica apenas para recibos antigos já arquivados.</p>
         <p className="mt-2 text-sm font-semibold text-cyan-300">Competência de uso: {competenceLabel(competencia)}</p>
         <p className="mt-1 text-xs text-muted-foreground">Regra: benefício pago antecipadamente pertence ao mês de uso. Ex.: gerado em agosto para setembro = competência 09/2026.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={()=>void pullGenerated()} disabled={pulling || loading}>{pulling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileSignature className="mr-2 h-4 w-4"/>}PUXAR RECIBOS GERADOS</Button>
+        <Button onClick={()=>void pullGenerated()} disabled={pulling || loading}>{pulling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileSignature className="mr-2 h-4 w-4"/>}SINCRONIZAR RECIBOS ANTIGOS</Button>
         <Button variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`}/>Atualizar</Button>
       </div>
     </div>
@@ -276,7 +279,7 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
 
     {missing.length > 0 && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
       <div className="flex items-center gap-2 font-bold"><AlertTriangle className="h-4 w-4"/>Ainda não existe recibo separado gerado para {missing.length} benefício(s) nesta competência.</div>
-      <p className="mt-1 text-amber-100/80">Gere primeiro no módulo normal de VR/VT. Depois clique em “Puxar recibos gerados”.</p>
+      <p className="mt-1 text-amber-100/80">Gere no módulo de VR/VT. Os novos documentos entram automaticamente; use a sincronização apenas para recibos antigos.</p>
       <div className="mt-2 flex flex-wrap gap-1">{missing.slice(0, 12).map(item => <Badge key={item} variant="outline" className="border-amber-400/40 text-amber-100">{item}</Badge>)}{missing.length > 12 && <Badge variant="outline">+{missing.length - 12}</Badge>}</div>
     </div>}
   </div>;
