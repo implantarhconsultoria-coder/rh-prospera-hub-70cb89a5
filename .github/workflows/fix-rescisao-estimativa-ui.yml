@@ -1,0 +1,46 @@
+name: Fix Rescisao Estimativa UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-rescisao-estimativa-ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Remove obsolete review checkbox
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/RescisaoPage.tsx')
+          s = p.read_text(encoding='utf-8')
+          old = '''            <label className="flex items-start gap-2 border rounded p-3"><input type="checkbox" checked={confirmouFerias} onChange={(e) => setConfirmouFerias(e.target.checked)} className="mt-1" /><span><b>Conferi os períodos de férias utilizados nesta rescisão.</b><br/><small className="text-muted-foreground">Esta confirmação ficará refletida no snapshot/auditoria do cálculo.</small></span></label>'''
+          new = '''            <div className="border rounded p-3 text-sm text-muted-foreground"><b className="text-foreground">Memória estimativa.</b> A conferência dos períodos pode ser feita como apoio interno, mas não bloqueia o salvamento nem o envio para a contabilidade.</div>'''
+          if old not in s:
+              raise SystemExit('obsolete review checkbox not found')
+          s = s.replace(old, new, 1)
+          if 'confirmouFerias' in s or 'setConfirmouFerias' in s:
+              raise SystemExit('obsolete review state still present')
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Validate production build
+        run: |
+          npm install --legacy-peer-deps --package-lock=false
+          npm run build
+      - name: Commit clean estimate flow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/RescisaoPage.tsx
+          git commit -m "fix(rescisao): remover confirmacao obrigatoria de revisao"
+          git push origin HEAD:main
