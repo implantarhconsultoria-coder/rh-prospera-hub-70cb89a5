@@ -65,6 +65,7 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
   const [signatures, setSignatures] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [pulling, setPulling] = useState(false);
+  const [benefitCompetencia, setBenefitCompetencia] = useState(competencia);
 
   const eligible = useMemo(() => employees
     .filter((employee: any) => employee.companyId === companyId && employee.status === 'ativo' && (employee.vrAtivo || employee.vtAtivo) && !isSignatureExcluded(employee))
@@ -84,16 +85,55 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
     return map;
   }, [sources]);
 
+  const resolveBenefitCompetencia = async () => {
+    const [portalCompetencias, sourceCompetencias] = await Promise.all([
+      (supabase as any)
+        .from('payroll_documents')
+        .select('competencia,created_at')
+        .eq('company_id', companyId)
+        .in('document_type', [VR_TYPE, VT_TYPE])
+        .eq('is_current', true)
+        .eq('confirmed', true)
+        .order('competencia', { ascending: false })
+        .limit(30),
+      (supabase as any)
+        .from('documentos_funcionario')
+        .select('competencia,created_at')
+        .eq('company_id', companyId)
+        .neq('origem', 'payroll_portal')
+        .in('tipo_documento', ['Recibo VR', 'Recibo VT'])
+        .not('competencia', 'is', null)
+        .order('competencia', { ascending: false })
+        .limit(30),
+    ]);
+    if (portalCompetencias.error) throw portalCompetencias.error;
+    if (sourceCompetencias.error) throw sourceCompetencias.error;
+
+    const competencias = [
+      ...(portalCompetencias.data || []).map((row: any) => String(row.competencia || '')),
+      ...(sourceCompetencias.data || []).map((row: any) => String(row.competencia || '')),
+    ].filter((value: string) => /^\d{4}-\d{2}$/.test(value));
+
+    if (!competencias.length) return competencia;
+
+    // VR/VT usam a competência gravada no próprio recibo gerado.
+    // Não existe conversão mês atual -> mês seguinte dentro da assinatura.
+    // Quando houver recibos futuros já gerados, usa a competência mais recente disponível.
+    return [...new Set(competencias)].sort().reverse()[0] || competencia;
+  };
+
   const load = async () => {
     if (!companyId || !competencia) return;
     setLoading(true);
     try {
+      const effectiveCompetencia = await resolveBenefitCompetencia();
+      setBenefitCompetencia(effectiveCompetencia);
       const [sourceResult, docResult] = await Promise.all([
         (supabase as any)
           .from('documentos_funcionario')
           .select('id,funcionario_id,funcionario_nome,company_id,tipo_documento,categoria,competencia,nome_arquivo,storage_bucket,storage_path,data_documento,created_at,origem')
           .eq('company_id', companyId)
-          .eq('competencia', competencia)
+          .eq('competencia', effectiveCompetencia)
           .neq('origem', 'payroll_portal')
           .in('tipo_documento', ['Recibo VR', 'Recibo VT'])
           .order('data_documento', { ascending: false, nullsFirst: false })
@@ -102,7 +142,7 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
           .from('payroll_documents')
           .select('id,employee_id,document_type,document_version,document_sha256,original_filename,status,confirmed,is_current,created_at')
           .eq('company_id', companyId)
-          .eq('competencia', competencia)
+          .eq('competencia', effectiveCompetencia)
           .in('document_type', [VR_TYPE, VT_TYPE])
           .eq('is_current', true)
           .order('created_at', { ascending: false }),
@@ -154,7 +194,7 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
       if (employee.vtAtivo && vt) out.push({ employee, kind: 'vt', source: vt });
       return out;
     });
-    if (!candidates.length) return toast.info(`Nenhum recibo VR/VT separado foi gerado para ${competenceLabel(competencia)}.`);
+    if (!candidates.length) return toast.info(`Nenhum recibo VR/VT separado foi gerado para ${competenceLabel(benefitCompetencia)}.`);
 
     setPulling(true);
     try {
@@ -192,8 +232,8 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
         }
 
         const label = item.kind === 'vr' ? 'VR' : 'VT';
-        const filename = item.source.nome_arquivo || `RECIBO_${label}_${safeFile(item.employee.name)}_${competencia}.pdf`;
-        const payrollPath = `${companyId}/${competencia}/beneficios/${item.employee.id}/${item.kind}/${crypto.randomUUID()}-${safeFile(filename)}`;
+        const filename = item.source.nome_arquivo || `RECIBO_${label}_${safeFile(item.employee.name)}_${benefitCompetencia}.pdf`;
+        const payrollPath = `${companyId}/${benefitCompetencia}/beneficios/${item.employee.id}/${item.kind}/${crypto.randomUUID()}-${safeFile(filename)}`;
         const { error: uploadError } = await supabase.storage.from(PAYROLL_BUCKET).upload(
           payrollPath,
           new Blob([bytes as any], { type: 'application/pdf' }),
@@ -207,7 +247,7 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
         const { error: insertError } = await (supabase as any).from('payroll_documents').insert({
           company_id: companyId,
           employee_id: item.employee.id,
-          competencia,
+          competencia: benefitCompetencia,
           document_type: docType,
           storage_bucket: PAYROLL_BUCKET,
           storage_path: payrollPath,
@@ -224,7 +264,7 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
             source_bucket: sourceBucket,
             source_path: sourcePath,
             beneficio: label,
-            competencia_uso: competencia,
+            competencia_uso: benefitCompetencia,
           },
           match_confidence: 100,
           status: 'AGUARDANDO_ASSINATURA',
@@ -261,8 +301,8 @@ const BenefitSignatureGenerator: React.FC<{ companyId: string; competencia: stri
         <p className="text-xs uppercase tracking-wide text-cyan-400">Assinatura digital de benefícios</p>
         <h3 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Recibos VR e VT já gerados</h3>
         <p className="mt-1 text-xs text-muted-foreground">VT gerado no módulo de Vale-Transporte entra aqui automaticamente. A sincronização abaixo fica apenas para recibos antigos já arquivados.</p>
-        <p className="mt-2 text-sm font-semibold text-cyan-300">Competência de uso: {competenceLabel(competencia)}</p>
-        <p className="mt-1 text-xs text-muted-foreground">Regra: benefício pago antecipadamente pertence ao mês de uso. Ex.: gerado em agosto para setembro = competência 09/2026.</p>
+        <p className="mt-2 text-sm font-semibold text-cyan-300">Competência do benefício detectada: {competenceLabel(benefitCompetencia)}</p>
+        <p className="mt-1 text-xs text-muted-foreground">VR e VT usam exatamente a competência em que foram gerados no Fechamento. Não há migração de um mês para o seguinte dentro da Assinatura Digital.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button onClick={()=>void pullGenerated()} disabled={pulling || loading}>{pulling ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <FileSignature className="mr-2 h-4 w-4"/>}SINCRONIZAR RECIBOS ANTIGOS</Button>
