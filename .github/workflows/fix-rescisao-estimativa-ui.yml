@@ -28,11 +28,12 @@ jobs:
           new = '''            <div className="border rounded p-3 text-sm text-muted-foreground"><b className="text-foreground">Memória estimativa.</b> A conferência dos períodos pode ser feita como apoio interno, mas não bloqueia o salvamento nem o envio para a contabilidade.</div>'''
           if old not in s:
               raise SystemExit('obsolete review checkbox not found')
-          s = s.replace(old, new, 1)
-          if 'confirmouFerias' in s or 'setConfirmouFerias' in s:
-              raise SystemExit('obsolete review state still present')
-          p.write_text(s, encoding='utf-8')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
+      - name: Verify obsolete checkbox is gone
+        run: |
+          ! grep -F 'checked={confirmouFerias}' src/pages/RescisaoPage.tsx
+          ! grep -F 'setConfirmouFerias(e.target.checked)' src/pages/RescisaoPage.tsx
       - name: Validate production build
         run: |
           npm install --legacy-peer-deps --package-lock=false
