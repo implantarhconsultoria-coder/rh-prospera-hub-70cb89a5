@@ -151,15 +151,20 @@ const RelatorioVTPage: React.FC = () => {
     const hash = await sha256Browser(bytes);
 
     const { data: current, error: currentError } = await (supabase as any).from('payroll_documents')
-      .select('id,document_sha256,confirmed,is_current')
+      .select('id,document_sha256,confirmed,is_current,payment_event_id,payment_kind,payment_sequence,payment_state')
       .eq('company_id', block.company.id)
       .eq('employee_id', row.emp.id)
       .eq('competencia', competencia)
       .eq('document_type', VT_DOCUMENT_TYPE)
+      .eq('payment_kind', 'ORIGINAL')
       .eq('is_current', true)
       .maybeSingle();
     if (currentError) throw currentError;
+    // Pagamento original já reconhecido como pago: nunca recalcular/substituir aqui.
+    // Diferenças posteriores pertencem à Edição de Benefícios e viram outro recibo.
+    if (current?.payment_state === 'PAGO') return false;
     if (current?.document_sha256 === hash && current?.confirmed) return false;
+    const paymentEventId = current?.payment_event_id || crypto.randomUUID();
 
     const filename = `RECIBO_VT_${safeFile(row.emp.name)}_${competencia}.pdf`;
     const path = `${block.company.id}/${competencia}/beneficios/${row.emp.id}/vt/${crypto.randomUUID()}-${filename}`;
@@ -183,6 +188,13 @@ const RelatorioVTPage: React.FC = () => {
       document_sha256: hash,
       source_sha256: hash,
       net_amount: row.valorTotal,
+      payment_event_id: paymentEventId,
+      payment_kind: 'ORIGINAL',
+      payment_sequence: 1,
+      payment_state: 'GERADO',
+      entitlement_amount: row.valorTotal,
+      prior_paid_amount: 0,
+      payment_reason: row.correcaoMotivo || row.motivo || 'Pagamento original de VT',
       extracted_data: {
         origem: 'VT_GERADOR_UNIFICADO',
         dias_pagos: Math.max(0, Number(diasPagos || 0)),
@@ -297,9 +309,13 @@ const RelatorioVTPage: React.FC = () => {
       rows: editing.block.rows.map(row => row.emp.id === correctedRow.emp.id ? correctedRow : row),
     };
     await persistGeneration(correctedBlock, session.user.id);
-    await syncPayrollDocument(correctedBlock, correctedRow, session.user.id);
+    const synced = await syncPayrollDocument(correctedBlock, correctedRow, session.user.id);
     setGeneratedBlocks(prev => prev.map(block => block.company.id === correctedBlock.company.id ? correctedBlock : block));
-    toast.success('Ajuste aplicado no relatório, recibo e documento pendente de assinatura.');
+    if (synced) {
+      toast.success('Ajuste aplicado no relatório, recibo e documento pendente de assinatura.');
+    } else {
+      toast.info('Pagamento original já está preservado. Para acrescentar valor após pagamento, use a Edição de Benefícios.');
+    }
   };
 
   const handleCorrectionRemove = async (id: string) => {

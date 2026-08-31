@@ -49,10 +49,11 @@ const isSignatureExcluded = (employee: any) => {
   return cargo.includes('socio') || cargo.includes('pro labore') || cargo.includes('prolabore');
 };
 
-const documentLabel = (type: string) => {
-  if (type === BENEFICIO_VR) return 'Recibo VR';
-  if (type === BENEFICIO_VT) return 'Recibo VT';
-  if (type === BENEFICIO) return 'Recibo VR / VT';
+const documentLabel = (type: string, paymentKind?: string | null) => {
+  const complement = paymentKind === 'COMPLEMENTAR';
+  if (type === BENEFICIO_VR) return complement ? 'Recibo VR — Pagamento complementar' : 'Recibo VR';
+  if (type === BENEFICIO_VT) return complement ? 'Recibo VT — Pagamento complementar' : 'Recibo VT';
+  if (type === BENEFICIO) return complement ? 'Recibo VR / VT — Pagamento complementar' : 'Recibo VR / VT';
   if (type === ADIANTAMENTO) return 'Recibo de Adiantamento';
   return 'Holerite';
 };
@@ -125,7 +126,7 @@ const validatePublicSession = async (service: any, rawSession: string, expectedC
 const availableDocuments = async (service: any, employeeId: string, companyId: string) => {
   const { data: docs, error: docsError } = await service
     .from('payroll_documents')
-    .select('id,company_id,employee_id,competencia,document_type,document_version,net_amount,confirmed,status,is_current,created_at')
+    .select('id,company_id,employee_id,competencia,document_type,document_version,net_amount,confirmed,status,is_current,created_at,payment_kind,payment_sequence,payment_reason')
     .eq('employee_id', employeeId)
     .eq('company_id', companyId)
     .eq('is_current', true)
@@ -159,7 +160,9 @@ const availableDocuments = async (service: any, employeeId: string, companyId: s
       return {
         document_id: doc.id,
         document_type: doc.document_type,
-        document_label: documentLabel(doc.document_type),
+        document_label: documentLabel(doc.document_type, doc.payment_kind),
+        payment_sequence: doc.payment_sequence || 1,
+        payment_reason: doc.payment_reason || null,
         competencia: doc.competencia,
         document_version: doc.document_version,
         amount: doc.net_amount,

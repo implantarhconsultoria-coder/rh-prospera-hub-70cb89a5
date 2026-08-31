@@ -93,7 +93,7 @@ const benefitFlags = (value: string) => {
 const loadArchive = async (service: any, employeeId: string, companyId: string) => {
   const { data: payrollDocs, error: payrollError } = await service
     .from('payroll_documents')
-    .select('id,document_type,competencia,storage_bucket,storage_path,original_filename,created_at,confirmed_at,is_current,confirmed,extracted_data')
+    .select('id,document_type,competencia,storage_bucket,storage_path,original_filename,created_at,confirmed_at,is_current,confirmed,extracted_data,payment_kind,payment_sequence,payment_reason')
     .eq('employee_id', employeeId)
     .eq('company_id', companyId)
     .eq('confirmed', true)
@@ -143,7 +143,9 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
     const url = await createFileUrl(service, bucket, doc.storage_path);
     if (!url) return null;
     const benefitTypes = doc.document_type === 'BENEFICIO_VR' ? ['VR'] : doc.document_type === 'BENEFICIO_VT' ? ['VT'] : doc.document_type === 'BENEFICIO_VR_VT' ? ['VR', 'VT'] : [];
-    const label = doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : 'Holerite';
+    const complement = doc.payment_kind === 'COMPLEMENTAR';
+    const baseLabel = doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : 'Holerite';
+    const label = complement && benefitTypes.length ? `${baseLabel} — Pagamento complementar` : baseLabel;
     return {
       id: `payroll:${doc.id}`,
       source: 'payroll',
@@ -155,6 +157,8 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
       date: signature?.signed_at || doc.confirmed_at || doc.created_at,
       signed: true,
       signed_at: signature?.signed_at || null,
+      payment_sequence: doc.payment_sequence || 1,
+      payment_reason: doc.payment_reason || null,
       url,
     };
   }));

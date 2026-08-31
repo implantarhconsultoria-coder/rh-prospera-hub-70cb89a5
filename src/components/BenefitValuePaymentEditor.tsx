@@ -34,6 +34,7 @@ type PaymentDoc = {
   entitlement_amount?: number | string | null;
   prior_paid_amount?: number | string | null;
   payment_reason?: string | null;
+  payment_state?: 'GERADO' | 'PAGO' | null;
   extracted_data?: any;
   created_at: string;
 };
@@ -82,7 +83,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
     try {
       const { data, error } = await (supabase as any)
         .from('payroll_documents')
-        .select('id,competencia,net_amount,is_current,status,payment_event_id,payment_kind,payment_sequence,entitlement_amount,prior_paid_amount,payment_reason,extracted_data,created_at')
+        .select('id,competencia,net_amount,is_current,status,payment_event_id,payment_kind,payment_sequence,entitlement_amount,prior_paid_amount,payment_reason,payment_state,extracted_data,created_at')
         .eq('company_id', employee.companyId)
         .eq('employee_id', employee.id)
         .eq('document_type', documentType)
@@ -153,7 +154,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
       // Reconfere o total já registrado imediatamente antes de criar o complemento.
       const { data: currentRows, error: currentError } = await (supabase as any)
         .from('payroll_documents')
-        .select('id,net_amount,is_current,status,payment_sequence')
+        .select('id,net_amount,is_current,status,payment_sequence,payment_state')
         .eq('company_id', employee.companyId)
         .eq('employee_id', employee.id)
         .eq('competencia', context.competencia)
@@ -168,6 +169,18 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         toast.success(`${benefitType} atualizado. Não há diferença adicional para pagar.`);
         await loadContext();
         return;
+      }
+
+      // Entrar pela Edição de Benefícios com um recibo já existente significa
+      // que esse pagamento anterior deve ser preservado. Ele passa a ser a base
+      // paga e somente a diferença vira um novo evento/recibo complementar.
+      const liveIds = liveRows.map((row: any) => row.id).filter(Boolean);
+      if (liveIds.length) {
+        const { error: paidStateError } = await (supabase as any)
+          .from('payroll_documents')
+          .update({ payment_state: 'PAGO', updated_at: new Date().toISOString() })
+          .in('id', liveIds);
+        if (paidStateError) throw paidStateError;
       }
 
       const nextSequence = Math.max(context.sequence, ...liveRows.map((row: any) => Number(row.payment_sequence || 1)), 0) + 1;
@@ -221,6 +234,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         entitlement_amount: newEntitlement,
         prior_paid_amount: livePaid,
         payment_reason: reason.trim(),
+        payment_state: 'GERADO',
         extracted_data: {
           origem: 'EDICAO_BENEFICIOS',
           pagamento_tipo: 'COMPLEMENTAR',
