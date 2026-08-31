@@ -96,7 +96,6 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
     .select('id,document_type,competencia,storage_bucket,storage_path,original_filename,created_at,confirmed_at,is_current,confirmed,extracted_data')
     .eq('employee_id', employeeId)
     .eq('company_id', companyId)
-    .eq('is_current', true)
     .eq('confirmed', true)
     .order('competencia', { ascending: false });
   if (payrollError) throw payrollError;
