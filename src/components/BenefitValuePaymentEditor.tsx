@@ -75,6 +75,8 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
 
   useEffect(() => {
     setValue(String(Number(currentValue || 0)));
+    setReason('');
+    setPaymentDate('');
   }, [currentValue]);
 
   const loadContext = async () => {
@@ -119,7 +121,9 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
     void loadContext();
   }, [employee?.id, employee?.companyId, documentType]);
 
+  const storedDailyValue = Math.max(0, Number(currentValue || 0));
   const newDailyValue = Math.max(0, Number(value || 0));
+  const valueChanged = Math.abs(newDailyValue - storedDailyValue) > 0.009;
   const newEntitlement = useMemo(
     () => context?.daysConsidered ? roundMoney(newDailyValue * context.daysConsidered) : 0,
     [newDailyValue, context?.daysConsidered],
@@ -128,11 +132,12 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
     () => context ? roundMoney(newEntitlement - context.alreadyPaid) : 0,
     [context, newEntitlement],
   );
-  const needsComplement = Boolean(context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference > 0.009);
-  const hasOverpayment = Boolean(context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference < -0.009);
+  const needsComplement = Boolean(valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference > 0.009);
+  const hasOverpayment = Boolean(valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference < -0.009);
 
   const save = async () => {
     if (!Number.isFinite(newDailyValue) || newDailyValue < 0) return toast.error('Informe um valor válido.');
+    if (!valueChanged) return toast.info('Altere o valor do benefício antes de salvar.');
     if (needsComplement && !reason.trim()) return toast.error('Informe o motivo do pagamento complementar.');
     if (!actorId) return toast.error('Sessão administrativa expirada. Entre novamente.');
 
@@ -143,7 +148,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
 
       if (!needsComplement || !context || !company) {
         if (hasOverpayment) {
-          toast.warning(`${benefitType} atualizado. O valor já pago é maior que o novo total; nenhum recibo negativo foi criado.`);
+          toast.warning(`${benefitType} atualizado. O valor já registrado é maior que o novo total; nenhum recibo negativo foi criado.`);
         } else {
           toast.success(`${benefitType} atualizado.`);
         }
@@ -151,7 +156,6 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         return;
       }
 
-      // Reconfere o total já registrado imediatamente antes de criar o complemento.
       const { data: currentRows, error: currentError } = await (supabase as any)
         .from('payroll_documents')
         .select('id,net_amount,is_current,status,payment_sequence,payment_state')
@@ -171,9 +175,6 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         return;
       }
 
-      // Entrar pela Edição de Benefícios com um recibo já existente significa
-      // que esse pagamento anterior deve ser preservado. Ele passa a ser a base
-      // paga e somente a diferença vira um novo evento/recibo complementar.
       const liveIds = liveRows.map((row: any) => row.id).filter(Boolean);
       if (liveIds.length) {
         const { error: paidStateError } = await (supabase as any)
@@ -277,22 +278,22 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
           <label className="text-xs text-muted-foreground block mb-1">Valor Diário {benefitType}</label>
           <Input type="number" min="0" step="0.01" value={value} onChange={event => setValue(event.target.value)} />
         </div>
-        <Button type="button" onClick={save} disabled={saving || loading}>
+        <Button type="button" onClick={save} disabled={saving || loading || !valueChanged}>
           {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
           Salvar alteração
         </Button>
       </div>
 
-      {loading && <p className="text-xs text-muted-foreground">Conferindo pagamentos já gerados...</p>}
+      {valueChanged && loading && <p className="text-xs text-muted-foreground">Conferindo pagamento anterior...</p>}
 
-      {!loading && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && (
+      {!loading && valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && (
         <div className="rounded-md border bg-background p-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">Competência {competenciaPt(context.competencia)}</Badge>
-            <span>Já pago/registrado: <strong>{formatCurrency(context.alreadyPaid)}</strong></span>
-            <span>Novo total devido: <strong>{formatCurrency(newEntitlement)}</strong></span>
+            <span>Pagamento anterior: <strong>{formatCurrency(context.alreadyPaid)}</strong></span>
+            <span>Novo total calculado: <strong>{formatCurrency(newEntitlement)}</strong></span>
             {needsComplement && <Badge>Complemento: {formatCurrency(difference)}</Badge>}
-            {hasOverpayment && <Badge variant="destructive">Pago a maior: {formatCurrency(Math.abs(difference))}</Badge>}
+            {hasOverpayment && <Badge variant="destructive">Diferença negativa: {formatCurrency(Math.abs(difference))}</Badge>}
           </div>
 
           {needsComplement && (
@@ -302,7 +303,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
                 <Input
                   value={reason}
                   onChange={event => setReason(event.target.value)}
-                  placeholder="Ex.: atualização do valor do VT após pagamento original"
+                  placeholder="Ex.: atualização do valor do VT após o pagamento anterior"
                 />
               </div>
               <div>
@@ -310,7 +311,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
                 <Input type="date" value={paymentDate} onChange={event => setPaymentDate(event.target.value)} />
               </div>
               <p className="md:col-span-2 text-xs text-muted-foreground">
-                O recibo já pago permanece intacto. Ao salvar, somente a diferença será criada como um novo recibo para assinatura.
+                O pagamento anterior é preservado. Ao salvar a alteração, somente a diferença será criada como um novo recibo para assinatura.
               </p>
             </div>
           )}
