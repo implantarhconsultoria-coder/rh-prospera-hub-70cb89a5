@@ -14,6 +14,7 @@ const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPa
 const FechamentoPagamentoAddon = lazy(() => import("@/components/FechamentoPagamentoAddon"));
 const PreCadastroFsePrintAddon = lazy(() => import("@/components/PreCadastroFsePrintAddon"));
 const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastroFseButtonPlacement"));
+const PedidoDemissaoModelDialog = lazy(() => import("@/components/PedidoDemissaoModelDialog"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
 const MOBILE_BUILD_TAG = "20260824-holerite-server-3";
@@ -74,8 +75,9 @@ const RouteEnhancers = () => {
   const isRelatorioVr = path.includes('/admin/relatorio-vr');
   const isEpi = path.includes('/admin/epi');
   const isPreCadastro = path === '/admin/pre-cadastro-admissional';
+  const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios';
 
-  if (!isFechamento && !isRelatorioVr && !isEpi && !isPreCadastro) return null;
+  if (!isFechamento && !isRelatorioVr && !isEpi && !isPreCadastro && !isPedidoDemissao) return null;
 
   return (
     <Suspense fallback={null}>
@@ -86,6 +88,7 @@ const RouteEnhancers = () => {
       {isEpi && <EpiBulkPrintEnhancer />}
       {isPreCadastro && <PreCadastroFsePrintAddon />}
       {isPreCadastro && <PreCadastroFseButtonPlacement />}
+      {isPedidoDemissao && <PedidoDemissaoModelDialog />}
     </Suspense>
   );
 };
