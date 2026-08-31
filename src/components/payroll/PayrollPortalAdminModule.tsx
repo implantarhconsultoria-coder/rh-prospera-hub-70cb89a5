@@ -32,6 +32,28 @@ const brDateTime = (value?: string | null) => value ? new Date(value).toLocaleSt
 const currency = (value?: number | null) => value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const humanStatus = (value: unknown) => String(value || '').replace(/_/g, ' ');
 
+const SIGNATURE_EXCLUDED_EMPLOYEE_IDS = new Set([
+  '2e736835-f228-49ec-80ee-e893172aeb44',
+  'f2a7cbe6-ca51-4f39-a7b8-b7843599793e',
+  '57abf7fb-8895-4881-8946-952a4d5e1a44',
+]);
+const normalizeSignatureText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+const isSignatureExcluded = (employee: any) => {
+  const id = String(employee?.id || employee?.employee_id || '');
+  const cargo = normalizeSignatureText(employee?.cargo || employee?.employee_role || employee?.employee_cargo);
+  const name = normalizeSignatureText(employee?.name || employee?.nome || employee?.employee_name);
+  return SIGNATURE_EXCLUDED_EMPLOYEE_IDS.has(id)
+    || cargo.includes('socio')
+    || cargo.includes('pro labore')
+    || name.includes('aitor urcelay')
+    || name.includes('robson chafi');
+};
+
 const mergePairPdfBytes = async (pages: Uint8Array[]) => {
   const output = await PDFDocument.create();
   for (const bytes of pages) {
@@ -83,12 +105,12 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}${portalPath}` : portalPath;
 
   const scopedEmployees = useMemo<PayrollEmployeeMatch[]>(() => employees
-    .filter(e => e.companyId === companyId && e.status === 'ativo')
+    .filter(e => e.companyId === companyId && e.status === 'ativo' && !isSignatureExcluded(e))
     .map(e => ({ id: e.id, name: e.name, cpf: e.cpf, cargo: e.cargo, companyId: e.companyId }))
     .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);
 
   const phoneIssues = useMemo(() => employees
-    .filter(e => e.companyId === companyId && e.status === 'ativo')
+    .filter(e => e.companyId === companyId && e.status === 'ativo' && !isSignatureExcluded(e))
     .filter(e => {
       const phone = digits((e as any).celular || (e as any).telefone);
       return phone.length < 10 || phone.length > 11;
@@ -117,7 +139,9 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         .eq('competencia', competencia)
         .order('employee_name', { ascending: true, nullsFirst: false });
       if (error) throw error;
-      setRows(data || []);
+      setRows((data || []).filter((row: any) => !isSignatureExcluded(
+        employees.find((employee: any) => employee.id === row.employee_id) || { id: row.employee_id, name: row.employee_name, cargo: row.employee_role || row.employee_cargo || '' },
+      )));
     } catch (error: any) {
       if (!silent) toast.error(error?.message || 'Não foi possível carregar o fechamento.');
       else console.warn('[payroll-auto-refresh]', error?.message || error);
@@ -174,6 +198,11 @@ ${portalUrl}`;
       const sameCompany = !detectedCnpj || !expectedCnpj || detectedCnpj === expectedCnpj;
       const employeeId = sameCompany && receiptPage.status === 'IDENTIFICADO' ? receiptPage.employeeId : null;
       const employeeName = receiptPage.employeeName || receiptPage.employeeNameDetected || `PENDENTE_P${receiptPage.pageNumber}`;
+      const identifiedEmployee = employeeId ? employees.find((employee: any) => employee.id === employeeId) : null;
+      if (isSignatureExcluded(identifiedEmployee || { id: employeeId, name: employeeName })) {
+        console.info('[payroll-signature-excluded]', { employeeId, employeeName, reason: 'SOCIO_PRO_LABORE' });
+        continue;
+      }
       const pairBytes = await mergePairPdfBytes(bankPage?.bytes?.byteLength ? [receiptPage.bytes, bankPage.bytes] : [receiptPage.bytes]);
       const pairHash = await sha256Browser(pairBytes);
       const pairEndPage = bankPage?.pageNumber || receiptPage.pageNumber;

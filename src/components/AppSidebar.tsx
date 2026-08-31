@@ -19,6 +19,7 @@ const menuItems: MenuItem[] = [
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
   { label: 'Funcionarios', icon: Users, path: '/admin/funcionarios' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
+  { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
   { label: 'Fechamentos das Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
   { label: 'Rescisoes', icon: FileX, path: '/admin/rescisoes' },

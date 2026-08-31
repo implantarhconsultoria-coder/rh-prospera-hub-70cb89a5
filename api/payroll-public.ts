@@ -38,6 +38,28 @@ const COMPANY_SCOPE_CNPJS: Record<string, string> = {
 
 const normalizeCompanyScope = (value: unknown) => String(value || '').trim().toLowerCase();
 
+const SIGNATURE_EXCLUDED_EMPLOYEE_IDS = new Set([
+  '2e736835-f228-49ec-80ee-e893172aeb44',
+  'f2a7cbe6-ca51-4f39-a7b8-b7843599793e',
+  '57abf7fb-8895-4881-8946-952a4d5e1a44',
+]);
+const normalizeSignatureText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+const isSignatureExcluded = (employee: any) => {
+  const id = String(employee?.id || employee?.employee_id || '');
+  const cargo = normalizeSignatureText(employee?.cargo);
+  const name = normalizeSignatureText(employee?.nome || employee?.name);
+  return SIGNATURE_EXCLUDED_EMPLOYEE_IDS.has(id)
+    || cargo.includes('socio')
+    || cargo.includes('pro labore')
+    || name.includes('aitor urcelay')
+    || name.includes('robson chafi');
+};
+
 const documentLabel = (type: string) => {
   if (type === BENEFICIO_VR) return 'Recibo VR';
   if (type === BENEFICIO_VT) return 'Recibo VT';
@@ -99,6 +121,11 @@ const validatePublicSession = async (service: any, rawSession: string, expectedC
     throw Object.assign(new Error('session_expired'), { status: 401 });
   }
   if (data.company_id !== expectedCompanyId) {
+    throw Object.assign(new Error('invalid_session'), { status: 401 });
+  }
+  const { data: sessionEmployee } = await service.from('funcionarios').select('id,nome,cargo').eq('id', data.employee_id).maybeSingle();
+  if (isSignatureExcluded(sessionEmployee || { id: data.employee_id })) {
+    await service.from('payroll_public_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', data.id);
     throw Object.assign(new Error('invalid_session'), { status: 401 });
   }
   await assertCompanyEnabled(service, data.company_id);
@@ -192,6 +219,7 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
     .eq('id', sessionRow.employee_id)
     .single();
   if (employeeError || !employee) throw Object.assign(new Error('employee_not_found'), { status: 404 });
+  if (isSignatureExcluded(employee)) throw Object.assign(new Error('document_not_available'), { status: 404 });
 
   const phone = normalizePhone(employee.celular || employee.telefone) || digits(employee.celular || employee.telefone);
   const now = new Date().toISOString();
@@ -299,6 +327,10 @@ const authenticate = async (service: any, req: any, res: any, body: any, scopedC
     .eq('id', match.employee_id)
     .single();
   if (employeeError || !employee) return genericIdentityError(res);
+  if (isSignatureExcluded(employee)) {
+    await service.from('payroll_public_access_attempts').insert({ identifier_hash: identifierHash, ip, success: false, failure_reason: 'SIGNATURE_EXCLUDED' });
+    return genericIdentityError(res);
+  }
 
   const documents = await availableDocuments(service, match.employee_id, scopedCompany.companyId);
   if (!documents.length) return genericIdentityError(res);
