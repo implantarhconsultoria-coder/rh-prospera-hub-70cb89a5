@@ -32,11 +32,6 @@ const brDateTime = (value?: string | null) => value ? new Date(value).toLocaleSt
 const currency = (value?: number | null) => value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const humanStatus = (value: unknown) => String(value || '').replace(/_/g, ' ');
 
-const SIGNATURE_EXCLUDED_EMPLOYEE_IDS = new Set([
-  '2e736835-f228-49ec-80ee-e893172aeb44',
-  'f2a7cbe6-ca51-4f39-a7b8-b7843599793e',
-  '57abf7fb-8895-4881-8946-952a4d5e1a44',
-]);
 const normalizeSignatureText = (value: unknown) => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -44,14 +39,8 @@ const normalizeSignatureText = (value: unknown) => String(value || '')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 const isSignatureExcluded = (employee: any) => {
-  const id = String(employee?.id || employee?.employee_id || '');
   const cargo = normalizeSignatureText(employee?.cargo || employee?.employee_role || employee?.employee_cargo);
-  const name = normalizeSignatureText(employee?.name || employee?.nome || employee?.employee_name);
-  return SIGNATURE_EXCLUDED_EMPLOYEE_IDS.has(id)
-    || cargo.includes('socio')
-    || cargo.includes('pro labore')
-    || name.includes('aitor urcelay')
-    || name.includes('robson chafi');
+  return cargo.includes('socio') || cargo.includes('pro labore') || cargo.includes('prolabore');
 };
 
 const mergePairPdfBytes = async (pages: Uint8Array[]) => {
@@ -104,10 +93,13 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const portalPath = portalSlug ? `/holerite/${encodeURIComponent(portalSlug)}` : '/holerite';
   const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}${portalPath}` : portalPath;
 
-  const scopedEmployees = useMemo<PayrollEmployeeMatch[]>(() => employees
-    .filter(e => e.companyId === companyId && e.status === 'ativo' && !isSignatureExcluded(e))
+  const matchingEmployees = useMemo<PayrollEmployeeMatch[]>(() => employees
+    .filter(e => e.companyId === companyId && (e.status === 'ativo' || isSignatureExcluded(e)))
     .map(e => ({ id: e.id, name: e.name, cpf: e.cpf, cargo: e.cargo, companyId: e.companyId }))
     .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);
+
+  const scopedEmployees = useMemo<PayrollEmployeeMatch[]>(() => matchingEmployees
+    .filter(e => !isSignatureExcluded(e)), [matchingEmployees]);
 
   const phoneIssues = useMemo(() => employees
     .filter(e => e.companyId === companyId && e.status === 'ativo' && !isSignatureExcluded(e))
@@ -354,7 +346,7 @@ ${portalUrl}`;
       let duplicates = 0;
 
       for (const file of pdfFiles) {
-        const analyses = await analyzePayrollFiles({ files: [file], employees: scopedEmployees });
+        const analyses = await analyzePayrollFiles({ files: [file], employees: matchingEmployees });
         const analysis = analyses[0];
         if (!analysis) throw new Error(`Não foi possível ler ${file.name}.`);
 

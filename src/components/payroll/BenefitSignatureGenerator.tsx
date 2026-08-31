@@ -11,11 +11,6 @@ const PAYROLL_BUCKET = 'payroll-private';
 const VR_TYPE = 'BENEFICIO_VR';
 const VT_TYPE = 'BENEFICIO_VT';
 
-const SIGNATURE_EXCLUDED_EMPLOYEE_IDS = new Set([
-  '2e736835-f228-49ec-80ee-e893172aeb44',
-  'f2a7cbe6-ca51-4f39-a7b8-b7843599793e',
-  '57abf7fb-8895-4881-8946-952a4d5e1a44',
-]);
 const normalizeSignatureText = (value: unknown) => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -23,14 +18,8 @@ const normalizeSignatureText = (value: unknown) => String(value || '')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 const isSignatureExcluded = (employee: any) => {
-  const id = String(employee?.id || '');
   const cargo = normalizeSignatureText(employee?.cargo);
-  const name = normalizeSignatureText(employee?.name || employee?.nome);
-  return SIGNATURE_EXCLUDED_EMPLOYEE_IDS.has(id)
-    || cargo.includes('socio')
-    || cargo.includes('pro labore')
-    || name.includes('aitor urcelay')
-    || name.includes('robson chafi');
+  return cargo.includes('socio') || cargo.includes('pro labore') || cargo.includes('prolabore');
 };
 
 const safeFile = (value: string) => value

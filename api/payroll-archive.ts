@@ -20,20 +20,9 @@ const normalizeText = (value: unknown) => String(value || '')
   .replace(/[\u0300-\u036f]/g, '')
   .toLowerCase();
 
-const SIGNATURE_EXCLUDED_EMPLOYEE_IDS = new Set([
-  '2e736835-f228-49ec-80ee-e893172aeb44',
-  'f2a7cbe6-ca51-4f39-a7b8-b7843599793e',
-  '57abf7fb-8895-4881-8946-952a4d5e1a44',
-]);
 const isSignatureExcluded = (employee: any) => {
-  const id = String(employee?.id || employee?.employee_id || '');
   const cargo = normalizeText(employee?.cargo).replace(/[^a-z0-9]+/g, ' ');
-  const name = normalizeText(employee?.nome || employee?.name).replace(/[^a-z0-9]+/g, ' ');
-  return SIGNATURE_EXCLUDED_EMPLOYEE_IDS.has(id)
-    || cargo.includes('socio')
-    || cargo.includes('pro labore')
-    || name.includes('aitor urcelay')
-    || name.includes('robson chafi');
+  return cargo.includes('socio') || cargo.includes('pro labore') || cargo.includes('prolabore');
 };
 
 const resolveCompanyScope = async (service: any, rawScope: unknown) => {
