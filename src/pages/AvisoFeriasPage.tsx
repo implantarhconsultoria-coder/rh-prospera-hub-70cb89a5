@@ -12,6 +12,7 @@ import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documento
 import { gerarAvisoFeriasPdf, downloadPdf } from '@/lib/pdfGenerator';
 import { supabase } from '@/integrations/supabase/client';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import VacationProgrammingReport from '@/components/ferias/VacationProgrammingReport';
 
 type FeriasAvisoRow = {
   id: string;
@@ -507,6 +508,8 @@ const AvisoFeriasPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      <VacationProgrammingReport />
 
       <div className="card-premium p-4 flex flex-wrap gap-3 items-center">
         <Input placeholder="Buscar por nome ou CPF..." value={search}

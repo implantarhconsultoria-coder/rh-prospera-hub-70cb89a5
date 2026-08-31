@@ -87,6 +87,14 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     .map(e => ({ id: e.id, name: e.name, cpf: e.cpf, cargo: e.cargo, companyId: e.companyId }))
     .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);
 
+  const phoneIssues = useMemo(() => employees
+    .filter(e => e.companyId === companyId && e.status === 'ativo')
+    .filter(e => {
+      const phone = digits((e as any).celular || (e as any).telefone);
+      return phone.length < 10 || phone.length > 11;
+    })
+    .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);
+
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -132,6 +140,13 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const copyPortal = async () => {
     try { await navigator.clipboard.writeText(portalUrl); toast.success(`Link do portal da ${company?.name || 'empresa'} copiado.`); }
     catch { window.prompt('Copie o link do Portal de Holerite desta empresa:', portalUrl); }
+  };
+
+  const sharePortalWhatsApp = () => {
+    const text = `Pessoal, os documentos para conferência e assinatura estão disponíveis no Portal TOPAC RH PRO da ${company?.name || 'empresa'}. Acesse pelo link abaixo e entre com CPF, data de nascimento e os 4 últimos números do celular cadastrado:
+
+${portalUrl}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
   const persistSequentialPayrollAnalysis = async (analysis: PayrollFileAnalysis) => {
@@ -408,9 +423,11 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div><p className="flex items-center gap-2 text-xs font-bold uppercase text-cyan-300"><ShieldCheck className="h-4 w-4"/>Portal de holerite desta empresa</p><p className="mt-2 break-all font-mono text-sm">{portalUrl}</p><p className="mt-2 text-xs text-muted-foreground">Este link aceita somente funcionários vinculados a {company?.name}. O documento completo do par segue para visualizar e assinar.</p></div>
-        <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={()=>void copyPortal()}><Copy className="mr-2 h-4 w-4"/>Copiar link</Button><Button variant="outline" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className="mr-2 h-4 w-4"/>Abrir portal</Button></div>
+        <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={()=>void copyPortal()}><Copy className="mr-2 h-4 w-4"/>Copiar link</Button><Button variant="outline" onClick={sharePortalWhatsApp}>Compartilhar no WhatsApp</Button><Button variant="outline" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className="mr-2 h-4 w-4"/>Abrir portal</Button></div>
       </div>
     </div>
+
+    {phoneIssues.length > 0 ? <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"><div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"><div><b className="text-amber-300">ATENÇÃO: {phoneIssues.length} funcionário(s) sem telefone/celular válido para o acesso</b><p className="mt-1 text-xs text-muted-foreground">Corrija antes de compartilhar o link. O login usa os 4 últimos números do telefone cadastrado.</p><div className="mt-2 flex flex-wrap gap-1">{phoneIssues.map(e=><Badge key={e.id} variant="outline" className="border-amber-500/40 text-amber-200">{e.name}</Badge>)}</div></div><Button variant="outline" onClick={()=>navigator.clipboard.writeText(phoneIssues.map(e=>e.name).join('\n'))}>Copiar lista</Button></div></div> : <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">✓ Todos os funcionários ativos desta empresa possuem telefone/celular válido para o acesso.</div>}
 
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Kpi label="Documentos" value={rows.length}/>

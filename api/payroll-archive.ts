@@ -83,7 +83,7 @@ const benefitFlags = (value: string) => {
 const loadArchive = async (service: any, employeeId: string, companyId: string) => {
   const { data: payrollDocs, error: payrollError } = await service
     .from('payroll_documents')
-    .select('id,document_type,competencia,storage_bucket,storage_path,original_filename,created_at,confirmed_at,is_current,confirmed')
+    .select('id,document_type,competencia,storage_bucket,storage_path,original_filename,created_at,confirmed_at,is_current,confirmed,extracted_data')
     .eq('employee_id', employeeId)
     .eq('company_id', companyId)
     .eq('is_current', true)
@@ -105,6 +105,7 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
 
   const signatureByDocument = new Map((signatures || []).map((row: any) => [row.document_id, row]));
   const paidDocuments = new Set((confirmedPayments || []).map((row: any) => row.document_id));
+  const importedSourceIds = new Set((payrollDocs || []).map((doc: any) => doc?.extracted_data?.source_documento_funcionario_id).filter(Boolean));
 
   const signedPayroll = (payrollDocs || []).filter((doc: any) => {
     if (!signatureByDocument.has(doc.id)) return false;
@@ -122,6 +123,7 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
   if (benefitError) throw benefitError;
 
   const historicalBenefits = (benefitDocs || []).filter((doc: any) => {
+    if (importedSourceIds.has(doc.id)) return false;
     const flags = benefitFlags([doc.tipo_documento, doc.categoria, doc.descricao, doc.nome_arquivo].filter(Boolean).join(' | '));
     return flags.vr || flags.vt;
   });
@@ -131,13 +133,14 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
     const bucket = doc.storage_bucket || 'payroll-private';
     const url = await createFileUrl(service, bucket, doc.storage_path);
     if (!url) return null;
-    const isBenefit = doc.document_type === 'BENEFICIO_VR_VT';
+    const benefitTypes = doc.document_type === 'BENEFICIO_VR' ? ['VR'] : doc.document_type === 'BENEFICIO_VT' ? ['VT'] : doc.document_type === 'BENEFICIO_VR_VT' ? ['VR', 'VT'] : [];
+    const label = doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : 'Holerite';
     return {
       id: `payroll:${doc.id}`,
       source: 'payroll',
-      category: isBenefit ? 'beneficio' : 'pagamento',
-      benefit_types: isBenefit ? ['VR', 'VT'] : [],
-      label: isBenefit ? 'Recibo VR / VT' : 'Holerite',
+      category: benefitTypes.length ? 'beneficio' : 'pagamento',
+      benefit_types: benefitTypes,
+      label,
       competencia: doc.competencia,
       filename: doc.original_filename || '',
       date: signature?.signed_at || doc.confirmed_at || doc.created_at,

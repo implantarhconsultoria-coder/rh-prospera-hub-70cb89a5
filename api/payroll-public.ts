@@ -23,6 +23,10 @@ const MAX_IP_ATTEMPTS_15M = 8;
 const MAX_CPF_ATTEMPTS_15M = 5;
 const HOLERITE = 'HOLERITE';
 const BENEFICIO = 'BENEFICIO_VR_VT';
+const BENEFICIO_VR = 'BENEFICIO_VR';
+const BENEFICIO_VT = 'BENEFICIO_VT';
+const ADIANTAMENTO = 'ADIANTAMENTO';
+const BENEFIT_TYPES = new Set([BENEFICIO, BENEFICIO_VR, BENEFICIO_VT]);
 
 const COMPANY_SCOPE_CNPJS: Record<string, string> = {
   'topac-matriz': '07291648000103',
@@ -34,7 +38,13 @@ const COMPANY_SCOPE_CNPJS: Record<string, string> = {
 
 const normalizeCompanyScope = (value: unknown) => String(value || '').trim().toLowerCase();
 
-const documentLabel = (type: string) => type === BENEFICIO ? 'Recibo VR / VT' : 'Holerite';
+const documentLabel = (type: string) => {
+  if (type === BENEFICIO_VR) return 'Recibo VR';
+  if (type === BENEFICIO_VT) return 'Recibo VT';
+  if (type === BENEFICIO) return 'Recibo VR / VT';
+  if (type === ADIANTAMENTO) return 'Recibo de Adiantamento';
+  return 'Holerite';
+};
 
 const genericIdentityError = (res: any, status = 401) =>
   sendJson(res, { ok: false, error: 'identity_not_validated' }, status);
@@ -172,7 +182,7 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
       .maybeSingle();
     if (result.error || !result.data) throw Object.assign(new Error('payment_not_confirmed'), { status: 409 });
     receipt = result.data;
-  } else if (doc.document_type !== BENEFICIO) {
+  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO) {
     throw Object.assign(new Error('document_not_available'), { status: 404 });
   }
 
@@ -520,7 +530,7 @@ export default async function handler(req: any, res?: any) {
       await service.from('payroll_terms_acceptances').insert({
         company_id: sessionRow.company_id,
         employee_id: sessionRow.employee_id,
-        term_version: doc.document_type === BENEFICIO ? 'benefit-signature-v1' : 'payroll-signature-v1',
+        term_version: BENEFIT_TYPES.has(doc.document_type) ? 'benefit-signature-v1' : 'payroll-signature-v1',
         accepted: true,
         authentication_method: AUTH_METHOD,
         accepted_at: signedAt,
