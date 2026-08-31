@@ -160,9 +160,28 @@ const RelatorioVTPage: React.FC = () => {
       .eq('is_current', true)
       .maybeSingle();
     if (currentError) throw currentError;
-    // Pagamento original já reconhecido como pago: nunca recalcular/substituir aqui.
-    // Diferenças posteriores pertencem à Edição de Benefícios e viram outro recibo.
-    if (current?.payment_state === 'PAGO') return false;
+    // O recibo original pode ser regerado/corrigido enquanto ainda não foi assinado
+    // e enquanto não existir complemento. Depois disso, ele vira base imutável.
+    if (current?.id) {
+      const [{ data: complementRows, error: complementError }, { data: signatureRow, error: signatureError }] = await Promise.all([
+        (supabase as any).from('payroll_documents')
+          .select('id')
+          .eq('company_id', block.company.id)
+          .eq('employee_id', row.emp.id)
+          .eq('competencia', competencia)
+          .eq('document_type', VT_DOCUMENT_TYPE)
+          .eq('payment_kind', 'COMPLEMENTAR')
+          .eq('is_current', true)
+          .limit(1),
+        (supabase as any).from('payroll_signatures')
+          .select('id')
+          .eq('document_id', current.id)
+          .limit(1),
+      ]);
+      if (complementError) throw complementError;
+      if (signatureError) throw signatureError;
+      if ((complementRows || []).length || (signatureRow || []).length) return false;
+    }
     if (current?.document_sha256 === hash && current?.confirmed) return false;
     const paymentEventId = current?.payment_event_id || crypto.randomUUID();
 

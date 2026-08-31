@@ -102,8 +102,11 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
       const competencia = rows[0].competencia;
       const sameCompetencia = rows.filter(row => row.competencia === competencia);
       const currentDocs = sameCompetencia.filter(row => row.is_current && row.status !== 'SUBSTITUIDO');
-      const reference = sameCompetencia.find(row => Number(row.extracted_data?.dias_finais || 0) > 0)
-        || sameCompetencia.find(row => Number(row.extracted_data?.dias_pagos || 0) > 0)
+      const reference = currentDocs.find(row => row.payment_kind === 'ORIGINAL' && Number(row.extracted_data?.dias_finais || 0) > 0)
+        || currentDocs.find(row => row.payment_kind === 'ORIGINAL' && Number(row.extracted_data?.dias_pagos || 0) > 0)
+        || currentDocs.find(row => Number(row.extracted_data?.dias_finais || 0) > 0)
+        || currentDocs.find(row => Number(row.extracted_data?.dias_pagos || 0) > 0)
+        || currentDocs[0]
         || sameCompetencia[0];
       const daysConsidered = Math.max(0, Number(reference?.extracted_data?.dias_finais || reference?.extracted_data?.dias_pagos || 0));
       const alreadyPaid = roundMoney(currentDocs.reduce((sum, row) => sum + Number(row.net_amount || 0), 0));
@@ -173,15 +176,6 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         toast.success(`${benefitType} atualizado. Não há diferença adicional para pagar.`);
         await loadContext();
         return;
-      }
-
-      const liveIds = liveRows.map((row: any) => row.id).filter(Boolean);
-      if (liveIds.length) {
-        const { error: paidStateError } = await (supabase as any)
-          .from('payroll_documents')
-          .update({ payment_state: 'PAGO', updated_at: new Date().toISOString() })
-          .in('id', liveIds);
-        if (paidStateError) throw paidStateError;
       }
 
       const nextSequence = Math.max(context.sequence, ...liveRows.map((row: any) => Number(row.payment_sequence || 1)), 0) + 1;
