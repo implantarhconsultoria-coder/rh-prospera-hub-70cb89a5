@@ -36,6 +36,7 @@ const AppLayout: React.FC = () => {
   useActivityTracker(session);
 
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
+  const legacyRemoved = location.pathname.startsWith('/admin/faturamento') || location.pathname.startsWith('/admin/financeiro');
 
   const globalResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -44,8 +45,7 @@ const AppLayout: React.FC = () => {
       ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionarios', '/admin/funcionarios'],
       ['Pre-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
       ['Fechamento', '/admin/fechamento'], ['EPI', '/admin/epi'],
-      ['Faturamento', '/admin/faturamento'],
-      ['Financeiro', '/admin/financeiro'], ['Frota / Documentos', '/admin/documentos-ativos'],
+      ['Frota / Documentos', '/admin/documentos-ativos'],
       ['Almoxarifado', '/admin/almoxarifado'], ['Abastecimento QR Code', '/admin/abastecimento-qrcode'],
     ]
       .filter(([label, path]) => `${label} ${path}`.toLowerCase().includes(q))
@@ -79,6 +79,7 @@ const AppLayout: React.FC = () => {
   }
 
   if (!userRole) return <AguardandoAcesso />;
+  if (legacyRemoved) return <Navigate to="/admin" replace />;
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -96,8 +97,6 @@ const AppLayout: React.FC = () => {
   if (userRole !== 'admin' && !isDirector) {
     const redirect = userRole?.startsWith('filial_') ? '/filial'
       : userRole === 'almoxarifado' ? '/almoxarifado'
-      : userRole === 'faturamento' ? '/faturamento'
-      : userRole === 'financeiro' ? '/financeiro'
       : userRole === 'operacional' ? '/operacional'
       : userRole === 'tecnico_campo' ? '/campo'
       : '/';
@@ -142,7 +141,7 @@ const AppLayout: React.FC = () => {
             <div className="max-h-[55vh] overflow-y-auto p-2">
               {searchQuery && globalResults.length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">Nenhum registro encontrado.</div>}
               {!searchQuery && <div className="p-6 text-center text-sm text-muted-foreground">Digite para localizar e pressione Enter para abrir o primeiro resultado.</div>}
-              {globalResults.map((item) => <button key={`${item.path}-${item.label}`} onClick={() => { navigate(item.path); setSearchOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-muted"><item.icon className="h-4 w-4 text-primary" /><span className="flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="block text-xs text-muted-foreground">{item.subtitle}</span></span></button>)}
+              {globalResults.map((item) => <button key={`${item.path}-${item.label}`} onClick={() => { navigate(globalResults[0]?.path === item.path ? item.path : item.path); setSearchOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-muted"><item.icon className="h-4 w-4 text-primary" /><span className="flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="block text-xs text-muted-foreground">{item.subtitle}</span></span></button>)}
             </div>
           </div>
         </div>
