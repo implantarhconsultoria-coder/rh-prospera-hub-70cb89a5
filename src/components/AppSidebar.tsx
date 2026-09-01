@@ -54,32 +54,78 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const location = useLocation();
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
 
-  const renderLink = (item: MenuItem) => (
-    <NavLink key={item.path} to={item.path} title={collapsed ? item.label : undefined}
-      className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all', location.pathname === item.path ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-premium' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground')}>
-      <item.icon className="w-5 h-5 flex-shrink-0" />
-      {!collapsed && <span>{item.label}</span>}
-    </NavLink>
-  );
+  const renderLink = (item: MenuItem) => {
+    const active = location.pathname === item.path;
+    return (
+      <NavLink
+        key={item.path}
+        to={item.path}
+        title={collapsed ? item.label : undefined}
+        className={cn(
+          'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200',
+          active
+            ? 'bg-gradient-to-r from-violet-600/95 via-violet-500/90 to-fuchsia-500/80 text-white shadow-[0_0_24px_rgba(124,58,237,.28)] ring-1 ring-violet-300/20'
+            : 'text-zinc-300 hover:bg-white/[0.055] hover:text-white'
+        )}
+      >
+        {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-yellow-300 shadow-[0_0_12px_rgba(253,224,71,.9)]" />}
+        <item.icon className={cn('h-[18px] w-[18px] flex-shrink-0 transition-colors', active ? 'text-yellow-300' : 'text-violet-300 group-hover:text-yellow-300')} />
+        {!collapsed && <span className="font-medium">{item.label}</span>}
+      </NavLink>
+    );
+  };
 
-  const sectionTitle = (label: string) => !collapsed ? <div className="pt-3 mt-3 border-t border-sidebar-border"><p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">{label}</p></div> : <div className="pt-2 mt-2 border-t border-sidebar-border" />;
+  const sectionTitle = (label: string) => !collapsed ? (
+    <div className="mt-4 border-t border-violet-500/15 pt-4">
+      <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.24em] text-yellow-300/65">{label}</p>
+    </div>
+  ) : <div className="mt-3 border-t border-violet-500/15 pt-3" />;
 
   return (
-    <aside className={cn('h-screen gradient-sidebar flex flex-col border-r border-sidebar-border transition-all duration-300 fixed left-0 top-0 z-40', collapsed ? 'w-16' : 'w-64')}>
-      <div className="p-4 flex items-center justify-between border-b border-sidebar-border">
-        {!collapsed && <div className="admin-sidebar-brand"><div className="admin-sidebar-logo"><img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC RH PRO" className="w-14 h-14 object-contain" /></div><div><h2>TOPAC RH PRO</h2><p>Inteligencia Operacional</p></div></div>}
-        <button onClick={onToggle} className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground">{collapsed ? <Menu className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}</button>
+    <aside className={cn(
+      'fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-violet-500/20 bg-[#07060a] shadow-[18px_0_60px_rgba(0,0,0,.28)] transition-all duration-300',
+      collapsed ? 'w-16' : 'w-64'
+    )}>
+      <div className="relative border-b border-violet-500/20 px-3 py-4">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(124,58,237,.22),transparent_38%),radial-gradient(circle_at_90%_85%,rgba(250,204,21,.08),transparent_35%)]" />
+        <div className="relative flex items-center justify-between gap-2">
+          {!collapsed && (
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-xl border border-violet-400/35 bg-black/50 shadow-[0_0_22px_rgba(124,58,237,.25)]">
+                <img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC RH PRO" className="h-9 w-9 object-contain" />
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-black tracking-[0.12em] text-white">TOPAC RH PRO</div>
+                <div className="mt-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-yellow-300/70">Central operacional</div>
+              </div>
+            </div>
+          )}
+          <button onClick={onToggle} className="relative rounded-lg border border-violet-500/20 bg-white/[0.03] p-1.5 text-zinc-300 transition hover:border-yellow-300/40 hover:text-yellow-300">
+            {collapsed ? <Menu className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
-      <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3 [scrollbar-width:thin] [scrollbar-color:rgba(124,58,237,.35)_transparent]">
         {(isDirector ? directorItems : menuItems).map(renderLink)}
         {!isDirector && sectionTitle('Operacional')}
         {!isDirector && operationalItems.map(renderLink)}
       </nav>
 
-      <div className="p-2 border-t border-sidebar-border">
-        {!collapsed && <div className="px-3 py-3 mb-2 text-[11px] text-emerald-300/90"><div className="flex items-center gap-2 font-semibold"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.9)]" />Sistema operacional</div><p className="mt-1 text-sky-100/45">Latencia 12ms . Uptime 99.98%</p></div>}
-        <button onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive w-full transition-colors"><LogOut className="w-5 h-5 flex-shrink-0" />{!collapsed && <span>Sair</span>}</button>
+      <div className="border-t border-violet-500/20 p-2">
+        {!collapsed && (
+          <div className="mb-2 rounded-xl border border-violet-500/15 bg-white/[0.025] px-3 py-3 text-[11px]">
+            <div className="flex items-center gap-2 font-semibold text-zinc-100">
+              <span className="h-2 w-2 rounded-full bg-yellow-300 shadow-[0_0_12px_rgba(253,224,71,.85)]" />
+              Sistema operacional
+            </div>
+            <p className="mt-1 text-zinc-500">TOPAC RH PRO • ambiente ativo</p>
+          </div>
+        )}
+        <button onClick={logout} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-400 transition hover:bg-red-500/10 hover:text-red-300">
+          <LogOut className="h-5 w-5 flex-shrink-0" />
+          {!collapsed && <span>Sair</span>}
+        </button>
       </div>
     </aside>
   );
