@@ -1,406 +1,175 @@
-name: Hotfix folha PDF sequencial sem validacao de comprovante
+name: Patch definitivo assinatura horario e dossie
 
 on:
   push:
     paths:
       - '.github/workflows/hotfix-payroll-pdf-sequencial.yml'
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  patch-build-push:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Aplicar fluxo sequencial direto
-        shell: bash
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Aplicar patch
+        shell: python
         run: |
-          python3 <<'PY'
           from pathlib import Path
 
-          def must_replace(text, old, new, label):
-              if old not in text:
-                  raise SystemExit(f'Padrao nao encontrado: {label}')
-              return text.replace(old, new, 1)
+          def one(path, old, new):
+              p = Path(path)
+              s = p.read_text(encoding='utf-8')
+              if s.count(old) != 1:
+                  raise SystemExit(f'{path}: esperado 1 padrao, achado {s.count(old)}')
+              p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
-          # 1) Admin: o PDF ja vem [recibo][comprovante] por funcionario.
-          p = Path('src/components/payroll/PayrollPortalAdminModule.tsx')
-          s = p.read_text()
-          s = must_replace(
-              s,
-              "import { Clock3, Copy, ExternalLink, FileArchive, FileSignature, FileUp, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';",
-              "import { Clock3, Copy, ExternalLink, FileArchive, FileSignature, FileUp, Loader2, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';\nimport { PDFDocument } from 'pdf-lib';",
-              'imports admin',
+          one('src/server/payrollServer.ts',
+              "export const buildCertificatePdf = (evidence: Record<string, any>) => {\n  const lines = [",
+              r'''const exactSaoPauloDateTime = (value: unknown) => {
+  const raw = String(value || '').trim();
+  const date = new Date(raw);
+  if (!raw || Number.isNaN(date.getTime())) return raw;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).reduce<Record<string,string>>((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const fraction = (raw.match(/\.(\d{1,6})/)?.[1] || String(date.getUTCMilliseconds()).padStart(3, '0')).padEnd(3, '0');
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}.${fraction}`;
+};
+
+export const buildCertificatePdf = (evidence: Record<string, any>) => {
+  const lines = [''')
+          one('src/server/payrollServer.ts',
+              "    `Data/hora: ${evidence.signed_at || ''} (America/Sao_Paulo)`,",
+              "    `Data/hora oficial: ${exactSaoPauloDateTime(evidence.signed_at)} (America/Sao_Paulo)`,\n    `Instante oficial UTC: ${evidence.signed_at || ''}`,
           )
 
-          helper_anchor = "const amountMatches = (left: unknown, right: unknown) => {\n  const a = Number(left);\n  const b = Number(right);\n  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= AMOUNT_TOLERANCE;\n};\n"
-          helper_new = helper_anchor + "\nconst mergePairPdfBytes = async (pages: Uint8Array[]) => {\n  const out = await PDFDocument.create();\n  for (const bytes of pages) {\n    const source = await PDFDocument.load(new Uint8Array(bytes), { ignoreEncryption: true, updateMetadata: false });\n    const copied = await out.copyPages(source, source.getPageIndices());\n    copied.forEach(page => out.addPage(page));\n  }\n  return new Uint8Array(await out.save({ addDefaultPage: false, useObjectStreams: false }));\n};\n"
-          s = must_replace(s, helper_anchor, helper_new, 'helper merge pair')
+          one('api/payroll-public.ts',
+              "      const signedAt = new Date().toISOString();",
+              "      const { data: authoritativeNow, error: authoritativeNowError } = await service.rpc('payroll_authoritative_now');\n      if (authoritativeNowError || !authoritativeNow) throw new Error('authoritative_signature_clock_failed');\n      const signedAt = String(authoritativeNow);",
+          )
 
-          old_load = """  const load = async () => {
-    if (!enabled || !companyId || !competencia) return;
-    setLoading(true);
-    try {
-      let snapshot = await fetchSnapshot();
-      const documentsChanged = await retryUnmatchedDocuments(snapshot.pendingDocuments);
-      if (documentsChanged) snapshot = await fetchSnapshot();
-      const receiptsChanged = await reconcilePayments(snapshot.statusRows, snapshot.pendingReceipts);
-      if (receiptsChanged) snapshot = await fetchSnapshot();
-      setRows(snapshot.statusRows);
-    } catch (error: any) {
-      toast.error(error?.message || 'Não foi possível carregar o fechamento.');
-    } finally {
-      setLoading(false);
-    }
-  };
-"""
-          new_load = """  const load = async () => {
-    if (!enabled || !companyId || !competencia) return;
-    setLoading(true);
-    try {
-      const snapshot = await fetchSnapshot();
-      // O fluxo operacional não valida nem reprocessa comprovantes separadamente.
-      // O PDF sequencial já é a fonte do par RECIBO + COMPROVANTE.
-      setRows(snapshot.statusRows);
-    } catch (error: any) {
-      toast.error(error?.message || 'Não foi possível carregar o fechamento.');
-    } finally {
-      setLoading(false);
-    }
-  };
-"""
-          s = must_replace(s, old_load, new_load, 'load sem validacao')
+          one('api/payroll-admin.ts',
+              "    if (action === 'signed-urls') {",
+              r'''    if (action === 'dossier-signed-documents') {
+      const sourceDoc = await loadDocument(service, String(body.document_id || ''));
+      if (!sourceDoc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
 
-          insert_anchor = "  const persistBankFile = async (file: File) => {\n"
-          sequential_fn = r'''  const persistSequentialPayrollAnalysis = async (analysis: PayrollFileAnalysis) => {
-    const ordered = [...analysis.documents].sort((a, b) => a.pageNumber - b.pageNumber);
-    let created = 0;
-    let technicalPending = 0;
-    let duplicates = 0;
+      const benefitTypes = new Set(['BENEFICIO_VR', 'BENEFICIO_VT', 'BENEFICIO_VR_VT']);
+      const payrollTypes = new Set(['HOLERITE', 'ADIANTAMENTO']);
+      const shiftCompetencia = (value: string, delta: number) => {
+        const match = /^(\d{4})-(\d{2})$/.exec(String(value || ''));
+        if (!match) return String(value || '');
+        const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + delta, 1));
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      };
+      const sourceIsBenefit = benefitTypes.has(String(sourceDoc.document_type || ''));
+      const payrollCompetencia = sourceIsBenefit ? shiftCompetencia(sourceDoc.competencia, -1) : sourceDoc.competencia;
+      const benefitCompetencia = sourceIsBenefit ? sourceDoc.competencia : shiftCompetencia(sourceDoc.competencia, 1);
 
-    // REGRA DO NOVO FLUXO: pagina 1 = recibo, 2 = comprovante, 3 = recibo, 4 = comprovante...
-    // O funcionario e decidido SOMENTE pela pagina do recibo. A pagina seguinte pertence ao mesmo par.
-    for (let index = 0; index < ordered.length; index += 2) {
-      const receiptPage = ordered[index];
-      const bankPage = ordered[index + 1] || null;
-      if (!receiptPage?.bytes?.byteLength) {
-        technicalPending += 1;
-        continue;
-      }
+      const { data: candidateDocs, error: candidateError } = await service
+        .from('payroll_documents')
+        .select('id,document_type,competencia,storage_path,original_filename,extracted_data,document_version')
+        .eq('company_id', sourceDoc.company_id)
+        .eq('employee_id', sourceDoc.employee_id)
+        .in('competencia', Array.from(new Set([payrollCompetencia, benefitCompetencia])));
+      if (candidateError) throw candidateError;
 
-      const pairPages = bankPage?.bytes?.byteLength ? [receiptPage.bytes, bankPage.bytes] : [receiptPage.bytes];
-      const pairBytes = await mergePairPdfBytes(pairPages);
-      const pairHash = await sha256Browser(pairBytes);
-      const employeeId = receiptPage.status === 'IDENTIFICADO' ? receiptPage.employeeId : null;
-      const employeeName = receiptPage.employeeName || receiptPage.employeeNameDetected || `PENDENTE_P${receiptPage.pageNumber}`;
-
-      const { data: duplicateSource, error: duplicateSourceError } = await (supabase as any).from('payroll_documents')
-        .select('id')
-        .eq('company_id', companyId)
-        .eq('competencia', competencia)
-        .eq('source_sha256', analysis.sourceSha256)
-        .eq('source_page_start', receiptPage.pageNumber)
-        .eq('source_page_end', bankPage?.pageNumber || receiptPage.pageNumber)
-        .maybeSingle();
-      if (duplicateSourceError) throw duplicateSourceError;
-      if (duplicateSource) { duplicates += 1; continue; }
-
-      const filename = `${safeFile(employeeName)}_${competencia}_RECIBO_COMPROVANTE.pdf`;
-      const path = `${companyId}/${competencia}/holerites/${safeUuid()}-${filename}`;
-      const { error: storageError } = await supabase.storage.from(BUCKET).upload(
-        path,
-        new Blob([pairBytes as any], { type: 'application/pdf' }),
-        { contentType: 'application/pdf', upsert: false },
+      const scopedDocs = (candidateDocs || []).filter((doc: any) =>
+        (payrollTypes.has(String(doc.document_type || '')) && doc.competencia === payrollCompetencia)
+        || (benefitTypes.has(String(doc.document_type || '')) && doc.competencia === benefitCompetencia),
       );
-      if (storageError) throw storageError;
+      const documentIds = scopedDocs.map((doc: any) => doc.id);
+      if (!documentIds.length) return sendJson(res, { ok: true, items: [], payroll_competencia: payrollCompetencia, benefit_competencia: benefitCompetencia });
 
-      const { data: inserted, error: insertError } = await (supabase as any).from('payroll_documents').insert({
-        company_id: companyId,
-        employee_id: employeeId,
-        competencia,
-        storage_path: path,
-        original_filename: filename,
-        mime_type: 'application/pdf',
-        file_size: pairBytes.byteLength,
-        document_sha256: pairHash,
-        source_sha256: analysis.sourceSha256,
-        source_page_start: receiptPage.pageNumber,
-        source_page_end: bankPage?.pageNumber || receiptPage.pageNumber,
-        net_amount: receiptPage.amountDetected,
-        match_confidence: employeeId ? 100 : 0,
-        extracted_data: {
-          ingestion_mode: 'SEQUENTIAL_RECEIPT_PROOF',
-          includes_bank_proof: Boolean(bankPage),
-          receipt_page: receiptPage.pageNumber,
-          bank_proof_page: bankPage?.pageNumber || null,
-          paginas: bankPage ? [receiptPage.pageNumber, bankPage.pageNumber] : [receiptPage.pageNumber],
-          nome_detectado: receiptPage.employeeNameDetected,
-          metodo_vinculo: receiptPage.matchMethod,
-          status_analise: employeeId ? 'IDENTIFICADO_PELO_RECIBO' : 'REVISAO_MANUAL_SEM_DESCARTE',
-          empresa_detectada: receiptPage.companyNameDetected,
-          cnpj_detectado: receiptPage.cnpjDetected,
-          competencia_detectada: receiptPage.competenciaDetected,
-          tipo_documento_detectado: receiptPage.documentType,
-          subtipo_documento_detectado: receiptPage.documentSubtype,
-          valor_liquido_detectado: receiptPage.amountDetected,
-          usou_ocr: receiptPage.usedOcr,
-          regra_importacao: 'PARES_FIXOS_RECIBO_COMPROVANTE_SEM_VALIDACAO',
-        },
-        status: 'HOLERITE_PENDENTE',
-      }).select('id').single();
+      const [{ data: signatures, error: signatureError }, { data: receipts, error: receiptError }] = await Promise.all([
+        service.from('payroll_signatures').select('id,document_id,certificate_path,signed_at').in('document_id', documentIds).order('signed_at', { ascending: true }),
+        service.from('payroll_payment_receipts').select('document_id,storage_path,status').in('document_id', documentIds).eq('status', 'PAGAMENTO_CONFIRMADO'),
+      ]);
+      if (signatureError) throw signatureError;
+      if (receiptError) throw receiptError;
 
-      if (insertError) {
-        await supabase.storage.from(BUCKET).remove([path]);
-        throw insertError;
-      }
-      created += 1;
+      const docById = new Map(scopedDocs.map((doc: any) => [doc.id, doc]));
+      const receiptByDoc = new Map((receipts || []).map((receipt: any) => [receipt.document_id, receipt]));
+      const typeOrder: Record<string, number> = { HOLERITE: 10, ADIANTAMENTO: 20, BENEFICIO_VR: 30, BENEFICIO_VT: 40, BENEFICIO_VR_VT: 50 };
+      const typeLabel: Record<string, string> = { HOLERITE: 'Holerite', ADIANTAMENTO: 'Adiantamento', BENEFICIO_VR: 'Recibo VR', BENEFICIO_VT: 'Recibo VT', BENEFICIO_VR_VT: 'Recibo VR + VT' };
+      const signedRows = (signatures || [])
+        .map((signature: any) => ({ signature, doc: docById.get(signature.document_id) as any }))
+        .filter((entry: any) => entry.doc?.storage_path)
+        .sort((a: any, b: any) => (typeOrder[a.doc.document_type] || 99) - (typeOrder[b.doc.document_type] || 99) || new Date(a.signature.signed_at).getTime() - new Date(b.signature.signed_at).getTime());
 
-      if (!employeeId) {
-        technicalPending += 1;
-        continue;
-      }
-
-      await apiCall('confirm-document', { document_id: inserted.id });
-
-      // O comprovante e apenas a segunda pagina do par. Ele nao passa por OCR, score ou aprovacao manual.
-      if (bankPage?.bytes?.byteLength) {
-        const bankHash = bankPage.sha256 || await sha256Browser(bankPage.bytes);
-        const bankMeta = extractReceiptMetadata(bankPage.text || '');
-        const bankPath = `${companyId}/${competencia}/comprovantes/${safeUuid()}-${safeFile(employeeName)}_${competencia}_COMPROVANTE.pdf`;
-        const { error: bankStorageError } = await supabase.storage.from(BUCKET).upload(
-          bankPath,
-          new Blob([bankPage.bytes as any], { type: 'application/pdf' }),
-          { contentType: 'application/pdf', upsert: false },
-        );
-        if (bankStorageError) throw bankStorageError;
-
-        const { data: payment, error: paymentError } = await (supabase as any).from('payroll_payment_receipts').insert({
-          company_id: companyId,
-          employee_id: employeeId,
-          document_id: inserted.id,
-          competencia,
-          storage_path: bankPath,
-          original_filename: `${safeFile(employeeName)}_${competencia}_COMPROVANTE.pdf`,
-          mime_type: 'application/pdf',
-          file_size: bankPage.bytes.byteLength,
-          receipt_sha256: bankHash,
-          source_sha256: analysis.sourceSha256,
-          source_page_start: bankPage.pageNumber,
-          source_page_end: bankPage.pageNumber,
-          amount: bankMeta.amount,
-          paid_at: bankMeta.paidAt,
-          bank_name: bankMeta.bankName,
-          transaction_id: bankMeta.transactionId,
-          bank_authentication: bankMeta.bankAuthentication,
-          payer_name: bankMeta.payerName,
-          match_confidence: 100,
-          extracted_data: {
-            ingestion_mode: 'SEQUENTIAL_RECEIPT_PROOF',
-            paired_by_position: true,
-            receipt_page: receiptPage.pageNumber,
-            bank_proof_page: bankPage.pageNumber,
-            nome_funcionario: employeeName,
-            regra_importacao: 'SEM_VALIDACAO_DE_COMPROVANTE',
-          },
-          status: 'PAGAMENTO_IDENTIFICADO',
-          idempotency_key: `sequential:${companyId}:${competencia}:${analysis.sourceSha256}:${bankPage.pageNumber}`,
-        }).select('id').single();
-
-        if (paymentError) {
-          await supabase.storage.from(BUCKET).remove([bankPath]);
-          throw paymentError;
-        }
-
-        // Confirma em backend no mesmo ciclo do upload. Nao existe etapa humana "validar comprovante".
-        await apiCall('confirm-payment', {
-          receipt_id: payment.id,
-          override_reason: 'IMPORTACAO_SEQUENCIAL_RECIBO_COMPROVANTE_SEM_VALIDACAO',
+      const items = [];
+      for (const { signature, doc } of signedRows) {
+        const receipt = receiptByDoc.get(doc.id) as any;
+        items.push({
+          document_id: doc.id, document_type: doc.document_type, label: typeLabel[doc.document_type] || doc.document_type,
+          competencia: doc.competencia, signed_at: signature.signed_at, document_version: doc.document_version,
+          document_url: await signedUrl(service, doc.storage_path, 900),
+          certificate_url: signature.certificate_path ? await signedUrl(service, signature.certificate_path, 900) : null,
+          receipt_url: receipt?.storage_path ? await signedUrl(service, receipt.storage_path, 900) : null,
+          document_includes_bank_proof: doc?.extracted_data?.includes_bank_proof === true,
         });
       }
+      return sendJson(res, { ok: true, items, payroll_competencia: payrollCompetencia, benefit_competencia: benefitCompetencia });
     }
 
-    return { created, technicalPending, duplicates };
-  };
+    if (action === 'signed-urls') {''')
 
-'''
-          if insert_anchor not in s:
-              raise SystemExit('Padrao nao encontrado: inserir persistSequentialPayrollAnalysis')
-          s = s.replace(insert_anchor, sequential_fn + insert_anchor, 1)
-
-          old_branch = """        if (payrollLike && analysis) {
-          const result = await persistPayrollAnalysis(analysis);
-          payrollCreated += result.created;
-          technicalPending += result.technicalPending;
-          duplicates += result.duplicates;
-        } else {
-          const result = await persistBankFile(file);
-          receiptCreated += result.created;
-          technicalPending += result.technicalPending;
-          duplicates += result.duplicates;
-        }
-"""
-          new_branch = """        if (payrollLike && analysis) {
-          const result = await persistSequentialPayrollAnalysis(analysis);
-          payrollCreated += result.created;
-          technicalPending += result.technicalPending;
-          duplicates += result.duplicates;
-        } else {
-          // Comprovante bancario isolado nao entra mais no fluxo de folha.
-          // VR e VT continuam sendo lancamentos independentes fora deste pareamento sequencial.
-          throw new Error('Envie aqui o PDF ja montado em sequencia: RECIBO + COMPROVANTE de cada funcionario. VR e VT permanecem separados.');
-        }
-"""
-          s = must_replace(s, old_branch, new_branch, 'upload sequencial')
-
-          # Sem linguagem/etapa de validacao no uso normal.
-          s = s.replace('Envie recibos/holerites e comprovantes bancários juntos ou em etapas. O sistema lê, cruza nome + valor e confirma automaticamente.', 'Envie um único PDF já montado na ordem: RECIBO + COMPROVANTE de cada funcionário. O par é registrado e liberado direto para assinatura, sem validação de comprovante.')
-          s = s.replace('SUBIR RECIBOS + COMPROVANTES', 'SUBIR PDF SEQUENCIAL')
-          s = s.replace('CRUZAR / ATUALIZAR', 'ATUALIZAR')
-          s = s.replace("row.payment_status?humanStatus(row.payment_status):'Processando comprovante'", "row.payment_status?humanStatus(row.payment_status):'SEM COMPROVANTE NO PAR'")
-          s = s.replace('Fatiando PDFs e cruzando automaticamente nome + valor dentro de {company?.name}.', 'Registrando cada par RECIBO + COMPROVANTE de {company?.name}, sem etapa de validação.')
-          s = s.replace("toast.success(`${payrollCreated} recibo/holerite(s) e ${receiptCreated} comprovante(s) processados. Cruzamento automático concluído.${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);", "toast.success(`${payrollCreated} documento(s) RECIBO + COMPROVANTE enviados para o fluxo de assinatura.${technicalPending ? ` ${technicalPending} par(es) preservado(s) para revisão por falta de identificação no recibo.` : ''}${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);")
-
-          old_dossier = """      if (!urls.holerite_url || !urls.certificate_url || !urls.receipt_url) throw new Error('Dossiê incompleto: holerite, certificado ou comprovante ausente.');
-      await mergePdfUrls([
-        { url: urls.holerite_url, label: 'Holerite' },
-        { url: urls.certificate_url, label: 'Certificado' },
-        { url: urls.receipt_url, label: 'Comprovante' },
-      ], `DOSSIE_PAGAMENTO_${safeFile(row.employee_name || 'FUNCIONARIO')}_${competencia}.pdf`);
-"""
-          new_dossier = """      if (!urls.holerite_url || !urls.certificate_url) throw new Error('Dossiê incompleto: documento ou certificado ausente.');
-      const dossierSources = [
+          old = r'''  const dossier = async (row: any) => {
+    if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
+    try {
+      const urls = await apiCall('signed-urls', { document_id: row.document_id });
+      if (!urls.holerite_url || !urls.certificate_url) throw new Error('Dossiê incompleto: documento ou certificado ausente.');
+      const sources: Array<{url:string;label:string}> = [
         { url: urls.holerite_url, label: 'Recibo + comprovante' },
         { url: urls.certificate_url, label: 'Certificado' },
       ];
-      if (!urls.document_includes_bank_proof && urls.receipt_url) dossierSources.push({ url: urls.receipt_url, label: 'Comprovante' });
-      await mergePdfUrls(dossierSources, `DOSSIE_PAGAMENTO_${safeFile(row.employee_name || 'FUNCIONARIO')}_${competencia}.pdf`);
-"""
-          s = must_replace(s, old_dossier, new_dossier, 'dossie sem duplicar comprovante')
-
-          action_anchor = "  const releasedCount = rows.filter(r => r.holerite_confirmed && r.payment_confirmed && r.signature_status !== 'ASSINADO').length;\n"
-          delete_fn = r'''  const deleteEntry = async (row: any) => {
-    if (!row.document_id) return;
-    if (row.signature_status === 'ASSINADO') return toast.error('Documento já assinado não pode ser apagado pelo fechamento.');
-    if (!window.confirm(`Excluir o documento de ${row.employee_name || 'funcionário'} desta competência?`)) return;
+      if (!urls.document_includes_bank_proof && urls.receipt_url) sources.push({ url: urls.receipt_url, label: 'Comprovante' });
+      await mergePdfUrls(sources, `DOSSIE_PAGAMENTO_${safeFile(row.employee_name || 'FUNCIONARIO')}_${competencia}.pdf`);
+    } catch (error: any) { toast.error(error.message); }
+  };'''
+          new = r'''  const dossier = async (row: any) => {
+    if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
     try {
-      await apiCall('delete-payroll-entry', { document_id: row.document_id });
-      toast.success('Documento excluído.');
-      await load();
-    } catch (error: any) {
-      toast.error(error?.message || 'Não foi possível excluir.');
-    }
-  };
-
-'''
-          if action_anchor not in s:
-              raise SystemExit('Padrao nao encontrado: deleteEntry anchor')
-          s = s.replace(action_anchor, delete_fn + action_anchor, 1)
-
-          old_actions = "{row.request_id&&<Button size=\"sm\" variant=\"ghost\" onClick={()=>void openTimeline(row)}><Clock3 className=\"mr-1 h-3 w-3\"/>Histórico</Button>}</div></td>"
-          new_actions = "{row.request_id&&<Button size=\"sm\" variant=\"ghost\" onClick={()=>void openTimeline(row)}><Clock3 className=\"mr-1 h-3 w-3\"/>Histórico</Button>}{row.signature_status!=='ASSINADO'&&<Button size=\"sm\" variant=\"ghost\" className=\"text-red-400 hover:text-red-300\" onClick={()=>void deleteEntry(row)}><Trash2 className=\"mr-1 h-3 w-3\"/>Excluir</Button>}</div></td>"
-          s = must_replace(s, old_actions, new_actions, 'botao excluir')
-          p.write_text(s)
-
-          # 2) Consolidado: se o holerite armazenado ja contem o comprovante, nunca anexar a segunda via de novo.
-          p = Path('src/lib/payrollDocumentsV2.ts')
-          s = p.read_text()
-          s = must_replace(
-              s,
-              ".from('payroll_documents')\n    .select('id')\n    .eq('storage_path', storagePath)",
-              ".from('payroll_documents')\n    .select('id,extracted_data')\n    .eq('storage_path', storagePath)",
-              'select marker pair',
-          )
-          s = must_replace(
-              s,
-              "  if (documentError || !document?.id) return null;\n\n  const { data: receipt, error: receiptError }",
-              "  if (documentError || !document?.id) return null;\n  if (document?.extracted_data?.includes_bank_proof === true) return null;\n\n  const { data: receipt, error: receiptError }",
-              'skip duplicate proof',
-          )
-          p.write_text(s)
-
-          # 3) Backend: expose marcador e oferece exclusao explicita do upload antes de assinatura.
-          p = Path('api/payroll-admin.ts')
-          s = p.read_text()
-          signed_old = """        certificate_url: signature?.certificate_path ? await signedUrl(service, signature.certificate_path, 900) : null,
-      });
-    }
-
-    if (action === 'timeline') {
-"""
-          signed_new = """        certificate_url: signature?.certificate_path ? await signedUrl(service, signature.certificate_path, 900) : null,
-        document_includes_bank_proof: doc?.extracted_data?.includes_bank_proof === true,
-      });
-    }
-
-    if (action === 'delete-payroll-entry') {
-      const doc = await loadDocument(service, String(body.document_id || ''));
-      const { data: requestRows, error: requestError } = await service.from('payroll_signature_requests').select('id').eq('document_id', doc.id);
-      if (requestError) throw requestError;
-      const requestIds = (requestRows || []).map((row: any) => row.id).filter(Boolean);
-      if (requestIds.length) {
-        const { data: signatures, error: signatureError } = await service.from('payroll_signatures').select('id').in('request_id', requestIds);
-        if (signatureError) throw signatureError;
-        if ((signatures || []).length) return sendJson(res, { ok: false, error: 'signed_document_cannot_be_deleted' }, 409);
+      const dossierData = await apiCall('dossier-signed-documents', { document_id: row.document_id });
+      const items = Array.isArray(dossierData.items) ? dossierData.items : [];
+      if (!items.length) throw new Error('Dossiê incompleto: nenhuma assinatura concluída encontrada.');
+      const sources: Array<{url:string;label:string}> = [];
+      for (const item of items) {
+        if (item.document_url) sources.push({ url: item.document_url, label: `${item.label || item.document_type} ${item.competencia || ''}`.trim() });
+        if (!item.document_includes_bank_proof && item.receipt_url) sources.push({ url: item.receipt_url, label: `Comprovante ${item.competencia || ''}`.trim() });
+        if (item.certificate_url) sources.push({ url: item.certificate_url, label: `Certificado ${item.label || item.document_type} ${item.competencia || ''}`.trim() });
       }
-
-      const { data: receipts, error: receiptError } = await service.from('payroll_payment_receipts').select('id,storage_path').eq('document_id', doc.id);
-      if (receiptError) throw receiptError;
-      const receiptPaths = (receipts || []).map((row: any) => row.storage_path).filter(Boolean);
-
-      if (requestIds.length) {
-        await service.from('payroll_message_logs').delete().in('request_id', requestIds);
-        await service.from('payroll_signature_events').delete().in('request_id', requestIds);
-        const { error: deleteRequestError } = await service.from('payroll_signature_requests').delete().in('id', requestIds);
-        if (deleteRequestError) throw deleteRequestError;
-      }
-      const { error: deleteReceiptError } = await service.from('payroll_payment_receipts').delete().eq('document_id', doc.id);
-      if (deleteReceiptError) throw deleteReceiptError;
-      const { error: deleteDocError } = await service.from('payroll_documents').delete().eq('id', doc.id);
-      if (deleteDocError) throw deleteDocError;
-
-      const paths = [doc.storage_path, ...receiptPaths].filter(Boolean);
-      if (paths.length) {
-        const { error: storageDeleteError } = await service.storage.from(PAYROLL_BUCKET).remove(paths);
-        if (storageDeleteError) console.warn('[payroll-delete-storage]', storageDeleteError);
-      }
-      await addEvent(service, {
-        company_id: doc.company_id,
-        employee_id: doc.employee_id,
-        event_type: 'DOCUMENTO_FOLHA_EXCLUIDO',
-        actor_type: 'ADMIN',
-        actor_user_id: user.id,
-        payload: { document_id: doc.id, competencia: doc.competencia },
-      });
-      return sendJson(res, { ok: true, deleted_document_id: doc.id });
-    }
-
-    if (action === 'timeline') {
-"""
-          s = must_replace(s, signed_old, signed_new, 'backend marker delete')
-          p.write_text(s)
-          PY
-
-      - name: Instalar dependencias
-        run: npm ci
+      if (!sources.length) throw new Error('Dossiê incompleto: arquivos assinados indisponíveis.');
+      await mergePdfUrls(sources, `DOSSIE_ASSINATURAS_${safeFile(row.employee_name || 'FUNCIONARIO')}_${dossierData.payroll_competencia || competencia}.pdf`);
+    } catch (error: any) { toast.error(error.message); }
+  };'''
+          one('src/components/payroll/PayrollPortalAdminModule.tsx', old, new)
 
       - name: Validar build
-        run: npm run build
-
-      - name: Gravar hotfix na main
-        shell: bash
         run: |
-          git config user.name "TOPAC RH Automation"
-          git config user.email "actions@users.noreply.github.com"
-          git add src/components/payroll/PayrollPortalAdminModule.tsx src/lib/payrollDocumentsV2.ts api/payroll-admin.ts
-          if git diff --cached --quiet; then
-            echo "Nenhuma alteracao necessaria"
-            exit 0
-          fi
-          git commit -m "fix(payroll): use sequential receipt proof pairs without validation"
-          git push origin HEAD:main
+          npm install --legacy-peer-deps --no-package-lock --no-audit --no-fund
+          npm run build
+
+      - name: Commitar patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/hotfix-payroll-pdf-sequencial.yml
+          rm -f .github/workflows/patch-payroll-authoritative-time-dossier.yml
+          git add -A
+          git commit -m "fix(payroll): horario oficial e dossie com VR VT"
+          git push
