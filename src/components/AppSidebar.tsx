@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Users, FileCheck, FileText, LogOut, ChevronLeft, Menu,
-  HardHat, Shirt, History, Wallet, CalendarCheck, FileX, Fuel, Car, Stethoscope,
-  UserCheck, Package, ClipboardList, ChevronDown, ChevronRight, Receipt, RefreshCw,
-  AlertTriangle, ClipboardCheck, ArrowDownCircle, ArrowUpCircle, Truck, Landmark,
-  Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch, ShoppingCart,
+  HardHat, Shirt, History, CalendarCheck, FileX, Fuel, Car, Stethoscope,
+  UserCheck, Package, ClipboardList, Receipt, ClipboardCheck, Wrench, FileSearch, ShoppingCart,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -45,36 +43,8 @@ const operationalItems: MenuItem[] = [
 
 const directorItems: MenuItem[] = [
   { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin' },
-  { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
-  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
-  { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento' },
-  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
-  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
   { label: 'Envios para Clinicas', icon: FileText, path: '/admin/emails-contabilidade' },
   { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio' },
-];
-
-const faturamentoItems: MenuItem[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/faturamento' },
-  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
-  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
-  { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas' },
-  { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
-  { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
-  { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
-];
-
-const financeiroItems: MenuItem[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/financeiro' },
-  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
-  { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores' },
-  { label: 'Caixa e Bancos', icon: Landmark, path: '/admin/financeiro/bancos' },
-  { label: 'Fluxo de Caixa', icon: Activity, path: '/admin/financeiro/fluxo-caixa' },
-  { label: 'Conciliacao', icon: CheckSquare, path: '/admin/financeiro/conciliacao' },
-  { label: 'Inadimplencia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia' },
-  { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo' },
 ];
 
 interface Props { collapsed: boolean; onToggle: () => void }
@@ -82,8 +52,6 @@ interface Props { collapsed: boolean; onToggle: () => void }
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout, userRoles } = useApp();
   const location = useLocation();
-  const [fatOpen, setFatOpen] = useState(location.pathname.startsWith('/admin/faturamento'));
-  const [finOpen, setFinOpen] = useState(location.pathname.startsWith('/admin/financeiro'));
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
 
   const renderLink = (item: MenuItem) => (
@@ -96,17 +64,6 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
   const sectionTitle = (label: string) => !collapsed ? <div className="pt-3 mt-3 border-t border-sidebar-border"><p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">{label}</p></div> : <div className="pt-2 mt-2 border-t border-sidebar-border" />;
 
-  const expandable = (label: string, icon: React.ElementType, open: boolean, setOpen: (value: boolean) => void, items: MenuItem[], activePrefix: string) => {
-    const Icon = icon;
-    if (collapsed) return <>{items.map(renderLink)}</>;
-    return <>
-      <button onClick={() => setOpen(!open)} className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm w-full transition-all', location.pathname.startsWith(activePrefix) ? 'bg-sidebar-primary/40 text-sidebar-primary-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent')}>
-        <Icon className="w-5 h-5 flex-shrink-0" /><span className="flex-1 text-left">{label}</span>{open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-      </button>
-      {open && <div className="ml-3 pl-2 border-l border-sidebar-border space-y-1 mt-1">{items.map(renderLink)}</div>}
-    </>;
-  };
-
   return (
     <aside className={cn('h-screen gradient-sidebar flex flex-col border-r border-sidebar-border transition-all duration-300 fixed left-0 top-0 z-40', collapsed ? 'w-16' : 'w-64')}>
       <div className="p-4 flex items-center justify-between border-b border-sidebar-border">
@@ -118,10 +75,6 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
         {(isDirector ? directorItems : menuItems).map(renderLink)}
         {!isDirector && sectionTitle('Operacional')}
         {!isDirector && operationalItems.map(renderLink)}
-        {!isDirector && sectionTitle('Faturamento antigo')}
-        {!isDirector && expandable('Faturamento', Wallet, fatOpen, setFatOpen, faturamentoItems, '/admin/faturamento')}
-        {!isDirector && sectionTitle('Financeiro antigo')}
-        {!isDirector && expandable('Financeiro', DollarSign, finOpen, setFinOpen, financeiroItems, '/admin/financeiro')}
       </nav>
 
       <div className="p-2 border-t border-sidebar-border">
