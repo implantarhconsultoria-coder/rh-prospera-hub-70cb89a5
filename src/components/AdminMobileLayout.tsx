@@ -152,9 +152,9 @@ const AdminMobileLayout: React.FC = () => {
         ) : <Outlet />}
       </main>
 
-      <VoiceCommandFab modules={searchModules} onNavigate={go} />
+      <VoiceCommandFab />
       <AssistenteFab />
-      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} query={searchQ} onQueryChange={setSearchQ} modules={searchModules} onNavigate={(path) => { setSearchOpen(false); nav(path); }} />
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} query={searchQ} onQuery={setSearchQ} modules={searchModules} />
     </div>
   );
 };
