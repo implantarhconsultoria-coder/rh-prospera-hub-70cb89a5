@@ -20,8 +20,6 @@ const PORTAL_MODULES: ModuleDef[] = [
   { role: 'filial_matriz', label: 'RH Matriz', path: '/filial' },
   { role: 'filial_praia', label: 'RH Praia Grande', path: '/filial' },
   { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
-  { role: 'faturamento', label: 'Faturamento', path: '/faturamento' },
-  { role: 'financeiro', label: 'Financeiro', path: '/financeiro' },
   { role: 'almoxarifado', label: 'Almoxarifado', path: '/almoxarifado' },
   { role: 'operacional', label: 'Operacional', path: '/operacional' },
   { role: 'tecnico_campo', label: 'Campo', path: '/campo' },
@@ -37,8 +35,6 @@ const ADMIN_MODULES: ModuleDef[] = [
   { role: 'filial_praia', label: 'Filial Praia Grande', path: '/filial', filialCodigo: 'topac-pg' },
   { role: 'filial_goiania', label: 'Filial Goiania', path: '/filial', filialCodigo: 'topac-gyn' },
   { role: 'almoxarifado', label: 'Almoxarifado', path: '/admin/almoxarifado' },
-  { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
-  { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
 ];
 
 const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
@@ -51,8 +47,6 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
     : isDirector
       ? [
           { role: 'diretor_geral', label: 'Central TOPAC', path: '/admin' },
-          { role: 'faturamento', label: 'Faturamento', path: '/admin/faturamento' },
-          { role: 'financeiro', label: 'Financeiro', path: '/admin/financeiro' },
           { role: 'relatorios', label: 'Relatorios', path: '/admin/relatorio' },
         ]
       : PORTAL_MODULES.filter((m) => userRoles.includes(m.role as any));
