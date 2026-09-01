@@ -33,7 +33,6 @@ jobs:
                   raise SystemExit(f'{path}: expected 1 match, found {count}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          # 1) Certificate: exact Sao Paulo rendering from canonical DB timestamp.
           server_path = 'src/server/payrollServer.ts'
           marker = "export const buildCertificatePdf = (evidence: Record<string, any>) => {\n  const lines = ["
           helper = r'''const exactSaoPauloDateTime = (value: unknown) => {
@@ -62,14 +61,12 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
               "    `Data/hora oficial: ${exactSaoPauloDateTime(evidence.signed_at)} (America/Sao_Paulo)`,\n    `Instante oficial UTC: ${evidence.signed_at || ''}`,
           )
 
-          # 2) Public signing: one authoritative PostgreSQL timestamp for every write/evidence field.
           replace_once(
               'api/payroll-public.ts',
               "      const signedAt = new Date().toISOString();",
               "      const { data: authoritativeNow, error: authoritativeNowError } = await service.rpc('payroll_authoritative_now');\n      if (authoritativeNowError || !authoritativeNow) throw new Error('authoritative_signature_clock_failed');\n      const signedAt = String(authoritativeNow);",
           )
 
-          # 3) Admin API: dossier is a signed cycle, payroll competence + next-month benefits.
           admin_path = 'api/payroll-admin.ts'
           signed_urls_marker = "    if (action === 'signed-urls') {"
           dossier_action = r'''    if (action === 'dossier-signed-documents') {
@@ -163,7 +160,6 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
     if (action === 'signed-urls') {'''
           replace_once(admin_path, signed_urls_marker, dossier_action)
 
-          # 4) Admin UI: merge every signed document and its certificate into the employee dossier.
           ui_path = 'src/components/payroll/PayrollPortalAdminModule.tsx'
           old_dossier = r'''  const dossier = async (row: any) => {
     if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
@@ -218,3 +214,5 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
           git add -A
           git commit -m "fix(payroll): horário oficial e dossiê com VR VT"
           git push
+
+# trigger: 2026-09-01-authoritative-clock
