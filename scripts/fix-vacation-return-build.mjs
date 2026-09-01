@@ -3,18 +3,14 @@ import fs from 'node:fs';
 const path = 'src/pages/AvisoFeriasPage.tsx';
 let source = fs.readFileSync(path, 'utf8');
 
-if (source.includes('const calcPeriodoFerias = () => {')) {
-  console.log('[ferias] regra de fim/retorno ja corrigida');
-  process.exit(0);
-}
-
 const replaceOnce = (oldText, newText, label) => {
   const count = source.split(oldText).length - 1;
   if (count !== 1) throw new Error(`[ferias] ${label}: esperado 1 trecho, encontrado ${count}`);
   source = source.replace(oldText, newText);
 };
 
-replaceOnce(
+if (!source.includes('const calcPeriodoFerias = () => {')) {
+  replaceOnce(
 `const addDaysISO = (value: string, days: number) => {
   const date = toDateOnly(value);
   date.setDate(date.getDate() + days);
@@ -36,9 +32,9 @@ const nextWeekdayISO = (value: string) => {
   return value;
 };`,
 'helper proximo dia util',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `  const calcRetorno = () => {
     if (!inicioFerias) return '';
     return addDaysISO(inicioFerias, Math.max(0, diasFerias - 1));
@@ -52,55 +48,55 @@ replaceOnce(
   };
   const { fim: fimFerias, retorno } = calcPeriodoFerias();`,
 'calculo do periodo',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `    if (!retorno) { toast.error('Informe o periodo de ferias'); return null; }`,
 `    if (!fimFerias || !retorno) { toast.error('Informe o periodo de ferias'); return null; }`,
 'validacao do periodo',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `      const statusAtual = feriasPeriodoStatus(inicioFerias, retorno);
       const observacao = \`Ferias de \${diasFerias} dias. Inicio: \${formatDate(inicioFerias)}. Fim/retorno previsto: \${formatDate(retorno)}.\`;`,
 `      const statusAtual = feriasPeriodoStatus(inicioFerias, fimFerias);
       const observacao = \`Ferias de \${diasFerias} dias. Inicio: \${formatDate(inicioFerias)}. Fim: \${formatDate(fimFerias)}. Retorno previsto: \${formatDate(retorno)}.\`;`,
 'status e observacao',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `        periodo_gozo_fim: retorno,
         data_retorno: retorno,`,
 `        periodo_gozo_fim: fimFerias,
         data_retorno: retorno,`,
 'persistencia fim/retorno',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `[FERIAS] Inicio: \${inicioFerias} | Fim/retorno previsto: \${retorno} | \${diasFerias} dias | Status: \${statusAtual?.label || 'Ferias marcadas'}`,
 `[FERIAS] Inicio: \${inicioFerias} | Fim: \${fimFerias} | Retorno: \${retorno} | \${diasFerias} dias | Status: \${statusAtual?.label || 'Ferias marcadas'}`,
 'historico do funcionario',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `      inicioFerias && retorno ? { inicio: inicioFerias, fim: retorno, dias: diasFerias } : undefined,`,
 `      inicioFerias && fimFerias ? { inicio: inicioFerias, fim: fimFerias, dias: diasFerias } : undefined,`,
 'rascunho do periodo',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `            <div><span className="text-xs text-muted-foreground block">Fim/retorno</span><strong>{fer.fim ? formatDate(fer.fim) : 'Sem data'}</strong></div>`,
 `            <div><span className="text-xs text-muted-foreground block">Fim das férias</span><strong>{fer.fim ? formatDate(fer.fim) : 'Sem data'}</strong></div>`,
 'rotulo fim das ferias',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">`,
 `          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">`,
 'grid de datas',
-);
+  );
 
-replaceOnce(
+  replaceOnce(
 `            <div><label className="text-xs text-muted-foreground block mb-1">Retorno Previsto</label>
               <p className="text-sm font-medium bg-muted/50 px-3 py-2 rounded-md">{retorno ? formatDate(retorno) : '—'}</p></div>`,
 `            <div><label className="text-xs text-muted-foreground block mb-1">Fim das Férias</label>
@@ -108,7 +104,23 @@ replaceOnce(
             <div><label className="text-xs text-muted-foreground block mb-1">Retorno ao Trabalho</label>
               <p className="text-sm font-medium bg-muted/50 px-3 py-2 rounded-md">{retorno ? formatDate(retorno) : '—'}</p></div>`,
 'campos fim e retorno',
-);
+  );
+}
+
+if (!source.includes("label: 'A vencer'")) {
+  replaceOnce(
+`  if (raw === 'em dia') {
+    return { code: 'em_dia', status: 'em dia', label: 'Em dia', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
+  }`,
+`  if (raw === 'em dia') {
+    if (fer.periodoAtual >= 1) {
+      return { code: 'atencao', status: 'atenção', label: 'A vencer', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
+    }
+    return { code: 'em_dia', status: 'em dia', label: 'Em dia', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
+  }`,
+'status a vencer apos periodo adquirido',
+  );
+}
 
 fs.writeFileSync(path, source, 'utf8');
-console.log('[ferias] regra de fim e retorno corrigida com sucesso');
+console.log('[ferias] regras de retorno e situacao unificadas');
