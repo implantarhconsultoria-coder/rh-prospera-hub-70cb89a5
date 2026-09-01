@@ -1,0 +1,220 @@
+name: Patch Payroll Authoritative Time and Dossier
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-payroll-authoritative-time-dossier.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Patch payroll signature time and dossier
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected 1 match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # 1) Certificate: exact Sao Paulo rendering from canonical DB timestamp.
+          server_path = 'src/server/payrollServer.ts'
+          marker = "export const buildCertificatePdf = (evidence: Record<string, any>) => {\n  const lines = ["
+          helper = r'''const exactSaoPauloDateTime = (value: unknown) => {
+  const raw = String(value || '').trim();
+  const date = new Date(raw);
+  if (!raw || Number.isNaN(date.getTime())) return raw;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date).reduce<Record<string,string>>((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const fraction = (raw.match(/\.(\d{1,6})/)?.[1] || String(date.getUTCMilliseconds()).padStart(3, '0')).padEnd(3, '0');
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}.${fraction}`;
+};
+
+export const buildCertificatePdf = (evidence: Record<string, any>) => {
+  const lines = ['''
+          replace_once(server_path, marker, helper)
+          replace_once(
+              server_path,
+              "    `Data/hora: ${evidence.signed_at || ''} (America/Sao_Paulo)`,",
+              "    `Data/hora oficial: ${exactSaoPauloDateTime(evidence.signed_at)} (America/Sao_Paulo)`,\n    `Instante oficial UTC: ${evidence.signed_at || ''}`,
+          )
+
+          # 2) Public signing: one authoritative PostgreSQL timestamp for every write/evidence field.
+          replace_once(
+              'api/payroll-public.ts',
+              "      const signedAt = new Date().toISOString();",
+              "      const { data: authoritativeNow, error: authoritativeNowError } = await service.rpc('payroll_authoritative_now');\n      if (authoritativeNowError || !authoritativeNow) throw new Error('authoritative_signature_clock_failed');\n      const signedAt = String(authoritativeNow);",
+          )
+
+          # 3) Admin API: dossier is a signed cycle, payroll competence + next-month benefits.
+          admin_path = 'api/payroll-admin.ts'
+          signed_urls_marker = "    if (action === 'signed-urls') {"
+          dossier_action = r'''    if (action === 'dossier-signed-documents') {
+      const sourceDoc = await loadDocument(service, String(body.document_id || ''));
+      if (!sourceDoc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
+
+      const benefitTypes = new Set(['BENEFICIO_VR', 'BENEFICIO_VT', 'BENEFICIO_VR_VT']);
+      const payrollTypes = new Set(['HOLERITE', 'ADIANTAMENTO']);
+      const shiftCompetencia = (value: string, delta: number) => {
+        const match = /^(\d{4})-(\d{2})$/.exec(String(value || ''));
+        if (!match) return String(value || '');
+        const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + delta, 1));
+        return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      };
+      const sourceIsBenefit = benefitTypes.has(String(sourceDoc.document_type || ''));
+      const payrollCompetencia = sourceIsBenefit ? shiftCompetencia(sourceDoc.competencia, -1) : sourceDoc.competencia;
+      const benefitCompetencia = sourceIsBenefit ? sourceDoc.competencia : shiftCompetencia(sourceDoc.competencia, 1);
+
+      const { data: candidateDocs, error: candidateError } = await service
+        .from('payroll_documents')
+        .select('id,document_type,competencia,storage_path,original_filename,extracted_data,document_version')
+        .eq('company_id', sourceDoc.company_id)
+        .eq('employee_id', sourceDoc.employee_id)
+        .in('competencia', Array.from(new Set([payrollCompetencia, benefitCompetencia])));
+      if (candidateError) throw candidateError;
+
+      const scopedDocs = (candidateDocs || []).filter((doc: any) =>
+        (payrollTypes.has(String(doc.document_type || '')) && doc.competencia === payrollCompetencia)
+        || (benefitTypes.has(String(doc.document_type || '')) && doc.competencia === benefitCompetencia),
+      );
+      const documentIds = scopedDocs.map((doc: any) => doc.id);
+      if (!documentIds.length) return sendJson(res, {
+        ok: true, items: [], payroll_competencia: payrollCompetencia, benefit_competencia: benefitCompetencia,
+      });
+
+      const [{ data: signatures, error: signatureError }, { data: receipts, error: receiptError }] = await Promise.all([
+        service.from('payroll_signatures')
+          .select('id,document_id,certificate_path,signed_at')
+          .in('document_id', documentIds)
+          .order('signed_at', { ascending: true }),
+        service.from('payroll_payment_receipts')
+          .select('document_id,storage_path,status')
+          .in('document_id', documentIds)
+          .eq('status', 'PAGAMENTO_CONFIRMADO'),
+      ]);
+      if (signatureError) throw signatureError;
+      if (receiptError) throw receiptError;
+
+      const docById = new Map(scopedDocs.map((doc: any) => [doc.id, doc]));
+      const receiptByDoc = new Map((receipts || []).map((receipt: any) => [receipt.document_id, receipt]));
+      const typeOrder: Record<string, number> = { HOLERITE: 10, ADIANTAMENTO: 20, BENEFICIO_VR: 30, BENEFICIO_VT: 40, BENEFICIO_VR_VT: 50 };
+      const typeLabel: Record<string, string> = {
+        HOLERITE: 'Holerite', ADIANTAMENTO: 'Adiantamento', BENEFICIO_VR: 'Recibo VR',
+        BENEFICIO_VT: 'Recibo VT', BENEFICIO_VR_VT: 'Recibo VR + VT',
+      };
+
+      const signedRows = (signatures || [])
+        .map((signature: any) => ({ signature, doc: docById.get(signature.document_id) as any }))
+        .filter((entry: any) => entry.doc?.storage_path)
+        .sort((a: any, b: any) => {
+          const typeDiff = (typeOrder[a.doc.document_type] || 99) - (typeOrder[b.doc.document_type] || 99);
+          if (typeDiff) return typeDiff;
+          return new Date(a.signature.signed_at).getTime() - new Date(b.signature.signed_at).getTime();
+        });
+
+      const items = [];
+      for (const { signature, doc } of signedRows) {
+        const receipt = receiptByDoc.get(doc.id) as any;
+        items.push({
+          document_id: doc.id,
+          document_type: doc.document_type,
+          label: typeLabel[doc.document_type] || doc.document_type,
+          competencia: doc.competencia,
+          signed_at: signature.signed_at,
+          document_version: doc.document_version,
+          document_url: await signedUrl(service, doc.storage_path, 900),
+          certificate_url: signature.certificate_path ? await signedUrl(service, signature.certificate_path, 900) : null,
+          receipt_url: receipt?.storage_path ? await signedUrl(service, receipt.storage_path, 900) : null,
+          document_includes_bank_proof: doc?.extracted_data?.includes_bank_proof === true,
+        });
+      }
+
+      return sendJson(res, {
+        ok: true,
+        items,
+        payroll_competencia: payrollCompetencia,
+        benefit_competencia: benefitCompetencia,
+      });
+    }
+
+    if (action === 'signed-urls') {'''
+          replace_once(admin_path, signed_urls_marker, dossier_action)
+
+          # 4) Admin UI: merge every signed document and its certificate into the employee dossier.
+          ui_path = 'src/components/payroll/PayrollPortalAdminModule.tsx'
+          old_dossier = r'''  const dossier = async (row: any) => {
+    if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
+    try {
+      const urls = await apiCall('signed-urls', { document_id: row.document_id });
+      if (!urls.holerite_url || !urls.certificate_url) throw new Error('Dossiê incompleto: documento ou certificado ausente.');
+      const sources: Array<{url:string;label:string}> = [
+        { url: urls.holerite_url, label: 'Recibo + comprovante' },
+        { url: urls.certificate_url, label: 'Certificado' },
+      ];
+      if (!urls.document_includes_bank_proof && urls.receipt_url) sources.push({ url: urls.receipt_url, label: 'Comprovante' });
+      await mergePdfUrls(sources, `DOSSIE_PAGAMENTO_${safeFile(row.employee_name || 'FUNCIONARIO')}_${competencia}.pdf`);
+    } catch (error: any) { toast.error(error.message); }
+  };'''
+          new_dossier = r'''  const dossier = async (row: any) => {
+    if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
+    try {
+      const dossierData = await apiCall('dossier-signed-documents', { document_id: row.document_id });
+      const items = Array.isArray(dossierData.items) ? dossierData.items : [];
+      if (!items.length) throw new Error('Dossiê incompleto: nenhuma assinatura concluída encontrada.');
+      const sources: Array<{url:string;label:string}> = [];
+      for (const item of items) {
+        if (item.document_url) sources.push({
+          url: item.document_url,
+          label: `${item.label || item.document_type} ${item.competencia || ''}`.trim(),
+        });
+        if (!item.document_includes_bank_proof && item.receipt_url) sources.push({
+          url: item.receipt_url,
+          label: `Comprovante ${item.competencia || ''}`.trim(),
+        });
+        if (item.certificate_url) sources.push({
+          url: item.certificate_url,
+          label: `Certificado ${item.label || item.document_type} ${item.competencia || ''}`.trim(),
+        });
+      }
+      if (!sources.length) throw new Error('Dossiê incompleto: arquivos assinados indisponíveis.');
+      await mergePdfUrls(sources, `DOSSIE_ASSINATURAS_${safeFile(row.employee_name || 'FUNCIONARIO')}_${dossierData.payroll_competencia || competencia}.pdf`);
+    } catch (error: any) { toast.error(error.message); }
+  };'''
+          replace_once(ui_path, old_dossier, new_dossier)
+
+      - name: Install and build
+        run: |
+          npm install --legacy-peer-deps --no-package-lock --no-audit --no-fund
+          npm run build
+
+      - name: Commit production patch and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/patch-payroll-authoritative-time-dossier.yml
+          git add -A
+          git commit -m "fix(payroll): horário oficial e dossiê com VR VT"
+          git push
