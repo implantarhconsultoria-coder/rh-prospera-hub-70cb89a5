@@ -1,3 +1,4 @@
+import './fix-goiania-he60-build.mjs';
 import fs from 'node:fs';
 
 const path = 'src/pages/FechamentoPage.tsx';
