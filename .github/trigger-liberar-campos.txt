@@ -1,1 +1,1 @@
-liberar todos os campos manuais sem sobrescrita automatica
+Executar agora a liberacao completa de empresa, funcao, salario e insalubridade sem sobrescrita automatica.
