@@ -4,9 +4,41 @@ import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/emp
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
 export const TOPAC_GYN_COMPANY_ID = 'c7a040f2-34b3-42a6-8a3a-f4bb64140ec6';
+export const TOPAC_GYN_CNPJ = '50973087000208';
 
-export const getHoraExtraSemanalPercentual = (companyId?: string | null) =>
-  companyId === TOPAC_GYN_COMPANY_ID ? 60 : 50;
+type CompanyHourRuleRef = string | {
+  id?: string | null;
+  codigo?: string | null;
+  name?: string | null;
+  nome?: string | null;
+  city?: string | null;
+  cidade?: string | null;
+  cnpj?: string | null;
+};
+
+const normalizeCompanyRuleText = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+export const isTopacGoiania = (company?: CompanyHourRuleRef | null) => {
+  if (!company) return false;
+  const refs = typeof company === 'string'
+    ? [company]
+    : [company.id, company.codigo, company.name, company.nome, company.city, company.cidade, company.cnpj];
+  const raw = refs.filter(Boolean).join(' ');
+  const text = normalizeCompanyRuleText(raw);
+  const digits = raw.replace(/\D/g, '');
+
+  return refs.some((ref) => ref === TOPAC_GYN_COMPANY_ID)
+    || text.includes('topac-gyn')
+    || text.includes('topac filial goiania')
+    || text.includes('aparecida de goiania')
+    || digits.includes(TOPAC_GYN_CNPJ);
+};
+
+export const getHoraExtraSemanalPercentual = (company?: CompanyHourRuleRef | null) =>
+  isTopacGoiania(company) ? 60 : 50;
 
 export const valorHora = (salario: number) => salario / 220;
 
@@ -133,6 +165,7 @@ type PayrollOptions = {
   comissaoPct: number;
   domingosFeriados?: number;
   dependentes?: number;
+  horaExtraSemanalPct?: number;
 };
 
 export type PayrollBreakdown = {
@@ -188,7 +221,7 @@ export const calcPayrollBreakdown = (
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const valorHora = (emp.salarioBase + insVal + periculosidadeVal) / 220;
-  const heSemanalPct = getHoraExtraSemanalPercentual(emp.companyId);
+  const heSemanalPct = opts.horaExtraSemanalPct ?? getHoraExtraSemanalPercentual(emp.companyId);
   const he50Val = round2(valorHora * (1 + heSemanalPct / 100) * (entry.he50 || 0));
   const he100Val = round2(valorHora * 2 * (entry.he100 || 0));
   const totalHE = round2(he50Val + he100Val);
@@ -258,11 +291,11 @@ export const calcPayrollBreakdown = (
   };
 };
 
-export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22) => {
+export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22, horaExtraSemanalPct?: number) => {
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const baseHora = emp.salarioBase + insVal + periculosidadeVal;
-  const he50Val = calcHE50(baseHora, entry.he50, getHoraExtraSemanalPercentual(emp.companyId));
+  const he50Val = calcHE50(baseHora, entry.he50, horaExtraSemanalPct ?? getHoraExtraSemanalPercentual(emp.companyId));
   const he100Val = calcHE100(baseHora, entry.he100);
   const totalHE = he50Val + he100Val;
   const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
