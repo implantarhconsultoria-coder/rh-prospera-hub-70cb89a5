@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
+import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual, getHoraExtraSemanalPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import type { Employee, MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
@@ -105,11 +105,12 @@ const RelatorioImpressaoPage: React.FC = () => {
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     const fechamento = getFechamento(company.id, competencia);
     const comissaoPct = getComissaoPercentual(company);
+    const heSemanalPct = getHoraExtraSemanalPercentual(company);
     const totals = emptyTotals();
 
     const rows = companyEmployees.map(emp => {
       const entry = companyEntries.find(e => e.employeeId === emp.id) || defaultEntry(emp, competencia, diasUteis);
-      const calc = calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct });
+      const calc = calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct, horaExtraSemanalPct: heSemanalPct });
 
       totals.proventos += calc.proventos;
       totals.descontos += calc.descontosLegais + calc.descontosOperacionais + calc.adiantamento + calc.descontosDiversos;
@@ -130,7 +131,7 @@ const RelatorioImpressaoPage: React.FC = () => {
       return { emp, entry, calc };
     });
 
-    return { company, fechamento, rows, totals };
+    return { company, fechamento, rows, totals, heSemanalPct };
   }), [selectedCompanies, entries, employees, competencia, diasUteis, domingosFeriados, getFechamento]);
 
   const grandTotals = useMemo(() => companyReports.reduce((acc, report) => {
@@ -215,7 +216,7 @@ const RelatorioImpressaoPage: React.FC = () => {
         </div>
 
         <div id="fech-print-area" className="max-w-[297mm] mx-auto px-5 py-4 print:px-0 print:py-0">
-          {companyReports.map(({ company, fechamento, rows, totals }) => (
+          {companyReports.map(({ company, fechamento, rows, totals, heSemanalPct }) => (
             <section key={company.id} className="company-report-page mb-5">
               <table className="fechamento-table">
                 <colgroup>
@@ -230,14 +231,21 @@ const RelatorioImpressaoPage: React.FC = () => {
                     </th>
                   </tr>
                   <tr className="bg-gray-200">
-                    {columns.map(column => (
-                      <th
-                        key={column.label}
-                        className={`border border-gray-400 px-1 py-1 font-semibold ${column.numeric ? 'numeric' : 'text-left'}`}
-                      >
-                        {column.label}
-                      </th>
-                    ))}
+                    {columns.map(column => {
+                      const displayLabel = column.label === 'HE50 qtd'
+                        ? `HE${heSemanalPct} qtd`
+                        : column.label === 'HE50 valor'
+                          ? `HE${heSemanalPct} valor`
+                          : column.label;
+                      return (
+                        <th
+                          key={column.label}
+                          className={`border border-gray-400 px-1 py-1 font-semibold ${column.numeric ? 'numeric' : 'text-left'}`}
+                        >
+                          {displayLabel}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
