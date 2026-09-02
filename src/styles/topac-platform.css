@@ -1,164 +1,470 @@
-:root {
-  --background: 222 47% 5%;
-  --foreground: 213 55% 91%;
-  --card: 222 44% 7%;
-  --card-foreground: 213 55% 91%;
-  --popover: 222 44% 7%;
-  --popover-foreground: 213 55% 91%;
-  --primary: 185 100% 50%;
-  --primary-foreground: 222 47% 5%;
-  --secondary: 222 38% 11%;
-  --secondary-foreground: 213 55% 91%;
-  --muted: 222 38% 11%;
-  --muted-foreground: 212 30% 64%;
-  --accent: 314 83% 64%;
-  --accent-foreground: 222 47% 5%;
-  --border: 185 82% 46% / 0.22;
-  --input: 185 82% 46% / 0.20;
-  --ring: 185 100% 50%;
-  --sidebar-background: 222 52% 5%;
-  --sidebar-foreground: 214 40% 82%;
-  --sidebar-primary: 185 100% 50%;
-  --sidebar-primary-foreground: 222 47% 5%;
-  --sidebar-accent: 222 38% 13%;
-  --sidebar-accent-foreground: 213 55% 91%;
-  --sidebar-border: 185 82% 46% / 0.22;
+/* TOPAC RH PRO — Design System interno
+   Escopo visual apenas. Nenhuma regra de negócio é definida neste arquivo. */
+
+.topac-neon-skin {
+  --background: 225 40% 3%;
+  --foreground: 0 0% 96%;
+  --card: 225 30% 5%;
+  --card-foreground: 0 0% 96%;
+  --popover: 225 32% 5%;
+  --popover-foreground: 0 0% 96%;
+  --primary: 43 100% 50%;
+  --primary-foreground: 230 45% 4%;
+  --secondary: 270 38% 12%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 228 22% 10%;
+  --muted-foreground: 230 8% 60%;
+  --accent: 271 91% 60%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 4 82% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 111 63% 46%;
+  --success-foreground: 0 0% 100%;
+  --warning: 32 100% 50%;
+  --warning-foreground: 230 45% 4%;
+  --border: 272 38% 23%;
+  --input: 228 19% 16%;
+  --ring: 271 91% 60%;
+  --sidebar-background: 225 45% 2%;
+  --sidebar-foreground: 0 0% 86%;
+  --sidebar-primary: 271 91% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 270 34% 12%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-border: 272 38% 20%;
+  --topac-black: #020609;
+  --topac-panel: #06090d;
+  --topac-panel-2: #090c11;
+  --topac-border: rgba(155, 50, 255, .28);
+  --topac-border-soft: rgba(155, 50, 255, .16);
+  --topac-purple: #9b32ff;
+  --topac-purple-soft: #b85cff;
+  --topac-gold: #f4b400;
+  --topac-yellow: #ffc400;
+  --topac-orange: #ff8a00;
+  --topac-white: #f7f7f8;
+  --topac-text-muted: #8b8792;
+  --topac-glow-purple: 0 0 22px rgba(155, 50, 255, .12);
+  color-scheme: dark;
+  min-height: 100vh;
+  color: var(--topac-white);
+  background: var(--topac-black);
 }
 
-html,
-body,
-#root {
-  min-height: 100%;
-  background: #030712;
+body.topac-neon-body {
+  color-scheme: dark;
+  background: #020609;
 }
 
-body {
-  color: hsl(var(--foreground));
-  background:
-    radial-gradient(circle at 12% 18%, rgba(168, 85, 247, .16), transparent 30%),
-    radial-gradient(circle at 88% 10%, rgba(20, 184, 166, .14), transparent 28%),
-    radial-gradient(circle at 75% 86%, rgba(56, 189, 248, .10), transparent 32%),
-    linear-gradient(135deg, #12081d 0%, #071828 48%, #073637 100%);
-}
-
-body::before {
+body.topac-neon-body::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: .24;
-  background-image:
-    radial-gradient(circle, rgba(125, 211, 252, .42) 0 1px, transparent 1.5px),
-    linear-gradient(120deg, transparent 0 18%, rgba(125, 211, 252, .10) 18.2%, transparent 18.6% 100%);
-  background-size: 72px 72px, 240px 240px;
-}
-
-.card-premium,
-.rounded-2xl.bg-card,
-.rounded-xl.bg-card,
-.rounded-lg.bg-card,
-aside[class*='bg-card'],
-header[class*='bg-card'],
-[class*='bg-card/'] {
-  border-color: rgba(125, 211, 252, .18) !important;
-  background: linear-gradient(145deg, rgba(15, 23, 42, .72), rgba(15, 118, 110, .16)) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 18px 55px rgba(2, 6, 23, .24) !important;
-  backdrop-filter: blur(18px);
-}
-
-aside[class*='fixed'][class*='h-screen'] {
-  border-color: rgba(125, 211, 252, .16) !important;
   background:
-    radial-gradient(circle at 88% 8%, rgba(217, 70, 239, .18), transparent 30%),
-    linear-gradient(180deg, rgba(3, 7, 18, .96), rgba(7, 24, 40, .94)) !important;
+    radial-gradient(circle at 74% -12%, rgba(155, 50, 255, .10), transparent 29%),
+    radial-gradient(circle at 20% 110%, rgba(244, 180, 0, .04), transparent 25%),
+    #020609;
 }
 
-header[class*='sticky'][class*='top-0'],
-.admin-command-topbar {
-  border-color: rgba(125, 211, 252, .16) !important;
-  background: rgba(5, 10, 20, .78) !important;
-  backdrop-filter: blur(18px);
+.topac-neon-skin main {
+  background:
+    radial-gradient(circle at 83% -10%, rgba(155, 50, 255, .075), transparent 24%),
+    linear-gradient(180deg, #020609 0%, #03070b 100%);
 }
 
-button[class*='bg-primary'],
-a[class*='bg-primary'] {
-  background: linear-gradient(100deg, #34d399, #22d3ee, #e879f9) !important;
-  color: #06111f !important;
+.topac-neon-skin main > div {
+  position: relative;
+}
+
+/* Tipografia */
+.topac-neon-skin main h1,
+.topac-neon-skin main h2,
+.topac-neon-skin main h3,
+.topac-neon-skin main h4,
+.topac-neon-skin main h5,
+.topac-neon-skin main h6 {
+  color: #f8f8fa;
+  letter-spacing: -.015em;
+}
+
+.topac-neon-skin main h1 {
   font-weight: 800;
 }
 
-input,
-select,
-textarea,
-[role='combobox'] {
-  border-color: rgba(125, 211, 252, .20) !important;
-  background-color: rgba(15, 23, 42, .58) !important;
-  color: hsl(var(--foreground)) !important;
+.topac-neon-skin main h2,
+.topac-neon-skin main h3 {
+  font-weight: 700;
 }
 
-main h1,
-main h2,
-main h3 {
-  color: #f8fafc;
+.topac-neon-skin .text-muted-foreground {
+  color: #8e8995 !important;
 }
 
-main p,
-main span,
-main td,
-main th,
-main label {
-  border-color: rgba(125, 211, 252, .14);
+.topac-neon-skin .text-foreground,
+.topac-neon-skin .text-card-foreground {
+  color: #f5f5f6 !important;
 }
 
+/* Cards, KPIs e painéis */
+.topac-neon-skin .card-premium,
+.topac-neon-skin main .bg-card,
+.topac-neon-skin main [class*='bg-card/'] {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(155, 50, 255, .26) !important;
+  border-radius: 11px !important;
+  background:
+    linear-gradient(135deg, rgba(155, 50, 255, .035), transparent 34%),
+    linear-gradient(180deg, rgba(8, 12, 17, .98), rgba(4, 8, 12, .98)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .025),
+    0 14px 38px rgba(0, 0, 0, .26),
+    0 0 22px rgba(155, 50, 255, .035) !important;
+}
+
+.topac-neon-skin .card-premium:hover,
+.topac-neon-skin main .bg-card:hover {
+  border-color: rgba(184, 92, 255, .40) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .035),
+    0 16px 42px rgba(0, 0, 0, .32),
+    0 0 26px rgba(155, 50, 255, .065) !important;
+}
+
+.topac-neon-skin main div.rounded-2xl.border,
+.topac-neon-skin main div.rounded-xl.border,
+.topac-neon-skin main div.rounded-lg.border {
+  border-color: rgba(155, 50, 255, .22);
+}
+
+.topac-neon-skin .gradient-primary {
+  color: #fff !important;
+  border: 1px solid rgba(155, 50, 255, .34) !important;
+  background:
+    linear-gradient(90deg, rgba(155, 50, 255, .18), transparent 27%),
+    linear-gradient(115deg, #09080d 0%, #070a0e 58%, rgba(244, 180, 0, .065) 100%) !important;
+  box-shadow: inset 3px 0 0 #f4b400, 0 16px 42px rgba(0, 0, 0, .30) !important;
+}
+
+.topac-neon-skin .gradient-primary.text-primary-foreground,
+.topac-neon-skin .gradient-primary [class*='text-primary-foreground'] {
+  color: #fff !important;
+}
+
+.topac-neon-skin .gradient-primary [class*='bg-primary-foreground'] {
+  background: rgba(155, 50, 255, .15) !important;
+}
+
+/* Tabelas / grids */
+.topac-neon-skin main table {
+  width: 100%;
+  border: 1px solid rgba(155, 50, 255, .20);
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #05090d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .018);
+}
+
+.topac-neon-skin main thead {
+  background: linear-gradient(90deg, rgba(155, 50, 255, .11), rgba(244, 180, 0, .035));
+}
+
+.topac-neon-skin main thead tr,
+.topac-neon-skin main tbody tr,
+.topac-neon-skin main tfoot tr {
+  border-color: rgba(155, 50, 255, .14) !important;
+}
+
+.topac-neon-skin main th {
+  height: 42px;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+  color: #9c96a5 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(155, 50, 255, .15);
+}
+
+.topac-neon-skin main td {
+  color: #dedbe2;
+  border-bottom: 1px solid rgba(155, 50, 255, .105);
+}
+
+.topac-neon-skin main tbody tr {
+  background: rgba(4, 8, 12, .78);
+  transition: background-color .14s ease, box-shadow .14s ease;
+}
+
+.topac-neon-skin main tbody tr:nth-child(even) {
+  background: rgba(8, 10, 15, .90);
+}
+
+.topac-neon-skin main tbody tr:hover {
+  background: linear-gradient(90deg, rgba(155, 50, 255, .10), rgba(244, 180, 0, .025)) !important;
+  box-shadow: inset 3px 0 0 rgba(155, 50, 255, .65);
+}
+
+.topac-neon-skin main tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.topac-neon-skin main tfoot {
+  background: #080a0f !important;
+}
+
+/* Formulários */
+.topac-neon-skin main input:not([type='checkbox']):not([type='radio']):not([type='range']),
+.topac-neon-skin main select,
+.topac-neon-skin main textarea,
+.topac-neon-skin main [role='combobox'],
+.topac-neon-skin main [data-radix-select-trigger] {
+  border: 1px solid rgba(155, 50, 255, .24) !important;
+  border-radius: 8px !important;
+  background: #070a0e !important;
+  color: #f3f1f5 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .018);
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.topac-neon-skin main input::placeholder,
+.topac-neon-skin main textarea::placeholder {
+  color: #625e69 !important;
+}
+
+.topac-neon-skin main input:not([type='checkbox']):not([type='radio']):focus,
+.topac-neon-skin main select:focus,
+.topac-neon-skin main textarea:focus,
+.topac-neon-skin main [role='combobox']:focus,
+.topac-neon-skin main [role='combobox'][data-state='open'] {
+  border-color: rgba(184, 92, 255, .75) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(155, 50, 255, .13), 0 0 20px rgba(155, 50, 255, .075) !important;
+}
+
+.topac-neon-skin main label {
+  color: #b5b0bb;
+  font-weight: 500;
+}
+
+.topac-neon-skin main fieldset {
+  border-color: rgba(155, 50, 255, .22) !important;
+  border-radius: 10px;
+  background: rgba(5, 8, 12, .65);
+}
+
+.topac-neon-skin main input[type='checkbox'],
+.topac-neon-skin main input[type='radio'] {
+  accent-color: #9b32ff;
+}
+
+/* Botões */
+.topac-neon-skin main button,
+.topac-neon-skin main a[role='button'] {
+  border-radius: 8px;
+  transition: transform .14s ease, border-color .14s ease, background-color .14s ease, color .14s ease, box-shadow .14s ease;
+}
+
+.topac-neon-skin main button:not(:disabled):active,
+.topac-neon-skin main a[role='button']:active {
+  transform: translateY(1px);
+}
+
+.topac-neon-skin button[class*='bg-primary'],
+.topac-neon-skin a[class*='bg-primary'] {
+  border-color: rgba(255, 196, 0, .78) !important;
+  background: linear-gradient(180deg, #ffc928, #f4b400) !important;
+  color: #110d02 !important;
+  font-weight: 800;
+  box-shadow: 0 0 18px rgba(244, 180, 0, .11), inset 0 1px 0 rgba(255, 255, 255, .26);
+}
+
+.topac-neon-skin button[class*='bg-primary']:hover,
+.topac-neon-skin a[class*='bg-primary']:hover {
+  background: linear-gradient(180deg, #ffd24a, #ffc400) !important;
+  box-shadow: 0 0 24px rgba(244, 180, 0, .16), inset 0 1px 0 rgba(255, 255, 255, .30);
+}
+
+.topac-neon-skin button[class*='bg-secondary'],
+.topac-neon-skin a[class*='bg-secondary'] {
+  border: 1px solid rgba(155, 50, 255, .30) !important;
+  background: linear-gradient(180deg, rgba(155, 50, 255, .15), rgba(155, 50, 255, .08)) !important;
+  color: #f3eaff !important;
+}
+
+.topac-neon-skin button[class*='border-input'],
+.topac-neon-skin a[class*='border-input'] {
+  border-color: rgba(155, 50, 255, .32) !important;
+  background: #080a0f !important;
+  color: #dcd8e1 !important;
+}
+
+.topac-neon-skin button[class*='border-input']:hover,
+.topac-neon-skin a[class*='border-input']:hover {
+  border-color: rgba(244, 180, 0, .52) !important;
+  background: rgba(244, 180, 0, .055) !important;
+  color: #ffd04a !important;
+}
+
+.topac-neon-skin button[class*='bg-destructive'],
+.topac-neon-skin a[class*='bg-destructive'] {
+  box-shadow: 0 0 18px rgba(239, 68, 68, .09);
+}
+
+/* Abas, filtros, paginação e navegação interna */
+.topac-neon-skin main [role='tablist'] {
+  border: 1px solid rgba(155, 50, 255, .18);
+  border-radius: 9px;
+  background: #07090d !important;
+  padding: 3px;
+}
+
+.topac-neon-skin main [role='tab'] {
+  border-radius: 6px !important;
+  color: #8f8996 !important;
+}
+
+.topac-neon-skin main [role='tab'][data-state='active'] {
+  background: linear-gradient(90deg, rgba(155, 50, 255, .20), rgba(155, 50, 255, .10)) !important;
+  color: #ffc400 !important;
+  box-shadow: inset 0 0 0 1px rgba(155, 50, 255, .28), 0 0 14px rgba(155, 50, 255, .06) !important;
+}
+
+.topac-neon-skin main nav[aria-label*='pagination' i] a,
+.topac-neon-skin main nav[aria-label*='pagination' i] button {
+  border-color: rgba(155, 50, 255, .22) !important;
+  background: #07090d !important;
+}
+
+/* Separadores e divisões */
+.topac-neon-skin main hr,
+.topac-neon-skin main [data-orientation='horizontal'] {
+  border-color: rgba(155, 50, 255, .14) !important;
+  background-color: rgba(155, 50, 255, .14) !important;
+}
+
+.topac-neon-skin main .border,
+.topac-neon-skin main .border-b,
+.topac-neon-skin main .border-t,
+.topac-neon-skin main .border-l,
+.topac-neon-skin main .border-r {
+  border-color: rgba(155, 50, 255, .17);
+}
+
+/* Métricas e números */
+.topac-neon-skin .card-premium > p:last-child,
+.topac-neon-skin .card-premium strong,
+.topac-neon-skin main [class*='font-bold'][class*='text-2xl'],
+.topac-neon-skin main [class*='font-bold'][class*='text-xl'] {
+  text-shadow: 0 0 18px rgba(155, 50, 255, .055);
+}
+
+/* Dropdowns, dialogs e popovers renderizados via portal */
+.topac-neon-body [role='dialog'],
+.topac-neon-body [role='menu'],
+.topac-neon-body [role='listbox'],
+.topac-neon-body [data-radix-popper-content-wrapper] > div,
+.topac-neon-body [data-radix-menu-content],
+.topac-neon-body [data-radix-select-content],
+.topac-neon-body [data-radix-popover-content] {
+  border-color: rgba(155, 50, 255, .32) !important;
+  background: #06090d !important;
+  color: #f3f1f5 !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .62), 0 0 34px rgba(155, 50, 255, .09) !important;
+}
+
+.topac-neon-body [role='option'][data-highlighted],
+.topac-neon-body [role='menuitem'][data-highlighted] {
+  background: rgba(155, 50, 255, .15) !important;
+  color: #ffc400 !important;
+}
+
+.topac-neon-body [data-sonner-toaster] [data-sonner-toast] {
+  border: 1px solid rgba(155, 50, 255, .26) !important;
+  background: #080a0e !important;
+  color: #f3f1f5 !important;
+  box-shadow: 0 18px 56px rgba(0, 0, 0, .44) !important;
+}
+
+/* Scrollbars */
+.topac-neon-skin,
+.topac-neon-skin * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 50, 255, .42) rgba(6, 9, 13, .45);
+}
+
+.topac-neon-skin *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.topac-neon-skin *::-webkit-scrollbar-track {
+  background: rgba(6, 9, 13, .45);
+}
+
+.topac-neon-skin *::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(6, 9, 13, .7);
+  border-radius: 999px;
+  background: rgba(155, 50, 255, .44);
+}
+
+.topac-neon-skin *::-webkit-scrollbar-thumb:hover {
+  background: rgba(184, 92, 255, .62);
+}
+
+/* Mobile: mesma identidade sem mudar estrutura funcional */
 @media (max-width: 860px) {
-  body {
-    background:
-      radial-gradient(circle at 16% 0%, rgba(168, 85, 247, .24), transparent 36%),
-      radial-gradient(circle at 92% 2%, rgba(45, 212, 191, .22), transparent 32%),
-      linear-gradient(180deg, #0f172a, #030712 48%, #031f22 100%);
+  .topac-neon-skin {
+    background: #020609;
   }
 
-  header[class*='sticky'][class*='top-0'] {
-    height: 64px !important;
-    border-bottom: 1px solid rgba(125, 211, 252, .18) !important;
-    background: rgba(3, 7, 18, .78) !important;
-    box-shadow: 0 16px 46px rgba(2, 6, 23, .30);
+  .topac-neon-skin header[class*='sticky'][class*='top-0'] {
+    border-bottom: 1px solid rgba(155, 50, 255, .22) !important;
+    background: rgba(2, 6, 9, .94) !important;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, .34);
   }
 
-  main[class*='pb-24'],
-  main[class*='pb-20'] {
-    padding-top: 14px !important;
+  .topac-neon-skin main div.rounded-2xl.border,
+  .topac-neon-skin main div.rounded-xl.border,
+  .topac-neon-skin main div.rounded-lg.border,
+  .topac-neon-skin .card-premium {
+    border-color: rgba(155, 50, 255, .23) !important;
+    background: linear-gradient(180deg, #080b10, #05080c) !important;
   }
 
-  main[class*='pb-24'] > div:first-child,
-  main[class*='pb-20'] > *:first-child {
-    position: relative;
-  }
-
-  .aspect-square.rounded-2xl,
-  button.rounded-2xl,
-  .rounded-2xl.border {
-    border-color: rgba(125, 211, 252, .18) !important;
-    background: linear-gradient(145deg, rgba(15, 23, 42, .70), rgba(8, 145, 178, .16)) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 16px 42px rgba(2, 6, 23, .30) !important;
-  }
-
-  aside[class*='fixed'][class*='right-0'] {
-    background: linear-gradient(180deg, rgba(3, 7, 18, .98), rgba(7, 24, 40, .96)) !important;
-    border-color: rgba(125, 211, 252, .18) !important;
+  .topac-neon-skin main table {
+    font-size: 12px;
   }
 }
 
+/* Impressão: preserva documentos/PDFs sem o skin escuro */
 @media print {
-  body,
-  html,
-  #root {
+  body.topac-neon-body,
+  .topac-neon-skin,
+  .topac-neon-skin main {
     background: #fff !important;
     color: #111827 !important;
   }
 
-  body::before {
+  body.topac-neon-body::before {
     display: none !important;
+  }
+
+  .topac-neon-skin main table,
+  .topac-neon-skin main thead,
+  .topac-neon-skin main tbody tr,
+  .topac-neon-skin main input,
+  .topac-neon-skin main select,
+  .topac-neon-skin main textarea,
+  .topac-neon-skin .card-premium,
+  .topac-neon-skin main .bg-card {
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #111827 !important;
   }
 }

@@ -1,0 +1,169 @@
+from pathlib import Path
+
+
+def replace(path: str, old: str, new: str) -> None:
+    p = Path(path)
+    s = p.read_text(encoding='utf-8')
+    if old not in s:
+        raise SystemExit(f'pattern not found in {path}: {old[:180]!r}')
+    p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+
+# Public payroll portal: VR, VT and advance as independent signable document types.
+path = 'api/payroll-public.ts'
+replace(
+    path,
+    """const HOLERITE = 'HOLERITE';
+const BENEFICIO = 'BENEFICIO_VR_VT';""",
+    """const HOLERITE = 'HOLERITE';
+const BENEFICIO = 'BENEFICIO_VR_VT';
+const BENEFICIO_VR = 'BENEFICIO_VR';
+const BENEFICIO_VT = 'BENEFICIO_VT';
+const ADIANTAMENTO = 'ADIANTAMENTO';
+const BENEFIT_TYPES = new Set([BENEFICIO, BENEFICIO_VR, BENEFICIO_VT]);""",
+)
+replace(
+    path,
+    """const documentLabel = (type: string) => type === BENEFICIO ? 'Recibo VR / VT' : 'Holerite';""",
+    """const documentLabel = (type: string) => {
+  if (type === BENEFICIO_VR) return 'Recibo VR';
+  if (type === BENEFICIO_VT) return 'Recibo VT';
+  if (type === BENEFICIO) return 'Recibo VR / VT';
+  if (type === ADIANTAMENTO) return 'Recibo de Adiantamento';
+  return 'Holerite';
+};""",
+)
+replace(
+    path,
+    """  } else if (doc.document_type !== BENEFICIO) {
+    throw Object.assign(new Error('document_not_available'), { status: 404 });
+  }""",
+    """  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO) {
+    throw Object.assign(new Error('document_not_available'), { status: 404 });
+  }""",
+)
+replace(
+    path,
+    """        term_version: doc.document_type === BENEFICIO ? 'benefit-signature-v1' : 'payroll-signature-v1',""",
+    """        term_version: BENEFIT_TYPES.has(doc.document_type) ? 'benefit-signature-v1' : 'payroll-signature-v1',""",
+)
+
+# Employee archive: classify signed VR/VT separately and hide original benefit once imported.
+path = 'api/payroll-archive.ts'
+replace(
+    path,
+    """    .select('id,document_type,competencia,storage_bucket,storage_path,original_filename,created_at,confirmed_at,is_current,confirmed')""",
+    """    .select('id,document_type,competencia,storage_bucket,storage_path,original_filename,created_at,confirmed_at,is_current,confirmed,extracted_data')""",
+)
+replace(
+    path,
+    """  const paidDocuments = new Set((confirmedPayments || []).map((row: any) => row.document_id));""",
+    """  const paidDocuments = new Set((confirmedPayments || []).map((row: any) => row.document_id));
+  const importedSourceIds = new Set((payrollDocs || []).map((doc: any) => doc?.extracted_data?.source_documento_funcionario_id).filter(Boolean));""",
+)
+replace(
+    path,
+    """  const historicalBenefits = (benefitDocs || []).filter((doc: any) => {
+    const flags = benefitFlags([doc.tipo_documento, doc.categoria, doc.descricao, doc.nome_arquivo].filter(Boolean).join(' | '));
+    return flags.vr || flags.vt;
+  });""",
+    """  const historicalBenefits = (benefitDocs || []).filter((doc: any) => {
+    if (importedSourceIds.has(doc.id)) return false;
+    const flags = benefitFlags([doc.tipo_documento, doc.categoria, doc.descricao, doc.nome_arquivo].filter(Boolean).join(' | '));
+    return flags.vr || flags.vt;
+  });""",
+)
+replace(
+    path,
+    """    const isBenefit = doc.document_type === 'BENEFICIO_VR_VT';
+    return {
+      id: `payroll:${doc.id}`,
+      source: 'payroll',
+      category: isBenefit ? 'beneficio' : 'pagamento',
+      benefit_types: isBenefit ? ['VR', 'VT'] : [],
+      label: isBenefit ? 'Recibo VR / VT' : 'Holerite',""",
+    """    const benefitTypes = doc.document_type === 'BENEFICIO_VR' ? ['VR'] : doc.document_type === 'BENEFICIO_VT' ? ['VT'] : doc.document_type === 'BENEFICIO_VR_VT' ? ['VR', 'VT'] : [];
+    const label = doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : 'Holerite';
+    return {
+      id: `payroll:${doc.id}`,
+      source: 'payroll',
+      category: benefitTypes.length ? 'beneficio' : 'pagamento',
+      benefit_types: benefitTypes,
+      label,""",
+)
+
+# Admin payroll panel: validate contact data before sharing and add WhatsApp share action.
+path = 'src/components/payroll/PayrollPortalAdminModule.tsx'
+replace(
+    path,
+    """  const scopedEmployees = useMemo<PayrollEmployeeMatch[]>(() => employees
+    .filter(e => e.companyId === companyId && e.status === 'ativo')
+    .map(e => ({ id: e.id, name: e.name, cpf: e.cpf, cargo: e.cargo, companyId: e.companyId }))
+    .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);""",
+    """  const scopedEmployees = useMemo<PayrollEmployeeMatch[]>(() => employees
+    .filter(e => e.companyId === companyId && e.status === 'ativo')
+    .map(e => ({ id: e.id, name: e.name, cpf: e.cpf, cargo: e.cargo, companyId: e.companyId }))
+    .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);
+
+  const phoneIssues = useMemo(() => employees
+    .filter(e => e.companyId === companyId && e.status === 'ativo')
+    .filter(e => {
+      const phone = digits((e as any).celular || (e as any).telefone);
+      return phone.length < 10 || phone.length > 11;
+    })
+    .sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, companyId]);""",
+)
+replace(
+    path,
+    """  const copyPortal = async () => {
+    try { await navigator.clipboard.writeText(portalUrl); toast.success(`Link do portal da ${company?.name || 'empresa'} copiado.`); }
+    catch { window.prompt('Copie o link do Portal de Holerite desta empresa:', portalUrl); }
+  };""",
+    """  const copyPortal = async () => {
+    try { await navigator.clipboard.writeText(portalUrl); toast.success(`Link do portal da ${company?.name || 'empresa'} copiado.`); }
+    catch { window.prompt('Copie o link do Portal de Holerite desta empresa:', portalUrl); }
+  };
+
+  const sharePortalWhatsApp = () => {
+    const text = `Pessoal, os documentos para conferência e assinatura estão disponíveis no Portal TOPAC RH PRO da ${company?.name || 'empresa'}. Acesse pelo link abaixo e entre com CPF, data de nascimento e os 4 últimos números do celular cadastrado:\n\n${portalUrl}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  };""",
+)
+replace(
+    path,
+    """        <div className=\"flex shrink-0 flex-wrap gap-2\"><Button variant=\"outline\" onClick={()=>void copyPortal()}><Copy className=\"mr-2 h-4 w-4\"/>Copiar link</Button><Button variant=\"outline\" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className=\"mr-2 h-4 w-4\"/>Abrir portal</Button></div>""",
+    """        <div className=\"flex shrink-0 flex-wrap gap-2\"><Button variant=\"outline\" onClick={()=>void copyPortal()}><Copy className=\"mr-2 h-4 w-4\"/>Copiar link</Button><Button variant=\"outline\" onClick={sharePortalWhatsApp}>Compartilhar no WhatsApp</Button><Button variant=\"outline\" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className=\"mr-2 h-4 w-4\"/>Abrir portal</Button></div>""",
+)
+replace(
+    path,
+    """    </div>
+
+    <div className=\"grid gap-3 sm:grid-cols-2 lg:grid-cols-4\">""",
+    """    </div>
+
+    {phoneIssues.length > 0 ? <div className=\"rounded-xl border border-amber-500/30 bg-amber-500/10 p-4\"><div className=\"flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between\"><div><b className=\"text-amber-300\">ATENÇÃO: {phoneIssues.length} funcionário(s) sem telefone/celular válido para o acesso</b><p className=\"mt-1 text-xs text-muted-foreground\">Corrija antes de compartilhar o link. O login usa os 4 últimos números do telefone cadastrado.</p><div className=\"mt-2 flex flex-wrap gap-1\">{phoneIssues.map(e=><Badge key={e.id} variant=\"outline\" className=\"border-amber-500/40 text-amber-200\">{e.name}</Badge>)}</div></div><Button variant=\"outline\" onClick={()=>navigator.clipboard.writeText(phoneIssues.map(e=>e.name).join('\\n'))}>Copiar lista</Button></div></div> : <div className=\"rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300\">✓ Todos os funcionários ativos desta empresa possuem telefone/celular válido para o acesso.</div>}
+
+    <div className=\"grid gap-3 sm:grid-cols-2 lg:grid-cols-4\">""",
+)
+
+# Vacation page: embed printable consolidated programming report.
+path = 'src/pages/AvisoFeriasPage.tsx'
+replace(
+    path,
+    """import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';""",
+    """import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import VacationProgrammingReport from '@/components/ferias/VacationProgrammingReport';""",
+)
+replace(
+    path,
+    """      )}
+
+      <div className=\"card-premium p-4 flex flex-wrap gap-3 items-center\">""",
+    """      )}
+
+      <VacationProgrammingReport />
+
+      <div className=\"card-premium p-4 flex flex-wrap gap-3 items-center\">""",
+)
+
+print('TOPAC payroll/vacation rollout patches applied successfully.')

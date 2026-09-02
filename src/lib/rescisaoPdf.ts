@@ -1,9 +1,10 @@
-import { formatCurrency } from './calculations';
-import { tipoRescisaoLabel, type RescisaoResultado, type TipoRescisao, type AvisoPrevio } from './rescisaoCalc';
 import { jsPDF } from 'jspdf';
+import { buildTopacRhPdfFileName } from './savePdf';
+import { tipoRescisaoLabel, type RescisaoResultado, type TipoRescisao, type AvisoPrevio } from './rescisaoCalc';
 
-interface PdfData {
+export interface RescisaoPdfData {
   empresa: string;
+  empresaCnpj?: string;
   funcionario: string;
   cargo: string;
   cpf: string;
@@ -11,189 +12,226 @@ interface PdfData {
   desligamento: string;
   tipo: TipoRescisao;
   aviso: AvisoPrevio;
-  motivo: string;
-  observacoes: string;
+  motivo?: string;
+  observacoes?: string;
   resultado: RescisaoResultado;
 }
 
-const fmtBR = (value?: string) => {
+const money = (value: unknown) => (Number(value) || 0).toLocaleString('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+});
+
+const dateBr = (value?: string | null) => {
   if (!value) return '-';
-  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
-  return value;
+  const [year, month, day] = String(value).slice(0, 10).split('-');
+  return year && month && day ? `${day}/${month}/${year}` : String(value);
 };
 
-const filePart = (value?: string | number | null) =>
-  String(value || 'documento')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
+export const buildRescisaoPdfName = (empresa?: string, funcionario?: string, competencia?: string) =>
+  buildTopacRhPdfFileName({
+    tipo: 'MemoriaRescisao',
+    nome: funcionario || empresa || 'Funcionario',
+    competencia,
+  });
 
-export const buildRescisaoPdfName = (empresa?: string, funcionario?: string, competencia?: string) => {
-  const ref = competencia ? `REF. ${competencia}` : new Date().toISOString().slice(0, 10);
-  return `${filePart(empresa)} - FICHA DE RESCISAO - ${filePart(funcionario)} - ${ref}.pdf`;
-};
+const escapeHtml = (value: unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
-const css = `
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 24px; }
-  h1 { margin: 0 0 8px; font-size: 16px; }
-  h2 { margin: 14px 0 6px; font-size: 12px; border-bottom: 1px solid #999; padding-bottom: 2px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-  th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; }
-  th { background: #eee; }
-  td.num { text-align: right; }
-  .liq { background: #f4f4f4; padding: 8px; margin-top: 8px; text-align: right; border: 2px solid #000; font-size: 14px; }
-`;
+export const buildRescisaoHtml = (data: RescisaoPdfData) => {
+  const result = data.resultado;
+  const periodRows = result.periodosFerias.map((period) => `
+    <tr>
+      <td>${escapeHtml(dateBr(period.periodoAquisitivoInicio))} a ${escapeHtml(dateBr(period.periodoAquisitivoFim))}</td>
+      <td>${escapeHtml(period.situacao)}${period.revisaoNecessaria ? '<br><small>Revisar</small>' : ''}</td>
+      <td class="n">${period.diasDireito}</td>
+      <td class="n">${period.diasJaUtilizados}</td>
+      <td class="n">${period.diasAbono}</td>
+      <td class="n">${period.saldoDias}</td>
+      <td class="n">${period.avos == null ? '-' : `${period.avos}/12`}</td>
+      <td class="n">${money(period.valorFerias)}</td>
+      <td class="n">${money(period.tercoConstitucional)}</td>
+      <td class="n">${money(period.totalPeriodo)}</td>
+    </tr>`).join('');
 
-export const buildRescisaoHtml = (d: PdfData) => {
-  const r = d.resultado;
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rescisão ${d.funcionario}</title><style>${css}</style></head><body>
-    <h1>Termo de Rescisão do Contrato de Trabalho (TRCT)</h1>
-    <table>
-      <tr><th>Empresa</th><td colspan="3">${d.empresa}</td></tr>
-      <tr><th>Funcionário</th><td>${d.funcionario}</td><th>CPF</th><td>${d.cpf}</td></tr>
-      <tr><th>Cargo</th><td>${d.cargo}</td><th>Admissão</th><td>${d.admissao}</td></tr>
-      <tr><th>Desligamento</th><td>${d.desligamento}</td><th>Tipo</th><td>${tipoRescisaoLabel(d.tipo)}</td></tr>
-      <tr><th>Aviso prévio</th><td>${d.aviso} (${r.diasAviso} dias)</td><th>Motivo</th><td>${d.motivo || '—'}</td></tr>
-    </table>
+  const discounts = result.descontosDetalhados.map((item) => `
+    <tr><td>${escapeHtml(item.descricao)}</td><td>${escapeHtml(item.observacao || '-')}</td><td class="n">${money(item.valor)}</td></tr>`).join('');
 
-    <h2>Verbas Rescisórias</h2>
-    <table>
-      <thead><tr><th>Descrição</th><th>Proventos</th><th>Descontos</th></tr></thead>
-      <tbody>
-        <tr><td>Saldo de salário</td><td class="num">${formatCurrency(r.saldoSalario)}</td><td></td></tr>
-        ${r.avisoPrevioValor > 0 ? `<tr><td>Aviso prévio indenizado</td><td class="num">${formatCurrency(r.avisoPrevioValor)}</td><td></td></tr>` : ''}
-        ${r.feriasVencidas > 0 ? `<tr><td>Férias vencidas</td><td class="num">${formatCurrency(r.feriasVencidas)}</td><td></td></tr>` : ''}
-        ${r.feriasProporcionais > 0 ? `<tr><td>Férias proporcionais</td><td class="num">${formatCurrency(r.feriasProporcionais)}</td><td></td></tr>` : ''}
-        ${r.tercoFerias > 0 ? `<tr><td>1/3 sobre férias</td><td class="num">${formatCurrency(r.tercoFerias)}</td><td></td></tr>` : ''}
-        ${r.decimoTerceiro > 0 ? `<tr><td>13º proporcional</td><td class="num">${formatCurrency(r.decimoTerceiro)}</td><td></td></tr>` : ''}
-        ${r.multaFgts > 0 ? `<tr><td>Multa FGTS</td><td class="num">${formatCurrency(r.multaFgts)}</td><td></td></tr>` : ''}
-        <tr><td>INSS</td><td></td><td class="num">${formatCurrency(r.inss)}</td></tr>
-        <tr><td>IRRF</td><td></td><td class="num">${formatCurrency(r.irrf)}</td></tr>
-        ${r.outrosDescontos > 0 ? `<tr><td>Outros descontos</td><td></td><td class="num">${formatCurrency(r.outrosDescontos)}</td></tr>` : ''}
-      </tbody>
-      <tfoot><tr><th>Totais</th>
-        <th class="num">${formatCurrency(r.totalProventos)}</th>
-        <th class="num">${formatCurrency(r.totalDescontos)}</th>
-      </tr></tfoot>
-    </table>
+  const manualChanges = result.alteracoesManuais.map((item) => `
+    <tr><td>${escapeHtml(item.campo)}</td><td class="n">${money(item.valorAutomatico)}</td><td class="n">${money(item.valorManual)}</td><td>${escapeHtml(item.motivo)}</td></tr>`).join('');
 
-    <table>
-      <tr>
-        <th>FGTS do mês a depositar</th><td class="num">${formatCurrency(r.fgtsMes)}</td>
-      </tr>
-    </table>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Memória de Cálculo da Rescisão</title><style>
+    @page{size:A4 portrait;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:10px;margin:0}h1{font-size:16px;text-align:center;margin:0 0 4px}h2{font-size:12px;margin:14px 0 5px;border-bottom:1px solid #444;padding-bottom:3px}.meta{text-align:center;margin-bottom:10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px}.box{border:1px solid #aaa;padding:6px;margin-bottom:8px;break-inside:avoid}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #aaa;padding:4px;vertical-align:top}th{background:#eee;text-align:left}.n{text-align:right;font-variant-numeric:tabular-nums}.total{font-weight:bold;background:#eee}.warn{border-left:4px solid #d97706;background:#fff7ed;padding:6px;margin:8px 0}.small{font-size:8px;color:#555}tr{break-inside:avoid}
+  </style></head><body>
+    <h1>MEMÓRIA DE CÁLCULO DA RESCISÃO</h1>
+    <div class="meta"><b>${escapeHtml(data.empresa)}</b>${data.empresaCnpj ? ` · CNPJ ${escapeHtml(data.empresaCnpj)}` : ''}</div>
+    <div class="box grid">
+      <div><b>Funcionário:</b> ${escapeHtml(data.funcionario)}</div><div><b>CPF:</b> ${escapeHtml(data.cpf)}</div>
+      <div><b>Cargo:</b> ${escapeHtml(data.cargo)}</div><div><b>Salário-base:</b> ${money(result.auditoria.salarioBaseUtilizado)}</div>
+      <div><b>Admissão:</b> ${dateBr(data.admissao)}</div><div><b>Desligamento:</b> ${dateBr(data.desligamento)}</div>
+      <div><b>Tipo:</b> ${escapeHtml(tipoRescisaoLabel(data.tipo))}</div><div><b>Aviso:</b> ${escapeHtml(data.aviso)} · ${result.diasAviso} dias</div>
+      <div><b>Remuneração de cálculo:</b> ${money(result.baseRemuneracao)}</div><div><b>Projeção do contrato:</b> ${dateBr(result.dataProjetadaContrato)}</div>
+    </div>
+    <div class="warn"><b>PRÉVIA ESTIMATIVA:</b> esta memória é apenas referência interna. O cálculo rescisório oficial, valores finais, encargos e validações são de responsabilidade da contabilidade.</div>
+    ${result.revisaoFeriasNecessaria ? '<div class="warn"><b>Observação:</b> há períodos de férias inferidos ou sem histórico completo. Esta condição não impede o envio para conferência contábil.</div>' : ''}
 
-    <div class="liq"><strong>Líquido a receber:</strong> ${formatCurrency(r.liquido)}</div>
+    <h2>Férias por período aquisitivo</h2>
+    <table><thead><tr><th>Período aquisitivo</th><th>Situação</th><th>Direito</th><th>Usados</th><th>Abono</th><th>Saldo</th><th>Avos</th><th>Férias</th><th>1/3</th><th>Total</th></tr></thead><tbody>${periodRows || '<tr><td colspan="10">Sem períodos calculados.</td></tr>'}</tbody></table>
 
-    ${d.observacoes ? `<h2>Observações</h2><p>${d.observacoes}</p>` : ''}
+    <h2>Verbas</h2>
+    <table><tbody>
+      <tr><td>Saldo de salário (${result.diasSaldoSalario} dias / divisor ${result.divisorSaldoSalario})</td><td class="n">${money(result.saldoSalario)}</td></tr>
+      <tr><td>Aviso-prévio (${result.diasAviso} dias)</td><td class="n">${money(result.avisoPrevioValor)}</td></tr>
+      <tr><td>Férias vencidas</td><td class="n">${money(result.feriasVencidas)}</td></tr>
+      <tr><td>Férias adquiridas em aberto</td><td class="n">${money(result.feriasEmAberto)}</td></tr>
+      <tr><td>Férias proporcionais</td><td class="n">${money(result.feriasProporcionais)}</td></tr>
+      <tr><td>1/3 férias vencidas</td><td class="n">${money(result.tercoFeriasVencidas)}</td></tr>
+      <tr><td>1/3 férias em aberto</td><td class="n">${money(result.tercoFeriasEmAberto)}</td></tr>
+      <tr><td>1/3 férias proporcionais</td><td class="n">${money(result.tercoFeriasProporcionais)}</td></tr>
+      <tr><td>13º proporcional (${result.decimoTerceiroAvos}/12)</td><td class="n">${money(result.decimoTerceiroBruto)}</td></tr>
+      <tr class="total"><td>TOTAL DE PROVENTOS</td><td class="n">${money(result.totalProventos)}</td></tr>
+    </tbody></table>
 
-    <p style="margin-top:30px;">_____________________________________<br>Assinatura do funcionário</p>
-    <p style="margin-top:20px;">_____________________________________<br>Assinatura do empregador</p>
+    <h2>Descontos</h2>
+    <table><thead><tr><th>Descrição</th><th>Observação</th><th>Valor</th></tr></thead><tbody>
+      <tr><td>INSS</td><td>Saldo de salário + 13º em bases separadas</td><td class="n">${money(result.inss)}</td></tr>
+      <tr><td>IRRF</td><td>Estimativa conforme tabela 2026</td><td class="n">${money(result.irrf)}</td></tr>
+      ${discounts}
+      <tr class="total"><td colspan="2">TOTAL DE DESCONTOS</td><td class="n">${money(result.totalDescontos)}</td></tr>
+      <tr class="total"><td colspan="2">LÍQUIDO ESTIMADO</td><td class="n">${money(result.liquido)}</td></tr>
+    </tbody></table>
+
+    <h2>FGTS — valores extra-rescisão</h2>
+    <table><tbody>
+      <tr><td>Saldo FGTS informado/importado</td><td class="n">${money(result.saldoFgtsConsiderado)}</td></tr>
+      <tr><td>FGTS das verbas calculadas (informativo)</td><td class="n">${money(result.fgtsMes)}</td></tr>
+      <tr><td>Multa rescisória</td><td class="n">${money(result.multaFgts)}</td></tr>
+    </tbody></table>
+
+    ${manualChanges ? `<h2>Alterações manuais</h2><table><thead><tr><th>Campo</th><th>Automático</th><th>Manual</th><th>Motivo</th></tr></thead><tbody>${manualChanges}</tbody></table>` : ''}
+
+    <h2>Auditoria</h2>
+    <div class="box grid small">
+      <div>Calculado em: ${escapeHtml(new Date(result.auditoria.calculadoEm).toLocaleString('pt-BR'))}</div>
+      <div>Usuário: ${escapeHtml(result.auditoria.usuario)}</div>
+      <div>Salário-base: ${money(result.auditoria.salarioBaseUtilizado)}</div>
+      <div>Remuneração-base: ${money(result.auditoria.remuneracaoBaseUtilizada)}</div>
+      <div>Avos de férias proporcionais: ${result.auditoria.avosFeriasProporcionais}/12</div>
+      <div>Avos de 13º: ${result.auditoria.avosDecimoTerceiro}/12</div>
+    </div>
+    ${data.motivo ? `<div class="box"><b>Motivo:</b> ${escapeHtml(data.motivo)}</div>` : ''}
+    ${data.observacoes ? `<div class="box"><b>Observações:</b> ${escapeHtml(data.observacoes)}</div>` : ''}
+    <p class="small"><b>PRÉVIA ESTIMATIVA.</b> Documento de apoio gerado pelo TOPAC RH PRO. O cálculo rescisório oficial, valores finais, encargos, convenção coletiva e particularidades do vínculo devem ser apurados e validados pela contabilidade antes da quitação.</p>
   </body></html>`;
 };
 
-export const gerarRescisaoPdf = (d: PdfData) => {
-  const r = d.resultado;
+export const gerarRescisaoPdf = (data: RescisaoPdfData) => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const fileName = buildRescisaoPdfName(d.empresa, d.funcionario, d.desligamento?.slice(0, 7));
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 14;
+  const margin = 10;
+  const width = 190;
+  let y = 12;
+  const result = data.resultado;
 
-  const addText = (text: string, x: number, yy: number, options?: any) => doc.text(String(text || '-'), x, yy, options);
-  const line = () => {
-    doc.setDrawColor(60, 60, 60);
-    doc.line(12, y, pageWidth - 12, y);
+  const ensureSpace = (height = 8) => {
+    if (y + height <= 285) return;
+    doc.addPage();
+    y = 12;
+  };
+  const line = (label: string, value = '', bold = false) => {
+    ensureSpace(7);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(8.5);
+    doc.text(label, margin, y);
+    if (value) doc.text(value, margin + width, y, { align: 'right' });
     y += 5;
   };
-  const section = (title: string) => {
-    y += 4;
-    doc.setFillColor(232, 235, 239);
-    doc.rect(12, y, pageWidth - 24, 8, 'F');
+  const title = (text: string) => {
+    ensureSpace(10);
+    y += 2;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    addText(title, 14, y + 5.5);
-    y += 12;
-  };
-  const row = (label: string, value: string, label2?: string, value2?: string) => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    addText(label, 14, y);
-    doc.setFont('helvetica', 'normal');
-    addText(value || '-', 48, y);
-    if (label2) {
-      doc.setFont('helvetica', 'bold');
-      addText(label2, 112, y);
-      doc.setFont('helvetica', 'normal');
-      addText(value2 || '-', 150, y);
-    }
-    y += 6;
-  };
-  const moneyRow = (label: string, provento?: number, desconto?: number) => {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    addText(label, 14, y);
-    addText(provento ? formatCurrency(provento) : '-', 120, y, { align: 'right' });
-    addText(desconto ? formatCurrency(desconto) : '-', pageWidth - 14, y, { align: 'right' });
+    doc.text(text, margin, y);
+    doc.line(margin, y + 1.5, margin + width, y + 1.5);
     y += 6;
   };
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  addText('FICHA DE RESCISAO DO CONTRATO DE TRABALHO', pageWidth / 2, y, { align: 'center' });
-  y += 8;
-  line();
-
-  section('Dados do colaborador');
-  row('Empresa', d.empresa, 'Funcionario', d.funcionario);
-  row('CPF', d.cpf || '-', 'Cargo', d.cargo || '-');
-  row('Admissao', fmtBR(d.admissao), 'Desligamento', fmtBR(d.desligamento));
-  row('Tipo', tipoRescisaoLabel(d.tipo), 'Aviso previo', `${d.aviso || '-'} (${r.diasAviso || 0} dias)`);
-  row('Motivo', d.motivo || '-', 'Observacoes', d.observacoes || '-');
-
-  section('Verbas rescisorias');
-  doc.setFont('helvetica', 'bold');
-  addText('Descricao', 14, y);
-  addText('Proventos', 120, y, { align: 'right' });
-  addText('Descontos', pageWidth - 14, y, { align: 'right' });
-  y += 3;
-  line();
-  moneyRow('Saldo de salario', r.saldoSalario, 0);
-  if (r.avisoPrevioValor > 0) moneyRow('Aviso previo indenizado', r.avisoPrevioValor, 0);
-  if (r.feriasVencidas > 0) moneyRow('Ferias vencidas', r.feriasVencidas, 0);
-  if (r.feriasProporcionais > 0) moneyRow('Ferias proporcionais', r.feriasProporcionais, 0);
-  if (r.tercoFerias > 0) moneyRow('1/3 sobre ferias', r.tercoFerias, 0);
-  if (r.decimoTerceiro > 0) moneyRow('13o proporcional', r.decimoTerceiro, 0);
-  if (r.multaFgts > 0) moneyRow('Multa FGTS', r.multaFgts, 0);
-  moneyRow('INSS', 0, r.inss);
-  moneyRow('IRRF', 0, r.irrf);
-  if (r.outrosDescontos > 0) moneyRow('Outros descontos', 0, r.outrosDescontos);
-  line();
-  doc.setFont('helvetica', 'bold');
-  addText('Totais', 14, y);
-  addText(formatCurrency(r.totalProventos), 120, y, { align: 'right' });
-  addText(formatCurrency(r.totalDescontos), pageWidth - 14, y, { align: 'right' });
-  y += 8;
-  addText('FGTS do mes a depositar', 14, y);
-  addText(formatCurrency(r.fgtsMes), pageWidth - 14, y, { align: 'right' });
-  y += 10;
-
-  doc.setFillColor(245, 245, 245);
-  doc.rect(12, y, pageWidth - 24, 12, 'F');
-  doc.setFontSize(12);
-  addText(`Liquido a receber: ${formatCurrency(r.liquido)}`, pageWidth - 16, y + 8, { align: 'right' });
-  y += 28;
-
-  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(14);
+  doc.text('MEMORIA DE CALCULO DA RESCISAO', 105, y, { align: 'center' });
+  y += 6;
   doc.setFontSize(9);
-  addText('_____________________________________', 20, y);
-  addText('_____________________________________', 112, y);
-  y += 5;
-  addText('Assinatura do funcionario', 34, y);
-  addText('Assinatura do empregador', 126, y);
+  doc.text(data.empresa, 105, y, { align: 'center' });
+  y += 7;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  const estimateNotice = doc.splitTextToSize('PREVIA ESTIMATIVA - memoria de apoio interno. O calculo rescisorio oficial, valores finais e encargos devem ser apurados e validados pela contabilidade.', width);
+  doc.text(estimateNotice, margin, y);
+  y += estimateNotice.length * 4 + 4;
 
-  return { blob: doc.output('blob'), fileName };
+  line('Funcionario', data.funcionario);
+  line('CPF', data.cpf);
+  line('Cargo', data.cargo);
+  line('Admissao / Desligamento', `${dateBr(data.admissao)} / ${dateBr(data.desligamento)}`);
+  line('Tipo', tipoRescisaoLabel(data.tipo));
+  line('Salario-base', money(result.auditoria.salarioBaseUtilizado));
+  line('Remuneracao de calculo', money(result.baseRemuneracao));
+  line('Aviso / Projecao', `${data.aviso} - ${result.diasAviso} dias - ${dateBr(result.dataProjetadaContrato)}`);
+
+  title('FERIAS POR PERIODO AQUISITIVO');
+  result.periodosFerias.forEach((period) => {
+    ensureSpace(16);
+    line(`${dateBr(period.periodoAquisitivoInicio)} a ${dateBr(period.periodoAquisitivoFim)} - ${period.situacao}`, money(period.totalPeriodo), true);
+    line(`Direito ${period.diasDireito}d | usados ${period.diasJaUtilizados}d | abono ${period.diasAbono}d | saldo ${period.saldoDias}d | avos ${period.avos ?? '-'}/12`);
+    if (period.observacao) {
+      const chunks = doc.splitTextToSize(period.observacao, width);
+      ensureSpace(chunks.length * 4 + 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.text(chunks, margin, y);
+      y += chunks.length * 4 + 2;
+    }
+  });
+
+  title('PROVENTOS');
+  line(`Saldo de salario - ${result.diasSaldoSalario} dias`, money(result.saldoSalario));
+  line(`Aviso previo - ${result.diasAviso} dias`, money(result.avisoPrevioValor));
+  line('Ferias vencidas', money(result.feriasVencidas));
+  line('Ferias adquiridas em aberto', money(result.feriasEmAberto));
+  line('Ferias proporcionais', money(result.feriasProporcionais));
+  line('1/3 constitucional', money(result.tercoFerias));
+  line(`13o proporcional - ${result.decimoTerceiroAvos}/12`, money(result.decimoTerceiroBruto));
+  line('TOTAL PROVENTOS', money(result.totalProventos), true);
+
+  title('DESCONTOS');
+  line('INSS', money(result.inss));
+  line('IRRF', money(result.irrf));
+  result.descontosDetalhados.forEach((item) => line(item.descricao, money(item.valor)));
+  line('TOTAL DESCONTOS', money(result.totalDescontos), true);
+  line('LIQUIDO ESTIMADO', money(result.liquido), true);
+
+  title('FGTS - EXTRA RESCISAO');
+  line('Saldo FGTS informado/importado', money(result.saldoFgtsConsiderado));
+  line('FGTS das verbas calculadas', money(result.fgtsMes));
+  line('Multa rescisoria', money(result.multaFgts));
+
+  if (result.alteracoesManuais.length) {
+    title('ALTERACOES MANUAIS');
+    result.alteracoesManuais.forEach((item) => {
+      line(`${item.campo}: ${money(item.valorAutomatico)} -> ${money(item.valorManual)}`, item.motivo, true);
+    });
+  }
+
+  title('AUDITORIA');
+  line('Calculado em', new Date(result.auditoria.calculadoEm).toLocaleString('pt-BR'));
+  line('Usuario', result.auditoria.usuario);
+  line('Avos ferias / 13o', `${result.auditoria.avosFeriasProporcionais}/12 | ${result.auditoria.avosDecimoTerceiro}/12`);
+  if (result.revisaoFeriasNecessaria) line('ATENCAO', 'Ha periodos de ferias que exigem conferencia historica.', true);
+
+  const fileName = buildRescisaoPdfName(data.empresa, data.funcionario, data.desligamento?.slice(0, 7));
+  const blob = doc.output('blob');
+  return { blob, fileName, html: buildRescisaoHtml(data) };
 };

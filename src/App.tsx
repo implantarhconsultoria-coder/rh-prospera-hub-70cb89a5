@@ -2,21 +2,19 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate, useParams, useLocation } from "react-router-dom";
 
-// Alias legado: redireciona /mecanico-ext/:acessoId(/...) para /app-mecanico/:acessoId(/...)
 const MecanicoExtAlias = () => {
   const { acessoId } = useParams<{ acessoId: string }>();
   const location = useLocation();
   const resto = location.pathname.replace(/^\/mecanico-ext\/[^/]+/, "");
   return <Navigate to={`/app-mecanico/${acessoId}${resto}`} replace />;
 };
+
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppProvider, useApp } from "@/context/AppContext";
 import AppLayout from "@/components/AppLayout";
 import FilialLayout from "@/components/FilialLayout";
-import FaturamentoLayout from "@/components/FaturamentoLayout";
-import FinanceiroLayout from "@/components/FinanceiroLayout";
 import AlmoxarifadoLayout from "@/components/AlmoxarifadoLayout";
 import OperacionalLayout from "@/components/OperacionalLayout";
 import CampoLayout from "@/components/CampoLayout";
@@ -86,23 +84,6 @@ import CampoPontoPage from "@/pages/campo/PontoPage";
 import CampoChamadosPage from "@/pages/campo/ChamadosPage";
 import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
 import RegistroKmPage from "@/pages/campo/RegistroKmPage";
-import FaturamentoDashboardPage from "@/pages/faturamento/FaturamentoDashboardPage";
-import ClientesFatPage from "@/pages/faturamento/ClientesFatPage";
-import ClienteDetailPage from "@/pages/faturamento/ClienteDetailPage";
-import ContratosPage from "@/pages/faturamento/ContratosPage";
-import ContratoDetailPage from "@/pages/faturamento/ContratoDetailPage";
-import { FaturasPage, MedicoesPage, ReajustesPage, PendenciasPage } from "@/pages/faturamento/FaturamentoPlaceholders";
-import ConferenciaPage from "@/pages/faturamento/ConferenciaPage";
-import FinanceiroDashboardPage from "@/pages/financeiro/FinanceiroDashboardPage";
-import ContasReceberPage from "@/pages/financeiro/ContasReceberPage";
-import ContasPagarPage from "@/pages/financeiro/ContasPagarPage";
-import FornecedoresPage from "@/pages/financeiro/FornecedoresPage";
-import BancosPage from "@/pages/financeiro/BancosPage";
-import FluxoCaixaPage from "@/pages/financeiro/FluxoCaixaPage";
-import InadimplenciaPage from "@/pages/financeiro/InadimplenciaPage";
-import CentrosCustoPage from "@/pages/financeiro/CentrosCustoPage";
-import ConciliacaoPage from "@/pages/financeiro/ConciliacaoPage";
-import TopacGestaoPage from "@/pages/gestao/TopacGestaoPage";
 import NotFound from "@/pages/NotFound";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
 import AcessoDiretoPage from "@/pages/AcessoDiretoPage";
@@ -115,51 +96,20 @@ import { isDirectorRole } from "@/lib/directorPermissions";
 import ExternoLayout from "@/components/ExternoLayout";
 import AguardandoAcesso from "@/components/AguardandoAcesso";
 import {
-  Wallet, ArrowDownCircle, ArrowUpCircle, Building, Landmark, TrendingDown, AlertTriangle, Layers, GitMerge,
-  FileText, Users, FileSignature, Receipt, TrendingUp, ClipboardCheck,
   UserCircle, Stethoscope, FileWarning, CalendarDays, FileCheck,
-  Package, Shirt, Shield,
-  Wrench, Headphones,
-  LayoutDashboard, Bell, Activity,
+  Package, Wrench, Headphones, LayoutDashboard, Bell, Activity, ClipboardCheck,
 } from "lucide-react";
 
-const EXT_ITEMS_FINANCEIRO = [
-  { to: '', label: 'Dashboard', icon: Wallet, end: true },
-  { to: 'contas-receber', label: 'Contas a Receber', icon: ArrowDownCircle },
-  { to: 'contas-pagar', label: 'Contas a Pagar', icon: ArrowUpCircle },
-  { to: 'fornecedores', label: 'Fornecedores', icon: Building },
-  { to: 'bancos', label: 'Bancos', icon: Landmark },
-  { to: 'fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingDown },
-  { to: 'inadimplencia', label: 'Inadimplencia', icon: AlertTriangle },
-  { to: 'centros-custo', label: 'Centros de Custo', icon: Layers },
-  { to: 'conciliacao', label: 'Conciliacao', icon: GitMerge },
-];
-const EXT_ITEMS_FATURAMENTO = [
-  { to: '', label: 'Dashboard', icon: TrendingUp, end: true },
-  { to: 'clientes', label: 'Clientes', icon: Users },
-  { to: 'contratos', label: 'Contratos', icon: FileSignature },
-  { to: 'medicoes', label: 'Medicoes', icon: FileText },
-  { to: 'conferencia', label: 'Conferencia', icon: ClipboardCheck },
-  { to: 'faturas', label: 'Faturas', icon: Receipt },
-  { to: 'reajustes', label: 'Reajustes', icon: TrendingUp },
-  { to: 'pendencias', label: 'Pendencias', icon: AlertTriangle },
-];
-const EXT_ITEMS_RH = [
-  { to: '', label: 'Funcionarios', icon: UserCircle, end: true },
-  { to: 'aso', label: 'ASO', icon: Stethoscope },
-  { to: 'atestados', label: 'Atestados', icon: FileWarning },
-  { to: 'aviso-ferias', label: 'Aviso de Ferias', icon: CalendarDays },
-];
-// EPI e Uniformes NAO sao liberados para acesso externo/almoxarifado/filial.
-// Ficam restritos ao admin central (rota /admin/epi e /admin/uniformes).
 const EXT_ITEMS_ALMOX = [
   { to: '', label: 'Almoxarifado', icon: Package, end: true },
 ];
+
 const EXT_ITEMS_OP = [
   { to: '', label: 'Chamados', icon: Headphones, end: true },
   { to: 'tecnicos', label: 'Tecnicos', icon: Wrench },
   { to: 'protocolo', label: 'Protocolo', icon: FileCheck },
 ];
+
 const EXT_ITEMS_FILIAL = [
   { to: '', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: 'funcionarios', label: 'Funcionarios', icon: UserCircle },
@@ -171,31 +121,23 @@ const EXT_ITEMS_FILIAL = [
   { to: 'apontamento', label: 'Apontamento', icon: ClipboardCheck },
   { to: 'fechamento', label: 'Fechamento', icon: ClipboardCheck },
 ];
+
 const EXT_ITEMS_CAMPO = [
   { to: '', label: 'Chamados', icon: Headphones, end: true },
 ];
 
 const queryClient = new QueryClient();
 
-/**
- * RoleRedirect - after login, sends user to the correct portal based on role.
- */
 const RoleRedirect = () => {
   const { userRoles, roleLoading } = useApp();
 
-  if (roleLoading) {
-    return <StableLoading label="Carregando permissao de acesso..." />;
-  }
-
+  if (roleLoading) return <StableLoading label="Carregando permissao de acesso..." />;
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('diretor_geral')) return <Navigate to="/admin" replace />;
-  if (userRoles.includes('faturamento')) return <Navigate to="/faturamento" replace />;
-  if (userRoles.includes('financeiro')) return <Navigate to="/financeiro" replace />;
   if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/almoxarifado" replace />;
   if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
   if (userRoles.includes('tecnico_campo')) return <Navigate to="/campo" replace />;
-
   return <AguardandoAcesso />;
 };
 
@@ -207,24 +149,15 @@ const AdminHomeRoute = () => {
 
 const MecanicoRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useApp();
-
-  if (loading) {
-    return <StableLoading label="Verificando acesso..." />;
-  }
-
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
-  }
-
+  if (loading) return <StableLoading label="Verificando acesso..." />;
+  if (isAuthenticated) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
 const AuthGate = () => {
   const { isAuthenticated, loading } = useApp();
 
-  if (loading) {
-    return <StableLoading label="Carregando sessao..." />;
-  }
+  if (loading) return <StableLoading label="Carregando sessao..." />;
 
   if (!isAuthenticated) {
     return (
@@ -242,12 +175,10 @@ const AuthGate = () => {
 
   return (
     <Routes>
-      {/* Entrada principal: sempre exibe o login/cadastro web da plataforma. */}
       <Route path="/" element={<LoginPage />} />
       <Route path="/index" element={<Navigate to="/" replace />} />
       <Route path="/login" element={<LoginPage />} />
 
-      {/* ========== ADMIN PORTAL ========== */}
       <Route element={<AppLayout />}>
         <Route path="/admin" element={<AdminHomeRoute />} />
         <Route path="/admin/implanta-central" element={<Navigate to="/admin" replace />} />
@@ -288,7 +219,6 @@ const AuthGate = () => {
         <Route path="/admin/operacional" element={<DespacharChamadoPage />} />
         <Route path="/admin/operacional/protocolo" element={<ProtocoloPage />} />
         <Route path="/admin/chamados" element={<Navigate to="/admin/operacional" replace />} />
-        {/* App Mecanico (novo) */}
         <Route path="/admin/app-mecanico" element={<AppMecanicoAdminPage />} />
         <Route path="/admin/app-operacional" element={<Navigate to="/admin/app-mecanico" replace />} />
         <Route path="/admin/app-operacional/:id" element={<Navigate to="/admin/app-mecanico" replace />} />
@@ -297,40 +227,10 @@ const AuthGate = () => {
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
         <Route path="/admin/acessos-externos" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/assistente" element={<AssistentePage />} />
-        {/* TOPAC Gestao - novo modulo interno */}
-        <Route path="/admin/gestao" element={<TopacGestaoPage />} />
-        <Route path="/admin/gestao/:secao" element={<TopacGestaoPage />} />
-        {/* Faturamento */}
-        <Route path="/admin/faturamento" element={<FaturamentoDashboardPage />} />
-        <Route path="/admin/faturamento/clientes" element={<ClientesFatPage />} />
-        <Route path="/admin/faturamento/clientes/:id" element={<ClienteDetailPage />} />
-        <Route path="/admin/faturamento/contratos" element={<ContratosPage />} />
-        <Route path="/admin/faturamento/contratos/:id" element={<ContratoDetailPage />} />
-        <Route path="/admin/faturamento/faturas" element={<FaturasPage />} />
-        <Route path="/admin/faturamento/medicoes" element={<MedicoesPage />} />
-        <Route path="/admin/faturamento/reajustes" element={<ReajustesPage />} />
-        <Route path="/admin/faturamento/pendencias" element={<PendenciasPage />} />
-        <Route path="/admin/faturamento/conferencia" element={<ConferenciaPage />} />
-        {/* Base de Faturamento (importacao) */}
-        <Route path="/admin/faturamento/importacao-dados" element={<Navigate to="/admin/faturamento" replace />} />
-        <Route path="/admin/faturamento/migracao-dn4" element={<Navigate to="/admin/faturamento" replace />} />
-        <Route path="/admin/faturamento/importacao/*" element={<Navigate to="/admin/faturamento" replace />} />
-        {/* Redirecionamentos legados (rota interna antiga) */}
-        <Route path="/admin/faturamento/dn4" element={<Navigate to="/admin/faturamento" replace />} />
-        <Route path="/admin/faturamento/dn4/*" element={<Navigate to="/admin/faturamento" replace />} />
-        {/* Financeiro */}
-        <Route path="/admin/financeiro" element={<FinanceiroDashboardPage />} />
-        <Route path="/admin/financeiro/contas-receber" element={<ContasReceberPage />} />
-        <Route path="/admin/financeiro/contas-pagar" element={<ContasPagarPage />} />
-        <Route path="/admin/financeiro/fornecedores" element={<FornecedoresPage />} />
-        <Route path="/admin/financeiro/bancos" element={<BancosPage />} />
-        <Route path="/admin/financeiro/fluxo-caixa" element={<FluxoCaixaPage />} />
-        <Route path="/admin/financeiro/inadimplencia" element={<InadimplenciaPage />} />
-        <Route path="/admin/financeiro/centros-custo" element={<CentrosCustoPage />} />
-        <Route path="/admin/financeiro/conciliacao" element={<ConciliacaoPage />} />
+        <Route path="/admin/faturamento/*" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/financeiro/*" element={<Navigate to="/admin" replace />} />
       </Route>
 
-      {/* ========== FILIAL PORTAL ========== */}
       <Route element={<FilialLayout />}>
         <Route path="/filial" element={<FilialDashboardPage />} />
         <Route path="/filial/funcionarios" element={<FuncionariosPage />} />
@@ -346,12 +246,10 @@ const AuthGate = () => {
         <Route path="/filial/documentos" element={<FilialDocumentosPage />} />
       </Route>
 
-      {/* ========== ALMOXARIFADO PORTAL ========== */}
       <Route element={<AlmoxarifadoLayout />}>
         <Route path="/almoxarifado" element={<AlmoxarifadoPage />} />
       </Route>
 
-      {/* ========== OPERACIONAL PORTAL ========== */}
       <Route element={<OperacionalLayout />}>
         <Route path="/operacional" element={<DespacharChamadoPage />} />
         <Route path="/operacional/chamados" element={<DespacharChamadoPage />} />
@@ -359,7 +257,6 @@ const AuthGate = () => {
         <Route path="/operacional/importacao-dados" element={<Navigate to="/operacional" replace />} />
       </Route>
 
-      {/* ========== CAMPO PORTAL ========== */}
       <Route element={<CampoLayout />}>
         <Route path="/campo" element={<CampoHomePage />} />
         <Route path="/campo/ponto" element={<CampoPontoPage />} />
@@ -368,37 +265,8 @@ const AuthGate = () => {
         <Route path="/campo/km" element={<RegistroKmPage />} />
       </Route>
 
-      {/* ========== FATURAMENTO PORTAL (acesso teste FAT) ========== */}
-      <Route element={<FaturamentoLayout />}>
-        <Route path="/faturamento" element={<FaturamentoDashboardPage />} />
-        <Route path="/faturamento/clientes" element={<ClientesFatPage />} />
-        <Route path="/faturamento/clientes/:id" element={<ClienteDetailPage />} />
-        <Route path="/faturamento/contratos" element={<ContratosPage />} />
-        <Route path="/faturamento/contratos/:id" element={<ContratoDetailPage />} />
-        <Route path="/faturamento/faturas" element={<FaturasPage />} />
-        <Route path="/faturamento/medicoes" element={<MedicoesPage />} />
-        <Route path="/faturamento/reajustes" element={<ReajustesPage />} />
-        <Route path="/faturamento/pendencias" element={<PendenciasPage />} />
-        <Route path="/faturamento/conferencia" element={<ConferenciaPage />} />
-        <Route path="/faturamento/importacao-dados" element={<Navigate to="/faturamento" replace />} />
-        <Route path="/faturamento/importacoes-dn4" element={<Navigate to="/faturamento" replace />} />
-      </Route>
-
-      {/* ========== FINANCEIRO PORTAL (acesso teste FIN) ========== */}
-      <Route element={<FinanceiroLayout />}>
-        <Route path="/financeiro" element={<FinanceiroDashboardPage />} />
-        <Route path="/financeiro/contas-receber" element={<ContasReceberPage />} />
-        <Route path="/financeiro/contas-pagar" element={<ContasPagarPage />} />
-        <Route path="/financeiro/fornecedores" element={<FornecedoresPage />} />
-        <Route path="/financeiro/bancos" element={<BancosPage />} />
-        <Route path="/financeiro/fluxo-caixa" element={<FluxoCaixaPage />} />
-        <Route path="/financeiro/inadimplencia" element={<InadimplenciaPage />} />
-        <Route path="/financeiro/centros-custo" element={<CentrosCustoPage />} />
-        <Route path="/financeiro/conciliacao" element={<ConciliacaoPage />} />
-        <Route path="/financeiro/importacao-dados" element={<Navigate to="/financeiro" replace />} />
-      </Route>
-
-      {/* Catch-all */}
+      <Route path="/faturamento/*" element={<Navigate to="/" replace />} />
+      <Route path="/financeiro/*" element={<Navigate to="/" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -414,24 +282,19 @@ const App = () => (
           <BrowserRouter>
             <GlobalErrorCatcher />
             <Routes>
-              {/* ========== ACESSO EXTERNO POR PIN - PORTAL UNICO ========== */}
               <Route path="/modulos" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso/:slug" element={<ErrorBoundary><AcessoDiretoPage /></ErrorBoundary>} />
-              {/* /acesso-filial e a rota canonica unica para todos os portais externos (exceto mecanico) */}
               <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso-modulos" element={<Navigate to="/modulos" replace />} />
               <Route path="/portais" element={<ErrorBoundary><PortaisPage /></ErrorBoundary>} />
-              {/* Aliases legados redirecionam para o portal unico */}
-              <Route path="/acesso-financeiro" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-almoxarifado" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-operacional" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-campo" element={<Navigate to="/modulos" replace />} />
-              <Route path="/acesso-faturamento" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-rh" element={<Navigate to="/modulos" replace />} />
-              {/* App Mecanico (novo) - login por PIN */}
-              <Route path="/acesso-mecanico" element={<ErrorBoundary><MecanicoRouteGuard><AcessoMecanicoPage /></MecanicoRouteGuard></ErrorBoundary>} />
+              <Route path="/acesso-financeiro" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-faturamento" element={<Navigate to="/modulos" replace />} />
 
-              {/* App Mecanico (novo) - portal isolado */}
+              <Route path="/acesso-mecanico" element={<ErrorBoundary><MecanicoRouteGuard><AcessoMecanicoPage /></MecanicoRouteGuard></ErrorBoundary>} />
               <Route path="/app-mecanico/:acessoId" element={<ErrorBoundary><MecanicoRouteGuard><MecanicoAppLayout /></MecanicoRouteGuard></ErrorBoundary>}>
                 <Route index element={<MecHomePage />} />
                 <Route path="ponto" element={<MecPontoPage />} />
@@ -441,38 +304,12 @@ const App = () => (
                 <Route path="abastecimento" element={<MecAbastecimentoPage />} />
               </Route>
 
-              {/* ========== ACESSO EXTERNO POR PIN - MODULOS (sem login) ========== */}
-              <Route path="/financeiro-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="financeiro" titulo="Portal Financeiro" cor="bg-cyan-600" items={EXT_ITEMS_FINANCEIRO} /></ErrorBoundary>}>
-                <Route index element={<FinanceiroDashboardPage />} />
-                <Route path="contas-receber" element={<ContasReceberPage />} />
-                <Route path="contas-pagar" element={<ContasPagarPage />} />
-                <Route path="fornecedores" element={<FornecedoresPage />} />
-                <Route path="bancos" element={<BancosPage />} />
-                <Route path="fluxo-caixa" element={<FluxoCaixaPage />} />
-                <Route path="inadimplencia" element={<InadimplenciaPage />} />
-                <Route path="centros-custo" element={<CentrosCustoPage />} />
-                <Route path="conciliacao" element={<ConciliacaoPage />} />
-              </Route>
-
-              <Route path="/faturamento-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="faturamento" titulo="Portal Faturamento" cor="bg-indigo-500" items={EXT_ITEMS_FATURAMENTO} /></ErrorBoundary>}>
-                <Route index element={<FaturamentoDashboardPage />} />
-                <Route path="clientes" element={<ClientesFatPage />} />
-                <Route path="clientes/:id" element={<ClienteDetailPage />} />
-                <Route path="contratos" element={<ContratosPage />} />
-                <Route path="contratos/:id" element={<ContratoDetailPage />} />
-                <Route path="medicoes" element={<MedicoesPage />} />
-                <Route path="conferencia" element={<ConferenciaPage />} />
-                <Route path="faturas" element={<FaturasPage />} />
-                <Route path="reajustes" element={<ReajustesPage />} />
-                <Route path="pendencias" element={<PendenciasPage />} />
-              </Route>
-
-              {/* RH externo removido - usar /acesso-filial */}
+              <Route path="/financeiro-ext/:acessoId/*" element={<Navigate to="/modulos" replace />} />
+              <Route path="/faturamento-ext/:acessoId/*" element={<Navigate to="/modulos" replace />} />
 
               <Route path="/almoxarifado-ext/:acessoId" element={<ErrorBoundary><ExternoLayout modulo="almoxarifado" titulo="Almoxarifado" cor="bg-orange-600" items={EXT_ITEMS_ALMOX} /></ErrorBoundary>}>
                 <Route index element={<AlmoxarifadoPage />} />
                 <Route path="entregas" element={<AlmoxarifadoPage />} />
-                {/* EPI/Uniformes restritos ao admin central - redireciona se tentar acessar por URL */}
                 <Route path="epi" element={<Navigate to="" replace />} />
                 <Route path="uniformes" element={<Navigate to="" replace />} />
               </Route>
@@ -504,7 +341,6 @@ const App = () => (
                 <Route path="chamados" element={<DespacharChamadoPage />} />
               </Route>
 
-              {/* Alias legado: /mecanico-ext/:acessoId -> /app-mecanico/:acessoId */}
               <Route path="/mecanico-ext/:acessoId" element={<MecanicoExtAlias />} />
               <Route path="/mecanico-ext/:acessoId/*" element={<MecanicoExtAlias />} />
 

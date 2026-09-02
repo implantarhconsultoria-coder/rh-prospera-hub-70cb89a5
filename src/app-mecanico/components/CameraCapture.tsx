@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle } from "lucide-react";
+import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle, ImageUp } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -11,38 +11,50 @@ interface Props {
   facing?: "user" | "environment";
   title?: string;
   hint?: string;
+  allowGallery?: boolean;
 }
 
 const getCameraMessage = (error: unknown) => {
   const name = error instanceof DOMException ? error.name : "";
   if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-    return "Permita acesso à câmera no navegador para concluir o registro.";
+    return "Permita acesso à câmera no navegador ou selecione uma foto da galeria.";
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-    return "Nenhuma câmera foi encontrada neste aparelho.";
+    return "Nenhuma câmera foi encontrada neste aparelho. Selecione uma foto da galeria.";
   }
   if (name === "NotReadableError" || name === "TrackStartError") {
-    return "A câmera está em uso por outro aplicativo. Feche a câmera e tente novamente.";
+    return "A câmera está em uso por outro aplicativo. Feche a câmera ou selecione uma foto da galeria.";
   }
   if (typeof window !== "undefined" && !window.isSecureContext && window.location.hostname !== "localhost") {
-    return "Abra o app em um endereço seguro HTTPS para usar a câmera.";
+    return "Abra o app em um endereço seguro HTTPS ou selecione uma foto da galeria.";
   }
-  return "Não foi possível abrir a câmera. Tente novamente ou verifique as permissões do navegador.";
+  return "Não foi possível abrir a câmera. Tente novamente ou selecione uma foto da galeria.";
 };
 
 /**
- * Câmera mobile-first reutilizável (selfie ou traseira).
- * Garante prova de vida para ponto e foto da bomba/painel para abastecimento.
+ * Câmera mobile-first reutilizável do app mecânico.
+ * A galeria fica liberada por padrão para garantir envio de fotos já existentes.
+ * Use allowGallery={false} somente em capturas que precisem ser obrigatoriamente ao vivo.
  */
-export default function CameraCapture({ open, onClose, onCapture, facing = "user", title = "Foto", hint }: Props) {
+export default function CameraCapture({
+  open,
+  onClose,
+  onCapture,
+  facing = "user",
+  title = "Foto",
+  hint,
+  allowGallery = true,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const openRef = useRef(open);
   const [foto, setFoto] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const galleryEnabled = allowGallery !== false;
 
   const stop = () => {
     if (streamRef.current) {
@@ -61,7 +73,9 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        setErro("Este navegador não liberou acesso à câmera. Use Chrome/Safari atualizado ou HTTPS.");
+        setErro(galleryEnabled
+          ? "Este navegador não liberou acesso à câmera. Selecione uma foto da galeria."
+          : "Este navegador não liberou acesso à câmera. Use Chrome/Safari atualizado ou HTTPS.");
         return;
       }
 
@@ -96,7 +110,6 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
       openRef.current = false;
       stop();
     };
-    // `start` and `stop` intentionally follow the current camera props.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, facing]);
 
@@ -129,6 +142,47 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
     stop();
   };
 
+  const carregarDaGaleria = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Selecione um arquivo de imagem.");
+      return;
+    }
+
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        URL.revokeObjectURL(objectUrl);
+        toast.error("Não foi possível preparar a imagem.");
+        return;
+      }
+
+      const maxDimension = 2000;
+      const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        toast.error("Não foi possível preparar a imagem.");
+        return;
+      }
+
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      setFoto(canvas.toDataURL("image/jpeg", 0.88));
+      setErro(null);
+      stop();
+      URL.revokeObjectURL(objectUrl);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      toast.error("Não foi possível abrir essa imagem. Selecione outra foto.");
+    };
+    image.src = objectUrl;
+  };
+
   const confirmar = async () => {
     if (!canvasRef.current || saving) return;
     setSaving(true);
@@ -148,7 +202,7 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
       } finally {
         setSaving(false);
       }
-    }, "image/jpeg", 0.85);
+    }, "image/jpeg", 0.88);
   };
 
   return (
@@ -156,7 +210,7 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
       <DialogContent className="max-w-md p-0 overflow-hidden bg-black border-0">
         <div className="relative bg-black aspect-[3/4] w-full flex items-center justify-center">
           {starting && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10 pointer-events-none">
               <Loader2 className="w-8 h-8 animate-spin" /><p className="text-sm">Iniciando câmera...</p>
             </div>
           )}
@@ -164,15 +218,28 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10 p-6 text-center">
               <AlertTriangle className="w-10 h-10 text-yellow-400" />
               <p className="text-sm">{erro}</p>
-              <Button onClick={() => void start()} variant="secondary" size="sm">Tentar novamente</Button>
+              <div className="flex flex-col gap-2 w-full max-w-xs">
+                <Button onClick={() => void start()} variant="secondary" size="sm">Tentar câmera novamente</Button>
+                {galleryEnabled && <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm" className="bg-white text-black"><ImageUp className="w-4 h-4 mr-2" />Adicionar foto da galeria</Button>}
+              </div>
             </div>
           )}
           {foto ? (
-            <img src={foto} alt="Captura" className="w-full h-full object-cover" />
+            <img src={foto} alt="Captura" className="w-full h-full object-contain" />
           ) : (
             <video ref={videoRef} playsInline muted className="w-full h-full object-cover" style={facing === "user" ? { transform: "scaleX(-1)" } : undefined} />
           )}
           <canvas ref={canvasRef} className="hidden" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(event) => {
+              carregarDaGaleria(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
 
           <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/70 to-transparent flex items-center justify-between text-white">
             <div className="flex items-center gap-2"><Camera className="w-5 h-5" /><span className="font-semibold text-sm">{title}</span></div>
@@ -184,20 +251,36 @@ export default function CameraCapture({ open, onClose, onCapture, facing = "user
           )}
         </div>
 
-        <div className="p-4 bg-black flex items-center justify-center gap-4">
+        <div className="p-4 bg-black space-y-3">
           {foto ? (
             <>
-              <Button onClick={() => void start()} variant="outline" className="flex-1 bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving || starting}>
-                <RotateCcw className="w-4 h-4 mr-2" /> Refazer
-              </Button>
-              <Button onClick={() => void confirmar()} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white" disabled={saving}>
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />} Confirmar
-              </Button>
+              <div className="grid grid-cols-2 gap-3">
+                <Button onClick={() => void start()} variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20" disabled={saving || starting}>
+                  <RotateCcw className="w-4 h-4 mr-2" /> Refazer
+                </Button>
+                <Button onClick={() => void confirmar()} className="bg-emerald-500 hover:bg-emerald-600 text-white" disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />} Confirmar
+                </Button>
+              </div>
+              {galleryEnabled && (
+                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full bg-white text-black border-white hover:bg-white/90" disabled={saving}>
+                  <ImageUp className="w-4 h-4 mr-2" /> Adicionar outra foto da galeria
+                </Button>
+              )}
             </>
           ) : (
-            <Button onClick={tirar} disabled={starting || !!erro} className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40">
-              <div className="w-full h-full rounded-full bg-white border-2 border-black/20" />
-            </Button>
+            <>
+              <div className="flex justify-center">
+                <Button onClick={tirar} disabled={starting || !!erro} className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40">
+                  <div className="w-full h-full rounded-full bg-white border-2 border-black/20" />
+                </Button>
+              </div>
+              {galleryEnabled && (
+                <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="w-full bg-white text-black border-white hover:bg-white/90" disabled={saving}>
+                  <ImageUp className="w-4 h-4 mr-2" /> Adicionar foto da galeria
+                </Button>
+              )}
+            </>
           )}
         </div>
       </DialogContent>

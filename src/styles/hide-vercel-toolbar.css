@@ -1,0 +1,11 @@
+vercel-live-feedback,
+vercel-toolbar,
+#vercel-toolbar,
+[data-vercel-toolbar],
+[data-vercel-live-feedback],
+iframe[src*="vercel.live"],
+iframe[src*="vercel.com/live"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

@@ -15,8 +15,28 @@ import { useNavigate } from 'react-router-dom';
 import { buildVRReportRows, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
+import { supabase } from '@/integrations/supabase/client';
+import { sha256Browser } from '@/lib/payrollDocuments';
+import { buildVRReceiptPdfBlob } from '@/lib/vrReceiptPdf';
 
 const ALL_COMPANIES = 'todas';
+const PAYROLL_BUCKET = 'payroll-private';
+const VR_DOCUMENT_TYPE = 'BENEFICIO_VR';
+const normalizeEmployeeText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+const isSignatureExcluded = (employee: any) => {
+  const cargo = normalizeEmployeeText(employee?.cargo);
+  return cargo.includes('socio') || cargo.includes('pro labore') || cargo.includes('prolabore');
+};
+const safeFile = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^A-Za-z0-9._-]+/g, '_')
+  .slice(0, 100);
 const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const competenciaPt = (c: string) => {
   const [y, m] = (c || '').split('-');
@@ -165,7 +185,7 @@ const isGuincheiroEmployee = (employee: { name?: string; cargo?: string; setorGh
 };
 
 const RelatorioVRPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento, userRoles, updateEmployee, refreshData } = useApp();
+  const { companies, employees, entries, getOrCreateEntries, addBenefitReport, getFechamento, userRoles, updateEmployee, refreshData, session } = useApp();
   const isAdmin = userRoles?.includes('admin');
   const correcoes = useRecibosCorrecoes({ tipo: 'vr', competencia: undefined });
   const [editingRow, setEditingRow] = useState<BenefitReportRow | null>(null);
@@ -184,12 +204,8 @@ const RelatorioVRPage: React.FC = () => {
   const [vrBulkCompany, setVrBulkCompany] = useState(ALL_COMPANIES);
   const [vrBulkMode, setVrBulkMode] = useState<VrBulkMode>('sem_guincheiros');
   const [updatingVr, setUpdatingVr] = useState(false);
-
-  const [competenciaEmpresa, setCompetenciaEmpresa] = useState(new Date().toISOString().slice(0, 7));
   const [diasUteisManual, setDiasUteisManual] = useState('');
-  const [diasUteisEmpresaManual, setDiasUteisEmpresaManual] = useState('');
   const [dataPagamentoManual, setDataPagamentoManual] = useState('');
-  const [dataPagamentoEmpresaManual, setDataPagamentoEmpresaManual] = useState('');
 
   const isAllCompanies = selectedCompany === ALL_COMPANIES;
   const reportCompanyIds = useMemo(
@@ -201,16 +217,190 @@ const RelatorioVRPage: React.FC = () => {
   const { datas: feriadosDatas } = useFeriados(competencia, isAllCompanies ? undefined : selectedCompany);
   const diasUteisCalculado = getWorkingDays(competencia, feriadosDatas);
   const diasUteis = Number(diasUteisManual) > 0 ? Number(diasUteisManual) : diasUteisCalculado;
-  const diasUteisEmpresa = Number(diasUteisEmpresaManual) > 0 ? Number(diasUteisEmpresaManual) : undefined;
   const fechamento = isAllCompanies ? { dataFechamento: '' } : getFechamento(selectedCompany, competencia);
   const dataFechamento = fechamento.dataFechamento || '';
 
-  const handleGenerate = () => {
+  const applyGenerationCorrection = (row: BenefitReportRow, companyId: string) => {
+    const correction = correcoes.findFor('vr', companyId, row.emp.id, competencia);
+    if (!correction) return row;
+    return {
+      ...row,
+      valorDiario: Number(correction.valor_diario_corrigido ?? row.valorDiario),
+      diasFinais: Number(correction.dias_finais_corrigido ?? row.diasFinais),
+      valorTotal: Number(correction.valor_total_corrigido ?? row.valorTotal),
+      corrigido: true,
+      correcaoMotivo: correction.motivo || null,
+      correcaoObservacao: correction.observacao || null,
+      ...(correction.data_pagamento ? { dataPagamentoCorrecao: correction.data_pagamento } : {}),
+    } as BenefitReportRow;
+  };
+
+  const persistVrGeneration = async (company: any, generationRows: BenefitReportRow[], actorId: string) => {
+    const snapshot = generationRows.map(row => ({
+      employee_id: row.emp.id,
+      employee_name: row.emp.name,
+      cargo: row.emp.cargo,
+      valor_diario: row.valorDiario,
+      dias_previstos: row.diasPrevistos,
+      dias_descontados: row.diasDescontados,
+      dias_finais: row.diasFinais,
+      valor_total: row.valorTotal,
+      motivo: row.motivo || null,
+      correcao_motivo: row.correcaoMotivo || null,
+      correcao_observacao: row.correcaoObservacao || null,
+      data_pagamento_individual: (row as any).dataPagamentoCorrecao || null,
+    }));
+    const { error } = await (supabase as any).from('benefit_generations').upsert({
+      tipo: 'vr',
+      company_id: company.id,
+      competencia,
+      dias_pagos: diasUteis,
+      data_pagamento: dataPagamentoManual || null,
+      report_snapshot: snapshot,
+      total: sumBenefitRows(generationRows),
+      generated_by: actorId,
+      generated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'tipo,company_id,competencia' });
+    if (error) throw error;
+  };
+
+  const syncVrPayrollDocument = async (company: any, row: BenefitReportRow, actorId: string) => {
+    const effectivePaymentDate = (row as any).dataPagamentoCorrecao || dataPagamentoManual || '';
+    const blob = buildVRReceiptPdfBlob(company, row, {
+      competencia,
+      diasPagos: diasUteis,
+      dataPagamento: effectivePaymentDate,
+    });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const hash = await sha256Browser(bytes);
+
+    const { data: current, error: currentError } = await (supabase as any).from('payroll_documents')
+      .select('id,document_sha256,confirmed,is_current,payment_event_id,payment_kind,payment_sequence')
+      .eq('company_id', company.id)
+      .eq('employee_id', row.emp.id)
+      .eq('competencia', competencia)
+      .eq('document_type', VR_DOCUMENT_TYPE)
+      .eq('payment_kind', 'ORIGINAL')
+      .eq('is_current', true)
+      .maybeSingle();
+    if (currentError) throw currentError;
+
+    if (current?.id) {
+      const [{ data: complementRows, error: complementError }, { data: signatureRows, error: signatureError }] = await Promise.all([
+        (supabase as any).from('payroll_documents')
+          .select('id')
+          .eq('company_id', company.id)
+          .eq('employee_id', row.emp.id)
+          .eq('competencia', competencia)
+          .eq('document_type', VR_DOCUMENT_TYPE)
+          .eq('payment_kind', 'COMPLEMENTAR')
+          .eq('is_current', true)
+          .limit(1),
+        (supabase as any).from('payroll_signatures')
+          .select('id')
+          .eq('document_id', current.id)
+          .limit(1),
+      ]);
+      if (complementError) throw complementError;
+      if (signatureError) throw signatureError;
+      if ((complementRows || []).length || (signatureRows || []).length) return false;
+    }
+    if (current?.document_sha256 === hash && current?.confirmed) return false;
+
+    const paymentEventId = current?.payment_event_id || crypto.randomUUID();
+    const filename = `RECIBO_VR_${safeFile(row.emp.name)}_${competencia}.pdf`;
+    const path = `${company.id}/${competencia}/beneficios/${row.emp.id}/vr/${crypto.randomUUID()}-${filename}`;
+    const { error: uploadError } = await supabase.storage.from(PAYROLL_BUCKET).upload(
+      path,
+      new Blob([bytes as any], { type: 'application/pdf' }),
+      { contentType: 'application/pdf', upsert: false },
+    );
+    if (uploadError) throw uploadError;
+
+    const { error: insertError } = await (supabase as any).from('payroll_documents').insert({
+      company_id: company.id,
+      employee_id: row.emp.id,
+      competencia,
+      document_type: VR_DOCUMENT_TYPE,
+      storage_bucket: PAYROLL_BUCKET,
+      storage_path: path,
+      original_filename: filename,
+      mime_type: 'application/pdf',
+      file_size: bytes.byteLength,
+      document_sha256: hash,
+      source_sha256: hash,
+      net_amount: row.valorTotal,
+      payment_event_id: paymentEventId,
+      payment_kind: 'ORIGINAL',
+      payment_sequence: 1,
+      payment_state: 'GERADO',
+      entitlement_amount: row.valorTotal,
+      prior_paid_amount: 0,
+      payment_reason: row.correcaoMotivo || row.motivo || 'Pagamento original de VR',
+      extracted_data: {
+        origem: 'VR_GERADOR',
+        dias_pagos: diasUteis,
+        data_pagamento: effectivePaymentDate || null,
+        valor_diario: row.valorDiario,
+        dias_previstos: row.diasPrevistos,
+        dias_descontados: row.diasDescontados,
+        dias_finais: row.diasFinais,
+        motivo: row.motivo || null,
+        correcao_motivo: row.correcaoMotivo || null,
+        correcao_observacao: row.correcaoObservacao || null,
+      },
+      match_confidence: 100,
+      status: 'AGUARDANDO_ASSINATURA',
+      confirmed: true,
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: actorId,
+      created_by: actorId,
+    });
+    if (insertError) {
+      await supabase.storage.from(PAYROLL_BUCKET).remove([path]);
+      throw insertError;
+    }
+    return true;
+  };
+
+  const handleGenerate = async () => {
     if (!selectedCompany) { toast.error('Selecione uma empresa'); return; }
-    reportCompanyIds.forEach(companyId => getOrCreateEntries(companyId, competencia));
-    setGenerated(true);
-    setSelectedEmployees(new Set());
-    toast.success(isAllCompanies ? 'Relatório de VR de todas as empresas gerado!' : 'Relatório de VR gerado!');
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    if (!session?.user?.id) { toast.error('Sessão administrativa expirada. Entre novamente.'); return; }
+
+    try {
+      const entryPool = [...entries];
+      reportCompanyIds.forEach(companyId => {
+        const generatedEntries = getOrCreateEntries(companyId, competencia);
+        generatedEntries.forEach(entry => {
+          if (!entryPool.some(item => item.employeeId === entry.employeeId && item.competencia === entry.competencia)) entryPool.push(entry);
+        });
+      });
+
+      let synced = 0;
+      for (const companyId of reportCompanyIds) {
+        const generationCompany = companies.find(c => c.id === companyId);
+        if (!generationCompany) continue;
+        const generationEmployees = employees
+          .filter(emp => emp.companyId === companyId && emp.status === 'ativo' && emp.vrAtivo && !isSignatureExcluded(emp))
+          .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+        const companyEntries = entryPool.filter(entry => entry.companyId === companyId && entry.competencia === competencia);
+        const generationRows = buildVRReportRows(generationEmployees, companyEntries, diasUteis)
+          .map(row => applyGenerationCorrection(row, companyId));
+        await persistVrGeneration(generationCompany, generationRows, session.user.id);
+        for (const row of generationRows) {
+          if (await syncVrPayrollDocument(generationCompany, row, session.user.id)) synced += 1;
+        }
+      }
+
+      setGenerated(true);
+      setSelectedEmployees(new Set());
+      toast.success(`VR gerado: relatório + recibos. ${synced} documento(s) liberado(s) automaticamente na Assinatura Digital.`);
+    } catch (error: any) {
+      console.error('[vr-generation-signature]', error);
+      toast.error(`Não foi possível gerar o VR: ${error?.message || error}`);
+    }
   };
 
   const handleAtualizarVrValor = async () => {
@@ -285,7 +475,7 @@ const RelatorioVRPage: React.FC = () => {
   };
 
   const compEmps = employees
-    .filter(e => reportCompanyIds.includes(e.companyId) && e.status === 'ativo')
+    .filter(e => reportCompanyIds.includes(e.companyId) && e.status === 'ativo' && e.vrAtivo && !isSignatureExcluded(e))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const compEntries = entries.filter(e => reportCompanyIds.includes(e.companyId) && e.competencia === competencia);
   const company = isAllCompanies ? undefined : companies.find(c => c.id === selectedCompany);
@@ -308,7 +498,7 @@ const RelatorioVRPage: React.FC = () => {
   const totalFinal = useMemo(() => sumBenefitRows(rows), [rows]);
   const importTotal = useMemo(() => roundCurrency(importRows.reduce((sum, row) => sum + row.valorTotal, 0)), [importRows]);
   const emissaoDate = new Date().toLocaleDateString('pt-BR');
-  const pagamentoDate = getFirstBusinessDayOfNextMonth(competencia);
+  const pagamentoDate = dataPagamentoManual || getFirstBusinessDayOfNextMonth(competencia);
 
   const handlePrintRelatorio = () => {
     if (!selectedCompany) { toast.error('Selecione uma empresa'); return; }
@@ -318,6 +508,7 @@ const RelatorioVRPage: React.FC = () => {
       : { empresa: selectedCompany, competencia },
     );
     if (Number(diasUteisManual) > 0) params.set('diasUteis', String(Number(diasUteisManual)));
+    if (dataPagamentoManual) params.set('dataPagamento', dataPagamentoManual);
     navigate(`/relatorio-vr-impressao?${params.toString()}`);
   };
 
@@ -339,21 +530,15 @@ const RelatorioVRPage: React.FC = () => {
   };
   const handleRecibosEmpresa = () => goRecibos([selectedCompany]);
   const handleRecibosTodasEmpresas = () => {
-    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
-    companies.forEach(c => getOrCreateEntries(c.id, competenciaEmpresa));
-    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: companies.map(c => c.id).join(',') });
-    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
-    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
-    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    companies.forEach(c => getOrCreateEntries(c.id, competencia));
+    goRecibos(companies.map(c => c.id));
   };
   const handleRecibosEmpresasSelecionadas = () => {
     if (multiCompanies.size === 0) { toast.error('Selecione ao menos uma empresa'); return; }
-    if (!competenciaEmpresa) { toast.error('Selecione a competência'); return; }
-    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competenciaEmpresa));
-    const params = new URLSearchParams({ formato, competencia: competenciaEmpresa, empresas: Array.from(multiCompanies).join(',') });
-    if (diasUteisEmpresa) params.set('diasUteis', String(diasUteisEmpresa));
-    if (dataPagamentoEmpresaManual) params.set('dataPagamento', dataPagamentoEmpresaManual);
-    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+    if (!competencia) { toast.error('Selecione a competência'); return; }
+    Array.from(multiCompanies).forEach(cid => getOrCreateEntries(cid, competencia));
+    goRecibos(Array.from(multiCompanies));
   };
 
   const toggleEmp = (id: string) => {
@@ -421,7 +606,7 @@ const RelatorioVRPage: React.FC = () => {
         </div>
         <span className="text-xs text-muted-foreground">Dias uteis: <strong className="text-foreground">{diasUteis}</strong>{diasUteisManual ? ' (manual)' : ''}</span>
         <Button onClick={handleGenerate} className="gradient-accent text-accent-foreground font-semibold">
-          <FileText className="w-4 h-4 mr-2" /> Gerar Relatório
+          <FileText className="w-4 h-4 mr-2" /> Gerar VR
         </Button>
       </div>
 
@@ -530,17 +715,17 @@ const RelatorioVRPage: React.FC = () => {
         <div className="flex flex-wrap gap-3 items-end">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Competência (mês)</label>
-            <Input type="month" value={competenciaEmpresa} onChange={e => setCompetenciaEmpresa(e.target.value)} className="w-44" />
+            <Input type="month" value={competencia} onChange={e => { setCompetencia(e.target.value); setGenerated(false); }} className="w-44" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Dias pagos (opcional)</label>
-            <Input type="number" min="1" step="1" value={diasUteisEmpresaManual}
-              onChange={e => setDiasUteisEmpresaManual(e.target.value)}
-              placeholder="auto" className="w-28" />
+            <Input type="number" min="1" step="1" value={diasUteisManual}
+              onChange={e => { setDiasUteisManual(e.target.value); setGenerated(false); }}
+              placeholder={String(diasUteisCalculado)} className="w-28" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Data pagamento</label>
-            <Input type="date" value={dataPagamentoEmpresaManual} onChange={e => setDataPagamentoEmpresaManual(e.target.value)} className="w-40" />
+            <Input type="date" value={dataPagamentoManual} onChange={e => setDataPagamentoManual(e.target.value)} className="w-40" />
           </div>
           <Button onClick={handleRecibosTodasEmpresas} variant="outline" size="sm">
             <Printer className="w-4 h-4 mr-2" /> Recibos de todas as empresas

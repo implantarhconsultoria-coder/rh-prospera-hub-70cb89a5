@@ -1,16 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Check, KeyRound, Landmark, Save, Search, ShieldCheck, Upload, UserPlus, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { useLocation } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, UserPlus, X, Save, KeyRound, Check, ShieldCheck } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { formatCurrency } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
-import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/calculations';
 import { upsertFuncionarioBase, onlyDigits } from '@/lib/funcionariosBase';
+import BankingDataEditor from '@/components/BankingDataEditor';
+import BulkBankingDataEditor from '@/components/BulkBankingDataEditor';
+import BulkEmployeeDataImporter from '@/components/BulkEmployeeDataImporter';
+import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
+import { emptyBankingData, type BankingData } from '@/lib/bankingParser';
+import type { EmployeeSmartData } from '@/lib/smartTextParser';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const MODULOS = [
   { perfil: 'filial', modulo: 'filial', label: 'Filial / RH', descricao: 'Funcionários, ASO, atestados, férias e fechamento da filial' },
@@ -22,148 +28,282 @@ const MODULOS = [
   { perfil: 'mecanico_externo', modulo: 'mecanico', label: 'App Mecânico', descricao: 'Ponto, chamados, veículo, abastecimento e histórico no app' },
 ] as const;
 
+const emptyEmployee = () => ({
+  nome: '', cpf: '', rg: '', cargo: '', salario_base: '', data_admissao: '', telefone: '', celular: '', email: '', endereco: '',
+  banking: emptyBankingData(),
+});
+
+const bankingFromRow = (row: any): BankingData => ({
+  banco: String(row?.banco || ''),
+  bancoCodigo: String(row?.banco_codigo || ''),
+  agencia: String(row?.agencia || ''),
+  conta: String(row?.conta || ''),
+  digito: String(row?.conta_digito || ''),
+  tipoConta: String(row?.tipo_conta || ''),
+  titular: String(row?.titular_conta || row?.nome || ''),
+  cpfTitular: String(row?.cpf_titular || row?.cpf || ''),
+  chavePix: String(row?.pix || ''),
+  tipoChavePix: String(row?.tipo_chave_pix || ''),
+  textoOriginal: String(row?.dados_bancarios_origem || ''),
+});
+
+const bankingPayload = (data: BankingData) => ({
+  banco: data.banco || null,
+  banco_codigo: data.bancoCodigo || null,
+  agencia: data.agencia || null,
+  conta: data.conta || null,
+  conta_digito: data.digito || null,
+  tipo_conta: data.tipoConta || null,
+  titular_conta: data.titular || null,
+  cpf_titular: data.cpfTitular || null,
+  pix: data.chavePix || null,
+  tipo_chave_pix: data.tipoChavePix || null,
+  dados_bancarios_origem: data.textoOriginal || null,
+  dados_bancarios_atualizado_em: new Date().toISOString(),
+});
+
+const mergeBankingNonEmpty = (current: BankingData, next: BankingData): BankingData => {
+  const output = { ...current };
+  (Object.keys(output) as Array<keyof BankingData>).forEach((key) => {
+    const value = String(next[key] || '').trim();
+    if (value) output[key] = value;
+  });
+  return output;
+};
+
 const FuncionariosPage: React.FC = () => {
   const { employees, companies, refreshData } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const { isFilial, filialCompanyId } = useFilialFilter();
+  const portalPrefix = location.pathname.startsWith('/filial') ? '/filial' : location.pathname.startsWith('/admin') ? '/admin' : '';
+  const isAdminPortal = portalPrefix === '/admin';
+
   const [search, setSearch] = useState('');
   const [filterCompany, setFilterCompany] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ativos' | 'inativos' | 'todos'>('ativos');
   const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [acessoEmployeeId, setAcessoEmployeeId] = useState<string | null>(null);
-  const [modulosAtivos, setModulosAtivos] = useState<string[]>([]);
-  const [loadingAcessos, setLoadingAcessos] = useState(false);
-  const [salvandoAcessos, setSalvandoAcessos] = useState(false);
+  const [newEmp, setNewEmp] = useState(emptyEmployee());
+  const [bulkBankOpen, setBulkBankOpen] = useState(false);
+  const [bulkEmployeeOpen, setBulkEmployeeOpen] = useState(false);
 
-  const [newEmp, setNewEmp] = useState({ nome: '', cpf: '', cargo: '', salario_base: '', data_admissao: '', telefone: '', celular: '', email: '', endereco: '', rg: '' });
-  const portalPrefix = location.pathname.startsWith('/filial') ? '/filial' : location.pathname.startsWith('/admin') ? '/admin' : '';
-  const isAdminPortal = portalPrefix === '/admin';
-  const acessoEmployee = useMemo(() => employees.find(employee => employee.id === acessoEmployeeId) || null, [employees, acessoEmployeeId]);
-  const acessoCompany = acessoEmployee ? companies.find(company => company.id === acessoEmployee.companyId) : null;
+  const [bankEmployeeId, setBankEmployeeId] = useState<string | null>(null);
+  const [bankData, setBankData] = useState<BankingData>(emptyBankingData());
+  const [loadingBank, setLoadingBank] = useState(false);
+  const [savingBank, setSavingBank] = useState(false);
 
-  const filtered = employees.filter(e => {
-    if (search && !e.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterCompany && e.companyId !== filterCompany) return false;
-    if (filterStatus === 'ativos' && e.status === 'desligado') return false;
-    if (filterStatus === 'inativos' && e.status !== 'desligado') return false;
+  const [accessEmployeeId, setAccessEmployeeId] = useState<string | null>(null);
+  const [activeModules, setActiveModules] = useState<string[]>([]);
+  const [loadingAccess, setLoadingAccess] = useState(false);
+  const [savingAccess, setSavingAccess] = useState(false);
+
+  const effectiveCompany = isFilial ? filialCompanyId || '' : filterCompany;
+  const bankEmployee = employees.find((employee) => employee.id === bankEmployeeId) || null;
+  const accessEmployee = employees.find((employee) => employee.id === accessEmployeeId) || null;
+  const accessCompany = accessEmployee ? companies.find((company) => company.id === accessEmployee.companyId) : null;
+
+  const filtered = useMemo(() => employees.filter((employee) => {
+    const query = search.trim().toLowerCase();
+    if (query && !`${employee.name} ${employee.cpf} ${employee.cargo}`.toLowerCase().includes(query)) return false;
+    if (filterCompany && employee.companyId !== filterCompany) return false;
+    if (filterStatus === 'ativos' && employee.status === 'desligado') return false;
+    if (filterStatus === 'inativos' && employee.status !== 'desligado') return false;
     return true;
-  });
-  const operacionais = filtered.filter(e => e.categoria === 'operacional');
-  const socios = filtered.filter(e => e.categoria === 'socio');
+  }), [employees, search, filterCompany, filterStatus]);
 
   useEffect(() => {
-    if (!acessoEmployee) return;
-    const carregar = async () => {
-      setLoadingAcessos(true);
-      const cpfClean = onlyDigits(acessoEmployee.cpf || '');
-      const filter = cpfClean.length === 11 ? `cpf_clean.eq.${cpfClean},funcionario_id.eq.${acessoEmployee.id}` : `funcionario_id.eq.${acessoEmployee.id}`;
+    if (!accessEmployee) return;
+    const load = async () => {
+      setLoadingAccess(true);
+      const cpfClean = onlyDigits(accessEmployee.cpf || '');
+      const filter = cpfClean.length === 11 ? `cpf_clean.eq.${cpfClean},funcionario_id.eq.${accessEmployee.id}` : `funcionario_id.eq.${accessEmployee.id}`;
       const { data, error } = await supabase.from('acessos_externos' as any).select('modulo,status,acesso_liberado').or(filter);
       if (error) toast.error('Não foi possível carregar os módulos deste funcionário.');
-      setModulosAtivos(((data as any[]) || []).filter(row => row.status === 'ativo' && row.acesso_liberado).map(row => row.modulo));
-      setLoadingAcessos(false);
+      setActiveModules(((data as any[]) || []).filter((row) => row.status === 'ativo' && row.acesso_liberado).map((row) => row.modulo));
+      setLoadingAccess(false);
     };
-    carregar();
-  }, [acessoEmployee?.id, acessoEmployee?.cpf]);
+    void load();
+  }, [accessEmployee?.id, accessEmployee?.cpf]);
 
-  const handleSaveNew = async () => {
-    if (!newEmp.nome.trim()) return toast.error('Nome é obrigatório');
-    const companyId = isFilial ? filialCompanyId : filterCompany;
-    if (!companyId) return toast.error('Selecione a empresa primeiro');
+  const applySmartEmployee = (data: EmployeeSmartData) => {
+    setNewEmp((current) => ({
+      ...current,
+      nome: data.nome || current.nome,
+      cpf: data.cpf || current.cpf,
+      rg: data.rg || current.rg,
+      cargo: data.cargo || current.cargo,
+      salario_base: data.salarioBase || current.salario_base,
+      data_admissao: data.dataAdmissao || current.data_admissao,
+      telefone: data.telefone || current.telefone,
+      celular: data.celular || current.celular,
+      email: data.email || current.email,
+      endereco: data.endereco || current.endereco,
+      banking: mergeBankingNonEmpty(current.banking, data.banking),
+    }));
+  };
+
+  const saveNewEmployee = async () => {
+    if (!newEmp.nome.trim()) return toast.error('Nome é obrigatório.');
+    if (!effectiveCompany) return toast.error('Selecione a empresa antes de cadastrar.');
     setSaving(true);
-    const result = await upsertFuncionarioBase({ employees, companies, companyId, nome: newEmp.nome.trim(), cpf: newEmp.cpf, cargo: newEmp.cargo, salarioBase: Number(newEmp.salario_base) || 0, dataAdmissao: newEmp.data_admissao || null, telefone: newEmp.telefone, celular: newEmp.celular, email: newEmp.email, endereco: newEmp.endereco, rg: newEmp.rg, setor: 'operacional' });
+    const result = await upsertFuncionarioBase({
+      employees,
+      companies,
+      companyId: effectiveCompany,
+      nome: newEmp.nome.trim(),
+      cpf: newEmp.cpf,
+      cargo: newEmp.cargo,
+      salarioBase: Number(newEmp.salario_base) || 0,
+      dataAdmissao: newEmp.data_admissao || null,
+      telefone: newEmp.telefone,
+      celular: newEmp.celular,
+      email: newEmp.email,
+      endereco: newEmp.endereco,
+      rg: newEmp.rg,
+      setor: 'operacional',
+      dadosBancarios: newEmp.banking,
+    });
     setSaving(false);
     if (!result.ok) return toast.error(result.error);
-    toast.success(result.action === 'created' ? 'Funcionário cadastrado com sucesso!' : 'Funcionário existente atualizado e vinculado.');
+    toast.success(result.action === 'created' ? 'Funcionário cadastrado com sucesso.' : 'Funcionário atualizado e vinculado.');
     setShowNew(false);
-    setNewEmp({ nome: '', cpf: '', cargo: '', salario_base: '', data_admissao: '', telefone: '', celular: '', email: '', endereco: '', rg: '' });
+    setNewEmp(emptyEmployee());
     await refreshData();
   };
 
-  const abrirAcessos = (event: React.MouseEvent, funcionarioId: string) => {
+  const openBanking = async (event: React.MouseEvent, employeeId: string) => {
     event.stopPropagation();
-    setModulosAtivos([]);
-    setAcessoEmployeeId(funcionarioId);
+    setBankEmployeeId(employeeId);
+    setLoadingBank(true);
+    const { data, error } = await (supabase as any).from('funcionarios')
+      .select('nome,cpf,banco,banco_codigo,agencia,conta,conta_digito,tipo_conta,titular_conta,cpf_titular,pix,tipo_chave_pix,dados_bancarios_origem')
+      .eq('id', employeeId)
+      .single();
+    setLoadingBank(false);
+    if (error) {
+      toast.error(`Não foi possível carregar os dados bancários: ${error.message}`);
+      setBankData(emptyBankingData());
+      return;
+    }
+    setBankData(bankingFromRow(data));
   };
 
-  const toggleModulo = (modulo: string) => setModulosAtivos(current => current.includes(modulo) ? current.filter(item => item !== modulo) : [...current, modulo]);
+  const saveBanking = async () => {
+    if (!bankEmployeeId) return;
+    setSavingBank(true);
+    const { error } = await (supabase as any).from('funcionarios').update(bankingPayload(bankData)).eq('id', bankEmployeeId);
+    setSavingBank(false);
+    if (error) return toast.error(`Não foi possível salvar os dados bancários: ${error.message}`);
+    toast.success('Dados bancários salvos após revisão.');
+    setBankEmployeeId(null);
+    await refreshData();
+  };
 
-  const salvarAcessos = async () => {
-    if (!acessoEmployee || salvandoAcessos) return;
-    const cpfClean = onlyDigits(acessoEmployee.cpf || '');
-    if (cpfClean.length !== 11) return toast.error('Cadastre o CPF completo do funcionário antes de liberar acesso.');
-    if (acessoEmployee.status === 'desligado') return toast.error('Funcionário desligado não pode receber acesso.');
-    setSalvandoAcessos(true);
-    const { data: existentes, error: loadError } = await supabase.from('acessos_externos' as any).select('id,modulo').or(`cpf_clean.eq.${cpfClean},funcionario_id.eq.${acessoEmployee.id}`);
-    if (loadError) { setSalvandoAcessos(false); return toast.error('Não foi possível conferir os acessos atuais.'); }
+  const saveAccess = async () => {
+    if (!accessEmployee || savingAccess) return;
+    const cpfClean = onlyDigits(accessEmployee.cpf || '');
+    if (cpfClean.length !== 11) return toast.error('Cadastre o CPF completo antes de liberar acesso.');
+    if (accessEmployee.status === 'desligado') return toast.error('Funcionário desligado não pode receber acesso.');
+    setSavingAccess(true);
+    const { data: existing, error: loadError } = await supabase.from('acessos_externos' as any).select('id,modulo').or(`cpf_clean.eq.${cpfClean},funcionario_id.eq.${accessEmployee.id}`);
+    if (loadError) { setSavingAccess(false); return toast.error('Não foi possível conferir os acessos atuais.'); }
 
-    const email = String((acessoEmployee as any).email || '').trim().toLowerCase() || null;
-    const telefone = String((acessoEmployee as any).telefone || (acessoEmployee as any).celular || '').trim();
-    const payload = MODULOS.filter(item => modulosAtivos.includes(item.modulo)).map(item => ({
-      nome: acessoEmployee.name.trim(), cpf: acessoEmployee.cpf, cpf_clean: cpfClean, pin: cpfClean.slice(-4), email,
-      observacoes: JSON.stringify({ telefone, atualizado_em: new Date().toISOString() }), empresa: acessoCompany?.name || null,
-      filial: (acessoCompany as any)?.cidade || null, funcao: acessoEmployee.cargo || null, funcionario_id: acessoEmployee.id,
-      perfil_acesso: item.perfil, modulo: item.modulo, status: 'ativo', acesso_liberado: true,
+    const payload = MODULOS.filter((item) => activeModules.includes(item.modulo)).map((item) => ({
+      nome: accessEmployee.name.trim(),
+      cpf: accessEmployee.cpf,
+      cpf_clean: cpfClean,
+      pin: cpfClean.slice(-4),
+      email: accessEmployee.email?.trim().toLowerCase() || null,
+      observacoes: JSON.stringify({ telefone: accessEmployee.telefone || accessEmployee.celular || '', atualizado_em: new Date().toISOString() }),
+      empresa: accessCompany?.name || null,
+      filial: accessCompany?.city || null,
+      funcao: accessEmployee.cargo || null,
+      funcionario_id: accessEmployee.id,
+      perfil_acesso: item.perfil,
+      modulo: item.modulo,
+      status: 'ativo',
+      acesso_liberado: true,
     }));
-
     if (payload.length) {
       const { error } = await supabase.from('acessos_externos' as any).upsert(payload, { onConflict: 'cpf_clean,modulo', ignoreDuplicates: false });
-      if (error) { setSalvandoAcessos(false); return toast.error(`Não foi possível liberar os módulos: ${error.message}`); }
+      if (error) { setSavingAccess(false); return toast.error(`Não foi possível liberar os módulos: ${error.message}`); }
     }
-    const idsBloquear = ((existentes as any[]) || []).filter(row => !modulosAtivos.includes(row.modulo)).map(row => row.id);
-    if (idsBloquear.length) {
-      const { error } = await supabase.from('acessos_externos' as any).update({ status: 'bloqueado', acesso_liberado: false }).in('id', idsBloquear);
-      if (error) { setSalvandoAcessos(false); return toast.error(`Erro ao bloquear os módulos removidos: ${error.message}`); }
+    const idsToBlock = ((existing as any[]) || []).filter((row) => !activeModules.includes(row.modulo)).map((row) => row.id);
+    if (idsToBlock.length) {
+      const { error } = await supabase.from('acessos_externos' as any).update({ status: 'bloqueado', acesso_liberado: false }).in('id', idsToBlock);
+      if (error) { setSavingAccess(false); return toast.error(`Erro ao bloquear módulos removidos: ${error.message}`); }
     }
-    setSalvandoAcessos(false);
-    toast.success(modulosAtivos.length ? 'Módulos do funcionário atualizados.' : 'Todos os acessos deste funcionário foram bloqueados.');
-    setAcessoEmployeeId(null);
+    setSavingAccess(false);
+    toast.success(activeModules.length ? 'Módulos atualizados.' : 'Todos os acessos foram bloqueados.');
+    setAccessEmployeeId(null);
   };
-
-  const renderCard = (e: typeof employees[0]) => (
-    <div key={e.id} className="card-premium p-5 cursor-pointer hover:shadow-premium transition-shadow" onClick={() => navigate(`${portalPrefix}/funcionarios/${e.id}`)}>
-      <div className="flex items-start gap-3 mb-3">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-primary-foreground font-bold text-sm ${e.categoria === 'socio' ? 'bg-accent' : 'gradient-primary'}`}>{e.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</div>
-        <div className="min-w-0 flex-1"><h3 className="font-semibold text-foreground text-sm truncate">{e.name}</h3><p className="text-xs text-muted-foreground truncate">{e.cargo}</p></div>
-        {isAdminPortal && <Button type="button" variant="outline" size="sm" onClick={(event) => abrirAcessos(event, e.id)} className="h-8 shrink-0 gap-1.5" title="Liberar módulos deste funcionário"><KeyRound className="w-3.5 h-3.5" /><span className="hidden xl:inline">Módulos</span></Button>}
-      </div>
-      <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{companies.find(c => c.id === e.companyId)?.name}</span><span className="font-semibold text-foreground">{formatCurrency(e.salarioBase)}</span></div>
-      <div className="mt-2 flex gap-1"><Badge className={`text-[10px] ${e.status === 'ativo' ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}`}>{e.status}</Badge>{e.categoria === 'socio' && <Badge variant="outline" className="text-[10px] border-accent text-accent">Socio</Badge>}</div>
-    </div>
-  );
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between"><h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1><Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground"><UserPlus className="w-4 h-4 mr-2" /> Novo Funcionário</Button></div>
-
-      {showNew && <div className="card-premium p-5 space-y-4 border-l-4 border-primary">
-        <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-foreground">Cadastrar Novo Funcionário</h2><Button variant="ghost" size="icon" onClick={() => setShowNew(false)}><X className="w-4 h-4" /></Button></div>
-        {isFilial && <p className="text-xs text-muted-foreground">Empresa: <strong>{companies.find(c => c.id === filialCompanyId)?.name}</strong></p>}
-        {!isFilial && !filterCompany && <p className="text-xs text-warning">Selecione uma empresa no filtro antes de cadastrar.</p>}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div><label className="text-xs text-muted-foreground block mb-1">Nome Completo *</label><Input value={newEmp.nome} onChange={e => setNewEmp(p => ({ ...p, nome: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">CPF</label><Input value={newEmp.cpf} onChange={e => setNewEmp(p => ({ ...p, cpf: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">RG</label><Input value={newEmp.rg} onChange={e => setNewEmp(p => ({ ...p, rg: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">Cargo / Função</label><Input value={newEmp.cargo} onChange={e => setNewEmp(p => ({ ...p, cargo: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">Salário Base</label><Input type="number" value={newEmp.salario_base} onChange={e => setNewEmp(p => ({ ...p, salario_base: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">Data Admissão</label><Input type="date" value={newEmp.data_admissao} onChange={e => setNewEmp(p => ({ ...p, data_admissao: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">Telefone</label><Input value={newEmp.telefone} onChange={e => setNewEmp(p => ({ ...p, telefone: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">Celular</label><Input value={newEmp.celular} onChange={e => setNewEmp(p => ({ ...p, celular: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground block mb-1">E-mail</label><Input value={newEmp.email} onChange={e => setNewEmp(p => ({ ...p, email: e.target.value }))} /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold font-display text-foreground">Funcionários</h1>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => setBulkEmployeeOpen(true)}><Upload className="mr-2 h-4 w-4" /> Upload para atualizar cadastros</Button>
+          <Button type="button" variant="outline" onClick={() => setBulkBankOpen(true)}><Landmark className="mr-2 h-4 w-4" /> Dados bancários em massa</Button>
+          <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground"><UserPlus className="mr-2 h-4 w-4" /> Novo Funcionário</Button>
         </div>
-        <div className="flex gap-3"><Button onClick={handleSaveNew} disabled={saving} className="gradient-primary text-primary-foreground"><Save className="w-4 h-4 mr-2" /> {saving ? 'Salvando...' : 'Salvar Funcionário'}</Button><Button variant="outline" onClick={() => setShowNew(false)}>Cancelar</Button></div>
-      </div>}
+      </div>
 
-      <div className="card-premium p-4 flex flex-wrap gap-3"><div className="relative flex-1 min-w-[200px]"><Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" /><Input placeholder="Buscar funcionário..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" /></div>{!isFilial && <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground"><option value="">Todas Empresas</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}<select value={filterStatus} onChange={e => setFilterStatus(e.target.value as typeof filterStatus)} className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground"><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="todos">Todos</option></select></div>
-      {operacionais.length > 0 && <><h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Operacionais ({operacionais.length})</h2><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{operacionais.map(renderCard)}</div></>}
-      {socios.length > 0 && <><h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mt-6">Sócios / Pró-labore ({socios.length})</h2><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{socios.map(renderCard)}</div></>}
-      {filtered.length === 0 && <div className="text-center py-12 text-muted-foreground"><p>Nenhum funcionário encontrado.</p></div>}
-
-      {acessoEmployee && <div className="fixed inset-0 z-50 bg-black/65 flex items-center justify-center p-4" onClick={() => setAcessoEmployeeId(null)}>
-        <div className="bg-card border border-border rounded-xl shadow-premium-lg w-full max-w-3xl max-h-[92vh] overflow-y-auto" onClick={event => event.stopPropagation()}>
-          <div className="flex items-start justify-between gap-3 p-5 border-b border-border"><div><h2 className="text-lg font-bold flex items-center gap-2"><KeyRound className="w-5 h-5 text-primary" /> Liberar módulos</h2><p className="text-sm text-muted-foreground mt-1">{acessoEmployee.name} · {acessoCompany?.name}</p></div><Button variant="ghost" size="icon" onClick={() => setAcessoEmployeeId(null)}><X className="w-5 h-5" /></Button></div>
-          <div className="p-5 space-y-4">
-            <p className="text-xs text-muted-foreground">Marque somente o que este funcionário pode acessar. Login pelo CPF e PIN com os 4 últimos números.</p>
-            {loadingAcessos ? <p className="py-10 text-center text-muted-foreground">Carregando módulos...</p> : <div className="grid md:grid-cols-2 gap-3">{MODULOS.map(item => { const ativo = modulosAtivos.includes(item.modulo); return <button key={item.modulo} type="button" onClick={() => toggleModulo(item.modulo)} className={`text-left rounded-lg border p-4 transition-colors ${ativo ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted/50'}`}><div className="flex items-center justify-between gap-2"><span className="font-semibold text-sm">{item.label}</span><span className={`w-6 h-6 rounded-full flex items-center justify-center ${ativo ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{ativo && <Check className="w-4 h-4" />}</span></div><p className="text-xs text-muted-foreground mt-2">{item.descricao}</p></button>; })}</div>}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border"><div className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="w-4 h-4 text-success" /> Desmarcar bloqueia o módulo sem apagar o histórico.</div><div className="flex gap-2"><Button variant="outline" onClick={() => setAcessoEmployeeId(null)}>Cancelar</Button><Button onClick={salvarAcessos} disabled={loadingAcessos || salvandoAcessos}>{salvandoAcessos ? 'Salvando...' : 'Salvar acessos'}</Button></div></div>
+      {showNew && (
+        <div className="card-premium space-y-4 border-l-4 border-primary p-5">
+          <div className="flex items-center justify-between"><h2 className="text-sm font-bold">Cadastrar Novo Funcionário</h2><Button variant="ghost" size="icon" onClick={() => setShowNew(false)}><X className="h-4 w-4" /></Button></div>
+          {!isFilial && !filterCompany && <p className="text-xs text-warning">Selecione uma empresa no filtro antes de cadastrar.</p>}
+          <EmployeeSmartTextPanel onApply={applySmartEmployee} />
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <Field label="Nome Completo *" value={newEmp.nome} onChange={(value) => setNewEmp((current) => ({ ...current, nome: value }))} />
+            <Field label="CPF" value={newEmp.cpf} onChange={(value) => setNewEmp((current) => ({ ...current, cpf: value }))} />
+            <Field label="RG" value={newEmp.rg} onChange={(value) => setNewEmp((current) => ({ ...current, rg: value }))} />
+            <Field label="Cargo / Função" value={newEmp.cargo} onChange={(value) => setNewEmp((current) => ({ ...current, cargo: value }))} />
+            <Field label="Salário Base" value={newEmp.salario_base} type="number" onChange={(value) => setNewEmp((current) => ({ ...current, salario_base: value }))} />
+            <Field label="Data de Admissão" value={newEmp.data_admissao} type="date" onChange={(value) => setNewEmp((current) => ({ ...current, data_admissao: value }))} />
+            <Field label="Telefone" value={newEmp.telefone} onChange={(value) => setNewEmp((current) => ({ ...current, telefone: value }))} />
+            <Field label="Celular" value={newEmp.celular} onChange={(value) => setNewEmp((current) => ({ ...current, celular: value }))} />
+            <Field label="E-mail" value={newEmp.email} onChange={(value) => setNewEmp((current) => ({ ...current, email: value }))} />
+            <Field label="Endereço" value={newEmp.endereco} onChange={(value) => setNewEmp((current) => ({ ...current, endereco: value }))} />
           </div>
+          <BankingDataEditor value={newEmp.banking} onChange={(banking) => setNewEmp((current) => ({ ...current, banking }))} defaultHolder={newEmp.nome} defaultCpf={newEmp.cpf} />
+          <div className="flex gap-3"><Button onClick={() => void saveNewEmployee()} disabled={saving}><Save className="mr-2 h-4 w-4" /> {saving ? 'Salvando...' : 'Salvar Funcionário'}</Button><Button variant="outline" onClick={() => setShowNew(false)}>Cancelar</Button></div>
         </div>
-      </div>}
+      )}
+
+      <div className="card-premium flex flex-wrap gap-3 p-4">
+        <div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar funcionário, CPF ou cargo" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+        {!isFilial && <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="rounded-lg border bg-background px-3 py-2 text-sm"><option value="">Todas as empresas</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select>}
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)} className="rounded-lg border bg-background px-3 py-2 text-sm"><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="todos">Todos</option></select>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filtered.map((employee) => {
+          const company = companies.find((item) => item.id === employee.companyId);
+          return <div key={employee.id} className="card-premium cursor-pointer p-5 transition-shadow hover:shadow-premium" onClick={() => navigate(`${portalPrefix}/funcionarios/${employee.id}`)}>
+            <div className="mb-3 flex items-start gap-3"><div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground">{employee.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{employee.name}</h3><p className="truncate text-xs text-muted-foreground">{employee.cargo}</p></div><div className="flex gap-1"><Button type="button" variant="outline" size="icon" onClick={(event) => void openBanking(event, employee.id)} title="Editar dados bancários"><Landmark className="h-4 w-4" /></Button>{isAdminPortal && <Button type="button" variant="outline" size="icon" onClick={(event) => { event.stopPropagation(); setActiveModules([]); setAccessEmployeeId(employee.id); }} title="Liberar módulos"><KeyRound className="h-4 w-4" /></Button>}</div></div>
+            <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{company?.name}</span><span className="font-semibold">{formatCurrency(employee.salarioBase)}</span></div>
+            <div className="mt-2"><Badge className={employee.status === 'ativo' ? 'bg-success text-success-foreground' : ''}>{employee.status}</Badge></div>
+          </div>;
+        })}
+      </div>
+      {!filtered.length && <div className="card-premium p-10 text-center text-sm text-muted-foreground">Nenhum funcionário encontrado.</div>}
+
+      <BulkEmployeeDataImporter open={bulkEmployeeOpen} onOpenChange={setBulkEmployeeOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
+      <BulkBankingDataEditor open={bulkBankOpen} onOpenChange={setBulkBankOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
+
+      <Dialog open={!!bankEmployeeId} onOpenChange={(open) => !open && setBankEmployeeId(null)}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto"><DialogHeader><DialogTitle>Dados bancários — {bankEmployee?.name}</DialogTitle></DialogHeader>{loadingBank ? <div className="p-10 text-center">Carregando...</div> : <BankingDataEditor value={bankData} onChange={setBankData} defaultHolder={bankEmployee?.name} defaultCpf={bankEmployee?.cpf} />}<DialogFooter><Button variant="outline" onClick={() => setBankEmployeeId(null)}>Cancelar</Button><Button onClick={() => void saveBanking()} disabled={savingBank}><Save className="mr-2 h-4 w-4" /> {savingBank ? 'Salvando...' : 'Salvar após revisão'}</Button></DialogFooter></DialogContent>
+      </Dialog>
+
+      <Dialog open={!!accessEmployeeId} onOpenChange={(open) => !open && setAccessEmployeeId(null)}>
+        <DialogContent className="max-w-xl"><DialogHeader><DialogTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Módulos — {accessEmployee?.name}</DialogTitle></DialogHeader>{loadingAccess ? <div className="p-10 text-center">Carregando...</div> : <div className="space-y-2">{MODULOS.map((item) => { const active = activeModules.includes(item.modulo); return <button key={item.modulo} type="button" onClick={() => setActiveModules((current) => active ? current.filter((value) => value !== item.modulo) : [...current, item.modulo])} className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left ${active ? 'border-primary bg-primary text-primary-foreground' : ''}`}><span className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border ${active ? 'border-primary bg-primary text-primary-foreground' : ''}`}>{active && <Check className="h-3.5 w-3.5" />}</span><span><span className="block text-sm font-semibold">{item.label}</span><span className="text-xs text-muted-foreground">{item.descricao}</span></span></button>; })}</div>}<DialogFooter><Button variant="outline" onClick={() => setAccessEmployeeId(null)}>Cancelar</Button><Button onClick={() => void saveAccess()} disabled={savingAccess}>{savingAccess ? 'Salvando...' : 'Salvar módulos'}</Button></DialogFooter></DialogContent>
+      </Dialog>
     </div>
   );
 };
+
+const Field = ({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) => <div><label className="mb-1 block text-xs text-muted-foreground">{label}</label><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} /></div>;
 
 export default FuncionariosPage;

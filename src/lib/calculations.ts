@@ -3,9 +3,47 @@ import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/emp
 
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
+export const TOPAC_GYN_COMPANY_ID = 'c7a040f2-34b3-42a6-8a3a-f4bb64140ec6';
+export const TOPAC_GYN_CNPJ = '50973087000208';
+
+type CompanyHourRuleRef = string | {
+  id?: string | null;
+  codigo?: string | null;
+  name?: string | null;
+  nome?: string | null;
+  city?: string | null;
+  cidade?: string | null;
+  cnpj?: string | null;
+};
+
+const normalizeCompanyRuleText = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+export const isTopacGoiania = (company?: CompanyHourRuleRef | null) => {
+  if (!company) return false;
+  const refs = typeof company === 'string'
+    ? [company]
+    : [company.id, company.codigo, company.name, company.nome, company.city, company.cidade, company.cnpj];
+  const raw = refs.filter(Boolean).join(' ');
+  const text = normalizeCompanyRuleText(raw);
+  const digits = raw.replace(/\D/g, '');
+
+  return refs.some((ref) => ref === TOPAC_GYN_COMPANY_ID)
+    || text.includes('topac-gyn')
+    || text.includes('topac filial goiania')
+    || text.includes('aparecida de goiania')
+    || digits.includes(TOPAC_GYN_CNPJ);
+};
+
+export const getHoraExtraSemanalPercentual = (company?: CompanyHourRuleRef | null) =>
+  isTopacGoiania(company) ? 60 : 50;
+
 export const valorHora = (salario: number) => salario / 220;
 
-export const calcHE50 = (salario: number, horas: number) => valorHora(salario) * 1.5 * horas;
+export const calcHE50 = (salario: number, horas: number, percentual: number = 50) =>
+  valorHora(salario) * (1 + percentual / 100) * horas;
 export const calcHE100 = (salario: number, horas: number) => valorHora(salario) * 2 * horas;
 export const calcFalta = (salario: number, dias: number) => (salario / 30) * dias;
 export const calcAtraso = (salario: number, horas: number) => valorHora(salario) * horas;
@@ -100,7 +138,6 @@ export const calcDescontoVT = (salarioBase: number): number => {
  */
 export const calcDSR = (totalHE: number, diasUteis: number, competencia?: string) => {
   if (diasUteis <= 0) return 0;
-  // dias no mês
   let diasNoMes = 30;
   if (competencia) {
     const [y, m] = competencia.split('-').map(Number);
@@ -128,6 +165,7 @@ type PayrollOptions = {
   comissaoPct: number;
   domingosFeriados?: number;
   dependentes?: number;
+  horaExtraSemanalPct?: number;
 };
 
 export type PayrollBreakdown = {
@@ -183,12 +221,19 @@ export const calcPayrollBreakdown = (
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const valorHora = (emp.salarioBase + insVal + periculosidadeVal) / 220;
-  const he50Val = round2(valorHora * 1.5 * (entry.he50 || 0));
+  const heSemanalPct = opts.horaExtraSemanalPct ?? getHoraExtraSemanalPercentual(emp.companyId);
+  const he50Val = round2(valorHora * (1 + heSemanalPct / 100) * (entry.he50 || 0));
   const he100Val = round2(valorHora * 2 * (entry.he100 || 0));
   const totalHE = round2(he50Val + he100Val);
   const dsrHE = diasUteis > 0 ? round2((totalHE / diasUteis) * domingosFeriados) : 0;
   const comissaoBase = entry.comissaoBase || 0;
-  const comissaoPct = opts.comissaoPct || 0;
+  const nomeNormalizado = String(emp.name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const comissaoPct = opts.comissaoPct === 0.02
+    ? (nomeNormalizado.includes('aldenei') ? 0.02 : 0.01)
+    : (opts.comissaoPct || 0);
   const comissaoVal = round2(comissaoBase * comissaoPct);
   const dsrComissao = diasUteis > 0 && comissaoVal > 0
     ? round2((comissaoVal / diasUteis) * domingosFeriados)
@@ -246,11 +291,11 @@ export const calcPayrollBreakdown = (
   };
 };
 
-export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22) => {
+export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUteis: number = 22, horaExtraSemanalPct?: number) => {
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const baseHora = emp.salarioBase + insVal + periculosidadeVal;
-  const he50Val = calcHE50(baseHora, entry.he50);
+  const he50Val = calcHE50(baseHora, entry.he50, horaExtraSemanalPct ?? getHoraExtraSemanalPercentual(emp.companyId));
   const he100Val = calcHE100(baseHora, entry.he100);
   const totalHE = he50Val + he100Val;
   const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
@@ -263,16 +308,10 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
     + insVal
     + periculosidadeVal;
 
-  // VR: use entry vrDias (auto or manual), discount faltas
   const vrDiasEfetivos = Math.max(0, (entry.vrDias ?? diasUteis) - entry.faltasDias);
   const vrVal = entry.vrAplicado && emp.vrAtivo ? emp.vrDiario * vrDiasEfetivos : 0;
-
-  // VA: fixed monthly
   const vaVal = entry.vaAplicado && emp.vaAtivo ? emp.vaMensal : 0;
-
-  // VT: benefício, sem desconto automático
   const vtVal = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario * Math.max(0, diasUteis - entry.faltasDias) : 0;
-
   const beneficios = vrVal + vaVal + vtVal;
 
   const descontos = calcFalta(emp.salarioBase, entry.faltasDias)

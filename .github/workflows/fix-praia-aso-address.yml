@@ -1,0 +1,92 @@
+name: Corrigir endereco ASO Praia Grande
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-praia-aso-address.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Atualizar guia ASO da Praia Grande
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'src/lib/pdfGenerator.ts';
+          let text = fs.readFileSync(path, 'utf8');
+
+          const marker = `const isGoianiaAso = (d: FichaASOData) => {
+  const source = normalizePlain(\`${'${d.clinica || \'\'} ${d.empresa || \'\'} ${d.obraLocal || \'\'}'}\`);
+  return source.includes('GOIANIA') || source.includes('ASMETRO') || source.includes('GLOBAL MED');
+};`;
+
+          const addition = `${marker}
+
+const isPraiaGrandeAso = (d: FichaASOData) => {
+  const source = normalizePlain(\`${'${d.clinica || \'\'} ${d.empresa || \'\'} ${d.obraLocal || \'\'}'}\`);
+  return source.includes('PRAIA GRANDE') || source.includes('TOPAC FILIAL PRAIA') || source.includes('RUA LONDRINA');
+};`;
+
+          if (!text.includes('const isPraiaGrandeAso')) {
+            if (!text.includes(marker)) throw new Error('Ponto de insercao da unidade Praia Grande nao encontrado.');
+            text = text.replace(marker, addition);
+          }
+
+          const returnMarker = `  return {
+    local: d.clinica || 'Avenida Sao Joao, 313, 1o andar, Centro, Sao Paulo/SP',`;
+
+          const praiaBlock = `  if (isPraiaGrandeAso(d)) {
+    return {
+      local: 'Rua Londrina, 483, Centro, Praia Grande/SP',
+      horarios: [
+        'DE SEGUNDA A SEXTA DAS 08h00 AS 11h00.',
+        '(horario agendado)',
+      ],
+      agendamento: [
+        'CENTRAL DE AGENDAMENTO:',
+        'E-mail: agendamento@ponteaereaseguranca.com.br',
+        'Mediante agendamento previo no telefone e (ou) e-mail acima indicado;',
+        'E obrigatorio que o funcionario compareca munido de documento de identidade e CPF.',
+      ],
+    };
+  }
+
+${returnMarker}`;
+
+          if (!text.includes("local: 'Rua Londrina, 483, Centro, Praia Grande/SP'")) {
+            if (!text.includes(returnMarker)) throw new Error('Ponto de insercao dos dados da Praia Grande nao encontrado.');
+            text = text.replace(returnMarker, praiaBlock);
+          }
+
+          fs.writeFileSync(path, text, 'utf8');
+          NODE
+
+      - name: Validar compilacao
+        run: |
+          npm ci
+          npm run build
+
+      - name: Gravar alteracao
+        run: |
+          git config user.name "TOPAC RH PRO Automation"
+          git config user.email "actions@github.com"
+          git add src/lib/pdfGenerator.ts
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteracao necessaria."
+            exit 0
+          fi
+          git commit -m "fix: atualizar endereco da guia ASO Praia Grande"
+          git push

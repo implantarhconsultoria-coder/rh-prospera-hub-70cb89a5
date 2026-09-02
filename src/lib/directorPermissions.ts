@@ -2,9 +2,6 @@ export const DIRECTOR_BLOCKED_MESSAGE = 'Edicao bloqueada para este perfil. Soli
 
 const DIRECTOR_ALLOWED_ADMIN_PREFIXES = [
   '/admin/diretoria',
-  '/admin/faturamento',
-  '/admin/faturamento/migracao-dn4',
-  '/admin/financeiro',
   '/admin/relatorio',
   '/admin/relatorio-vr',
   '/admin/relatorio-vt',
@@ -42,6 +39,8 @@ const DIRECTOR_BLOCKED_EDIT_PREFIXES = [
   '/admin/configuracoes',
   '/admin/acessos-externos',
   '/admin/assistente',
+  '/admin/faturamento',
+  '/admin/financeiro',
 ];
 
 export const isDirectorRole = (roles: string[] = []) =>
@@ -57,7 +56,4 @@ export const isDirectorRouteAllowed = (pathname: string) => {
   return DIRECTOR_ALLOWED_ADMIN_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 };
 
-export const diretorPodeEditarModulo = (modulo: string) => {
-  const normalized = modulo.toLowerCase();
-  return normalized === 'financeiro' || normalized === 'faturamento' || normalized === 'contas_pagar' || normalized === 'prestacao_contas';
-};
+export const diretorPodeEditarModulo = (_modulo: string) => false;

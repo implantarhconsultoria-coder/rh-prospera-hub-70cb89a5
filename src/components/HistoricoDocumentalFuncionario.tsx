@@ -12,11 +12,28 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { FileText, Mail, Clock, User, Building2, Eye, Download, Trash2, Upload } from 'lucide-react';
+import {
+  Building2,
+  Bus,
+  Clock,
+  Download,
+  Eye,
+  FileText,
+  FolderLock,
+  HardHat,
+  Mail,
+  Shirt,
+  Stethoscope,
+  Trash2,
+  Upload,
+  User,
+  Utensils,
+  WalletCards,
+} from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { useApp } from '@/context/AppContext';
-import { downloadDocument, getDocumentUrl } from '@/lib/documentUrl';
+import { downloadDocument, getDocumentUrl, type DocumentSource } from '@/lib/documentUrl';
 import { CC_OBRIGATORIO, DESTINATARIOS_CONTABILIDADE } from '@/lib/emailUtils';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
@@ -27,19 +44,121 @@ interface Props {
   funcionarioId: string;
 }
 
+type HistoryGroupId =
+  | 'pagamentos'
+  | 'vr'
+  | 'vt'
+  | 'atestados'
+  | 'documentos'
+  | 'epi'
+  | 'uniformes';
+
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
+
+const HISTORY_GROUPS: Array<{
+  id: HistoryGroupId;
+  label: string;
+  shortLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { id: 'pagamentos', label: 'Pagamentos', shortLabel: 'Pagamentos', icon: WalletCards },
+  { id: 'vr', label: 'Vale-Refeição (VR)', shortLabel: 'VR', icon: Utensils },
+  { id: 'vt', label: 'Vale-Transporte (VT)', shortLabel: 'VT', icon: Bus },
+  { id: 'atestados', label: 'Atestados', shortLabel: 'Atestados', icon: Stethoscope },
+  { id: 'documentos', label: 'Contratos e Documentos Pessoais', shortLabel: 'Contratos / Docs.', icon: FolderLock },
+  { id: 'epi', label: 'EPI', shortLabel: 'EPI', icon: HardHat },
+  { id: 'uniformes', label: 'Uniformes', shortLabel: 'Uniformes', icon: Shirt },
+];
 
 const ORIGEM_LABEL: Record<string, string> = {
   gerado_sistema: 'Gerado pelo sistema',
   upload_manual: 'Upload manual',
-  pre_cadastro: 'Pre-cadastro',
+  pre_cadastro: 'Pré-cadastro',
+  email_clinica_soc: 'Clínica / SOC',
+  payroll_portal: 'Portal de assinatura',
+};
+
+const normalizeText = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+const groupsForDocument = (doc: any): HistoryGroupId[] => {
+  const text = normalizeText([
+    doc.categoria,
+    doc.tipo_documento,
+    doc.descricao,
+    doc.observacao,
+    doc.nome_arquivo,
+    doc.competencia,
+  ].filter(Boolean).join(' | '));
+
+  const groups = new Set<HistoryGroupId>();
+
+  const hasVr = /(^|[^a-z])vr([^a-z]|$)/.test(text)
+    || text.includes('vale-refeicao')
+    || text.includes('vale refeicao')
+    || text.includes('vale alimentacao');
+  const hasVt = /(^|[^a-z])vt([^a-z]|$)/.test(text)
+    || text.includes('vale-transporte')
+    || text.includes('vale transporte');
+
+  if (hasVr) groups.add('vr');
+  if (hasVt) groups.add('vt');
+
+  if (text.includes('atestado') || (text.includes('declaracao') && text.includes('hora'))) {
+    groups.add('atestados');
+  }
+
+  if (text.includes('uniform')) groups.add('uniformes');
+  if (text.includes('epi') && !text.includes('uniform')) groups.add('epi');
+
+  const isBenefit = hasVr || hasVt;
+  const isPayment = !isBenefit && [
+    'holerite',
+    'pagamento',
+    'folha',
+    'salario',
+    'comprovante',
+    'recibo',
+    'apontamento contabilidade',
+    'adiantamento',
+    'rescisao',
+  ].some((term) => text.includes(term));
+
+  if (isPayment) groups.add('pagamentos');
+
+  const isPersonalDocument = [
+    'contrato',
+    'documentacao',
+    'admissional',
+    'aso',
+    'toxicologico',
+    'termo',
+    'rg',
+    'cpf',
+    'cnh',
+    'ctps',
+    'ficha',
+    'ferias',
+  ].some((term) => text.includes(term));
+
+  if (isPersonalDocument && !groups.has('epi') && !groups.has('uniformes')) {
+    groups.add('documentos');
+  }
+
+  // Nada desaparece do histórico: documentos que não encaixam nas demais
+  // categorias ficam junto aos documentos pessoais/contratuais.
+  if (groups.size === 0) groups.add('documentos');
+
+  return Array.from(groups);
 };
 
 const inferTipo = (tipoDocumento: string): string => {
-  const t = (tipoDocumento || '').toLowerCase();
+  const t = normalizeText(tipoDocumento);
   if (t.includes('atestado')) return 'atestado';
-  if (t.includes('ferias') || t.includes('férias')) return 'ferias';
-  if (t.includes('veiculo') || t.includes('veículo')) return 'veiculo';
+  if (t.includes('ferias')) return 'ferias';
+  if (t.includes('veiculo')) return 'veiculo';
   return 'funcionario';
 };
 
@@ -53,16 +172,17 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const { employees, companies, session } = useApp();
   const funcionario = employees.find((e) => e.id === funcionarioId);
   const company = companies.find((c) => c.id === funcionario?.companyId);
+
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [viewing, setViewing] = useState<{ url: string; tipo: string; titulo: string } | null>(null);
+  const [viewing, setViewing] = useState<{ source: DocumentSource; titulo: string } | null>(null);
+  const [activeGroup, setActiveGroup] = useState<HistoryGroupId>('pagamentos');
   const [categoria, setCategoria] = useState('DOCUMENTACAO ADMISSIONAL');
   const [origem, setOrigem] = useState('upload_manual');
   const [descricao, setDescricao] = useState('');
   const [observacao, setObservacao] = useState('');
   const [arquivo, setArquivo] = useState<File | null>(null);
-  const [filtroTipo, setFiltroTipo] = useState('');
   const [filtroOrigem, setFiltroOrigem] = useState('');
   const [filtroData, setFiltroData] = useState('');
   const [filtroEmpresa, setFiltroEmpresa] = useState('');
@@ -87,19 +207,32 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     return () => { active = false; };
   }, [funcionarioId]);
 
-  const docsFiltrados = useMemo(() => {
-    return docs.filter((doc) => {
-      const docCategoria = doc.categoria || doc.tipo_documento || '';
-      const docOrigem = doc.origem || (doc.status_envio === 'gerado' ? 'gerado_sistema' : doc.status_envio) || '';
-      const docData = String(doc.data_documento || doc.created_at || '').slice(0, 10);
-      const docEmpresa = doc.empresa_nome || '';
-      if (filtroTipo && docCategoria !== filtroTipo) return false;
-      if (filtroOrigem && docOrigem !== filtroOrigem) return false;
-      if (filtroData && docData !== filtroData) return false;
-      if (filtroEmpresa && docEmpresa !== filtroEmpresa) return false;
-      return true;
+  const groupCounts = useMemo(() => {
+    const counts: Record<HistoryGroupId, number> = {
+      pagamentos: 0,
+      vr: 0,
+      vt: 0,
+      atestados: 0,
+      documentos: 0,
+      epi: 0,
+      uniformes: 0,
+    };
+    docs.forEach((doc) => {
+      groupsForDocument(doc).forEach((group) => { counts[group] += 1; });
     });
-  }, [docs, filtroData, filtroEmpresa, filtroOrigem, filtroTipo]);
+    return counts;
+  }, [docs]);
+
+  const docsFiltrados = useMemo(() => docs.filter((doc) => {
+    if (!groupsForDocument(doc).includes(activeGroup)) return false;
+    const docOrigem = doc.origem || (doc.status_envio === 'gerado' ? 'gerado_sistema' : doc.status_envio) || '';
+    const docData = String(doc.data_documento || doc.created_at || '').slice(0, 10);
+    const docEmpresa = doc.empresa_nome || '';
+    if (filtroOrigem && docOrigem !== filtroOrigem) return false;
+    if (filtroData && docData !== filtroData) return false;
+    if (filtroEmpresa && docEmpresa !== filtroEmpresa) return false;
+    return true;
+  }), [activeGroup, docs, filtroData, filtroEmpresa, filtroOrigem]);
 
   const empresasDisponiveis = useMemo(
     () => Array.from(new Set(docs.map((doc) => doc.empresa_nome).filter(Boolean))).sort(),
@@ -108,7 +241,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
 
   const anexarDocumento = async () => {
     if (!funcionario || !company) {
-      toast.error('Funcionario ou empresa nao localizados para vincular o documento.');
+      toast.error('Funcionário ou empresa não localizados para vincular o documento.');
       return;
     }
     if (!arquivo) {
@@ -151,55 +284,59 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       setDescricao('');
       setObservacao('');
       await carregar();
-      toast.success('Documento anexado ao historico do funcionario.');
+      toast.success('Documento anexado ao histórico do funcionário.');
     } catch (error: any) {
-      toast.error(error?.message || 'Nao foi possivel anexar o documento.');
+      toast.error(error?.message || 'Não foi possível anexar o documento.');
     } finally {
       setUploading(false);
     }
   };
 
   const excluir = async (doc: any) => {
-    if (!confirm('Excluir este documento do historico?')) return;
+    if (doc.origem === 'payroll_portal') {
+      toast.error('Holerites e recibos do portal são registros protegidos e não podem ser removidos pelo histórico.');
+      return;
+    }
+    if (!confirm('Excluir este documento do histórico?')) return;
     try {
       await excluirDocumentoFuncionario(doc);
       await carregar();
-      toast.success('Documento excluido do historico.');
+      toast.success('Documento excluído do histórico.');
     } catch (error: any) {
-      toast.error(error?.message || 'Nao foi possivel excluir o documento.');
+      toast.error(error?.message || 'Não foi possível excluir o documento.');
     }
   };
 
   const isDocumentoContabilidade = (doc: any) => {
-    const text = `${doc.categoria || ''} ${doc.tipo_documento || ''} ${doc.descricao || ''} ${doc.nome_arquivo || ''}`
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
-    return [
-      'rescis',
-      'aviso previo',
-      'aso',
-      'admissional',
-      'desligamento',
-      'demissional',
-      'contrato',
-      'atestado',
-    ].some((term) => text.includes(term));
+    const text = normalizeText(`${doc.categoria || ''} ${doc.tipo_documento || ''} ${doc.descricao || ''} ${doc.nome_arquivo || ''}`);
+    return ['rescis', 'aviso previo', 'aso', 'admissional', 'desligamento', 'demissional', 'contrato', 'atestado']
+      .some((term) => text.includes(term));
   };
 
-  const enviarParaContabilidade = async (doc: any, source: any, titulo: string) => {
+  const sourceFor = (doc: any): DocumentSource => ({
+    url: doc.arquivo_url || undefined,
+    arquivo_url: doc.arquivo_url || undefined,
+    bucket: doc.storage_bucket || 'documentos-funcionarios',
+    path: doc.storage_path || doc.arquivo_url || undefined,
+    storage_path: doc.storage_path || undefined,
+    tipo: inferTipo(doc.categoria || doc.tipo_documento || ''),
+  });
+
+  const enviarParaContabilidade = async (doc: any, source: DocumentSource, titulo: string) => {
     if (!session?.user) {
       toast.error('Entre na plataforma para enviar documentos.');
       return;
     }
     if (!funcionario || !company) {
-      toast.error('Funcionario ou empresa nao localizados.');
+      toast.error('Funcionário ou empresa não localizados.');
       return;
     }
+
     const fileName = safeFileName(doc.nome_arquivo || `${company.name} - ${titulo} - ${funcionario.name}.pdf`);
-    const isAtestado = inferTipo(doc.categoria || doc.tipo_documento || '') === 'atestado';
+    const isAtestado = groupsForDocument(doc).includes('atestados');
     let to = [...DESTINATARIOS_CONTABILIDADE] as string[];
     let cc = [...CC_OBRIGATORIO] as string[];
+
     if (isAtestado) {
       const { data: emailConfig, error: emailConfigError } = await supabase
         .from('config_emails_contabilidade' as any)
@@ -208,7 +345,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         .limit(1)
         .maybeSingle();
       if (emailConfigError) {
-        toast.error('Nao foi possivel carregar os e-mails cadastrados da contabilidade.');
+        toast.error('Não foi possível carregar os e-mails cadastrados da contabilidade.');
         return;
       }
       const config = emailConfig as any;
@@ -223,30 +360,26 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
           .filter((email) => !to.includes(email)),
       ));
       if (!to.length) {
-        toast.error('Nenhum e-mail da contabilidade esta cadastrado.');
+        toast.error('Nenhum e-mail da contabilidade está cadastrado.');
         return;
       }
-    } else if (!fileName.toLowerCase().endsWith('.pdf')) {
-      toast.error('Este documento ainda nao esta salvo como PDF. Gere o PDF novamente antes de enviar.');
-      return;
     }
+
     const url = await getDocumentUrl(source);
     if (!url) {
-      toast.error('Nao foi possivel localizar o arquivo para anexar.');
+      toast.error('Não foi possível localizar o arquivo para anexar.');
       return;
     }
     const response = await fetch(url);
     if (!response.ok) {
-      toast.error('Nao foi possivel baixar o arquivo para anexar.');
+      toast.error('Não foi possível baixar o arquivo para anexar.');
       return;
     }
     const originalBlob = await response.blob();
-    const attachmentBlob = originalBlob.type === 'application/pdf'
-      ? originalBlob
-      : new Blob([originalBlob], { type: 'application/pdf' });
     const senderName = String(session.user.user_metadata?.nome_completo || session.user.email || 'TOPAC RH PRO');
     const dataDocumento = new Date(doc.data_documento || doc.created_at).toLocaleDateString('pt-BR');
-    const detalheDocumento = [doc.descricao, doc.observacao].filter(Boolean).join(' | ') || 'Sem observacao/descricao.';
+    const detalheDocumento = [doc.descricao, doc.observacao].filter(Boolean).join(' | ') || 'Sem observação/descrição.';
+
     setEmailPdfDraft({
       to,
       cc,
@@ -255,39 +388,35 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         ? [
           'Prezados,',
           '',
-          `Funcionario: ${funcionario.name}`,
+          `Funcionário: ${funcionario.name}`,
           `Empresa: ${company.name}`,
           'Tipo do documento: ATESTADO',
           `Data do documento: ${dataDocumento}`,
-          `Observacao/descricao: ${detalheDocumento}`,
+          `Observação/descrição: ${detalheDocumento}`,
           '',
           'O PDF/arquivo enviado segue em anexo.',
           '',
           'Atenciosamente,',
           senderName,
-        ].filter(Boolean).join('\n')
+        ].join('\n')
         : [
           'Prezados,',
           '',
           `Segue em anexo o documento ${titulo} referente ao colaborador ${funcionario.name}.`,
           '',
           `Empresa: ${company.name}`,
-          doc.competencia ? `Competencia: ${doc.competencia}` : '',
+          doc.competencia ? `Competência: ${doc.competencia}` : '',
           '',
           'Atenciosamente,',
           senderName,
         ].filter(Boolean).join('\n'),
-      ...(isAtestado
-        ? {
-          attachments: [{
-            attachmentBlob: originalBlob,
-            attachmentName: fileName,
-            attachmentContentType: originalBlob.type || 'application/octet-stream',
-            documentId: doc.id,
-            documentName: titulo,
-          }],
-        }
-        : { attachmentBlob, attachmentName: fileName }),
+      attachments: [{
+        attachmentBlob: originalBlob,
+        attachmentName: fileName,
+        attachmentContentType: originalBlob.type || 'application/octet-stream',
+        documentId: doc.id,
+        documentName: titulo,
+      }],
       senderUserId: session.user.id,
       senderName,
       senderEmail: session.user.email,
@@ -301,15 +430,39 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     });
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground py-4">Carregando historico...</p>;
+  if (loading) return <p className="text-sm text-muted-foreground py-4">Carregando histórico...</p>;
+
+  const activeGroupLabel = HISTORY_GROUPS.find((group) => group.id === activeGroup)?.label || 'Histórico';
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+        {HISTORY_GROUPS.map((group) => {
+          const Icon = group.icon;
+          const selected = activeGroup === group.id;
+          return (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => setActiveGroup(group.id)}
+              className={`rounded-xl border p-3 text-left transition-colors ${selected ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card hover:bg-muted/40'}`}
+              title={group.label}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <Icon className="h-4 w-4" />
+                <span className="text-lg font-bold">{groupCounts[group.id]}</span>
+              </div>
+              <p className="mt-2 text-xs font-semibold leading-tight">{group.shortLabel}</p>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="rounded-lg border border-border p-3 space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Upload className="w-4 h-4 text-primary" /> Anexar documento
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Tipo/categoria</label>
             <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
@@ -332,14 +485,14 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             </Button>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label htmlFor="historico-documento-descricao" className="text-xs text-muted-foreground block mb-1">Descrição/nome do documento</label>
             <Input
               id="historico-documento-descricao"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Ex.: CARTA DEMISSIONAL ILMA MENDES GOIANIA"
+              placeholder="Ex.: contrato, documento pessoal, recibo..."
             />
           </div>
           <div>
@@ -356,14 +509,17 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       </div>
 
       <div className="rounded-lg border border-border p-3">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
-            <option value="">Todos os tipos</option>
-            {DOCUMENTO_CATEGORIAS_PADRAO.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">{activeGroupLabel}</p>
+            <p className="text-xs text-muted-foreground">Histórico individual permanente do funcionário.</p>
+          </div>
+          <Badge variant="outline">{docsFiltrados.length} registro(s)</Badge>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <select value={filtroOrigem} onChange={(e) => setFiltroOrigem(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
             <option value="">Todas as origens</option>
-            {DOCUMENTO_ORIGENS_PADRAO.map((item) => <option key={item} value={item}>{ORIGEM_LABEL[item] || item}</option>)}
+            {[...DOCUMENTO_ORIGENS_PADRAO, 'payroll_portal'].map((item) => <option key={item} value={item}>{ORIGEM_LABEL[item] || item}</option>)}
           </select>
           <Input type="date" value={filtroData} onChange={(e) => setFiltroData(e.target.value)} />
           <select value={filtroEmpresa} onChange={(e) => setFiltroEmpresa(e.target.value)} className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
@@ -373,40 +529,36 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         </div>
       </div>
 
-      {docs.length === 0 ? (
+      {docsFiltrados.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">Nenhum documento registrado ainda.</p>
+          <p className="text-sm">Nenhum registro nesta categoria.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">{docsFiltrados.length} de {docs.length} documento(s) no historico</p>
           {docsFiltrados.map((doc: any) => {
-            const categoriaDoc = doc.categoria || doc.tipo_documento || 'OUTROS';
+            const categoriaDoc = doc.tipo_documento || doc.categoria || 'Documento';
             const origemDoc = doc.origem || (doc.status_envio === 'gerado' ? 'gerado_sistema' : doc.status_envio) || 'gerado_sistema';
             const titulo = `${categoriaDoc}${doc.competencia ? ' - ' + doc.competencia : ''}`;
-            const source = {
-              arquivo_url: doc.arquivo_url,
-              storage_path: doc.storage_path,
-              bucket: doc.storage_bucket || 'documentos-funcionarios',
-              tipo: inferTipo(categoriaDoc),
-            };
+            const source = sourceFor(doc);
+            const protectedPayroll = doc.origem === 'payroll_portal';
+
             return (
-              <div key={doc.id} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
+              <div key={`${activeGroup}-${doc.id}`} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <FileText className="w-4 h-4 text-primary shrink-0" />
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-sm font-medium text-foreground">{categoriaDoc}</span>
-                      {doc.nome_arquivo && <span className="text-xs text-muted-foreground ml-2">{doc.nome_arquivo}</span>}
-                      {doc.competencia && <span className="text-xs text-muted-foreground ml-2">({doc.competencia})</span>}
+                      {doc.nome_arquivo && <span className="block truncate text-xs text-muted-foreground">{doc.nome_arquivo}</span>}
+                      {doc.competencia && <span className="text-xs text-muted-foreground">Competência {doc.competencia}</span>}
                     </div>
                   </div>
-                  <Badge className={doc.status_envio === 'enviado' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}>
-                    {doc.status_envio === 'enviado' ? 'Enviado' : ORIGEM_LABEL[origemDoc] || origemDoc}
+                  <Badge className={protectedPayroll ? 'bg-primary/10 text-primary' : doc.status_envio === 'enviado' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}>
+                    {protectedPayroll ? 'Protegido' : doc.status_envio === 'enviado' ? 'Enviado' : ORIGEM_LABEL[origemDoc] || origemDoc}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{doc.observacao || doc.descricao}</p>
+                <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{doc.descricao || doc.observacao}</p>
                 <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-muted-foreground">
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(doc.data_documento || doc.created_at).toLocaleString('pt-BR')}</span>
                   <span className="flex items-center gap-1"><User className="w-3 h-3" />{doc.funcionario_nome || funcionario?.name}</span>
@@ -424,14 +576,14 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                     <>
                       <button
                         type="button"
-                        onClick={() => setViewing({ url: doc.storage_path || doc.arquivo_url, tipo: inferTipo(categoriaDoc), titulo })}
+                        onClick={() => setViewing({ source, titulo })}
                         className="text-[11px] text-primary underline inline-flex items-center gap-1"
                       >
                         <Eye className="w-3 h-3" /> Visualizar
                       </button>
                       <button
                         type="button"
-                        onClick={() => downloadDocument(source, safeFileName(doc.nome_arquivo || `${titulo}.pdf`))}
+                        onClick={() => void downloadDocument(source, safeFileName(doc.nome_arquivo || `${titulo}.pdf`))}
                         className="text-[11px] text-primary underline inline-flex items-center gap-1"
                       >
                         <Download className="w-3 h-3" /> Baixar
@@ -439,7 +591,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                       {isDocumentoContabilidade(doc) && (
                         <button
                           type="button"
-                          onClick={() => enviarParaContabilidade(doc, source, titulo)}
+                          onClick={() => void enviarParaContabilidade(doc, source, titulo)}
                           className="text-[11px] text-primary underline inline-flex items-center gap-1"
                         >
                           <Mail className="w-3 h-3" /> Enviar para contabilidade
@@ -447,13 +599,15 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                       )}
                     </>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => excluir(doc)}
-                    className="text-[11px] text-destructive underline inline-flex items-center gap-1"
-                  >
-                    <Trash2 className="w-3 h-3" /> Excluir
-                  </button>
+                  {!protectedPayroll && (
+                    <button
+                      type="button"
+                      onClick={() => void excluir(doc)}
+                      className="text-[11px] text-destructive underline inline-flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" /> Excluir
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -461,19 +615,20 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         </div>
       )}
 
-      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
+      <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
         <DialogContent className="max-w-5xl p-0 overflow-hidden">
           <DialogHeader className="border-b px-6 py-4">
             <DialogTitle className="text-base">{viewing?.titulo || 'Documento'}</DialogTitle>
           </DialogHeader>
           <div className="px-6 pb-6 pt-3">
             <PdfDocumentViewer
-              source={viewing ? { url: viewing.url, tipo: viewing.tipo } : undefined}
+              source={viewing?.source}
               title={viewing?.titulo || 'Documento'}
             />
           </div>
         </DialogContent>
       </Dialog>
+
       <EmailPdfModal
         open={!!emailPdfDraft}
         draft={emailPdfDraft}

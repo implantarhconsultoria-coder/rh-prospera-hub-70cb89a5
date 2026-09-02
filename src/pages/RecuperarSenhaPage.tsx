@@ -7,6 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
+const PASSWORD_RECOVERY_URL = 'https://topacrh.pro/redefinir-senha';
+
 const RecuperarSenhaPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,7 +18,7 @@ const RecuperarSenhaPage: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/redefinir-senha`,
+      redirectTo: PASSWORD_RECOVERY_URL,
     });
     setLoading(false);
     if (error) {
@@ -37,7 +39,7 @@ const RecuperarSenhaPage: React.FC = () => {
           <>
             <h1 className="text-xl font-bold font-display text-foreground mb-2">Email enviado</h1>
             <p className="text-sm text-muted-foreground mb-4">
-              Se o email <strong>{email}</strong> estiver cadastrado, você receberá um link para redefinir sua senha.
+              Se o email <strong>{email}</strong> estiver cadastrado, você receberá um link para redefinir sua senha na TOPAC RH.
             </p>
             <Link to="/login"><Button variant="outline" className="w-full">Voltar ao Login</Button></Link>
           </>

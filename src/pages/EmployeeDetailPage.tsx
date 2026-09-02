@@ -15,6 +15,7 @@ import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documento
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
 import { prepareDocumentTextForSave } from '@/lib/documentoHistoricoTexto';
+import BenefitValuePaymentEditor from '@/components/BenefitValuePaymentEditor';
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
@@ -279,11 +280,29 @@ const EmployeeDetailPage: React.FC = () => {
         {activeTab === 2 && (
           <div className="space-y-3">
             <ToggleRow label="Vale Refeição (VR)" {...toggleFor('vrAtivo')} valueLabel="Diário" value={emp.vrDiario} />
-            {emp.vrAtivo && <Field label="Valor Diário VR" {...fieldFor('vrDiario', 'number')} />}
+            {emp.vrAtivo && (
+              <BenefitValuePaymentEditor
+                benefitType="VR"
+                employee={emp}
+                company={company}
+                currentValue={emp.vrDiario}
+                onUpdateValue={(value) => updateEmployee(emp.id, { vrDiario: value })}
+                actorId={session?.user?.id}
+              />
+            )}
             <ToggleRow label="Vale Alimentação (VA)" {...toggleFor('vaAtivo')} valueLabel="Mensal" value={emp.vaMensal} />
             {emp.vaAtivo && <Field label="Valor Mensal VA" {...fieldFor('vaMensal', 'number')} />}
             <ToggleRow label="Vale Transporte (VT)" {...toggleFor('vtAtivo')} valueLabel="Diário" value={emp.vtDiario} />
-            {emp.vtAtivo && <Field label="Valor Diário VT" {...fieldFor('vtDiario', 'number')} />}
+            {emp.vtAtivo && (
+              <BenefitValuePaymentEditor
+                benefitType="VT"
+                employee={emp}
+                company={company}
+                currentValue={emp.vtDiario}
+                onUpdateValue={(value) => updateEmployee(emp.id, { vtDiario: value })}
+                actorId={session?.user?.id}
+              />
+            )}
             {insalubridadeLiberada ? (
               <>
                 <ToggleRow label="Insalubridade" {...toggleFor('insalubridadeAtiva')} valueLabel="Valor" value={emp.insalubridadeValor} />

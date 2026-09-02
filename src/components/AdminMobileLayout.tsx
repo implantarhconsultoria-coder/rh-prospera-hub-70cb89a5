@@ -1,11 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Users, FileCheck, FileText, Settings, LogOut, Menu, X, ArrowLeft, Search,
-  HardHat, Shirt, History, Clock, Wallet, CalendarCheck, FileX, Fuel, Car,
-  Stethoscope, UserCheck, Package, Monitor, Shield, ClipboardList, Receipt, RefreshCw, AlertTriangle, ClipboardCheck,
-  ArrowDownCircle, ArrowUpCircle, Truck, Landmark, Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch,
-  ShoppingCart, Sparkles, ChevronRight,
+  LayoutDashboard, Building2, FileCheck, FileText, LogOut, Menu, X, ArrowLeft, Search,
+  HardHat, Shirt, History, Clock, CalendarCheck, FileX, Fuel, Car, Stethoscope,
+  UserCheck, Package, ClipboardList, ClipboardCheck, Wrench, FileSearch, ShoppingCart,
+  ChevronRight,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -40,22 +39,6 @@ const ALL_ITEMS: Item[] = [
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores', group: 'Operacional' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras', group: 'Operacional' },
   { label: 'Historico', icon: History, path: '/admin/historico', group: 'Operacional' },
-  { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Faturamento' },
-  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes', group: 'Faturamento' },
-  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos', group: 'Faturamento' },
-  { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas', group: 'Faturamento' },
-  { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes', group: 'Faturamento' },
-  { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes', group: 'Faturamento' },
-  { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias', group: 'Faturamento' },
-  { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: 'Financeiro' },
-  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Financeiro' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: 'Financeiro' },
-  { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores', group: 'Financeiro' },
-  { label: 'Caixa e Bancos', icon: Landmark, path: '/admin/financeiro/bancos', group: 'Financeiro' },
-  { label: 'Fluxo de Caixa', icon: Activity, path: '/admin/financeiro/fluxo-caixa', group: 'Financeiro' },
-  { label: 'Conciliacao', icon: CheckSquare, path: '/admin/financeiro/conciliacao', group: 'Financeiro' },
-  { label: 'Inadimplencia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia', group: 'Financeiro' },
-  { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo', group: 'Financeiro' },
 ];
 
 const HOME_QUICK: Item[] = [
@@ -63,26 +46,14 @@ const HOME_QUICK: Item[] = [
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento', group: '', tint: 'from-emerald-500/15 to-emerald-500/5 text-emerald-600 dark:text-emerald-400' },
   { label: 'EPI', icon: HardHat, path: '/admin/epi', group: '', tint: 'from-orange-500/15 to-orange-500/5 text-orange-600 dark:text-orange-400' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', group: '', tint: 'from-cyan-500/15 to-cyan-500/5 text-cyan-600 dark:text-cyan-400' },
-  { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: '', tint: 'from-green-500/15 to-green-500/5 text-green-600 dark:text-green-400' },
-  { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: '', tint: 'from-lime-500/15 to-lime-500/5 text-lime-600 dark:text-lime-400' },
 ];
 
 const DIRECTOR_ITEMS: Item[] = [
   { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin', group: 'Diretoria' },
-  { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: 'Diretoria' },
-  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes', group: 'Diretoria' },
-  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos', group: 'Diretoria' },
-  { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas', group: 'Diretoria' },
-  { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: 'Diretoria' },
-  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber', group: 'Diretoria' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: 'Diretoria' },
   { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio', group: 'Relatorios' },
 ];
 
 const DIRECTOR_HOME_QUICK: Item[] = [
-  { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento', group: '', tint: 'from-green-500/15 to-green-500/5 text-green-600 dark:text-green-400' },
-  { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro', group: '', tint: 'from-cyan-500/15 to-cyan-500/5 text-cyan-600 dark:text-cyan-400' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar', group: '', tint: 'from-orange-500/15 to-orange-500/5 text-orange-600 dark:text-orange-400' },
   { label: 'Relatorio', icon: FileText, path: '/admin/relatorio', group: '', tint: 'from-violet-500/15 to-violet-500/5 text-violet-600 dark:text-violet-400' },
 ];
 
@@ -113,6 +84,8 @@ const AdminMobileLayout: React.FC = () => {
 
   const go = (path: string) => { setDrawerOpen(false); nav(path); };
   const initials = (session?.user?.email || 'A').slice(0, 1).toUpperCase();
+
+  if (isDirector && !isDirectorRouteAllowed(location.pathname)) return <DirectorBlocked />;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex flex-col">
@@ -148,9 +121,7 @@ const AdminMobileLayout: React.FC = () => {
                   <div className="space-y-1">
                     {items.map(it => (
                       <button key={it.path} onClick={() => go(it.path)} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition', location.pathname === it.path ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-muted/60 active:bg-muted')}>
-                        <it.icon className="w-4 h-4 shrink-0 opacity-90" />
-                        <span className="flex-1 truncate">{it.label}</span>
-                        <ChevronRight className="w-4 h-4 opacity-40" />
+                        <it.icon className="w-4 h-4 shrink-0 opacity-90" /><span className="flex-1 truncate">{it.label}</span><ChevronRight className="w-4 h-4 opacity-40" />
                       </button>
                     ))}
                   </div>
@@ -167,33 +138,23 @@ const AdminMobileLayout: React.FC = () => {
           <div className="space-y-5">
             <div className="px-1 pt-1">
               <h1 className="text-2xl font-bold tracking-tight">{isDirector ? 'Painel executivo' : `Ola, ${displayName}`}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{isDirector ? 'Indicadores, financeiro, faturamento e relatorios liberados.' : 'O que vamos fazer hoje?'}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{isDirector ? 'Indicadores e relatorios liberados.' : 'O que vamos fazer hoje?'}</p>
             </div>
-            <button onClick={() => setSearchOpen(true)} className="w-full flex items-center gap-2 px-4 h-12 rounded-2xl bg-card border border-border shadow-sm text-left text-sm text-muted-foreground active:scale-[0.99] transition"><Search className="w-4 h-4" /><span>Buscar funcionario, empresa, modulo...</span></button>
-            <div>
-              <div className="flex items-center justify-between mb-2 px-1"><h2 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Acesso rapido</h2><button onClick={() => setDrawerOpen(true)} className="text-xs text-primary font-medium">Ver tudo</button></div>
-              <div className="grid grid-cols-3 gap-2.5">
-                {quickItems.map(it => (
-                  <button key={it.path} onClick={() => nav(it.path)} className="aspect-square rounded-2xl bg-card border border-border/60 shadow-sm active:scale-95 transition flex flex-col items-center justify-center gap-1.5 p-2">
-                    <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-br', it.tint || 'from-primary/15 to-primary/5 text-primary')}><it.icon className="w-5 h-5" /></div>
-                    <span className="text-[11px] font-medium text-center leading-tight line-clamp-2">{it.label}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              {quickItems.map(it => (
+                <button key={it.path} onClick={() => go(it.path)} className={cn('rounded-2xl border border-border/70 bg-gradient-to-br p-4 text-left min-h-[104px] shadow-sm active:scale-[.98] transition', it.tint)}>
+                  <it.icon className="w-6 h-6 mb-3" /><div className="font-semibold text-sm text-foreground">{it.label}</div>
+                </button>
+              ))}
             </div>
-            <div className="rounded-2xl border border-border/60 bg-card p-4 flex items-start gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><Sparkles className="w-4 h-4 text-primary" /></div>
-              <div><div className="text-sm font-semibold">{isDirector ? 'Visao executiva' : 'Comando de voz'}</div><p className="text-xs text-muted-foreground mt-0.5">{isDirector ? 'Edicao operacional de RH, ponto, beneficios, frota, chamados e configuracoes fica bloqueada para este perfil.' : 'Toque no microfone e diga, por exemplo: abrir funcionario Rafael Olimpio ou imprimir recibo de VR do Diego.'}</p></div>
-            </div>
+            <Outlet />
           </div>
-        ) : (
-          isDirector && !isDirectorRouteAllowed(location.pathname) ? <DirectorBlocked /> : <Outlet />
-        )}
+        ) : <Outlet />}
       </main>
 
+      <VoiceCommandFab />
+      <AssistenteFab />
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} query={searchQ} onQuery={setSearchQ} modules={searchModules} />
-      {!isDirector && <VoiceCommandFab />}
-      {!isDirector && <AssistenteFab />}
     </div>
   );
 };

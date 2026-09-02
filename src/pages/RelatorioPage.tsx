@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/context/AppContext';
-import { calcTotalFuncionario, calcFalta, calcAtraso, formatCurrency, formatDate } from '@/lib/calculations';
+import { calcTotalFuncionario, calcFalta, calcAtraso, formatCurrency, formatDate, getHoraExtraSemanalPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
 import { Input } from '@/components/ui/input';
@@ -68,6 +68,7 @@ const RelatorioPage: React.FC = () => {
   const [generated, setGenerated] = useState(false);
 
   const isAllCompanies = selectedCompany === ALL_COMPANIES;
+  const selectedHePct = !isAllCompanies && selectedCompany ? getHoraExtraSemanalPercentual(selectedCompany) : null;
   const selectedCompanies = isAllCompanies ? companies : companies.filter(c => c.id === selectedCompany);
   const company = selectedCompanies[0];
   const diasUteis = getWorkingDays(competencia);
@@ -84,7 +85,7 @@ const RelatorioPage: React.FC = () => {
 
     const r = compEmps.map(emp => {
       const entry = compEntries.find(e => e.employeeId === emp.id) || defaultEntry(emp, competencia, diasUteis);
-      const calc = calcTotalFuncionario(emp, entry, diasUteis);
+      const calc = calcTotalFuncionario(emp, entry, diasUteis, getHoraExtraSemanalPercentual(emp.companyId));
       const he50Val = calc.he50Val;
       const he100Val = calc.he100Val;
       const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
@@ -262,7 +263,7 @@ const RelatorioPage: React.FC = () => {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  {(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário','HE 50%','HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (
+                  {(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário', isAllCompanies ? 'HE semanal' : `HE ${selectedHePct}%`, 'HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (
                     <th key={h} className="px-2 py-2 text-left font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -274,7 +275,7 @@ const RelatorioPage: React.FC = () => {
                     <td className="px-2 py-2 font-medium whitespace-nowrap">{r.emp.name}</td>
                     <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{r.emp.cargo}</td>
                     <td className="px-2 py-2">{formatCurrency(r.emp.salarioBase)}</td>
-                    <td className="px-2 py-2">{formatCurrency(r.he50Val)}</td>
+                    <td className="px-2 py-2">{isAllCompanies ? `HE ${getHoraExtraSemanalPercentual(r.emp.companyId)}% · ${formatCurrency(r.he50Val)}` : formatCurrency(r.he50Val)}</td>
                     <td className="px-2 py-2">{formatCurrency(r.he100Val)}</td>
                     <td className="px-2 py-2">{formatCurrency(r.entry.adicionais)}</td>
                     <td className="px-2 py-2">{formatCurrency(r.insVal)}</td>

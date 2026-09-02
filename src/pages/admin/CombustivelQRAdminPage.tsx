@@ -1,19 +1,37 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
-import { Fuel, QrCode, Lock, Unlock, Plus, Printer, FileSpreadsheet, Pencil, Download, Loader2, Building2, BarChart3, Settings, Filter, Trash2 } from "lucide-react";
-import QRCode from "qrcode";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import QRCode from 'qrcode';
+import { Building2, CalendarRange, Download, Fuel, History, Loader2, Mail, Pencil, Plus, Printer, QrCode } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import {
+  buildConsolidatedFuelReport,
+  buildKmReportGroups,
+  formatDateBr,
+  formatMoney,
+  formatNumber,
+  generateConsolidatedFuelPdf,
+  generateDetailedFuelPdf,
+  generateKmReportPdf,
+  resolveFuelPeriod,
+  type FuelReportRecord,
+  type KmReportGroup,
+  type KmReportRecord,
+  type RegisteredCompany,
+} from '@/lib/abastecimentoReports';
+import { TOPAC_REPORT_CC } from '@/lib/emailPolicy';
+import { toast } from 'sonner';
 
-interface Posto {
+type Posto = {
   id: string;
   codigo: string;
   nome: string;
@@ -24,415 +42,395 @@ interface Posto {
   telefone: string | null;
   observacao: string | null;
   status: string;
-}
+};
 
-interface Abast {
-  id: string;
-  data: string;
-  hora: string;
-  empresa: string | null;
-  filial: string | null;
-  mecanico_nome: string;
-  placa: string | null;
-  posto_nome: string | null;
-  posto_id: string | null;
-  combustivel: string | null;
-  valor: number;
-  litros: number;
-  valor_por_litro: number | null;
-  km_atual: number | null;
-  foto_bomba_url: string | null;
-  foto_painel_url: string | null;
-  status: string;
-  observacao: string | null;
-  qr_codigo: string | null;
-  excluido?: boolean | null;
-  excluido_em?: string | null;
-  excluido_motivo?: string | null;
-}
+type PeriodMode = 'month' | 'year' | 'range';
+type ReportMode = 'consolidado' | 'detalhado' | 'quilometragem';
 
-const EMPRESAS_PADRAO = ["TOPAC MATRIZ", "TOPAC FILIAL PRAIA GRANDE", "TOPAC FILIAL GOIÂNIA", "LMT", "ALQUI OBRAS"];
-const empty = { id: "", nome: "", cnpj: "", endereco: "", telefone: "", observacao: "" };
+const currentDate = new Date();
+const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+const emptyPosto = { id: '', nome: '', cnpj: '', endereco: '', telefone: '', observacao: '' };
+
+const escapeHtml = (value: unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
 
 export default function CombustivelQRAdminPage() {
+  const navigate = useNavigate();
   const [postos, setPostos] = useState<Posto[]>([]);
-  const [abastecimentos, setAbastecimentos] = useState<Abast[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editAberto, setEditAberto] = useState(false);
-  const [edit, setEdit] = useState<typeof empty>(empty);
-  const [qrAberto, setQrAberto] = useState<Posto | null>(null);
-  const [qrUrl, setQrUrl] = useState("");
-  const [editAbast, setEditAbast] = useState<Abast | null>(null);
-  const [comp, setComp] = useState(new Date().toISOString().slice(0, 7));
-  const [fEmp, setFEmp] = useState("todas");
-  const [fPosto, setFPosto] = useState("todos");
-  const [fStatus, setFStatus] = useState("todos");
-  const [fBusca, setFBusca] = useState("");
+  const [companies, setCompanies] = useState<RegisteredCompany[]>([]);
+  const [records, setRecords] = useState<FuelReportRecord[]>([]);
+  const [kmRecords, setKmRecords] = useState<KmReportRecord[]>([]);
+  const [loadingBase, setLoadingBase] = useState(true);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
+  const [month, setMonth] = useState(currentMonth);
+  const [year, setYear] = useState(String(currentDate.getFullYear()));
+  const [startDate, setStartDate] = useState(`${currentMonth}-01`);
+  const [endDate, setEndDate] = useState(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).toISOString().slice(0, 10));
+  const [companyFilter, setCompanyFilter] = useState('todas');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [search, setSearch] = useState('');
+  const [loadedPeriodLabel, setLoadedPeriodLabel] = useState('');
+  const [loadedSuffix, setLoadedSuffix] = useState(currentMonth);
+  const [postoDialog, setPostoDialog] = useState(false);
+  const [postoDraft, setPostoDraft] = useState(emptyPosto);
+  const [qrPosto, setQrPosto] = useState<Posto | null>(null);
+  const [qrUrl, setQrUrl] = useState('');
+  const [emailDraft, setEmailDraft] = useState<EmailPdfDraft | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
 
-  const carregar = async () => {
-    setLoading(true);
-    const [pRes, aRes] = await Promise.all([
-      supabase.from("postos_combustivel" as any).select("*").is("deleted_at", null).order("unidade").order("codigo"),
-      supabase.from("abastecimentos" as any).select("*").or("excluido.is.null,excluido.eq.false").order("data", { ascending: false }).order("hora", { ascending: false }).limit(2000),
+  const loadBase = useCallback(async () => {
+    setLoadingBase(true);
+    const [postosResult, companiesResult] = await Promise.all([
+      supabase.from('postos_combustivel' as any).select('*').is('deleted_at', null).order('unidade').order('codigo'),
+      supabase.from('empresas').select('id,nome,razao_social,cnpj,status').order('nome'),
     ]);
-    setPostos(((pRes.data as any) || []) as Posto[]);
-    setAbastecimentos(((aRes.data as any) || []) as Abast[]);
-    setLoading(false);
-  };
+    if (postosResult.error) toast.error(`Postos: ${postosResult.error.message}`);
+    if (companiesResult.error) toast.error(`Empresas: ${companiesResult.error.message}`);
+    setPostos(((postosResult.data as any[]) || []) as Posto[]);
+    setCompanies(((companiesResult.data as any[]) || []) as RegisteredCompany[]);
+    setLoadingBase(false);
+  }, []);
 
-  useEffect(() => { carregar(); }, []);
+  const loadReport = useCallback(async () => {
+    const period = resolveFuelPeriod({ mode: periodMode, month, year, startDate, endDate });
+    if (!period.startDate || !period.endDate) return toast.error('Informe o período completo.');
+    if (period.endDate < period.startDate) return toast.error('A data final não pode ser anterior à inicial.');
+    setLoadingReport(true);
+    const [fuelResult, kmResult] = await Promise.all([
+      supabase.rpc('relatorio_abastecimento_periodo' as any, {
+        p_data_inicio: period.startDate,
+        p_data_fim: period.endDate,
+      }),
+      supabase.rpc('relatorio_quilometragem_periodo' as any, {
+        p_data_inicio: period.startDate,
+        p_data_fim: period.endDate,
+      }),
+    ]);
+    setLoadingReport(false);
+    if (fuelResult.error || kmResult.error) {
+      toast.error(fuelResult.error?.message || kmResult.error?.message || 'Não foi possível consultar os relatórios operacionais.');
+      return;
+    }
+    const rows = ((fuelResult.data as unknown[]) || []).map((item) => (typeof item === 'string' ? JSON.parse(item) : item)) as FuelReportRecord[];
+    const kmRows = ((kmResult.data as unknown[]) || []).map((item) => (typeof item === 'string' ? JSON.parse(item) : item)) as KmReportRecord[];
+    setRecords(rows);
+    setKmRecords(kmRows);
+    setLoadedPeriodLabel(period.label);
+    setLoadedSuffix(`${period.startDate}_${period.endDate}`);
+    toast.success(`${rows.length} abastecimento(s) e ${kmRows.length} leitura(s) de KM localizados.`);
+  }, [periodMode, month, year, startDate, endDate]);
 
-  const qrTarget = (p: Posto) => `${window.location.origin}/acesso-mecanico?qr=${encodeURIComponent(p.codigo)}`;
+  useEffect(() => { void loadBase(); }, [loadBase]);
+  useEffect(() => { void loadReport(); }, [loadReport]);
 
-  const novo = () => { setEdit(empty); setEditAberto(true); };
-  const editar = (p: Posto) => {
-    setEdit({ id: p.id, nome: p.nome, cnpj: p.cnpj || "", endereco: p.endereco || "", telefone: p.telefone || "", observacao: p.observacao || "" });
-    setEditAberto(true);
-  };
-
-  const salvar = async () => {
-    if (!edit.nome.trim()) { toast.error("Informe o nome do posto"); return; }
-    const { data, error } = await supabase.rpc("admin_posto_combustivel_upsert" as any, {
-      p_id: edit.id || null,
-      p_nome: edit.nome,
-      p_cnpj: edit.cnpj,
-      p_endereco: edit.endereco,
-      p_telefone: edit.telefone,
-    });
-    const r = data as any;
-    if (error || !r?.ok) { toast.error(r?.error || error?.message || "Erro"); return; }
-    if (edit.id) await supabase.from("postos_combustivel" as any).update({ observacao: edit.observacao }).eq("id", edit.id);
-    toast.success(edit.id ? "Posto atualizado" : "Posto criado com QR unico");
-    setEditAberto(false);
-    carregar();
-  };
-
-  const toggle = async (p: Posto) => {
-    const bloquear = p.status === "ativo";
-    const { data, error } = await supabase.rpc("admin_posto_combustivel_toggle" as any, { p_id: p.id, p_bloquear: bloquear });
-    const r = data as any;
-    if (error || !r?.ok) { toast.error("Erro"); return; }
-    toast.success(bloquear ? "QR bloqueado" : "QR liberado");
-    carregar();
-  };
-
-  const verQr = async (p: Posto) => {
-    setQrAberto(p);
-    setQrUrl(await QRCode.toDataURL(qrTarget(p), { width: 480, margin: 2 }));
-  };
-
-  const baixarQr = () => {
-    if (!qrUrl || !qrAberto) return;
-    const a = document.createElement("a");
-    a.href = qrUrl;
-    a.download = `qr-${qrAberto.codigo}.png`;
-    a.click();
-  };
-
-  const imprimirQr = () => {
-    if (!qrAberto || !qrUrl) return;
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(qrPrintHtml([{ p: qrAberto, url: qrUrl }], false));
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 300);
-  };
-
-  const imprimirFolhaQrs = async () => {
-    const ativos = postos.filter((p) => p.status === "ativo");
-    if (!ativos.length) return;
-    const itens = await Promise.all(ativos.map(async (p) => ({ p, url: await QRCode.toDataURL(qrTarget(p), { width: 360, margin: 1 }) })));
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.write(qrPrintHtml(itens, true));
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 300);
-  };
-
-  const empresasUsadas = useMemo(() => {
-    const s = new Set<string>(EMPRESAS_PADRAO);
-    abastecimentos.forEach((a) => a.empresa && s.add(a.empresa));
-    return Array.from(s).sort();
-  }, [abastecimentos]);
-
-  const filtrados = useMemo(() => abastecimentos.filter((a) => {
-    if (comp && !(a.data || "").startsWith(comp)) return false;
-    if (fEmp !== "todas" && (a.empresa || "") !== fEmp) return false;
-    if (fPosto !== "todos" && a.posto_id !== fPosto) return false;
-    if (fStatus !== "todos" && a.status !== fStatus) return false;
-    if (fBusca) {
-      const q = fBusca.toLowerCase();
-      const hay = `${a.mecanico_nome} ${a.placa || ""} ${a.posto_nome || ""}`.toLowerCase();
-      if (!hay.includes(q)) return false;
+  const filteredRecords = useMemo(() => records.filter((record) => {
+    if (companyFilter !== 'todas' && record.empresa_id !== companyFilter) return false;
+    if (statusFilter !== 'todos' && record.status !== statusFilter) return false;
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      const haystack = `${record.funcionario_nome} ${record.empresa_nome} ${record.empresa || ''} ${record.placa || ''} ${record.posto_nome || ''}`.toLowerCase();
+      if (!haystack.includes(term)) return false;
     }
     return true;
-  }), [abastecimentos, comp, fEmp, fPosto, fStatus, fBusca]);
+  }), [records, companyFilter, statusFilter, search]);
 
-  const totais = useMemo(() => {
-    const litros = filtrados.reduce((s, a) => s + Number(a.litros || 0), 0);
-    const valor = filtrados.reduce((s, a) => s + Number(a.valor || 0), 0);
-    return { qtd: filtrados.length, litros, valor, media: litros > 0 ? valor / litros : 0 };
-  }, [filtrados]);
+  const filteredKmRecords = useMemo(() => kmRecords.filter((record) => {
+    if (companyFilter !== 'todas' && record.empresa_id !== companyFilter) return false;
+    if (statusFilter !== 'todos' && record.status !== statusFilter) return false;
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      const haystack = `${record.funcionario_nome} ${record.empresa_nome} ${record.empresa || ''} ${record.filial || ''} ${record.placa} ${record.motivo_rota}`.toLowerCase();
+      if (!haystack.includes(term)) return false;
+    }
+    return true;
+  }), [kmRecords, companyFilter, statusFilter, search]);
 
-  const porEmpresa = useMemo(() => {
-    const map = new Map<string, { qtd: number; litros: number; valor: number; mecanicos: Set<string>; veiculos: Set<string> }>();
-    filtrados.forEach((a) => {
-      const k = a.empresa || "(sem empresa)";
-      if (!map.has(k)) map.set(k, { qtd: 0, litros: 0, valor: 0, mecanicos: new Set(), veiculos: new Set() });
-      const o = map.get(k)!;
-      o.qtd++;
-      o.litros += Number(a.litros || 0);
-      o.valor += Number(a.valor || 0);
-      if (a.mecanico_nome) o.mecanicos.add(a.mecanico_nome);
-      if (a.placa) o.veiculos.add(a.placa);
+  const consolidated = useMemo(() => buildConsolidatedFuelReport(filteredRecords, companies), [filteredRecords, companies]);
+  const kmGroups = useMemo(() => buildKmReportGroups(filteredKmRecords), [filteredKmRecords]);
+  const generalTotals = useMemo(() => ({
+    quantity: filteredRecords.length,
+    value: filteredRecords.reduce((sum, record) => sum + Number(record.valor || 0), 0),
+    liters: filteredRecords.reduce((sum, record) => sum + Number(record.litros || 0), 0),
+  }), [filteredRecords]);
+  const kmTotals = useMemo(() => ({
+    records: filteredKmRecords.length,
+    groups: kmGroups.length,
+    kilometers: kmGroups.reduce((sum, group) => sum + group.totalRodado, 0),
+  }), [filteredKmRecords.length, kmGroups]);
+
+  const openPdf = (mode: ReportMode, download = false) => {
+    if (mode === 'quilometragem' && !kmGroups.length) return toast.error('Não há dados de quilometragem no filtro atual.');
+    if (mode !== 'quilometragem' && !filteredRecords.length) return toast.error('Não há dados no filtro atual.');
+    const pdf = mode === 'consolidado'
+      ? generateConsolidatedFuelPdf(consolidated, loadedPeriodLabel, loadedSuffix)
+      : mode === 'detalhado'
+        ? generateDetailedFuelPdf(filteredRecords, loadedPeriodLabel, loadedSuffix)
+        : generateKmReportPdf(kmGroups, loadedPeriodLabel, loadedSuffix);
+    const url = URL.createObjectURL(pdf.blob);
+    if (download) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = pdf.fileName;
+      link.click();
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+  };
+
+  const prepareEmail = (mode: ReportMode) => {
+    if (mode === 'quilometragem' && !kmGroups.length) return toast.error('Não há dados de quilometragem no filtro atual.');
+    if (mode !== 'quilometragem' && !filteredRecords.length) return toast.error('Não há dados no filtro atual.');
+    const pdf = mode === 'consolidado'
+      ? generateConsolidatedFuelPdf(consolidated, loadedPeriodLabel, loadedSuffix)
+      : mode === 'detalhado'
+        ? generateDetailedFuelPdf(filteredRecords, loadedPeriodLabel, loadedSuffix)
+        : generateKmReportPdf(kmGroups, loadedPeriodLabel, loadedSuffix);
+    const title = mode === 'consolidado'
+      ? 'Relatório Consolidado de Abastecimentos'
+      : mode === 'detalhado'
+        ? 'Relatório Detalhado de Abastecimentos'
+        : 'Relatório Corporativo de Quilometragem';
+    setEmailDraft({
+      to: [],
+      cc: [...TOPAC_REPORT_CC],
+      subject: `${title} — ${loadedPeriodLabel}`,
+      body: [
+        'Prezados,',
+        '',
+        `Encaminho, em anexo, o ${title.toLowerCase()} referente ao período ${loadedPeriodLabel}.`,
+        '',
+        mode === 'consolidado'
+          ? 'O documento está organizado por empresa e apresenta, para cada funcionário, a quantidade de abastecimentos e o valor total abastecido, além dos totais gerais de cada empresa.'
+          : mode === 'detalhado'
+            ? 'O documento apresenta os registros individuais dos abastecimentos localizados no período selecionado.'
+            : 'O documento está separado por colaborador e placa, com sequência completa de KM inicial, KM final, total rodado e motivo ou rota.',
+        '',
+        'Permanecemos à disposição para eventuais conferências.',
+      ].join('\n'),
+      attachmentBlob: pdf.blob,
+      attachmentName: pdf.fileName,
+      moduleOrigin: mode === 'quilometragem' ? 'relatorio-quilometragem' : `relatorio-abastecimentos-${mode}`,
+      documentName: pdf.fileName,
     });
-    return Array.from(map.entries()).map(([empresa, v]) => ({ empresa, qtd: v.qtd, litros: v.litros, valor: v.valor, mecanicos: v.mecanicos.size, veiculos: v.veiculos.size })).sort((a, b) => b.valor - a.valor);
-  }, [filtrados]);
+    setEmailOpen(true);
+  };
 
-  const relatorio = useMemo(() => {
-    const map = new Map<string, any>();
-    filtrados.forEach((a) => {
-      const k = `${a.empresa || ""}|${a.mecanico_nome}|${a.placa || ""}`;
-      if (!map.has(k)) map.set(k, { empresa: a.empresa || "-", mecanico: a.mecanico_nome, placa: a.placa || "-", qtd: 0, litros: 0, valor: 0, km_min: Infinity, km_max: -Infinity, postos: new Set<string>() });
-      const o = map.get(k)!;
-      o.qtd++;
-      o.litros += Number(a.litros || 0);
-      o.valor += Number(a.valor || 0);
-      if (a.km_atual != null) { o.km_min = Math.min(o.km_min, Number(a.km_atual)); o.km_max = Math.max(o.km_max, Number(a.km_atual)); }
-      if (a.posto_nome) o.postos.add(a.posto_nome);
+  const exportDetailedCsv = () => {
+    if (!filteredRecords.length) return;
+    const columns = ['Data', 'Hora', 'Empresa', 'Funcionario', 'Placa', 'Posto', 'Combustivel', 'Litros', 'Valor', 'KM', 'Status'];
+    const rows = filteredRecords.map((record) => [
+      formatDateBr(record.data), String(record.hora || '').slice(0, 5), record.empresa_nome, record.funcionario_nome,
+      record.placa || '', record.posto_nome || '', record.combustivel || '', Number(record.litros || 0).toFixed(2),
+      Number(record.valor || 0).toFixed(2), record.km_atual ?? '', record.status || '',
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Relatorio_Detalhado_Abastecimentos_${loadedSuffix}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportKmCsv = () => {
+    if (!filteredKmRecords.length) return;
+    const columns = ['Empresa', 'Colaborador', 'Data', 'Hora', 'Placa', 'KM Inicial', 'KM Final', 'Total rodado', 'Motivo/Rota', 'Origem do cálculo'];
+    const rows = filteredKmRecords.map((record) => [
+      record.empresa_nome || record.empresa || record.filial || '',
+      record.funcionario_nome,
+      formatDateBr(record.data),
+      String(record.hora || '').slice(0, 5),
+      record.placa,
+      record.km_inicial ?? '',
+      record.km_final ?? '',
+      record.total_rodado ?? '',
+      record.motivo_rota || '',
+      record.fonte_km,
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Relatorio_Quilometragem_${loadedSuffix}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const savePosto = async () => {
+    if (!postoDraft.nome.trim()) return toast.error('Informe o nome do posto.');
+    const { data, error } = await supabase.rpc('admin_posto_combustivel_upsert' as any, {
+      p_id: postoDraft.id || null,
+      p_nome: postoDraft.nome,
+      p_cnpj: postoDraft.cnpj,
+      p_endereco: postoDraft.endereco,
+      p_telefone: postoDraft.telefone,
     });
-    return Array.from(map.values()).map((o) => {
-      const km_rodado = (o.km_max > -Infinity && o.km_min < Infinity) ? Math.max(0, o.km_max - o.km_min) : 0;
-      return { ...o, km_inicial: o.km_min === Infinity ? null : o.km_min, km_final: o.km_max === -Infinity ? null : o.km_max, km_rodado, media_litro: o.litros > 0 ? o.valor / o.litros : 0, custo_km: km_rodado > 0 ? o.valor / km_rodado : 0, postos: Array.from(o.postos).join(", ") };
-    }).sort((a, b) => b.valor - a.valor);
-  }, [filtrados]);
-
-  const exportarCsv = () => {
-    if (!relatorio.length) return;
-    const head = ["Empresa", "Mecanico", "Placa", "Qtd", "Litros", "Valor", "R$/L", "KM Inicial", "KM Final", "KM Rodado", "Custo/KM", "Postos"];
-    const rows = relatorio.map((l) => [l.empresa, l.mecanico, l.placa, l.qtd, l.litros.toFixed(2), l.valor.toFixed(2), l.media_litro.toFixed(3), l.km_inicial ?? "", l.km_final ?? "", l.km_rodado, l.custo_km.toFixed(3), l.postos]);
-    const csv = [head, ...rows].map((r) => r.map((c: any) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `combustivel-${comp}.csv`;
-    a.click();
+    const response = data as any;
+    if (error || !response?.ok) return toast.error(response?.error || error?.message || 'Não foi possível salvar o posto.');
+    if (postoDraft.id) await supabase.from('postos_combustivel' as any).update({ observacao: postoDraft.observacao }).eq('id', postoDraft.id);
+    toast.success(postoDraft.id ? 'Posto atualizado.' : 'Posto criado.');
+    setPostoDialog(false);
+    await loadBase();
   };
 
-  const imprimirRelatorio = () => {
-    if (!relatorio.length) return;
-    const w = window.open("", "_blank", "width=1280,height=900");
-    if (!w) return;
-    w.document.write(buildFuelReportPrintHtml({
-      competencia: comp,
-      filtroEmpresa: fEmp,
-      filtroPosto: fPosto === "todos" ? "Todos" : postos.find((p) => p.id === fPosto)?.nome || "Todos",
-      totais,
-      porEmpresa,
-      relatorio,
-    }));
-    w.document.close();
-    w.focus();
-    setTimeout(() => w.print(), 250);
+  const togglePosto = async (posto: Posto) => {
+    const { data, error } = await supabase.rpc('admin_posto_combustivel_toggle' as any, { p_id: posto.id, p_bloquear: posto.status === 'ativo' });
+    if (error || !(data as any)?.ok) return toast.error(error?.message || 'Não foi possível alterar o posto.');
+    await loadBase();
   };
 
-  const salvarAbast = async () => {
-    if (!editAbast) return;
-    const { error } = await supabase.from("abastecimentos" as any).update({
-      valor: editAbast.valor,
-      litros: editAbast.litros,
-      km_atual: editAbast.km_atual,
-      combustivel: editAbast.combustivel,
-      placa: editAbast.placa,
-      observacao: editAbast.observacao,
-      status: editAbast.status,
-    }).eq("id", editAbast.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Abastecimento atualizado");
-    setEditAbast(null);
-    carregar();
+  const showQr = async (posto: Posto) => {
+    setQrPosto(posto);
+    setQrUrl(await QRCode.toDataURL(`${window.location.origin}/acesso-mecanico?qr=${encodeURIComponent(posto.codigo)}`, { width: 480, margin: 2 }));
   };
 
-  const cancelarAbast = async () => {
-    if (!editAbast) return;
-    const motivo = window.prompt("Motivo do cancelamento:");
-    if (!motivo) return;
-    const { error } = await supabase.from("abastecimentos" as any).update({ status: "cancelado", observacao: `[CANCELADO] ${motivo} | ${editAbast.observacao || ""}` }).eq("id", editAbast.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Abastecimento cancelado");
-    setEditAbast(null);
-    carregar();
-  };
-
-  const excluirAbast = async (abast?: Abast | null) => {
-    const alvo = abast || editAbast;
-    if (!alvo) return;
-    const confirmado = window.confirm(`Excluir este abastecimento?\n\n${alvo.mecanico_nome} - ${alvo.data} ${String(alvo.hora).slice(0, 5)}\n\nEle sairá das listas e relatórios.`);
-    if (!confirmado) return;
-    const motivo = window.prompt("Motivo da exclusao (opcional):", "Registro de teste");
-    const { error } = await supabase.from("abastecimentos" as any).update({
-      excluido: true,
-      excluido_em: new Date().toISOString(),
-      excluido_motivo: motivo || "Excluido manualmente no painel",
-      observacao: `[EXCLUIDO] ${motivo || "Excluido manualmente no painel"} | ${alvo.observacao || ""}`,
-    }).eq("id", alvo.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Abastecimento excluido");
-    setAbastecimentos((itens) => itens.filter((item) => item.id !== alvo.id));
-    setEditAbast(null);
-    carregar();
+  const printQr = () => {
+    if (!qrPosto || !qrUrl) return;
+    const popup = window.open('', '_blank');
+    if (!popup) return;
+    popup.document.write(`<html><head><title>QR ${escapeHtml(qrPosto.nome)}</title><style>body{font-family:Arial;text-align:center;padding:30px;color:#111}img{width:380px}.name{font-size:20px;font-weight:700}.code{font-family:monospace;margin-top:8px}</style></head><body><div class="name">${escapeHtml(qrPosto.nome)}</div><img src="${qrUrl}"/><div class="code">${escapeHtml(qrPosto.codigo)}</div></body></html>`);
+    popup.document.close();
+    popup.focus();
+    setTimeout(() => popup.print(), 250);
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Fuel className="w-7 h-7 text-amber-600" />
-          <div>
-            <h1 className="text-2xl font-bold">Abastecimento QRCode</h1>
-            <p className="text-sm text-muted-foreground">QR Codes de postos, abastecimentos da frota e custo por empresa.</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={imprimirFolhaQrs} disabled={!postos.length}><Printer className="w-4 h-4 mr-1" /> Imprimir A4</Button>
-          <Button onClick={novo}><Plus className="w-4 h-4 mr-1" /> Novo posto</Button>
-        </div>
+    <div className="container mx-auto space-y-6 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3"><Fuel className="h-7 w-7 text-amber-600" /><div><h1 className="text-2xl font-bold">Central de Abastecimentos</h1><p className="text-sm text-muted-foreground">Relatórios executivos separados do Aplicativo dos Mecânicos.</p></div></div>
+        <Button variant="outline" onClick={() => navigate('/admin/funcionarios')}><Building2 className="mr-2 h-4 w-4" /> Dados bancários dos funcionários</Button>
       </div>
 
       <Card>
-        <CardContent className="pt-4">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
-            <div><Label className="text-xs flex items-center gap-1"><Filter className="w-3 h-3" /> Mes</Label><Input type="month" value={comp} onChange={(e) => setComp(e.target.value)} /></div>
-            <div><Label className="text-xs">Empresa</Label><Select value={fEmp} onValueChange={setFEmp}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todas">Todas</SelectItem>{empresasUsadas.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label className="text-xs">Posto</Label><Select value={fPosto} onValueChange={setFPosto}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem>{postos.map((p) => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent></Select></div>
-            <div><Label className="text-xs">Status</Label><Select value={fStatus} onValueChange={setFStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="concluido">Concluido</SelectItem><SelectItem value="pendente">Pendente</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div>
-            <div className="md:col-span-2"><Label className="text-xs">Buscar</Label><Input value={fBusca} onChange={(e) => setFBusca(e.target.value)} placeholder="Mecanico, placa, posto..." /></div>
+        <CardHeader><CardTitle className="flex items-center gap-2"><CalendarRange className="h-5 w-5" /> Período e filtros</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            <div><Label>Tipo de período</Label><Select value={periodMode} onValueChange={(value) => setPeriodMode(value as PeriodMode)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="month">Mês</SelectItem><SelectItem value="year">Ano</SelectItem><SelectItem value="range">Intervalo de datas</SelectItem></SelectContent></Select></div>
+            {periodMode === 'month' && <div><Label>Mês</Label><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} /></div>}
+            {periodMode === 'year' && <div><Label>Ano</Label><Input type="number" min="2000" max="2100" value={year} onChange={(e) => setYear(e.target.value)} /></div>}
+            {periodMode === 'range' && <><div><Label>Data inicial</Label><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></div><div><Label>Data final</Label><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></div></>}
+            <div><Label>Empresa</Label><Select value={companyFilter} onValueChange={setCompanyFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todas">Todas</SelectItem>{companies.filter((company) => company.status !== 'inativa').map((company) => <SelectItem key={company.id} value={company.id}>{company.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Status</Label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todos">Todos</SelectItem><SelectItem value="concluido">Concluído</SelectItem><SelectItem value="pendente">Pendente</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div>
+            <div><Label>Buscar</Label><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Funcionário, placa ou posto" /></div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => void loadReport()} disabled={loadingReport}>{loadingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <History className="mr-2 h-4 w-4" />} Consultar período</Button>
+            {loadedPeriodLabel && <span className="text-xs text-muted-foreground">Consulta carregada: {loadedPeriodLabel}</span>}
           </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="qrcodes">
-        <TabsList className="grid grid-cols-5 w-full md:w-auto">
-          <TabsTrigger value="qrcodes"><QrCode className="w-4 h-4 mr-1" /> QR Codes</TabsTrigger>
-          <TabsTrigger value="abast"><Fuel className="w-4 h-4 mr-1" /> Abastecimentos</TabsTrigger>
-          <TabsTrigger value="empresas"><Building2 className="w-4 h-4 mr-1" /> Empresas</TabsTrigger>
-          <TabsTrigger value="rel"><BarChart3 className="w-4 h-4 mr-1" /> Relatorio</TabsTrigger>
-          <TabsTrigger value="cfg"><Settings className="w-4 h-4 mr-1" /> Config</TabsTrigger>
+      <Tabs defaultValue="consolidado">
+        <TabsList className="h-auto flex-wrap justify-start">
+          <TabsTrigger value="consolidado">Relatório Consolidado</TabsTrigger>
+          <TabsTrigger value="detalhado">Relatório Detalhado</TabsTrigger>
+          <TabsTrigger value="quilometragem">Relatório de KM</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
+          <TabsTrigger value="qrcodes">QR Codes dos postos</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="qrcodes"><Card><CardHeader><CardTitle>Postos cadastrados ({postos.length})</CardTitle></CardHeader><CardContent>{loading ? "Carregando..." : postos.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">Nenhum posto cadastrado.</p> : <Table><TableHeader><TableRow><TableHead>Posto</TableHead><TableHead>CNPJ</TableHead><TableHead>Endereco</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Acoes</TableHead></TableRow></TableHeader><TableBody>{postos.map((p) => <TableRow key={p.id}><TableCell><div className="font-medium">{p.nome}</div><code className="text-xs text-muted-foreground">{p.codigo}</code>{p.unidade && <div className="text-xs text-muted-foreground">{p.unidade}</div>}{p.tipo_qr === "unidade" && <Badge variant="secondary" className="mt-1">Seleciona posto no app</Badge>}</TableCell><TableCell className="text-sm">{p.cnpj || "-"}</TableCell><TableCell className="text-xs text-muted-foreground max-w-[260px]">{p.endereco || "-"}</TableCell><TableCell>{p.status === "ativo" ? <Badge className="bg-green-500/10 text-green-700 border-green-500/20">Ativo</Badge> : <Badge variant="destructive">Bloqueado</Badge>}</TableCell><TableCell className="text-right space-x-1"><Button size="sm" variant="ghost" onClick={() => verQr(p)} title="Ver / imprimir QR"><QrCode className="w-4 h-4" /></Button><Button size="sm" variant="ghost" onClick={() => editar(p)} title="Editar"><Pencil className="w-4 h-4" /></Button><Button size="sm" variant="ghost" onClick={() => toggle(p)} title={p.status === "ativo" ? "Bloquear" : "Liberar"}>{p.status === "ativo" ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}</Button></TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card></TabsContent>
+        <TabsContent value="consolidado">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between gap-3"><CardTitle>Relatório Consolidado</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={() => openPdf('consolidado')} disabled={!filteredRecords.length}><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button><Button variant="outline" onClick={() => openPdf('consolidado', true)} disabled={!filteredRecords.length}><Download className="mr-2 h-4 w-4" /> Baixar</Button><Button onClick={() => prepareEmail('consolidado')} disabled={!filteredRecords.length}><Mail className="mr-2 h-4 w-4" /> Enviar</Button></div></CardHeader>
+            <CardContent className="space-y-5">
+              {loadingReport ? <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" /></div> : consolidated.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">Nenhum abastecimento localizado.</p> : consolidated.map((company) => (
+                <div key={company.empresaId} className="overflow-hidden rounded-lg border">
+                  <div className="flex flex-wrap justify-between gap-2 bg-muted/40 px-4 py-3"><div><div className="font-semibold">{company.nome}</div>{(company.razaoSocial || company.cnpj) && <div className="text-xs text-muted-foreground">{[company.razaoSocial, company.cnpj && `CNPJ ${company.cnpj}`].filter(Boolean).join(' — ')}</div>}</div><div className="text-right text-sm"><div>{company.quantidadeTotal} abastecimento(s)</div><div className="font-semibold">{formatMoney(company.valorTotal)}</div></div></div>
+                  <Table><TableHeader><TableRow><TableHead>Funcionário</TableHead><TableHead className="text-right">Quantidade de abastecimentos</TableHead><TableHead className="text-right">Valor total abastecido</TableHead></TableRow></TableHeader><TableBody>{company.funcionarios.map((employee) => <TableRow key={employee.funcionarioId}><TableCell>{employee.nome}</TableCell><TableCell className="text-right">{employee.quantidade}</TableCell><TableCell className="text-right font-medium">{formatMoney(employee.valorTotal)}</TableCell></TableRow>)}<TableRow className="bg-muted/30 font-semibold"><TableCell>Total da empresa</TableCell><TableCell className="text-right">{company.quantidadeTotal}</TableCell><TableCell className="text-right">{formatMoney(company.valorTotal)}</TableCell></TableRow></TableBody></Table>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        <TabsContent value="abast"><Card><CardHeader><CardTitle className="flex items-center justify-between"><span>Abastecimentos ({filtrados.length})</span><span className="text-sm font-normal text-muted-foreground">{totais.litros.toFixed(2)} L - R$ {totais.valor.toFixed(2)}</span></CardTitle></CardHeader><CardContent>{loading ? <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div> : filtrados.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">Nenhum abastecimento no filtro.</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Empresa</TableHead><TableHead>Mecanico</TableHead><TableHead>Placa</TableHead><TableHead>Posto</TableHead><TableHead>Comb.</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">KM</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader><TableBody>{filtrados.map((a) => <TableRow key={a.id}><TableCell className="text-xs whitespace-nowrap">{a.data} {String(a.hora).slice(0, 5)}</TableCell><TableCell className="text-xs">{a.empresa || "-"}</TableCell><TableCell className="text-sm">{a.mecanico_nome}</TableCell><TableCell className="text-xs">{a.placa || "-"}</TableCell><TableCell className="text-xs">{a.posto_nome || "-"}</TableCell><TableCell className="text-xs">{a.combustivel || "-"}</TableCell><TableCell className="text-right text-xs">{Number(a.litros).toFixed(2)}</TableCell><TableCell className="text-right text-xs">R$ {Number(a.valor).toFixed(2)}</TableCell><TableCell className="text-right text-xs">{a.km_atual ?? "-"}</TableCell><TableCell>{a.status === "concluido" && <Badge className="bg-green-500/10 text-green-700 border-green-500/20">OK</Badge>}{a.status === "pendente" && <Badge variant="secondary">Pendente</Badge>}{a.status === "cancelado" && <Badge variant="destructive">Cancelado</Badge>}</TableCell><TableCell className="text-right whitespace-nowrap"><Button size="sm" variant="ghost" onClick={() => setEditAbast({ ...a })} title="Editar abastecimento"><Pencil className="w-4 h-4" /></Button><Button size="sm" variant="ghost" onClick={() => excluirAbast(a)} title="Excluir abastecimento"><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell></TableRow>)}</TableBody></Table></div>}</CardContent></Card></TabsContent>
+        <TabsContent value="detalhado">
+          <Card>
+            <CardHeader className="flex-row items-center justify-between gap-3"><CardTitle>Relatório Detalhado</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={exportDetailedCsv} disabled={!filteredRecords.length}>CSV</Button><Button variant="outline" onClick={() => openPdf('detalhado')} disabled={!filteredRecords.length}><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button><Button onClick={() => prepareEmail('detalhado')} disabled={!filteredRecords.length}><Mail className="mr-2 h-4 w-4" /> Enviar</Button></div></CardHeader>
+            <CardContent><DetailedTable records={filteredRecords} /></CardContent>
+          </Card>
+        </TabsContent>
 
-        <TabsContent value="empresas"><Card><CardHeader><CardTitle>Custo por Empresa - {comp}</CardTitle></CardHeader><CardContent>{porEmpresa.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">Sem dados no periodo.</p> : <Table><TableHeader><TableRow><TableHead>Empresa</TableHead><TableHead className="text-right">Mecanicos</TableHead><TableHead className="text-right">Veiculos</TableHead><TableHead className="text-right">Abast.</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{porEmpresa.map((e) => <TableRow key={e.empresa}><TableCell className="font-medium">{e.empresa}</TableCell><TableCell className="text-right">{e.mecanicos}</TableCell><TableCell className="text-right">{e.veiculos}</TableCell><TableCell className="text-right">{e.qtd}</TableCell><TableCell className="text-right">{e.litros.toFixed(2)}</TableCell><TableCell className="text-right font-semibold">R$ {e.valor.toFixed(2)}</TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card></TabsContent>
 
-        <TabsContent value="rel"><Card><CardHeader><CardTitle className="flex items-center justify-between flex-wrap gap-2"><span>Relatorio Mensal - {comp}</span><div className="flex gap-2"><Button variant="outline" size="sm" onClick={exportarCsv} disabled={!relatorio.length}><FileSpreadsheet className="w-4 h-4 mr-1" /> CSV</Button><Button variant="outline" size="sm" onClick={imprimirRelatorio} disabled={!relatorio.length}><Printer className="w-4 h-4 mr-1" /> Imprimir</Button></div></CardTitle></CardHeader><CardContent><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"><Card className="p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{totais.qtd}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Litros totais</div><div className="text-xl font-bold">{totais.litros.toFixed(2)}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Valor total</div><div className="text-xl font-bold">R$ {totais.valor.toFixed(2)}</div></Card><Card className="p-3"><div className="text-xs text-muted-foreground">Media R$/L</div><div className="text-xl font-bold">{totais.media.toFixed(3)}</div></Card></div>{relatorio.length === 0 ? <p className="text-sm text-muted-foreground py-6 text-center">Sem dados no periodo.</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Empresa</TableHead><TableHead>Mecanico</TableHead><TableHead>Placa</TableHead><TableHead className="text-right">Qtd</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">R$/L</TableHead><TableHead className="text-right">KM ini</TableHead><TableHead className="text-right">KM fim</TableHead><TableHead className="text-right">Rodado</TableHead><TableHead className="text-right">R$/KM</TableHead><TableHead>Postos</TableHead></TableRow></TableHeader><TableBody>{relatorio.map((l, i) => <TableRow key={i}><TableCell className="text-xs">{l.empresa}</TableCell><TableCell className="text-sm">{l.mecanico}</TableCell><TableCell className="text-xs">{l.placa}</TableCell><TableCell className="text-right text-xs">{l.qtd}</TableCell><TableCell className="text-right text-xs">{l.litros.toFixed(2)}</TableCell><TableCell className="text-right text-xs font-semibold">R$ {l.valor.toFixed(2)}</TableCell><TableCell className="text-right text-xs">{l.media_litro.toFixed(3)}</TableCell><TableCell className="text-right text-xs">{l.km_inicial ?? "-"}</TableCell><TableCell className="text-right text-xs">{l.km_final ?? "-"}</TableCell><TableCell className="text-right text-xs">{l.km_rodado || "-"}</TableCell><TableCell className="text-right text-xs">{l.custo_km > 0 ? l.custo_km.toFixed(3) : "-"}</TableCell><TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{l.postos}</TableCell></TableRow>)}</TableBody></Table></div>}</CardContent></Card></TabsContent>
+        <TabsContent value="quilometragem">
+          <Card>
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Relatório Corporativo de Quilometragem</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">Separado por colaborador e veículo, sem cortes na sequência.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={exportKmCsv} disabled={!filteredKmRecords.length}>CSV</Button>
+                <Button variant="outline" onClick={() => openPdf('quilometragem')} disabled={!kmGroups.length}><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button>
+                <Button variant="outline" onClick={() => openPdf('quilometragem', true)} disabled={!kmGroups.length}><Download className="mr-2 h-4 w-4" /> Baixar</Button>
+                <Button onClick={() => prepareEmail('quilometragem')} disabled={!kmGroups.length}><Mail className="mr-2 h-4 w-4" /> Enviar</Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Registros completos</div><div className="text-xl font-bold">{kmTotals.records}</div></div>
+                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Colaborador/veículo</div><div className="text-xl font-bold">{kmTotals.groups}</div></div>
+                <div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Total calculado</div><div className="text-xl font-bold">{formatNumber(kmTotals.kilometers, 0)} km</div></div>
+              </div>
+              {loadingReport ? <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" /></div> : <KmReportView groups={kmGroups} />}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        <TabsContent value="cfg"><Card><CardHeader><CardTitle>Configuracoes</CardTitle></CardHeader><CardContent className="space-y-4 text-sm text-muted-foreground"><div><strong className="text-foreground">QR Code</strong>: cada QR abre o login do App Mecanico e preserva o posto/unidade lido. Matriz e Praia usam posto fixo; Goiania abre a selecao dos dois postos.</div><div><strong className="text-foreground">Empresas reconhecidas</strong>:<ul className="list-disc pl-6 mt-1">{EMPRESAS_PADRAO.map((e) => <li key={e}>{e}</li>)}</ul></div><div><strong className="text-foreground">Recibo</strong>: o app salva fotos, KM, litros, valor, posto, CNPJ, endereco e telefone para compartilhamento.</div></CardContent></Card></TabsContent>
+        <TabsContent value="historico">
+          <Card><CardHeader><CardTitle>Histórico do período consultado</CardTitle></CardHeader><CardContent><div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3"><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{generalTotals.quantity}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Litros</div><div className="text-xl font-bold">{formatNumber(generalTotals.liters)}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Valor</div><div className="text-xl font-bold">{formatMoney(generalTotals.value)}</div></div></div><DetailedTable records={filteredRecords} /></CardContent></Card>
+        </TabsContent>
+
+        <TabsContent value="qrcodes">
+          <Card><CardHeader className="flex-row items-center justify-between"><CardTitle>Postos cadastrados</CardTitle><Button onClick={() => { setPostoDraft(emptyPosto); setPostoDialog(true); }}><Plus className="mr-2 h-4 w-4" /> Novo posto</Button></CardHeader><CardContent>{loadingBase ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Table><TableHeader><TableRow><TableHead>Posto</TableHead><TableHead>CNPJ</TableHead><TableHead>Endereço</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{postos.map((posto) => <TableRow key={posto.id}><TableCell><div className="font-medium">{posto.nome}</div><code className="text-xs text-muted-foreground">{posto.codigo}</code></TableCell><TableCell>{posto.cnpj || '-'}</TableCell><TableCell>{posto.endereco || '-'}</TableCell><TableCell><Badge variant={posto.status === 'ativo' ? 'default' : 'destructive'}>{posto.status}</Badge></TableCell><TableCell className="text-right"><Button size="icon" variant="ghost" onClick={() => void showQr(posto)}><QrCode className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => { setPostoDraft({ id: posto.id, nome: posto.nome, cnpj: posto.cnpj || '', endereco: posto.endereco || '', telefone: posto.telefone || '', observacao: posto.observacao || '' }); setPostoDialog(true); }}><Pencil className="h-4 w-4" /></Button><Button size="sm" variant="outline" onClick={() => void togglePosto(posto)}>{posto.status === 'ativo' ? 'Bloquear' : 'Liberar'}</Button></TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card>
+        </TabsContent>
       </Tabs>
 
-      <Dialog open={editAberto} onOpenChange={setEditAberto}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>{edit.id ? "Editar posto" : "Novo posto"}</DialogTitle></DialogHeader><div className="space-y-3"><div><Label>Nome</Label><Input value={edit.nome} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} /></div><div><Label>CNPJ</Label><Input value={edit.cnpj} onChange={(e) => setEdit({ ...edit, cnpj: e.target.value })} /></div><div><Label>Endereco</Label><Input value={edit.endereco} onChange={(e) => setEdit({ ...edit, endereco: e.target.value })} /></div><div><Label>Telefone</Label><Input value={edit.telefone} onChange={(e) => setEdit({ ...edit, telefone: e.target.value })} /></div><div><Label>Observacao</Label><Input value={edit.observacao} onChange={(e) => setEdit({ ...edit, observacao: e.target.value })} /></div><Button onClick={salvar} className="w-full">Salvar</Button></div></DialogContent></Dialog>
+      <Dialog open={postoDialog} onOpenChange={setPostoDialog}><DialogContent><DialogHeader><DialogTitle>{postoDraft.id ? 'Editar posto' : 'Novo posto'}</DialogTitle></DialogHeader><div className="space-y-3"><div><Label>Nome</Label><Input value={postoDraft.nome} onChange={(e) => setPostoDraft({ ...postoDraft, nome: e.target.value })} /></div><div><Label>CNPJ</Label><Input value={postoDraft.cnpj} onChange={(e) => setPostoDraft({ ...postoDraft, cnpj: e.target.value })} /></div><div><Label>Endereço</Label><Input value={postoDraft.endereco} onChange={(e) => setPostoDraft({ ...postoDraft, endereco: e.target.value })} /></div><div><Label>Telefone</Label><Input value={postoDraft.telefone} onChange={(e) => setPostoDraft({ ...postoDraft, telefone: e.target.value })} /></div><div><Label>Observação</Label><Input value={postoDraft.observacao} onChange={(e) => setPostoDraft({ ...postoDraft, observacao: e.target.value })} /></div><Button className="w-full" onClick={() => void savePosto()}>Salvar</Button></div></DialogContent></Dialog>
 
-      <Dialog open={!!qrAberto} onOpenChange={(o) => !o && setQrAberto(null)}><DialogContent className="max-w-sm"><DialogHeader><DialogTitle>{qrAberto?.nome}</DialogTitle></DialogHeader>{qrUrl && <img src={qrUrl} alt="QR" className="w-full" />}<div className="text-center text-xs font-mono text-muted-foreground">{qrAberto?.codigo}</div><div className="text-center text-xs text-muted-foreground">Abre o login e leva direto ao abastecimento.</div><div className="grid grid-cols-2 gap-2"><Button onClick={imprimirQr}><Printer className="w-4 h-4 mr-2" /> Imprimir</Button><Button variant="outline" onClick={baixarQr}><Download className="w-4 h-4 mr-2" /> Baixar</Button></div></DialogContent></Dialog>
+      <Dialog open={!!qrPosto} onOpenChange={(open) => !open && setQrPosto(null)}><DialogContent className="max-w-sm"><DialogHeader><DialogTitle>{qrPosto?.nome}</DialogTitle></DialogHeader>{qrUrl && <img src={qrUrl} alt="QR Code" className="w-full" />}<Button onClick={printQr}><Printer className="mr-2 h-4 w-4" /> Imprimir QR</Button></DialogContent></Dialog>
 
-      <Dialog open={!!editAbast} onOpenChange={(o) => !o && setEditAbast(null)}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Abastecimento</DialogTitle></DialogHeader>{editAbast && <div className="space-y-3"><div className="text-xs text-muted-foreground">{editAbast.mecanico_nome} - {editAbast.empresa || "-"} - {editAbast.data} {String(editAbast.hora).slice(0, 5)}</div><div className="grid grid-cols-2 gap-3"><div><Label>Placa</Label><Input value={editAbast.placa || ""} onChange={(e) => setEditAbast({ ...editAbast, placa: e.target.value })} /></div><div><Label>Combustivel</Label><Input value={editAbast.combustivel || ""} onChange={(e) => setEditAbast({ ...editAbast, combustivel: e.target.value })} /></div><div><Label>Valor (R$)</Label><Input type="number" step="0.01" value={editAbast.valor} onChange={(e) => setEditAbast({ ...editAbast, valor: Number(e.target.value) })} /></div><div><Label>Litros</Label><Input type="number" step="0.001" value={editAbast.litros} onChange={(e) => setEditAbast({ ...editAbast, litros: Number(e.target.value) })} /></div><div><Label>KM</Label><Input type="number" value={editAbast.km_atual ?? ""} onChange={(e) => setEditAbast({ ...editAbast, km_atual: e.target.value ? Number(e.target.value) : null })} /></div><div><Label>Status</Label><Select value={editAbast.status} onValueChange={(v) => setEditAbast({ ...editAbast, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="concluido">Concluido</SelectItem><SelectItem value="pendente">Pendente</SelectItem><SelectItem value="cancelado">Cancelado</SelectItem></SelectContent></Select></div></div><div><Label>Observacao</Label><Input value={editAbast.observacao || ""} onChange={(e) => setEditAbast({ ...editAbast, observacao: e.target.value })} /></div><div className="flex gap-2 pt-2">{editAbast.foto_bomba_url && <a href={editAbast.foto_bomba_url} target="_blank" rel="noreferrer"><img src={editAbast.foto_bomba_url} className="w-16 h-16 object-cover rounded" /></a>}{editAbast.foto_painel_url && <a href={editAbast.foto_painel_url} target="_blank" rel="noreferrer"><img src={editAbast.foto_painel_url} className="w-16 h-16 object-cover rounded" /></a>}</div><div className="flex gap-2"><Button onClick={salvarAbast} className="flex-1">Salvar</Button>{editAbast.status !== "cancelado" && <Button variant="destructive" onClick={cancelarAbast}>Cancelar abast.</Button>}<Button variant="outline" onClick={() => excluirAbast(editAbast)} className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4 mr-1" /> Excluir</Button></div></div>}</DialogContent></Dialog>
+      <EmailPdfModal open={emailOpen} onOpenChange={setEmailOpen} draft={emailDraft} />
     </div>
   );
 }
 
-function qrPrintHtml(itens: { p: Posto; url: string }[], folha: boolean) {
-  return `<html><head><title>QR Codes Abastecimento</title><style>body{font-family:Arial,sans-serif;margin:18px;color:#111}h1{font-size:18px;margin:0 0 14px}.grid{display:grid;grid-template-columns:${folha ? "repeat(2,1fr)" : "1fr"};gap:12px}.card{border:1px solid #222;padding:10px;min-height:${folha ? "285px" : "auto"};break-inside:avoid;text-align:center}.single{max-width:420px;margin:auto}img{width:${folha ? "155px" : "340px"};height:${folha ? "155px" : "340px"}}.name{font-weight:bold;font-size:13px;margin-bottom:3px}.meta{font-size:10px;color:#333;line-height:1.3}.code{font-family:monospace;font-size:11px;margin-top:5px}@media print{.card{break-inside:avoid}}</style></head><body><h1>TOPAC RH PRO - QR Codes de Abastecimento</h1><div class="grid">${itens.map(({ p, url }) => `<div class="card ${folha ? "" : "single"}"><div class="name">${escapeHtml(p.nome)}</div><div class="meta">${escapeHtml(p.unidade || "")}</div>${p.cnpj ? `<div class="meta">CNPJ: ${escapeHtml(p.cnpj)}</div>` : ""}${p.endereco ? `<div class="meta">${escapeHtml(p.endereco)}</div>` : ""}${p.telefone ? `<div class="meta">Tel: ${escapeHtml(p.telefone)}</div>` : ""}<img src="${url}" /><div class="code">${escapeHtml(p.codigo)}</div><div class="meta">QR unico. Abre login do App Mecanico e registra o abastecimento.</div></div>`).join("")}</div></body></html>`;
-}
 
-function buildFuelReportPrintHtml(input: {
-  competencia: string;
-  filtroEmpresa: string;
-  filtroPosto: string;
-  totais: { qtd: number; litros: number; valor: number; media: number };
-  porEmpresa: Array<{ empresa: string; qtd: number; litros: number; valor: number; mecanicos: number; veiculos: number }>;
-  relatorio: any[];
-}) {
-  const titulo = `TOPAC RH PRO - RELATORIO DE ABASTECIMENTO - REF. ${formatCompetencia(input.competencia)}`;
-  const rows = input.relatorio.map((l) => `<tr>
-    <td>${escapeHtml(l.empresa)}</td>
-    <td>${escapeHtml(l.mecanico)}</td>
-    <td>${escapeHtml(l.placa)}</td>
-    <td class="num">${l.qtd || 0}</td>
-    <td class="num">${formatLitros(l.litros)}</td>
-    <td class="num">${formatMoney(l.valor)}</td>
-    <td class="num">${formatDecimalPrint(l.media_litro, 3)}</td>
-    <td class="num">${l.km_inicial ?? "-"}</td>
-    <td class="num">${l.km_final ?? "-"}</td>
-    <td class="num">${l.km_rodado || "-"}</td>
-    <td class="num">${l.custo_km > 0 ? formatDecimalPrint(l.custo_km, 3) : "-"}</td>
-    <td>${escapeHtml(l.postos || "-")}</td>
-  </tr>`).join("");
-  const empresaRows = input.porEmpresa.map((e) => `<tr>
-    <td>${escapeHtml(e.empresa)}</td>
-    <td class="num">${e.mecanicos}</td>
-    <td class="num">${e.veiculos}</td>
-    <td class="num">${e.qtd}</td>
-    <td class="num">${formatLitros(e.litros)}</td>
-    <td class="num">${formatMoney(e.valor)}</td>
-  </tr>`).join("");
 
-  return `<html><head><title>${escapeHtml(titulo)}</title><style>
-    @page{size:A4 landscape;margin:6mm}
-    *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:9px}
-    h1{font-size:14px;text-align:center;margin:0 0 6px}
-    .meta{display:flex;justify-content:space-between;border-top:2px solid #111;border-bottom:1px solid #111;padding:4px 0;margin-bottom:6px;font-size:9px}
-    .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px}
-    .card{border:1px solid #222;padding:4px}
-    .label{font-size:7px;text-transform:uppercase;color:#444}
-    .value{font-size:11px;font-weight:bold}
-    table{width:100%;border-collapse:collapse;table-layout:fixed}
-    th,td{border:1px solid #222;padding:2px 3px;vertical-align:top;word-break:break-word}
-    th{background:#e5e7eb;text-transform:uppercase;font-size:7px}
-    td{font-size:8px}
-    .num{text-align:right;white-space:nowrap}
-    .section{margin-top:6px;font-weight:bold;font-size:10px}
-    .small th,.small td{font-size:7.5px}
-    .main th:nth-child(1){width:13%}.main th:nth-child(2){width:14%}.main th:nth-child(3){width:7%}.main th:nth-child(4){width:4%}.main th:nth-child(5){width:7%}.main th:nth-child(6){width:8%}.main th:nth-child(7){width:6%}.main th:nth-child(8){width:6%}.main th:nth-child(9){width:6%}.main th:nth-child(10){width:6%}.main th:nth-child(11){width:6%}.main th:nth-child(12){width:17%}
-    .footer{margin-top:6px;border-top:1px solid #999;padding-top:3px;font-size:7px;color:#444}
-  </style></head><body>
-    <h1>${escapeHtml(titulo)}</h1>
-    <div class="meta"><div>Empresa: ${escapeHtml(input.filtroEmpresa === "todas" ? "Todas" : input.filtroEmpresa)}</div><div>Posto: ${escapeHtml(input.filtroPosto)}</div><div>Emissao: ${new Date().toLocaleString("pt-BR")}</div></div>
-    <div class="cards">
-      <div class="card"><div class="label">Abastecimentos</div><div class="value">${input.totais.qtd}</div></div>
-      <div class="card"><div class="label">Litros totais</div><div class="value">${formatLitros(input.totais.litros)}</div></div>
-      <div class="card"><div class="label">Valor total</div><div class="value">${formatMoney(input.totais.valor)}</div></div>
-      <div class="card"><div class="label">Media R$/L</div><div class="value">${formatDecimalPrint(input.totais.media, 3)}</div></div>
-    </div>
-    <div class="section">Resumo por empresa</div>
-    <table class="small"><thead><tr><th>Empresa</th><th>Mecanicos</th><th>Veiculos</th><th>Abast.</th><th>Litros</th><th>Valor</th></tr></thead><tbody>${empresaRows || '<tr><td colspan="6">Sem dados</td></tr>'}</tbody></table>
-    <div class="section">Detalhamento por mecanico e veiculo</div>
-    <table class="main"><thead><tr><th>Empresa</th><th>Mecanico</th><th>Placa</th><th>Qtd</th><th>Litros</th><th>Valor</th><th>R$/L</th><th>KM ini</th><th>KM fim</th><th>Rodado</th><th>R$/KM</th><th>Postos</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="footer">Documento para conferencia de abastecimentos. Usa os mesmos dados exibidos na tabela da tela.</div>
-  </body></html>`;
-}
+const KmReportView = ({ groups }: { groups: KmReportGroup[] }) => {
+  if (!groups.length) return <p className="py-10 text-center text-sm text-muted-foreground">Nenhum registro de quilometragem localizado.</p>;
 
-function escapeHtml(value: string) {
-  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
+  return <div className="space-y-6">{groups.map((group) => (
+    <section key={group.groupKey} className="break-inside-avoid overflow-hidden rounded-xl border bg-background shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 bg-slate-50 px-4 py-3 dark:bg-slate-900/40">
+        <div><div className="font-semibold">{group.funcionarioNome}</div><div className="text-xs text-muted-foreground">{group.empresaNome}</div></div>
+        <div className="text-right"><div className="text-sm font-bold">PLACA {group.placa}</div><div className="text-xs text-muted-foreground">{group.records.length} registro(s)</div></div>
+      </div>
+      <div className="overflow-x-auto">
+        <Table className="min-w-[980px] table-fixed">
+          <TableHeader><TableRow><TableHead className="w-[130px]">Data</TableHead><TableHead className="w-[100px]">Placa</TableHead><TableHead className="w-[120px] text-right">KM Inicial</TableHead><TableHead className="w-[120px] text-right">KM Final</TableHead><TableHead className="w-[130px] text-right">Total rodado</TableHead><TableHead>Motivo / Rota</TableHead></TableRow></TableHeader>
+          <TableBody>{group.records.map((record) => <TableRow key={record.id}>
+            <TableCell className="whitespace-nowrap align-top">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell>
+            <TableCell className="align-top font-medium">{record.placa}</TableCell>
+            <TableCell className="align-top text-right">{record.km_inicial == null ? '-' : formatNumber(record.km_inicial, 0)}</TableCell>
+            <TableCell className="align-top text-right">{record.km_final == null ? '-' : formatNumber(record.km_final, 0)}</TableCell>
+            <TableCell className="align-top text-right font-medium">{record.total_rodado == null ? '-' : `${formatNumber(record.total_rodado, 0)} km`}</TableCell>
+            <TableCell className="whitespace-normal break-words align-top leading-relaxed">{record.motivo_rota || 'Não informado'}{record.fonte_km === 'inconsistente' && <div className="mt-1 text-xs font-medium text-destructive">Leitura inferior ao KM anterior — revisão necessária.</div>}{record.fonte_km === 'sem_base' && <div className="mt-1 text-xs text-muted-foreground">Primeira leitura disponível do veículo.</div>}</TableCell>
+          </TableRow>)}<TableRow className="bg-muted/30 font-semibold"><TableCell colSpan={5}>Total rodado no grupo</TableCell><TableCell className="text-right">{formatNumber(group.totalRodado, 0)} km</TableCell></TableRow></TableBody>
+        </Table>
+      </div>
+    </section>
+  ))}</div>;
+};
 
-function formatMoney(value: number) {
-  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function formatLitros(value: number) {
-  return Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatDecimalPrint(value: number, digits: number) {
-  return Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-function formatCompetencia(value: string) {
-  const [year, month] = String(value || "").split("-");
-  if (!year || !month) return String(value || "");
-  const date = new Date(Number(year), Number(month) - 1, 1);
-  return date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }).toUpperCase();
-}
+const DetailedTable = ({ records }: { records: FuelReportRecord[] }) => {
+  if (!records.length) return <p className="py-10 text-center text-sm text-muted-foreground">Nenhum abastecimento localizado.</p>;
+  return <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Empresa</TableHead><TableHead>Funcionário</TableHead><TableHead>Placa</TableHead><TableHead>Posto</TableHead><TableHead>Combustível</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">KM</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{records.map((record) => <TableRow key={record.id}><TableCell className="whitespace-nowrap">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell><TableCell>{record.empresa_nome || record.empresa || record.filial || '-'}</TableCell><TableCell>{record.funcionario_nome}</TableCell><TableCell>{record.placa || '-'}</TableCell><TableCell>{record.posto_nome || '-'}</TableCell><TableCell>{record.combustivel || '-'}</TableCell><TableCell className="text-right">{formatNumber(record.litros)}</TableCell><TableCell className="text-right font-medium">{formatMoney(record.valor)}</TableCell><TableCell className="text-right">{record.km_atual == null ? '-' : formatNumber(record.km_atual, 0)}</TableCell><TableCell><Badge variant={record.status === 'cancelado' ? 'destructive' : 'secondary'}>{record.status || '-'}</Badge></TableCell></TableRow>)}</TableBody></Table></div>;
+};

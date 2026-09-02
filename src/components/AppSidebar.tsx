@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Users, FileCheck, FileText, LogOut, ChevronLeft, Menu,
-  HardHat, Shirt, History, Wallet, CalendarCheck, FileX, Fuel, Car, Stethoscope,
-  UserCheck, Package, ClipboardList, ChevronDown, ChevronRight, Receipt, RefreshCw,
-  AlertTriangle, ClipboardCheck, ArrowDownCircle, ArrowUpCircle, Truck, Landmark,
-  Activity, Layers, CheckSquare, DollarSign, Wrench, FileSearch, ShoppingCart,
-  BriefcaseBusiness, Boxes,
+  LayoutDashboard, Building2, Users, FileCheck, FileText, LogOut,
+  HardHat, Shirt, History, CalendarCheck, FileX, Fuel, Car, Stethoscope,
+  UserCheck, Package, ClipboardList, Receipt, ClipboardCheck, Wrench, FileSearch,
+  ShoppingCart, Headphones, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -17,76 +15,37 @@ interface MenuItem { label: string; icon: React.ElementType; path: string }
 const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
+  { label: 'Funcionários', icon: Users, path: '/admin/funcionarios' },
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
+  { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
+  { label: 'Fechamentos das Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
-  { label: 'Rescisoes', icon: FileX, path: '/admin/rescisoes' },
+  { label: 'Rescisões', icon: FileX, path: '/admin/rescisoes' },
 ];
 
 const operationalItems: MenuItem[] = [
   { label: 'Operacional', icon: ClipboardList, path: '/admin/operacional' },
-  { label: 'App Mecanico', icon: Wrench, path: '/admin/app-mecanico' },
+  { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico' },
   { label: 'Abastecimento QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
-  { label: 'Combustivel (Galoes)', icon: Fuel, path: '/admin/galoes-combustivel' },
+  { label: 'Combustível', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
   { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
-  { label: 'Aviso de Ferias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
+  { label: 'Aviso de Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
-  { label: 'Pre-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional' },
+  { label: 'Pré-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
-  { label: 'Historico', icon: History, path: '/admin/historico' },
+  { label: 'Envios para Clínicas', icon: FileText, path: '/admin/emails-contabilidade' },
+  { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 
 const directorItems: MenuItem[] = [
   { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin' },
-  { label: 'TOPAC Gestao', icon: BriefcaseBusiness, path: '/admin/gestao' },
-  { label: 'Financeiro', icon: DollarSign, path: '/admin/financeiro' },
-  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
-  { label: 'Faturamento', icon: Wallet, path: '/admin/faturamento' },
-  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
-  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
-  { label: 'Relatorio Geral', icon: FileText, path: '/admin/relatorio' },
-];
-
-const gestaoItems: MenuItem[] = [
-  { label: 'Painel', icon: LayoutDashboard, path: '/admin/gestao' },
-  { label: 'Clientes', icon: Users, path: '/admin/gestao/clientes' },
-  { label: 'Contratos', icon: FileText, path: '/admin/gestao/contratos' },
-  { label: 'Locacoes', icon: Layers, path: '/admin/gestao/locacoes' },
-  { label: 'Equipamentos', icon: Boxes, path: '/admin/gestao/equipamentos' },
-  { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/gestao/medicoes' },
-  { label: 'Faturamento', icon: Receipt, path: '/admin/gestao/faturamento' },
-  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/gestao/receber' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/gestao/pagar' },
-  { label: 'Bancos', icon: Landmark, path: '/admin/gestao/bancos' },
-  { label: 'Conciliacao', icon: CheckSquare, path: '/admin/gestao/conciliacao' },
-  { label: 'Relatorios', icon: Activity, path: '/admin/gestao/relatorios' },
-];
-
-const faturamentoItems: MenuItem[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/faturamento' },
-  { label: 'Clientes', icon: Users, path: '/admin/faturamento/clientes' },
-  { label: 'Contratos', icon: FileText, path: '/admin/faturamento/contratos' },
-  { label: 'Faturas', icon: Receipt, path: '/admin/faturamento/faturas' },
-  { label: 'Medicoes', icon: ClipboardCheck, path: '/admin/faturamento/medicoes' },
-  { label: 'Reajustes', icon: RefreshCw, path: '/admin/faturamento/reajustes' },
-  { label: 'Pendencias', icon: AlertTriangle, path: '/admin/faturamento/pendencias' },
-];
-
-const financeiroItems: MenuItem[] = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/financeiro' },
-  { label: 'Contas a Receber', icon: ArrowDownCircle, path: '/admin/financeiro/contas-receber' },
-  { label: 'Contas a Pagar', icon: ArrowUpCircle, path: '/admin/financeiro/contas-pagar' },
-  { label: 'Fornecedores', icon: Truck, path: '/admin/financeiro/fornecedores' },
-  { label: 'Caixa e Bancos', icon: Landmark, path: '/admin/financeiro/bancos' },
-  { label: 'Fluxo de Caixa', icon: Activity, path: '/admin/financeiro/fluxo-caixa' },
-  { label: 'Conciliacao', icon: CheckSquare, path: '/admin/financeiro/conciliacao' },
-  { label: 'Inadimplencia', icon: AlertTriangle, path: '/admin/financeiro/inadimplencia' },
-  { label: 'Centros de Custo', icon: Layers, path: '/admin/financeiro/centros-custo' },
+  { label: 'Envios para Clínicas', icon: FileText, path: '/admin/emails-contabilidade' },
+  { label: 'Relatório Geral', icon: FileText, path: '/admin/relatorio' },
 ];
 
 interface Props { collapsed: boolean; onToggle: () => void }
@@ -94,54 +53,82 @@ interface Props { collapsed: boolean; onToggle: () => void }
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout, userRoles } = useApp();
   const location = useLocation();
-  const [gestaoOpen, setGestaoOpen] = useState(location.pathname.startsWith('/admin/gestao'));
-  const [fatOpen, setFatOpen] = useState(location.pathname.startsWith('/admin/faturamento'));
-  const [finOpen, setFinOpen] = useState(location.pathname.startsWith('/admin/financeiro'));
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
-
-  const renderLink = (item: MenuItem) => (
-    <NavLink key={item.path} to={item.path} title={collapsed ? item.label : undefined}
-      className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all', location.pathname === item.path ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-premium' : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground')}>
-      <item.icon className="w-5 h-5 flex-shrink-0" />
-      {!collapsed && <span>{item.label}</span>}
-    </NavLink>
-  );
-
-  const sectionTitle = (label: string) => !collapsed ? <div className="pt-3 mt-3 border-t border-sidebar-border"><p className="px-3 text-[10px] uppercase tracking-wider text-sidebar-foreground/40 mb-2">{label}</p></div> : <div className="pt-2 mt-2 border-t border-sidebar-border" />;
-
-  const expandable = (label: string, icon: React.ElementType, open: boolean, setOpen: (value: boolean) => void, items: MenuItem[], activePrefix: string) => {
-    const Icon = icon;
-    if (collapsed) return <>{items.map(renderLink)}</>;
-    return <>
-      <button onClick={() => setOpen(!open)} className={cn('flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm w-full transition-all', location.pathname.startsWith(activePrefix) ? 'bg-sidebar-primary/40 text-sidebar-primary-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent')}>
-        <Icon className="w-5 h-5 flex-shrink-0" /><span className="flex-1 text-left">{label}</span>{open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-      </button>
-      {open && <div className="ml-3 pl-2 border-l border-sidebar-border space-y-1 mt-1">{items.map(renderLink)}</div>}
-    </>;
-  };
+  const items = isDirector ? directorItems : [...menuItems, ...operationalItems];
 
   return (
-    <aside className={cn('h-screen gradient-sidebar flex flex-col border-r border-sidebar-border transition-all duration-300 fixed left-0 top-0 z-40', collapsed ? 'w-16' : 'w-64')}>
-      <div className="p-4 flex items-center justify-between border-b border-sidebar-border">
-        {!collapsed && <div className="admin-sidebar-brand"><div className="admin-sidebar-logo"><img src="/icons/icon-192.png?v=20260524-2" alt="TOPAC RH PRO" className="w-14 h-14 object-contain" /></div><div><h2>TOPAC RH PRO</h2><p>Inteligencia Operacional</p></div></div>}
-        <button onClick={onToggle} className="p-1.5 rounded-md hover:bg-sidebar-accent text-sidebar-foreground">{collapsed ? <Menu className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}</button>
+    <aside
+      className={cn(
+        'fixed inset-y-0 left-0 z-40 flex flex-col border-r border-[#24202c] bg-[#030609] shadow-[18px_0_50px_rgba(0,0,0,.34)] transition-[width] duration-300',
+        collapsed ? 'w-[72px]' : 'w-[270px]'
+      )}
+    >
+      <div className="flex h-[86px] shrink-0 items-center border-b border-[#24202c] px-4">
+        <div className={cn('flex min-w-0 flex-1 items-center gap-3', collapsed && 'justify-center')}>
+          <div className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-[8px] border-2 border-[#8b22ff] bg-[#08070a] shadow-[0_0_22px_rgba(139,34,255,.18)]">
+            <span className="text-[34px] font-black leading-none text-[#ffbf00]">T</span>
+          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <div className="truncate text-[20px] font-black tracking-[-.02em] text-white">TOPAC RH PRO</div>
+              <div className="mt-1 text-[11px] font-semibold tracking-wide text-[#a855f7]">Inteligência Operacional</div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
-        {(isDirector ? directorItems : menuItems).map(renderLink)}
-        {!isDirector && sectionTitle('Operacional')}
-        {!isDirector && operationalItems.map(renderLink)}
-        {!isDirector && sectionTitle('TOPAC Gestao')}
-        {!isDirector && expandable('TOPAC Gestao', BriefcaseBusiness, gestaoOpen, setGestaoOpen, gestaoItems, '/admin/gestao')}
-        {!isDirector && sectionTitle('Faturamento antigo')}
-        {!isDirector && expandable('Faturamento', Wallet, fatOpen, setFatOpen, faturamentoItems, '/admin/faturamento')}
-        {!isDirector && sectionTitle('Financeiro antigo')}
-        {!isDirector && expandable('Financeiro', DollarSign, finOpen, setFinOpen, financeiroItems, '/admin/financeiro')}
+      <button
+        onClick={onToggle}
+        aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
+        className="absolute -right-4 top-[101px] z-10 grid h-8 w-8 place-items-center rounded-full border border-[#32263f] bg-[#090b10] text-zinc-400 shadow-lg transition hover:border-[#9b36ff] hover:text-[#c66cff]"
+      >
+        {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+      </button>
+
+      <nav className="flex-1 overflow-y-auto px-2 py-3 [scrollbar-color:#4c1d95_transparent] [scrollbar-width:thin]">
+        <div className="space-y-[2px]">
+          {items.map((item) => {
+            const active = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                title={collapsed ? item.label : undefined}
+                className={cn(
+                  'group relative flex h-[38px] items-center gap-3 rounded-[4px] px-3 text-[13px] transition-all duration-150',
+                  active
+                    ? 'bg-gradient-to-r from-[#251548] via-[#211339] to-[#181023] text-white shadow-[inset_0_0_0_1px_rgba(147,51,234,.12)]'
+                    : 'text-[#c9c6ce] hover:bg-white/[0.035] hover:text-white'
+                )}
+              >
+                <item.icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-[#f4b400]' : 'text-[#9b32ff] group-hover:text-[#ba64ff]')} strokeWidth={1.8} />
+                {!collapsed && <span className="truncate">{item.label}</span>}
+                {active && <span className="absolute bottom-0 right-0 top-0 w-[3px] rounded-l-full bg-[#ffc400] shadow-[0_0_12px_rgba(255,196,0,.8)]" />}
+              </NavLink>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="p-2 border-t border-sidebar-border">
-        {!collapsed && <div className="px-3 py-3 mb-2 text-[11px] text-emerald-300/90"><div className="flex items-center gap-2 font-semibold"><span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.9)]" />Sistema operacional</div><p className="mt-1 text-sky-100/45">Latencia 12ms . Uptime 99.98%</p></div>}
-        <button onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive w-full transition-colors"><LogOut className="w-5 h-5 flex-shrink-0" />{!collapsed && <span>Sair</span>}</button>
+      <div className="shrink-0 px-4 pb-3 pt-2">
+        {!collapsed && (
+          <div className="mb-3 rounded-[9px] border border-[#282b32] bg-[#06090d] px-4 py-4">
+            <div className="flex items-center gap-3">
+              <Headphones className="h-8 w-8 text-[#9b32ff]" strokeWidth={1.6} />
+              <div>
+                <div className="text-[12px] font-bold uppercase tracking-wide text-white">Suporte interno</div>
+                <div className="mt-1 text-[11px] text-zinc-500">TOPAC RH PRO</div>
+              </div>
+            </div>
+          </div>
+        )}
+        <button
+          onClick={logout}
+          className={cn('flex h-9 w-full items-center gap-3 rounded-md px-3 text-[12px] text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300', collapsed && 'justify-center')}
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Sair</span>}
+        </button>
       </div>
     </aside>
   );

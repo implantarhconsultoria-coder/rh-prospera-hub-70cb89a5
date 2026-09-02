@@ -1,0 +1,99 @@
+name: Aplicar funcoes globais no pre-cadastro
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Aplicar alteracao no arquivo
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/PreCadastroAdmissionalOcrPage.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          bloco_atual = """const FIXED_ROLE_PRESETS: RoleOption[] = [
+            {
+              cargo: 'AJUDANTE DE MECANICO',
+              salarioBase: 2100,
+              insalubridadeAtiva: true,
+              insalubridadeValor: 648.40,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+          ];""".replace('          ', '')
+
+          bloco_novo = """const FIXED_ROLE_PRESETS: RoleOption[] = [
+            {
+              cargo: 'AJUDANTE DE MECANICO',
+              salarioBase: 2100,
+              insalubridadeAtiva: true,
+              insalubridadeValor: 648.40,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+            {
+              cargo: 'VENDEDOR',
+              salarioBase: 0,
+              insalubridadeAtiva: false,
+              insalubridadeValor: 0,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+            {
+              cargo: 'REPRESENTANTE',
+              salarioBase: 0,
+              insalubridadeAtiva: false,
+              insalubridadeValor: 0,
+              periculosidadeAtiva: false,
+              periculosidadeValor: 0,
+            },
+          ];""".replace('          ', '')
+
+          if "cargo: 'VENDEDOR'" not in text:
+              if bloco_atual not in text:
+                  raise SystemExit('Bloco FIXED_ROLE_PRESETS nao encontrado')
+              text = text.replace(bloco_atual, bloco_novo, 1)
+
+          text = text.replace("    if (!form.empresa_id) return [];\n", "")
+          text = text.replace(
+              "      .filter(emp => emp.companyId === form.empresa_id && emp.categoria !== 'socio' && normalizeRole(emp.cargo))",
+              "      .filter(emp => emp.categoria !== 'socio' && normalizeRole(emp.cargo))",
+          )
+          text = text.replace(
+              "  }, [employees, form.empresa_id, config.valorInsalubridade]);",
+              "  }, [employees, config.valorInsalubridade]);",
+          )
+          text = text.replace(
+              "{role.cargo} - {formatBRL(role.salarioBase || 0)}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}",
+              "{role.cargo}{role.salarioBase > 0 ? ` - ${formatBRL(role.salarioBase)}` : ''}{role.insalubridadeAtiva ? ' - insalubridade' : role.periculosidadeAtiva ? ' - periculosidade' : ''}",
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit e push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/PreCadastroAdmissionalOcrPage.tsx
+          if git diff --cached --quiet; then
+            echo "Nada para alterar"
+            exit 0
+          fi
+          git commit -m "feat: disponibilizar todas as funcoes em todas as empresas"
+          git push origin main

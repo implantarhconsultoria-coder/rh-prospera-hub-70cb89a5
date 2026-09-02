@@ -9,16 +9,38 @@ const getMessage = (error: unknown) => {
   return 'Erro inesperado no carregamento da plataforma.';
 };
 
+const isTransientNetworkError = (error: unknown) => {
+  const message = getMessage(error).trim().toLowerCase();
+  if (!message) return false;
+
+  return [
+    'failed to fetch',
+    'load failed',
+    'network request failed',
+    'networkerror when attempting to fetch resource',
+    'the internet connection appears to be offline',
+  ].some((pattern) => message.includes(pattern));
+};
+
 const GlobalErrorCatcher: React.FC = () => {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     const onError = (event: ErrorEvent) => {
-      console.error('[GlobalError]', event.error || event.message);
-      setMessage(getMessage(event.error || event.message));
+      const error = event.error || event.message;
+      console.error('[GlobalError]', error);
+      setMessage(getMessage(error));
     };
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (isTransientNetworkError(event.reason)) {
+        // Falhas transitórias de rede não derrubam a aplicação e não devem ser
+        // apresentadas como erro global. Chamadas funcionais devem tratar seus
+        // próprios erros no contexto da ação executada pelo usuário.
+        console.warn('[UnhandledNetworkRejection]', event.reason);
+        return;
+      }
+
       console.error('[UnhandledRejection]', event.reason);
       setMessage(getMessage(event.reason));
     };

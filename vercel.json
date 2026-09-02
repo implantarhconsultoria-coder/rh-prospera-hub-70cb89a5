@@ -5,6 +5,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/frota-upload",
+      "destination": "/api/frota-upload-v2"
+    },
+    {
+      "source": "/api/payroll-public",
+      "destination": "/api/payroll-public-v2"
+    },
+    {
       "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|sw.js|placeholder.svg).*)",
       "destination": "/index.html"
     }
@@ -27,6 +35,12 @@
           "value": "public, max-age=0, must-revalidate"
         }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cleanup-email-attachments",
+      "schedule": "17 3 * * *"
     }
   ]
 }

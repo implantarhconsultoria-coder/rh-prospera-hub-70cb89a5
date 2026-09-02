@@ -1,738 +1,332 @@
-/**
- * AlmoxarifadoCargaTab — Carga / Retirada por Funcionário
- *
- * NÃO desconta estoque automaticamente — apenas registra/confere/arquiva.
- */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Truck, Plus, Trash2, Wand2, Loader2, Save, RefreshCw, FileText, Printer, Paperclip, Search, Users, AlertTriangle, Check } from 'lucide-react';
+import { FileText, Loader2, Plus, Printer, Search, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 import type { Employee } from '@/types/database';
+import { registrarDocumento } from '@/lib/documentoHistorico';
+import { printDocumentInPage } from '@/lib/printInPage';
 
-interface CargaItem { nome: string; quantidade: number; observacao?: string }
-interface CargaRow {
-  id: string;
-  funcionario_id: string | null;
-  funcionario_nome: string;
-  cpf: string;
-  matricula: string;
-  funcao: string;
-  setor: string;
-  empresa_nome: string;
-  filial: string;
-  veiculo: string;
-  data_carga: string;
-  itens_json: CargaItem[];
-  observacao: string;
-  status: string;
-  tipo: string;
-  responsavel_nome: string;
-  anexo_url: string;
-  anexo_nome: string;
-  comprovante_url: string;
-  created_at: string;
+interface RetiradaItem {
+  nome: string;
+  quantidade: number;
+  observacao?: string;
 }
 
-const statusBadge = (s: string) => {
-  switch (s) {
-    case 'conferido': return <Badge className="bg-primary text-primary-foreground">Conferido</Badge>;
-    case 'enviado': return <Badge className="bg-success text-success-foreground">Enviado</Badge>;
-    case 'finalizado': return <Badge variant="outline">Finalizado</Badge>;
-    case 'arquivado': return <Badge variant="outline">Arquivado</Badge>;
-    default: return <Badge variant="secondary">Pendente</Badge>;
-  }
+const normalizar = (valor: string) =>
+  String(valor || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const escaparHtml = (valor: string) => String(valor || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+const localizarFuncionario = (texto: string, employees: Employee[]) => {
+  const textoNormalizado = normalizar(texto);
+  const ativos = employees.filter(employee => employee.status === 'ativo');
+
+  const nomeCompleto = ativos.find(employee => textoNormalizado.includes(normalizar(employee.name)));
+  if (nomeCompleto) return nomeCompleto;
+
+  const candidatos = ativos.filter(employee => {
+    const nomes = normalizar(employee.name).split(/\s+/).filter(parte => parte.length >= 4);
+    return nomes.some(parte => new RegExp(`\\b${parte}\\b`, 'i').test(textoNormalizado));
+  });
+
+  return candidatos.length === 1 ? candidatos[0] : null;
 };
 
-const parseEmailItens = (texto: string): CargaItem[] => {
-  if (!texto.trim()) return [];
-  const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const itens: CargaItem[] = [];
-  const reA = /^(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unidade|pç|peças?)\s*[-:]?\s*(.+)$/i;
-  const reB = /^[-•*]\s*(.+?)\s*[-—–]\s*(\d+(?:[.,]\d+)?)\s*(?:un|und|unidade|pç|x)?\s*$/i;
-  const reC = /^(.+?)\s*[-—–:]\s*(\d+(?:[.,]\d+)?)\s*(?:un|und|unidade|pç|x)?\s*$/i;
-  const reD = /^(\d+(?:[.,]\d+)?)\s+(.+)$/;
+const extrairItensLocalmente = (texto: string): RetiradaItem[] => {
+  const linhas = texto.split(/\r?\n/).map(linha => linha.trim()).filter(Boolean);
+  const itens: RetiradaItem[] = [];
+
+  const adicionar = (quantidade: number, nome: string) => {
+    const item = nome
+      .replace(/\b(?:para|pro|pra)\s+(?:o|a)?\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s-]*$/i, '')
+      .replace(/[.,;:]+$/g, '')
+      .trim();
+    if (item && quantidade > 0) itens.push({ nome: item, quantidade, observacao: '' });
+  };
+
   for (const linha of linhas) {
-    let m: RegExpMatchArray | null = null;
-    if ((m = linha.match(reA))) itens.push({ nome: m[2].trim(), quantidade: Number(m[1].replace(',', '.')) });
-    else if ((m = linha.match(reB))) itens.push({ nome: m[1].trim(), quantidade: Number(m[2].replace(',', '.')) });
-    else if ((m = linha.match(reC))) itens.push({ nome: m[1].trim(), quantidade: Number(m[2].replace(',', '.')) });
-    else if ((m = linha.match(reD)) && Number(m[1]) <= 999) itens.push({ nome: m[2].trim(), quantidade: Number(m[1].replace(',', '.')) });
-  }
-  return itens;
-};
+    const padroes = [
+      /(?:carga|retirada|entrega|separar|emitir)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
+      /(?:preciso|solicito|favor|gentileza)\s+(?:de\s+)?(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([^,.\n]+)/i,
+      /^(?:-|•|\*)?\s*(\d+(?:[.,]\d+)?)\s*(?:x|un|und|unidade|unidades|pç|peça|peças)?\s*(?:(?:-|:|–|—))?\s*(.+)$/i,
+      /\b(\d+(?:[.,]\d+)?)\s+(?:unidades?\s+de\s+|un\s+|und\s+|peças?\s+de\s+)?([A-Za-zÀ-ÿ][^,.\n]*)/i,
+    ];
 
-/** Tenta extrair (nome, qtd, item) de uma única linha tipo "Ednaldo - 1 alicate de corte" */
-const parseLinhaFuncionarioItem = (linha: string): { nome: string; quantidade: number; item: string } | null => {
-  const l = linha.trim();
-  if (!l) return null;
-  // padrão: Nome <sep> qtd <unid?> item
-  const re = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s]{1,60}?)\s*[-—–:]\s*(\d+(?:[.,]\d+)?)\s*(?:un|und|unidade|pç|peças?|x)?\s*[-–—:]?\s*(.+)$/i;
-  const reSemSep = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'\s]{1,60}?)\s+(\d+(?:[.,]\d+)?)\s+(.+)$/i;
-  let m = l.match(re) || l.match(reSemSep);
-  if (!m) return null;
-  const nome = m[1].trim();
-  const quantidade = Number(m[2].replace(',', '.'));
-  const item = m[3].trim();
-  if (!nome || !item || nome.split(/\s+/).length > 5) return null;
-  // descarta saudações
-  if (/^(boa|bom|prezad|olá|ola|att|obrigad|veio|email|e-mail|solicit)/i.test(nome)) return null;
-  return { nome, quantidade, item };
-};
-
-interface GrupoFunc {
-  nomeOriginal: string;
-  funcionario: Employee | null;
-  candidatos: Employee[];
-  itens: CargaItem[];
-}
-
-const agruparPorFuncionario = (texto: string, employees: Employee[]): GrupoFunc[] => {
-  const linhas = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const mapa = new Map<string, GrupoFunc>();
-  for (const linha of linhas) {
-    const p = parseLinhaFuncionarioItem(linha);
-    if (!p) continue;
-    const chave = p.nome.toLowerCase();
-    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const alvo = norm(p.nome);
-    const candidatos = employees.filter(e => {
-      const n = norm(e.name);
-      return n === alvo || n.split(/\s+/).includes(alvo) || n.startsWith(alvo + ' ');
-    });
-    const exato = candidatos.length === 1 ? candidatos[0] : null;
-    if (!mapa.has(chave)) {
-      mapa.set(chave, { nomeOriginal: p.nome, funcionario: exato, candidatos, itens: [] });
+    for (const padrao of padroes) {
+      const match = linha.match(padrao);
+      if (match) {
+        adicionar(Number(match[1].replace(',', '.')), match[2]);
+        break;
+      }
     }
-    mapa.get(chave)!.itens.push({ nome: p.item, quantidade: p.quantidade });
   }
-  return Array.from(mapa.values());
-};
 
-/** Gera HTML imprimível e abre janela de impressão (PDF nativo do navegador). */
-const gerarComprovanteHTML = (c: Partial<CargaRow>): string => {
-  const itens = (c.itens_json || []) as CargaItem[];
-  const dataFmt = c.data_carga ? new Date(c.data_carga + 'T00:00:00').toLocaleDateString('pt-BR') : '';
-  const horaFmt = c.created_at ? new Date(c.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante de ${c.tipo || 'carga'} — ${c.funcionario_nome || ''}</title>
-<style>
-  @page { size: A4; margin: 18mm; }
-  body { font-family: Arial, sans-serif; color: #111; font-size: 12px; }
-  h1 { font-size: 16px; text-align: center; margin: 0 0 4px; }
-  .sub { text-align: center; color: #555; margin-bottom: 18px; font-size: 11px; }
-  .box { border: 1px solid #999; padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
-  .grid div { padding: 2px 0; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; font-size: 11px; }
-  th { background: #f0f0f0; }
-  .term { font-size: 10.5px; line-height: 1.4; margin: 16px 0; text-align: justify; color: #333; }
-  .sigs { display: flex; justify-content: space-between; margin-top: 50px; gap: 40px; }
-  .sig { flex: 1; text-align: center; }
-  .sig .line { border-top: 1px solid #333; margin-top: 40px; padding-top: 4px; font-size: 11px; }
-</style></head><body>
-<h1>COMPROVANTE DE ${(c.tipo || 'CARGA').toUpperCase()} — ALMOXARIFADO</h1>
-<div class="sub">Emitido em ${new Date().toLocaleString('pt-BR')}</div>
-<div class="box">
-  <div class="grid">
-    <div><b>Empresa:</b> ${c.empresa_nome || '—'}</div>
-    <div><b>Filial:</b> ${c.filial || '—'}</div>
-    <div><b>Funcionário:</b> ${c.funcionario_nome || '—'}</div>
-    <div><b>CPF:</b> ${c.cpf || '—'}</div>
-    <div><b>Matrícula:</b> ${c.matricula || '—'}</div>
-    <div><b>Função:</b> ${c.funcao || '—'}</div>
-    <div><b>Setor:</b> ${c.setor || '—'}</div>
-    <div><b>Veículo:</b> ${c.veiculo || '—'}</div>
-    <div><b>Data:</b> ${dataFmt}</div>
-    <div><b>Hora do registro:</b> ${horaFmt}</div>
-    <div><b>Responsável:</b> ${c.responsavel_nome || '—'}</div>
-    <div><b>Tipo:</b> ${c.tipo || 'carga'}</div>
-  </div>
-</div>
-<table>
-  <thead><tr><th style="width:8%">#</th><th>Item</th><th style="width:12%">Qtd</th><th>Observação</th></tr></thead>
-  <tbody>
-  ${itens.map((it, i) => `<tr><td>${i + 1}</td><td>${it.nome || ''}</td><td>${it.quantidade}</td><td>${it.observacao || ''}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#777">Sem itens</td></tr>'}
-  </tbody>
-</table>
-${c.observacao ? `<div class="box" style="margin-top:12px"><b>Observação geral:</b><br>${c.observacao}</div>` : ''}
-<p class="term">Declaro que recebi os itens listados acima em perfeito estado e me responsabilizo pela sua conservação e devolução, quando aplicável, conforme normas internas da empresa.</p>
-<div class="sigs">
-  <div class="sig"><div class="line">Assinatura do funcionário</div></div>
-  <div class="sig"><div class="line">Responsável pela entrega</div></div>
-</div>
-</body></html>`;
+  return itens;
 };
 
 const AlmoxarifadoCargaTab: React.FC = () => {
   const { session, employees, companies } = useApp();
   const userId = session?.user?.id;
 
-  // form
-  const [emailBruto, setEmailBruto] = useState('');
-  const [tipo, setTipo] = useState<'carga' | 'retirada'>('carga');
-  const [funcionarioId, setFuncionarioId] = useState<string>('');
+  const [textoColado, setTextoColado] = useState('');
+  const [processando, setProcessando] = useState(false);
+  const [funcionarioId, setFuncionarioId] = useState('');
   const [funcionarioNome, setFuncionarioNome] = useState('');
   const [cpf, setCpf] = useState('');
   const [matricula, setMatricula] = useState('');
   const [funcao, setFuncao] = useState('');
-  const [setor, setSetor] = useState('');
   const [empresaNome, setEmpresaNome] = useState('');
   const [filial, setFilial] = useState('');
-  const [veiculo, setVeiculo] = useState('');
-  const [dataCarga, setDataCarga] = useState(new Date().toISOString().slice(0, 10));
-  const [itens, setItens] = useState<CargaItem[]>([]);
+  const [setor, setSetor] = useState('');
+  const [dataRetirada, setDataRetirada] = useState(new Date().toISOString().slice(0, 10));
+  const [itens, setItens] = useState<RetiradaItem[]>([{ nome: '', quantidade: 1, observacao: '' }]);
   const [observacao, setObservacao] = useState('');
-  const [anexo, setAnexo] = useState<File | null>(null);
-  const [salvando, setSalvando] = useState(false);
+  const [gerando, setGerando] = useState(false);
 
-  // múltiplos funcionários (prévia)
-  const [grupos, setGrupos] = useState<GrupoFunc[]>([]);
-  const [gerandoLote, setGerandoLote] = useState(false);
+  const empresa = useMemo(
+    () => companies.find(company => company.name === empresaNome),
+    [companies, empresaNome],
+  );
 
-  // listagem
-  const [cargas, setCargas] = useState<CargaRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [fEmpresa, setFEmpresa] = useState('');
-  const [fFuncionario, setFFuncionario] = useState('');
-  const [fDataIni, setFDataIni] = useState('');
-  const [fDataFim, setFDataFim] = useState('');
-  const [fItem, setFItem] = useState('');
-  const [fTipo, setFTipo] = useState('');
-  const [fResp, setFResp] = useState('');
-
-  const aplicarFuncionario = (emp: Employee | null) => {
-    if (!emp) {
-      setFuncionarioId(''); setFuncionarioNome(''); setCpf(''); setMatricula('');
-      setFuncao(''); setSetor(''); setEmpresaNome(''); setFilial('');
-      return;
-    }
-    const co = companies.find(c => c.id === emp.companyId);
-    setFuncionarioId(emp.id);
-    setFuncionarioNome(emp.name);
-    setCpf(emp.cpf || '');
-    setMatricula(emp.matriculaEsocial || emp.registro || '');
-    setFuncao(emp.cargo || '');
-    setEmpresaNome(co?.name || '');
-    // setor/filial não estão no Employee — deixa em branco para preencher manual
-  };
-
-  const fetchCargas = async () => {
-    setLoading(true);
-    const { data, error } = await (supabase
-      .from('almoxarifado_carga') as any)
-      .select('*').order('created_at', { ascending: false }).limit(500);
-    setLoading(false);
-    if (error) { toast.error('Erro: ' + error.message); return; }
-    setCargas((data || []) as CargaRow[]);
-  };
-
-  useEffect(() => { fetchCargas(); }, []);
-
-  const preencherAuto = () => {
-    if (!emailBruto.trim()) { toast.error('Cole o e-mail antes.'); return; }
-
-    // 1) Tenta agrupar por funcionário (multi)
-    const gs = agruparPorFuncionario(emailBruto, employees);
-    if (gs.length >= 2) {
-      setGrupos(gs);
-      setItens([]);
-      toast.success(`${gs.length} funcionários identificados.`);
-      return;
-    }
-    if (gs.length === 1 && gs[0].funcionario) {
-      setGrupos([]);
-      aplicarFuncionario(gs[0].funcionario);
-      setItens(gs[0].itens);
-      toast.success(`Funcionário e ${gs[0].itens.length} item(ns) detectado(s).`);
+  const aplicarFuncionario = (employee: Employee | null) => {
+    if (!employee) {
+      setFuncionarioId('');
+      setFuncionarioNome('');
+      setCpf('');
+      setMatricula('');
+      setFuncao('');
+      setEmpresaNome('');
       return;
     }
 
-    // 2) Fallback: extração simples de itens
-    setGrupos([]);
-    const its = parseEmailItens(emailBruto);
-    if (its.length) setItens(its);
-    if (!funcionarioId) {
-      const lc = emailBruto.toLowerCase();
-      const emp = employees.find(e => {
-        const tokens = e.name.toLowerCase().split(/\s+/).filter(t => t.length > 2);
-        return tokens.length >= 2 && tokens.every(t => lc.includes(t));
-      });
-      if (emp) aplicarFuncionario(emp);
+    const company = companies.find(item => item.id === employee.companyId);
+    setFuncionarioId(employee.id);
+    setFuncionarioNome(employee.name);
+    setCpf(employee.cpf || '');
+    setMatricula(employee.matriculaEsocial || employee.registro || '');
+    setFuncao(employee.cargo || '');
+    setEmpresaNome(company?.name || '');
+    setFilial(company?.city || '');
+    setSetor(employee.categoria === 'operacional' ? 'Operacional' : employee.categoria || '');
+  };
+
+  const lerEPreencher = async () => {
+    if (!textoColado.trim()) {
+      toast.error('Cole a solicitação antes de ler.');
+      return;
     }
-    toast.success(`${its.length} item(ns) detectado(s).`);
-  };
 
-  const atualizarGrupoFuncionario = (idx: number, empId: string) => {
-    const emp = employees.find(e => e.id === empId) || null;
-    setGrupos(prev => prev.map((g, i) => i === idx ? { ...g, funcionario: emp } : g));
-  };
-
-  const removerGrupo = (idx: number) => {
-    setGrupos(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const limparForm = () => {
-    setEmailBruto(''); setFuncionarioId(''); setFuncionarioNome(''); setCpf('');
-    setMatricula(''); setFuncao(''); setSetor(''); setEmpresaNome(''); setFilial('');
-    setVeiculo(''); setItens([]); setObservacao(''); setAnexo(null);
-    setGrupos([]);
-    setDataCarga(new Date().toISOString().slice(0, 10));
-  };
-
-  const uploadAnexo = async (): Promise<{ url: string; nome: string }> => {
-    if (!anexo || !userId) return { url: '', nome: '' };
-    const path = `cargas/${userId}/${Date.now()}-${anexo.name.replace(/[^\w.\-]/g, '_')}`;
-    const up = await supabase.storage.from('documentos-ativos').upload(path, anexo);
-    if (up.error) throw new Error('Falha ao subir anexo: ' + up.error.message);
-    const { data } = supabase.storage.from('documentos-ativos').getPublicUrl(path);
-    return { url: data.publicUrl, nome: anexo.name };
-  };
-
-  const salvar = async (gerarPdfDepois = false) => {
-    if (!userId) { toast.error('Sessão expirada'); return; }
-    if (!funcionarioNome.trim()) { toast.error('Selecione o funcionário.'); return; }
-    if (itens.length === 0) { toast.error('Adicione pelo menos um item.'); return; }
-    setSalvando(true);
+    setProcessando(true);
     try {
-      const anexoData = await uploadAnexo();
-      const responsavelNome = session?.user?.email || 'Sistema';
-      const payload = {
-        user_id: userId,
-        usuario_nome: responsavelNome,
-        funcionario_id: funcionarioId || null,
-        funcionario_nome: funcionarioNome,
-        cpf, matricula, funcao, setor, filial,
-        empresa_nome: empresaNome,
-        company_id: employees.find(e => e.id === funcionarioId)?.companyId || null,
-        veiculo,
-        data_carga: dataCarga,
-        email_bruto: emailBruto,
-        itens_json: itens,
-        observacao,
-        status: 'pendente',
-        tipo,
-        responsavel_nome: responsavelNome,
-        anexo_url: anexoData.url,
-        anexo_nome: anexoData.nome,
-      };
-      const { data, error } = await (supabase.from('almoxarifado_carga') as any).insert(payload).select().single();
-      if (error) throw new Error(error.message);
+      const funcionarioLocal = localizarFuncionario(textoColado, employees);
+      let itensExtraidos = extrairItensLocalmente(textoColado);
+      let nomeFuncionarioIA = '';
 
-      // Arquiva no histórico do funcionário
-      if (funcionarioId) {
-        const co = companies.find(c => c.id === employees.find(e => e.id === funcionarioId)?.companyId);
-        await supabase.from('documentos_funcionario').insert({
-          funcionario_id: funcionarioId,
-          funcionario_nome: funcionarioNome,
-          company_id: co?.id,
-          empresa_nome: co?.name || empresaNome,
-          tipo_documento: tipo === 'carga' ? 'Carga Almoxarifado' : 'Retirada Almoxarifado',
-          competencia: dataCarga.slice(0, 7),
-          descricao: `${itens.length} item(ns) — ${itens.slice(0, 3).map(i => `${i.quantidade}× ${i.nome}`).join(', ')}${itens.length > 3 ? '…' : ''}`,
-          arquivo_url: anexoData.url || '',
-          gerado_por_user_id: userId,
-          gerado_por_nome: responsavelNome,
-          status_envio: 'arquivado',
-          unidade: co?.name || empresaNome,
-        } as any);
-      }
-
-      toast.success('Carga registrada.');
-      if (gerarPdfDepois) imprimirComprovante(data as CargaRow);
-      limparForm();
-      await fetchCargas();
-    } catch (e) {
-      toast.error('Erro: ' + (e instanceof Error ? e.message : 'desconhecido'));
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  const imprimirComprovante = (c: Partial<CargaRow>) => {
-    const html = gerarComprovanteHTML(c);
-    const w = window.open('', '_blank', 'width=900,height=700');
-    if (!w) { toast.error('Popup bloqueado. Permita popups para imprimir.'); return; }
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => { w.focus(); w.print(); }, 300);
-  };
-
-  const gerarCargasSeparadas = async (imprimir: boolean) => {
-    if (!userId) { toast.error('Sessão expirada'); return; }
-    const validos = grupos.filter(g => g.funcionario && g.itens.length > 0);
-    if (validos.length === 0) {
-      toast.error('Nenhum funcionário válido. Selecione manualmente os pendentes.');
-      return;
-    }
-    setGerandoLote(true);
-    const responsavelNome = session?.user?.email || 'Sistema';
-    const criadas: CargaRow[] = [];
-    try {
-      for (const g of validos) {
-        const emp = g.funcionario!;
-        const co = companies.find(c => c.id === emp.companyId);
-        const payload = {
-          user_id: userId,
-          usuario_nome: responsavelNome,
-          funcionario_id: emp.id,
-          funcionario_nome: emp.name,
-          cpf: emp.cpf || '',
-          matricula: emp.matriculaEsocial || emp.registro || '',
-          funcao: emp.cargo || '',
-          setor: '', filial: '',
-          empresa_nome: co?.name || '',
-          company_id: emp.companyId || null,
-          veiculo: '',
-          data_carga: dataCarga,
-          email_bruto: emailBruto,
-          itens_json: g.itens,
-          observacao,
-          status: 'pendente',
-          tipo,
-          responsavel_nome: responsavelNome,
-          anexo_url: '',
-          anexo_nome: '',
-        };
-        const { data, error } = await (supabase.from('almoxarifado_carga') as any).insert(payload).select().single();
-        if (error) { toast.error(`Erro em ${emp.name}: ${error.message}`); continue; }
-        criadas.push(data as CargaRow);
-        await supabase.from('documentos_funcionario').insert({
-          funcionario_id: emp.id,
-          funcionario_nome: emp.name,
-          company_id: co?.id,
-          empresa_nome: co?.name || '',
-          tipo_documento: tipo === 'carga' ? 'Carga Almoxarifado' : 'Retirada Almoxarifado',
-          competencia: dataCarga.slice(0, 7),
-          descricao: `${g.itens.length} item(ns) — ${g.itens.slice(0, 3).map(i => `${i.quantidade}× ${i.nome}`).join(', ')}${g.itens.length > 3 ? '…' : ''}`,
-          arquivo_url: '',
-          gerado_por_user_id: userId,
-          gerado_por_nome: responsavelNome,
-          status_envio: 'arquivado',
-          unidade: co?.name || '',
-        } as any);
-      }
-      toast.success(`${criadas.length} carga(s) gerada(s).`);
-      if (imprimir) {
-        for (const c of criadas) {
-          imprimirComprovante(c);
-          await new Promise(r => setTimeout(r, 400));
+      try {
+        const { data, error } = await supabase.functions.invoke('parse-text', {
+          body: { text: textoColado, type: 'almoxarifado' },
+        });
+        if (error) throw error;
+        const resultado = data?.data || {};
+        nomeFuncionarioIA = resultado.funcionario_nome || resultado.funcionario || resultado.nome || '';
+        const itensIA = Array.isArray(resultado.itens) ? resultado.itens : [];
+        if (itensIA.length) {
+          itensExtraidos = itensIA.map((item: any) => ({
+            nome: String(item.nome || item.item || item.descricao || '').trim(),
+            quantidade: Number(item.quantidade || item.qtd || 1),
+            observacao: String(item.observacao || ''),
+          })).filter((item: RetiradaItem) => item.nome && item.quantidade > 0);
         }
+      } catch (error) {
+        console.warn('[almoxarifado] leitura IA indisponível; usando leitura local', error);
       }
-      limparForm();
-      await fetchCargas();
+
+      let funcionario = funcionarioLocal;
+      if (!funcionario && nomeFuncionarioIA) {
+        const alvo = normalizar(nomeFuncionarioIA);
+        funcionario = employees.find(employee => normalizar(employee.name).includes(alvo) || alvo.includes(normalizar(employee.name))) || null;
+      }
+
+      if (funcionario) aplicarFuncionario(funcionario);
+      if (itensExtraidos.length) setItens(itensExtraidos);
+      setObservacao(textoColado);
+
+      if (!funcionario && itensExtraidos.length === 0) {
+        toast.warning('O texto foi copiado para observação. Selecione o funcionário e informe os materiais manualmente.');
+      } else if (!funcionario) {
+        toast.warning('Materiais preenchidos. Selecione o funcionário para gerar o documento.');
+      } else if (itensExtraidos.length === 0) {
+        toast.warning('Funcionário preenchido. Informe os materiais para gerar o documento.');
+      } else {
+        toast.success('Solicitação lida e formulário preenchido. Revise antes de gerar.');
+      }
     } finally {
-      setGerandoLote(false);
+      setProcessando(false);
     }
   };
 
-  const atualizarStatus = async (id: string, status: string) => {
-    const { error } = await (supabase.from('almoxarifado_carga') as any).update({ status }).eq('id', id);
-    if (error) { toast.error('Erro: ' + error.message); return; }
-    toast.success('Status atualizado.');
-    await fetchCargas();
+  const atualizarItem = (index: number, dados: Partial<RetiradaItem>) => {
+    setItens(current => current.map((item, i) => i === index ? { ...item, ...dados } : item));
   };
 
-  const excluir = async (id: string) => {
-    if (!confirm('Excluir este registro? Esta ação não pode ser desfeita.')) return;
-    const { error } = await (supabase.from('almoxarifado_carga') as any).delete().eq('id', id);
-    if (error) { toast.error('Erro: ' + error.message); return; }
-    toast.success('Excluído.');
-    await fetchCargas();
+  const montarDocumento = (itensValidos: RetiradaItem[]) => {
+    const dataFormatada = new Date(`${dataRetirada}T12:00:00`).toLocaleDateString('pt-BR');
+    const emissao = new Date().toLocaleString('pt-BR');
+    const cnpj = empresa?.cnpj || '';
+
+    return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Termo de Retirada de Materiais</title>
+<style>
+@page{size:A4;margin:12mm}body{margin:0;background:#fff;color:#000;font-family:'Segoe UI',Arial,sans-serif;font-size:11px}.pagina{max-width:210mm;margin:0 auto;padding:6mm}.cabecalho{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px}.titulo{text-align:right;font-size:15px;font-weight:700}.sub{font-size:10px;color:#555}.box{border:1px solid #999;border-radius:5px;padding:10px;margin-bottom:14px}.legenda{font-size:9px;text-transform:uppercase;color:#666;font-weight:700;margin-bottom:7px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px 14px}.rotulo{color:#666}.valor{font-weight:600}table{width:100%;border-collapse:collapse;margin-bottom:14px}th,td{border:1px solid #aaa;padding:7px}th{background:#e9e9e9;text-align:left}.centro{text-align:center}.termo{border:1px solid #999;border-radius:5px;padding:11px;line-height:1.5;text-align:justify}.assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:70px}.assinatura{text-align:center;border-top:1px solid #000;padding-top:5px}.nome{font-weight:700}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.pagina{padding:0}}
+</style></head><body><div class="pagina">
+<div class="cabecalho"><div><div style="font-size:17px;font-weight:700">${escaparHtml(empresaNome || 'TOPAC')}</div><div class="sub">CNPJ: ${escaparHtml(cnpj)}</div></div><div class="titulo">TERMO DE RETIRADA DE MATERIAIS<div class="sub">Data: ${dataFormatada}<br>Emissão: ${emissao}</div></div></div>
+<div class="box"><div class="legenda">Dados do colaborador</div><div class="grid">
+<div><span class="rotulo">Nome:</span> <span class="valor">${escaparHtml(funcionarioNome)}</span></div>
+<div><span class="rotulo">Função:</span> ${escaparHtml(funcao || '—')}</div>
+<div><span class="rotulo">CPF:</span> ${escaparHtml(cpf || '—')}</div>
+<div><span class="rotulo">Matrícula:</span> ${escaparHtml(matricula || '—')}</div>
+<div><span class="rotulo">Setor:</span> ${escaparHtml(setor || '—')}</div>
+<div><span class="rotulo">Empresa:</span> ${escaparHtml(empresaNome || '—')}</div>
+<div><span class="rotulo">Unidade:</span> ${escaparHtml(filial || empresa?.city || '—')}</div>
+<div><span class="rotulo">Data da retirada:</span> ${dataFormatada}</div>
+</div></div>
+<table><thead><tr><th>Item / Descrição</th><th style="width:14%" class="centro">Quantidade</th><th style="width:30%">Observação</th></tr></thead><tbody>
+${itensValidos.map(item => `<tr><td>${escaparHtml(item.nome)}</td><td class="centro">${item.quantidade}</td><td>${escaparHtml(item.observacao || '—')}</td></tr>`).join('')}
+</tbody></table>
+${observacao ? `<div class="box"><div class="legenda">Solicitação / observação</div><div style="white-space:pre-wrap">${escaparHtml(observacao)}</div></div>` : ''}
+<div class="termo"><div class="legenda">Termo de responsabilidade</div>Declaro que recebi os materiais descritos acima, nas quantidades informadas, ficando responsável por sua guarda, conservação e utilização adequada nas atividades da empresa.</div>
+<div class="assinaturas"><div class="assinatura"><div class="nome">${escaparHtml(funcionarioNome)}</div><div class="sub">Colaborador</div></div><div class="assinatura"><div class="nome">&nbsp;</div><div class="sub">Responsável pela entrega</div></div></div>
+</div></body></html>`;
   };
 
-  const empresasUnicas = useMemo(() => Array.from(new Set(companies.map(c => c.name))), [companies]);
+  const gerarDocumento = async () => {
+    if (!userId) {
+      toast.error('Sessão expirada.');
+      return;
+    }
+    if (!funcionarioId || !funcionarioNome) {
+      toast.error('Selecione o funcionário.');
+      return;
+    }
 
-  const cargasFiltradas = useMemo(() => {
-    return cargas.filter(c => {
-      if (fEmpresa && !(c.empresa_nome || '').toLowerCase().includes(fEmpresa.toLowerCase())) return false;
-      if (fFuncionario && !(c.funcionario_nome || '').toLowerCase().includes(fFuncionario.toLowerCase())) return false;
-      if (fDataIni && c.data_carga < fDataIni) return false;
-      if (fDataFim && c.data_carga > fDataFim) return false;
-      if (fTipo && c.tipo !== fTipo) return false;
-      if (fResp && !(c.responsavel_nome || '').toLowerCase().includes(fResp.toLowerCase())) return false;
-      if (fItem) {
-        const q = fItem.toLowerCase();
-        const found = (c.itens_json || []).some(i => (i.nome || '').toLowerCase().includes(q));
-        if (!found) return false;
-      }
-      return true;
-    });
-  }, [cargas, fEmpresa, fFuncionario, fDataIni, fDataFim, fItem, fTipo, fResp]);
+    const itensValidos = itens.filter(item => item.nome.trim() && item.quantidade > 0);
+    if (!itensValidos.length) {
+      toast.error('Informe pelo menos um material.');
+      return;
+    }
+
+    const employee = employees.find(item => item.id === funcionarioId);
+    const company = companies.find(item => item.id === employee?.companyId);
+    if (!employee || !company) {
+      toast.error('Dados do funcionário ou da empresa não encontrados.');
+      return;
+    }
+
+    setGerando(true);
+    const html = montarDocumento(itensValidos);
+    const resumo = itensValidos.map(item => `${item.quantidade}x ${item.nome}`).join(', ');
+
+    try {
+      await registrarDocumento({
+        funcionarioId: employee.id,
+        funcionarioNome: employee.name,
+        companyId: company.id,
+        empresaNome: company.name,
+        tipoDocumento: 'Termo de Retirada de Materiais',
+        competencia: dataRetirada.slice(0, 7),
+        descricao: `Retirada de materiais: ${resumo}`,
+        geradoPorUserId: userId,
+        geradoPorNome: session?.user?.user_metadata?.nome_completo || session?.user?.email || 'Sistema',
+        unidade: company.city,
+        categoria: 'TERMOS',
+        origem: 'gerado_sistema',
+        observacao: observacao || textoColado,
+        dataDocumento: dataRetirada,
+      });
+    } catch (error) {
+      console.warn('[almoxarifado] documento impresso, mas histórico não foi salvo', error);
+      toast.warning('Documento será aberto para impressão, mas o histórico não pôde ser salvo.');
+    }
+
+    printDocumentInPage(html);
+    toast.success('Documento gerado. Use a janela de impressão para imprimir ou salvar em PDF.');
+    setGerando(false);
+  };
+
+  const limpar = () => {
+    setTextoColado('');
+    setFuncionarioId('');
+    setFuncionarioNome('');
+    setCpf('');
+    setMatricula('');
+    setFuncao('');
+    setEmpresaNome('');
+    setFilial('');
+    setSetor('');
+    setDataRetirada(new Date().toISOString().slice(0, 10));
+    setItens([{ nome: '', quantidade: 1, observacao: '' }]);
+    setObservacao('');
+  };
 
   return (
     <div className="space-y-5">
       <div className="card-premium p-5 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Truck className="w-4 h-4 text-primary" /> Nova Carga / Retirada por Funcionário
-          </h2>
-          <div className="flex gap-2 items-center">
-            <label className="text-xs text-muted-foreground">Tipo:</label>
-            <select value={tipo} onChange={e => setTipo(e.target.value as 'carga' | 'retirada')}
-              className="border rounded-lg px-2 py-1 text-xs bg-background">
-              <option value="carga">Carga</option>
-              <option value="retirada">Retirada</option>
-            </select>
-          </div>
-        </div>
-        <p className="text-[11px] text-muted-foreground">⚠ Esta aba <strong>não desconta do estoque</strong>. Apenas registra/confere/arquiva.</p>
-
-        {/* Busca de funcionário */}
         <div>
-          <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><Search className="w-3 h-3" />Funcionário *</label>
-          <EmployeeCombobox
-            value={funcionarioId}
-            onChange={aplicarFuncionario}
-            placeholder="Buscar por nome, CPF ou matrícula..."
-          />
+          <h2 className="text-sm font-bold flex items-center gap-2"><FileText className="w-4 h-4 text-primary" /> Termo de retirada do almoxarifado</h2>
+          <p className="text-xs text-muted-foreground mt-1">Cole a solicitação como no Protocolo, revise os campos preenchidos e gere uma ficha no modelo da Entrega de EPI. Não consulta nem desconta estoque.</p>
         </div>
 
-        {/* Dados preenchidos automaticamente */}
-        {funcionarioId && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div><label className="text-[10px] uppercase text-muted-foreground">CPF</label>
-              <Input value={cpf} onChange={e => setCpf(e.target.value)} className="h-9" /></div>
-            <div><label className="text-[10px] uppercase text-muted-foreground">Matrícula</label>
-              <Input value={matricula} onChange={e => setMatricula(e.target.value)} className="h-9" /></div>
-            <div><label className="text-[10px] uppercase text-muted-foreground">Função</label>
-              <Input value={funcao} onChange={e => setFuncao(e.target.value)} className="h-9" /></div>
-            <div><label className="text-[10px] uppercase text-muted-foreground">Empresa</label>
-              <select value={empresaNome} onChange={e => setEmpresaNome(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm bg-background h-9">
-                <option value="">—</option>
-                {empresasUnicas.map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
-            <div><label className="text-[10px] uppercase text-muted-foreground">Filial</label>
-              <Input value={filial} onChange={e => setFilial(e.target.value)} className="h-9" /></div>
-            <div><label className="text-[10px] uppercase text-muted-foreground">Setor</label>
-              <Input value={setor} onChange={e => setSetor(e.target.value)} className="h-9" /></div>
-          </div>
-        )}
+        <div className="border rounded-lg p-4 space-y-2 bg-muted/20">
+          <label className="text-xs font-medium">Cole o e-mail ou WhatsApp</label>
+          <Textarea value={textoColado} onChange={event => setTextoColado(event.target.value)} rows={4} placeholder="Ex.: Bom dia, por gentileza emitir a carga de 2 cadeados para o Gustavo" />
+          <Button size="sm" onClick={lerEPreencher} disabled={processando}>
+            {processando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} Ler e preencher
+          </Button>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><Search className="w-3 h-3" /> Funcionário *</label>
+          <EmployeeCombobox value={funcionarioId} onChange={aplicarFuncionario} placeholder="Buscar por nome, CPF ou matrícula..." />
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div><label className="text-[10px] uppercase text-muted-foreground">Data da carga</label>
-            <Input type="date" value={dataCarga} onChange={e => setDataCarga(e.target.value)} className="h-9" /></div>
-          <div className="md:col-span-2"><label className="text-[10px] uppercase text-muted-foreground">Veículo (placa / modelo) — opcional</label>
-            <Input value={veiculo} onChange={e => setVeiculo(e.target.value)} placeholder="Ex.: ABC-1234 / Strada" className="h-9" /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">CPF</label><Input value={cpf} onChange={event => setCpf(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Matrícula</label><Input value={matricula} onChange={event => setMatricula(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Função</label><Input value={funcao} onChange={event => setFuncao(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Empresa</label><Input value={empresaNome} readOnly /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Unidade / Filial</label><Input value={filial} onChange={event => setFilial(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Setor</label><Input value={setor} onChange={event => setSetor(event.target.value)} /></div>
+          <div><label className="text-[10px] uppercase text-muted-foreground">Data</label><Input type="date" value={dataRetirada} onChange={event => setDataRetirada(event.target.value)} /></div>
         </div>
 
-        {/* Cole aqui */}
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Cole aqui (e-mail ou lista de materiais)</label>
-          <Textarea value={emailBruto} onChange={e => setEmailBruto(e.target.value)}
-            placeholder={'Cole o texto da solicitação. Ex.:\n2x parafuso M8\n3 - mangueira 1/2\n10 luvas nitrílicas'}
-            rows={4} className="text-sm" />
-          <div className="mt-2 flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={preencherAuto}>
-              <Wand2 className="w-3.5 h-3.5 mr-1" /> Identificar itens
-            </Button>
-            <Button variant="ghost" size="sm" onClick={limparForm}>Limpar tudo</Button>
-          </div>
-        </div>
-
-        {/* Prévia agrupada por funcionário (multi) */}
-        {grupos.length > 0 && (
-          <div className="border-2 border-primary/40 rounded-lg p-4 space-y-3 bg-primary/5">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <Users className="w-4 h-4 text-primary" />
-                {grupos.length} funcionário(s) identificados
-              </h3>
-              <div className="flex gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setGrupos([])}>Cancelar</Button>
-                <Button size="sm" variant="secondary" disabled={gerandoLote}
-                  onClick={() => gerarCargasSeparadas(false)}>
-                  {gerandoLote ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1" />}
-                  Gerar cargas separadas
-                </Button>
-                <Button size="sm" disabled={gerandoLote}
-                  onClick={() => gerarCargasSeparadas(true)}>
-                  <Printer className="w-3.5 h-3.5 mr-1" /> Gerar e imprimir todas
-                </Button>
-              </div>
-            </div>
-            <div className="grid gap-2">
-              {grupos.map((g, idx) => {
-                const pendente = !g.funcionario;
-                return (
-                  <div key={idx} className={`rounded-lg p-3 border ${pendente ? 'border-warning bg-warning/10' : 'border-border bg-background'}`}>
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs uppercase text-muted-foreground">Detectado:</span>
-                          <span className="text-sm font-semibold">{g.nomeOriginal}</span>
-                          {pendente
-                            ? <Badge variant="outline" className="text-warning border-warning"><AlertTriangle className="w-3 h-3 mr-1" />Pendente</Badge>
-                            : <Badge className="bg-success text-success-foreground"><Check className="w-3 h-3 mr-1" />{g.funcionario!.name}</Badge>}
-                        </div>
-                        {pendente && (
-                          <div className="mt-2">
-                            <label className="text-[10px] uppercase text-muted-foreground">Selecionar funcionário</label>
-                            <select
-                              className="w-full border rounded-lg px-2 py-1.5 text-sm bg-background mt-0.5"
-                              value=""
-                              onChange={e => atualizarGrupoFuncionario(idx, e.target.value)}
-                            >
-                              <option value="">— escolher —</option>
-                              {(g.candidatos.length > 0 ? g.candidatos : employees).slice(0, 50).map(e => (
-                                <option key={e.id} value={e.id}>{e.name}{e.cpf ? ` — ${e.cpf}` : ''}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        <ul className="mt-2 text-xs space-y-0.5">
-                          {g.itens.map((it, i) => (
-                            <li key={i}>• {it.quantidade}× {it.nome}</li>
-                          ))}
-                        </ul>
-                      </div>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removerGrupo(idx)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {/* Itens */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-foreground">Itens ({itens.length})</h3>
-            <Button size="sm" variant="outline" onClick={() => setItens([...itens, { nome: '', quantidade: 1 }])}>
-              <Plus className="w-3 h-3 mr-1" /> Adicionar
-            </Button>
-          </div>
-          {itens.length === 0 && (
-            <p className="text-xs text-muted-foreground py-4 text-center border rounded-lg">
-              Cole o texto acima e clique em "Identificar itens" — ou adicione manualmente.
-            </p>
-          )}
-          {itens.map((it, idx) => (
-            <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-              <Input className="col-span-6" value={it.nome}
-                onChange={e => { const arr = [...itens]; arr[idx].nome = e.target.value; setItens(arr); }}
-                placeholder="Nome do item" />
-              <Input className="col-span-2" type="number" value={it.quantidade}
-                onChange={e => { const arr = [...itens]; arr[idx].quantidade = Number(e.target.value); setItens(arr); }}
-                placeholder="Qtd" />
-              <Input className="col-span-3" value={it.observacao || ''}
-                onChange={e => { const arr = [...itens]; arr[idx].observacao = e.target.value; setItens(arr); }}
-                placeholder="Obs (opcional)" />
-              <Button size="icon" variant="ghost" className="text-destructive col-span-1"
-                onClick={() => setItens(itens.filter((_, i) => i !== idx))}>
-                <Trash2 className="w-4 h-4" />
-              </Button>
+          <div className="flex justify-between items-center"><h3 className="text-sm font-semibold">Materiais</h3><Button size="sm" variant="outline" onClick={() => setItens(current => [...current, { nome: '', quantidade: 1, observacao: '' }])}><Plus className="w-3.5 h-3.5 mr-1" /> Adicionar material</Button></div>
+          {itens.map((item, index) => (
+            <div key={index} className="grid grid-cols-12 gap-2">
+              <Input className="col-span-6" value={item.nome} onChange={event => atualizarItem(index, { nome: event.target.value })} placeholder="Descrição do material" />
+              <Input className="col-span-2" type="number" min="1" value={item.quantidade} onChange={event => atualizarItem(index, { quantidade: Number(event.target.value) })} />
+              <Input className="col-span-3" value={item.observacao || ''} onChange={event => atualizarItem(index, { observacao: event.target.value })} placeholder="Observação" />
+              <Button className="col-span-1" variant="ghost" size="icon" onClick={() => setItens(current => current.length === 1 ? [{ nome: '', quantidade: 1, observacao: '' }] : current.filter((_, i) => i !== index))}><Trash2 className="w-4 h-4 text-destructive" /></Button>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="text-[10px] uppercase text-muted-foreground">Observação geral</label>
-            <Textarea value={observacao} onChange={e => setObservacao(e.target.value)} rows={2} />
-          </div>
-          <div>
-            <label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1"><Paperclip className="w-3 h-3" />Anexar PDF/documento</label>
-            <input type="file" accept=".pdf,image/*" onChange={e => setAnexo(e.target.files?.[0] || null)}
-              className="text-xs block w-full border rounded-lg p-2 bg-background" />
-            {anexo && <p className="text-[10px] text-muted-foreground mt-1">{anexo.name} ({(anexo.size / 1024).toFixed(0)} KB)</p>}
-          </div>
-        </div>
+        <div><label className="text-[10px] uppercase text-muted-foreground">Solicitação / observação</label><Textarea rows={3} value={observacao} onChange={event => setObservacao(event.target.value)} /></div>
 
         <div className="flex gap-2 flex-wrap">
-          <Button onClick={() => salvar(false)} disabled={salvando}>
-            {salvando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Salvar carga
+          <Button onClick={gerarDocumento} disabled={gerando} className="gradient-accent text-accent-foreground font-semibold">
+            {gerando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Printer className="w-4 h-4 mr-2" />} Gerar documento
           </Button>
-          <Button onClick={() => salvar(true)} disabled={salvando} variant="secondary">
-            <Printer className="w-4 h-4 mr-2" />Salvar e imprimir comprovante
-          </Button>
-        </div>
-      </div>
-
-      {/* Histórico com filtros */}
-      <div className="card-premium p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-foreground">Histórico de cargas / retiradas</h2>
-          <Button size="sm" variant="outline" onClick={fetchCargas} disabled={loading}>
-            {loading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-            Atualizar
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-xs">
-          <Input placeholder="Funcionário" value={fFuncionario} onChange={e => setFFuncionario(e.target.value)} className="h-8 text-xs" />
-          <Input placeholder="Empresa" value={fEmpresa} onChange={e => setFEmpresa(e.target.value)} className="h-8 text-xs" />
-          <Input placeholder="Item" value={fItem} onChange={e => setFItem(e.target.value)} className="h-8 text-xs" />
-          <Input placeholder="Responsável" value={fResp} onChange={e => setFResp(e.target.value)} className="h-8 text-xs" />
-          <select value={fTipo} onChange={e => setFTipo(e.target.value)} className="h-8 text-xs border rounded-lg px-2 bg-background">
-            <option value="">Todos os tipos</option>
-            <option value="carga">Carga</option>
-            <option value="retirada">Retirada</option>
-          </select>
-          <Input type="date" value={fDataIni} onChange={e => setFDataIni(e.target.value)} className="h-8 text-xs" />
-          <Input type="date" value={fDataFim} onChange={e => setFDataFim(e.target.value)} className="h-8 text-xs" />
-        </div>
-
-        <div className="overflow-x-auto sticky-x-scroll">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                {['Data', 'Tipo', 'Funcionário', 'Empresa', 'Itens', 'Responsável', 'Anexo', 'Status', 'Ações'].map(h => (
-                  <th key={h} className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {cargasFiltradas.length === 0 && (
-                <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">
-                  <FileText className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">Nenhum registro encontrado.</p>
-                </td></tr>
-              )}
-              {cargasFiltradas.map(c => (
-                <tr key={c.id} className="border-b hover:bg-muted/20">
-                  <td className="px-3 py-2 text-xs">{new Date(c.data_carga + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                  <td className="px-3 py-2 text-xs"><Badge variant="outline">{c.tipo || 'carga'}</Badge></td>
-                  <td className="px-3 py-2 text-xs font-medium">{c.funcionario_nome}</td>
-                  <td className="px-3 py-2 text-xs">{c.empresa_nome || '—'}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {(c.itens_json || []).slice(0, 3).map((i, k) => (
-                      <span key={k} className="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded bg-muted text-[10px]">
-                        {i.quantidade}× {i.nome}
-                      </span>
-                    ))}
-                    {(c.itens_json || []).length > 3 && <span className="text-[10px] text-muted-foreground">+{(c.itens_json || []).length - 3}</span>}
-                  </td>
-                  <td className="px-3 py-2 text-xs">{c.responsavel_nome || '—'}</td>
-                  <td className="px-3 py-2 text-xs">
-                    {c.anexo_url ? <a href={c.anexo_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">Ver</a> : '—'}
-                  </td>
-                  <td className="px-3 py-2">{statusBadge(c.status)}</td>
-                  <td className="px-3 py-2 text-xs space-x-1 whitespace-nowrap">
-                    <Button size="sm" variant="outline" onClick={() => imprimirComprovante(c)} title="Imprimir comprovante">
-                      <Printer className="w-3 h-3" />
-                    </Button>
-                    {c.status === 'pendente' && <Button size="sm" variant="outline" onClick={() => atualizarStatus(c.id, 'conferido')}>Conferir</Button>}
-                    {c.status === 'conferido' && <Button size="sm" variant="outline" onClick={() => atualizarStatus(c.id, 'enviado')}>Enviado</Button>}
-                    {c.status === 'enviado' && <Button size="sm" variant="outline" onClick={() => atualizarStatus(c.id, 'finalizado')}>Finalizar</Button>}
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => excluir(c.id)} title="Excluir">
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Button variant="ghost" onClick={limpar}>Limpar</Button>
         </div>
       </div>
     </div>
