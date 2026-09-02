@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, FileCheck, LinkIcon, Loader2, Printer, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CheckCircle2, FileCheck, LinkIcon, Loader2, MessageSquareText, Printer, Sparkles } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,10 +43,13 @@ interface ProtocolGroup {
   cliente: string;
   local: string;
   responsavel: string;
+  observacao: string;
+  substituicaoSaiId: string;
+  substituicaoEntraId: string;
   itens: ProtocolItem[];
 }
 
-const PROTOCOL_PARSE_ENDPOINT = '/api/protocolos-parse'; // Vercel Function: /api/protocolos-parse.ts
+const PROTOCOL_PARSE_ENDPOINT = '/api/protocolos-parse';
 
 const normalize = (value: unknown) =>
   String(value || '')
@@ -62,6 +65,8 @@ const normalizePlate = (value: unknown) =>
 const normalizePatrimonio = (value: unknown) =>
   normalize(value).replace(/\s+/g, '').replace(/[^A-Z0-9./-]/g, '');
 
+const compactToken = (value: unknown) => normalize(value).replace(/[^A-Z0-9]/g, '');
+
 const escapeHtml = (value: unknown) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -72,7 +77,6 @@ const escapeHtml = (value: unknown) =>
 
 const pdfOf = (asset: AtivoDoc | null) => String(asset?.documento_url || asset?.arquivo_url || '').trim();
 
-// Mantidos como contrato do módulo Frota/Protocolo.
 const findVehicleByPlate = (assets: AtivoDoc[], plate: unknown) => {
   const normalized = normalizePlate(plate);
   return normalized ? assets.find((asset) => normalizePlate(asset.placa) === normalized) || null : null;
@@ -89,6 +93,35 @@ const toProtocolVehicleFields = (asset: AtivoDoc | null) => ({
   pdf_url: pdfOf(asset) || null,
   ativo_id: asset?.id || null,
 });
+
+const itemLabel = (item?: ProtocolItem | null) => {
+  if (!item) return 'Não informado';
+  const asset = item.ativo;
+  const patrimonio = asset?.patrimonio || item.patrimonio || 'sem patrimônio';
+  const placa = normalizePlate(asset?.placa || item.placa);
+  const descricao = asset?.descricao || item.descricao || 'Equipamento';
+  return `${patrimonio}${placa ? ` / ${placa}` : ''} — ${descricao}`;
+};
+
+const inferSubstitution = (items: ProtocolItem[], sourceText: string) => {
+  const normalizedText = normalize(sourceText);
+  const marker = normalizedText.search(/SUBSTITU/);
+  if (marker < 0 || items.length < 2) return { sai: '', entra: '' };
+
+  const context = compactToken(normalizedText.slice(marker, marker + 180));
+  const outgoing = items.find((item) => {
+    const patrimonio = compactToken(item.ativo?.patrimonio || item.patrimonio);
+    const placa = compactToken(normalizePlate(item.ativo?.placa || item.placa));
+    return Boolean((patrimonio && context.includes(patrimonio)) || (placa && context.includes(placa)));
+  });
+
+  const sai = outgoing?.ativo?.id || '';
+  const entra = items.length === 2
+    ? items.find((item) => item.ativo?.id && item.ativo.id !== sai)?.ativo?.id || ''
+    : '';
+
+  return { sai, entra };
+};
 
 const ProtocoloPage: React.FC = () => {
   const { companies, session } = useApp();
@@ -159,7 +192,6 @@ const ProtocoloPage: React.FC = () => {
 
     setParsing(true);
     try {
-      // Atualiza a Frota antes de cruzar placa/patrimônio, evitando resultado com cache antigo.
       const freshAssets = await loadAssets();
       const response = await fetch(PROTOCOL_PARSE_ENDPOINT, {
         method: 'POST',
@@ -173,18 +205,25 @@ const ProtocoloPage: React.FC = () => {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || 'Não foi possível interpretar a mensagem.');
 
-      const nextGroups: ProtocolGroup[] = (payload.groups || []).map((group: any, index: number) => ({
-        key: `${Date.now()}-${index}`,
-        cliente: String(group.cliente || '').trim(),
-        local: String(group.local || '').trim(),
-        responsavel: String(group.responsavel || '').trim(),
-        itens: (group.itens || []).map((item: ParsedItem) => ({
+      const nextGroups: ProtocolGroup[] = (payload.groups || []).map((group: any, index: number) => {
+        const itens: ProtocolItem[] = (group.itens || []).map((item: ParsedItem) => ({
           placa: normalizePlate(item.placa),
           patrimonio: String(item.patrimonio || '').trim(),
           descricao: String(item.descricao || '').trim(),
           ativo: resolveAsset(item, freshAssets),
-        })),
-      }));
+        }));
+        const inferred = inferSubstitution(itens, textoColado);
+        return {
+          key: `${Date.now()}-${index}`,
+          cliente: String(group.cliente || '').trim(),
+          local: String(group.local || '').trim(),
+          responsavel: String(group.responsavel || '').trim(),
+          observacao: '',
+          substituicaoSaiId: inferred.sai,
+          substituicaoEntraId: inferred.entra,
+          itens,
+        };
+      });
 
       if (!nextGroups.length) throw new Error('Nenhum grupo Cliente + Local foi identificado.');
 
@@ -198,7 +237,8 @@ const ProtocoloPage: React.FC = () => {
       if (missing > 0) {
         toast.error(`${missing} ativo(s) estão com Documento Faltando. A impressão foi bloqueada.`);
       } else {
-        toast.success(`${nextGroups.length} grupo(s) processado(s) por Cliente + Local com todos os documentos vinculados.`);
+        const inferredCount = nextGroups.filter((group) => group.substituicaoSaiId && group.substituicaoEntraId).length;
+        toast.success(`${nextGroups.length} grupo(s) processado(s) por Cliente + Local${inferredCount ? ` • ${inferredCount} substituição(ões) sugerida(s)` : ''}.`);
       }
     } catch (error: any) {
       setGroups([]);
@@ -208,7 +248,11 @@ const ProtocoloPage: React.FC = () => {
     }
   };
 
-  const updateGroup = (key: string, field: 'cliente' | 'local' | 'responsavel', value: string) => {
+  const updateGroup = (
+    key: string,
+    field: 'cliente' | 'local' | 'responsavel' | 'observacao' | 'substituicaoSaiId' | 'substituicaoEntraId',
+    value: string,
+  ) => {
     setGroups((current) => current.map((group) => group.key === key ? { ...group, [field]: value } : group));
   };
 
@@ -235,6 +279,20 @@ const ProtocoloPage: React.FC = () => {
     };
   }, [groups]);
 
+  const getSubstitution = (group: ProtocolGroup) => {
+    const sai = group.itens.find((item) => item.ativo?.id === group.substituicaoSaiId) || null;
+    const entra = group.itens.find((item) => item.ativo?.id === group.substituicaoEntraId) || null;
+    return { sai, entra };
+  };
+
+  const buildGroupObservationText = (group: ProtocolGroup) => {
+    const { sai, entra } = getSubstitution(group);
+    const parts = [`Grupo automático: ${group.cliente} / ${group.local}`];
+    if (sai || entra) parts.push(`SUBSTITUIÇÃO: ${itemLabel(sai)} → ${itemLabel(entra)}`);
+    if (group.observacao.trim()) parts.push(`OBSERVAÇÃO: ${group.observacao.trim()}`);
+    return parts.join('\n');
+  };
+
   const buildObservationItems = (group: ProtocolGroup) => group.itens.map((item) => {
     const asset = item.ativo;
     const patrimonio = asset?.patrimonio || item.patrimonio || '—';
@@ -244,8 +302,6 @@ const ProtocoloPage: React.FC = () => {
     return `<li><strong>${escapeHtml(patrimonio)}</strong> — placa ${escapeHtml(placa)}${escapeHtml(complemento)}</li>`;
   }).join('');
 
-  // Modelo oficial de impressão: folha detalhada, no padrão físico aprovado pelo usuário.
-  // A identificação principal utiliza o primeiro ativo do grupo e os demais permanecem listados em Observações.
   const buildProtocolHtml = (group: ProtocolGroup, copyNumber: 1 | 2) => {
     const primaryItem = group.itens[0];
     const asset = primaryItem?.ativo;
@@ -254,6 +310,13 @@ const ProtocoloPage: React.FC = () => {
     const dataFormatada = new Date(`${dataEmissao}T12:00:00`).toLocaleDateString('pt-BR');
     const exercicio = new Date(`${dataEmissao}T12:00:00`).getFullYear().toString();
     const destination = [group.cliente, group.local].filter(Boolean).join(' — ');
+    const { sai, entra } = getSubstitution(group);
+    const substitutionHtml = (sai || entra)
+      ? `<div class="substitution-line"><strong>SUBSTITUIÇÃO DE EQUIPAMENTO:</strong><br/><span>SAI: ${escapeHtml(itemLabel(sai))}</span><span class="arrow">→</span><span>ENTRA: ${escapeHtml(itemLabel(entra))}</span></div>`
+      : '';
+    const customObservationHtml = group.observacao.trim()
+      ? `<div class="custom-observation"><strong>OBSERVAÇÃO:</strong> ${escapeHtml(group.observacao.trim()).replace(/\n/g, '<br/>')}</div>`
+      : '';
 
     return `
       <section class="protocol-page">
@@ -292,6 +355,8 @@ const ProtocoloPage: React.FC = () => {
         <section class="protocol-box observations-box">
           <div class="section-title">OBSERVAÇÕES</div>
           <div class="observations-content">
+            ${substitutionHtml}
+            ${customObservationHtml}
             <p>Por favor, acondicionar os protocolos de documentos referentes aos equipamentos/veículos e patrimônios:</p>
             <ul>${buildObservationItems(group)}</ul>
             <p>A remessa será encaminhada para <strong>${escapeHtml(destination || group.cliente)}</strong>${group.responsavel ? `, aos cuidados de <strong>${escapeHtml(group.responsavel)}</strong>` : ''}.</p>
@@ -331,7 +396,7 @@ const ProtocoloPage: React.FC = () => {
           placa: vehicleFields.placa || normalizePlate(item.placa) || null,
           patrimonio: vehicleFields.patrimonio || item.patrimonio || null,
           exercicio: new Date(`${dataEmissao}T12:00:00`).getFullYear().toString(),
-          observacoes: `Grupo automático: ${group.cliente} / ${group.local}`,
+          observacoes: buildGroupObservationText(group),
           texto_original: textoColado,
           criado_por: session.user.id,
         };
@@ -356,6 +421,9 @@ const ProtocoloPage: React.FC = () => {
             cliente: group.cliente,
             local: group.local,
             responsavel: group.responsavel,
+            observacao: group.observacao,
+            substituicaoSaiId: group.substituicaoSaiId || null,
+            substituicaoEntraId: group.substituicaoEntraId || null,
             ativos: group.itens.map((item) => item.ativo?.id),
           })),
           ids,
@@ -435,6 +503,10 @@ const ProtocoloPage: React.FC = () => {
         .observations-content p{margin:0 0 3mm}
         .observations-content ul{margin:0 0 4mm 4.5mm;padding-left:4mm}
         .observations-content li{margin:1.1mm 0}
+        .substitution-line{margin:0 0 4mm;padding:3mm;border:1.5px solid #222;background:#f4f4f4;font-size:9px;line-height:1.5}
+        .substitution-line span{display:inline-block;margin-top:1.5mm}
+        .substitution-line .arrow{padding:0 3mm;font-size:13px;font-weight:800}
+        .custom-observation{margin:0 0 4mm;padding:3mm;border-left:3px solid #333;background:#fafafa;font-size:9px;line-height:1.45}
         .signatures{display:grid;grid-template-columns:1fr 1fr;gap:18mm;margin-top:22mm;text-align:center;font-size:9px}
         .signatures>div span{display:block;border-top:1px solid #444;width:100%;height:2mm}
         .signatures p{margin:0}
@@ -446,7 +518,6 @@ const ProtocoloPage: React.FC = () => {
         }
       </style></head><body>${content}</body></html>`;
 
-      // printDocumentInPage aguarda carregamento + decode das imagens antes de chamar Window.print().
       printDocumentInPage(html);
       toast.success('Impressão aberta: 2 vias no modelo detalhado + 1 via completa de cada documento vinculado.');
     } catch (error: any) {
@@ -523,64 +594,135 @@ const ProtocoloPage: React.FC = () => {
             </Badge>
           </div>
 
-          {groups.map((group, groupIndex) => (
-            <section key={group.key} className="space-y-4 rounded-xl border border-border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Protocolo {groupIndex + 1}</p>
-                  <h3 className="text-base font-bold">{group.cliente || 'Cliente não identificado'} / {group.local || 'Local não identificado'}</h3>
+          {groups.map((group, groupIndex) => {
+            const substitution = getSubstitution(group);
+            return (
+              <section key={group.key} className="space-y-4 rounded-xl border border-border p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Protocolo {groupIndex + 1}</p>
+                    <h3 className="text-base font-bold">{group.cliente || 'Cliente não identificado'} / {group.local || 'Local não identificado'}</h3>
+                  </div>
+                  <Badge variant="outline">{group.itens.length} ativo(s)</Badge>
                 </div>
-                <Badge variant="outline">{group.itens.length} ativo(s)</Badge>
-              </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div><label className="mb-1 block text-xs text-muted-foreground">Cliente</label><Input value={group.cliente} onChange={(event) => updateGroup(group.key, 'cliente', event.target.value)} placeholder="Cliente" /></div>
-                <div><label className="mb-1 block text-xs text-muted-foreground">Local / Canteiro</label><Input value={group.local} onChange={(event) => updateGroup(group.key, 'local', event.target.value)} placeholder="Local" /></div>
-                <div><label className="mb-1 block text-xs text-muted-foreground">Responsável</label><Input value={group.responsavel} onChange={(event) => updateGroup(group.key, 'responsavel', event.target.value)} placeholder="Responsável pelo recebimento" /></div>
-              </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div><label className="mb-1 block text-xs text-muted-foreground">Cliente</label><Input value={group.cliente} onChange={(event) => updateGroup(group.key, 'cliente', event.target.value)} placeholder="Cliente" /></div>
+                  <div><label className="mb-1 block text-xs text-muted-foreground">Local / Canteiro</label><Input value={group.local} onChange={(event) => updateGroup(group.key, 'local', event.target.value)} placeholder="Local" /></div>
+                  <div><label className="mb-1 block text-xs text-muted-foreground">Responsável</label><Input value={group.responsavel} onChange={(event) => updateGroup(group.key, 'responsavel', event.target.value)} placeholder="Responsável pelo recebimento" /></div>
+                </div>
 
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full min-w-[760px] text-sm">
-                  <thead className="bg-muted/50">
-                    <tr><th className="px-3 py-2 text-left">Ativo / Equipamento</th><th className="px-3 py-2 text-left">Patrimônio</th><th className="px-3 py-2 text-left">Placa</th><th className="px-3 py-2 text-left">Documento</th></tr>
-                  </thead>
-                  <tbody>
-                    {group.itens.map((item, itemIndex) => {
-                      const url = pdfOf(item.ativo);
-                      return (
-                        <tr key={`${group.key}-${itemIndex}`} className="border-t">
-                          <td className="px-3 py-3"><strong>{item.ativo?.descricao || item.descricao || 'Ativo não localizado'}</strong></td>
-                          <td className="px-3 py-3">{item.ativo?.patrimonio || item.patrimonio || '—'}</td>
-                          <td className="px-3 py-3">{normalizePlate(item.ativo?.placa || item.placa) || '—'}</td>
-                          <td className="px-3 py-3">
-                            {item.ativo && url ? (
-                              <span className="inline-flex items-center gap-2 rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-                                <CheckCircle2 className="h-4 w-4" /> PDF vinculado automaticamente — Documento OK
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-2 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
-                                <AlertTriangle className="h-4 w-4" /> Documento Faltando
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                <div className="rounded-xl border border-amber-400/35 bg-amber-400/[0.045] p-4 shadow-[0_0_24px_rgba(245,158,11,.05)]">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ArrowRightLeft className="h-5 w-5 text-amber-400" />
+                      <div>
+                        <p className="text-sm font-extrabold text-foreground">Movimentação / Substituição de Equipamento</p>
+                        <p className="text-[11px] text-muted-foreground">Selecione quem sai e quem entra. Se a mensagem disser “substituição”, o sistema tenta sugerir automaticamente.</p>
+                      </div>
+                    </div>
+                    {(substitution.sai || substitution.entra) && (
+                      <Badge variant="outline" className="border-amber-400/40 bg-amber-400/10 text-amber-300">SUBSTITUIÇÃO REGISTRADA</Badge>
+                    )}
+                  </div>
 
-              {group.itens.map((item, itemIndex) => {
-                const url = pdfOf(item.ativo);
-                return url ? (
-                  <details key={`pdf-${group.key}-${itemIndex}`} className="rounded-lg border p-3">
-                    <summary className="cursor-pointer text-xs font-semibold">Visualizar {item.ativo?.documento_nome || item.ativo?.descricao || 'documento vinculado'}</summary>
-                    <div className="mt-3"><PdfDocumentViewer source={{ url, tipo: 'protocolo' }} title={item.ativo?.descricao || 'Documento da Frota'} /></div>
-                  </details>
-                ) : null;
-              })}
-            </section>
-          ))}
+                  <div className="grid grid-cols-1 items-end gap-3 lg:grid-cols-[1fr_auto_1fr]">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-red-300">Equipamento que SAI</label>
+                      <select
+                        value={group.substituicaoSaiId}
+                        onChange={(event) => updateGroup(group.key, 'substituicaoSaiId', event.target.value)}
+                        className="h-11 w-full rounded-lg border border-red-400/25 bg-background px-3 text-sm text-foreground outline-none focus:border-red-400/60"
+                      >
+                        <option value="">Nenhum / não se aplica</option>
+                        {group.itens.map((item, index) => (
+                          <option key={`sai-${group.key}-${index}`} value={item.ativo?.id || ''} disabled={!item.ativo?.id}>{itemLabel(item)}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="hidden pb-2 lg:block"><ArrowRightLeft className="h-6 w-6 text-amber-400" /></div>
+
+                    <div>
+                      <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-emerald-300">Equipamento que ENTRA</label>
+                      <select
+                        value={group.substituicaoEntraId}
+                        onChange={(event) => updateGroup(group.key, 'substituicaoEntraId', event.target.value)}
+                        className="h-11 w-full rounded-lg border border-emerald-400/25 bg-background px-3 text-sm text-foreground outline-none focus:border-emerald-400/60"
+                      >
+                        <option value="">Nenhum / não se aplica</option>
+                        {group.itens.map((item, index) => (
+                          <option key={`entra-${group.key}-${index}`} value={item.ativo?.id || ''} disabled={!item.ativo?.id}>{itemLabel(item)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {(substitution.sai || substitution.entra) && (
+                    <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-lg border border-amber-400/20 bg-black/20 px-3 py-3 text-xs">
+                      <div><span className="block text-[10px] font-bold text-red-300">SAI</span><strong className="text-foreground">{itemLabel(substitution.sai)}</strong></div>
+                      <ArrowRightLeft className="h-5 w-5 text-amber-400" />
+                      <div><span className="block text-[10px] font-bold text-emerald-300">ENTRA</span><strong className="text-foreground">{itemLabel(substitution.entra)}</strong></div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-violet-400/25 bg-violet-500/[0.035] p-4">
+                  <label className="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+                    <MessageSquareText className="h-4 w-4 text-violet-300" /> Observação do Protocolo
+                  </label>
+                  <textarea
+                    value={group.observacao}
+                    onChange={(event) => updateGroup(group.key, 'observacao', event.target.value)}
+                    placeholder="Escreva aqui qualquer orientação que precise aparecer no protocolo. Ex.: equipamento enviado em substituição temporária, motivo da troca, condição de entrega, informação ao cliente..."
+                    className="min-h-24 w-full resize-y rounded-lg border border-violet-400/25 bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-violet-400/60 focus:ring-2 focus:ring-violet-500/10"
+                  />
+                  <p className="mt-2 text-[11px] text-muted-foreground">Esta observação fica salva no registro e sai impressa na área de OBSERVAÇÕES do protocolo.</p>
+                </div>
+
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead className="bg-muted/50">
+                      <tr><th className="px-3 py-2 text-left">Ativo / Equipamento</th><th className="px-3 py-2 text-left">Patrimônio</th><th className="px-3 py-2 text-left">Placa</th><th className="px-3 py-2 text-left">Documento</th></tr>
+                    </thead>
+                    <tbody>
+                      {group.itens.map((item, itemIndex) => {
+                        const url = pdfOf(item.ativo);
+                        return (
+                          <tr key={`${group.key}-${itemIndex}`} className="border-t">
+                            <td className="px-3 py-3"><strong>{item.ativo?.descricao || item.descricao || 'Ativo não localizado'}</strong></td>
+                            <td className="px-3 py-3">{item.ativo?.patrimonio || item.patrimonio || '—'}</td>
+                            <td className="px-3 py-3">{normalizePlate(item.ativo?.placa || item.placa) || '—'}</td>
+                            <td className="px-3 py-3">
+                              {item.ativo && url ? (
+                                <span className="inline-flex items-center gap-2 rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
+                                  <CheckCircle2 className="h-4 w-4" /> PDF vinculado automaticamente — Documento OK
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-2 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
+                                  <AlertTriangle className="h-4 w-4" /> Documento Faltando
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {group.itens.map((item, itemIndex) => {
+                  const url = pdfOf(item.ativo);
+                  return url ? (
+                    <details key={`pdf-${group.key}-${itemIndex}`} className="rounded-lg border p-3">
+                      <summary className="cursor-pointer text-xs font-semibold">Visualizar {item.ativo?.documento_nome || item.ativo?.descricao || 'documento vinculado'}</summary>
+                      <div className="mt-3"><PdfDocumentViewer source={{ url, tipo: 'protocolo' }} title={item.ativo?.descricao || 'Documento da Frota'} /></div>
+                    </details>
+                  ) : null;
+                })}
+              </section>
+            );
+          })}
         </section>
       )}
 
