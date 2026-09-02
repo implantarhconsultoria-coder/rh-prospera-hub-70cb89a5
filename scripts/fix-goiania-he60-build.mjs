@@ -81,13 +81,13 @@ patch(files.relatorio, [
   {
     label: 'cabecalho HE dinamico',
     oldText: `(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário','HE 50%','HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (`,
-    newText: `(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário', isAllCompanies ? 'HE semanal' : \`HE ${selectedHePct}%\`, 'HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (`,
+    newText: `(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário', isAllCompanies ? 'HE semanal' : \`HE \${selectedHePct}%\`, 'HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (`,
     already: "isAllCompanies ? 'HE semanal'",
   },
   {
     label: 'celula multiempresa mostra percentual',
     oldText: `                    <td className="px-2 py-2">{formatCurrency(r.he50Val)}</td>`,
-    newText: `                    <td className="px-2 py-2">{isAllCompanies ? \`HE ${getHoraExtraSemanalPercentual(r.emp.companyId)}% · ${formatCurrency(r.he50Val)}\` : formatCurrency(r.he50Val)}</td>`,
+    newText: `                    <td className="px-2 py-2">{isAllCompanies ? \`HE \${getHoraExtraSemanalPercentual(r.emp.companyId)}% · \${formatCurrency(r.he50Val)}\` : formatCurrency(r.he50Val)}</td>`,
     already: 'getHoraExtraSemanalPercentual(r.emp.companyId)',
   },
 ]);
@@ -125,8 +125,8 @@ patch(files.impressao, [
   },
   {
     label: 'rotulos dinamicos PDF',
-    oldText: `                    {columns.map(column => (\n                      <th\n                        key={column.label}\n                        className={\`border border-gray-400 px-1 py-1 font-semibold ${column.numeric ? 'numeric' : 'text-left'}\`}\n                      >\n                        {column.label}\n                      </th>\n                    ))}`,
-    newText: `                    {columns.map(column => {\n                      const displayLabel = column.label === 'HE50 qtd'\n                        ? \`HE${heSemanalPct} qtd\`\n                        : column.label === 'HE50 valor'\n                          ? \`HE${heSemanalPct} valor\`\n                          : column.label;\n                      return (\n                        <th\n                          key={column.label}\n                          className={\`border border-gray-400 px-1 py-1 font-semibold ${column.numeric ? 'numeric' : 'text-left'}\`}\n                        >\n                          {displayLabel}\n                        </th>\n                      );\n                    })}`,
+    oldText: `                    {columns.map(column => (\n                      <th\n                        key={column.label}\n                        className={\`border border-gray-400 px-1 py-1 font-semibold \${column.numeric ? 'numeric' : 'text-left'}\`}\n                      >\n                        {column.label}\n                      </th>\n                    ))}`,
+    newText: `                    {columns.map(column => {\n                      const displayLabel = column.label === 'HE50 qtd'\n                        ? \`HE\${heSemanalPct} qtd\`\n                        : column.label === 'HE50 valor'\n                          ? \`HE\${heSemanalPct} valor\`\n                          : column.label;\n                      return (\n                        <th\n                          key={column.label}\n                          className={\`border border-gray-400 px-1 py-1 font-semibold \${column.numeric ? 'numeric' : 'text-left'}\`}\n                        >\n                          {displayLabel}\n                        </th>\n                      );\n                    })}`,
     already: 'const displayLabel = column.label',
   },
 ]);
