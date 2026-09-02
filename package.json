@@ -7,9 +7,9 @@
     "node": "22.x"
   },
   "scripts": {
-    "predev": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs",
+    "predev": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs && node scripts/fix-almoxarifado-migracao-build.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs",
+    "prebuild": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs && node scripts/fix-almoxarifado-migracao-build.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
