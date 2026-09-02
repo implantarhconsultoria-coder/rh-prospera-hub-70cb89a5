@@ -18,7 +18,6 @@ if (/export const TOPAC_GYN_CNPJ = '[^']+';/.test(calc)) {
 } else {
   calc = calc.replace(`export const TOPAC_GYN_COMPANY_ID = '${GYN_ID}';`, `export const TOPAC_GYN_COMPANY_ID = '${GYN_ID}';\nexport const TOPAC_GYN_CNPJ = '${GYN_CNPJ}';`);
 }
-
 if (!calc.includes("text.includes('topac-gyn')")) throw new Error('[he60] detector topac-gyn ausente');
 if (!calc.includes("isTopacGoiania(company) ? 60 : 50")) throw new Error('[he60] regra central 60/50 ausente');
 write(calcPath, calc);
@@ -28,9 +27,11 @@ fechamento = fechamento.replace(
   `const heSemanalPct = getHoraExtraSemanalPercentual(selectedCompany);`,
   `const heSemanalPct = getHoraExtraSemanalPercentual(selectedCompanyData || selectedCompany);`,
 );
-if (!fechamento.includes('getHoraExtraSemanalPercentual(selectedCompanyData || selectedCompany)')) {
-  throw new Error('[he60] Fechamento não usa os dados reais da empresa');
-}
+fechamento = fechamento.replace(
+  `const calcPayroll = (emp: typeof compEmps[number], entry: typeof compEntries[number]) => calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct });`,
+  `const calcPayroll = (emp: typeof compEmps[number], entry: typeof compEntries[number]) => calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct, horaExtraSemanalPct: heSemanalPct });`,
+);
+if (!fechamento.includes('getHoraExtraSemanalPercentual(selectedCompanyData || selectedCompany)')) throw new Error('[he60] Fechamento não usa os dados reais da empresa');
 if (!fechamento.includes('horaExtraSemanalPct: heSemanalPct')) throw new Error('[he60] Fechamento não passa percentual ao cálculo');
 write(fechamentoPath, fechamento);
 
