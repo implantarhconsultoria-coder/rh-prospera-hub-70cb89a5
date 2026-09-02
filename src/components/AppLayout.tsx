@@ -76,6 +76,11 @@ const AppLayout: React.FC = () => {
     return () => window.removeEventListener('keydown', handleShortcut);
   }, []);
 
+  useEffect(() => {
+    document.body.classList.add('topac-neon-body');
+    return () => document.body.classList.remove('topac-neon-body');
+  }, []);
+
   if (roleLoading) return <StableLoading label="Carregando permissão do usuário..." />;
   if (!userRole) return <AguardandoAcesso />;
   if (legacyRemoved) return <Navigate to="/admin" replace />;
@@ -102,7 +107,13 @@ const AppLayout: React.FC = () => {
     return <Navigate to={redirect} replace />;
   }
 
-  if (isMobile) return <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>;
+  if (isMobile) {
+    return (
+      <div className="topac-neon-skin min-h-screen bg-[#020609] text-zinc-100">
+        <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>
+      </div>
+    );
+  }
 
   const showEpiAlert = location.pathname === '/admin' || location.pathname === '/admin/diretoria';
   const displayName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || 'Administrador';
@@ -130,7 +141,7 @@ const AppLayout: React.FC = () => {
   } as React.CSSProperties;
 
   return (
-    <div style={themeVars} className="min-h-screen bg-[#020609] text-zinc-100">
+    <div style={themeVars} className="topac-neon-skin min-h-screen bg-[#020609] text-zinc-100">
       <AppSidebar collapsed={collapsed} onToggle={() => setCollapsed(v => !v)} />
 
       <main className={cn('min-h-screen transition-[margin] duration-300', collapsed ? 'ml-[72px]' : 'ml-[270px]')}>
