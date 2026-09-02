@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { RotateCcw, Sparkles, Trash2 } from 'lucide-react';
+import { Landmark, RotateCcw, Sparkles, Trash2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
+import BulkBankingDataEditor from '@/components/BulkBankingDataEditor';
 import { useApp } from '@/context/AppContext';
 import type { EmployeeSmartData } from '@/lib/smartTextParser';
 import { supabase } from '@/integrations/supabase/client';
@@ -21,8 +22,9 @@ const normalizedName = (value: unknown) => clean(value)
 
 const EmployeeSmartEditOverlay: React.FC = () => {
   const location = useLocation();
-  const { employees, refreshData } = useApp();
+  const { employees, companies, refreshData } = useApp();
   const [open, setOpen] = useState(false);
+  const [bankingOpen, setBankingOpen] = useState(false);
   const [undoAvailable, setUndoAvailable] = useState(false);
   const [undoing, setUndoing] = useState(false);
   const [clearingBanking, setClearingBanking] = useState(false);
@@ -236,6 +238,11 @@ const EmployeeSmartEditOverlay: React.FC = () => {
     }
   };
 
+  const openBankingChange = () => {
+    setOpen(false);
+    window.setTimeout(() => setBankingOpen(true), 80);
+  };
+
   return (
     <>
       {birthTarget && createPortal(
@@ -256,11 +263,14 @@ const EmployeeSmartEditOverlay: React.FC = () => {
         <Sparkles className="h-4 w-4" /> Edição inteligente
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-          <DialogHeader><DialogTitle>Leitura Inteligente — {employee.name}</DialogTitle></DialogHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-            <p className="text-xs text-amber-900">Aplicou no funcionário errado? Desfaça a última leitura ou limpe somente os dados bancários.</p>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto border-violet-400/30 bg-[#05080d] text-white">
+          <DialogHeader><DialogTitle className="text-white">Leitura Inteligente — {employee.name}</DialogTitle></DialogHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
+            <p className="text-xs text-amber-100">Aplicou no funcionário errado? Desfaça a última leitura ou limpe somente os dados bancários.</p>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={openBankingChange} className="bg-violet-600 text-white hover:bg-violet-500">
+                <Landmark className="mr-2 h-4 w-4" /> Alterar conta / Enviar ao Financeiro
+              </Button>
               {undoAvailable && (
                 <Button type="button" variant="outline" size="sm" onClick={() => void undoLastApply()} disabled={undoing}>
                   <RotateCcw className="mr-2 h-4 w-4" /> {undoing ? 'Desfazendo...' : 'Desfazer última leitura'}
@@ -272,9 +282,18 @@ const EmployeeSmartEditOverlay: React.FC = () => {
             </div>
           </div>
           <EmployeeSmartTextPanel onApply={apply} targetName={employee.name} />
-          <p className="text-xs text-muted-foreground">A aplicação é transacional, preserva os campos não identificados e cria um backup antes de alterar o cadastro.</p>
+          <p className="text-xs text-slate-400">A aplicação é transacional, preserva os campos não identificados e cria um backup antes de alterar o cadastro.</p>
         </DialogContent>
       </Dialog>
+
+      <BulkBankingDataEditor
+        open={bankingOpen}
+        onOpenChange={setBankingOpen}
+        employees={[employee]}
+        companies={companies}
+        companyId={employee.companyId}
+        onSaved={refreshData}
+      />
     </>
   );
 };
