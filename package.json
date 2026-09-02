@@ -7,9 +7,9 @@
     "node": "22.x"
   },
   "scripts": {
-    "predev": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs",
+    "predev": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs",
+    "prebuild": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -95,7 +95,7 @@
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.32.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^6.1.1",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "jsdom": "^20.0.3",
