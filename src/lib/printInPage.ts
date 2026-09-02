@@ -86,6 +86,90 @@ const waitForPaint = (win: Window) =>
     });
   });
 
+const compactPrintToken = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+
+const substitutionTokens = (value: string) =>
+  value
+    .split(/[\s/—–,:;()[\]]+/)
+    .map(compactPrintToken)
+    .filter((token) => token.length >= 5 && token !== 'EQUIPAMENTO' && token !== 'SUBSTITUICAO');
+
+/**
+ * Regra específica do Protocolo de substituição:
+ * o ativo marcado como SAI permanece descrito no protocolo, mas seu PDF não deve
+ * ser anexado à impressão. Somente os documentos efetivamente enviados seguem.
+ * Fora do Protocolo esta função não altera absolutamente nada.
+ */
+const pruneOutgoingSubstitutionDocuments = (doc: Document) => {
+  if (!doc.querySelector('.protocol-page .substitution-line') || !doc.querySelector('.document-page')) return;
+
+  const children = Array.from(doc.body.children) as HTMLElement[];
+  let index = 0;
+
+  while (index < children.length) {
+    const firstProtocol = children[index];
+    if (!firstProtocol?.classList.contains('protocol-page')) {
+      index += 1;
+      continue;
+    }
+
+    const secondProtocol = children[index + 1]?.classList.contains('protocol-page') ? children[index + 1] : null;
+    const groupStart = secondProtocol ? index + 2 : index + 1;
+    let groupEnd = groupStart;
+
+    while (groupEnd < children.length && !children[groupEnd].classList.contains('protocol-page')) {
+      groupEnd += 1;
+    }
+
+    const substitutionLine = firstProtocol.querySelector('.substitution-line');
+    if (substitutionLine) {
+      const text = substitutionLine.textContent || '';
+      const outgoingMatch = text.match(/SAI:\s*(.*?)(?:→|ENTRA:)/i);
+      const outgoingText = outgoingMatch?.[1]?.trim() || '';
+      const outgoingTokens = substitutionTokens(outgoingText);
+      const documentPages = children
+        .slice(groupStart, groupEnd)
+        .filter((node) => node.classList.contains('document-page'));
+
+      let removed = false;
+
+      // 1) Preferência: nome do PDF contém placa/patrimônio do equipamento que SAI.
+      if (outgoingTokens.length) {
+        const directMatches = documentPages.filter((page) => {
+          const documentName = compactPrintToken(page.getAttribute('data-document') || '');
+          return outgoingTokens.some((token) => documentName.includes(token));
+        });
+
+        if (directMatches.length === 1) {
+          directMatches[0].remove();
+          removed = true;
+        }
+      }
+
+      // 2) Fallback seguro: usa a ordem dos ativos mostrada nas Observações.
+      // O Protocolo monta os PDFs na mesma ordem dos itens do grupo.
+      if (!removed && documentPages.length > 1 && outgoingTokens.length) {
+        const listedItems = Array.from(firstProtocol.querySelectorAll('.observations-content li'));
+        const outgoingIndex = listedItems.findIndex((item) => {
+          const listed = compactPrintToken(item.textContent || '');
+          return outgoingTokens.some((token) => listed.includes(token));
+        });
+
+        if (outgoingIndex >= 0 && outgoingIndex < documentPages.length) {
+          documentPages[outgoingIndex].remove();
+        }
+      }
+    }
+
+    index = groupEnd;
+  }
+};
+
 /**
  * Variante para HTML completo (com <html><head>...</head><body>...</body></html>).
  * Aguarda imagens/fontes e a decodificação dos pixels antes de chamar print(),
@@ -121,6 +205,7 @@ export const printDocumentInPage = (fullHtml: string) => {
       const printWindow = iframe.contentWindow;
       if (!printDoc || !printWindow) return;
 
+      pruneOutgoingSubstitutionDocuments(printDoc);
       await waitForPrintAssets(printDoc);
       await waitForPaint(printWindow);
 
