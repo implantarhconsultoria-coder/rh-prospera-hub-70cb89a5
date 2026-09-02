@@ -45,7 +45,7 @@ const FechamentoPage: React.FC = () => {
   const fechamento = getFechamento(selectedCompany, competencia);
   const selectedCompanyData = companies.find((company) => company.id === selectedCompany);
   const comissaoPct = getComissaoPercentual(selectedCompanyData);
-  const heSemanalPct = getHoraExtraSemanalPercentual(selectedCompany);
+  const heSemanalPct = getHoraExtraSemanalPercentual(selectedCompanyData || selectedCompany);
   const heSemanalLabel = `HE ${heSemanalPct}%`;
   const diasUteis = diasUteisManual;
 
@@ -73,7 +73,7 @@ const FechamentoPage: React.FC = () => {
     ].filter(Boolean).join(' | ');
   };
 
-  const calcPayroll = (emp: typeof compEmps[number], entry: typeof compEntries[number]) => calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct });
+  const calcPayroll = (emp: typeof compEmps[number], entry: typeof compEntries[number]) => calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct, horaExtraSemanalPct: heSemanalPct });
 
   const totals = useMemo(() => compEmps.reduce((acc, emp) => {
     const entry = compEntries.find((item) => item.employeeId === emp.id);
@@ -83,7 +83,7 @@ const FechamentoPage: React.FC = () => {
     acc.descontos += calc.descontosLegais + calc.descontosOperacionais + calc.adiantamento + calc.descontosDiversos;
     acc.liquido += calc.liquido;
     return acc;
-  }, { proventos: 0, descontos: 0, liquido: 0 }), [compEmps, compEntries, diasUteis, domingosFeriados, comissaoPct]);
+  }, { proventos: 0, descontos: 0, liquido: 0 }), [compEmps, compEntries, diasUteis, domingosFeriados, comissaoPct, heSemanalPct]);
 
   const fechamentoTotals = { totalFuncionarios: compEmps.length, totalProventos: totals.proventos, totalDescontos: totals.descontos, totalLiquido: totals.liquido };
 
