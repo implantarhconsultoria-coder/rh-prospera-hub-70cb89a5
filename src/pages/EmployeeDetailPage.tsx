@@ -5,7 +5,8 @@ import { formatCurrency, formatDate, feriasStatus, asoStatus } from '@/lib/calcu
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, FileText, Mail, Save } from 'lucide-react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ArrowLeft, FileText, Mail, Pencil, Save, Trash2, UserMinus } from 'lucide-react';
 import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
 import AsoAgendamentosFuncionario from '@/components/AsoAgendamentosFuncionario';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel } from '@/lib/employeeRoleRules';
@@ -16,6 +17,9 @@ import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
 import { prepareDocumentTextForSave } from '@/lib/documentoHistoricoTexto';
 import BenefitValuePaymentEditor from '@/components/BenefitValuePaymentEditor';
+import { clearPersistentViewState, usePersistentViewState } from '@/hooks/usePersistentViewState';
+import { supabase } from '@/integrations/supabase/client';
+import type { Employee } from '@/types/database';
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
@@ -26,20 +30,24 @@ const Field: React.FC<FieldProps> = React.memo(({ label, value, onChange, type =
     {onChange ? (
       <Input value={value} type={type} onChange={e => onChange(e.target.value)} className="text-sm" />
     ) : (
-      <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md">{value}</p>
+      <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md min-h-10">{value}</p>
     )}
   </div>
 ));
 
-type ToggleProps = { label: string; active: boolean; onToggle: () => void; valueLabel?: string; value?: number };
-const ToggleRow: React.FC<ToggleProps> = React.memo(({ label, active, onToggle, valueLabel, value }) => (
+type ToggleProps = { label: string; active: boolean; onToggle?: () => void; valueLabel?: string; value?: number; disabled?: boolean };
+const ToggleRow: React.FC<ToggleProps> = React.memo(({ label, active, onToggle, valueLabel, value, disabled }) => (
   <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
     <div>
       <span className="text-sm font-medium text-foreground">{label}</span>
       {valueLabel && <span className="text-xs text-muted-foreground ml-2">({valueLabel}: {formatCurrency(value || 0)})</span>}
     </div>
-    <button onClick={onToggle}
-      className={`w-12 h-6 rounded-full transition-colors ${active ? 'bg-success' : 'bg-muted'} relative`}>
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled || !onToggle}
+      className={`w-12 h-6 rounded-full transition-colors ${active ? 'bg-success' : 'bg-muted'} relative disabled:cursor-not-allowed disabled:opacity-55`}
+    >
       <div className={`w-5 h-5 bg-card rounded-full absolute top-0.5 transition-transform ${active ? 'translate-x-6' : 'translate-x-0.5'}`} />
     </button>
   </div>
@@ -47,13 +55,28 @@ const ToggleRow: React.FC<ToggleProps> = React.memo(({ label, active, onToggle, 
 
 const EmployeeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { employees, companies, updateEmployee, session } = useApp();
+  const { employees, companies, updateEmployee, refreshData, session, userRoles } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState(0);
+  const detailStateKey = `funcionario:detalhe:${id || 'sem-id'}`;
+  const [detailState, setDetailState] = usePersistentViewState(detailStateKey, {
+    activeTab: 0,
+    isEditing: false,
+    draft: null as Employee | null,
+  });
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [inactivating, setInactivating] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const emp = employees.find(e => e.id === id);
+  const isAdmin = userRoles.includes('admin');
+  const isEditing = isAdmin && detailState.isEditing;
+  const workingEmp = isEditing && detailState.draft?.id === emp?.id ? detailState.draft : emp;
+  const activeTab = Math.max(0, Math.min(tabs.length - 1, Number(detailState.activeTab) || 0));
+  const setActiveTab = (tab: number) => setDetailState((current) => ({ ...current, activeTab: tab }));
   const [observacoesGerais, setObservacoesGerais] = useState(emp?.observacoes || '');
   const [salvandoObservacoes, setSalvandoObservacoes] = useState(false);
 
@@ -64,24 +87,107 @@ const EmployeeDetailPage: React.FC = () => {
   const portalPrefix = location.pathname.startsWith('/filial') ? '/filial'
     : location.pathname.startsWith('/admin') ? '/admin' : '';
 
-  if (!emp) return <div className="p-8 text-center text-muted-foreground">Funcionário não encontrado</div>;
+  if (!emp || !workingEmp) return <div className="p-8 text-center text-muted-foreground">Funcionário não encontrado</div>;
 
-  const company = companies.find(c => c.id === emp.companyId);
+  const company = companies.find(c => c.id === workingEmp.companyId);
   const fer = feriasStatus(emp.dataAdmissao);
   const aso = asoStatus(emp.dataExameMedico);
-  const insalubridadeLiberada = employeeHasInsalubridade(emp);
-  const periculosidade = getPericulosidadeAplicavel(emp);
-  const funcionarioDesligado = /deslig|inativ/i.test(String(emp.status || ''));
+  const insalubridadeLiberada = employeeHasInsalubridade(workingEmp);
+  const periculosidade = getPericulosidadeAplicavel(workingEmp);
+  const funcionarioDesligado = /deslig|inativ|exclu/i.test(String(emp.status || ''));
 
-  const fieldFor = (field: keyof typeof emp, type: string = 'text') => ({
-    value: (emp as any)[field] ?? '',
+  const updateDraft = (data: Partial<Employee>) => {
+    if (!isEditing) return;
+    setDetailState((current) => ({
+      ...current,
+      draft: { ...(current.draft || emp), ...data },
+    }));
+  };
+
+  const fieldFor = (field: keyof Employee, type: string = 'text') => ({
+    value: (workingEmp as any)[field] ?? '',
     type,
-    onChange: (v: string) => updateEmployee(emp.id, { [field]: type === 'number' ? Number(v) : v } as any),
+    onChange: isEditing ? (v: string) => updateDraft({ [field]: type === 'number' ? Number(v) : v } as Partial<Employee>) : undefined,
   });
-  const toggleFor = (field: keyof typeof emp) => ({
-    active: !!(emp as any)[field],
-    onToggle: () => updateEmployee(emp.id, { [field]: !(emp as any)[field] } as any),
+
+  const toggleFor = (field: keyof Employee) => ({
+    active: !!(workingEmp as any)[field],
+    onToggle: isEditing ? () => updateDraft({ [field]: !(workingEmp as any)[field] } as Partial<Employee>) : undefined,
+    disabled: !isEditing,
   });
+
+  const startEditing = () => {
+    setDetailState((current) => ({ ...current, isEditing: true, draft: { ...emp } }));
+  };
+
+  const cancelEditing = () => {
+    setDetailState((current) => ({ ...current, isEditing: false, draft: null }));
+  };
+
+  const saveEditing = async () => {
+    if (!detailState.draft || savingEdit) return;
+    if (!detailState.draft.name?.trim()) return toast.error('Nome do funcionário é obrigatório.');
+    if (!companies.some((item) => item.id === detailState.draft?.companyId)) return toast.error('Selecione uma empresa válida.');
+    setSavingEdit(true);
+    try {
+      const result = await updateEmployee(emp.id, detailState.draft);
+      if (!result.ok) return;
+      setDetailState((current) => ({ ...current, isEditing: false, draft: null }));
+      toast.success('Alterações do funcionário salvas no banco.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const inactivateEmployee = async () => {
+    if (inactivating) return;
+    const confirmed = window.confirm(`Inativar ${emp.name}?\n\nO funcionário sairá da operação ativa, mas o histórico será mantido.`);
+    if (!confirmed) return;
+    setInactivating(true);
+    try {
+      const result = await updateEmployee(emp.id, { status: 'desligado' });
+      if (!result.ok) return;
+      cancelEditing();
+      toast.success('Funcionário inativado. O histórico foi preservado.');
+    } finally {
+      setInactivating(false);
+    }
+  };
+
+  const deleteEmployee = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('admin_excluir_funcionario_seguro', {
+        p_funcionario_id: emp.id,
+        p_motivo: deleteReason.trim() || null,
+      });
+      if (error) {
+        console.error('Erro ao excluir funcionário:', error);
+        toast.error(`Não foi possível excluir ${emp.name}: ${error.message}`);
+        return;
+      }
+
+      const result = (data || {}) as { modo?: string; vinculos_total?: number };
+      const listRoute = `${portalPrefix}/funcionarios`;
+      clearPersistentViewState(detailStateKey);
+      if (typeof window !== 'undefined' && portalPrefix) {
+        window.sessionStorage.setItem(`topac:last-route:v1:${listRoute}`, listRoute);
+      }
+      setDeleteOpen(false);
+      setDeleteReason('');
+      await refreshData();
+      navigate(listRoute, { replace: true });
+
+      if (result.modo === 'definitiva') {
+        toast.success(`${emp.name} foi excluído definitivamente. Não havia registros vinculados.`);
+      } else {
+        toast.success(`${emp.name} foi excluído da operação. ${Number(result.vinculos_total || 0)} registro(s) histórico(s) foram preservados.`);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const buildAsoDemissionalPdf = () => {
     if (!company) {
@@ -153,10 +259,10 @@ const EmployeeDetailPage: React.FC = () => {
   const salvarObservacoesGerais = async () => {
     setSalvandoObservacoes(true);
     try {
-      await updateEmployee(emp.id, {
+      const result = await updateEmployee(emp.id, {
         observacoes: prepareDocumentTextForSave(observacoesGerais),
       });
-      toast.success('Observações gerais salvas.');
+      if (result.ok) toast.success('Observações gerais salvas.');
     } finally {
       setSalvandoObservacoes(false);
     }
@@ -206,14 +312,35 @@ const EmployeeDetailPage: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(`${portalPrefix}/funcionarios`)}><ArrowLeft className="w-5 h-5" /></Button>
         <div>
-          <h1 className="text-xl font-bold font-display text-foreground">{emp.name}</h1>
-          <p className="text-sm text-muted-foreground">{emp.cargo} — {company?.name}</p>
+          <h1 className="text-xl font-bold font-display text-foreground">{workingEmp.name}</h1>
+          <p className="text-sm text-muted-foreground">{workingEmp.cargo} — {company?.name}</p>
         </div>
-        <Badge className={`ml-auto ${emp.status === 'ativo' ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}`}>{emp.status}</Badge>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          <Badge className={emp.status === 'ativo' ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'}>{emp.status}</Badge>
+          {isAdmin && !isEditing && (
+            <>
+              <Button type="button" variant="outline" onClick={startEditing}><Pencil className="mr-2 h-4 w-4" /> Editar funcionário</Button>
+              {emp.status === 'ativo' && <Button type="button" variant="outline" onClick={() => void inactivateEmployee()} disabled={inactivating}><UserMinus className="mr-2 h-4 w-4" /> {inactivating ? 'Inativando...' : 'Inativar'}</Button>}
+              <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</Button>
+            </>
+          )}
+          {isAdmin && isEditing && (
+            <>
+              <Button type="button" onClick={() => void saveEditing()} disabled={savingEdit}><Save className="mr-2 h-4 w-4" /> {savingEdit ? 'Salvando...' : 'Salvar alterações'}</Button>
+              <Button type="button" variant="outline" onClick={cancelEditing} disabled={savingEdit}>Cancelar</Button>
+            </>
+          )}
+        </div>
       </div>
+
+      {isEditing && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground">
+          <strong>Modo de edição ativo.</strong> As alterações ficam em rascunho e só são gravadas no Supabase ao clicar em <strong>Salvar alterações</strong>.
+        </div>
+      )}
 
       <div className="flex gap-1 border-b overflow-x-auto">
         {tabs.map((t, i) => (
@@ -241,23 +368,32 @@ const EmployeeDetailPage: React.FC = () => {
         {activeTab === 1 && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Field label="Empresa" value={company?.name || ''} />
-            <Field label="CNPJ" value={company?.cnpj || ''} />
-            <Field label="Nº Registro" value={emp.registro} />
-            <Field label="Matrícula eSocial" value={emp.matriculaEsocial} />
-            <Field label="Cargo / Função" {...fieldFor('cargo')} />
-            <Field label="Salário Base" {...fieldFor('salarioBase', 'number')} />
-            <Field label="Data Admissão" {...fieldFor('dataAdmissao', 'date')} />
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">Status</label>
-              <select value={emp.status} onChange={e => updateEmployee(emp.id, { status: e.target.value as any })}
-                className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground w-full">
-                <option value="ativo">Ativo</option>
-                <option value="afastado">Afastado</option>
-                <option value="férias">Férias</option>
-                <option value="desligado">Desligado</option>
-              </select>
-            </div>
+              {isEditing ? (
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
+                  <select value={workingEmp.companyId} onChange={(e) => updateDraft({ companyId: e.target.value })} className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground w-full min-h-10">
+                    {companies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                  </select>
+                </div>
+              ) : <Field label="Empresa" value={company?.name || ''} />}
+              <Field label="CNPJ" value={company?.cnpj || ''} />
+              <Field label="Nº Registro" {...fieldFor('registro')} />
+              <Field label="Matrícula eSocial" {...fieldFor('matriculaEsocial')} />
+              <Field label="Cargo / Função" {...fieldFor('cargo')} />
+              <Field label="Salário Base" {...fieldFor('salarioBase', 'number')} />
+              <Field label="Data Admissão" {...fieldFor('dataAdmissao', 'date')} />
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Status</label>
+                {isEditing ? (
+                  <select value={workingEmp.status} onChange={e => updateDraft({ status: e.target.value as Employee['status'] })}
+                    className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground w-full min-h-10">
+                    <option value="ativo">Ativo</option>
+                    <option value="afastado">Afastado</option>
+                    <option value="férias">Férias</option>
+                    <option value="desligado">Desligado</option>
+                  </select>
+                ) : <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md min-h-10">{emp.status}</p>}
+              </div>
             </div>
             {funcionarioDesligado && (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -279,25 +415,25 @@ const EmployeeDetailPage: React.FC = () => {
         )}
         {activeTab === 2 && (
           <div className="space-y-3">
-            <ToggleRow label="Vale Refeição (VR)" {...toggleFor('vrAtivo')} valueLabel="Diário" value={emp.vrDiario} />
-            {emp.vrAtivo && (
+            <ToggleRow label="Vale Refeição (VR)" {...toggleFor('vrAtivo')} valueLabel="Diário" value={workingEmp.vrDiario} />
+            {workingEmp.vrAtivo && (
               <BenefitValuePaymentEditor
                 benefitType="VR"
                 employee={emp}
-                company={company}
+                company={companies.find(c => c.id === emp.companyId)}
                 currentValue={emp.vrDiario}
                 onUpdateValue={(value) => updateEmployee(emp.id, { vrDiario: value })}
                 actorId={session?.user?.id}
               />
             )}
-            <ToggleRow label="Vale Alimentação (VA)" {...toggleFor('vaAtivo')} valueLabel="Mensal" value={emp.vaMensal} />
-            {emp.vaAtivo && <Field label="Valor Mensal VA" {...fieldFor('vaMensal', 'number')} />}
-            <ToggleRow label="Vale Transporte (VT)" {...toggleFor('vtAtivo')} valueLabel="Diário" value={emp.vtDiario} />
-            {emp.vtAtivo && (
+            <ToggleRow label="Vale Alimentação (VA)" {...toggleFor('vaAtivo')} valueLabel="Mensal" value={workingEmp.vaMensal} />
+            {workingEmp.vaAtivo && <Field label="Valor Mensal VA" {...fieldFor('vaMensal', 'number')} />}
+            <ToggleRow label="Vale Transporte (VT)" {...toggleFor('vtAtivo')} valueLabel="Diário" value={workingEmp.vtDiario} />
+            {workingEmp.vtAtivo && (
               <BenefitValuePaymentEditor
                 benefitType="VT"
                 employee={emp}
-                company={company}
+                company={companies.find(c => c.id === emp.companyId)}
                 currentValue={emp.vtDiario}
                 onUpdateValue={(value) => updateEmployee(emp.id, { vtDiario: value })}
                 actorId={session?.user?.id}
@@ -305,8 +441,8 @@ const EmployeeDetailPage: React.FC = () => {
             )}
             {insalubridadeLiberada ? (
               <>
-                <ToggleRow label="Insalubridade" {...toggleFor('insalubridadeAtiva')} valueLabel="Valor" value={emp.insalubridadeValor} />
-                {emp.insalubridadeAtiva && <Field label="Valor Insalubridade" {...fieldFor('insalubridadeValor', 'number')} />}
+                <ToggleRow label="Insalubridade" {...toggleFor('insalubridadeAtiva')} valueLabel="Valor" value={workingEmp.insalubridadeValor} />
+                {workingEmp.insalubridadeAtiva && <Field label="Valor Insalubridade" {...fieldFor('insalubridadeValor', 'number')} />}
               </>
             ) : (
               <div className="flex items-center justify-between bg-muted/30 rounded-lg p-3">
@@ -372,6 +508,27 @@ const EmployeeDetailPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      <Dialog open={deleteOpen} onOpenChange={(open) => !deleting && setDeleteOpen(open)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 className="h-5 w-5" /> Excluir funcionário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <p>Você está prestes a excluir <strong>{emp.name}</strong>.</p>
+            <p className="text-muted-foreground">Se não houver registros vinculados, o cadastro será removido definitivamente. Se houver histórico de ponto, EPI, folha, assinatura ou outros vínculos, ele será preservado e o funcionário será removido da operação ativa.</p>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Motivo da exclusão (opcional)</label>
+              <textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} className="w-full min-h-20 rounded-lg border bg-background px-3 py-2" placeholder="Informe o motivo, se necessário..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => void deleteEmployee()} disabled={deleting}><Trash2 className="mr-2 h-4 w-4" /> {deleting ? 'Excluindo...' : 'Confirmar exclusão'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <EmailPdfModal
         open={!!emailPdfDraft}
         draft={emailPdfDraft}
