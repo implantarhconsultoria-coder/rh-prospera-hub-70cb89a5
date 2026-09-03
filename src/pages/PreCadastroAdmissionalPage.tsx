@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import PreCadastroAdmissionalOcrPage from './PreCadastroAdmissionalOcrPage';
+import PreCadastroInteligente from '@/components/PreCadastroInteligente';
 import { supabase } from '@/integrations/supabase/client';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { toast } from 'sonner';
@@ -311,7 +312,14 @@ const useBatchUpload = () => {
 
 const PreCadastroAdmissionalPage: React.FC = () => {
   useBatchUpload();
-  return <PreCadastroAdmissionalOcrPage />;
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <PreCadastroInteligente />
+      </div>
+      <PreCadastroAdmissionalOcrPage />
+    </div>
+  );
 };
 
 export default PreCadastroAdmissionalPage;
