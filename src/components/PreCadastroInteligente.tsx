@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { useApp } from '@/context/AppContext';
-import { interpretarPreCadastroLivre, type SmartAdmissionResult } from '@/lib/preCadastroInteligente';
+import { type SmartAdmissionResult } from '@/lib/preCadastroInteligente';
+import { interpretarEValidarPreCadastroLivre } from '@/lib/preCadastroInteligenteNormalizacao';
 
 const PreCadastroInteligente: React.FC = () => {
   const { companies, employees } = useApp();
@@ -17,7 +18,7 @@ const PreCadastroInteligente: React.FC = () => {
   };
 
   const interpretar = () => {
-    const resultado = interpretarPreCadastroLivre(texto, {
+    const resultado = interpretarEValidarPreCadastroLivre(texto, {
       companies: companies.map((company: any) => ({
         id: company.id,
         name: company.name || company.nome,
