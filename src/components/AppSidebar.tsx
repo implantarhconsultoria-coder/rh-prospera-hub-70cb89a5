@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Users, FileCheck, FileText, LogOut,
@@ -48,6 +48,23 @@ const directorItems: MenuItem[] = [
   { label: 'Relatório Geral', icon: FileText, path: '/admin/relatorio' },
 ];
 
+const LAST_ROUTE_PREFIX = 'topac:last-route:v1:';
+const allMenuPaths = Array.from(new Set([...menuItems, ...operationalItems, ...directorItems].map((item) => item.path)))
+  .sort((a, b) => b.length - a.length);
+
+const isInsideModule = (pathname: string, basePath: string) =>
+  pathname === basePath || (basePath !== '/admin' && pathname.startsWith(`${basePath}/`));
+
+const savedModuleRoute = (basePath: string) => {
+  if (typeof window === 'undefined' || basePath === '/admin') return basePath;
+  try {
+    const saved = window.sessionStorage.getItem(`${LAST_ROUTE_PREFIX}${basePath}`) || '';
+    return isInsideModule(saved.split('?')[0], basePath) ? saved : basePath;
+  } catch {
+    return basePath;
+  }
+};
+
 interface Props { collapsed: boolean; onToggle: () => void }
 
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
@@ -55,6 +72,20 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const location = useLocation();
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
   const items = isDirector ? directorItems : [...menuItems, ...operationalItems];
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const modulePath = allMenuPaths.find((path) => isInsideModule(location.pathname, path));
+    if (!modulePath || modulePath === '/admin') return;
+    try {
+      window.sessionStorage.setItem(
+        `${LAST_ROUTE_PREFIX}${modulePath}`,
+        `${location.pathname}${location.search}${location.hash}`,
+      );
+    } catch (error) {
+      console.warn('Não foi possível memorizar a rota do módulo:', error);
+    }
+  }, [location.pathname, location.search, location.hash]);
 
   return (
     <aside
@@ -88,11 +119,12 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
       <nav className="flex-1 overflow-y-auto px-2 py-3 [scrollbar-color:#4c1d95_transparent] [scrollbar-width:thin]">
         <div className="space-y-[2px]">
           {items.map((item) => {
-            const active = location.pathname === item.path;
+            const active = isInsideModule(location.pathname, item.path);
+            const destination = savedModuleRoute(item.path);
             return (
               <NavLink
                 key={item.path}
-                to={item.path}
+                to={destination}
                 title={collapsed ? item.label : undefined}
                 className={cn(
                   'group relative flex h-[38px] items-center gap-3 rounded-[4px] px-3 text-[13px] transition-all duration-150',
