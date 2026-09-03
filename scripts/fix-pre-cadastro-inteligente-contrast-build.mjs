@@ -17,3 +17,4 @@ if (!source.includes(after)) {
 }
 
 console.log('[pre-cadastro-inteligente] contraste escuro e legivel aplicado ao modal');
+await import('./fix-topac-ux-block1-build.mjs');
