@@ -13,6 +13,8 @@ import {
 
 const onlyDigits = (value: unknown) => String(value ?? '').replace(/\D/g, '');
 const isLikelyBrazilianMobile = (digits: string) => /^[1-9][1-9]9\d{8}$/.test(digits);
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const titleCase = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR').replace(/(^|\s)([a-záàâãéèêíïóôõöúçñ])/giu, (_, prefix: string, letter: string) => `${prefix}${letter.toLocaleUpperCase('pt-BR')}`);
 
 const candidateToCpfField = (candidate: SmartCandidate<string>): SmartField<string> => {
   const digits = onlyDigits(candidate.value);
@@ -101,6 +103,72 @@ const resolveCompanyAlias = (rawText: string, result: SmartAdmissionResult, opti
   return result;
 };
 
+const isKnownEntityPhrase = (value: string, options: SmartInterpreterOptions) => {
+  const normalized = normalizeSmartText(value);
+  const companies = (options.companies || []).map((company) => normalizeSmartText(company.name || company.nome || company.razaoSocial || company.razao_social || '')).filter(Boolean);
+  const roles = (options.roles || []).map(normalizeSmartText).filter(Boolean);
+  return [...companies, ...roles].some((entity) => entity === normalized || entity.includes(normalized) || normalized.includes(entity));
+};
+
+const resolveName = (rawText: string, result: SmartAdmissionResult, options: SmartInterpreterOptions) => {
+  if (result.nome.value && result.nome.status !== 'conflict') return result;
+
+  const capitalized = [...rawText.matchAll(/\b([A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ][a-záàâãéèêíïóôõöúçñ'’-]+(?:\s+[A-ZÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ][a-záàâãéèêíïóôõöúçñ'’-]+){1,5})\b/gu)]
+    .map((match) => match[1].trim())
+    .filter((value) => !isKnownEntityPhrase(value, options));
+  const uniqueCapitalized = [...new Map(capitalized.map((value) => [normalizeSmartText(value), value])).values()];
+
+  if (uniqueCapitalized.length === 1) {
+    result.nome = {
+      value: uniqueCapitalized[0],
+      display: uniqueCapitalized[0],
+      confidence: 'high',
+      status: 'ok',
+    };
+    return result;
+  }
+
+  let semantic = normalizeSmartText(rawText);
+  semantic = semantic.replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, ' ');
+  semantic = semantic.replace(/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/g, ' ');
+  semantic = semantic.replace(/\b\d{7,}\b/g, ' ');
+
+  for (const company of options.companies || []) {
+    const name = normalizeSmartText(company.name || company.nome || company.razaoSocial || company.razao_social || '');
+    if (name) semantic = semantic.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'g'), ' ');
+  }
+  semantic = semantic.replace(/\btopac\s+(?:sao paulo\s+)?matriz\b/g, ' ')
+    .replace(/\btopac\s+(?:filial\s+)?praia(?:\s+grande)?\b/g, ' ')
+    .replace(/\btopac\s+(?:filial\s+)?goiania\b/g, ' ');
+
+  for (const role of options.roles || []) {
+    const normalizedRole = normalizeSmartText(role);
+    if (normalizedRole) semantic = semantic.replace(new RegExp(`\\b${escapeRegExp(normalizedRole)}\\b`, 'g'), ' ');
+  }
+
+  semantic = semantic
+    .replace(/\b(?:cpf|rg|salario|sal|inicial|admissao|admitir|entrada|entra|inicio|nascimento|nasceu|cel|celular|telefone|whatsapp|email|e-mail|empresa|contratante|funcao|cargo|setor|ghe|obra|local|vr|vt|vale|refeicao|transporte|alimentacao|insalubridade|sim|nao|sem|valor|dia|reais?|recebe|receber|ainda|sei|definido|depois|por|o|a|do|da)\b/g, ' ')
+    .replace(/\b\d+(?:[.,]\d+)?\b/g, ' ')
+    .replace(/[^a-záàâãéèêíïóôõöúçñ'’\s-]/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const words = semantic.split(/\s+/).filter((word) => word.length >= 2);
+  if (words.length >= 2 && words.length <= 6) {
+    const value = titleCase(words.join(' '));
+    if (!isKnownEntityPhrase(value, options)) {
+      result.nome = {
+        value,
+        display: value,
+        confidence: 'medium',
+        status: 'review',
+        message: 'Nome identificado pelo conteúdo remanescente do texto. Recomenda-se conferência.',
+      };
+    }
+  }
+  return result;
+};
+
 const preserveBenefitSemantics = (result: SmartAdmissionResult) => {
   if (result.vr.value?.enabled === true && result.vr.value.dailyValue === null) {
     result.vr.display = 'VR: SIM — valor ainda não informado';
@@ -126,6 +194,7 @@ export const interpretarEValidarPreCadastroLivre = (rawText: string, options: Sm
   const result = interpretarPreCadastroLivre(rawText, options);
   resolveDocumentVsPhone(rawText, result);
   resolveCompanyAlias(rawText, result, options);
+  resolveName(rawText, result, options);
   preserveBenefitSemantics(result);
   ensureNoInventedText(result);
   return result;
