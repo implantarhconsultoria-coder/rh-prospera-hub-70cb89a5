@@ -17,7 +17,7 @@ const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastr
 const PedidoDemissaoModelDialog = lazy(() => import("@/components/PedidoDemissaoModelDialog"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
-const MOBILE_BUILD_TAG = "20260831-global-fetch-fix-1";
+const MOBILE_BUILD_TAG = "20260903-app-mecanico-layout-v1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(window.location.pathname);
 
@@ -59,8 +59,6 @@ const reportClientError = (payload: { message?: string; stack?: string; url: str
     body: JSON.stringify(payload),
     keepalive: true,
   }).catch((error) => {
-    // Telemetria e apenas diagnostica. Uma indisponibilidade do coletor nunca pode
-    // virar erro visivel ou interferir no uso normal da plataforma.
     console.warn('[Telemetry] Nao foi possivel enviar o erro ao coletor:', error);
   });
 };

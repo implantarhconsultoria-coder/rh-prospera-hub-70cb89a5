@@ -1,75 +1,54 @@
-const CACHE_NAME = 'topac-pro-v1';
+const CACHE_NAME = 'topac-pro-20260903-app-mecanico-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
 ];
 
-// Install event - cache assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys().then((cacheNames) => Promise.all(
+      cacheNames.map((cacheName) => cacheName !== CACHE_NAME ? caches.delete(cacheName) : Promise.resolve(false))
+    ))
   );
   self.clients.claim();
 });
 
-// Fetch event - network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') {
-    return;
-  }
+  if (event.request.method !== 'GET') return;
+  if (event.request.url.includes('/api/') || event.request.url.includes('supabase')) return;
 
-  // Skip API calls - always use network
-  if (event.request.url.includes('/api/') || event.request.url.includes('supabase')) {
-    return;
-  }
-
+  const isNavigation = event.request.mode === 'navigate' || event.request.destination === 'document';
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, isNavigation ? { cache: 'no-store' } : undefined)
       .then((response) => {
-        // Cache successful responses
-        if (response.ok) {
-          const cache = caches.open(CACHE_NAME);
-          cache.then((c) => c.put(event.request, response.clone()));
+        if (response.ok && !isNavigation) {
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
         }
         return response;
       })
-      .catch(() => {
-        // Fallback to cache on network error
-        return caches.match(event.request);
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (isNavigation) return caches.match('/index.html');
+        throw new Error('offline_resource_unavailable');
       })
   );
 });
 
-// Background sync for offline actions
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-data') {
-    event.waitUntil(syncData());
-  }
+  if (event.tag === 'sync-data') event.waitUntil(syncData());
 });
 
 async function syncData() {
   try {
-    // Sync pending changes when back online
     const response = await fetch('/api/sync', { method: 'POST' });
     return response.json();
   } catch (error) {
@@ -78,7 +57,6 @@ async function syncData() {
   }
 }
 
-// Push notifications
 self.addEventListener('push', (event) => {
   const data = event.data?.json() ?? {};
   const title = data.title || 'TOPAC PRO';
@@ -88,24 +66,23 @@ self.addEventListener('push', (event) => {
     badge: '/icons/icon-192.png',
     tag: data.tag || 'notification',
     requireInteraction: data.requireInteraction || false,
+    data: { url: data.url || '/' },
   };
-
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Notification click
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then((clientList) => {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const target = event.notification.data?.url || '/';
       for (const client of clientList) {
-        if (client.url === '/' && 'focus' in client) {
+        if ('focus' in client && client.url.includes(self.location.origin)) {
+          if ('navigate' in client) client.navigate(target);
           return client.focus();
         }
       }
-      if (clients.openWindow) {
-        return clients.openWindow(event.notification.data?.url || '/');
-      }
+      if (clients.openWindow) return clients.openWindow(target);
     })
   );
 });
