@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/pre-cadastro-inteligente-20260903
+  workflow_dispatch:
 
 jobs:
   test:
