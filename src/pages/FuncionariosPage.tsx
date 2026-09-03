@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
+import { usePersistentViewState } from '@/hooks/usePersistentViewState';
 import { formatCurrency } from '@/lib/calculations';
 import { upsertFuncionarioBase, onlyDigits } from '@/lib/funcionariosBase';
 import BankingDataEditor from '@/components/BankingDataEditor';
@@ -32,6 +33,9 @@ const emptyEmployee = () => ({
   nome: '', cpf: '', rg: '', cargo: '', salario_base: '', data_admissao: '', telefone: '', celular: '', email: '', endereco: '',
   banking: emptyBankingData(),
 });
+
+type EmployeeDraft = ReturnType<typeof emptyEmployee>;
+type FilterStatus = 'ativos' | 'inativos' | 'todos';
 
 const bankingFromRow = (row: any): BankingData => ({
   banco: String(row?.banco || ''),
@@ -79,12 +83,31 @@ const FuncionariosPage: React.FC = () => {
   const portalPrefix = location.pathname.startsWith('/filial') ? '/filial' : location.pathname.startsWith('/admin') ? '/admin' : '';
   const isAdminPortal = portalPrefix === '/admin';
 
-  const [search, setSearch] = useState('');
-  const [filterCompany, setFilterCompany] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'ativos' | 'inativos' | 'todos'>('ativos');
-  const [showNew, setShowNew] = useState(false);
+  const [listState, setListState] = usePersistentViewState(`funcionarios:list:${portalPrefix || 'root'}`, {
+    search: '',
+    filterCompany: '',
+    filterStatus: 'ativos' as FilterStatus,
+  });
+  const search = listState.search;
+  const filterCompany = listState.filterCompany;
+  const filterStatus = listState.filterStatus;
+  const setSearch = (value: string) => setListState((current) => ({ ...current, search: value }));
+  const setFilterCompany = (value: string) => setListState((current) => ({ ...current, filterCompany: value }));
+  const setFilterStatus = (value: FilterStatus) => setListState((current) => ({ ...current, filterStatus: value }));
+
+  const [createState, setCreateState] = usePersistentViewState(`funcionarios:novo:${portalPrefix || 'root'}`, {
+    showNew: false,
+    newEmp: emptyEmployee(),
+  });
+  const showNew = createState.showNew;
+  const newEmp = createState.newEmp;
+  const setShowNew = (value: boolean) => setCreateState((current) => ({ ...current, showNew: value }));
+  const setNewEmp = (updater: React.SetStateAction<EmployeeDraft>) => setCreateState((current) => ({
+    ...current,
+    newEmp: typeof updater === 'function' ? (updater as (value: EmployeeDraft) => EmployeeDraft)(current.newEmp) : updater,
+  }));
+
   const [saving, setSaving] = useState(false);
-  const [newEmp, setNewEmp] = useState(emptyEmployee());
   const [bulkBankOpen, setBulkBankOpen] = useState(false);
   const [bulkEmployeeOpen, setBulkEmployeeOpen] = useState(false);
 
@@ -103,12 +126,19 @@ const FuncionariosPage: React.FC = () => {
   const accessEmployee = employees.find((employee) => employee.id === accessEmployeeId) || null;
   const accessCompany = accessEmployee ? companies.find((company) => company.id === accessEmployee.companyId) : null;
 
+  useEffect(() => {
+    if (filterCompany && !companies.some((company) => company.id === filterCompany)) {
+      setFilterCompany('');
+    }
+  }, [companies, filterCompany]);
+
   const filtered = useMemo(() => employees.filter((employee) => {
     const query = search.trim().toLowerCase();
     if (query && !`${employee.name} ${employee.cpf} ${employee.cargo}`.toLowerCase().includes(query)) return false;
     if (filterCompany && employee.companyId !== filterCompany) return false;
-    if (filterStatus === 'ativos' && employee.status === 'desligado') return false;
-    if (filterStatus === 'inativos' && employee.status !== 'desligado') return false;
+    const inactive = ['desligado', 'demitido', 'excluido', 'inativo'].includes(String(employee.status || '').toLowerCase());
+    if (filterStatus === 'ativos' && inactive) return false;
+    if (filterStatus === 'inativos' && !inactive) return false;
     return true;
   }), [employees, search, filterCompany, filterStatus]);
 
@@ -275,7 +305,7 @@ const FuncionariosPage: React.FC = () => {
       <div className="card-premium flex flex-wrap gap-3 p-4">
         <div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar funcionário, CPF ou cargo" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         {!isFilial && <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="rounded-lg border bg-background px-3 py-2 text-sm"><option value="">Todas as empresas</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select>}
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)} className="rounded-lg border bg-background px-3 py-2 text-sm"><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="todos">Todos</option></select>
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as FilterStatus)} className="rounded-lg border bg-background px-3 py-2 text-sm"><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="todos">Todos</option></select>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
