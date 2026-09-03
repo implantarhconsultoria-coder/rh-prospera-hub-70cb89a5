@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual, getHoraExtraSemanalPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
+import { usePersistentViewState } from '@/hooks/usePersistentViewState';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,31 +15,42 @@ import { entryToRow, type MonthlyEntry } from '@/types/database';
 
 const HOURS_DOC_RE = /DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/gi;
 const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
+const currentCompetencia = () => new Date().toISOString().slice(0, 7);
+const defaultCalendarState = (competencia: string) => {
+  const diasUteis = getWorkingDays(competencia);
+  const [y, m] = competencia.split('-').map(Number);
+  return {
+    diasUteisManual: diasUteis,
+    domingosFeriados: new Date(y, m, 0).getDate() - diasUteis,
+  };
+};
 
 const FechamentoPage: React.FC = () => {
   const { companies, employees, entries, setEntries, getOrCreateEntries, refreshEntries, getFechamento, updateFechamento } = useApp();
   const navigate = useNavigate();
-  const [selectedCompany, setSelectedCompany] = useState(companies[0]?.id || '');
-  const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
+  const initialCompetencia = currentCompetencia();
+  const [viewState, setViewState] = usePersistentViewState('fechamento:principal', {
+    selectedCompany: '',
+    competencia: initialCompetencia,
+    ...defaultCalendarState(initialCompetencia),
+  });
+  const selectedCompany = viewState.selectedCompany;
+  const competencia = viewState.competencia || initialCompetencia;
+  const diasUteisManual = Number(viewState.diasUteisManual || 0);
+  const domingosFeriados = Number(viewState.domingosFeriados || 0);
+  const setSelectedCompany = (value: string) => setViewState((current) => ({ ...current, selectedCompany: value }));
+  const setCompetencia = (value: string) => setViewState((current) => ({ ...current, competencia: value, ...defaultCalendarState(value) }));
+  const setDiasUteisManual = (value: number) => setViewState((current) => ({ ...current, diasUteisManual: value }));
+  const setDomingosFeriados = (value: number) => setViewState((current) => ({ ...current, domingosFeriados: value }));
   const [saving, setSaving] = useState(false);
   const saveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
-  const diasUteisDefault = getWorkingDays(competencia);
-  const [diasUteisManual, setDiasUteisManual] = useState(diasUteisDefault);
-  const [domingosFeriados, setDomingosFeriados] = useState(() => {
-    const [y, m] = new Date().toISOString().slice(0, 7).split('-').map(Number);
-    return new Date(y, m, 0).getDate() - diasUteisDefault;
-  });
 
   useEffect(() => {
-    if (!selectedCompany && companies.length) setSelectedCompany(companies[0].id);
+    if (!companies.length) return;
+    if (!selectedCompany || !companies.some((company) => company.id === selectedCompany)) {
+      setSelectedCompany(companies[0].id);
+    }
   }, [companies, selectedCompany]);
-
-  useEffect(() => {
-    const du = getWorkingDays(competencia);
-    const [y, m] = competencia.split('-').map(Number);
-    setDiasUteisManual(du);
-    setDomingosFeriados(new Date(y, m, 0).getDate() - du);
-  }, [competencia]);
 
   useEffect(() => {
     if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
