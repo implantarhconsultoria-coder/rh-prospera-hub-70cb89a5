@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Lock, RefreshCw, Save, Table } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,15 +9,19 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
+import { supabase } from '@/integrations/supabase/client';
+import { entryToRow, type MonthlyEntry } from '@/types/database';
 
 const HOURS_DOC_RE = /DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/gi;
 const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
 
 const FechamentoPage: React.FC = () => {
-  const { companies, employees, entries, getOrCreateEntries, updateEntry, refreshEntries, getFechamento, updateFechamento } = useApp();
+  const { companies, employees, entries, setEntries, getOrCreateEntries, refreshEntries, getFechamento, updateFechamento } = useApp();
   const navigate = useNavigate();
   const [selectedCompany, setSelectedCompany] = useState(companies[0]?.id || '');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
+  const [saving, setSaving] = useState(false);
+  const saveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
   const diasUteisDefault = getWorkingDays(competencia);
   const [diasUteisManual, setDiasUteisManual] = useState(diasUteisDefault);
   const [domingosFeriados, setDomingosFeriados] = useState(() => {
@@ -87,14 +91,87 @@ const FechamentoPage: React.FC = () => {
 
   const fechamentoTotals = { totalFuncionarios: compEmps.length, totalProventos: totals.proventos, totalDescontos: totals.descontos, totalLiquido: totals.liquido };
 
+  const queueEntryPersistence = (entry: MonthlyEntry, data: Partial<MonthlyEntry>) => {
+    const key = `${entry.employeeId}|${entry.competencia}`;
+    const nextEntry = { ...entry, ...data };
+
+    setEntries(prev => prev.map(item =>
+      item.employeeId === entry.employeeId && item.competencia === entry.competencia
+        ? { ...item, ...data }
+        : item,
+    ));
+
+    const previous = saveQueueRef.current.get(key) || Promise.resolve();
+    const queued = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const patch = entryToRow(data);
+        if (Object.keys(patch).length === 0) return;
+
+        const result = entry.id
+          ? await supabase.from('lancamentos_mensais').update(patch).eq('id', entry.id).select('id').maybeSingle()
+          : await supabase.from('lancamentos_mensais').upsert(entryToRow(nextEntry), { onConflict: 'funcionario_id,competencia' }).select('id').maybeSingle();
+
+        if (result.error) throw result.error;
+        if (!result.data?.id) throw new Error('O lançamento não foi confirmado pelo banco.');
+      });
+
+    saveQueueRef.current.set(key, queued);
+    void queued
+      .catch((error) => {
+        console.error('Erro ao persistir lançamento do fechamento:', error);
+        toast.error('Não foi possível salvar uma alteração do fechamento. Use Salvar Fechamento para tentar novamente.');
+      })
+      .finally(() => {
+        if (saveQueueRef.current.get(key) === queued) saveQueueRef.current.delete(key);
+      });
+  };
+
+  const persistAllEntries = async () => {
+    const pending = Array.from(saveQueueRef.current.values());
+    if (pending.length) await Promise.allSettled(pending);
+    if (!compEntries.length) return;
+
+    const rows = compEntries.map((entry) => entryToRow(entry));
+    const { error } = await supabase
+      .from('lancamentos_mensais')
+      .upsert(rows, { onConflict: 'funcionario_id,competencia' });
+
+    if (error) throw error;
+  };
+
   const handleSalvarFechamento = async () => {
-    const result = await updateFechamento(selectedCompany, competencia, { status: 'em_conferencia', observacoes: fechamento.observacoes, ...fechamentoTotals });
-    if (result.ok) toast.success('Fechamento salvo.'); else toast.error('Erro ao salvar fechamento no banco.');
+    if (saving) return;
+    setSaving(true);
+    try {
+      await persistAllEntries();
+      const result = await updateFechamento(selectedCompany, competencia, { status: 'em_conferencia', observacoes: fechamento.observacoes, ...fechamentoTotals });
+      if (!result.ok) throw result.error || new Error('Falha ao salvar fechamento.');
+      await refreshEntries();
+      toast.success('Fechamento e lançamentos salvos no banco.');
+    } catch (error) {
+      console.error('Erro ao salvar fechamento completo:', error);
+      toast.error('Erro ao salvar fechamento no banco. Nenhum valor foi considerado confirmado.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleMarcarFechado = async () => {
-    const result = await updateFechamento(selectedCompany, competencia, { status: 'fechado', observacoes: fechamento.observacoes, dataFechamento: new Date().toISOString(), ...fechamentoTotals });
-    if (result.ok) toast.success('Fechamento marcado como fechado.'); else toast.error('Erro ao marcar fechamento como fechado.');
+    if (saving) return;
+    setSaving(true);
+    try {
+      await persistAllEntries();
+      const result = await updateFechamento(selectedCompany, competencia, { status: 'fechado', observacoes: fechamento.observacoes, dataFechamento: new Date().toISOString(), ...fechamentoTotals });
+      if (!result.ok) throw result.error || new Error('Falha ao fechar competência.');
+      await refreshEntries();
+      toast.success('Fechamento marcado como fechado.');
+    } catch (error) {
+      console.error('Erro ao marcar fechamento como fechado:', error);
+      toast.error('Erro ao marcar fechamento como fechado.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const exportApontamentoCsv = () => {
@@ -130,7 +207,7 @@ const FechamentoPage: React.FC = () => {
         <Input type="month" value={competencia} onChange={(event) => setCompetencia(event.target.value)} className="w-48" />
         <span className="text-xs text-muted-foreground">Dias úteis:</span><DecimalInput value={diasUteisManual} decimals={0} onValueChange={setDiasUteisManual} className="w-16 text-xs h-8" />
         <span className="text-xs text-muted-foreground">Dom/Feriados:</span><DecimalInput value={domingosFeriados} decimals={0} onValueChange={setDomingosFeriados} className="w-16 text-xs h-8" />
-        <Button variant="outline" size="sm" className="ml-auto" onClick={async () => { await refreshEntries(); toast.success('Lançamentos recarregados.'); }}><RefreshCw className="mr-2 h-3.5 w-3.5" /> Recarregar</Button>
+        <Button variant="outline" size="sm" className="ml-auto" disabled={saving} onClick={async () => { await refreshEntries(); toast.success('Lançamentos recarregados.'); }}><RefreshCw className="mr-2 h-3.5 w-3.5" /> Recarregar</Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -151,7 +228,7 @@ const FechamentoPage: React.FC = () => {
             <tbody>{compEmps.map((emp) => {
               const entry = compEntries.find((item) => item.employeeId === emp.id); if (!entry) return null;
               const calc = calcPayroll(emp, entry);
-              const update = (data: Parameters<typeof updateEntry>[2]) => updateEntry(emp.id, competencia, data);
+              const update = (data: Partial<MonthlyEntry>) => queueEntryPersistence(entry, data);
               const docHoras = getHorasDocumento(entry.observacoes);
               return <tr key={emp.id} className="border-b border-violet-400/10 align-top hover:bg-violet-500/[0.025]">
                 <td className="px-3 py-3 font-semibold whitespace-nowrap">{emp.name}</td>
@@ -177,7 +254,7 @@ const FechamentoPage: React.FC = () => {
       <section className="card-premium space-y-3 p-4">
         <label className="text-xs font-semibold text-muted-foreground">Observação geral do fechamento</label>
         <textarea value={fechamento.observacoes} onChange={(event) => updateFechamento(selectedCompany, competencia, { observacoes: event.target.value }, { persist: false })} className="min-h-[72px] w-full rounded-lg border border-violet-400/20 bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-violet-400/60" placeholder="Observações gerais da competência..." />
-        <div className="flex flex-wrap gap-3"><Button onClick={handleSalvarFechamento} className="gradient-primary text-primary-foreground"><Save className="mr-2 h-4 w-4" /> Salvar Fechamento</Button><Button onClick={handleMarcarFechado} variant="outline"><Lock className="mr-2 h-4 w-4" /> Marcar como Fechado</Button><Button onClick={openPdf} variant="outline"><FileText className="mr-2 h-4 w-4" /> Gerar PDF</Button><Button onClick={exportApontamentoCsv} variant="outline"><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button></div>
+        <div className="flex flex-wrap gap-3"><Button disabled={saving} onClick={handleSalvarFechamento} className="gradient-primary text-primary-foreground"><Save className="mr-2 h-4 w-4" /> {saving ? 'Salvando...' : 'Salvar Fechamento'}</Button><Button disabled={saving} onClick={handleMarcarFechado} variant="outline"><Lock className="mr-2 h-4 w-4" /> Marcar como Fechado</Button><Button onClick={openPdf} variant="outline"><FileText className="mr-2 h-4 w-4" /> Gerar PDF</Button><Button onClick={exportApontamentoCsv} variant="outline"><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button></div>
       </section>
     </div>
   );
