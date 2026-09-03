@@ -3,13 +3,29 @@ import { Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { useApp } from '@/context/AppContext';
+import { interpretarPreCadastroLivre, type SmartAdmissionResult } from '@/lib/preCadastroInteligente';
 
 const PreCadastroInteligente: React.FC = () => {
+  const { companies, employees } = useApp();
   const [open, setOpen] = useState(false);
   const [texto, setTexto] = useState('');
+  const [, setResultado] = useState<SmartAdmissionResult | null>(null);
 
   const fechar = () => {
     setOpen(false);
+  };
+
+  const interpretar = () => {
+    const resultado = interpretarPreCadastroLivre(texto, {
+      companies: companies.map((company: any) => ({
+        id: company.id,
+        name: company.name || company.nome,
+        razaoSocial: company.razaoSocial || company.razao_social,
+      })),
+      roles: Array.from(new Set(employees.map((employee: any) => String(employee.cargo || '').trim()).filter(Boolean))),
+    });
+    setResultado(resultado);
   };
 
   return (
@@ -51,7 +67,7 @@ const PreCadastroInteligente: React.FC = () => {
               <Button type="button" variant="outline" onClick={() => setTexto('')} disabled={!texto}>
                 LIMPAR
               </Button>
-              <Button type="button" disabled={!texto.trim()} className="gap-2">
+              <Button type="button" onClick={interpretar} disabled={!texto.trim()} className="gap-2">
                 <Sparkles className="h-4 w-4" />
                 INTERPRETAR INFORMAÇÕES
               </Button>
