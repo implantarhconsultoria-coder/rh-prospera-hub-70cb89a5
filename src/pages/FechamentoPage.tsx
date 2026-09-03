@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Lock, RefreshCw, Save, Table } from 'lucide-react';
+import { Bus, FileText, Lock, RefreshCw, Save, Table, UtensilsCrossed } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual, getHoraExtraSemanalPercentual } from '@/lib/calculations';
@@ -215,6 +215,17 @@ const FechamentoPage: React.FC = () => {
         <div className="card-premium p-4"><p className="text-[11px] uppercase text-muted-foreground">Proventos estimados</p><p className="mt-1 text-xl font-extrabold text-foreground">{formatCurrency(totals.proventos)}</p></div>
         <div className="card-premium p-4"><p className="text-[11px] uppercase text-muted-foreground">Descontos estimados</p><p className="mt-1 text-xl font-extrabold text-amber-300">{formatCurrency(totals.descontos)}</p></div>
         <div className="card-premium p-4"><p className="text-[11px] uppercase text-muted-foreground">Líquido estimado</p><p className="mt-1 text-xl font-extrabold text-violet-300">{formatCurrency(totals.liquido)}</p></div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <button type="button" onClick={() => navigate(`/admin/relatorio-vr?empresa=${selectedCompany}&competencia=${competencia}`)} className="card-premium flex items-center gap-3 p-4 text-left transition-all hover:ring-2 hover:ring-primary/30">
+          <UtensilsCrossed className="h-5 w-5 text-primary" />
+          <div><p className="text-sm font-bold text-foreground">VR — Vale Refeição</p><p className="text-xs text-muted-foreground">Abrir cálculo, conferência, relatórios e recibos de VR desta competência.</p></div>
+        </button>
+        <button type="button" onClick={() => navigate(`/admin/relatorio-vt?empresa=${selectedCompany}&competencia=${competencia}`)} className="card-premium flex items-center gap-3 p-4 text-left transition-all hover:ring-2 hover:ring-primary/30">
+          <Bus className="h-5 w-5 text-primary" />
+          <div><p className="text-sm font-bold text-foreground">VT — Vale Transporte</p><p className="text-xs text-muted-foreground">Abrir cálculo, conferência, relatórios e recibos de VT desta competência.</p></div>
+        </button>
       </div>
 
       <section className="card-premium overflow-hidden">
