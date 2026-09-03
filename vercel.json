@@ -1,7 +1,7 @@
 {
   "framework": "vite",
   "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "node scripts/normalize-source-encoding.mjs && npm run build",
+  "buildCommand": "node scripts/normalize-source-encoding.mjs && npx vitest run src/lib/preCadastroInteligente.test.ts && npm run build",
   "outputDirectory": "dist",
   "rewrites": [
     {
