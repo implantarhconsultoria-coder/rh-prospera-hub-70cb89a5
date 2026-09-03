@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { interpretarEValidarPreCadastroLivre } from '@/lib/preCadastroInteligenteNormalizacao';
 
 const options = {
-  companies: [{ id: 'company-matriz', name: 'TOPAC MATRIZ' }],
-  roles: ['AUXILIAR ADMINISTRATIVO'],
+  companies: [
+    { id: 'company-matriz', name: 'TOPAC MATRIZ' },
+    { id: 'company-praia', name: 'TOPAC FILIAL PRAIA GRANDE' },
+  ],
+  roles: ['AUXILIAR ADMINISTRATIVO', 'VENDEDOR'],
 };
 
 const parse = (text: string) => interpretarEValidarPreCadastroLivre(text, options);
@@ -97,5 +100,58 @@ salário 2400`);
     expect(result.nome.value).toBe('Amanda Oliveira Santos');
     expect(result.cpf.display).toBe('391.185.668-95');
     expect(result.email.value).toBe('yamandaoliveirasantos@gmail.com');
+  });
+
+  it('TESTE 8 - formato real numerado com markdown e =>', () => {
+    const result = parse(`1. **Empresa contratante** => TOPAC MATRIZ
+2. **Nome** => Amanda Oliveira Santos
+3. **CPF** => 39118566895
+4. **RG** => 381179722
+5. **Data de nascimento** => 17/12/1999
+6. **Data de admissão** => 08/09/2026
+7. **Função** => Auxiliar Administrativo
+8. **Setor/GHE** => Não informado
+9. **Obra/Local** => Não informado
+10. **Salário** => R$ 2.400,00
+11. **E-mail** => yamandaoliveirasantos@gmail.com
+12. **Celular** => 11986432509
+13. **VR** => Sim — R$ 31,00/dia
+14. **VT** => Sim — valor ainda não informado
+15. **Insalubridade** => Não`);
+    expectAmandaBase(result);
+  });
+
+  it('TESTE 9 - praia grande vendedor no mesmo formato visual usado pelo usuario', () => {
+    const result = parse(`1. **Empresa contratante** => TOPAC FILIAL PRAIA GRANDE
+2. **Nome** => Thiago Ferreira Pinto
+3. **CPF** => 38914735808
+4. **RG** => 3015712772
+5. **Data de nascimento** => 01/02/1988
+6. **Data de admissão** => 08/09/2026
+7. **Função** => Vendedor
+8. **Setor/GHE** => Não informado
+9. **Obra/Local** => Não informado
+10. **Salário** => R$ 2.400,00
+11. **E-mail** => thiagobalxada88@gmail.com
+12. **Celular** => 13983132720
+13. **VR** => Sim — R$ 31,00/dia
+14. **VT** => Sim — valor ainda não informado
+15. **Insalubridade** => Não`);
+
+    expect(result.empresa.value).toEqual({ id: 'company-praia', name: 'TOPAC FILIAL PRAIA GRANDE' });
+    expect(result.nome.value).toBe('Thiago Ferreira Pinto');
+    expect(result.cpf.display).toBe('389.147.358-08');
+    expect(result.rg.value).toBe('3015712772');
+    expect(result.dataNascimento.value).toBe('1988-02-01');
+    expect(result.dataAdmissao.value).toBe('2026-09-08');
+    expect(result.funcao.value).toBe('Vendedor');
+    expect(result.setorGhe.status).toBe('missing');
+    expect(result.obraLocal.status).toBe('missing');
+    expect(result.salario.value).toBe(2400);
+    expect(result.email.value).toBe('thiagobalxada88@gmail.com');
+    expect(result.celular.display).toBe('(13) 98313-2720');
+    expect(result.vr.value).toEqual({ enabled: true, dailyValue: 31 });
+    expect(result.vt.value).toEqual({ enabled: true, dailyValue: null });
+    expect(result.insalubridade.value).toBe(false);
   });
 });
