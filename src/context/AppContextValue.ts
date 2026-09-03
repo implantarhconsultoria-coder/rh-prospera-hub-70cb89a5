@@ -22,7 +22,7 @@ export interface AppState {
   refreshData: () => Promise<void>;
   companies: Company[];
   employees: Employee[];
-  updateEmployee: (id: string, data: Partial<Employee>) => void;
+  updateEmployee: (id: string, data: Partial<Employee>) => Promise<{ ok: boolean; error?: unknown }>;
   entries: MonthlyEntry[];
   setEntries: React.Dispatch<React.SetStateAction<MonthlyEntry[]>>;
   getOrCreateEntries: (companyId: string, competencia: string) => MonthlyEntry[];
