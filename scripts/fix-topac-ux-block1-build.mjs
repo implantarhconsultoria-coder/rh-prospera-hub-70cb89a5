@@ -91,3 +91,4 @@ patchFile('src/components/FilialLayout.tsx', (input) => {
 });
 
 console.log('[topac-ux1] restaurados: envio financeiro, etiquetas, filial moderna/correta, suporte e protocolo sem duplicidade');
+await import('./fix-topac-signature-block2-build.mjs');
