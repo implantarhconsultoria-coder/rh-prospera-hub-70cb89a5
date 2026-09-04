@@ -1,35 +1,18 @@
-import { getServiceClient, readBody, requireAdmin, sendJson } from '../src/server/payrollServer.js';
-import { processAccountingDocument, processAccountingQueue } from '../src/server/accountingCentralProcessor.js';
-
-const authorize = async (req: any) => {
-  const cronSecret = String(process.env.CRON_SECRET || '').trim();
-  const authorization = String(req?.headers?.authorization || '');
-  if (cronSecret && authorization === `Bearer ${cronSecret}`) return { service: getServiceClient(), user: null as any, mode: 'CRON' };
-  const admin = await requireAdmin(req);
-  return { ...admin, mode: 'ADMIN' };
-};
+import { requireAdmin, sendJson } from '../src/server/payrollServer.js';
 
 export default async function handler(req: any, res?: any) {
-  if (!['GET', 'POST'].includes(String(req?.method || 'GET').toUpperCase())) return sendJson(res, { ok: false, error: 'method_not_allowed' }, 405);
+  if (!['GET', 'POST'].includes(String(req?.method || 'GET').toUpperCase())) {
+    return sendJson(res, { ok: false, error: 'method_not_allowed' }, 405);
+  }
+
   try {
-    const { service, user, mode } = await authorize(req);
-    const body = readBody(req);
-    const action = String(body.action || (req?.method === 'GET' ? 'process-queue' : 'process-queue'));
-
-    if (action === 'reprocess-document') {
-      const documentId = String(body.document_id || '').trim();
-      if (!documentId) return sendJson(res, { ok: false, error: 'document_id_required' }, 400);
-      const result = await processAccountingDocument(service, documentId, user?.id || null);
-      return sendJson(res, { ok: true, mode, result });
-    }
-
-    if (action === 'process-queue') {
-      const limit = Number(body.limit || req?.query?.limit || 4);
-      const results = await processAccountingQueue(service, limit, user?.id || null);
-      return sendJson(res, { ok: true, mode, processed: results.length, results });
-    }
-
-    return sendJson(res, { ok: false, error: 'unknown_action' }, 400);
+    await requireAdmin(req);
+    return sendJson(res, {
+      ok: true,
+      mode: 'PDF_COLLECTOR_ONLY',
+      processed: 0,
+      message: 'A Central da Contabilidade funciona somente como coletor de PDFs recebidos por e-mail. Nenhum documento é vinculado automaticamente a funcionário, pré-cadastro, folha ou assinatura digital.',
+    });
   } catch (error: any) {
     console.error('[accounting-email-process]', error);
     return sendJson(res, { ok: false, error: String(error?.message || error) }, Number(error?.status || 500));
