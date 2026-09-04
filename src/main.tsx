@@ -4,7 +4,9 @@ import App from "./App.tsx";
 import "./index.css";
 import "./styles/topac-platform.css";
 import "./styles/hide-vercel-toolbar.css";
+import "./styles/form-contrast-guard.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import GlobalFormContrastGuard from "@/components/GlobalFormContrastGuard";
 import { AppProvider } from "@/context/AppContext";
 
 const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
@@ -108,6 +110,7 @@ const root = createRoot(document.getElementById("root")!);
 if (isPayrollPublicPortal) {
   root.render(
     <ErrorBoundary>
+      <GlobalFormContrastGuard />
       <Suspense fallback={<div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center">Carregando acesso seguro...</div>}>
         <PayrollSignaturePublicPage />
       </Suspense>
@@ -116,6 +119,7 @@ if (isPayrollPublicPortal) {
 } else {
   root.render(
     <ErrorBoundary>
+      <GlobalFormContrastGuard />
       <App />
       <AppProvider>
         <RouteEnhancers />
