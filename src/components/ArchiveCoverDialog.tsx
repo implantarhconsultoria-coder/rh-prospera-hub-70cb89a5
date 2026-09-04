@@ -42,6 +42,14 @@ const escapeHtml = (value: unknown) => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
+const sanitizeCargoForArchiveCover = (value: unknown) => String(value || '')
+  .replace(/\s*[-–—]?\s*R\$\s*\d{1,3}(?:\.\d{3})*(?:,\d{2})?/gi, '')
+  .replace(/\s*[-–—]?\s*R\$\s*\d+(?:,\d{2})?/gi, '')
+  .replace(/\s{2,}/g, ' ')
+  .replace(/\s*[-–—]\s*\+/g, ' +')
+  .replace(/\s*[-–—]\s*$/g, '')
+  .trim();
+
 const lightFieldClass = 'bg-white text-slate-950 placeholder:text-slate-500 caret-slate-950 dark:bg-white dark:text-slate-950 dark:placeholder:text-slate-500';
 
 const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenChange }) => {
@@ -145,9 +153,10 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
     const companyName = company?.name || '';
     const admission = formatDateBR(employee.dataAdmissao);
     const dismissal = formatDateBR(dismissalById[employee.id] || '');
+    const safeCargo = sanitizeCargoForArchiveCover(employee.cargo);
     const detailRows = [
       options.company && companyName ? `<div class="row"><span>EMPRESA</span><strong>${escapeHtml(companyName)}</strong></div>` : '',
-      options.cargo && employee.cargo ? `<div class="row"><span>CARGO / FUNÇÃO</span><strong>${escapeHtml(employee.cargo)}</strong></div>` : '',
+      options.cargo && safeCargo ? `<div class="row"><span>CARGO / FUNÇÃO</span><strong>${escapeHtml(safeCargo)}</strong></div>` : '',
       options.admission && admission ? `<div class="row"><span>ADMISSÃO</span><strong>${escapeHtml(admission)}</strong></div>` : '',
       options.dismissal && dismissal ? `<div class="row"><span>DEMISSÃO</span><strong>${escapeHtml(dismissal)}</strong></div>` : '',
     ].filter(Boolean).join('');
@@ -297,7 +306,13 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
                 <div className="max-h-56 overflow-y-auto rounded-lg border bg-background p-1">
                   {candidates.map((employee) => {
                     const company = companies.find((item) => item.id === employee.companyId);
-                    return <button key={employee.id} type="button" onClick={() => void selectEmployee(employee.id)} className="flex w-full items-start justify-between rounded-md px-3 py-2 text-left hover:bg-muted"><span><span className="block text-sm font-semibold">{employee.name}</span><span className="block text-xs text-muted-foreground">{employee.cargo || 'Cargo não informado'} • {company?.name || 'Empresa não informada'}</span></span><span className="text-[10px] uppercase text-muted-foreground">{employee.status}</span></button>;
+                    const safeCargo = sanitizeCargoForArchiveCover(employee.cargo);
+                    return (
+                      <button key={employee.id} type="button" onClick={() => void selectEmployee(employee.id)} className="w-full rounded-md px-3 py-2 text-left hover:bg-muted">
+                        <div className="text-xs font-semibold">{employee.name}</div>
+                        <div className="text-[11px] text-muted-foreground">{[safeCargo, company?.name].filter(Boolean).join(' • ')}</div>
+                      </button>
+                    );
                   })}
                 </div>
               )}
@@ -307,18 +322,10 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
           {mode === 'company' && (
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">Empresa</label>
-              <select value={selectedCompanyId} onChange={(event) => setSelectedCompanyId(event.target.value)} className={`h-10 w-full rounded-md border border-input px-3 text-sm ${lightFieldClass}`}>
-                <option value="">Selecione a empresa</option>
+              <select value={selectedCompanyId} onChange={(event) => setSelectedCompanyId(event.target.value)} className={`h-10 w-full rounded-md border px-3 text-sm ${lightFieldClass}`}>
+                <option value="">Selecione uma empresa</option>
                 {sortedCompanies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
               </select>
-              {!!selectedCompanyId && <p className="text-xs text-muted-foreground"><strong>{targetEmployees.length}</strong> funcionário(s) serão impressos em ordem alfabética, uma capa por página.</p>}
-            </div>
-          )}
-
-          {mode === 'all' && (
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <p className="text-sm font-semibold">Impressão completa</p>
-              <p className="mt-1 text-xs text-muted-foreground"><strong>{targetEmployees.length}</strong> funcionário(s) cadastrados no RH serão impressos em ordem alfabética, uma capa por página. Funcionários desligados permanecem porque o arquivo físico continua existindo.</p>
             </div>
           )}
 
@@ -335,7 +342,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Texto livre</label>
-                  <textarea value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder="Escreva aqui qualquer informação que queira colocar na capa..." className={`min-h-44 w-full resize-y rounded-md border border-input px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${lightFieldClass}`} />
+                  <textarea className={`min-h-44 w-full resize-y rounded-md border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 ${lightFieldClass}`} value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder={'Ex.: CONTRATOS\nDOCUMENTOS PESSOAIS\nFICHAS E RECIBOS'} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Rodapé opcional</label>
@@ -343,25 +350,32 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
                 </div>
               </div>
 
-              <div className="rounded-xl border bg-white p-6 text-slate-900 shadow-sm">
-                <div className="border-b-2 border-slate-800 pb-4 text-center"><p className="text-[10px] font-bold tracking-[0.28em] text-slate-500">TOPAC RH PRO</p><h3 className="mt-1 text-lg font-extrabold tracking-wide">CAPA PARA ARQUIVAR</h3></div>
-                <div className="flex min-h-64 flex-col items-center justify-center px-3 py-8 text-center">
-                  <div className="break-words text-3xl font-black uppercase leading-tight md:text-4xl">{customTitle || 'TÍTULO DA CAPA'}</div>
-                  <div className="mt-6 w-full whitespace-pre-wrap break-words text-base font-semibold leading-relaxed text-slate-700">{customText || 'Seu texto livre aparecerá aqui.'}</div>
+              <div className="rounded-xl border bg-white p-6 text-slate-950 shadow-sm">
+                <div className="border-b-2 border-slate-900 pb-4 text-center">
+                  <div className="text-[9px] font-bold tracking-[.22em] text-slate-500">TOPAC RH PRO</div>
+                  <div className="mt-1 text-sm font-extrabold tracking-wide">CAPA PARA ARQUIVAR</div>
                 </div>
-                <div className="border-t pt-3 text-center text-xs font-semibold tracking-wide text-slate-500">{customFooter || 'ARQUIVO TOPAC RH'}</div>
+                <div className="flex min-h-[330px] flex-col items-center justify-center px-3 py-10 text-center">
+                  {customTitle.trim() && <div className="break-words text-3xl font-black uppercase leading-tight md:text-5xl">{customTitle}</div>}
+                  {customText.trim() && <div className="mt-8 whitespace-pre-wrap break-words text-base font-semibold leading-relaxed md:text-xl">{customText}</div>}
+                  {!customReady && <div className="text-sm text-slate-400">A prévia aparece conforme você escreve.</div>}
+                </div>
+                <div className="border-t pt-3 text-center text-[10px] tracking-wide text-slate-500">{customFooter.trim() || 'ARQUIVO TOPAC RH'}</div>
               </div>
             </div>
           )}
 
           {mode === 'employee' && selectedEmployee && (
             <div className="grid gap-4 md:grid-cols-[1fr_280px]">
-              <div className="rounded-xl border bg-white p-6 text-slate-900 shadow-sm">
-                <div className="border-b-2 border-slate-800 pb-4 text-center"><p className="text-[10px] font-bold tracking-[0.28em] text-slate-500">TOPAC RH PRO</p><h3 className="mt-1 text-lg font-extrabold tracking-wide">CAPA PARA ARQUIVAR</h3></div>
+              <div className="rounded-xl border bg-white p-6 text-slate-950 shadow-sm">
+                <div className="border-b-2 border-slate-900 pb-4 text-center">
+                  <div className="text-[9px] font-bold tracking-[.22em] text-slate-500">TOPAC RH PRO</div>
+                  <div className="mt-1 text-sm font-extrabold tracking-wide">CAPA PARA ARQUIVAR</div>
+                </div>
                 <div className="flex min-h-40 items-center justify-center px-3 py-8"><div className="break-words text-center text-3xl font-black uppercase leading-tight md:text-5xl">{selectedEmployee.name}</div></div>
                 <div className="divide-y border-y text-sm">
                   {options.company && selectedCompany?.name && <PreviewRow label="EMPRESA" value={selectedCompany.name} />}
-                  {options.cargo && selectedEmployee.cargo && <PreviewRow label="CARGO / FUNÇÃO" value={selectedEmployee.cargo} />}
+                  {options.cargo && sanitizeCargoForArchiveCover(selectedEmployee.cargo) && <PreviewRow label="CARGO / FUNÇÃO" value={sanitizeCargoForArchiveCover(selectedEmployee.cargo)} />}
                   {options.admission && selectedEmployee.dataAdmissao && <PreviewRow label="ADMISSÃO" value={formatDateBR(selectedEmployee.dataAdmissao)} />}
                   {options.dismissal && dismissalDate && <PreviewRow label="DEMISSÃO" value={formatDateBR(dismissalDate)} />}
                 </div>
@@ -373,13 +387,10 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
 
           {mode !== 'employee' && mode !== 'custom' && (
             <div className="grid gap-4 md:grid-cols-[1fr_280px]">
-              <div className="rounded-xl border bg-white p-6 text-slate-900 shadow-sm">
-                <div className="border-b-2 border-slate-800 pb-4 text-center"><p className="text-[10px] font-bold tracking-[0.28em] text-slate-500">TOPAC RH PRO</p><h3 className="mt-1 text-lg font-extrabold tracking-wide">CAPA PARA ARQUIVAR</h3></div>
-                <div className="flex min-h-40 flex-col items-center justify-center px-3 py-8 text-center">
-                  <div className="text-5xl font-black">{targetEmployees.length}</div>
-                  <div className="mt-2 text-sm font-semibold uppercase tracking-wide">capa(s) no lote</div>
-                  <div className="mt-1 text-xs text-slate-500">uma página A4 por funcionário</div>
-                </div>
+              <div className="rounded-xl border bg-muted/20 p-5">
+                <div className="text-5xl font-black">{targetEmployees.length}</div>
+                <div className="mt-2 text-sm font-semibold uppercase tracking-wide">capa(s) no lote</div>
+                <div className="mt-1 text-xs text-slate-500">uma página A4 por funcionário</div>
               </div>
 
               <CoverOptionsPanel options={options} dismissalEnabled loadingEmployee={false} dismissalDate="" bulk toggleOption={toggleOption} />
@@ -388,8 +399,10 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>Fechar</Button>
-          <Button onClick={() => void printCover()} disabled={(mode === 'custom' ? !customReady : !targetEmployees.length) || loadingEmployee || printing}><Printer className="mr-2 h-4 w-4" /> {printing ? 'Preparando...' : mode !== 'custom' && targetEmployees.length > 1 ? `Imprimir ${targetEmployees.length} capas` : 'Imprimir / Salvar PDF'}</Button>
+          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={printing}>Fechar</Button>
+          <Button onClick={() => void printCover()} disabled={printing || (mode === 'employee' && !selectedEmployee) || (mode === 'company' && !targetEmployees.length) || (mode === 'all' && !targetEmployees.length) || (mode === 'custom' && !customReady)}>
+            <Printer className="mr-2 h-4 w-4" /> {printing ? 'Gerando...' : 'Imprimir / Salvar PDF'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -397,29 +410,40 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
 };
 
 const ModeButton = ({ active, icon: Icon, title, subtitle, onClick }: { active: boolean; icon: React.ElementType; title: string; subtitle: string; onClick: () => void }) => (
-  <button type="button" onClick={onClick} className={`rounded-xl border p-4 text-left transition-colors ${active ? 'border-primary bg-primary/10' : 'border-border bg-background hover:bg-muted/40'}`}>
-    <Icon className={`mb-2 h-5 w-5 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
-    <span className="block text-sm font-bold">{title}</span>
-    <span className="mt-0.5 block text-xs text-muted-foreground">{subtitle}</span>
+  <button type="button" onClick={onClick} className={`rounded-xl border p-3 text-left transition ${active ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border bg-muted/10 hover:bg-muted/20'}`}>
+    <Icon className={`mb-2 h-4 w-4 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
+    <div className="text-xs font-semibold">{title}</div>
+    <div className="mt-0.5 text-[10px] text-muted-foreground">{subtitle}</div>
   </button>
 );
 
-const PreviewRow = ({ label, value }: { label: string; value: string }) => <div className="grid grid-cols-[130px_1fr] gap-3 py-3"><span className="text-[10px] font-extrabold tracking-wide text-slate-500">{label}</span><strong className="text-base">{value}</strong></div>;
-
-const CoverOptionsPanel = ({ options, dismissalEnabled, loadingEmployee, dismissalDate, bulk, toggleOption }: { options: CoverOptions; dismissalEnabled: boolean; loadingEmployee: boolean; dismissalDate: string; bulk: boolean; toggleOption: (key: keyof CoverOptions) => void }) => (
-  <div className="space-y-3 rounded-xl border p-4">
-    <div><p className="text-sm font-semibold">Informações da capa</p><p className="text-xs text-muted-foreground">O nome sempre será impresso em destaque.</p></div>
-    <CoverCheck label="Empresa" checked={options.company} onClick={() => toggleOption('company')} />
-    <CoverCheck label="Cargo / Função" checked={options.cargo} onClick={() => toggleOption('cargo')} />
-    <CoverCheck label="Data de admissão" checked={options.admission} onClick={() => toggleOption('admission')} />
-    <CoverCheck label="Data de demissão" checked={options.dismissal} disabled={!dismissalEnabled || loadingEmployee} onClick={() => toggleOption('dismissal')} />
-    {bulk && <p className="text-xs text-muted-foreground">Na impressão em lote, a data de demissão aparece somente nas capas dos funcionários que possuem esse dado no RH.</p>}
-    {!bulk && loadingEmployee && <p className="text-xs text-muted-foreground">Conferindo desligamento...</p>}
-    {!bulk && !loadingEmployee && !dismissalDate && <p className="text-xs text-muted-foreground">Este funcionário não possui data de demissão cadastrada.</p>}
-    {!bulk && !!dismissalDate && <p className="text-xs text-muted-foreground">Demissão cadastrada: <strong>{formatDateBR(dismissalDate)}</strong>.</p>}
+const PreviewRow = ({ label, value }: { label: string; value: string }) => (
+  <div className="grid grid-cols-[130px_1fr] gap-3 py-3">
+    <div className="text-[9px] font-extrabold tracking-wide text-slate-500">{label}</div>
+    <div className="text-xs font-bold uppercase leading-snug">{value}</div>
   </div>
 );
 
-const CoverCheck = ({ label, checked, disabled, onClick }: { label: string; checked: boolean; disabled?: boolean; onClick: () => void }) => <button type="button" disabled={disabled} onClick={onClick} className="flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-45"><span className={`flex h-5 w-5 items-center justify-center rounded border ${checked ? 'border-primary bg-primary text-primary-foreground' : 'border-border'}`}>{checked ? '✓' : ''}</span><span>{label}</span></button>;
+const CoverOptionsPanel = ({ options, dismissalEnabled, loadingEmployee, dismissalDate, bulk, toggleOption }: { options: CoverOptions; dismissalEnabled: boolean; loadingEmployee: boolean; dismissalDate: string; bulk: boolean; toggleOption: (key: keyof CoverOptions) => void }) => (
+  <div className="rounded-xl border p-4">
+    <div className="text-xs font-semibold">Informações da capa</div>
+    <div className="mb-3 mt-0.5 text-[10px] text-muted-foreground">O nome sempre será impresso em destaque.</div>
+    <div className="space-y-2">
+      <OptionButton checked={options.company} label="Empresa" onClick={() => toggleOption('company')} />
+      <OptionButton checked={options.cargo} label="Cargo / Função" onClick={() => toggleOption('cargo')} />
+      <OptionButton checked={options.admission} label="Data de admissão" onClick={() => toggleOption('admission')} />
+      <OptionButton checked={options.dismissal} label="Data de demissão" onClick={() => toggleOption('dismissal')} disabled={!dismissalEnabled} />
+    </div>
+    {!bulk && loadingEmployee && <div className="mt-3 text-[10px] text-muted-foreground">Conferindo data de demissão...</div>}
+    {!bulk && !loadingEmployee && !dismissalDate && <div className="mt-3 text-[10px] text-muted-foreground">Este funcionário não possui data de demissão cadastrada.</div>}
+  </div>
+);
+
+const OptionButton = ({ checked, label, onClick, disabled }: { checked: boolean; label: string; onClick: () => void; disabled?: boolean }) => (
+  <button type="button" onClick={onClick} disabled={disabled} className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition ${disabled ? 'cursor-not-allowed opacity-40' : 'hover:bg-muted/20'}`}>
+    <span className={`flex h-4 w-4 items-center justify-center rounded border text-[10px] ${checked ? 'border-primary bg-primary text-primary-foreground' : 'border-border'}`}>{checked ? '✓' : ''}</span>
+    <span>{label}</span>
+  </button>
+);
 
 export default ArchiveCoverDialog;
