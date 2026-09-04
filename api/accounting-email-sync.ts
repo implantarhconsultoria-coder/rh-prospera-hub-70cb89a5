@@ -27,7 +27,7 @@ const logEvent = async (service: any, mensagemId: string, documentoId: string | 
 export default async function handler(req: any, res?: any) {
   if (!['GET', 'POST'].includes(String(req?.method || 'GET').toUpperCase())) return sendJson(res, { ok: false, error: 'method_not_allowed' }, 405);
   try {
-    const { service, user, mode } = await authorize(req);
+    const { service, mode } = await authorize(req);
     const providerStatus = accountingEmailProviderStatus();
     if (!providerStatus.configured) {
       return sendJson(res, { ok: false, error: 'accounting_email_not_configured', provider: providerStatus }, 409);
@@ -57,6 +57,8 @@ export default async function handler(req: any, res?: any) {
           metadata: {
             ...(email.metadata || {}),
             integration_mode: mode,
+            central_mode: 'PDF_COLLECTOR_ONLY',
+            automatic_employee_linking: false,
             attachments: email.attachments.map((attachment) => ({ name: attachment.name, content_type: attachment.contentType, size: attachment.size, pdf: isPdf(attachment.name, attachment.contentType) })),
           },
           processado_em: pdfParts.length ? null : new Date().toISOString(),
@@ -64,19 +66,23 @@ export default async function handler(req: any, res?: any) {
         if (messageError) throw messageError;
         result.created_messages += 1;
         result.ignored_attachments += email.attachments.length - pdfParts.length;
-        await logEvent(service, messageRow.id, null, 'EMAIL_RECEBIDO', { remetente: email.sender, assunto: email.subject, anexos: email.attachments.length, pdfs: pdfParts.length });
+        await logEvent(service, messageRow.id, null, 'EMAIL_RECEBIDO', { remetente: email.sender, assunto: email.subject, anexos: email.attachments.length, pdfs: pdfParts.length, mode: 'PDF_COLLECTOR_ONLY' });
 
         if (!pdfParts.length) {
           await logEvent(service, messageRow.id, null, 'EMAIL_IGNORADO_SEM_PDF', { reason: 'Nenhum anexo PDF encontrado.' });
           continue;
         }
 
+        let emailHadError = false;
+
         for (const attachment of pdfParts) {
           if (!attachment.bytes?.byteLength) {
+            emailHadError = true;
             result.errors.push(`${email.subject || email.providerMessageId} / ${attachment.name}: anexo PDF sem conteúdo.`);
             await logEvent(service, messageRow.id, null, 'ANEXO_PDF_ERRO', { arquivo: attachment.name, reason: 'pdf_without_bytes' });
             continue;
           }
+
           const sourceHash = sha256(attachment.bytes);
           const { data: prior, error: priorError } = await service.from('contabilidade_email_documentos')
             .select('id,storage_bucket,storage_path')
@@ -90,8 +96,8 @@ export default async function handler(req: any, res?: any) {
           let storageBucket = INBOX_BUCKET;
           let storagePath = '';
           let duplicateOf: string | null = null;
-          let status = 'RECEBIDO';
-          let reason: string | null = null;
+          let status = 'PROCESSADO';
+          let reason = 'PDF coletado do e-mail e disponibilizado na Central. Nenhum vínculo automático com funcionário ou módulo de RH foi realizado.';
 
           if (prior) {
             storageBucket = prior.storage_bucket;
@@ -122,20 +128,20 @@ export default async function handler(req: any, res?: any) {
           }).select('*').single();
           if (docError) throw docError;
           result.created_pdfs += 1;
-          await logEvent(service, messageRow.id, doc.id, status === 'DUPLICADO' ? 'ANEXO_DUPLICADO' : 'ANEXO_PDF_REGISTRADO', { arquivo: attachment.name, sha256: sourceHash, duplicate_of: duplicateOf });
+          await logEvent(service, messageRow.id, doc.id, status === 'DUPLICADO' ? 'ANEXO_DUPLICADO' : 'PDF_COLETADO', { arquivo: attachment.name, sha256: sourceHash, duplicate_of: duplicateOf, mode: 'PDF_COLLECTOR_ONLY' });
         }
 
-        const { data: originals } = await service.from('contabilidade_email_documentos').select('status').eq('mensagem_id', messageRow.id).is('parent_documento_id', null);
-        const statuses = (originals || []).map((row: any) => row.status);
-        if (statuses.length && statuses.every((status: string) => status === 'DUPLICADO')) {
-          await service.from('contabilidade_email_mensagens').update({ status: 'PROCESSADO', processado_em: new Date().toISOString() }).eq('id', messageRow.id);
-        }
+        await service.from('contabilidade_email_mensagens').update({
+          status: emailHadError ? 'ERRO_PROCESSAMENTO' : 'PROCESSADO',
+          processado_em: new Date().toISOString(),
+          erro: emailHadError ? 'Um ou mais PDFs não puderam ser coletados.' : null,
+        }).eq('id', messageRow.id);
       } catch (error: any) {
         result.errors.push(`${email.subject || email.providerMessageId}: ${String(error?.message || error)}`);
       }
     }
 
-    return sendJson(res, { ok: true, provider: providerStatus, result });
+    return sendJson(res, { ok: true, provider: providerStatus, mode: 'PDF_COLLECTOR_ONLY', result });
   } catch (error: any) {
     console.error('[accounting-email-sync]', error);
     return sendJson(res, { ok: false, error: String(error?.message || error), details: error?.details || null }, Number(error?.status || 500));
