@@ -26,3 +26,4 @@ if (changed) fs.writeFileSync(file, source, 'utf8');
 console.log('[archive-cover-dismissal-date] data manual liberada na capa para arquivar sem alterar o cadastro');
 
 await import('./fix-pre-cadastro-unified-docs-email-build.mjs');
+await import('./fix-admissional-email-template-build.mjs');
