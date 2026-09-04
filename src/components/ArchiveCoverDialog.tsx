@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Building2, FileArchive, Layers3, Printer, Search, UserRound } from 'lucide-react';
+import { Building2, FileArchive, Layers3, PencilLine, Printer, Search, UserRound } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -20,7 +20,7 @@ type CoverOptions = {
   dismissal: boolean;
 };
 
-type PrintMode = 'employee' | 'company' | 'all';
+type PrintMode = 'employee' | 'company' | 'all' | 'custom';
 
 const defaultOptions: CoverOptions = {
   company: true,
@@ -42,6 +42,8 @@ const escapeHtml = (value: unknown) => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
+const lightFieldClass = 'bg-white text-slate-950 placeholder:text-slate-500 caret-slate-950 dark:bg-white dark:text-slate-950 dark:placeholder:text-slate-500';
+
 const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenChange }) => {
   const { employees, companies } = useApp();
   const [mode, setMode] = useState<PrintMode>('employee');
@@ -52,6 +54,9 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
   const [loadingEmployee, setLoadingEmployee] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [options, setOptions] = useState<CoverOptions>(defaultOptions);
+  const [customTitle, setCustomTitle] = useState('');
+  const [customText, setCustomText] = useState('');
+  const [customFooter, setCustomFooter] = useState('');
 
   const availableEmployees = useMemo(() => employees
     .filter((employee) => String(employee.status || '').toLowerCase() !== 'excluido')
@@ -79,7 +84,8 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
     if (mode === 'company') return selectedCompanyId
       ? availableEmployees.filter((employee) => employee.companyId === selectedCompanyId)
       : [];
-    return availableEmployees;
+    if (mode === 'all') return availableEmployees;
+    return [];
   }, [availableEmployees, mode, selectedCompanyId, selectedEmployee]);
 
   const reset = () => {
@@ -91,6 +97,9 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
     setLoadingEmployee(false);
     setPrinting(false);
     setOptions(defaultOptions);
+    setCustomTitle('');
+    setCustomText('');
+    setCustomFooter('');
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -153,7 +162,52 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
     `;
   };
 
+  const printCustomCover = () => {
+    const title = customTitle.trim();
+    const text = customText.trim();
+    const footer = customFooter.trim();
+    if (!title && !text) {
+      toast.error('Escreva um título ou algum texto para gerar a capa.');
+      return;
+    }
+
+    const safeText = escapeHtml(text).replace(/\n/g, '<br />');
+    printInPage(`
+      <style>
+        @page { size: A4 portrait; margin: 0; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; background: #fff; }
+        .page { width: 210mm; min-height: 297mm; padding: 20mm 18mm 18mm; position: relative; }
+        .top { border-bottom: 2px solid #111827; padding-bottom: 7mm; text-align: center; }
+        .top small { display: block; font-size: 10pt; letter-spacing: 2.4px; font-weight: 700; color: #4b5563; }
+        .top h1 { margin: 4mm 0 0; font-size: 18pt; letter-spacing: 1.2px; }
+        .custom-wrap { min-height: 165mm; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18mm 6mm; text-align: center; }
+        .custom-title { margin: 0; max-width: 100%; font-size: 34pt; line-height: 1.1; font-weight: 900; text-transform: uppercase; overflow-wrap: anywhere; }
+        .custom-text { margin-top: 14mm; width: 100%; font-size: 17pt; line-height: 1.55; font-weight: 600; overflow-wrap: anywhere; white-space: normal; }
+        .footer { position: absolute; bottom: 16mm; left: 18mm; right: 18mm; text-align: center; color: #6b7280; font-size: 9pt; letter-spacing: .8px; }
+      </style>
+      <section class="page">
+        <div class="top"><small>TOPAC RH PRO</small><h1>CAPA PARA ARQUIVAR</h1></div>
+        <div class="custom-wrap">
+          ${title ? `<h2 class="custom-title">${escapeHtml(title)}</h2>` : ''}
+          ${text ? `<div class="custom-text">${safeText}</div>` : ''}
+        </div>
+        <div class="footer">${escapeHtml(footer || 'ARQUIVO TOPAC RH')}</div>
+      </section>
+    `, `Capa - ${title || 'Personalizada'}`);
+  };
+
   const printCover = async () => {
+    if (mode === 'custom') {
+      setPrinting(true);
+      try {
+        printCustomCover();
+      } finally {
+        setPrinting(false);
+      }
+      return;
+    }
+
     if (!targetEmployees.length) {
       if (mode === 'employee') return toast.error('Selecione um funcionário.');
       if (mode === 'company') return toast.error('Selecione uma empresa com funcionários cadastrados.');
@@ -215,6 +269,8 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
     }
   };
 
+  const customReady = Boolean(customTitle.trim() || customText.trim());
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
@@ -223,18 +279,19 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
         </DialogHeader>
 
         <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <ModeButton active={mode === 'employee'} icon={UserRound} title="Por funcionário" subtitle="Escolher uma pessoa" onClick={() => changeMode('employee')} />
             <ModeButton active={mode === 'company'} icon={Building2} title="Por empresa" subtitle="Uma capa para cada funcionário" onClick={() => changeMode('company')} />
             <ModeButton active={mode === 'all'} icon={Layers3} title="Todas" subtitle="Todos os funcionários do RH" onClick={() => changeMode('all')} />
+            <ModeButton active={mode === 'custom'} icon={PencilLine} title="Capa livre" subtitle="Escrever o que quiser" onClick={() => changeMode('custom')} />
           </div>
 
           {mode === 'employee' && (
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">Procurar funcionário</label>
               <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input className="pl-9" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedId(''); setDismissalDate(''); }} placeholder="Digite nome, CPF, cargo ou empresa" autoFocus />
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <Input className={`pl-9 ${lightFieldClass}`} value={query} onChange={(event) => { setQuery(event.target.value); setSelectedId(''); setDismissalDate(''); }} placeholder="Digite nome, CPF, cargo ou empresa" autoFocus />
               </div>
               {!selectedEmployee && candidates.length > 0 && (
                 <div className="max-h-56 overflow-y-auto rounded-lg border bg-background p-1">
@@ -250,7 +307,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
           {mode === 'company' && (
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground">Empresa</label>
-              <select value={selectedCompanyId} onChange={(event) => setSelectedCompanyId(event.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground">
+              <select value={selectedCompanyId} onChange={(event) => setSelectedCompanyId(event.target.value)} className={`h-10 w-full rounded-md border border-input px-3 text-sm ${lightFieldClass}`}>
                 <option value="">Selecione a empresa</option>
                 {sortedCompanies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
               </select>
@@ -262,6 +319,38 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
             <div className="rounded-xl border bg-muted/20 p-4">
               <p className="text-sm font-semibold">Impressão completa</p>
               <p className="mt-1 text-xs text-muted-foreground"><strong>{targetEmployees.length}</strong> funcionário(s) cadastrados no RH serão impressos em ordem alfabética, uma capa por página. Funcionários desligados permanecem porque o arquivo físico continua existindo.</p>
+            </div>
+          )}
+
+          {mode === 'custom' && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-4 rounded-xl border p-4">
+                <div>
+                  <p className="text-sm font-semibold">Capa personalizada</p>
+                  <p className="text-xs text-muted-foreground">Escreva livremente. Nada aqui altera cadastro ou salva informação no banco.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Título da capa</label>
+                  <Input className={lightFieldClass} value={customTitle} onChange={(event) => setCustomTitle(event.target.value)} placeholder="Ex.: DOCUMENTOS 2026" autoFocus />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Texto livre</label>
+                  <textarea value={customText} onChange={(event) => setCustomText(event.target.value)} placeholder="Escreva aqui qualquer informação que queira colocar na capa..." className={`min-h-44 w-full resize-y rounded-md border border-input px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${lightFieldClass}`} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Rodapé opcional</label>
+                  <Input className={lightFieldClass} value={customFooter} onChange={(event) => setCustomFooter(event.target.value)} placeholder="Ex.: ARQUIVO ADMINISTRATIVO" />
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-white p-6 text-slate-900 shadow-sm">
+                <div className="border-b-2 border-slate-800 pb-4 text-center"><p className="text-[10px] font-bold tracking-[0.28em] text-slate-500">TOPAC RH PRO</p><h3 className="mt-1 text-lg font-extrabold tracking-wide">CAPA PARA ARQUIVAR</h3></div>
+                <div className="flex min-h-64 flex-col items-center justify-center px-3 py-8 text-center">
+                  <div className="break-words text-3xl font-black uppercase leading-tight md:text-4xl">{customTitle || 'TÍTULO DA CAPA'}</div>
+                  <div className="mt-6 w-full whitespace-pre-wrap break-words text-base font-semibold leading-relaxed text-slate-700">{customText || 'Seu texto livre aparecerá aqui.'}</div>
+                </div>
+                <div className="border-t pt-3 text-center text-xs font-semibold tracking-wide text-slate-500">{customFooter || 'ARQUIVO TOPAC RH'}</div>
+              </div>
             </div>
           )}
 
@@ -282,7 +371,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
             </div>
           )}
 
-          {mode !== 'employee' && (
+          {mode !== 'employee' && mode !== 'custom' && (
             <div className="grid gap-4 md:grid-cols-[1fr_280px]">
               <div className="rounded-xl border bg-white p-6 text-slate-900 shadow-sm">
                 <div className="border-b-2 border-slate-800 pb-4 text-center"><p className="text-[10px] font-bold tracking-[0.28em] text-slate-500">TOPAC RH PRO</p><h3 className="mt-1 text-lg font-extrabold tracking-wide">CAPA PARA ARQUIVAR</h3></div>
@@ -300,7 +389,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>Fechar</Button>
-          <Button onClick={() => void printCover()} disabled={!targetEmployees.length || loadingEmployee || printing}><Printer className="mr-2 h-4 w-4" /> {printing ? 'Preparando...' : targetEmployees.length > 1 ? `Imprimir ${targetEmployees.length} capas` : 'Imprimir / Salvar PDF'}</Button>
+          <Button onClick={() => void printCover()} disabled={(mode === 'custom' ? !customReady : !targetEmployees.length) || loadingEmployee || printing}><Printer className="mr-2 h-4 w-4" /> {printing ? 'Preparando...' : mode !== 'custom' && targetEmployees.length > 1 ? `Imprimir ${targetEmployees.length} capas` : 'Imprimir / Salvar PDF'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
