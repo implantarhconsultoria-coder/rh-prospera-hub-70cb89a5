@@ -24,3 +24,5 @@ if (!source.includes('Data de demissão para esta capa')) {
 
 if (changed) fs.writeFileSync(file, source, 'utf8');
 console.log('[archive-cover-dismissal-date] data manual liberada na capa para arquivar sem alterar o cadastro');
+
+await import('./fix-pre-cadastro-unified-docs-email-build.mjs');
