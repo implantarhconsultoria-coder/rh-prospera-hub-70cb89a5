@@ -126,3 +126,4 @@ patchFile('src/pages/HistoricoPage.tsx', (input) => {
 
 console.log('[email-cc] CC obrigatório aplicado: adm.matriz@topac.com.br + robson@topac.com.br');
 await import('./fix-finance-current-banking-build.mjs');
+await import('./remove-lucilene-email-build.mjs');
