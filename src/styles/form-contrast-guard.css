@@ -1,0 +1,53 @@
+.topac-light-control,
+input.topac-light-control,
+textarea.topac-light-control,
+select.topac-light-control,
+[role="combobox"].topac-light-control,
+[contenteditable="true"].topac-light-control {
+  color: #0f172a !important;
+  caret-color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+.topac-light-control::placeholder,
+input.topac-light-control::placeholder,
+textarea.topac-light-control::placeholder {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
+  opacity: 1 !important;
+}
+
+select.topac-light-control option,
+.topac-light-control option {
+  color: #0f172a !important;
+  background: #ffffff !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+input.topac-light-control:-webkit-autofill,
+input.topac-light-control:-webkit-autofill:hover,
+input.topac-light-control:-webkit-autofill:focus,
+textarea.topac-light-control:-webkit-autofill,
+select.topac-light-control:-webkit-autofill {
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+}
+
+input.topac-light-control[type="date"] {
+  color-scheme: light !important;
+}
+
+input.topac-light-control[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: .8;
+  filter: none !important;
+}
+
+input.topac-light-control:disabled,
+textarea.topac-light-control:disabled,
+select.topac-light-control:disabled,
+input.topac-light-control[readonly],
+textarea.topac-light-control[readonly] {
+  color: #334155 !important;
+  -webkit-text-fill-color: #334155 !important;
+}
