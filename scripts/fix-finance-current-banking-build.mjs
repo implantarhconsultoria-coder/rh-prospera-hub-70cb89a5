@@ -107,4 +107,30 @@ if (!source.includes('Enviar cadastro bancário atual')) {
 }
 
 if (changed) fs.writeFileSync(file, source, 'utf8');
-console.log('[finance-current-banking] leitura unificada: colunas novas + observacoes.dados_bancarios legado; envio e comparacao alinhados com a ficha');
+
+// Mantem conta + digito consistentes tambem na ficha/edicao do funcionario.
+const databaseFile = 'src/types/database.ts';
+if (fs.existsSync(databaseFile)) {
+  let databaseSource = fs.readFileSync(databaseFile, 'utf8');
+  let databaseChanged = false;
+
+  const oldDisplay = "    conta: cleanNullableText(row.conta) || notes.banking.conta || '',";
+  const newDisplay = "    conta: cleanNullableText(row.conta) ? (cleanNullableText(row.conta_digito) && !cleanNullableText(row.conta).endsWith(`-${cleanNullableText(row.conta_digito)}`) ? `${cleanNullableText(row.conta)}-${cleanNullableText(row.conta_digito)}` : cleanNullableText(row.conta)) : notes.banking.conta || '',";
+  if (!databaseSource.includes(newDisplay)) {
+    if (!databaseSource.includes(oldDisplay)) throw new Error('[finance-current-banking] leitura de conta no mapEmployee nao encontrada');
+    databaseSource = databaseSource.replace(oldDisplay, newDisplay);
+    databaseChanged = true;
+  }
+
+  const bankingSaveMarker = "  if (data.endereco !== undefined) row.endereco = data.endereco;";
+  const bankingSaveBlock = `${bankingSaveMarker}\n  if (data.pix !== undefined) row.pix = data.pix;\n  if (data.banco !== undefined) row.banco = data.banco;\n  if (data.agencia !== undefined) row.agencia = data.agencia;\n  if (data.conta !== undefined) {\n    const rawConta = String(data.conta || '').trim();\n    const match = rawConta.match(/^(.*?)[-\\s]+([0-9A-Za-z])$/);\n    row.conta = match ? match[1].trim() : rawConta;\n    row.conta_digito = match ? match[2].trim() : null;\n  }`;
+  if (!databaseSource.includes('row.conta_digito = match ? match[2].trim() : null;')) {
+    if (!databaseSource.includes(bankingSaveMarker)) throw new Error('[finance-current-banking] ponto de persistencia bancaria nao encontrado');
+    databaseSource = databaseSource.replace(bankingSaveMarker, bankingSaveBlock);
+    databaseChanged = true;
+  }
+
+  if (databaseChanged) fs.writeFileSync(databaseFile, databaseSource, 'utf8');
+}
+
+console.log('[finance-current-banking] leitura unificada + conta/digito preservados na ficha e na edicao do funcionario');
