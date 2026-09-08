@@ -1,19 +1,64 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, ExternalLink, Fuel, Printer, RefreshCw, Route, ShieldCheck, Timer, Users, Wrench } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import {
+  AlertTriangle, Building2, CheckCircle2, Clock3, ExternalLink, Fuel, Gauge,
+  Loader2, LogIn, Printer, RefreshCw, Route, Timer, Users, Wrench,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import { toast } from 'sonner';
 
-const todayLocal = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const TZ = 'America/Sao_Paulo';
+const todayLocal = () => new Date().toLocaleDateString('en-CA', { timeZone: TZ });
 const monthStart = () => `${todayLocal().slice(0, 7)}-01`;
+const money = (value?: number | null) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const numberBr = (value?: number | null) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR', { timeZone: TZ, dateStyle: 'short', timeStyle: 'short' }) : 'Nunca';
+const onlyTime = (value?: string | null) => value ? String(value).slice(0, 5) : '—';
+const dateBr = (value?: string | null) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '—';
+const duration = (minutes?: number | null) => {
+  const total = Math.max(0, Number(minutes || 0));
+  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}min`;
+};
 
-type Companion = { id: string; acompanhante_id: string; acompanhante_nome: string };
+type Tab = 'ponto' | 'abastecimento' | 'km' | 'fechamento';
+
+type DashboardStats = {
+  mecanicos: number;
+  online: number;
+  ponto_hoje: number;
+  ponto_aberto: number;
+  abastecimentos_hoje: number;
+  abastecimentos_pendentes: number;
+  km_total_hoje: number;
+  km_abertos: number;
+  fechamentos_completos: number;
+  fechamentos_pendentes: number;
+};
+
+type MecanicoRow = {
+  id: string;
+  funcionario_id?: string | null;
+  nome: string;
+  empresa: string;
+  filial?: string | null;
+  funcao?: string | null;
+  liberado: boolean;
+  online: boolean;
+  acessou_hoje: boolean;
+  ultimo_acesso_em?: string | null;
+  ponto: { batidas: number; entrada?: string | null; almoco_inicio?: string | null; almoco_fim?: string | null; saida?: string | null; status: string };
+  abastecimento: { hoje: number; valor: number; litros: number; pendentes: number; ultimo_em?: string | null };
+  km: { placa?: string | null; veiculo?: string | null; saida?: number | null; chegada?: number | null; total: number; status: string };
+  fechamento: { status: string };
+};
+
+type DashboardResponse = { ok?: boolean; error?: string; stats?: DashboardStats; mecanicos?: MecanicoRow[] };
+
 type FuelAuthorization = {
   id: string;
-  app_request_id: string;
   funcionario_nome: string;
   empresa_nome?: string | null;
   filial?: string | null;
@@ -21,21 +66,11 @@ type FuelAuthorization = {
   combustivel?: string | null;
   posto_nome?: string | null;
   solicitado_em: string;
-  status: 'pendente' | 'autorizado' | 'negado' | 'concluido';
-  categoria: 'Abastecimento Normal' | 'Abastecimento Viagem';
-  fora_expediente: boolean;
-  fim_semana: boolean;
-  tipo_hora_extra?: 'he50' | 'he100' | null;
-  hora_extra_inicio?: string | null;
-  hora_extra_fim?: string | null;
-  hora_extra_minutos: number;
-  autorizado_por_nome?: string | null;
-  abastecimento_acompanhantes?: Companion[];
+  status: string;
 };
 
 type ClosedOperation = {
   id: string;
-  app_request_id?: string | null;
   mecanico_nome: string;
   empresa?: string | null;
   filial?: string | null;
@@ -48,369 +83,207 @@ type ClosedOperation = {
   posto_nome?: string | null;
   categoria_operacional?: string | null;
   fim_semana: boolean;
-  fora_expediente: boolean;
   hora_extra_minutos: number;
-  acompanhantes: Array<{ id?: string; nome?: string }>;
-  status: string;
+  acompanhantes: Array<{ nome?: string }>;
 };
 
-type MecanicoAccess = {
-  id: string;
-  nome: string;
-  empresa?: string | null;
-  filial?: string | null;
-  funcao?: string | null;
-  pin?: string | null;
-  status?: string | null;
-  acesso_liberado?: boolean | null;
-  ativo?: boolean | null;
+const emptyStats: DashboardStats = {
+  mecanicos: 0, online: 0, ponto_hoje: 0, ponto_aberto: 0, abastecimentos_hoje: 0,
+  abastecimentos_pendentes: 0, km_total_hoje: 0, km_abertos: 0,
+  fechamentos_completos: 0, fechamentos_pendentes: 0,
 };
 
-const dateTime = (value?: string | null) => value
-  ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })
-  : '—';
-const dateBr = (value?: string | null) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('pt-BR') : '—';
-const money = (value?: number | null) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const duration = (minutes?: number | null) => {
-  const value = Math.max(0, Number(minutes || 0));
-  const hours = Math.floor(value / 60);
-  const mins = value % 60;
-  return hours ? `${hours}h ${String(mins).padStart(2, '0')}min` : `${mins}min`;
-};
-const companionNames = (items?: Array<{ nome?: string }> | null) => items?.map((item) => item.nome).filter(Boolean).join(' · ') || '—';
+function StatusDot({ ok }: { ok: boolean }) {
+  return <span className={`inline-block h-2 w-2 rounded-full ${ok ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.75)]' : 'bg-zinc-600'}`} />;
+}
 
-function MecanicosDirectory() {
-  const { userRoles } = useApp();
-  const isAdmin = userRoles.includes('admin');
-  const [rows, setRows] = useState<MecanicoAccess[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!isAdmin) return;
-    setLoading(true);
-    const { data, error } = await (supabase as any)
-      .from('acessos_externos')
-      .select('id,nome,empresa,filial,funcao,pin,status,acesso_liberado,ativo')
-      .eq('modulo', 'mecanico')
-      .order('nome', { ascending: true });
-    if (error) toast.error('Falha ao carregar acessos dos mecânicos: ' + error.message);
-    else setRows((data || []) as MecanicoAccess[]);
-    setLoading(false);
-  }, [isAdmin]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  if (!isAdmin) return null;
-
-  const ativos = rows.filter((row) => row.status === 'ativo' && row.acesso_liberado !== false && row.ativo !== false);
-  const base = typeof window !== 'undefined' ? window.location.origin : 'https://topacrh.pro';
-  const loginUrl = `${base}/mecanicos`;
-
-  const copy = async (value: string, message: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success(message);
-    } catch {
-      toast.error('Não foi possível copiar o link.');
-    }
-  };
-
+function TopCard({ active, title, value, subtitle, icon: Icon, onClick }: { active: boolean; title: string; value: string | number; subtitle: string; icon: typeof Clock3; onClick: () => void }) {
   return (
-    <section className="space-y-4 rounded-xl border bg-card p-4 no-print">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <button onClick={onClick} className={`rounded-xl border p-4 text-left transition ${active ? 'border-amber-400/60 bg-amber-400/5 shadow-[0_0_22px_rgba(251,191,36,.08)]' : 'border-fuchsia-500/20 bg-[#08080e] hover:border-fuchsia-500/40'}`}>
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-primary" />
-            <h1 className="text-lg font-semibold">App Mecânicos — Controle Oficial</h1>
-            <Badge variant="secondary">{ativos.length} ativos</Badge>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">Acesso e testes ligados diretamente ao TOPAC RH PRO / Supabase. Sem AppDeploy.</p>
+          <p className="text-[10px] font-black uppercase tracking-[.14em] text-zinc-500">{title}</p>
+          <strong className="mt-2 block text-2xl font-black text-amber-400">{value}</strong>
+          <span className="mt-1 block text-[11px] text-zinc-500">{subtitle}</span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Atualizar
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => copy(loginUrl, 'Link dos mecânicos copiado.')}>
-            <Copy className="mr-2 h-4 w-4" />Copiar login
-          </Button>
-          <Button size="sm" asChild>
-            <a href="/mecanicos" target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Abrir login</a>
-          </Button>
-        </div>
+        <span className={`grid h-10 w-10 place-items-center rounded-xl border ${active ? 'border-amber-400/30 bg-amber-400/10 text-amber-400' : 'border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-400'}`}><Icon className="h-5 w-5" /></span>
       </div>
-
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
-        <div className="flex items-start gap-2">
-          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <div>
-            <strong>Login oficial dos mecânicos:</strong> <span className="font-mono">{loginUrl}</span>
-            <p className="mt-1 text-muted-foreground">O mecânico digita somente os 4 últimos números do CPF. Os botões “Testar perfil” abaixo são internos e abrem o perfil diretamente para conferência administrativa.</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="bg-muted/50 text-xs">
-            <tr>
-              <th className="p-3 text-left">Mecânico</th>
-              <th className="p-3 text-left">Empresa / filial</th>
-              <th className="p-3 text-left">Função</th>
-              <th className="p-3 text-left">PIN</th>
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-right">Teste administrativo</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {rows.map((row) => {
-              const active = row.status === 'ativo' && row.acesso_liberado !== false && row.ativo !== false;
-              const testUrl = `${base}/app-mecanico/${row.id}?modo=teste-admin&build=20260908-mecanicos-oficial-v2`;
-              return (
-                <tr key={row.id}>
-                  <td className="p-3 font-semibold">{row.nome}</td>
-                  <td className="p-3 text-xs"><strong>{row.empresa || '—'}</strong><span className="block text-muted-foreground">{row.filial || '—'}</span></td>
-                  <td className="p-3 text-xs">{row.funcao || '—'}</td>
-                  <td className="p-3"><span className="rounded-md bg-muted px-2 py-1 font-mono font-bold tracking-widest">{row.pin || '—'}</span></td>
-                  <td className="p-3"><Badge variant={active ? 'secondary' : 'destructive'}>{active ? 'Ativo' : 'Bloqueado'}</Badge></td>
-                  <td className="p-3">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => copy(testUrl, `Link de teste de ${row.nome} copiado.`)}><Copy className="mr-2 h-4 w-4" />Copiar</Button>
-                      <Button size="sm" asChild><a href={testUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Testar perfil</a></Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {!rows.length && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum acesso de mecânico encontrado.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <p className="text-[11px] text-muted-foreground">Links diretos de teste usam o ID interno do acesso e são destinados somente à administração. Não compartilhar com terceiros.</p>
-    </section>
+    </button>
   );
 }
 
-function AuthorizationCenter() {
-  const { userRoles } = useApp();
-  const isAdmin = userRoles.includes('admin');
-  const [rows, setRows] = useState<FuelAuthorization[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [acting, setActing] = useState<string>('');
+function AccessBadge({ row }: { row: MecanicoRow }) {
+  if (!row.liberado) return <Badge variant="destructive">Bloqueado</Badge>;
+  if (row.online) return <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/10"><StatusDot ok />&nbsp; Online</Badge>;
+  if (row.acessou_hoje) return <Badge variant="outline" className="border-blue-500/30 text-blue-400">Acessou hoje</Badge>;
+  return <Badge variant="outline" className="text-zinc-500">Offline</Badge>;
+}
 
-  const load = useCallback(async () => {
-    if (!isAdmin) return;
-    setLoading(true);
-    const { data, error } = await (supabase as any)
-      .from('abastecimento_autorizacoes')
-      .select('*, abastecimento_acompanhantes(id, acompanhante_id, acompanhante_nome)')
-      .order('solicitado_em', { ascending: false })
-      .limit(80);
-    if (error) toast.error('Falha ao carregar autorizações: ' + error.message);
-    else setRows((data || []) as FuelAuthorization[]);
-    setLoading(false);
-  }, [isAdmin]);
+function MiniStatus({ label, value, tone = 'text-zinc-300' }: { label: string; value: string; tone?: string }) {
+  return <div className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-2"><span className="block text-[8px] font-bold uppercase tracking-wider text-zinc-600">{label}</span><strong className={`mt-1 block truncate text-[11px] ${tone}`}>{value}</strong></div>;
+}
 
-  useEffect(() => {
-    load();
-    if (!isAdmin) return;
-    const timer = window.setInterval(load, 15000);
-    return () => window.clearInterval(timer);
-  }, [load, isAdmin]);
-
-  const decide = async (row: FuelAuthorization, decision: 'autorizar' | 'negar') => {
-    if (!isAdmin) return;
-    setActing(row.id);
-    try {
-      const { data, error } = await (supabase as any).rpc('topac_decidir_abastecimento', {
-        p_id: row.id,
-        p_decisao: decision,
-      });
-      if (error) throw error;
-      const decided = Array.isArray(data) ? data[0] : data;
-      if (decision === 'autorizar') {
-        toast.success(decided?.categoria === 'Abastecimento Viagem'
-          ? `Autorizado como Abastecimento Viagem${decided?.tipo_hora_extra ? ` · ${String(decided.tipo_hora_extra).toUpperCase()} iniciada` : ''}.`
-          : 'Abastecimento autorizado.');
-      } else toast.success('Solicitação negada.');
-      await load();
-    } catch (error: any) {
-      toast.error(error?.message || 'Não foi possível registrar a decisão.');
-    } finally {
-      setActing('');
-    }
-  };
-
-  const pending = useMemo(() => rows.filter((row) => row.status === 'pendente'), [rows]);
-  const closed = useMemo(() => rows.filter((row) => row.status !== 'pendente').slice(0, 24), [rows]);
-
-  if (!isAdmin) return null;
+function MechanicCard({ row, tab }: { row: MecanicoRow; tab: Tab }) {
+  const initials = row.nome.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+  const pointTone = row.ponto.status === 'fechado' ? 'text-emerald-400' : row.ponto.status === 'aberto' ? 'text-amber-400' : 'text-zinc-500';
+  const closeTone = row.fechamento.status === 'completo' ? 'text-emerald-400' : row.fechamento.status === 'pendente' ? 'text-amber-400' : 'text-zinc-500';
 
   return (
-    <section className="space-y-3 rounded-xl border bg-card p-4 no-print">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Fuel className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Autorizações de abastecimento</h2>
-            {pending.length > 0 && <Badge variant="destructive">{pending.length} pendente(s)</Badge>}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">O horário da autorização define automaticamente Viagem e o início da Hora Extra.</p>
+    <article className="overflow-hidden rounded-xl border border-fuchsia-500/15 bg-[#07070d] shadow-[inset_0_0_35px_rgba(168,85,247,.025)]">
+      <div className="flex items-start gap-3 border-b border-white/5 p-3.5">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-xs font-black text-fuchsia-300">{initials}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2"><h3 className="truncate text-sm font-black text-white">{row.nome}</h3><AccessBadge row={row} /></div>
+          <p className="mt-0.5 truncate text-[10px] text-zinc-500">{row.funcao || 'Mecânico'} · {row.filial || row.empresa}</p>
+          <p className="mt-1 flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
-        </Button>
       </div>
 
-      {pending.length > 0 ? (
-        <div className="grid gap-3 xl:grid-cols-2">
-          {pending.map((row) => (
-            <div key={row.id} className="rounded-xl border bg-background p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{row.funcionario_nome}</p>
-                  <p className="text-xs text-muted-foreground">{row.empresa_nome || 'Empresa não identificada'} · {row.filial || 'Unidade'}</p>
-                </div>
-                <Badge variant="outline">Pendente</Badge>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <span><strong>Veículo:</strong> {row.placa || '—'}</span>
-                <span><strong>Combustível:</strong> {row.combustivel || '—'}</span>
-                <span className="col-span-2"><strong>Posto:</strong> {row.posto_nome || '—'}</span>
-                <span className="col-span-2"><strong>Solicitado:</strong> {dateTime(row.solicitado_em)}</span>
-                {(row.abastecimento_acompanhantes?.length || 0) > 0 && (
-                  <span className="col-span-2"><strong>Acompanhante(s):</strong> {row.abastecimento_acompanhantes!.map((item) => item.acompanhante_nome).join(' · ')}</span>
-                )}
-              </div>
-              <div className="mt-4 flex gap-2">
-                <Button variant="destructive" size="sm" disabled={acting === row.id} onClick={() => decide(row, 'negar')}>Negar</Button>
-                <Button size="sm" disabled={acting === row.id} onClick={() => decide(row, 'autorizar')}>Autorizar abastecimento</Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nenhuma solicitação aguardando autorização.</p>}
+      <div className="grid grid-cols-4 gap-1.5 p-2.5">
+        <MiniStatus label="Ponto" value={row.ponto.status === 'fechado' ? 'Fechado' : row.ponto.status === 'aberto' ? 'Em jornada' : 'Não bateu'} tone={pointTone} />
+        <MiniStatus label="Abast." value={row.abastecimento.pendentes ? `${row.abastecimento.pendentes} pend.` : row.abastecimento.hoje ? `${row.abastecimento.hoje} hoje` : 'Nenhum'} tone={row.abastecimento.pendentes ? 'text-amber-400' : row.abastecimento.hoje ? 'text-emerald-400' : 'text-zinc-500'} />
+        <MiniStatus label="KM" value={row.km.placa ? `${numberBr(row.km.total)} km` : 'Sem registro'} tone={row.km.status === 'aberto' ? 'text-amber-400' : row.km.placa ? 'text-zinc-300' : 'text-zinc-500'} />
+        <MiniStatus label="Fech." value={row.fechamento.status === 'completo' ? 'Completo' : row.fechamento.status === 'pendente' ? 'Pendente' : 'Não iniciou'} tone={closeTone} />
+      </div>
 
-      {closed.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border">
-          <table className="w-full min-w-[950px] text-sm">
-            <thead className="bg-muted/50 text-xs">
-              <tr><th className="p-3 text-left">Mecânico</th><th className="p-3 text-left">Operação</th><th className="p-3 text-left">Categoria</th><th className="p-3 text-left">Hora Extra</th><th className="p-3 text-left">Acompanhantes</th><th className="p-3 text-left">Status</th></tr>
-            </thead>
-            <tbody className="divide-y">
-              {closed.map((row) => (
-                <tr key={row.id}>
-                  <td className="p-3"><strong>{row.funcionario_nome}</strong><span className="block text-xs text-muted-foreground">{row.empresa_nome}</span></td>
-                  <td className="p-3 text-xs">{row.placa || '—'} · {row.combustivel || '—'}<span className="block text-muted-foreground">{dateTime(row.solicitado_em)}</span></td>
-                  <td className="p-3"><Badge variant={row.categoria === 'Abastecimento Viagem' ? 'destructive' : 'secondary'}>{row.categoria}</Badge>{row.fim_semana && <span className="ml-2 text-xs">Fim de semana</span>}</td>
-                  <td className="p-3 text-xs">{row.tipo_hora_extra ? <><strong>{row.tipo_hora_extra.toUpperCase()}</strong><span className="block">{duration(row.hora_extra_minutos)}</span></> : 'Sem HE automática'}</td>
-                  <td className="p-3 text-xs">{row.abastecimento_acompanhantes?.length ? row.abastecimento_acompanhantes.map((item) => item.acompanhante_nome).join(' · ') : '—'}</td>
-                  <td className="p-3"><Badge variant="outline">{row.status}</Badge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="border-t border-white/5 px-3.5 py-3 text-xs">
+        {tab === 'ponto' && (
+          <div className="grid grid-cols-4 gap-2 text-center"><div><span className="block text-[9px] text-zinc-600">Entrada</span><strong className="text-emerald-400">{onlyTime(row.ponto.entrada)}</strong></div><div><span className="block text-[9px] text-zinc-600">Almoço</span><strong className="text-zinc-300">{onlyTime(row.ponto.almoco_inicio)}</strong></div><div><span className="block text-[9px] text-zinc-600">Retorno</span><strong className="text-zinc-300">{onlyTime(row.ponto.almoco_fim)}</strong></div><div><span className="block text-[9px] text-zinc-600">Saída</span><strong className={row.ponto.saida ? 'text-emerald-400' : 'text-amber-400'}>{onlyTime(row.ponto.saida)}</strong></div></div>
+        )}
+        {tab === 'abastecimento' && (
+          <div className="grid grid-cols-3 gap-2"><div><span className="block text-[9px] text-zinc-600">Hoje</span><strong className="text-amber-400">{row.abastecimento.hoje} registro(s)</strong></div><div><span className="block text-[9px] text-zinc-600">Litros</span><strong>{numberBr(row.abastecimento.litros)} L</strong></div><div><span className="block text-[9px] text-zinc-600">Valor</span><strong>{money(row.abastecimento.valor)}</strong></div></div>
+        )}
+        {tab === 'km' && (
+          <div className="grid grid-cols-3 gap-2"><div><span className="block text-[9px] text-zinc-600">Veículo</span><strong className="text-fuchsia-300">{row.km.placa || '—'}</strong></div><div><span className="block text-[9px] text-zinc-600">Saída / chegada</span><strong>{row.km.saida ?? '—'} / {row.km.chegada ?? '—'}</strong></div><div><span className="block text-[9px] text-zinc-600">Rodado</span><strong className="text-amber-400">{numberBr(row.km.total)} km</strong></div></div>
+        )}
+        {tab === 'fechamento' && (
+          <div className="flex items-center justify-between gap-3"><div><span className="block text-[9px] text-zinc-600">Situação de hoje</span><strong className={closeTone}>{row.fechamento.status === 'completo' ? 'Jornada fechada' : row.fechamento.status === 'pendente' ? 'Aguardando saída' : 'Sem jornada iniciada'}</strong></div><div className="text-right"><span className="block text-[9px] text-zinc-600">Batidas</span><strong>{row.ponto.batidas || 0}</strong></div></div>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function PendingFuelAuthorizations({ rows, acting, decide }: { rows: FuelAuthorization[]; acting: string; decide: (row: FuelAuthorization, decision: 'autorizar' | 'negar') => Promise<void> }) {
+  if (!rows.length) return <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-400"><CheckCircle2 className="mr-2 inline h-4 w-4" />Nenhuma autorização de abastecimento pendente.</div>;
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-400" /><h2 className="text-sm font-black text-white">Autorizações pendentes</h2><Badge variant="destructive">{rows.length}</Badge></div>
+      <div className="grid gap-2 xl:grid-cols-2">
+        {rows.map((row) => <div key={row.id} className="rounded-xl border border-amber-500/20 bg-[#08080e] p-3"><div className="flex items-start justify-between gap-2"><div><strong className="text-sm text-white">{row.funcionario_nome}</strong><p className="text-[10px] text-zinc-500">{row.empresa_nome} · {row.filial}</p></div><span className="text-[10px] text-zinc-500">{dateTime(row.solicitado_em)}</span></div><div className="mt-2 text-xs text-zinc-400">{row.placa || 'Sem placa'} · {row.combustivel || 'Combustível'} · {row.posto_nome || 'Posto'}</div><div className="mt-3 flex gap-2"><Button size="sm" variant="destructive" disabled={acting === row.id} onClick={() => void decide(row, 'negar')}>Negar</Button><Button size="sm" disabled={acting === row.id} onClick={() => void decide(row, 'autorizar')}>Autorizar</Button></div></div>)}
+      </div>
     </section>
   );
 }
 
 function OperationalClosingReport() {
-  const { userRoles } = useApp();
-  const isAdmin = userRoles.includes('admin');
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayLocal());
   const [rows, setRows] = useState<ClosedOperation[]>([]);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!isAdmin || !from || !to) return;
     setLoading(true);
-    const { data, error } = await (supabase as any)
-      .from('abastecimentos')
-      .select('id,app_request_id,mecanico_nome,empresa,filial,placa,data,hora,combustivel,valor,litros,posto_nome,categoria_operacional,fim_semana,fora_expediente,hora_extra_minutos,acompanhantes,status,excluido')
-      .gte('data', from)
-      .lte('data', to)
-      .eq('excluido', false)
-      .order('data', { ascending: true })
-      .order('hora', { ascending: true });
+    const { data, error } = await (supabase as any).from('abastecimentos').select('id,mecanico_nome,empresa,filial,placa,data,hora,combustivel,valor,litros,posto_nome,categoria_operacional,fim_semana,hora_extra_minutos,acompanhantes').gte('data', from).lte('data', to).eq('excluido', false).order('data', { ascending: true }).order('hora', { ascending: true });
     if (error) toast.error('Falha ao carregar fechamento operacional: ' + error.message);
     else setRows((data || []) as ClosedOperation[]);
     setLoading(false);
-  }, [isAdmin, from, to]);
+  }, [from, to]);
 
-  useEffect(() => { load(); }, [load]);
-
-  const travelRows = rows.filter((row) => row.categoria_operacional === 'Abastecimento Viagem');
-  const overtimeMinutes = rows.reduce((sum, row) => sum + Number(row.hora_extra_minutos || 0), 0);
+  useEffect(() => { void load(); }, [load]);
   const total = rows.reduce((sum, row) => sum + Number(row.valor || 0), 0);
-  const uniqueCompanions = new Set(rows.flatMap((row) => (row.acompanhantes || []).map((item) => item.nome).filter(Boolean)));
-
-  if (!isAdmin) return null;
+  const overtime = rows.reduce((sum, row) => sum + Number(row.hora_extra_minutos || 0), 0);
+  const trips = rows.filter((row) => row.categoria_operacional === 'Abastecimento Viagem').length;
 
   return (
-    <section id="operational-close-print" className="space-y-4 rounded-xl border bg-card p-4">
-      <style>{`@media print{body *{visibility:hidden!important}#operational-close-print,#operational-close-print *{visibility:visible!important}#operational-close-print{position:absolute;left:0;top:0;width:100%;background:#fff!important;color:#000!important;padding:8mm!important;border:0!important}#operational-close-print .no-print{display:none!important}#operational-close-print table{font-size:9px!important}#operational-close-print th,#operational-close-print td{color:#000!important;border-color:#bbb!important}}`}</style>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2"><Route className="h-5 w-5 text-primary" /><h2 className="font-semibold">Relatório de Fechamento Operacional</h2></div>
-          <p className="mt-1 text-xs text-muted-foreground">Abastecimento, viagem, hora extra e acompanhantes consolidados para RH.</p>
-        </div>
-        <div className="no-print flex flex-wrap items-end gap-2">
-          <label className="text-xs text-muted-foreground">De<Input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mt-1 w-36" /></label>
-          <label className="text-xs text-muted-foreground">Até<Input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} className="mt-1 w-36" /></label>
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Atualizar</Button>
-          <Button size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />Imprimir / Salvar PDF</Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-        <div className="rounded-lg border p-3"><span className="block text-xs text-muted-foreground">Operações</span><strong className="text-xl">{rows.length}</strong></div>
-        <div className="rounded-lg border p-3"><span className="block text-xs text-muted-foreground">Viagens</span><strong className="text-xl">{travelRows.length}</strong></div>
-        <div className="rounded-lg border p-3"><span className="block text-xs text-muted-foreground">Hora Extra</span><strong className="text-xl">{duration(overtimeMinutes)}</strong></div>
-        <div className="rounded-lg border p-3"><span className="block text-xs text-muted-foreground">Acompanhantes</span><strong className="text-xl">{uniqueCompanions.size}</strong></div>
-        <div className="rounded-lg border p-3"><span className="block text-xs text-muted-foreground">Abastecimento</span><strong className="text-xl">{money(total)}</strong></div>
-      </div>
-
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full min-w-[1200px] text-xs">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="p-2 text-left">Data / Hora</th><th className="p-2 text-left">Empresa</th><th className="p-2 text-left">Mecânico</th><th className="p-2 text-left">Veículo</th><th className="p-2 text-left">Abastecimento</th><th className="p-2 text-left">Categoria</th><th className="p-2 text-left">HE automática</th><th className="p-2 text-left">Acompanhantes</th><th className="p-2 text-right">Valor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {rows.map((row) => {
-              const heType = row.hora_extra_minutos > 0 ? (row.fim_semana ? 'HE100' : 'HE50') : null;
-              return (
-                <tr key={row.id}>
-                  <td className="p-2 whitespace-nowrap">{dateBr(row.data)} · {String(row.hora || '').slice(0, 5)}</td>
-                  <td className="p-2"><strong>{row.empresa || '—'}</strong><span className="block text-muted-foreground">{row.filial || ''}</span></td>
-                  <td className="p-2 font-medium">{row.mecanico_nome}</td>
-                  <td className="p-2">{row.placa || '—'}</td>
-                  <td className="p-2">{row.combustivel || '—'} · {Number(row.litros || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} L<span className="block text-muted-foreground">{row.posto_nome || '—'}</span></td>
-                  <td className="p-2"><Badge variant={row.categoria_operacional === 'Abastecimento Viagem' ? 'destructive' : 'secondary'}>{row.categoria_operacional || 'Abastecimento Normal'}</Badge>{row.fim_semana && <span className="block mt-1">Fim de semana</span>}</td>
-                  <td className="p-2">{heType ? <><strong>{heType}</strong><span className="block">{duration(row.hora_extra_minutos)}</span><span className="block text-muted-foreground">Lançada na folha</span></> : '—'}</td>
-                  <td className="p-2">{companionNames(row.acompanhantes)}</td>
-                  <td className="p-2 text-right font-semibold">{money(row.valor)}</td>
-                </tr>
-              );
-            })}
-            {!rows.length && <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">Nenhuma operação concluída no período.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <p className="text-[11px] text-muted-foreground">Hora Extra de abastecimento/viagem é registrada automaticamente em Movimento Diário e entra no fechamento da folha sem lançamento manual.</p>
+    <section id="mechanic-close-print" className="space-y-3 rounded-xl border border-fuchsia-500/15 bg-[#08080e] p-4">
+      <style>{`@media print{body *{visibility:hidden!important}#mechanic-close-print,#mechanic-close-print *{visibility:visible!important}#mechanic-close-print{position:absolute;left:0;top:0;width:100%;background:white!important;color:black!important;border:0!important}#mechanic-close-print .no-print{display:none!important}}`}</style>
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="flex items-center gap-2"><Route className="h-4 w-4 text-fuchsia-400" /><h2 className="font-black text-white">Fechamento operacional</h2></div><p className="mt-1 text-[11px] text-zinc-500">Abastecimentos, viagens e hora extra consolidados.</p></div><div className="no-print flex flex-wrap items-end gap-2"><label className="text-[10px] text-zinc-500">De<Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-36" /></label><label className="text-[10px] text-zinc-500">Até<Input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="mt-1 w-36" /></label><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Atualizar</Button><Button size="sm" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />PDF</Button></div></div>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4"><MiniStatus label="Operações" value={String(rows.length)} tone="text-amber-400" /><MiniStatus label="Viagens" value={String(trips)} tone="text-fuchsia-300" /><MiniStatus label="Hora extra" value={duration(overtime)} tone="text-amber-400" /><MiniStatus label="Abastecimento" value={money(total)} tone="text-emerald-400" /></div>
+      <div className="overflow-x-auto rounded-xl border border-white/5"><table className="w-full min-w-[950px] text-xs"><thead className="bg-white/5 text-zinc-500"><tr><th className="p-2 text-left">Data</th><th className="p-2 text-left">Empresa</th><th className="p-2 text-left">Mecânico</th><th className="p-2 text-left">Veículo</th><th className="p-2 text-left">Abastecimento</th><th className="p-2 text-left">Categoria</th><th className="p-2 text-left">HE</th><th className="p-2 text-right">Valor</th></tr></thead><tbody className="divide-y divide-white/5">{rows.map((row) => <tr key={row.id}><td className="p-2">{dateBr(row.data)} · {String(row.hora || '').slice(0,5)}</td><td className="p-2">{row.empresa || '—'}<span className="block text-zinc-600">{row.filial}</span></td><td className="p-2 font-semibold">{row.mecanico_nome}</td><td className="p-2">{row.placa || '—'}</td><td className="p-2">{numberBr(row.litros)} L · {row.combustivel}</td><td className="p-2">{row.categoria_operacional || 'Normal'}</td><td className="p-2">{row.hora_extra_minutos ? duration(row.hora_extra_minutos) : '—'}</td><td className="p-2 text-right font-semibold">{money(row.valor)}</td></tr>)}{!rows.length && <tr><td colSpan={8} className="p-6 text-center text-zinc-500">Nenhuma operação no período.</td></tr>}</tbody></table></div>
     </section>
   );
 }
 
 export default function AppMecanicoAdminPage() {
+  const { userRoles } = useApp();
+  const isAdmin = userRoles.includes('admin');
+  const [tab, setTab] = useState<Tab>('ponto');
+  const [stats, setStats] = useState<DashboardStats>(emptyStats);
+  const [rows, setRows] = useState<MecanicoRow[]>([]);
+  const [pendingFuel, setPendingFuel] = useState<FuelAuthorization[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState('');
+
+  const load = useCallback(async () => {
+    if (!isAdmin) return;
+    setLoading(true);
+    const [dashboardResult, fuelResult] = await Promise.all([
+      (supabase as any).rpc('admin_app_mecanicos_dashboard'),
+      (supabase as any).from('abastecimento_autorizacoes').select('id,funcionario_nome,empresa_nome,filial,placa,combustivel,posto_nome,solicitado_em,status').eq('status', 'pendente').order('solicitado_em', { ascending: false }),
+    ]);
+    const dashboard = dashboardResult.data as DashboardResponse | null;
+    if (dashboardResult.error || !dashboard?.ok) toast.error(dashboard?.error || dashboardResult.error?.message || 'Falha ao carregar dashboard dos mecânicos.');
+    else { setStats(dashboard.stats || emptyStats); setRows(dashboard.mecanicos || []); }
+    if (!fuelResult.error) setPendingFuel((fuelResult.data || []) as FuelAuthorization[]);
+    setLoading(false);
+  }, [isAdmin]);
+
+  useEffect(() => {
+    void load();
+    if (!isAdmin) return;
+    const timer = window.setInterval(() => void load(), 15000);
+    return () => window.clearInterval(timer);
+  }, [load, isAdmin]);
+
+  const decide = async (row: FuelAuthorization, decision: 'autorizar' | 'negar') => {
+    setActing(row.id);
+    try {
+      const { error } = await (supabase as any).rpc('topac_decidir_abastecimento', { p_id: row.id, p_decisao: decision });
+      if (error) throw error;
+      toast.success(decision === 'autorizar' ? 'Abastecimento autorizado.' : 'Solicitação negada.');
+      await load();
+    } catch (error: any) { toast.error(error?.message || 'Não foi possível registrar a decisão.'); }
+    finally { setActing(''); }
+  };
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, MecanicoRow[]>();
+    rows.forEach((row) => { const key = row.empresa || 'SEM EMPRESA'; map.set(key, [...(map.get(key) || []), row]); });
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'pt-BR'));
+  }, [rows]);
+
+  if (!isAdmin) return null;
+
   return (
     <div className="space-y-4">
-      <MecanicosDirectory />
-      <AuthorizationCenter />
-      <OperationalClosingReport />
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-4">
+        <div><div className="flex items-center gap-2"><Wrench className="h-5 w-5 text-amber-400" /><h1 className="text-lg font-black text-white">App Mecânicos — Controle Operacional</h1><Badge variant="secondary">{stats.mecanicos} ativos</Badge></div><p className="mt-1 text-xs text-zinc-500">Acompanhamento em tempo real por empresa. Mecânicos não possuem edição ou exclusão de registros.</p></div>
+        <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Atualizar</Button><Button size="sm" asChild><a href="/mecanicos" target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Link dos mecânicos</a></Button></div>
+      </header>
+
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+        <TopCard active={tab === 'ponto'} title="Ponto" value={`${stats.ponto_hoje}/${stats.mecanicos}`} subtitle={`${stats.ponto_aberto} jornada(s) aberta(s)`} icon={Clock3} onClick={() => setTab('ponto')} />
+        <TopCard active={tab === 'abastecimento'} title="Abastecimento" value={stats.abastecimentos_hoje} subtitle={`${stats.abastecimentos_pendentes} aguardando autorização`} icon={Fuel} onClick={() => setTab('abastecimento')} />
+        <TopCard active={tab === 'km'} title="KM" value={`${numberBr(stats.km_total_hoje)} km`} subtitle={`${stats.km_abertos} veículo(s) em andamento`} icon={Gauge} onClick={() => setTab('km')} />
+        <TopCard active={tab === 'fechamento'} title="Fechamento" value={stats.fechamentos_completos} subtitle={`${stats.fechamentos_pendentes} pendente(s) hoje`} icon={CheckCircle2} onClick={() => setTab('fechamento')} />
+      </div>
+
+      <div className="flex items-center gap-4 rounded-xl border border-white/5 bg-[#08080e] px-4 py-2 text-[11px] text-zinc-500"><span><StatusDot ok /> <strong className="text-emerald-400">{stats.online}</strong> online agora</span><span><Users className="mr-1 inline h-3.5 w-3.5" />{stats.mecanicos} mecânicos monitorados</span><span className="ml-auto hidden sm:inline">Atualização automática a cada 15 segundos</span></div>
+
+      {tab === 'abastecimento' && <PendingFuelAuthorizations rows={pendingFuel} acting={acting} decide={decide} />}
+
+      <section className="space-y-4">
+        {grouped.map(([empresa, mecanicos]) => (
+          <div key={empresa} className="space-y-2.5">
+            <div className="flex items-center gap-2 border-b border-fuchsia-500/10 pb-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-fuchsia-500/10 text-fuchsia-400"><Building2 className="h-4 w-4" /></span><h2 className="text-sm font-black uppercase tracking-wide text-white">{empresa}</h2><Badge variant="outline" className="text-[10px]">{mecanicos.length}</Badge><span className="ml-auto text-[10px] text-zinc-600">{mecanicos.filter((m) => m.online).length} online</span></div>
+            <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">{mecanicos.map((row) => <MechanicCard key={row.id} row={row} tab={tab} />)}</div>
+          </div>
+        ))}
+        {!rows.length && !loading && <div className="rounded-xl border border-dashed p-10 text-center text-zinc-500">Nenhum mecânico encontrado.</div>}
+      </section>
+
+      {tab === 'fechamento' && <OperationalClosingReport />}
     </div>
   );
 }
