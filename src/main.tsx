@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import App from "./App.tsx";
 import "./index.css";
 import "./styles/topac-platform.css";
@@ -8,6 +9,15 @@ import "./styles/form-contrast-guard.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import GlobalFormContrastGuard from "@/components/GlobalFormContrastGuard";
 import { AppProvider } from "@/context/AppContext";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import AcessoMecanicoPage from "@/app-mecanico/AcessoMecanicoPage";
+import MecanicoAppLayout from "@/app-mecanico/MecanicoAppLayout";
+import MecHomePage from "@/app-mecanico/pages/HomePage";
+import MecPontoPage from "@/app-mecanico/pages/PontoPage";
+import MecChamadosPage from "@/app-mecanico/pages/ChamadosPage";
+import MecVeiculoPage from "@/app-mecanico/pages/VeiculoPage";
+import MecHistoricoPage from "@/app-mecanico/pages/HistoricoPage";
+import MecAbastecimentoPage from "@/app-mecanico/pages/AbastecimentoPage";
 
 const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
 const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
@@ -21,7 +31,9 @@ const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePu
 
 const MOBILE_BUILD_TAG = "20260908-mecanicos-oficial-v2";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
-const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(window.location.pathname);
+const currentPath = window.location.pathname;
+const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(currentPath);
+const isMecanicoPublicPortal = /^\/(?:mecanicos|acesso-mecanico|app-mecanico(?:\/|$)|mecanico-ext(?:\/|$))/i.test(currentPath);
 
 async function clearLegacyMobileCache() {
   if (typeof window === "undefined") return;
@@ -106,6 +118,34 @@ const RouteEnhancers = () => {
   );
 };
 
+const MecanicoLegacyAlias = () => {
+  const { acessoId } = useParams<{ acessoId: string }>();
+  const location = useLocation();
+  const tail = location.pathname.replace(/^\/mecanico-ext\/[^/]+/, "");
+  return <Navigate to={`/app-mecanico/${acessoId}${tail}${location.search}`} replace />;
+};
+
+const MecanicoPublicPortal = () => (
+  <BrowserRouter>
+    <Sonner />
+    <Routes>
+      <Route path="/mecanicos" element={<AcessoMecanicoPage />} />
+      <Route path="/acesso-mecanico" element={<Navigate to="/mecanicos" replace />} />
+      <Route path="/app-mecanico/:acessoId" element={<MecanicoAppLayout />}>
+        <Route index element={<MecHomePage />} />
+        <Route path="ponto" element={<MecPontoPage />} />
+        <Route path="chamados" element={<MecChamadosPage />} />
+        <Route path="veiculo" element={<MecVeiculoPage />} />
+        <Route path="historico" element={<MecHistoricoPage />} />
+        <Route path="abastecimento" element={<MecAbastecimentoPage />} />
+      </Route>
+      <Route path="/mecanico-ext/:acessoId" element={<MecanicoLegacyAlias />} />
+      <Route path="/mecanico-ext/:acessoId/*" element={<MecanicoLegacyAlias />} />
+      <Route path="*" element={<Navigate to="/mecanicos" replace />} />
+    </Routes>
+  </BrowserRouter>
+);
+
 const root = createRoot(document.getElementById("root")!);
 if (isPayrollPublicPortal) {
   root.render(
@@ -114,6 +154,13 @@ if (isPayrollPublicPortal) {
       <Suspense fallback={<div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center">Carregando acesso seguro...</div>}>
         <PayrollSignaturePublicPage />
       </Suspense>
+    </ErrorBoundary>
+  );
+} else if (isMecanicoPublicPortal) {
+  root.render(
+    <ErrorBoundary>
+      <GlobalFormContrastGuard />
+      <MecanicoPublicPortal />
     </ErrorBoundary>
   );
 } else {
