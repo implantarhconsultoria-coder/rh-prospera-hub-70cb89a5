@@ -103,10 +103,32 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
+  useEffect(() => {
+    if (!mecanico?.acesso_id) return;
+    let active = true;
+    const heartbeat = async () => {
+      if (!active || document.visibilityState === "hidden") return;
+      try {
+        await mecanicoRpc.rpc("app_mecanico_validar_acesso", { p_acesso_id: mecanico.acesso_id });
+      } catch (error) {
+        console.warn("Heartbeat do app mecânico indisponível:", error);
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === "visible") void heartbeat(); };
+    void heartbeat();
+    const timer = window.setInterval(() => void heartbeat(), 60000);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [mecanico?.acesso_id]);
+
   const sair = () => {
     localStorage.removeItem("app_mecanico_acesso_id");
     localStorage.removeItem("acesso_externo");
-    navigate("/acesso-mecanico", { replace: true });
+    navigate("/mecanicos", { replace: true });
   };
 
   if (loading) {
@@ -124,7 +146,7 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
           <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
           <p className="text-base text-foreground">{erro || "Acesso inválido"}</p>
           <button
-            onClick={() => navigate("/acesso-mecanico", { replace: true })}
+            onClick={() => navigate("/mecanicos", { replace: true })}
             className="text-primary underline text-sm"
           >
             Entrar novamente
