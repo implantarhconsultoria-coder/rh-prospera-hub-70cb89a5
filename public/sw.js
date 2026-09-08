@@ -1,8 +1,10 @@
-const CACHE_NAME = 'topac-pro-20260903-app-mecanico-v1';
+const CACHE_NAME = 'topac-pro-20260908-mecanicos-oficial-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/manifest-mecanico.json',
+  '/icons/topac-rh-pro.svg',
 ];
 
 self.addEventListener('install', (event) => {
@@ -59,11 +61,11 @@ async function syncData() {
 
 self.addEventListener('push', (event) => {
   const data = event.data?.json() ?? {};
-  const title = data.title || 'TOPAC PRO';
+  const title = data.title || 'TOPAC RH PRO';
   const options = {
     body: data.body || 'Você tem uma nova notificação',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2',
+    badge: '/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2',
     tag: data.tag || 'notification',
     requireInteraction: data.requireInteraction || false,
     data: { url: data.url || '/' },
