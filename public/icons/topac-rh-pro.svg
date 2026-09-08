@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="TOPAC RH PRO">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#171027"/>
+      <stop offset="0.55" stop-color="#09070f"/>
+      <stop offset="1" stop-color="#120b18"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe46a"/>
+      <stop offset="0.45" stop-color="#f5bf35"/>
+      <stop offset="1" stop-color="#b86d0b"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c05cff"/>
+      <stop offset="0.55" stop-color="#7c2ce8"/>
+      <stop offset="1" stop-color="#41126f"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="18" y="18" width="476" height="476" rx="108" fill="url(#bg)"/>
+  <rect x="20" y="20" width="472" height="472" rx="106" fill="none" stroke="#7c2ce8" stroke-width="4" opacity=".7"/>
+  <path d="M116 117h280c15 0 27 12 27 27v30c0 18-14 32-32 32H304v165c0 19-15 34-34 34h-34V206H151c-19 0-35-15-35-35z" fill="url(#gold)" filter="url(#glow)"/>
+  <circle cx="346" cy="250" r="33" fill="url(#purple)"/>
+  <path d="M300 350v-35c0-37 20-58 46-58s46 21 46 58v35c-16 12-31 18-46 18s-30-6-46-18z" fill="url(#purple)"/>
+  <circle cx="411" cy="278" r="20" fill="#8f3cf1"/>
+  <path d="M386 343v-23c0-24 12-38 25-38 14 0 26 14 26 38v18c-17 9-33 11-51 5z" fill="#6420a7"/>
+  <path d="M307 355c60-6 110-34 139-79" fill="none" stroke="url(#gold)" stroke-width="15" stroke-linecap="round"/>
+  <text x="256" y="438" text-anchor="middle" fill="#f8c43f" font-family="Arial,Helvetica,sans-serif" font-size="43" font-weight="800" letter-spacing="8">TOPAC</text>
+  <text x="256" y="470" text-anchor="middle" fill="#f2eef7" font-family="Arial,Helvetica,sans-serif" font-size="19" font-weight="600" letter-spacing="9">RH PRO</text>
+</svg>
