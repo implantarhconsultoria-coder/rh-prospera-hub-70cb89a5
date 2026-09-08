@@ -19,7 +19,7 @@ const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastr
 const PedidoDemissaoModelDialog = lazy(() => import("@/components/PedidoDemissaoModelDialog"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
-const MOBILE_BUILD_TAG = "20260903-app-mecanico-layout-v1";
+const MOBILE_BUILD_TAG = "20260908-mecanicos-oficial-v2";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(window.location.pathname);
 
