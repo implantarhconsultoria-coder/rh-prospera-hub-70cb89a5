@@ -33,12 +33,15 @@ type StatusResult = {
   error?: string;
   vehicles?: Vehicle[];
   record?: VehicleRecord | null;
+  allowManualPlate?: boolean;
 };
 
 type PhotoState = {
   dataUrl: string;
   mimeType: string;
 };
+
+const normalizePlate = (value: string | null | undefined) => String(value || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 7);
 
 const blobToDataUrl = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -67,7 +70,7 @@ const getPreciseLocation = () =>
 
 const errorMessage = (error?: string, payload?: Record<string, unknown>) => {
   if (error === "sem_veiculo_vinculado") return "Nenhum veículo está vinculado ao seu cadastro. Procure o administrador.";
-  if (error === "veiculo_nao_autorizado") return "Este veículo não está vinculado ao seu cadastro.";
+  if (error === "veiculo_nao_autorizado") return "Placa não encontrada entre os veículos ativos da frota. Confira a placa.";
   if (error === "registro_dia_ja_existe") return "O ponto do veículo de hoje já foi iniciado.";
   if (error === "sem_saida_aberta") return "Não existe saída de veículo aberta hoje.";
   if (error === "gps_obrigatorio") return "A localização é obrigatória para registrar o ponto do veículo.";
@@ -86,6 +89,7 @@ export default function VeiculoPage() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [record, setRecord] = useState<VehicleRecord | null>(null);
+  const [allowManualPlate, setAllowManualPlate] = useState(false);
   const [plate, setPlate] = useState("");
   const [km, setKm] = useState("");
   const [kmOcr, setKmOcr] = useState<number | null>(null);
@@ -94,7 +98,7 @@ export default function VeiculoPage() {
   const completed = String(record?.status || "").toLowerCase() === "concluido";
   const open = Boolean(record) && !completed;
   const mode: "start" | "finish" = open ? "finish" : "start";
-  const selected = useMemo(() => vehicles.find((vehicle) => vehicle.placa === plate) || null, [plate, vehicles]);
+  const selected = useMemo(() => vehicles.find((vehicle) => normalizePlate(vehicle.placa) === normalizePlate(plate)) || null, [plate, vehicles]);
   const kmRodado = record?.km_chegada != null
     ? Number(record.km_total ?? Math.max(0, Number(record.km_chegada) - Number(record.km_saida || 0)))
     : null;
@@ -107,12 +111,15 @@ export default function VeiculoPage() {
       });
       const result = data as StatusResult | null;
       if (error || !result?.ok) throw new Error(result?.error || error?.message || "status_indisponivel");
-      const list = Array.isArray(result.vehicles) ? result.vehicles : [];
+      const list = Array.isArray(result.vehicles)
+        ? result.vehicles.map((vehicle) => ({ ...vehicle, placa: normalizePlate(vehicle.placa) })).filter((vehicle) => Boolean(vehicle.placa))
+        : [];
       setVehicles(list);
       setRecord(result.record || null);
-      const currentPlate = result.record?.veiculo_placa || (list.length === 1 ? list[0].placa : "");
+      setAllowManualPlate(Boolean(result.allowManualPlate));
+      const currentPlate = normalizePlate(result.record?.veiculo_placa || (list.length === 1 ? list[0].placa : ""));
       setPlate(currentPlate);
-      setKm(result.record && String(result.record.status).toLowerCase() !== "concluido" ? "" : "");
+      setKm("");
       setKmOcr(null);
       setPhoto(null);
     } catch (error) {
@@ -154,8 +161,9 @@ export default function VeiculoPage() {
 
   const submit = async () => {
     if (saving || completed) return;
+    const normalizedPlate = normalizePlate(mode === "start" ? plate : record?.veiculo_placa);
     const parsedKm = Number(String(km).replace(/\D/g, ""));
-    if (mode === "start" && !plate) return toast.error("Selecione o veículo.");
+    if (mode === "start" && !normalizedPlate) return toast.error("Selecione ou informe a placa do veículo.");
     if (!Number.isSafeInteger(parsedKm) || parsedKm < 0) return toast.error("Informe o KM exibido no painel.");
     if (mode === "finish" && parsedKm < Number(record?.km_saida || 0)) return toast.error(`O KM de chegada não pode ser menor que ${record?.km_saida}.`);
     if (!photo) {
@@ -171,7 +179,7 @@ export default function VeiculoPage() {
         body: {
           action: mode,
           acessoId: mecanico.acesso_id,
-          vehiclePlate: mode === "start" ? plate : record?.veiculo_placa,
+          vehiclePlate: normalizedPlate,
           km: parsedKm,
           kmOcr,
           latitude: location.latitude,
@@ -205,7 +213,7 @@ export default function VeiculoPage() {
           <span className="grid h-11 w-11 place-items-center rounded-xl bg-fuchsia-500/10 text-fuchsia-400"><Gauge className="h-6 w-6" /></span>
           <div>
             <h1 className="text-lg font-bold">Ponto do Carro / KM</h1>
-            <p className="text-xs text-zinc-400">Foto do painel + GPS + hodômetro</p>
+            <p className="text-xs text-zinc-400">Foto ao vivo + GPS + leitura do hodômetro</p>
           </div>
         </div>
       </Card>
@@ -224,19 +232,29 @@ export default function VeiculoPage() {
       ) : (
         <Card className="space-y-5 p-5">
           {mode === "start" ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Label>Veículo</Label>
-              {vehicles.length === 0 ? (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">Nenhum veículo vinculado ao seu cadastro. O administrador precisa vincular um veículo antes do registro.</div>
-              ) : (
+              {vehicles.length > 0 && (
                 <div className="grid gap-2">
                   {vehicles.map((vehicle) => (
-                    <button key={`${vehicle.id || "v"}-${vehicle.placa}`} type="button" onClick={() => setPlate(vehicle.placa)} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${plate === vehicle.placa ? "border-fuchsia-500 bg-fuchsia-500/10" : "border-border"}`}>
+                    <button key={`${vehicle.id || "v"}-${vehicle.placa}`} type="button" onClick={() => setPlate(normalizePlate(vehicle.placa))} className={`flex items-center gap-3 rounded-lg border p-3 text-left ${normalizePlate(plate) === normalizePlate(vehicle.placa) ? "border-fuchsia-500 bg-fuchsia-500/10" : "border-border"}`}>
                       <Car className="h-5 w-5 shrink-0" />
                       <span><strong className="block text-sm">{vehicle.descricao || vehicle.placa}</strong><small className="text-muted-foreground">{vehicle.placa}</small></span>
                     </button>
                   ))}
                 </div>
+              )}
+
+              {allowManualPlate && (
+                <div className="space-y-1.5 rounded-lg border border-fuchsia-500/15 bg-fuchsia-500/5 p-3">
+                  <Label className="text-xs">Placa do veículo da frota</Label>
+                  <Input value={plate} onChange={(event) => setPlate(normalizePlate(event.target.value))} placeholder="ABC1D23" maxLength={7} autoCapitalize="characters" className="h-11 font-semibold uppercase" />
+                  <p className="text-[11px] text-muted-foreground">Em unidades com veículos compartilhados, informe a placa se ela não aparecer na lista. A placa precisa existir ativa na frota central.</p>
+                </div>
+              )}
+
+              {vehicles.length === 0 && !allowManualPlate && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">Nenhum veículo vinculado ao seu cadastro. O administrador precisa vincular um veículo antes do registro.</div>
               )}
             </div>
           ) : (
@@ -264,7 +282,7 @@ export default function VeiculoPage() {
 
           <div className="flex items-center gap-2 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground"><MapPin className="h-4 w-4 shrink-0" /> O GPS será validado no momento da confirmação. Sem localização o registro não é concluído.</div>
 
-          <Button className="h-12 w-full" onClick={() => void submit()} disabled={saving || ocrLoading || (mode === "start" && (!selected || vehicles.length === 0))}>
+          <Button className="h-12 w-full" onClick={() => void submit()} disabled={saving || ocrLoading || (mode === "start" && !normalizePlate(plate))}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === "start" ? "Registrar saída do veículo" : "Registrar chegada do veículo"}
           </Button>
         </Card>
