@@ -8,6 +8,20 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+
+    <script>
+      // iOS mantém identidade de atalhos por origem. Para impedir que o App Mecânicos
+      // reutilize a identidade da plataforma administrativa, ele é instalado em uma
+      // origem exclusiva e estável da mesma produção Vercel.
+      (() => {
+        const h = location.hostname.toLowerCase();
+        if (h === 'topacrh.pro' || h === 'www.topacrh.pro') {
+          const target = 'https://trabalhar-no-projeto-topac-rh-pro.vercel.app/mecanicos';
+          location.replace(target + location.search + location.hash);
+        }
+      })();
+    </script>
+
     <title>TOPAC Mecânicos</title>
     <meta name="description" content="Aplicativo operacional exclusivo da equipe de mecânicos TOPAC." />
     <meta name="author" content="TOPAC" />
@@ -18,10 +32,11 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TOPAC Mecânicos" />
     <meta name="application-name" content="TOPAC Mecânicos" />
-    <link rel="canonical" href="https://topacrh.pro/mecanicos" />
-    <link rel="manifest" href="/manifest-mecanico.json?v=20260908-final-1" />
-    <link rel="icon" type="image/svg+xml" href="/icons/topac-mecanicos-new.svg?v=20260908-final-1" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/topac-mecanicos-180.png?v=20260908-final-1" />
+
+    <link rel="canonical" href="https://trabalhar-no-projeto-topac-rh-pro.vercel.app/mecanicos" />
+    <link rel="manifest" href="/manifest-mecanicos-install-20260908.json" />
+    <link rel="icon" type="image/png" href="/icons/topac-mecanicos-oficial-20260908-1050-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/topac-mecanicos-oficial-20260908-1050-180.png" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="TOPAC Mecânicos" />
     <meta property="og:description" content="Acesso exclusivo da equipe operacional TOPAC." />
@@ -31,11 +46,33 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       (() => {
-        const mechanicLogo = '/icons/topac-mecanicos-new.svg?v=20260908-final-1';
-        const fixLogo = () => document.querySelectorAll('img[src*="topac-rh-pro"],img[alt="TOPAC RH PRO"]').forEach((img) => { img.src = mechanicLogo; img.alt = 'TOPAC Mecânicos'; });
-        new MutationObserver(fixLogo).observe(document.documentElement, { childList: true, subtree: true });
-        window.addEventListener('DOMContentLoaded', fixLogo);
-        setTimeout(fixLogo, 300);
+        const mechanicLogo = '/icons/topac-mecanicos-oficial-20260908-1050-180.png';
+        const mechanicManifest = '/manifest-mecanicos-install-20260908.json';
+        const enforceMechanicIdentity = () => {
+          document.title = 'TOPAC Mecânicos';
+          const manifest = document.querySelector('link[rel="manifest"]');
+          if (manifest) manifest.href = mechanicManifest;
+          document.querySelectorAll('link[rel="icon"]').forEach((icon) => {
+            icon.href = mechanicLogo;
+            icon.type = 'image/png';
+          });
+          const apple = document.querySelector('link[rel="apple-touch-icon"]');
+          if (apple) apple.href = mechanicLogo;
+          const title = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (title) title.content = 'TOPAC Mecânicos';
+          document.querySelectorAll('img[src*="topac-rh-pro"], img[alt="TOPAC RH PRO"]').forEach((img) => {
+            img.src = mechanicLogo;
+            img.alt = 'TOPAC Mecânicos';
+          });
+        };
+        new MutationObserver(enforceMechanicIdentity).observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['src', 'href']
+        });
+        window.addEventListener('DOMContentLoaded', enforceMechanicIdentity);
+        [0, 100, 300, 800, 1500].forEach((ms) => setTimeout(enforceMechanicIdentity, ms));
       })();
     </script>
   </body>
