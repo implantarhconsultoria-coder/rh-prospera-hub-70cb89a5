@@ -84,7 +84,6 @@ type PanelOcrResult = {
   motivo?: string;
 };
 
-const CANONICAL_BASE_URL = "https://topacrh.pro";
 const FUEL_OPTIONS = ["Gasolina", "Etanol", "Diesel", "Diesel S10", "GNV"];
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
@@ -123,7 +122,7 @@ export default function AbastecimentoPage() {
   const [placa, setPlaca] = useState("");
   const [carros, setCarros] = useState<string[]>([]);
   const [veiculos, setVeiculos] = useState<VeiculoInfo[]>([]);
-  const [combustivel, setCombustivel] = useState("Diesel S10");
+  const [combustivel, setCombustivel] = useState("");
   const [litros, setLitros] = useState("");
   const [valor, setValor] = useState("");
   const [kmAtual, setKmAtual] = useState("");
@@ -135,11 +134,6 @@ export default function AbastecimentoPage() {
   const autoQrRef = useRef("");
 
   const isSecure = typeof window !== "undefined" && (window.isSecureContext || window.location.hostname === "localhost");
-  const isCanonicalHost = typeof window !== "undefined" && window.location.origin === CANONICAL_BASE_URL;
-  const canonicalUrl = useMemo(() => {
-    if (typeof window === "undefined") return CANONICAL_BASE_URL;
-    return `${CANONICAL_BASE_URL}${window.location.pathname}${window.location.search}${window.location.hash}`;
-  }, []);
   const veiculoSelecionado = useMemo(() => {
     const atual = normalizePlate(placa);
     return veiculos.find((item) => normalizePlate(item.placa) === atual) || null;
@@ -184,12 +178,8 @@ export default function AbastecimentoPage() {
 
   const iniciarScanner = async () => {
     setScanError("");
-    if (typeof window !== "undefined" && window.location.hostname !== "localhost" && !isCanonicalHost) {
-      window.location.assign(canonicalUrl);
-      return;
-    }
     if (!isSecure || !navigator.mediaDevices?.getUserMedia) {
-      setScanError(`Abra pelo endereço seguro ${CANONICAL_BASE_URL} ou digite o código manualmente.`);
+      setScanError("A câmera precisa de uma conexão HTTPS segura. Você também pode usar uma imagem do QR ou digitar o código.");
       return;
     }
     try {
@@ -254,7 +244,7 @@ export default function AbastecimentoPage() {
       setCarros(placas);
       setVeiculos(veiculosInfo);
       setPlaca(initialPlate);
-      setKmAtual(result.mecanico?.ultimo_km ? String(Math.round(Number(result.mecanico.ultimo_km))) : "");
+      setKmAtual("");
       setStep("painel");
     } finally {
       setLoading(false);
@@ -447,7 +437,7 @@ export default function AbastecimentoPage() {
     setPlaca("");
     setCarros([]);
     setVeiculos([]);
-    setCombustivel("Diesel S10");
+    setCombustivel("");
     setLitros("");
     setValor("");
     setKmAtual("");
@@ -521,7 +511,6 @@ export default function AbastecimentoPage() {
           <div className="space-y-2">
             <Label className="text-xs">KM atual — confira o OCR</Label>
             <Input inputMode="numeric" value={kmAtual} onChange={(event) => setKmAtual(event.target.value.replace(/\D/g, ""))} placeholder="Ex.: 55128" className="h-12 text-lg font-semibold" />
-            {mecInfo?.ultimo_km ? <p className="text-[11px] text-muted-foreground">Último KM conhecido no início do fluxo: {Number(mecInfo.ultimo_km).toLocaleString("pt-BR")} km.</p> : null}
           </div>
           <AlertBox text="Agora tire a foto ao vivo da bomba mostrando TOTAL, LITROS e PREÇO/L. O sistema fará a leitura e abrirá a conferência antes de salvar." />
           <Button className="w-full" onClick={() => setCamBomba(true)} disabled={loading || ocrLoading || !kmNumero}><Camera className="mr-2 h-4 w-4" /> Tirar foto da bomba</Button>
@@ -536,7 +525,7 @@ export default function AbastecimentoPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Combustível</Label>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(event) => setCombustivel(event.target.value)}>{FUEL_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+              <select className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm" value={combustivel} onChange={(event) => setCombustivel(event.target.value)}><option value="">Selecionar</option>{FUEL_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select>
             </div>
             <div><Label className="text-xs">Litros</Label><Input inputMode="decimal" value={litros} onChange={(event) => setLitros(event.target.value)} placeholder="42,500" /></div>
             <div><Label className="text-xs">Valor total (R$)</Label><Input inputMode="decimal" value={valor} onChange={(event) => setValor(event.target.value)} placeholder="268,75" /></div>
