@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Fuel, Printer, RefreshCw, Route, Timer, Users, Wrench } from 'lucide-react';
+import { Copy, ExternalLink, Fuel, Printer, RefreshCw, Route, ShieldCheck, Timer, Users, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import { toast } from 'sonner';
 
-const APP_OPERACIONAL_URL = 'https://746ce5953133175295.v2.appdeploy.ai/';
 const todayLocal = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const monthStart = () => `${todayLocal().slice(0, 7)}-01`;
 
@@ -55,6 +54,18 @@ type ClosedOperation = {
   status: string;
 };
 
+type MecanicoAccess = {
+  id: string;
+  nome: string;
+  empresa?: string | null;
+  filial?: string | null;
+  funcao?: string | null;
+  pin?: string | null;
+  status?: string | null;
+  acesso_liberado?: boolean | null;
+  ativo?: boolean | null;
+};
+
 const dateTime = (value?: string | null) => value
   ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })
   : '—';
@@ -67,6 +78,117 @@ const duration = (minutes?: number | null) => {
   return hours ? `${hours}h ${String(mins).padStart(2, '0')}min` : `${mins}min`;
 };
 const companionNames = (items?: Array<{ nome?: string }> | null) => items?.map((item) => item.nome).filter(Boolean).join(' · ') || '—';
+
+function MecanicosDirectory() {
+  const { userRoles } = useApp();
+  const isAdmin = userRoles.includes('admin');
+  const [rows, setRows] = useState<MecanicoAccess[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!isAdmin) return;
+    setLoading(true);
+    const { data, error } = await (supabase as any)
+      .from('acessos_externos')
+      .select('id,nome,empresa,filial,funcao,pin,status,acesso_liberado,ativo')
+      .eq('modulo', 'mecanico')
+      .order('nome', { ascending: true });
+    if (error) toast.error('Falha ao carregar acessos dos mecânicos: ' + error.message);
+    else setRows((data || []) as MecanicoAccess[]);
+    setLoading(false);
+  }, [isAdmin]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (!isAdmin) return null;
+
+  const ativos = rows.filter((row) => row.status === 'ativo' && row.acesso_liberado !== false && row.ativo !== false);
+  const base = typeof window !== 'undefined' ? window.location.origin : 'https://topacrh.pro';
+  const loginUrl = `${base}/mecanicos`;
+
+  const copy = async (value: string, message: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(message);
+    } catch {
+      toast.error('Não foi possível copiar o link.');
+    }
+  };
+
+  return (
+    <section className="space-y-4 rounded-xl border bg-card p-4 no-print">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold">App Mecânicos — Controle Oficial</h1>
+            <Badge variant="secondary">{ativos.length} ativos</Badge>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Acesso e testes ligados diretamente ao TOPAC RH PRO / Supabase. Sem AppDeploy.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />Atualizar
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => copy(loginUrl, 'Link dos mecânicos copiado.')}>
+            <Copy className="mr-2 h-4 w-4" />Copiar login
+          </Button>
+          <Button size="sm" asChild>
+            <a href="/mecanicos" target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Abrir login</a>
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+        <div className="flex items-start gap-2">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div>
+            <strong>Login oficial dos mecânicos:</strong> <span className="font-mono">{loginUrl}</span>
+            <p className="mt-1 text-muted-foreground">O mecânico digita somente os 4 últimos números do CPF. Os botões “Testar perfil” abaixo são internos e abrem o perfil diretamente para conferência administrativa.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border">
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="bg-muted/50 text-xs">
+            <tr>
+              <th className="p-3 text-left">Mecânico</th>
+              <th className="p-3 text-left">Empresa / filial</th>
+              <th className="p-3 text-left">Função</th>
+              <th className="p-3 text-left">PIN</th>
+              <th className="p-3 text-left">Status</th>
+              <th className="p-3 text-right">Teste administrativo</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {rows.map((row) => {
+              const active = row.status === 'ativo' && row.acesso_liberado !== false && row.ativo !== false;
+              const testUrl = `${base}/app-mecanico/${row.id}?modo=teste-admin&build=20260908-mecanicos-oficial-v2`;
+              return (
+                <tr key={row.id}>
+                  <td className="p-3 font-semibold">{row.nome}</td>
+                  <td className="p-3 text-xs"><strong>{row.empresa || '—'}</strong><span className="block text-muted-foreground">{row.filial || '—'}</span></td>
+                  <td className="p-3 text-xs">{row.funcao || '—'}</td>
+                  <td className="p-3"><span className="rounded-md bg-muted px-2 py-1 font-mono font-bold tracking-widest">{row.pin || '—'}</span></td>
+                  <td className="p-3"><Badge variant={active ? 'secondary' : 'destructive'}>{active ? 'Ativo' : 'Bloqueado'}</Badge></td>
+                  <td className="p-3">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => copy(testUrl, `Link de teste de ${row.nome} copiado.`)}><Copy className="mr-2 h-4 w-4" />Copiar</Button>
+                      <Button size="sm" asChild><a href={testUrl} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Testar perfil</a></Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {!rows.length && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum acesso de mecânico encontrado.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[11px] text-muted-foreground">Links diretos de teste usam o ID interno do acesso e são destinados somente à administração. Não compartilhar com terceiros.</p>
+    </section>
+  );
+}
 
 function AuthorizationCenter() {
   const { userRoles } = useApp();
@@ -285,27 +407,10 @@ function OperationalClosingReport() {
 
 export default function AppMecanicoAdminPage() {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <MecanicosDirectory />
       <AuthorizationCenter />
       <OperationalClosingReport />
-      <div className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 no-print">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><Wrench className="h-5 w-5" /></div>
-          <div>
-            <h1 className="font-semibold">App Operacional</h1>
-            <p className="text-xs text-muted-foreground">Campo integrado ao controle de autorização, viagem e fechamento do RH.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="hidden items-center gap-1 lg:flex"><Route className="h-4 w-4" /> Viagem</span>
-          <span className="hidden items-center gap-1 lg:flex"><Timer className="h-4 w-4" /> Hora Extra</span>
-          <span className="hidden items-center gap-1 lg:flex"><Users className="h-4 w-4" /> Acompanhantes</span>
-          <Button variant="outline" size="sm" asChild><a href={APP_OPERACIONAL_URL} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Abrir em nova aba</a></Button>
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-xl border bg-background no-print" style={{ height: 'calc(100vh - 185px)' }}>
-        <iframe src={APP_OPERACIONAL_URL} title="TOPAC Operacional" className="h-full w-full border-0" allow="camera; geolocation; microphone; clipboard-read; clipboard-write" />
-      </div>
     </div>
   );
 }

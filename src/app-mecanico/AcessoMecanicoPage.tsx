@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Wrench, AlertCircle } from "lucide-react";
+import { Loader2, ShieldCheck, AlertCircle } from "lucide-react";
 
 interface Opcao { id: string; nome: string; empresa: string; filial: string; funcao: string; }
 interface PinValidationResult { ok?: boolean; error?: string; count?: number; usuarios?: Opcao[]; }
@@ -29,9 +29,19 @@ const normalizarUsuarios = (usuarios: unknown): Opcao[] => {
 
 const mensagemErroPin = (error?: string) => {
   if (error === "bloqueado") return "Acesso bloqueado pelo administrador.";
-  if (error === "pin_nao_encontrado") return "PIN não encontrado. Procure o administrador.";
-  if (error === "sem_permissao_modulo") return "Seu acesso ainda não está liberado para o app mecânico.";
+  if (error === "pin_nao_encontrado") return "PIN não encontrado. Confira os 4 últimos números do CPF.";
+  if (error === "sem_permissao_modulo") return "Seu acesso ainda não está liberado para o App Mecânicos.";
   return "PIN inválido ou acesso não liberado.";
+};
+
+const aplicarIdentidadeMecanico = () => {
+  document.title = "TOPAC Mecânicos";
+  const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (manifest) manifest.href = "/manifest-mecanico.json?v=20260908-mecanicos-v2";
+  const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+  if (apple) apple.href = "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2";
+  const theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (theme) theme.content = "#09070f";
 };
 
 export default function AcessoMecanicoPage() {
@@ -41,6 +51,10 @@ export default function AcessoMecanicoPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [opcoes, setOpcoes] = useState<Opcao[] | null>(null);
+
+  useEffect(() => {
+    aplicarIdentidadeMecanico();
+  }, []);
 
   const validar = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -74,7 +88,7 @@ export default function AcessoMecanicoPage() {
 
       const usuarios = normalizarUsuarios(res.usuarios);
       if (usuarios.length === 0) {
-        setErro("Nenhum mecânico encontrado para este PIN. Verifique o cadastro no admin.");
+        setErro("Nenhum mecânico encontrado para este PIN.");
         return;
       }
 
@@ -102,65 +116,96 @@ export default function AcessoMecanicoPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Wrench className="w-6 h-6 text-primary" />
+    <div className="min-h-screen bg-[#09070f] text-white flex items-center justify-center p-5 relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-purple-700/20 blur-3xl" />
+        <div className="absolute -bottom-32 -right-24 h-80 w-80 rounded-full bg-amber-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-sm space-y-5">
+        <div className="text-center space-y-3">
+          <img
+            src="/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2"
+            alt="TOPAC RH PRO"
+            className="mx-auto h-24 w-24 rounded-[24px] shadow-2xl shadow-purple-900/40"
+          />
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.28em] text-amber-400">TOPAC OPERACIONAL</p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight">App Mecânicos</h1>
+            <p className="mt-2 text-sm text-zinc-400">Acesso exclusivo da equipe operacional</p>
           </div>
-          <CardTitle className="text-2xl">App Mecânico</CardTitle>
-          <p className="text-sm text-muted-foreground">Digite seu PIN de 4 dígitos</p>
-        </CardHeader>
-        <CardContent>
-          {!opcoes ? (
-            <form onSubmit={validar} className="space-y-4">
-              <Input
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder="••••"
-                className="text-center text-2xl tracking-[0.5em] h-14"
-                autoFocus
-                disabled={loading}
-              />
-              <p className="text-xs text-muted-foreground text-center">
-                4 últimos números do seu CPF
-              </p>
-              {erro && (
-                <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                  <span>{erro}</span>
+        </div>
+
+        <Card className="border-purple-500/25 bg-[#100d17]/95 text-white shadow-2xl shadow-black/40 backdrop-blur">
+          <CardContent className="p-5">
+            {!opcoes ? (
+              <form onSubmit={validar} className="space-y-5">
+                <div className="rounded-xl border border-purple-500/20 bg-black/20 p-4">
+                  <label className="mb-3 block text-sm font-semibold text-zinc-200">PIN de acesso</label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={4}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="••••"
+                    className="h-16 border-purple-500/25 bg-[#08070c] text-center text-3xl font-black tracking-[0.55em] text-white placeholder:text-zinc-700 focus-visible:ring-purple-500"
+                    autoFocus
+                    disabled={loading}
+                  />
+                  <p className="mt-3 text-center text-xs text-zinc-400">
+                    Digite somente os <strong className="text-zinc-200">4 últimos números do seu CPF</strong>
+                  </p>
                 </div>
-              )}
-              <Button type="submit" className="w-full h-11" disabled={loading || pin.length !== 4}>
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Entrar"}
-              </Button>
-            </form>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">Selecione seu nome:</p>
-              {opcoes.map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => entrar(u)}
-                  className="w-full text-left p-3 rounded-md border hover:bg-accent transition-colors"
-                  disabled={loading}
-                >
-                  <div className="font-medium">{u.nome}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {[u.empresa, u.funcao].filter(Boolean).join(" • ")}
+
+                {erro && (
+                  <div className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-950/40 p-3 text-sm text-red-200">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{erro}</span>
                   </div>
-                </button>
-              ))}
-              <Button variant="ghost" className="w-full" onClick={() => { setOpcoes(null); setPin(""); setErro(null); }}>
-                Voltar
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                )}
+
+                <Button
+                  type="submit"
+                  className="h-14 w-full bg-gradient-to-r from-purple-700 to-purple-500 text-base font-bold text-white hover:from-purple-600 hover:to-purple-400"
+                  disabled={loading || pin.length !== 4}
+                >
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar no meu perfil"}
+                </Button>
+
+                <div className="flex items-center justify-center gap-2 text-[11px] text-zinc-500">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Acesso individual • dados oficiais TOPAC RH PRO
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <p className="font-semibold">Encontramos mais de um cadastro</p>
+                  <p className="text-xs text-zinc-400">Selecione seu nome para continuar.</p>
+                </div>
+                {opcoes.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => entrar(u)}
+                    className="w-full rounded-xl border border-purple-500/20 bg-black/20 p-4 text-left transition hover:border-purple-400/60 hover:bg-purple-950/20"
+                    disabled={loading}
+                  >
+                    <div className="font-semibold">{u.nome}</div>
+                    <div className="mt-1 text-xs text-zinc-400">
+                      {[u.empresa, u.funcao].filter(Boolean).join(" • ")}
+                    </div>
+                  </button>
+                ))}
+                <Button variant="ghost" className="w-full text-zinc-300 hover:bg-white/5 hover:text-white" onClick={() => { setOpcoes(null); setPin(""); setErro(null); }}>
+                  Voltar
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
