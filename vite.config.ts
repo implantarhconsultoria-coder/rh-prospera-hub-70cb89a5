@@ -13,6 +13,14 @@ export default defineConfig(() => ({
     },
   },
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "./index.html"),
+        mecanicos: path.resolve(__dirname, "./mecanicos.html"),
+      },
+    },
+  },
   resolve: {
     alias: [
       {
