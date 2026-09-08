@@ -10,7 +10,7 @@
     { "source": "/acesso-mecanico", "destination": "/mecanicos.html" },
     { "source": "/app-mecanico/:path*", "destination": "/mecanicos.html" },
     { "source": "/mecanico-ext/:path*", "destination": "/mecanicos.html" },
-    { "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|manifest-mecanico.json|sw.js|service-worker.js|placeholder.svg|icons/|apple-touch-icon.png|favicon-16.png|favicon-32.png).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|manifest-mecanico.json|manifest-rhpro-install-20260908.json|manifest-mecanicos-install-20260908.json|sw.js|service-worker.js|placeholder.svg|icons/|apple-touch-icon.png|favicon-16.png|favicon-32.png).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -18,7 +18,7 @@
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "source": "/(manifest.json|manifest-mecanico.json|sw.js|service-worker.js|mecanicos.html|icons/.*)",
+      "source": "/(manifest.json|manifest-mecanico.json|manifest-rhpro-install-20260908.json|manifest-mecanicos-install-20260908.json|sw.js|service-worker.js|mecanicos.html|icons/.*)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     }
   ],
