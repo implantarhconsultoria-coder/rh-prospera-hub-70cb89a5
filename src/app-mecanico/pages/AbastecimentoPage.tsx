@@ -105,6 +105,11 @@ type ReceiptInfo = {
 };
 
 const FUEL_OPTIONS = ["Gasolina", "Etanol", "Diesel", "Diesel S10", "GNV"];
+const WHATSAPP_RECIPIENTS = [
+  { label: "Administrativo", phone: "5511971535944" },
+  { label: "Robson", phone: "5511942920385" },
+] as const;
+
 const supabaseRpc = supabase as unknown as {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
 };
@@ -266,7 +271,10 @@ export default function AbastecimentoPage() {
     return lines.join("\n");
   };
 
-  const abrirWhatsApp = async (auth = autorizacao, station = postoAtual) => {
+  const whatsappHref = (phone: string, auth: Authorization, station?: Posto | null) =>
+    `https://wa.me/${phone}?text=${encodeURIComponent(buildWhatsAppText(auth, station))}`;
+
+  const abrirWhatsApp = async (phone: string, auth = autorizacao, station = postoAtual) => {
     if (!auth) return;
     const popup = window.open("about:blank", "_blank");
     try {
@@ -277,7 +285,7 @@ export default function AbastecimentoPage() {
     } catch (error) {
       console.warn("Falha apenas ao marcar envio WhatsApp:", error);
     }
-    const href = `https://wa.me/?text=${encodeURIComponent(buildWhatsAppText(auth, station))}`;
+    const href = whatsappHref(phone, auth, station);
     if (popup) popup.location.href = href;
     else window.location.href = href;
   };
@@ -288,7 +296,7 @@ export default function AbastecimentoPage() {
     if (!combustivel) return toast.error("Selecione o combustível.");
     if (!postoCodigo) return toast.error("Selecione o posto.");
 
-    const popup = window.open("about:blank", "_blank");
+    const popups = WHATSAPP_RECIPIENTS.map(() => window.open("about:blank", "_blank"));
     setLoading(true);
     try {
       const { data, error } = await supabaseRpc.rpc("app_mecanico_criar_solicitacao_abastecimento", {
@@ -301,7 +309,7 @@ export default function AbastecimentoPage() {
       });
       const result = data as { ok?: boolean; error?: string; existing?: boolean; authorization?: Authorization; posto?: Posto } | null;
       if (error || !result?.ok || !result.authorization) {
-        popup?.close();
+        popups.forEach((popup) => popup?.close());
         toast.error(fuelErrorMessage(result?.error || error?.message));
         return;
       }
@@ -321,11 +329,14 @@ export default function AbastecimentoPage() {
       } catch (markError) {
         console.warn("Falha apenas ao marcar envio WhatsApp:", markError);
       }
-      const href = `https://wa.me/?text=${encodeURIComponent(buildWhatsAppText(auth, station))}`;
-      if (popup) popup.location.href = href;
-      else toast.info("Use o botão WhatsApp para enviar a solicitação.");
+
+      WHATSAPP_RECIPIENTS.forEach((recipient, index) => {
+        const href = whatsappHref(recipient.phone, auth, station);
+        if (popups[index]) popups[index]!.location.href = href;
+      });
+      if (popups.some((popup) => !popup)) toast.info("O navegador bloqueou uma das janelas. Use os dois botões de WhatsApp abaixo para enviar aos dois contatos.");
     } catch (error) {
-      popup?.close();
+      popups.forEach((popup) => popup?.close());
       console.error("Erro ao criar solicitação de abastecimento:", error);
       toast.error(error instanceof Error ? error.message : "Não foi possível enviar a solicitação.");
     } finally {
@@ -546,7 +557,7 @@ export default function AbastecimentoPage() {
       {step === "solicitar" && (
         <Card className="space-y-4 p-4">
           <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-muted-foreground">
-            A solicitação chega ao painel da administração. Depois de enviar, o WhatsApp abrirá com a mensagem pronta para encaminhamento.
+            A solicitação chega ao painel da administração e também abre mensagem de WhatsApp para Administrativo e Robson.
           </div>
 
           <div className="space-y-1.5">
@@ -589,7 +600,9 @@ export default function AbastecimentoPage() {
         <Card className="space-y-4 p-5">
           <div className="flex items-center gap-3 text-amber-500"><Clock3 className="h-7 w-7" /><div><h2 className="font-bold">Aguardando liberação</h2><p className="text-xs text-muted-foreground">A solicitação já está no painel da administração.</p></div></div>
           <RequestSummary auth={autorizacao} posto={postoAtual} />
-          <Button className="w-full" onClick={() => void abrirWhatsApp()}><MessageCircle className="mr-2 h-4 w-4" /> Enviar pelo WhatsApp</Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {WHATSAPP_RECIPIENTS.map((recipient) => <Button key={recipient.phone} className="w-full" onClick={() => void abrirWhatsApp(recipient.phone)}><MessageCircle className="mr-2 h-4 w-4" /> WhatsApp {recipient.label}</Button>)}
+          </div>
           <Button variant="outline" className="w-full" onClick={() => void atualizarStatus()}><RefreshCw className="mr-2 h-4 w-4" /> Verificar liberação</Button>
         </Card>
       )}
