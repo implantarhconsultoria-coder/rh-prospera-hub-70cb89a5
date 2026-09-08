@@ -1,20 +1,18 @@
 {
-  "name": "TOPAC PRO - Software de Gestão Multiempresas",
-  "short_name": "TOPAC PRO",
-  "description": "Sistema integrado de RH, Faturamento e Financeiro para gestão multiempresas",
+  "name": "TOPAC RH PRO - Plataforma Multiempresas",
+  "short_name": "TOPAC RH PRO",
+  "description": "Sistema integrado de RH e operação multiempresas",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#1e293b",
+  "background_color": "#09070f",
+  "theme_color": "#7c2ce8",
   "orientation": "portrait-primary",
   "categories": ["business", "productivity"],
   "icons": [
-    { "src": "/icons/icon-192.png?v=20260625", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png?v=20260625", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-192-maskable.png?v=20260625", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icons/icon-512-maskable.png?v=20260625", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/topac-rh-pro.svg?v=20260908-1", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/topac-rh-pro.svg?v=20260908-1", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ],
   "shortcuts": [
     {
