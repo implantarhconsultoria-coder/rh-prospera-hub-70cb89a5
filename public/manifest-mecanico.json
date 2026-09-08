@@ -1,0 +1,18 @@
+{
+  "name": "TOPAC Mecânicos",
+  "short_name": "TOPAC Mecânicos",
+  "description": "Aplicativo operacional exclusivo dos mecânicos TOPAC",
+  "id": "/mecanicos",
+  "start_url": "/mecanicos?source=pwa&build=20260908-mecanicos-v2",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09070f",
+  "theme_color": "#7c2ce8",
+  "orientation": "portrait-primary",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/mecanico-192.png?v=20260908-2", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/mecanico-512.png?v=20260908-2", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/mecanico-512.png?v=20260908-2", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
