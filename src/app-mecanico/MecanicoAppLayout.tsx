@@ -1,7 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { MecanicoAppProvider, useMecanicoApp } from "./MecanicoAppContext";
 import { ArrowLeft, Clock3, Fuel, Gauge, History, Home, LogOut, Menu, UtensilsCrossed, Wrench, X } from "lucide-react";
+
+const aplicarIdentidadeMecanico = () => {
+  document.title = "TOPAC Mecânicos";
+  const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (manifest) manifest.href = "/manifest-mecanico.json?v=20260908-mecanicos-v2";
+  const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+  if (apple) apple.href = "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2";
+  const theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (theme) theme.content = "#09070f";
+};
 
 const Header = () => {
   const { mecanico } = useMecanicoApp();
@@ -88,10 +98,16 @@ const MecanicoShell = () => (
   </div>
 );
 
-const MecanicoAppLayout = () => (
-  <MecanicoAppProvider>
-    <MecanicoShell />
-  </MecanicoAppProvider>
-);
+const MecanicoAppLayout = () => {
+  useEffect(() => {
+    aplicarIdentidadeMecanico();
+  }, []);
+
+  return (
+    <MecanicoAppProvider>
+      <MecanicoShell />
+    </MecanicoAppProvider>
+  );
+};
 
 export default MecanicoAppLayout;
