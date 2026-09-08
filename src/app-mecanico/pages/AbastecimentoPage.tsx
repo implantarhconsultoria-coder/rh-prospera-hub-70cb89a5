@@ -45,8 +45,6 @@ type Authorization = {
   combustivel: string;
   posto_nome: string;
   posto_codigo?: string | null;
-  valor_estimado?: number | null;
-  observacao?: string | null;
   solicitado_em?: string | null;
   status: "pendente" | "autorizado" | "negado" | "concluido" | string;
   autorizado_em?: string | null;
@@ -136,7 +134,8 @@ const fuelErrorMessage = (code?: string, payload?: Record<string, unknown>) => {
   if (code === "combustivel_invalido") return "Selecione o combustível correto.";
   if (code === "dados_combustivel_invalidos") return "Confira litros e valor total do abastecimento.";
   if (code === "abastecimento_nao_autorizado") return "A solicitação ainda não foi liberada. Aguarde a autorização.";
-  if (code === "foto_bomba_obrigatoria" || code === "foto_painel_obrigatoria") return "As fotos ao vivo da bomba e do painel são obrigatórias.";
+  if (code === "foto_bomba_obrigatoria") return "Envie uma foto da bomba ou da nota/comprovante do posto.";
+  if (code === "foto_painel_obrigatoria") return "Envie a foto do painel do carro com o KM.";
   if (code === "acesso_nao_autorizado") return "Seu acesso não está liberado. Entre novamente pelo PIN.";
   return code || "Não foi possível concluir o abastecimento.";
 };
@@ -162,8 +161,6 @@ export default function AbastecimentoPage() {
   const [placa, setPlaca] = useState("");
   const [combustivel, setCombustivel] = useState("");
   const [postoCodigo, setPostoCodigo] = useState("");
-  const [valorEstimado, setValorEstimado] = useState("");
-  const [observacao, setObservacao] = useState("");
 
   const [camBomba, setCamBomba] = useState(false);
   const [camPainel, setCamPainel] = useState(false);
@@ -207,8 +204,6 @@ export default function AbastecimentoPage() {
         setPlaca(normalizePlate(active.placa));
         setCombustivel(active.combustivel || "");
         setPostoCodigo(active.posto_codigo || "");
-        setValorEstimado(active.valor_estimado ? formatNumberInput(Number(active.valor_estimado), 2) : "");
-        setObservacao(active.observacao || "");
         const station = stationList.find((item) => item.codigo === active.posto_codigo) || null;
         setPostoAtual(station);
         setStep(stepFromStatus(active.status));
@@ -264,9 +259,10 @@ export default function AbastecimentoPage() {
       `Veículo: ${normalizePlate(auth.placa)}`,
       `Combustível: ${auth.combustivel}`,
       `Posto: ${station?.nome || auth.posto_nome}`,
+      `Protocolo: ${auth.app_request_id}`,
+      "",
+      "Aguardando liberação no TOPAC RH PRO.",
     ];
-    if (auth.valor_estimado && Number(auth.valor_estimado) > 0) lines.push(`Valor estimado: R$ ${Number(auth.valor_estimado).toFixed(2).replace(".", ",")}`);
-    lines.push(`Protocolo: ${auth.app_request_id}`, "", "Aguardando liberação no TOPAC RH PRO.");
     return lines.join("\n");
   };
 
@@ -288,7 +284,6 @@ export default function AbastecimentoPage() {
 
   const criarSolicitacao = async () => {
     const plate = normalizePlate(placa);
-    const estimated = parseBrNumber(valorEstimado);
     if (!plate) return toast.error("Selecione ou informe o veículo.");
     if (!combustivel) return toast.error("Selecione o combustível.");
     if (!postoCodigo) return toast.error("Selecione o posto.");
@@ -301,8 +296,8 @@ export default function AbastecimentoPage() {
         p_placa: plate,
         p_combustivel: combustivel,
         p_posto_codigo: postoCodigo,
-        p_valor_estimado: estimated > 0 ? estimated : null,
-        p_observacao: observacao.trim() || null,
+        p_valor_estimado: null,
+        p_observacao: null,
       });
       const result = data as { ok?: boolean; error?: string; existing?: boolean; authorization?: Authorization; posto?: Posto } | null;
       if (error || !result?.ok || !result.authorization) {
@@ -349,8 +344,6 @@ export default function AbastecimentoPage() {
     setOcrCombustivel("");
     setReceipt(null);
     setPdfCache(null);
-    setValorEstimado("");
-    setObservacao("");
     setStep("solicitar");
   };
 
@@ -358,7 +351,7 @@ export default function AbastecimentoPage() {
     if (!autorizacao || autorizacao.status !== "autorizado") throw new Error("Aguarde a liberação antes de abastecer.");
     setLoading(true);
     try {
-      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `bomba-${autorizacao.id}`, blob);
+      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `comprovante-${autorizacao.id}`, blob);
       setFotoBombaUrl(url);
       setOcrLoading(true);
       try {
@@ -372,18 +365,18 @@ export default function AbastecimentoPage() {
           if (fields.litros) setLitros(formatNumberInput(fields.litros, 3));
           setOcrCombustivel(ocr.combustivel || "");
           if (ocr.combustivel && ocr.combustivel !== autorizacao.combustivel) {
-            toast.warning(`A bomba parece indicar ${ocr.combustivel}, mas a autorização é para ${autorizacao.combustivel}. Confira antes de continuar.`);
+            toast.warning(`A imagem parece indicar ${ocr.combustivel}, mas a autorização é para ${autorizacao.combustivel}. Confira antes de continuar.`);
           } else if (fields.valor && fields.litros) {
-            toast.success("Bomba lida automaticamente. Confira valor e litros.");
+            toast.success("Comprovante lido automaticamente. Confira valor e litros.");
           } else {
-            toast.info("Foto da bomba salva. Confira valor e litros manualmente.");
+            toast.info("Foto salva. Se for nota/comprovante, confira valor e litros manualmente.");
           }
         } else {
-          toast.info("Foto da bomba salva. Informe valor e litros manualmente.");
+          toast.info("Foto salva. Confira valor e litros manualmente.");
         }
       } catch (error) {
-        console.warn("OCR da bomba indisponível:", error);
-        toast.info("Foto da bomba salva. Informe valor e litros manualmente.");
+        console.warn("OCR do comprovante indisponível:", error);
+        toast.info("Foto salva. Confira valor e litros manualmente.");
       } finally {
         setOcrLoading(false);
       }
@@ -395,7 +388,7 @@ export default function AbastecimentoPage() {
 
   const onCapturePainel = async (blob: Blob) => {
     if (!autorizacao || autorizacao.status !== "autorizado") throw new Error("Aguarde a liberação antes de continuar.");
-    if (!fotoBombaUrl) throw new Error("Tire primeiro a foto da bomba.");
+    if (!fotoBombaUrl) throw new Error("Envie primeiro a foto da bomba ou da nota do posto.");
     setLoading(true);
     try {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `painel-${autorizacao.id}`, blob);
@@ -427,7 +420,8 @@ export default function AbastecimentoPage() {
 
   const finalizar = async () => {
     if (!autorizacao || autorizacao.status !== "autorizado") return toast.error("A solicitação não está liberada.");
-    if (!fotoBombaUrl || !fotoPainelUrl) return toast.error("As fotos da bomba e do painel são obrigatórias.");
+    if (!fotoBombaUrl) return toast.error("Envie a foto da bomba ou da nota/comprovante do posto.");
+    if (!fotoPainelUrl) return toast.error("Envie a foto do painel do carro com o KM.");
     if (valorNumero <= 0 || litrosNumero <= 0) return toast.error("Confira valor e litros.");
     if (kmNumero <= 0) return toast.error("Confira o KM do painel.");
 
@@ -585,16 +579,6 @@ export default function AbastecimentoPage() {
             </select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Valor estimado <span className="text-muted-foreground">(opcional)</span></Label>
-            <Input inputMode="decimal" value={valorEstimado} onChange={(e) => setValorEstimado(e.target.value)} placeholder="Ex.: 250,00" />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Observação <span className="text-muted-foreground">(opcional)</span></Label>
-            <textarea className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={observacao} onChange={(e) => setObservacao(e.target.value)} placeholder="Alguma informação importante..." />
-          </div>
-
           <Button className="h-12 w-full" onClick={() => void criarSolicitacao()} disabled={loading}>
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-2 h-4 w-4" />} Enviar solicitação
           </Button>
@@ -612,9 +596,9 @@ export default function AbastecimentoPage() {
 
       {step === "liberado" && autorizacao && (
         <Card className="space-y-4 border-emerald-500/30 p-5">
-          <div className="flex items-center gap-3 text-emerald-500"><ShieldCheck className="h-8 w-8" /><div><h2 className="text-lg font-bold">ABASTECIMENTO LIBERADO</h2><p className="text-xs text-muted-foreground">Agora faça o abastecimento e registre as fotos.</p></div></div>
+          <div className="flex items-center gap-3 text-emerald-500"><ShieldCheck className="h-8 w-8" /><div><h2 className="text-lg font-bold">ABASTECIMENTO LIBERADO</h2><p className="text-xs text-muted-foreground">Agora faça o abastecimento e registre as comprovações.</p></div></div>
           <RequestSummary auth={autorizacao} posto={postoAtual} />
-          <div className="rounded-lg bg-muted p-3 text-sm"><b>Ordem:</b> 1. Foto da bomba → 2. Foto do painel/KM → 3. Conferir → 4. Finalizar.</div>
+          <div className="rounded-lg bg-muted p-3 text-sm"><b>Ordem:</b> 1. Foto da bomba ou nota do posto → 2. Foto do painel do carro/KM → 3. Conferir → 4. Finalizar.</div>
           <Button className="h-12 w-full" onClick={() => setStep("bomba")}><Camera className="mr-2 h-4 w-4" /> Iniciar abastecimento</Button>
         </Card>
       )}
@@ -629,19 +613,19 @@ export default function AbastecimentoPage() {
 
       {step === "bomba" && autorizacao && (
         <Card className="space-y-4 p-4">
-          <div><p className="text-xs font-semibold text-amber-500">ETAPA 1 DE 2</p><h2 className="text-lg font-bold">Foto da bomba</h2><p className="text-sm text-muted-foreground">Mostre TOTAL, LITROS e PREÇO/L na bomba.</p></div>
-          {fotoBombaUrl && <img src={fotoBombaUrl} alt="Bomba" className="max-h-64 w-full rounded-lg object-contain" />}
-          <Button className="h-12 w-full" onClick={() => setCamBomba(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> {fotoBombaUrl ? "Refazer foto da bomba" : "Tirar foto da bomba"}</Button>
-          {ocrLoading && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lendo bomba...</p>}
+          <div><p className="text-xs font-semibold text-amber-500">ETAPA 1 DE 2</p><h2 className="text-lg font-bold">Bomba ou nota do posto</h2><p className="text-sm text-muted-foreground">Envie uma foto da bomba após o abastecimento ou da nota/comprovante do posto. Pode usar câmera ou galeria.</p></div>
+          {fotoBombaUrl && <img src={fotoBombaUrl} alt="Comprovante do abastecimento" className="max-h-64 w-full rounded-lg object-contain" />}
+          <Button className="h-12 w-full" onClick={() => setCamBomba(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> {fotoBombaUrl ? "Trocar foto" : "Adicionar foto da bomba ou nota"}</Button>
+          {ocrLoading && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Validando comprovante...</p>}
         </Card>
       )}
 
       {step === "painel" && autorizacao && (
         <Card className="space-y-4 p-4">
-          <div><p className="text-xs font-semibold text-amber-500">ETAPA 2 DE 2</p><h2 className="text-lg font-bold">Foto do painel / KM</h2><p className="text-sm text-muted-foreground">Agora fotografe o hodômetro do veículo.</p></div>
-          {fotoBombaUrl && <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-3 text-sm"><span>Valor OCR</span><b>R$ {valor || "-"}</b><span>Litros OCR</span><b>{litros || "-"}</b></div>}
-          {fotoPainelUrl && <img src={fotoPainelUrl} alt="Painel" className="max-h-64 w-full rounded-lg object-contain" />}
-          <Button className="h-12 w-full" onClick={() => setCamPainel(true)} disabled={loading || !fotoBombaUrl}><Gauge className="mr-2 h-4 w-4" /> {fotoPainelUrl ? "Refazer foto do painel" : "Tirar foto do painel/KM"}</Button>
+          <div><p className="text-xs font-semibold text-amber-500">ETAPA 2 DE 2</p><h2 className="text-lg font-bold">Painel do carro / KM</h2><p className="text-sm text-muted-foreground">Envie a foto do painel do carro mostrando o hodômetro. Esta foto é obrigatória para finalizar.</p></div>
+          {fotoBombaUrl && <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-3 text-sm"><span>Valor</span><b>R$ {valor || "-"}</b><span>Litros</span><b>{litros || "-"}</b></div>}
+          {fotoPainelUrl && <img src={fotoPainelUrl} alt="Painel do carro" className="max-h-64 w-full rounded-lg object-contain" />}
+          <Button className="h-12 w-full" onClick={() => setCamPainel(true)} disabled={loading || !fotoBombaUrl}><Gauge className="mr-2 h-4 w-4" /> {fotoPainelUrl ? "Trocar foto do painel" : "Adicionar foto do painel/KM"}</Button>
           {ocrLoading && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lendo hodômetro...</p>}
         </Card>
       )}
@@ -650,16 +634,16 @@ export default function AbastecimentoPage() {
         <Card className="space-y-4 p-4">
           <div><p className="text-xs font-semibold text-emerald-500">CONFERÊNCIA FINAL</p><h2 className="text-lg font-bold">Confira antes de salvar</h2></div>
           <RequestSummary auth={autorizacao} posto={postoAtual} />
-          {ocrCombustivel && ocrCombustivel !== autorizacao.combustivel && <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> A leitura da bomba indicou {ocrCombustivel}, mas a autorização é para {autorizacao.combustivel}. Confira a bomba.</div>}
+          {ocrCombustivel && ocrCombustivel !== autorizacao.combustivel && <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> A imagem indicou {ocrCombustivel}, mas a autorização é para {autorizacao.combustivel}. Confira antes de finalizar.</div>}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5"><Label>Valor total</Label><Input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0,00" /></div>
             <div className="space-y-1.5"><Label>Litros</Label><Input inputMode="decimal" value={litros} onChange={(e) => setLitros(e.target.value)} placeholder="0,000" /></div>
           </div>
           <div className="space-y-1.5"><Label>KM atual</Label><Input inputMode="numeric" value={kmAtual} onChange={(e) => setKmAtual(e.target.value.replace(/\D/g, ""))} placeholder="Ex.: 55128" className="h-12 text-lg font-semibold" /></div>
           {valorPorLitro && <div className="rounded-lg bg-muted p-3 text-sm">Preço calculado por litro: <b>R$ {valorPorLitro.toFixed(3).replace(".", ",")}</b></div>}
-          <div className="grid grid-cols-2 gap-2"><img src={fotoBombaUrl} alt="Bomba" className="h-28 w-full rounded-lg object-cover" /><img src={fotoPainelUrl} alt="Painel" className="h-28 w-full rounded-lg object-cover" /></div>
+          <div className="grid grid-cols-2 gap-2"><div><p className="mb-1 text-[11px] text-muted-foreground">Bomba/nota</p><img src={fotoBombaUrl} alt="Bomba ou nota" className="h-28 w-full rounded-lg object-cover" /></div><div><p className="mb-1 text-[11px] text-muted-foreground">Painel/KM</p><img src={fotoPainelUrl} alt="Painel" className="h-28 w-full rounded-lg object-cover" /></div></div>
           <Button className="h-12 w-full" onClick={() => void finalizar()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />} Finalizar abastecimento</Button>
-          <p className="text-center text-[11px] text-muted-foreground">GPS é obrigatório no momento da finalização.</p>
+          <p className="text-center text-[11px] text-muted-foreground">Bomba/nota + painel/KM + GPS são obrigatórios para finalizar.</p>
         </Card>
       )}
 
@@ -672,8 +656,8 @@ export default function AbastecimentoPage() {
         </Card>
       )}
 
-      <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" allowGallery={false} title="Foto da Bomba" hint="Enquadre TOTAL, LITROS e PREÇO/L" />
-      <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" allowGallery={false} title="Foto do Painel / KM" hint="Enquadre o hodômetro com os números legíveis" />
+      <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" allowGallery title="Bomba ou Nota do Posto" hint="Fotografe a bomba após o abastecimento ou envie a nota/comprovante do posto" />
+      <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" allowGallery title="Painel do Carro / KM" hint="Mostre o hodômetro com o KM legível" />
     </div>
   );
 }
@@ -685,7 +669,6 @@ function RequestSummary({ auth, posto }: { auth: Authorization; posto?: Posto | 
       <span className="text-muted-foreground">Veículo</span><b className="text-right">{normalizePlate(auth.placa)}</b>
       <span className="text-muted-foreground">Combustível</span><b className="text-right">{auth.combustivel}</b>
       <span className="text-muted-foreground">Posto</span><b className="text-right">{posto?.nome || auth.posto_nome}</b>
-      {auth.valor_estimado && Number(auth.valor_estimado) > 0 ? <><span className="text-muted-foreground">Estimado</span><b className="text-right">R$ {Number(auth.valor_estimado).toFixed(2).replace(".", ",")}</b></> : null}
     </div>
   );
 }
