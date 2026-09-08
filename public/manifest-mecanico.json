@@ -11,8 +11,7 @@
   "orientation": "portrait-primary",
   "categories": ["business", "productivity"],
   "icons": [
-    { "src": "/icons/mecanico-192.png?v=20260908-2", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/mecanico-512.png?v=20260908-2", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/mecanico-512.png?v=20260908-2", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }
