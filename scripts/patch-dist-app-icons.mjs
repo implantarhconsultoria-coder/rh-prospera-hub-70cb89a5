@@ -10,17 +10,20 @@ async function patch(file, replacements) {
   await writeFile(path, html);
 }
 
+// Plataforma principal: URL física nova para impedir o iOS de reaproveitar o ícone antigo.
 await patch('index.html', [
-  [/href="\/favicon-32\.png[^\"]*"/g, 'href="/icons/topac-platform-192.png?v=20260908-final-1"'],
-  [/href="\/favicon-16\.png[^\"]*"/g, 'href="/icons/topac-platform-192.png?v=20260908-final-1"'],
-  [/href="\/apple-touch-icon\.png[^\"]*"/g, 'href="/icons/topac-platform-180.png?v=20260908-final-1"'],
-  [/href="\/manifest\.json[^\"]*"/g, 'href="/manifest.json?v=20260908-final-1"'],
+  [/href="\/favicon-32\.png[^\"]*"/g, 'href="/icons/topac-rhpro-oficial-20260908-1050-192.png"'],
+  [/href="\/favicon-16\.png[^\"]*"/g, 'href="/icons/topac-rhpro-oficial-20260908-1050-192.png"'],
+  [/href="\/apple-touch-icon\.png[^\"]*"/g, 'href="/icons/topac-rhpro-oficial-20260908-1050-180.png"'],
+  [/href="\/manifest\.json[^\"]*"/g, 'href="/manifest-rhpro-install-20260908.json"'],
 ]);
 
+// App Mecânicos: identidade completamente distinta da plataforma.
 await patch('mecanicos.html', [
-  [/href="\/icons\/topac-rh-pro\.svg[^\"]*"/g, 'href="/icons/topac-mecanicos-new.svg?v=20260908-final-1"'],
-  [/href="\/apple-touch-icon\.png[^\"]*"/g, 'href="/icons/topac-mecanicos-180.png?v=20260908-final-1"'],
-  [/href="\/manifest-mecanico\.json[^\"]*"/g, 'href="/manifest-mecanico.json?v=20260908-final-1"'],
+  [/href="\/icons\/topac-mecanicos-new\.svg[^\"]*"/g, 'href="/icons/topac-mecanicos-oficial-20260908-1050-192.png"'],
+  [/href="\/icons\/topac-rh-pro\.svg[^\"]*"/g, 'href="/icons/topac-mecanicos-oficial-20260908-1050-192.png"'],
+  [/href="\/apple-touch-icon\.png[^\"]*"/g, 'href="/icons/topac-mecanicos-oficial-20260908-1050-180.png"'],
+  [/href="\/manifest-mecanico\.json[^\"]*"/g, 'href="/manifest-mecanicos-install-20260908.json"'],
 ]);
 
-console.log('HTML final dos dois aplicativos atualizado.');
+console.log('HTML final: TOPAC RH PRO e TOPAC Mecânicos com identidades físicas separadas.');
