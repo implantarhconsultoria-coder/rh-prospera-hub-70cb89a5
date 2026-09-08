@@ -4,19 +4,16 @@ import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   Bell,
-  Building2,
   CalendarDays,
   Car,
   ChevronRight,
   ClipboardCheck,
   Clock3,
   FileCheck2,
-  FolderOpen,
   Fuel,
   Gauge,
   LogIn,
   LogOut,
-  UsersRound,
   Wrench,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,11 +33,7 @@ const dateTimeMs = (row: any) => {
 
 interface DashboardResumo {
   ok?: boolean;
-  funcionarios_ativos?: number;
-  assinaturas_concluidas?: number;
-  filiais_ativas?: number;
   pendencias?: number;
-  competencia?: string;
   km_hoje?: number;
   veiculo_placa?: string;
   veiculo_descricao?: string;
@@ -53,24 +46,6 @@ interface HistoricoResumo {
   pontos?: any[];
   abastecimentos?: any[];
   chamados?: any[];
-}
-
-function MetricCard({ icon: Icon, label, value, footer, onClick }: { icon: ElementType; label: string; value: React.ReactNode; footer: string; onClick?: () => void }) {
-  const body = (
-    <>
-      <span className="grid h-9 w-9 place-items-center rounded-full border border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-400 sm:h-11 sm:w-11">
-        <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
-      </span>
-      <span className="mt-2 block min-h-[24px] text-[8px] font-medium uppercase leading-tight text-zinc-400 sm:text-[10px]">{label}</span>
-      <strong className="mt-1 block text-lg font-black leading-none text-amber-400 sm:text-2xl">{value}</strong>
-      <span className="mt-auto flex items-center justify-center gap-0.5 pt-2 text-[8px] font-semibold text-fuchsia-400 sm:text-[10px]">{footer}<ChevronRight className="h-3 w-3" /></span>
-    </>
-  );
-  return onClick ? (
-    <button onClick={onClick} className="flex min-h-[116px] flex-col rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-2.5 text-left shadow-[inset_0_0_25px_rgba(168,85,247,0.025)] active:scale-[.98] sm:min-h-[135px] sm:p-3">{body}</button>
-  ) : (
-    <div className="flex min-h-[116px] flex-col rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-2.5 shadow-[inset_0_0_25px_rgba(168,85,247,0.025)] sm:min-h-[135px] sm:p-3">{body}</div>
-  );
 }
 
 function ActionCard({ icon: Icon, title, subtitle, disabled, onClick, badge, greenBadge }: { icon: ElementType; title: string; subtitle: string; disabled?: boolean; onClick: () => void; badge?: string; greenBadge?: string }) {
@@ -116,12 +91,10 @@ export default function HomePage() {
   const base = `/app-mecanico/${mecanico.acesso_id}`;
   const [resumo, setResumo] = useState<DashboardResumo>({});
   const [historico, setHistorico] = useState<HistoricoResumo>({ pontos: [], abastecimentos: [], chamados: [] });
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     const carregar = async () => {
-      setLoading(true);
       try {
         const [dashboardResult, historyResult] = await Promise.all([
           (supabase as any).rpc("app_mecanico_dashboard_resumo", { p_acesso_id: mecanico.acesso_id }),
@@ -132,8 +105,6 @@ export default function HomePage() {
         if (!historyResult.error && historyResult.data?.ok) setHistorico(historyResult.data as HistoricoResumo);
       } catch (error) {
         console.error("Falha ao carregar home do app mecânico:", error);
-      } finally {
-        if (active) setLoading(false);
       }
     };
     void carregar();
@@ -175,7 +146,6 @@ export default function HomePage() {
   const lastFuel = abastecimentos[0];
   const vehicleLabel = [resumo.veiculo_descricao, resumo.veiculo_placa || lastFuel?.placa].filter(Boolean).join(" ") || "Sem veículo registrado";
   const pending = Number(resumo.pendencias || 0);
-  const metricValue = (value: unknown) => loading && value === undefined ? "…" : Number(value || 0);
 
   const recent = useMemo(() => {
     const items = [
@@ -236,13 +206,6 @@ export default function HomePage() {
           <span className="grid h-11 w-11 place-items-center rounded-full border border-fuchsia-500/60 bg-[#09070d] text-[13px] font-bold text-white">{initials}</span>
         </div>
       </header>
-
-      <section className="grid grid-cols-4 gap-1.5 sm:gap-2">
-        <MetricCard icon={UsersRound} label="Funcionários ativos" value={metricValue(resumo.funcionarios_ativos)} footer="Ver equipe" />
-        <MetricCard icon={FileCheck2} label="Assinaturas concluídas" value={metricValue(resumo.assinaturas_concluidas)} footer="Este mês" />
-        <MetricCard icon={Building2} label="Filiais ativas" value={metricValue(resumo.filiais_ativas)} footer="Ver filiais" />
-        <MetricCard icon={FolderOpen} label="Pendências" value={pending} footer="Ver pendências" onClick={() => navigate(`${base}/chamados`)} />
-      </section>
 
       <section>
         <div className="mb-2 flex items-center justify-between px-1">
