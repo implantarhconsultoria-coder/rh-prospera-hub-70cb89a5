@@ -1,62 +1,26 @@
 {
   "framework": "vite",
   "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "node scripts/normalize-source-encoding.mjs && npm run build",
+  "buildCommand": "node scripts/generate-app-icons.mjs && node scripts/normalize-source-encoding.mjs && npm run build && node scripts/patch-dist-app-icons.mjs",
   "outputDirectory": "dist",
   "rewrites": [
-    {
-      "source": "/api/frota-upload",
-      "destination": "/api/frota-upload-v2"
-    },
-    {
-      "source": "/api/payroll-public",
-      "destination": "/api/payroll-public-v2"
-    },
-    {
-      "source": "/mecanicos",
-      "destination": "/mecanicos.html"
-    },
-    {
-      "source": "/acesso-mecanico",
-      "destination": "/mecanicos.html"
-    },
-    {
-      "source": "/app-mecanico/:path*",
-      "destination": "/mecanicos.html"
-    },
-    {
-      "source": "/mecanico-ext/:path*",
-      "destination": "/mecanicos.html"
-    },
-    {
-      "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|manifest-mecanico.json|sw.js|service-worker.js|placeholder.svg|icons/|apple-touch-icon.png|favicon-16.png|favicon-32.png).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/frota-upload", "destination": "/api/frota-upload-v2" },
+    { "source": "/api/payroll-public", "destination": "/api/payroll-public-v2" },
+    { "source": "/mecanicos", "destination": "/mecanicos.html" },
+    { "source": "/acesso-mecanico", "destination": "/mecanicos.html" },
+    { "source": "/app-mecanico/:path*", "destination": "/mecanicos.html" },
+    { "source": "/mecanico-ext/:path*", "destination": "/mecanicos.html" },
+    { "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|manifest-mecanico.json|sw.js|service-worker.js|placeholder.svg|icons/|apple-touch-icon.png|favicon-16.png|favicon-32.png).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
       "source": "/(assets/.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
     },
     {
-      "source": "/(manifest.json|manifest-mecanico.json|sw.js|service-worker.js|mecanicos.html)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
-        }
-      ]
+      "source": "/(manifest.json|manifest-mecanico.json|sw.js|service-worker.js|mecanicos.html|icons/.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
     }
   ],
-  "crons": [
-    {
-      "path": "/api/cleanup-email-attachments",
-      "schedule": "17 3 * * *"
-    }
-  ]
+  "crons": [{ "path": "/api/cleanup-email-attachments", "schedule": "17 3 * * *" }]
 }
