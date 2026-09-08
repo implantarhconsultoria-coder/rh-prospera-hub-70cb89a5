@@ -13,7 +13,23 @@
       "destination": "/api/payroll-public-v2"
     },
     {
-      "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|sw.js|placeholder.svg).*)",
+      "source": "/mecanicos",
+      "destination": "/mecanicos.html"
+    },
+    {
+      "source": "/acesso-mecanico",
+      "destination": "/mecanicos.html"
+    },
+    {
+      "source": "/app-mecanico/:path*",
+      "destination": "/mecanicos.html"
+    },
+    {
+      "source": "/mecanico-ext/:path*",
+      "destination": "/mecanicos.html"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|manifest-mecanico.json|sw.js|service-worker.js|placeholder.svg|icons/|apple-touch-icon.png|favicon-16.png|favicon-32.png).*)",
       "destination": "/index.html"
     }
   ],
@@ -28,7 +44,7 @@
       ]
     },
     {
-      "source": "/(manifest.json|sw.js)",
+      "source": "/(manifest.json|manifest-mecanico.json|sw.js|service-worker.js|mecanicos.html)",
       "headers": [
         {
           "key": "Cache-Control",
