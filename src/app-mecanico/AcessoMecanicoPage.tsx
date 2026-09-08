@@ -35,13 +35,17 @@ const mensagemErroPin = (error?: string) => {
 };
 
 const aplicarIdentidadeMecanico = () => {
+  const iconHref = "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v3";
   document.title = "TOPAC Mecânicos";
   const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-  if (manifest) manifest.href = "/manifest-mecanico.json?v=20260908-mecanicos-v2";
+  if (manifest) manifest.href = "/manifest-mecanico.json?v=20260908-mecanicos-v3";
+  document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]').forEach((icon) => { icon.href = iconHref; icon.type = "image/svg+xml"; });
   const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
-  if (apple) apple.href = "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2";
+  if (apple) apple.href = iconHref;
   const theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   if (theme) theme.content = "#09070f";
+  const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+  if (appleTitle) appleTitle.content = "TOPAC Mecânicos";
 };
 
 export default function AcessoMecanicoPage() {
@@ -125,7 +129,7 @@ export default function AcessoMecanicoPage() {
       <div className="relative w-full max-w-sm space-y-5">
         <div className="text-center space-y-3">
           <img
-            src="/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2"
+            src="/icons/topac-rh-pro.svg?v=20260908-mecanicos-v3"
             alt="TOPAC RH PRO"
             className="mx-auto h-24 w-24 rounded-[24px] shadow-2xl shadow-purple-900/40"
           />
