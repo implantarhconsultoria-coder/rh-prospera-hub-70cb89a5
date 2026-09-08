@@ -3,7 +3,7 @@ import { useMecanicoApp } from "../MecanicoAppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Clock, MapPin, Camera, Fuel, ShieldCheck } from "lucide-react";
+import { Loader2, Clock, MapPin, Camera, Fuel, ShieldCheck, Car, Wrench } from "lucide-react";
 import { formatarDataHoraBrasil } from "@/lib/brTime";
 
 interface PontoHistorico {
@@ -36,11 +36,35 @@ interface AbastecimentoHistorico {
   hora?: string | null;
 }
 
+interface VeiculoHistorico {
+  id: string;
+  data?: string | null;
+  status?: string | null;
+  veiculo_placa?: string | null;
+  veiculo_descricao?: string | null;
+  km_saida?: number | null;
+  km_chegada?: number | null;
+  km_total?: number | null;
+  saida_em?: string | null;
+  chegada_em?: string | null;
+}
+
+interface ChamadoHistorico {
+  id: string;
+  tipo_servico?: string | null;
+  itens_previstos?: string | null;
+  observacoes?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+}
+
 interface HistoricoResult {
   ok?: boolean;
   error?: string;
   pontos?: PontoHistorico[];
   abastecimentos?: AbastecimentoHistorico[];
+  veiculos?: VeiculoHistorico[];
+  chamados?: ChamadoHistorico[];
 }
 
 const historicoRpc = supabase as unknown as {
@@ -56,10 +80,19 @@ const TIPO_LABEL: Record<string, string> = {
   almoco_volta: "Retorno Almoço",
 };
 
+const dataHoraIso = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
 export default function HistoricoPage() {
   const { mecanico } = useMecanicoApp();
   const [pontos, setPontos] = useState<PontoHistorico[]>([]);
   const [abastecimentos, setAbastecimentos] = useState<AbastecimentoHistorico[]>([]);
+  const [veiculos, setVeiculos] = useState<VeiculoHistorico[]>([]);
+  const [chamados, setChamados] = useState<ChamadoHistorico[]>([]);
   const [loading, setLoading] = useState(true);
 
   const carregar = useCallback(async () => {
@@ -70,9 +103,13 @@ export default function HistoricoPage() {
       toast.error(result?.error || error?.message || "Erro ao carregar histórico");
       setPontos([]);
       setAbastecimentos([]);
+      setVeiculos([]);
+      setChamados([]);
     } else {
       setPontos(result.pontos || []);
       setAbastecimentos(result.abastecimentos || []);
+      setVeiculos(result.veiculos || []);
+      setChamados(result.chamados || []);
     }
     setLoading(false);
   }, [mecanico.acesso_id]);
@@ -82,11 +119,32 @@ export default function HistoricoPage() {
   if (loading) return <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" /></div>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-4">
       <div className="flex items-center gap-2 rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/5 px-3 py-2 text-xs text-zinc-400">
         <ShieldCheck className="h-4 w-4 shrink-0 text-fuchsia-400" />
         Histórico somente para consulta. Registros não podem ser editados ou excluídos pelo mecânico.
       </div>
+
+      <Card className="border-fuchsia-500/15 bg-[#07070d] p-4 text-white">
+        <h2 className="mb-3 flex items-center gap-2 font-semibold"><Car className="h-4 w-4 text-fuchsia-400" /> Ponto do Carro / KM</h2>
+        {veiculos.length === 0 ? <p className="text-sm text-zinc-500">Nenhum registro de veículo.</p> : (
+          <ul className="divide-y divide-fuchsia-500/10 text-sm">
+            {veiculos.map((v) => {
+              const total = v.km_chegada != null ? Number(v.km_total ?? Math.max(0, Number(v.km_chegada) - Number(v.km_saida || 0))) : null;
+              return (
+                <li key={v.id} className="space-y-1.5 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div><span className="font-medium">{v.veiculo_descricao || v.veiculo_placa || "Veículo"}</span><p className="text-xs text-zinc-400">{v.veiculo_placa || "-"}</p></div>
+                    <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${String(v.status).toLowerCase() === "concluido" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>{String(v.status || "aberto")}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[11px] text-zinc-500"><span>Saída: {v.km_saida ?? "-"}</span><span>Chegada: {v.km_chegada ?? "-"}</span><span>Rodado: {total != null ? `${total} km` : "-"}</span></div>
+                  <p className="text-[11px] text-zinc-500">{dataHoraIso(v.saida_em || (v.data ? `${v.data}T12:00:00` : null))}</p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
 
       <Card className="border-fuchsia-500/15 bg-[#07070d] p-4 text-white">
         <h2 className="mb-3 flex items-center gap-2 font-semibold"><Fuel className="h-4 w-4 text-fuchsia-400" /> Abastecimentos recentes</h2>
@@ -111,22 +169,33 @@ export default function HistoricoPage() {
       </Card>
 
       <Card className="border-fuchsia-500/15 bg-[#07070d] p-4 text-white">
+        <h2 className="mb-3 flex items-center gap-2 font-semibold"><Wrench className="h-4 w-4 text-fuchsia-400" /> Manutenções</h2>
+        {chamados.length === 0 ? <p className="text-sm text-zinc-500">Nenhuma manutenção.</p> : (
+          <ul className="divide-y divide-fuchsia-500/10 text-sm">
+            {chamados.map((c) => (
+              <li key={c.id} className="space-y-1.5 py-3">
+                <div className="flex items-start justify-between gap-2"><strong>{c.tipo_servico || "Manutenção"}</strong><span className="text-xs text-zinc-500">{c.status || "pendente"}</span></div>
+                {c.itens_previstos && <p className="text-xs text-zinc-400">{c.itens_previstos}</p>}
+                {c.observacoes && <p className="text-[11px] text-zinc-500">{c.observacoes}</p>}
+                <p className="text-[11px] text-zinc-500">{dataHoraIso(c.created_at)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card className="border-fuchsia-500/15 bg-[#07070d] p-4 text-white">
         <h2 className="mb-3 flex items-center gap-2 font-semibold"><Clock className="h-4 w-4 text-fuchsia-400" /> Pontos recentes</h2>
         {pontos.length === 0 ? <p className="text-sm text-zinc-500">Nenhum registro.</p> : (
           <ul className="divide-y divide-fuchsia-500/10 text-sm">
             {pontos.map((p) => (
               <li key={p.id} className="py-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{TIPO_LABEL[p.tipo] || p.tipo}</span>
-                    {p.registro_teste && <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">TESTE</span>}
-                  </div>
+                  <div className="flex items-center gap-2"><span className="font-medium">{TIPO_LABEL[p.tipo] || p.tipo}</span>{p.registro_teste && <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">TESTE</span>}</div>
                   <span className="whitespace-nowrap text-xs text-zinc-500">{formatarDataHoraBrasil(p.data, p.hora)}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-500">
-                  {(p.latitude || p.lat) && (
-                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{(p.latitude ?? p.lat)?.toFixed?.(4)}, {(p.longitude ?? p.lng)?.toFixed?.(4)}</span>
-                  )}
+                  {(p.latitude || p.lat) && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{(p.latitude ?? p.lat)?.toFixed?.(4)}, {(p.longitude ?? p.lng)?.toFixed?.(4)}</span>}
                   {(p.selfie_url || p.selfie) && <span className="flex items-center gap-1 text-emerald-400"><Camera className="h-3 w-3" /> selfie</span>}
                 </div>
               </li>
