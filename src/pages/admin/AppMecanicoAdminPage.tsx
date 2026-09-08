@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
+import AppMecanicoDetailPanel from './AppMecanicoDetailPanel';
 import { toast } from 'sonner';
 
 const TZ = 'America/Sao_Paulo';
@@ -123,7 +124,7 @@ function MiniStatus({ label, value, tone = 'text-zinc-300' }: { label: string; v
   return <div className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-2"><span className="block text-[8px] font-bold uppercase tracking-wider text-zinc-600">{label}</span><strong className={`mt-1 block truncate text-[11px] ${tone}`}>{value}</strong></div>;
 }
 
-function MechanicCard({ row, tab }: { row: MecanicoRow; tab: Tab }) {
+function MechanicCard({ row, tab, onOpen }: { row: MecanicoRow; tab: Tab; onOpen: (id: string) => void }) {
   const initials = row.nome.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
   const pointTone = row.ponto.status === 'fechado' ? 'text-emerald-400' : row.ponto.status === 'aberto' ? 'text-amber-400' : 'text-zinc-500';
   const closeTone = row.fechamento.status === 'completo' ? 'text-emerald-400' : row.fechamento.status === 'pendente' ? 'text-amber-400' : 'text-zinc-500';
@@ -135,7 +136,7 @@ function MechanicCard({ row, tab }: { row: MecanicoRow; tab: Tab }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2"><h3 className="truncate text-sm font-black text-white">{row.nome}</h3><AccessBadge row={row} /></div>
           <p className="mt-0.5 truncate text-[10px] text-zinc-500">{row.funcao || 'Mecânico'} · {row.filial || row.empresa}</p>
-          <p className="mt-1 flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p>
+          <div className="mt-1 flex items-center justify-between gap-2"><p className="flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p><Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={() => onOpen(row.id)}><ExternalLink className="mr-1 h-3 w-3" />Abrir ficha</Button></div>
         </div>
       </div>
 
@@ -214,6 +215,7 @@ export default function AppMecanicoAdminPage() {
   const [pendingFuel, setPendingFuel] = useState<FuelAuthorization[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!isAdmin) return;
@@ -258,7 +260,7 @@ export default function AppMecanicoAdminPage() {
   return (
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-4">
-        <div><div className="flex items-center gap-2"><Wrench className="h-5 w-5 text-amber-400" /><h1 className="text-lg font-black text-white">App Mecânicos — Controle Operacional</h1><Badge variant="secondary">{stats.mecanicos} ativos</Badge></div><p className="mt-1 text-xs text-zinc-500">Acompanhamento em tempo real por empresa. Mecânicos não possuem edição ou exclusão de registros.</p></div>
+        <div><div className="flex items-center gap-2"><Wrench className="h-5 w-5 text-amber-400" /><h1 className="text-lg font-black text-white">App Mecânicos — Controle Operacional</h1><Badge variant="secondary">{stats.mecanicos} ativos</Badge></div><p className="mt-1 text-xs text-zinc-500">Acompanhamento em tempo real por empresa. Mecânicos não possuem edição ou exclusão de registros; a administração possui ficha completa.</p></div>
         <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Atualizar</Button><Button size="sm" asChild><a href="/mecanicos" target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Link dos mecânicos</a></Button></div>
       </header>
 
@@ -277,13 +279,14 @@ export default function AppMecanicoAdminPage() {
         {grouped.map(([empresa, mecanicos]) => (
           <div key={empresa} className="space-y-2.5">
             <div className="flex items-center gap-2 border-b border-fuchsia-500/10 pb-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-fuchsia-500/10 text-fuchsia-400"><Building2 className="h-4 w-4" /></span><h2 className="text-sm font-black uppercase tracking-wide text-white">{empresa}</h2><Badge variant="outline" className="text-[10px]">{mecanicos.length}</Badge><span className="ml-auto text-[10px] text-zinc-600">{mecanicos.filter((m) => m.online).length} online</span></div>
-            <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">{mecanicos.map((row) => <MechanicCard key={row.id} row={row} tab={tab} />)}</div>
+            <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">{mecanicos.map((row) => <MechanicCard key={row.id} row={row} tab={tab} onOpen={setSelectedId} />)}</div>
           </div>
         ))}
         {!rows.length && !loading && <div className="rounded-xl border border-dashed p-10 text-center text-zinc-500">Nenhum mecânico encontrado.</div>}
       </section>
 
       {tab === 'fechamento' && <OperationalClosingReport />}
+      {selectedId && <AppMecanicoDetailPanel acessoId={selectedId} onClose={() => setSelectedId(null)} onSaved={() => void load()} />}
     </div>
   );
 }
