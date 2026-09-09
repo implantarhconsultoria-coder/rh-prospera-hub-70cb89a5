@@ -26,7 +26,7 @@ const menuItems: MenuItem[] = [
 const operationalItems: MenuItem[] = [
   { label: 'Operacional', icon: ClipboardList, path: '/admin/operacional' },
   { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico' },
-  { label: 'Abastecimento QR Code', icon: Fuel, path: '/admin/abastecimento-qrcode' },
+  { label: 'Relatório de Abastecimento', icon: Fuel, path: '/admin/abastecimento-qrcode' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Combustível', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
