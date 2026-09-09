@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { MecanicoAppProvider, useMecanicoApp } from "./MecanicoAppContext";
-import { ArrowLeft, Clock3, Fuel, Gauge, History, Home, LogOut, Menu, UtensilsCrossed, Wrench, X } from "lucide-react";
+import { ArrowLeft, Clock3, Fuel, Gauge, History, Home, LogOut, Menu, Trash2, UtensilsCrossed, Wrench, X } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+const supabaseRpc = supabase as unknown as {
+  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+};
 
 const aplicarIdentidadeMecanico = () => {
   const iconHref = "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v3";
@@ -45,6 +51,88 @@ const Header = () => {
         <span className="grid h-9 w-9 place-items-center rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-400"><Wrench className="h-4 w-4" /></span>
       </div>
     </header>
+  );
+};
+
+const FuelRequestDelete = () => {
+  const { mecanico } = useMecanicoApp();
+  const location = useLocation();
+  const isFuel = location.pathname.includes("/abastecimento");
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [protocol, setProtocol] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isFuel) {
+      setRequestId(null);
+      setProtocol("");
+      return;
+    }
+
+    let active = true;
+    const load = async () => {
+      const { data, error } = await supabaseRpc.rpc("app_mecanico_abastecimento_contexto", {
+        p_acesso_id: mecanico.acesso_id,
+      });
+      if (!active || error) return;
+      const result = data as { solicitacao_ativa?: { id?: string; app_request_id?: string } | null } | null;
+      setRequestId(result?.solicitacao_ativa?.id || null);
+      setProtocol(result?.solicitacao_ativa?.app_request_id || "");
+    };
+
+    void load();
+    const timer = window.setInterval(() => void load(), 4000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isFuel, mecanico.acesso_id]);
+
+  const excluir = async () => {
+    if (!requestId || loading) return;
+    const confirmed = window.confirm(
+      `Excluir somente esta solicitação de abastecimento${protocol ? ` (${protocol})` : ""}?\n\nO registro de abastecimento, quando já concluído, NÃO será excluído.`,
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabaseRpc.rpc("app_mecanico_excluir_solicitacao_abastecimento", {
+        p_acesso_id: mecanico.acesso_id,
+        p_autorizacao_id: requestId,
+      });
+      const result = data as { ok?: boolean; error?: string } | null;
+      if (error || !result?.ok) {
+        if (result?.error === "registro_abastecimento_existente") {
+          toast.error("Essa solicitação já virou um registro de abastecimento e não pode ser excluída.");
+        } else {
+          toast.error(result?.error || error?.message || "Não foi possível excluir a solicitação.");
+        }
+        return;
+      }
+      setRequestId(null);
+      setProtocol("");
+      toast.success("Solicitação de abastecimento excluída.");
+      window.setTimeout(() => window.location.reload(), 350);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isFuel || !requestId) return null;
+
+  return (
+    <div className="fixed bottom-[92px] left-1/2 z-40 w-[calc(100%-24px)] max-w-lg -translate-x-1/2 px-1">
+      <button
+        type="button"
+        onClick={() => void excluir()}
+        disabled={loading}
+        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-[#12070a]/95 text-sm font-bold text-red-300 shadow-xl backdrop-blur-xl disabled:opacity-60"
+      >
+        <Trash2 className="h-4 w-4" />
+        {loading ? "Excluindo solicitação..." : "Excluir esta solicitação"}
+      </button>
+    </div>
   );
 };
 
@@ -98,6 +186,7 @@ const MecanicoShell = () => (
     <main className="relative mx-auto w-full max-w-lg px-3 pb-28 pt-3 sm:px-4">
       <Outlet />
     </main>
+    <FuelRequestDelete />
     <BottomNav />
   </div>
 );
