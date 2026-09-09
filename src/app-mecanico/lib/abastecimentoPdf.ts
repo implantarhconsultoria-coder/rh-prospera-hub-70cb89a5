@@ -60,8 +60,9 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
   ]);
 
   // Modelo visual aprovado: recibo vertical, limpo, com dados grandes e as duas fotos lado a lado.
-  const pdf = new jsPDF({ unit: "mm", format: [148, 210], orientation: "portrait" });
   const pageW = 148;
+  const pageH = 220;
+  const pdf = new jsPDF({ unit: "mm", format: [pageW, pageH], orientation: "portrait" });
   const margin = 10;
   const contentW = pageW - margin * 2;
   const viagem = /VIAGEM|POSTO EXTERNO/i.test(data.postoNome || "");
@@ -239,17 +240,15 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
     pdf.addImage(qr, "PNG", pageW - margin - 17, y - 1, 17, 17);
   }
 
-  if (viagem) {
-    pdf.setTextColor(10);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(7.1);
-    pdf.text("APRESENTAR RECIBO DO POSTO PARA REEMBOLSO", pageW / 2, 204, { align: "center" });
-  } else {
-    pdf.setTextColor(95);
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(6.2);
-    pdf.text("Comprovante gerado automaticamente pelo TOPAC RH PRO", pageW / 2, 204, { align: "center" });
-  }
+  pdf.setTextColor(viagem ? 10 : 95);
+  pdf.setFont("helvetica", viagem ? "bold" : "normal");
+  pdf.setFontSize(viagem ? 7.1 : 6.2);
+  pdf.text(
+    viagem ? "APRESENTAR RECIBO DO POSTO PARA REEMBOLSO" : "Comprovante gerado automaticamente pelo TOPAC RH PRO",
+    pageW / 2,
+    pageH - 6,
+    { align: "center" },
+  );
 
   const safe = (data.placa || data.mecanicoNome || "abastecimento")
     .normalize("NFD")
