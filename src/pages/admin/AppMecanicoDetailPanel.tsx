@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Fuel, Gauge, History, Loader2, LockKeyhole, MapPin, Phone, Save, UserRound, X } from 'lucide-react';
+import { Car, ExternalLink, Fuel, Gauge, History, Loader2, LockKeyhole, MapPin, Phone, Save, UserRound, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -82,6 +82,27 @@ type DetailData = {
   }>;
 };
 
+type VehicleOption = {
+  id: string;
+  placa: string;
+  descricao?: string | null;
+  empresa?: string | null;
+};
+
+type MechanicVehicle = {
+  acesso_id: string;
+  ativo_id?: string | null;
+  placa?: string | null;
+  veiculo_descricao?: string | null;
+};
+
+type VehicleResponse = {
+  ok?: boolean;
+  error?: string;
+  mecanicos?: MechanicVehicle[];
+  veiculos?: VehicleOption[];
+};
+
 type Props = {
   acessoId: string;
   onClose: () => void;
@@ -105,18 +126,34 @@ export default function AppMecanicoDetailPanel({ acessoId, onClose, onSaved }: P
   const [filial, setFilial] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [liberado, setLiberado] = useState(true);
+  const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
+  const [selectedVehicle, setSelectedVehicle] = useState('');
+  const [currentVehicleLabel, setCurrentVehicleLabel] = useState('Sem veículo fixo');
 
   const load = async () => {
     setLoading(true);
     try {
-      const { data: result, error } = await (supabase as any).rpc('admin_app_mecanico_historico', { p_acesso_id: acessoId });
-      const detail = result as DetailData | null;
-      if (error || !detail?.ok || !detail.mecanico) throw new Error(detail?.error || error?.message || 'Falha ao carregar ficha do mecânico.');
+      const [historyCall, vehiclesCall] = await Promise.all([
+        (supabase as any).rpc('admin_app_mecanico_historico', { p_acesso_id: acessoId }),
+        (supabase as any).rpc('admin_app_mecanicos_veiculos'),
+      ]);
+
+      const detail = historyCall.data as DetailData | null;
+      if (historyCall.error || !detail?.ok || !detail.mecanico) throw new Error(detail?.error || historyCall.error?.message || 'Falha ao carregar ficha do mecânico.');
+
+      const vehicleData = vehiclesCall.data as VehicleResponse | null;
+      if (vehiclesCall.error || !vehicleData?.ok) throw new Error(vehicleData?.error || vehiclesCall.error?.message || 'Falha ao carregar veículos cadastrados.');
+
+      const currentVehicle = (vehicleData.mecanicos || []).find((item) => item.acesso_id === acessoId);
+
       setData(detail);
       setTelefone(detail.mecanico.telefone || '');
       setFilial(detail.mecanico.filial || '');
       setObservacoes(detail.mecanico.observacoes || '');
       setLiberado(detail.mecanico.acesso_liberado !== false);
+      setVehicles(vehicleData.veiculos || []);
+      setSelectedVehicle(currentVehicle?.ativo_id || '');
+      setCurrentVehicleLabel(currentVehicle?.placa ? `${currentVehicle.placa}${currentVehicle.veiculo_descricao ? ` — ${currentVehicle.veiculo_descricao}` : ''}` : 'Sem veículo fixo');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Falha ao carregar ficha do mecânico.');
     } finally {
@@ -129,15 +166,24 @@ export default function AppMecanicoDetailPanel({ acessoId, onClose, onSaved }: P
   const save = async () => {
     setSaving(true);
     try {
-      const { data: result, error } = await (supabase as any).rpc('admin_app_mecanico_atualizar_acesso', {
-        p_acesso_id: acessoId,
-        p_acesso_liberado: liberado,
-        p_filial: filial || null,
-        p_telefone: telefone || null,
-        p_observacoes: observacoes || null,
-      });
-      if (error || !result?.ok) throw new Error(result?.error || error?.message || 'Não foi possível salvar.');
-      toast.success('Acesso do mecânico atualizado.');
+      const [accessCall, vehicleCall] = await Promise.all([
+        (supabase as any).rpc('admin_app_mecanico_atualizar_acesso', {
+          p_acesso_id: acessoId,
+          p_acesso_liberado: liberado,
+          p_filial: filial || null,
+          p_telefone: telefone || null,
+          p_observacoes: observacoes || null,
+        }),
+        (supabase as any).rpc('admin_app_mecanico_trocar_veiculo', {
+          p_acesso_id: acessoId,
+          p_ativo_id: selectedVehicle || null,
+        }),
+      ]);
+
+      if (accessCall.error || !accessCall.data?.ok) throw new Error(accessCall.data?.error || accessCall.error?.message || 'Não foi possível salvar o perfil.');
+      if (vehicleCall.error || !vehicleCall.data?.ok) throw new Error(vehicleCall.data?.error || vehicleCall.error?.message || 'Não foi possível salvar o veículo.');
+
+      toast.success('Perfil e veículo do mecânico atualizados.');
       await load();
       onSaved?.();
     } catch (error) {
@@ -156,7 +202,7 @@ export default function AppMecanicoDetailPanel({ acessoId, onClose, onSaved }: P
         <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-[#08080e]/95 p-4 backdrop-blur">
           <div>
             <div className="flex items-center gap-2"><UserRound className="h-5 w-5 text-fuchsia-400" /><h2 className="text-lg font-black text-white">Ficha do mecânico</h2></div>
-            <p className="mt-1 text-xs text-zinc-500">Edição administrativa, histórico e localização.</p>
+            <p className="mt-1 text-xs text-zinc-500">Edição administrativa, veículo, histórico e localização.</p>
           </div>
           <Button variant="outline" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
         </header>
@@ -175,9 +221,19 @@ export default function AppMecanicoDetailPanel({ acessoId, onClose, onSaved }: P
                 <div className="space-y-1.5"><Label>Telefone operacional</Label><div className="relative"><Phone className="absolute left-3 top-3 h-4 w-4 text-zinc-500" /><Input value={telefone} onChange={(e) => setTelefone(e.target.value)} className="pl-9" placeholder="Telefone" /></div></div>
                 <div className="space-y-1.5"><Label>Filial operacional</Label><Input value={filial} onChange={(e) => setFilial(e.target.value)} placeholder="Filial" /></div>
               </div>
+
+              <div className="mt-3 space-y-1.5 rounded-lg border border-amber-400/15 bg-amber-400/5 p-3">
+                <Label className="flex items-center gap-2"><Car className="h-4 w-4 text-amber-400" />Veículo fixo do mecânico</Label>
+                <select value={selectedVehicle} onChange={(e) => setSelectedVehicle(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring">
+                  <option value="">Sem veículo fixo</option>
+                  {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.placa} — {vehicle.descricao || 'Veículo'}{vehicle.empresa ? ` — ${vehicle.empresa}` : ''}</option>)}
+                </select>
+                <p className="text-[11px] text-zinc-500">Atual: <b className="text-amber-300">{currentVehicleLabel}</b>. Ao trocar o carro, o vínculo anterior é encerrado e o histórico continua preservado.</p>
+              </div>
+
               <div className="mt-3 space-y-1.5"><Label>Observações administrativas</Label><textarea className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observações internas do acesso..." /></div>
               <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm"><input type="checkbox" checked={liberado} onChange={(e) => setLiberado(e.target.checked)} className="h-4 w-4" /><LockKeyhole className="h-4 w-4 text-amber-400" /><span><b className="text-white">Acesso ao App Mecânicos</b><span className="block text-xs text-zinc-500">Desmarque para bloquear o login deste usuário.</span></span></label>
-              <Button className="mt-4" onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Salvar alterações</Button>
+              <Button className="mt-4" onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Salvar perfil e veículo</Button>
             </section>
 
             <section className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4">
