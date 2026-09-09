@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { MecanicoAppProvider, useMecanicoApp } from "./MecanicoAppContext";
-import { ArrowLeft, Clock3, Fuel, Gauge, History, Home, LogOut, Menu, Trash2, UtensilsCrossed, Wrench, X } from "lucide-react";
+import { ArrowLeft, Fuel, Gauge, History, Home, LogOut, Menu, Trash2, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -39,7 +39,7 @@ const Header = () => {
     : "TOPAC RH PRO";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-fuchsia-500/15 bg-[#030309]/95 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-fuchsia-500/15 bg-[#030309]/95 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
       <div className="mx-auto flex h-14 w-full max-w-lg items-center gap-3 px-3">
         <button onClick={() => navigate(base)} className="grid h-10 w-10 place-items-center rounded-full border border-fuchsia-500/20 bg-[#09090f] text-zinc-200" aria-label="Voltar">
           <ArrowLeft className="h-5 w-5" />
@@ -122,7 +122,7 @@ const FuelRequestDelete = () => {
   if (!isFuel || !requestId) return null;
 
   return (
-    <div className="fixed bottom-[92px] left-1/2 z-40 w-[calc(100%-24px)] max-w-lg -translate-x-1/2 px-1">
+    <div className="fixed bottom-[calc(104px+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-24px)] max-w-lg -translate-x-1/2 px-1">
       <button
         type="button"
         onClick={() => void excluir()}
@@ -151,14 +151,12 @@ const BottomNav = () => {
     <>
       {moreOpen && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/70 p-3 backdrop-blur-sm" onClick={() => setMoreOpen(false)}>
-          <div className="mx-auto w-full max-w-lg rounded-[24px] border border-fuchsia-500/25 bg-[#08080e] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+          <div className="mx-auto w-full max-w-lg rounded-[24px] border border-fuchsia-500/25 bg-[#08080e] p-4 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-fuchsia-400">Mais opções</p><h2 className="mt-1 text-lg font-black text-white">Operação do dia</h2></div>
               <button onClick={() => setMoreOpen(false)} className="grid h-9 w-9 place-items-center rounded-full border border-fuchsia-500/20 text-zinc-400"><X className="h-4 w-4" /></button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => { setMoreOpen(false); navigate(`${base}/ponto?tipo=almoco_inicio`); }} className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-left text-white"><UtensilsCrossed className="mb-3 h-5 w-5 text-fuchsia-400" /><strong className="block text-sm">Início do almoço</strong><span className="mt-1 block text-[10px] text-zinc-500">Registrar intervalo</span></button>
-              <button onClick={() => { setMoreOpen(false); navigate(`${base}/ponto?tipo=almoco_fim`); }} className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-left text-white"><Clock3 className="mb-3 h-5 w-5 text-fuchsia-400" /><strong className="block text-sm">Fim do almoço</strong><span className="mt-1 block text-[10px] text-zinc-500">Retornar à jornada</span></button>
               <button onClick={() => { setMoreOpen(false); navigate(`${base}/chamados`); }} className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-left text-white"><Wrench className="mb-3 h-5 w-5 text-fuchsia-400" /><strong className="block text-sm">Manutenção</strong><span className="mt-1 block text-[10px] text-zinc-500">Chamados e serviços</span></button>
               <button onClick={sair} className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-left text-white"><LogOut className="mb-3 h-5 w-5 text-red-400" /><strong className="block text-sm">Sair</strong><span className="mt-1 block text-[10px] text-zinc-500">Encerrar acesso</span></button>
             </div>
@@ -183,7 +181,7 @@ const MecanicoShell = () => (
   <div className="min-h-screen bg-[#030309] text-white">
     <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_82%_-5%,rgba(126,34,206,0.13),transparent_31%),radial-gradient(circle_at_7%_32%,rgba(88,28,135,0.06),transparent_27%)]" />
     <Header />
-    <main className="relative mx-auto w-full max-w-lg px-3 pb-28 pt-3 sm:px-4">
+    <main className="relative mx-auto w-full max-w-lg px-3 pb-[calc(128px+env(safe-area-inset-bottom))] pt-3 sm:px-4">
       <Outlet />
     </main>
     <FuelRequestDelete />
