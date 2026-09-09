@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { MecanicoAppProvider, useMecanicoApp } from "./MecanicoAppContext";
-import { ArrowLeft, Fuel, Gauge, History, Home, LogOut, Menu, Trash2, Wrench, X } from "lucide-react";
+import { ArrowLeft, Fuel, Gauge, History, Home, LogOut, MapPin, Menu, Trash2, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -51,6 +51,90 @@ const Header = () => {
         <span className="grid h-9 w-9 place-items-center rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-400"><Wrench className="h-4 w-4" /></span>
       </div>
     </header>
+  );
+};
+
+const FuelTravelMode = () => {
+  const { mecanico } = useMecanicoApp();
+  const location = useLocation();
+  const isFuel = location.pathname.includes("/abastecimento");
+  const [loaded, setLoaded] = useState(false);
+  const [hasActiveRequest, setHasActiveRequest] = useState(false);
+  const [viagem, setViagem] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isFuel) {
+      setLoaded(false);
+      setHasActiveRequest(false);
+      setViagem(false);
+      return;
+    }
+
+    let active = true;
+    const load = async () => {
+      const [contextResult, modeResult] = await Promise.all([
+        supabaseRpc.rpc("app_mecanico_abastecimento_contexto", { p_acesso_id: mecanico.acesso_id }),
+        supabaseRpc.rpc("app_mecanico_modo_abastecimento", { p_acesso_id: mecanico.acesso_id }),
+      ]);
+      if (!active) return;
+      const context = contextResult.data as { solicitacao_ativa?: { id?: string } | null } | null;
+      const mode = modeResult.data as { ok?: boolean; viagem?: boolean } | null;
+      setHasActiveRequest(Boolean(context?.solicitacao_ativa?.id));
+      setViagem(Boolean(mode?.viagem));
+      setLoaded(true);
+    };
+
+    void load();
+    return () => { active = false; };
+  }, [isFuel, mecanico.acesso_id]);
+
+  const toggle = async () => {
+    if (saving || hasActiveRequest) return;
+    const next = !viagem;
+    setSaving(true);
+    const { data, error } = await supabaseRpc.rpc("app_mecanico_definir_modo_abastecimento", {
+      p_acesso_id: mecanico.acesso_id,
+      p_viagem: next,
+    });
+    const result = data as { ok?: boolean; viagem?: boolean; error?: string } | null;
+    if (error || !result?.ok) {
+      toast.error(result?.error || error?.message || "Não foi possível alterar o modo de abastecimento.");
+      setSaving(false);
+      return;
+    }
+    setViagem(Boolean(result.viagem));
+    toast.success(next ? "Modo VIAGEM ativado para esta solicitação." : "Modo normal: posto fixo da unidade.");
+    setSaving(false);
+  };
+
+  if (!isFuel || !loaded || hasActiveRequest) return null;
+
+  return (
+    <div className={`mb-3 rounded-xl border p-3 ${viagem ? "border-amber-400/50 bg-amber-500/10" : "border-fuchsia-500/20 bg-[#08080e]"}`}>
+      <div className="flex items-center gap-3">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${viagem ? "bg-amber-500/15 text-amber-400" : "bg-fuchsia-500/10 text-fuchsia-400"}`}>
+          <MapPin className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-black text-white">Abastecimento em viagem</div>
+          <div className="mt-0.5 text-[10px] leading-snug text-zinc-400">
+            {viagem ? "Posto externo. GPS continua obrigatório e o recibo exigirá comprovante para reembolso." : "Opcional. Deixe desligado para usar o posto fixo da unidade."}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void toggle()}
+          disabled={saving}
+          className={`relative h-7 w-12 shrink-0 rounded-full border transition ${viagem ? "border-amber-400 bg-amber-500/30" : "border-zinc-700 bg-zinc-900"} disabled:opacity-60`}
+          aria-pressed={viagem}
+          aria-label="Alternar abastecimento em viagem"
+        >
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${viagem ? "left-[25px]" : "left-0.5"}`} />
+        </button>
+      </div>
+      {viagem && <div className="mt-2 rounded-lg border border-amber-400/25 bg-black/20 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-amber-300">VIAGEM ATIVA — apresentar recibo do posto para reembolso</div>}
+    </div>
   );
 };
 
@@ -182,6 +266,7 @@ const MecanicoShell = () => (
     <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_82%_-5%,rgba(126,34,206,0.13),transparent_31%),radial-gradient(circle_at_7%_32%,rgba(88,28,135,0.06),transparent_27%)]" />
     <Header />
     <main className="relative mx-auto w-full max-w-lg px-3 pb-[calc(128px+env(safe-area-inset-bottom))] pt-3 sm:px-4">
+      <FuelTravelMode />
       <Outlet />
     </main>
     <FuelRequestDelete />
