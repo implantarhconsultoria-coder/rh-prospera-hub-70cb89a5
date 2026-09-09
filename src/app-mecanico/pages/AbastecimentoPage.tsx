@@ -57,7 +57,8 @@ type ContextResult = {
   error?: string;
   mecanico?: MecInfo;
   veiculos?: VeiculoInfo[];
-  permite_placa_manual?: boolean;
+  veiculo_fixo?: string | null;
+  exige_selecao_veiculo?: boolean;
   postos?: Posto[];
   solicitacao_ativa?: Authorization | null;
 };
@@ -133,8 +134,9 @@ const fuelErrorMessage = (code?: string, payload?: Record<string, unknown>) => {
   if (code === "gps_obrigatorio") return "Ative a localização do aparelho. O abastecimento não é salvo sem GPS.";
   if (code === "km_obrigatorio") return "Informe o KM atual do veículo.";
   if (code === "km_menor_ultimo") return `O KM informado é menor que o último KM registrado (${payload?.ultimo_km ?? "-"}). Confira o painel.`;
-  if (code === "placa_obrigatoria") return "Selecione ou informe a placa do veículo.";
-  if (code === "veiculo_nao_autorizado") return "A placa informada não foi encontrada como veículo ativo da frota.";
+  if (code === "placa_obrigatoria") return "Selecione o veículo liberado para Goiânia.";
+  if (code === "veiculo_fixo_nao_configurado") return "Seu veículo fixo ainda não foi configurado. Fale com a administração.";
+  if (code === "veiculo_nao_autorizado") return "Esse veículo não está liberado para seu acesso.";
   if (code === "posto_invalido") return "Selecione um posto válido.";
   if (code === "combustivel_invalido") return "Selecione o combustível correto.";
   if (code === "dados_combustivel_invalidos") return "Confira litros e valor total do abastecimento.";
@@ -159,7 +161,7 @@ export default function AbastecimentoPage() {
   const [mecInfo, setMecInfo] = useState<MecInfo | null>(null);
   const [veiculos, setVeiculos] = useState<VeiculoInfo[]>([]);
   const [postos, setPostos] = useState<Posto[]>([]);
-  const [permitePlacaManual, setPermitePlacaManual] = useState(false);
+  const [exigeSelecaoVeiculo, setExigeSelecaoVeiculo] = useState(false);
   const [autorizacao, setAutorizacao] = useState<Authorization | null>(null);
   const [postoAtual, setPostoAtual] = useState<Posto | null>(null);
 
@@ -195,12 +197,15 @@ export default function AbastecimentoPage() {
 
       const vehicleList = (result.veiculos || []).map((item) => ({ ...item, placa: normalizePlate(item.placa) })).filter((item) => item.placa);
       const stationList = result.postos || [];
+      const mustSelectVehicle = Boolean(result.exige_selecao_veiculo);
+      const fixedPlate = normalizePlate(result.veiculo_fixo);
       setMecInfo(result.mecanico || null);
       setVeiculos(vehicleList);
       setPostos(stationList);
-      setPermitePlacaManual(Boolean(result.permite_placa_manual));
+      setExigeSelecaoVeiculo(mustSelectVehicle);
 
-      if (!placa && vehicleList.length === 1) setPlaca(vehicleList[0].placa);
+      if (!mustSelectVehicle) setPlaca(fixedPlate || vehicleList[0]?.placa || "");
+      else if (!placa && vehicleList.length === 1) setPlaca(vehicleList[0].placa);
       if (!postoCodigo && stationList.length === 1) setPostoCodigo(stationList[0].codigo);
 
       if (result.solicitacao_ativa?.id) {
@@ -292,18 +297,19 @@ export default function AbastecimentoPage() {
 
   const criarSolicitacao = async () => {
     const plate = normalizePlate(placa);
-    if (!plate) return toast.error("Selecione ou informe o veículo.");
+    const stationCode = postoCodigo || (!exigeSelecaoVeiculo && postos.length === 1 ? postos[0].codigo : "");
+    if (exigeSelecaoVeiculo && !plate) return toast.error("Selecione o veículo liberado.");
     if (!combustivel) return toast.error("Selecione o combustível.");
-    if (!postoCodigo) return toast.error("Selecione o posto.");
+    if (!stationCode) return toast.error("Selecione o posto.");
 
     const popups = WHATSAPP_RECIPIENTS.map(() => window.open("about:blank", "_blank"));
     setLoading(true);
     try {
       const { data, error } = await supabaseRpc.rpc("app_mecanico_criar_solicitacao_abastecimento", {
         p_acesso_id: mecanico.acesso_id,
-        p_placa: plate,
+        p_placa: exigeSelecaoVeiculo ? plate : null,
         p_combustivel: combustivel,
-        p_posto_codigo: postoCodigo,
+        p_posto_codigo: stationCode,
         p_valor_estimado: null,
         p_observacao: null,
       });
@@ -560,19 +566,25 @@ export default function AbastecimentoPage() {
             A solicitação chega ao painel da administração e também abre mensagem de WhatsApp para Administrativo e Robson.
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Veículo</Label>
-            {veiculos.length > 0 && (
-              <select className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={veiculos.some((v) => normalizePlate(v.placa) === normalizePlate(placa)) ? normalizePlate(placa) : ""} onChange={(e) => setPlaca(normalizePlate(e.target.value))}>
-                <option value="">Selecionar veículo</option>
-                {veiculos.map((item) => <option key={item.placa} value={item.placa}>{item.descricao || item.placa} · {item.placa}</option>)}
-              </select>
-            )}
-            {permitePlacaManual && (
-              <Input value={placa} onChange={(e) => setPlaca(normalizePlate(e.target.value))} placeholder="Placa do veículo" maxLength={7} autoCapitalize="characters" className="h-11 font-semibold uppercase" />
-            )}
-            {!permitePlacaManual && veiculos.length === 0 && <p className="text-xs text-amber-600">Nenhum veículo está vinculado ao seu acesso. Fale com a administração.</p>}
-          </div>
+          {exigeSelecaoVeiculo && (
+            <div className="space-y-1.5">
+              <Label>Veículo liberado</Label>
+              {veiculos.length > 0 ? (
+                <select className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={veiculos.some((v) => normalizePlate(v.placa) === normalizePlate(placa)) ? normalizePlate(placa) : ""} onChange={(e) => setPlaca(normalizePlate(e.target.value))}>
+                  <option value="">Selecionar veículo</option>
+                  {veiculos.map((item) => <option key={item.placa} value={item.placa}>{item.descricao || item.placa} · {item.placa}</option>)}
+                </select>
+              ) : (
+                <p className="text-xs text-amber-600">Nenhum carro ou moto está liberado para esta unidade. Fale com a administração.</p>
+              )}
+            </div>
+          )}
+
+          {!exigeSelecaoVeiculo && !placa && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700">
+              Seu veículo fixo ainda não foi configurado. Fale com a administração antes de solicitar.
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Combustível</Label>
@@ -582,15 +594,17 @@ export default function AbastecimentoPage() {
             </select>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Posto</Label>
-            <select className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={postoCodigo} onChange={(e) => setPostoCodigo(e.target.value)}>
-              <option value="">Selecionar posto</option>
-              {postos.map((item) => <option key={item.codigo} value={item.codigo}>{item.nome}</option>)}
-            </select>
-          </div>
+          {exigeSelecaoVeiculo && (
+            <div className="space-y-1.5">
+              <Label>Posto</Label>
+              <select className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={postoCodigo} onChange={(e) => setPostoCodigo(e.target.value)}>
+                <option value="">Selecionar posto</option>
+                {postos.map((item) => <option key={item.codigo} value={item.codigo}>{item.nome}</option>)}
+              </select>
+            </div>
+          )}
 
-          <Button className="h-12 w-full" onClick={() => void criarSolicitacao()} disabled={loading}>
+          <Button className="h-12 w-full" onClick={() => void criarSolicitacao()} disabled={loading || (!exigeSelecaoVeiculo && !placa)}>
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-2 h-4 w-4" />} Enviar solicitação
           </Button>
         </Card>
