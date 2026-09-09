@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Camera, CheckCircle2, Clock3, Eye, FileDown, Fuel, Gauge, Loader2, MessageCircle, RefreshCw, Share2, ShieldCheck, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Camera, CheckCircle2, Clock3, Eye, FileDown, Fuel, Gauge, Loader2, MessageCircle, RefreshCw, Share2, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { getBrowserLocation } from "@/lib/browserGeo";
@@ -76,12 +75,14 @@ type PumpOcrResult = {
   litros?: string | number;
   valor_por_litro?: string | number;
   combustivel?: string;
+  motivo?: string;
 };
 
 type PanelOcrResult = {
   ok?: boolean;
   km?: string | number;
   km_atual?: string | number;
+  motivo?: string;
 };
 
 type ReceiptInfo = {
@@ -118,30 +119,18 @@ const supabaseRpc = supabase as unknown as {
 const normalizePlate = (value: string | null | undefined) =>
   String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
 
-const parseBrNumber = (value: string | number | null | undefined) => {
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const raw = String(value || "").trim().replace(/\s/g, "");
-  if (!raw) return 0;
-  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
-  const parsed = Number(normalized.replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const formatNumberInput = (value: number, digits: number) =>
-  Number(value || 0).toFixed(digits).replace(".", ",");
-
 const fuelErrorMessage = (code?: string, payload?: Record<string, unknown>) => {
   if (code === "gps_obrigatorio") return "Ative a localização do aparelho. O abastecimento não é salvo sem GPS.";
-  if (code === "km_obrigatorio") return "Informe o KM atual do veículo.";
-  if (code === "km_menor_ultimo") return `O KM informado é menor que o último KM registrado (${payload?.ultimo_km ?? "-"}). Confira o painel.`;
+  if (code === "km_obrigatorio") return "Não foi possível confirmar o KM da foto do painel.";
+  if (code === "km_menor_ultimo") return `O KM lido na foto é menor que o último KM registrado (${payload?.ultimo_km ?? "-"}). Confira a foto do painel.`;
   if (code === "placa_obrigatoria") return "Selecione o veículo liberado para Goiânia.";
   if (code === "veiculo_fixo_nao_configurado") return "Seu veículo fixo ainda não foi configurado. Fale com a administração.";
   if (code === "veiculo_nao_autorizado") return "Esse veículo não está liberado para seu acesso.";
   if (code === "posto_invalido") return "Selecione um posto válido.";
   if (code === "combustivel_invalido") return "Selecione o combustível correto.";
-  if (code === "dados_combustivel_invalidos") return "Confira litros e valor total do abastecimento.";
+  if (code === "dados_combustivel_invalidos") return "Não foi possível confirmar valor e litros da foto da bomba.";
   if (code === "abastecimento_nao_autorizado") return "A solicitação ainda não foi liberada. Aguarde a autorização.";
-  if (code === "foto_bomba_obrigatoria") return "Envie uma foto da bomba ou da nota/comprovante do posto.";
+  if (code === "foto_bomba_obrigatoria") return "Envie a foto da bomba do posto.";
   if (code === "foto_painel_obrigatoria") return "Envie a foto do painel do carro com o KM.";
   if (code === "acesso_nao_autorizado") return "Seu acesso não está liberado. Entre novamente pelo PIN.";
   return code || "Não foi possível concluir o abastecimento.";
@@ -157,7 +146,6 @@ export default function AbastecimentoPage() {
   const { mecanico } = useMecanicoApp();
   const [step, setStep] = useState<Step>("solicitar");
   const [loading, setLoading] = useState(true);
-  const [ocrLoading, setOcrLoading] = useState(false);
   const [mecInfo, setMecInfo] = useState<MecInfo | null>(null);
   const [veiculos, setVeiculos] = useState<VeiculoInfo[]>([]);
   const [postos, setPostos] = useState<Posto[]>([]);
@@ -173,18 +161,8 @@ export default function AbastecimentoPage() {
   const [camPainel, setCamPainel] = useState(false);
   const [fotoBombaUrl, setFotoBombaUrl] = useState("");
   const [fotoPainelUrl, setFotoPainelUrl] = useState("");
-  const [valor, setValor] = useState("");
-  const [litros, setLitros] = useState("");
-  const [kmAtual, setKmAtual] = useState("");
-  const [ocrCombustivel, setOcrCombustivel] = useState("");
   const [receipt, setReceipt] = useState<ReceiptInfo | null>(null);
   const [pdfCache, setPdfCache] = useState<{ blob: Blob; fileName: string } | null>(null);
-
-  const valorNumero = useMemo(() => parseBrNumber(valor), [valor]);
-  const litrosNumero = useMemo(() => parseBrNumber(litros), [litros]);
-  const kmNumero = useMemo(() => parseBrNumber(kmAtual), [kmAtual]);
-  const valorPorLitro = useMemo(() => valorNumero > 0 && litrosNumero > 0 ? valorNumero / litrosNumero : null, [valorNumero, litrosNumero]);
-  const veiculoSelecionado = useMemo(() => veiculos.find((item) => normalizePlate(item.placa) === normalizePlate(autorizacao?.placa || placa)) || null, [veiculos, autorizacao?.placa, placa]);
 
   const carregarContexto = async () => {
     setLoading(true);
@@ -195,10 +173,13 @@ export default function AbastecimentoPage() {
       const result = data as ContextResult | null;
       if (error || !result?.ok) throw new Error(result?.error || error?.message || "Falha ao carregar abastecimento.");
 
-      const vehicleList = (result.veiculos || []).map((item) => ({ ...item, placa: normalizePlate(item.placa) })).filter((item) => item.placa);
+      const vehicleList = (result.veiculos || [])
+        .map((item) => ({ ...item, placa: normalizePlate(item.placa) }))
+        .filter((item) => item.placa);
       const stationList = result.postos || [];
       const mustSelectVehicle = Boolean(result.exige_selecao_veiculo);
       const fixedPlate = normalizePlate(result.veiculo_fixo);
+
       setMecInfo(result.mecanico || null);
       setVeiculos(vehicleList);
       setPostos(stationList);
@@ -214,8 +195,7 @@ export default function AbastecimentoPage() {
         setPlaca(normalizePlate(active.placa));
         setCombustivel(active.combustivel || "");
         setPostoCodigo(active.posto_codigo || "");
-        const station = stationList.find((item) => item.codigo === active.posto_codigo) || null;
-        setPostoAtual(station);
+        setPostoAtual(stationList.find((item) => item.codigo === active.posto_codigo) || null);
         setStep(stepFromStatus(active.status));
       } else {
         setStep("solicitar");
@@ -340,7 +320,9 @@ export default function AbastecimentoPage() {
         const href = whatsappHref(recipient.phone, auth, station);
         if (popups[index]) popups[index]!.location.href = href;
       });
-      if (popups.some((popup) => !popup)) toast.info("O navegador bloqueou uma das janelas. Use os dois botões de WhatsApp abaixo para enviar aos dois contatos.");
+      if (popups.some((popup) => !popup)) {
+        toast.info("O navegador bloqueou uma das janelas. Use os dois botões de WhatsApp abaixo para enviar aos dois contatos.");
+      }
     } catch (error) {
       popups.forEach((popup) => popup?.close());
       console.error("Erro ao criar solicitação de abastecimento:", error);
@@ -355,10 +337,6 @@ export default function AbastecimentoPage() {
     setPostoAtual(null);
     setFotoBombaUrl("");
     setFotoPainelUrl("");
-    setValor("");
-    setLitros("");
-    setKmAtual("");
-    setOcrCombustivel("");
     setReceipt(null);
     setPdfCache(null);
     setStep("solicitar");
@@ -368,36 +346,10 @@ export default function AbastecimentoPage() {
     if (!autorizacao || autorizacao.status !== "autorizado") throw new Error("Aguarde a liberação antes de abastecer.");
     setLoading(true);
     try {
-      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `comprovante-${autorizacao.id}`, blob);
+      const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `bomba-${autorizacao.id}`, blob);
       setFotoBombaUrl(url);
-      setOcrLoading(true);
-      try {
-        const { data, error } = await supabase.functions.invoke("ocr-bomba-combustivel", {
-          body: { fileUrl: url, tipo: "bomba" },
-        });
-        const ocr = data as PumpOcrResult | null;
-        if (!error && ocr?.ok) {
-          const fields = normalizePumpOcrFields(ocr);
-          if (fields.valor) setValor(formatNumberInput(fields.valor, 2));
-          if (fields.litros) setLitros(formatNumberInput(fields.litros, 3));
-          setOcrCombustivel(ocr.combustivel || "");
-          if (ocr.combustivel && ocr.combustivel !== autorizacao.combustivel) {
-            toast.warning(`A imagem parece indicar ${ocr.combustivel}, mas a autorização é para ${autorizacao.combustivel}. Confira antes de continuar.`);
-          } else if (fields.valor && fields.litros) {
-            toast.success("Comprovante lido automaticamente. Confira valor e litros.");
-          } else {
-            toast.info("Foto salva. Se for nota/comprovante, confira valor e litros manualmente.");
-          }
-        } else {
-          toast.info("Foto salva. Confira valor e litros manualmente.");
-        }
-      } catch (error) {
-        console.warn("OCR do comprovante indisponível:", error);
-        toast.info("Foto salva. Confira valor e litros manualmente.");
-      } finally {
-        setOcrLoading(false);
-      }
-      setStep("painel");
+      toast.success("Foto da bomba salva.");
+      setStep(fotoPainelUrl ? "revisao" : "painel");
     } finally {
       setLoading(false);
     }
@@ -405,42 +357,52 @@ export default function AbastecimentoPage() {
 
   const onCapturePainel = async (blob: Blob) => {
     if (!autorizacao || autorizacao.status !== "autorizado") throw new Error("Aguarde a liberação antes de continuar.");
-    if (!fotoBombaUrl) throw new Error("Envie primeiro a foto da bomba ou da nota do posto.");
+    if (!fotoBombaUrl) throw new Error("Envie primeiro a foto da bomba do posto.");
     setLoading(true);
     try {
       const url = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `painel-${autorizacao.id}`, blob);
       setFotoPainelUrl(url);
-      setOcrLoading(true);
-      try {
-        const { data, error } = await supabase.functions.invoke("ocr-bomba-combustivel", {
-          body: { fileUrl: url, tipo: "painel_km" },
-        });
-        const ocr = data as PanelOcrResult | null;
-        const km = !error && ocr?.ok ? normalizeKmOcrField(ocr) : null;
-        if (km) {
-          setKmAtual(String(km));
-          toast.success("KM lido automaticamente. Confira antes de finalizar.");
-        } else {
-          toast.info("Foto do painel salva. Informe o KM manualmente.");
-        }
-      } catch (error) {
-        console.warn("OCR do painel indisponível:", error);
-        toast.info("Foto do painel salva. Informe o KM manualmente.");
-      } finally {
-        setOcrLoading(false);
-      }
+      toast.success("Foto do painel salva.");
       setStep("revisao");
     } finally {
       setLoading(false);
     }
   };
 
+  const lerFotosParaRecibo = async () => {
+    const [pumpCall, panelCall] = await Promise.all([
+      supabase.functions.invoke("ocr-bomba-combustivel", {
+        body: { fileUrl: fotoBombaUrl, tipo: "bomba" },
+      }),
+      supabase.functions.invoke("ocr-bomba-combustivel", {
+        body: { fileUrl: fotoPainelUrl, tipo: "painel_km" },
+      }),
+    ]);
+
+    const pump = pumpCall.data as PumpOcrResult | null;
+    const panel = panelCall.data as PanelOcrResult | null;
+    const pumpFields = !pumpCall.error && pump ? normalizePumpOcrFields(pump) : { valor: null, litros: null, precoLitro: null };
+    const km = !panelCall.error && panel ? normalizeKmOcrField(panel) : null;
+
+    if (pumpCall.error || !pump?.ok || !pumpFields.valor || !pumpFields.litros) {
+      throw new Error("Não consegui ler com segurança o VALOR e os LITROS da foto da bomba. Tire outra foto deixando os números bem visíveis.");
+    }
+    if (panelCall.error || !panel?.ok || !km) {
+      throw new Error("Não consegui ler com segurança o KM da foto do painel. Tire outra foto mostrando claramente o hodômetro.");
+    }
+
+    return {
+      valor: pumpFields.valor,
+      litros: pumpFields.litros,
+      valorPorLitro: pumpFields.precoLitro || pumpFields.valor / pumpFields.litros,
+      km,
+    };
+  };
+
   const finalizar = async () => {
     if (!autorizacao || autorizacao.status !== "autorizado") return toast.error("A solicitação não está liberada.");
-    if (!fotoBombaUrl) return toast.error("Envie a foto da bomba ou da nota/comprovante do posto.");
+    if (!fotoBombaUrl) return toast.error("Envie a foto da bomba do posto.");
     if (!fotoPainelUrl) return toast.error("Envie a foto do painel do carro com o KM.");
-    if (valorNumero <= 0 || litrosNumero <= 0) return toast.error("Confira valor e litros.");
-    if (kmNumero <= 0) return toast.error("Confira o KM do painel.");
 
     setLoading(true);
     try {
@@ -450,12 +412,15 @@ export default function AbastecimentoPage() {
         return;
       }
 
+      toast.info("Gerando o recibo a partir das fotos...");
+      const lido = await lerFotosParaRecibo();
+
       const { data, error } = await supabaseRpc.rpc("app_mecanico_finalizar_abastecimento_autorizado", {
         p_acesso_id: mecanico.acesso_id,
         p_autorizacao_id: autorizacao.id,
-        p_valor: valorNumero,
-        p_litros: litrosNumero,
-        p_km: kmNumero,
+        p_valor: lido.valor,
+        p_litros: lido.litros,
+        p_km: lido.km,
         p_foto_bomba_url: fotoBombaUrl,
         p_foto_painel_url: fotoPainelUrl,
         p_latitude: location.latitude,
@@ -469,6 +434,7 @@ export default function AbastecimentoPage() {
       }
 
       const station = postoAtual || postos.find((item) => item.codigo === autorizacao.posto_codigo) || null;
+      const vehicle = veiculos.find((item) => normalizePlate(item.placa) === normalizePlate(autorizacao.placa)) || null;
       const info: ReceiptInfo = {
         id: result.id,
         codigo: autorizacao.app_request_id,
@@ -478,37 +444,32 @@ export default function AbastecimentoPage() {
         empresa: autorizacao.empresa_nome || mecInfo?.empresa || mecanico.empresa,
         filial: autorizacao.filial || mecInfo?.filial || mecanico.filial,
         placa: normalizePlate(autorizacao.placa),
-        veiculo: veiculoSelecionado?.descricao || "",
+        veiculo: vehicle?.descricao || "",
         combustivel: autorizacao.combustivel,
-        valor: valorNumero,
-        litros: litrosNumero,
-        valorPorLitro,
-        kmAtual: kmNumero,
+        valor: lido.valor,
+        litros: lido.litros,
+        valorPorLitro: lido.valorPorLitro,
+        kmAtual: lido.km,
         fotoBombaUrl,
         fotoPainelUrl,
         createdAt: new Date(),
       };
-      setReceipt(info);
-      setStep("ok");
 
-      try {
-        const pdf = await gerarCupomAbastecimentoPdf(info);
-        const reciboPdfUrl = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `recibo-${info.id}`, pdf.blob);
-        const linked = await supabaseRpc.rpc("app_mecanico_vincular_recibo_pdf", {
-          p_acesso_id: mecanico.acesso_id,
-          p_abastecimento_id: info.id,
-          p_recibo_pdf_url: reciboPdfUrl,
-        });
-        const linkedResult = linked.data as { ok?: boolean; error?: string } | null;
-        if (linked.error || !linkedResult?.ok) throw new Error(linkedResult?.error || linked.error?.message || "Falha ao vincular comprovante.");
-        info.reciboPdfUrl = reciboPdfUrl;
-        setReceipt({ ...info });
-        setPdfCache(pdf);
-        toast.success(result.duplicado ? "Abastecimento já estava concluído. Registro preservado." : "Abastecimento concluído com sucesso.");
-      } catch (pdfError) {
-        console.warn("Abastecimento salvo; falha apenas no PDF:", pdfError);
-        toast.success("Abastecimento concluído. Registro e fotos foram salvos; o PDF não foi gerado neste momento.");
-      }
+      const pdf = await gerarCupomAbastecimentoPdf(info);
+      const reciboPdfUrl = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `recibo-${info.id}`, pdf.blob);
+      const linked = await supabaseRpc.rpc("app_mecanico_vincular_recibo_pdf", {
+        p_acesso_id: mecanico.acesso_id,
+        p_abastecimento_id: info.id,
+        p_recibo_pdf_url: reciboPdfUrl,
+      });
+      const linkedResult = linked.data as { ok?: boolean; error?: string } | null;
+      if (linked.error || !linkedResult?.ok) throw new Error(linkedResult?.error || linked.error?.message || "Falha ao vincular comprovante.");
+
+      info.reciboPdfUrl = reciboPdfUrl;
+      setReceipt(info);
+      setPdfCache(pdf);
+      setStep("ok");
+      toast.success(result.duplicado ? "Abastecimento já estava concluído. Registro preservado." : "Abastecimento concluído e recibo gerado.");
     } catch (error) {
       console.error("Erro ao finalizar abastecimento:", error);
       toast.error(error instanceof Error ? error.message : "Não foi possível finalizar o abastecimento.");
@@ -623,9 +584,9 @@ export default function AbastecimentoPage() {
 
       {step === "liberado" && autorizacao && (
         <Card className="space-y-4 border-emerald-500/30 p-5">
-          <div className="flex items-center gap-3 text-emerald-500"><ShieldCheck className="h-8 w-8" /><div><h2 className="text-lg font-bold">ABASTECIMENTO LIBERADO</h2><p className="text-xs text-muted-foreground">Agora faça o abastecimento e registre as comprovações.</p></div></div>
+          <div className="flex items-center gap-3 text-emerald-500"><ShieldCheck className="h-8 w-8" /><div><h2 className="text-lg font-bold">ABASTECIMENTO LIBERADO</h2><p className="text-xs text-muted-foreground">Agora faça o abastecimento e registre as duas fotos.</p></div></div>
           <RequestSummary auth={autorizacao} posto={postoAtual} />
-          <div className="rounded-lg bg-muted p-3 text-sm"><b>Ordem:</b> 1. Foto da bomba ou nota do posto → 2. Foto do painel do carro/KM → 3. Conferir → 4. Finalizar.</div>
+          <div className="rounded-lg bg-muted p-3 text-sm"><b>Ordem:</b> 1. Foto da bomba → 2. Foto do painel/KM → 3. Conferir as fotos → 4. Finalizar e gerar o recibo.</div>
           <Button className="h-12 w-full" onClick={() => setStep("bomba")}><Camera className="mr-2 h-4 w-4" /> Iniciar abastecimento</Button>
         </Card>
       )}
@@ -640,51 +601,49 @@ export default function AbastecimentoPage() {
 
       {step === "bomba" && autorizacao && (
         <Card className="space-y-4 p-4">
-          <div><p className="text-xs font-semibold text-amber-500">ETAPA 1 DE 2</p><h2 className="text-lg font-bold">Bomba ou nota do posto</h2><p className="text-sm text-muted-foreground">Envie uma foto da bomba após o abastecimento ou da nota/comprovante do posto. Pode usar câmera ou galeria.</p></div>
-          {fotoBombaUrl && <img src={fotoBombaUrl} alt="Comprovante do abastecimento" className="max-h-64 w-full rounded-lg object-contain" />}
-          <Button className="h-12 w-full" onClick={() => setCamBomba(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> {fotoBombaUrl ? "Trocar foto" : "Adicionar foto da bomba ou nota"}</Button>
-          {ocrLoading && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Validando comprovante...</p>}
+          <div><p className="text-xs font-semibold text-amber-500">ETAPA 1 DE 2</p><h2 className="text-lg font-bold">Foto da bomba</h2><p className="text-sm text-muted-foreground">Fotografe a bomba após o abastecimento deixando VALOR e LITROS bem visíveis. A foto é salva primeiro; os números só serão usados na geração do recibo.</p></div>
+          {fotoBombaUrl && <img src={fotoBombaUrl} alt="Bomba do abastecimento" className="max-h-64 w-full rounded-lg object-contain" />}
+          <Button className="h-12 w-full" onClick={() => setCamBomba(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> {fotoBombaUrl ? "Trocar foto da bomba" : "Tirar foto da bomba"}</Button>
         </Card>
       )}
 
       {step === "painel" && autorizacao && (
         <Card className="space-y-4 p-4">
-          <div><p className="text-xs font-semibold text-amber-500">ETAPA 2 DE 2</p><h2 className="text-lg font-bold">Painel do carro / KM</h2><p className="text-sm text-muted-foreground">Envie a foto do painel do carro mostrando o hodômetro. Esta foto é obrigatória para finalizar.</p></div>
-          {fotoBombaUrl && <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-3 text-sm"><span>Valor</span><b>R$ {valor || "-"}</b><span>Litros</span><b>{litros || "-"}</b></div>}
+          <div><p className="text-xs font-semibold text-amber-500">ETAPA 2 DE 2</p><h2 className="text-lg font-bold">Foto do painel / KM</h2><p className="text-sm text-muted-foreground">Fotografe o painel mostrando claramente o hodômetro total. A foto é salva e o KM será usado somente na geração do recibo.</p></div>
+          {fotoBombaUrl && <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-600">Foto da bomba salva.</div>}
           {fotoPainelUrl && <img src={fotoPainelUrl} alt="Painel do carro" className="max-h-64 w-full rounded-lg object-contain" />}
-          <Button className="h-12 w-full" onClick={() => setCamPainel(true)} disabled={loading || !fotoBombaUrl}><Gauge className="mr-2 h-4 w-4" /> {fotoPainelUrl ? "Trocar foto do painel" : "Adicionar foto do painel/KM"}</Button>
-          {ocrLoading && <p className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Lendo hodômetro...</p>}
+          <Button className="h-12 w-full" onClick={() => setCamPainel(true)} disabled={loading || !fotoBombaUrl}><Gauge className="mr-2 h-4 w-4" /> {fotoPainelUrl ? "Trocar foto do painel" : "Tirar foto do painel/KM"}</Button>
         </Card>
       )}
 
       {step === "revisao" && autorizacao && (
         <Card className="space-y-4 p-4">
-          <div><p className="text-xs font-semibold text-emerald-500">CONFERÊNCIA FINAL</p><h2 className="text-lg font-bold">Confira antes de salvar</h2></div>
+          <div><p className="text-xs font-semibold text-emerald-500">CONFERÊNCIA FINAL</p><h2 className="text-lg font-bold">Confira as duas fotos</h2><p className="mt-1 text-sm text-muted-foreground">Não existe mais preenchimento automático durante a captura. Ao finalizar, o recibo usa a foto da bomba para valor/litros e a foto do painel para o KM.</p></div>
           <RequestSummary auth={autorizacao} posto={postoAtual} />
-          {ocrCombustivel && ocrCombustivel !== autorizacao.combustivel && <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-600"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> A imagem indicou {ocrCombustivel}, mas a autorização é para {autorizacao.combustivel}. Confira antes de finalizar.</div>}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5"><Label>Valor total</Label><Input inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0,00" /></div>
-            <div className="space-y-1.5"><Label>Litros</Label><Input inputMode="decimal" value={litros} onChange={(e) => setLitros(e.target.value)} placeholder="0,000" /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><p className="mb-1 text-[11px] text-muted-foreground">Bomba — valor e litros</p><img src={fotoBombaUrl} alt="Bomba" className="h-32 w-full rounded-lg object-cover" /></div>
+            <div><p className="mb-1 text-[11px] text-muted-foreground">Painel — KM</p><img src={fotoPainelUrl} alt="Painel" className="h-32 w-full rounded-lg object-cover" /></div>
           </div>
-          <div className="space-y-1.5"><Label>KM atual</Label><Input inputMode="numeric" value={kmAtual} onChange={(e) => setKmAtual(e.target.value.replace(/\D/g, ""))} placeholder="Ex.: 55128" className="h-12 text-lg font-semibold" /></div>
-          {valorPorLitro && <div className="rounded-lg bg-muted p-3 text-sm">Preço calculado por litro: <b>R$ {valorPorLitro.toFixed(3).replace(".", ",")}</b></div>}
-          <div className="grid grid-cols-2 gap-2"><div><p className="mb-1 text-[11px] text-muted-foreground">Bomba/nota</p><img src={fotoBombaUrl} alt="Bomba ou nota" className="h-28 w-full rounded-lg object-cover" /></div><div><p className="mb-1 text-[11px] text-muted-foreground">Painel/KM</p><img src={fotoPainelUrl} alt="Painel" className="h-28 w-full rounded-lg object-cover" /></div></div>
-          <Button className="h-12 w-full" onClick={() => void finalizar()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />} Finalizar abastecimento</Button>
-          <p className="text-center text-[11px] text-muted-foreground">Bomba/nota + painel/KM + GPS são obrigatórios para finalizar.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => setCamBomba(true)} disabled={loading}><Camera className="mr-2 h-4 w-4" /> Trocar bomba</Button>
+            <Button variant="outline" onClick={() => setCamPainel(true)} disabled={loading}><Gauge className="mr-2 h-4 w-4" /> Trocar painel</Button>
+          </div>
+          <Button className="h-12 w-full" onClick={() => void finalizar()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />} Finalizar e gerar recibo</Button>
+          <p className="text-center text-[11px] text-muted-foreground">Fotos + GPS são obrigatórios. Os dados numéricos do recibo vêm das imagens enviadas.</p>
         </Card>
       )}
 
       {step === "ok" && receipt && (
         <Card className="space-y-4 border-emerald-500/30 p-5">
-          <div className="flex items-center gap-3 text-emerald-500"><CheckCircle2 className="h-9 w-9" /><div><h2 className="text-lg font-bold">Abastecimento concluído</h2><p className="text-xs text-muted-foreground">Registro e fotos salvos no TOPAC RH PRO.</p></div></div>
+          <div className="flex items-center gap-3 text-emerald-500"><CheckCircle2 className="h-9 w-9" /><div><h2 className="text-lg font-bold">Abastecimento concluído</h2><p className="text-xs text-muted-foreground">Registro, fotos e recibo salvos no TOPAC RH PRO.</p></div></div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg bg-muted p-4 text-sm"><span>Veículo</span><b>{receipt.placa}</b><span>Combustível</span><b>{receipt.combustivel}</b><span>Valor</span><b>R$ {receipt.valor.toFixed(2).replace(".", ",")}</b><span>Litros</span><b>{receipt.litros.toFixed(3).replace(".", ",")}</b><span>KM</span><b>{receipt.kmAtual?.toLocaleString("pt-BR")}</b></div>
           {pdfCache && <div className="grid grid-cols-3 gap-2"><Button variant="outline" onClick={viewPdf}><Eye className="h-4 w-4" /></Button><Button variant="outline" onClick={downloadPdf}><FileDown className="h-4 w-4" /></Button><Button variant="outline" onClick={() => void sharePdf()}><Share2 className="h-4 w-4" /></Button></div>}
           <Button className="w-full" variant="outline" onClick={novaSolicitacao}>Voltar</Button>
         </Card>
       )}
 
-      <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" allowGallery title="Bomba ou Nota do Posto" hint="Fotografe a bomba após o abastecimento ou envie a nota/comprovante do posto" />
-      <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" allowGallery title="Painel do Carro / KM" hint="Mostre o hodômetro com o KM legível" />
+      <CameraCapture open={camBomba} onClose={() => setCamBomba(false)} onCapture={onCaptureBomba} facing="environment" allowGallery title="Foto da Bomba" hint="Mostre claramente o visor com VALOR e LITROS" />
+      <CameraCapture open={camPainel} onClose={() => setCamPainel(false)} onCapture={onCapturePainel} facing="environment" allowGallery title="Painel do Carro / KM" hint="Mostre claramente o hodômetro total" />
     </div>
   );
 }
