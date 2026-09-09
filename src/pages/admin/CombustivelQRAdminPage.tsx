@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { Building2, CalendarRange, Download, Fuel, History, Loader2, Mail, Pencil, Plus, Printer, QrCode } from 'lucide-react';
+import { Building2, CalendarRange, Download, Fuel, History, Loader2, Mail, Pencil, Plus, Printer, QrCode, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -60,6 +61,8 @@ const escapeHtml = (value: unknown) => String(value ?? '')
 
 export default function CombustivelQRAdminPage() {
   const navigate = useNavigate();
+  const { userRoles } = useApp();
+  const canDelete = userRoles.includes('admin');
   const [postos, setPostos] = useState<Posto[]>([]);
   const [companies, setCompanies] = useState<RegisteredCompany[]>([]);
   const [records, setRecords] = useState<FuelReportRecord[]>([]);
@@ -82,6 +85,8 @@ export default function CombustivelQRAdminPage() {
   const [qrUrl, setQrUrl] = useState('');
   const [emailDraft, setEmailDraft] = useState<EmailPdfDraft | null>(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [deleteRecord, setDeleteRecord] = useState<FuelReportRecord | null>(null);
+  const [deletingRecord, setDeletingRecord] = useState(false);
 
   const loadBase = useCallback(async () => {
     setLoadingBase(true);
@@ -264,6 +269,32 @@ export default function CombustivelQRAdminPage() {
     URL.revokeObjectURL(url);
   };
 
+  const deleteFuelRecord = async () => {
+    if (!deleteRecord || !canDelete) return;
+    setDeletingRecord(true);
+    try {
+      const { data, error } = await (supabase.from('abastecimentos' as any) as any)
+        .update({
+          excluido: true,
+          excluido_em: new Date().toISOString(),
+          excluido_motivo: 'Excluído pelo Relatório de Abastecimento',
+          status: 'cancelado',
+        })
+        .eq('id', deleteRecord.id)
+        .select('id')
+        .maybeSingle();
+      if (error || !data?.id) {
+        toast.error(error?.message || 'Não foi possível excluir o abastecimento.');
+        return;
+      }
+      setDeleteRecord(null);
+      toast.success('Abastecimento excluído do relatório.');
+      await loadReport();
+    } finally {
+      setDeletingRecord(false);
+    }
+  };
+
   const savePosto = async () => {
     if (!postoDraft.nome.trim()) return toast.error('Informe o nome do posto.');
     const { data, error } = await supabase.rpc('admin_posto_combustivel_upsert' as any, {
@@ -305,7 +336,7 @@ export default function CombustivelQRAdminPage() {
   return (
     <div className="container mx-auto space-y-6 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3"><Fuel className="h-7 w-7 text-amber-600" /><div><h1 className="text-2xl font-bold">Central de Abastecimentos</h1><p className="text-sm text-muted-foreground">Relatórios executivos separados do Aplicativo dos Mecânicos.</p></div></div>
+        <div className="flex items-center gap-3"><Fuel className="h-7 w-7 text-amber-600" /><div><h1 className="text-2xl font-bold">Relatório de Abastecimento</h1><p className="text-sm text-muted-foreground">Relatórios executivos integrados ao Aplicativo dos Mecânicos.</p></div></div>
         <Button variant="outline" onClick={() => navigate('/admin/funcionarios')}><Building2 className="mr-2 h-4 w-4" /> Dados bancários dos funcionários</Button>
       </div>
 
@@ -354,10 +385,9 @@ export default function CombustivelQRAdminPage() {
         <TabsContent value="detalhado">
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-3"><CardTitle>Relatório Detalhado</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={exportDetailedCsv} disabled={!filteredRecords.length}>CSV</Button><Button variant="outline" onClick={() => openPdf('detalhado')} disabled={!filteredRecords.length}><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button><Button onClick={() => prepareEmail('detalhado')} disabled={!filteredRecords.length}><Mail className="mr-2 h-4 w-4" /> Enviar</Button></div></CardHeader>
-            <CardContent><DetailedTable records={filteredRecords} /></CardContent>
+            <CardContent><DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} /></CardContent>
           </Card>
         </TabsContent>
-
 
         <TabsContent value="quilometragem">
           <Card>
@@ -385,13 +415,30 @@ export default function CombustivelQRAdminPage() {
         </TabsContent>
 
         <TabsContent value="historico">
-          <Card><CardHeader><CardTitle>Histórico do período consultado</CardTitle></CardHeader><CardContent><div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3"><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{generalTotals.quantity}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Litros</div><div className="text-xl font-bold">{formatNumber(generalTotals.liters)}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Valor</div><div className="text-xl font-bold">{formatMoney(generalTotals.value)}</div></div></div><DetailedTable records={filteredRecords} /></CardContent></Card>
+          <Card><CardHeader><CardTitle>Histórico do período consultado</CardTitle></CardHeader><CardContent><div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3"><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{generalTotals.quantity}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Litros</div><div className="text-xl font-bold">{formatNumber(generalTotals.liters)}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Valor</div><div className="text-xl font-bold">{formatMoney(generalTotals.value)}</div></div></div><DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="qrcodes">
           <Card><CardHeader className="flex-row items-center justify-between"><CardTitle>Postos cadastrados</CardTitle><Button onClick={() => { setPostoDraft(emptyPosto); setPostoDialog(true); }}><Plus className="mr-2 h-4 w-4" /> Novo posto</Button></CardHeader><CardContent>{loadingBase ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Table><TableHeader><TableRow><TableHead>Posto</TableHead><TableHead>CNPJ</TableHead><TableHead>Endereço</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{postos.map((posto) => <TableRow key={posto.id}><TableCell><div className="font-medium">{posto.nome}</div><code className="text-xs text-muted-foreground">{posto.codigo}</code></TableCell><TableCell>{posto.cnpj || '-'}</TableCell><TableCell>{posto.endereco || '-'}</TableCell><TableCell><Badge variant={posto.status === 'ativo' ? 'default' : 'destructive'}>{posto.status}</Badge></TableCell><TableCell className="text-right"><Button size="icon" variant="ghost" onClick={() => void showQr(posto)}><QrCode className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => { setPostoDraft({ id: posto.id, nome: posto.nome, cnpj: posto.cnpj || '', endereco: posto.endereco || '', telefone: posto.telefone || '', observacao: posto.observacao || '' }); setPostoDialog(true); }}><Pencil className="h-4 w-4" /></Button><Button size="sm" variant="outline" onClick={() => void togglePosto(posto)}>{posto.status === 'ativo' ? 'Bloquear' : 'Liberar'}</Button></TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!deleteRecord} onOpenChange={(open) => !open && !deletingRecord && setDeleteRecord(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Excluir abastecimento?</DialogTitle></DialogHeader>
+          {deleteRecord && <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+              <div className="font-semibold">{deleteRecord.funcionario_nome}</div>
+              <div className="mt-1 text-muted-foreground">{formatDateBr(deleteRecord.data)} {String(deleteRecord.hora || '').slice(0, 5)} · {deleteRecord.placa || 'Sem placa'} · {formatMoney(deleteRecord.valor)}</div>
+            </div>
+            <p className="text-sm text-muted-foreground">O registro deixará de aparecer nos relatórios, totais e PDFs de abastecimento.</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDeleteRecord(null)} disabled={deletingRecord}>Cancelar</Button>
+              <Button variant="destructive" onClick={() => void deleteFuelRecord()} disabled={deletingRecord}>{deletingRecord ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />} Excluir</Button>
+            </div>
+          </div>}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={postoDialog} onOpenChange={setPostoDialog}><DialogContent><DialogHeader><DialogTitle>{postoDraft.id ? 'Editar posto' : 'Novo posto'}</DialogTitle></DialogHeader><div className="space-y-3"><div><Label>Nome</Label><Input value={postoDraft.nome} onChange={(e) => setPostoDraft({ ...postoDraft, nome: e.target.value })} /></div><div><Label>CNPJ</Label><Input value={postoDraft.cnpj} onChange={(e) => setPostoDraft({ ...postoDraft, cnpj: e.target.value })} /></div><div><Label>Endereço</Label><Input value={postoDraft.endereco} onChange={(e) => setPostoDraft({ ...postoDraft, endereco: e.target.value })} /></div><div><Label>Telefone</Label><Input value={postoDraft.telefone} onChange={(e) => setPostoDraft({ ...postoDraft, telefone: e.target.value })} /></div><div><Label>Observação</Label><Input value={postoDraft.observacao} onChange={(e) => setPostoDraft({ ...postoDraft, observacao: e.target.value })} /></div><Button className="w-full" onClick={() => void savePosto()}>Salvar</Button></div></DialogContent></Dialog>
 
@@ -401,8 +448,6 @@ export default function CombustivelQRAdminPage() {
     </div>
   );
 }
-
-
 
 const KmReportView = ({ groups }: { groups: KmReportGroup[] }) => {
   if (!groups.length) return <p className="py-10 text-center text-sm text-muted-foreground">Nenhum registro de quilometragem localizado.</p>;
@@ -430,7 +475,7 @@ const KmReportView = ({ groups }: { groups: KmReportGroup[] }) => {
   ))}</div>;
 };
 
-const DetailedTable = ({ records }: { records: FuelReportRecord[] }) => {
+const DetailedTable = ({ records, onDelete }: { records: FuelReportRecord[]; onDelete?: (record: FuelReportRecord) => void }) => {
   if (!records.length) return <p className="py-10 text-center text-sm text-muted-foreground">Nenhum abastecimento localizado.</p>;
-  return <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Empresa</TableHead><TableHead>Funcionário</TableHead><TableHead>Placa</TableHead><TableHead>Posto</TableHead><TableHead>Combustível</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">KM</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{records.map((record) => <TableRow key={record.id}><TableCell className="whitespace-nowrap">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell><TableCell>{record.empresa_nome || record.empresa || record.filial || '-'}</TableCell><TableCell>{record.funcionario_nome}</TableCell><TableCell>{record.placa || '-'}</TableCell><TableCell>{record.posto_nome || '-'}</TableCell><TableCell>{record.combustivel || '-'}</TableCell><TableCell className="text-right">{formatNumber(record.litros)}</TableCell><TableCell className="text-right font-medium">{formatMoney(record.valor)}</TableCell><TableCell className="text-right">{record.km_atual == null ? '-' : formatNumber(record.km_atual, 0)}</TableCell><TableCell><Badge variant={record.status === 'cancelado' ? 'destructive' : 'secondary'}>{record.status || '-'}</Badge></TableCell></TableRow>)}</TableBody></Table></div>;
+  return <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Empresa</TableHead><TableHead>Funcionário</TableHead><TableHead>Placa</TableHead><TableHead>Posto</TableHead><TableHead>Combustível</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">KM</TableHead><TableHead>Status</TableHead>{onDelete && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{records.map((record) => <TableRow key={record.id}><TableCell className="whitespace-nowrap">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell><TableCell>{record.empresa_nome || record.empresa || record.filial || '-'}</TableCell><TableCell>{record.funcionario_nome}</TableCell><TableCell>{record.placa || '-'}</TableCell><TableCell>{record.posto_nome || '-'}</TableCell><TableCell>{record.combustivel || '-'}</TableCell><TableCell className="text-right">{formatNumber(record.litros)}</TableCell><TableCell className="text-right font-medium">{formatMoney(record.valor)}</TableCell><TableCell className="text-right">{record.km_atual == null ? '-' : formatNumber(record.km_atual, 0)}</TableCell><TableCell><Badge variant={record.status === 'cancelado' ? 'destructive' : 'secondary'}>{record.status || '-'}</Badge></TableCell>{onDelete && <TableCell className="text-right"><Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => onDelete(record)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</Button></TableCell>}</TableRow>)}</TableBody></Table></div>;
 };
