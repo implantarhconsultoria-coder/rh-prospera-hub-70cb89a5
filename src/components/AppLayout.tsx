@@ -7,7 +7,6 @@ import EmployeeSmartEditOverlay from '@/components/EmployeeSmartEditOverlay';
 import EpiSemestralAlert from '@/components/EpiSemestralAlert';
 import ArchiveCoverDialog from '@/components/ArchiveCoverDialog';
 import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';
-import AppMecanicoVehicleManager from '@/components/AppMecanicoVehicleManager';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -209,7 +208,6 @@ const AppLayout: React.FC = () => {
 
         <div className="mx-auto max-w-[1680px] p-[18px]">
           {showEpiAlert && <EpiSemestralAlert />}
-          <AppMecanicoVehicleManager />
           <ErrorBoundary>{isDirector && !isDirectorRouteAllowed(location.pathname) ? <DirectorBlocked /> : <Outlet />}</ErrorBoundary>
         </div>
       </main>
