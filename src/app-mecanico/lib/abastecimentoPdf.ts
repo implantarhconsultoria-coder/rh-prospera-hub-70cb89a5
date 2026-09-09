@@ -59,6 +59,7 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
   const pdf = new jsPDF({ unit: "mm", format: [80, 260], orientation: "portrait" });
   const center = 40;
   let y = 8;
+  const viagem = /VIAGEM|POSTO EXTERNO/i.test(data.postoNome || "");
 
   const line = () => {
     pdf.setDrawColor(130);
@@ -94,12 +95,30 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
     }
   };
 
+  const travelNotice = () => {
+    pdf.setDrawColor(0);
+    pdf.setLineDashPattern([], 0);
+    pdf.rect(6, y, 68, 16);
+    y += 5;
+    centered("ABASTECIMENTO EM VIAGEM", 8, true);
+    centered("APRESENTAR RECIBO DO POSTO", 7.5, true);
+    centered("PARA REEMBOLSO", 7.5, true);
+    y += 3;
+  };
+
   centered("TOPAC RH PRO", 12, true);
   centered("COMPROVANTE DE ABASTECIMENTO", 8.5, true);
   centered(data.createdAt.toLocaleString("pt-BR"), 7);
   line();
-  row("POSTO", data.postoNome);
-  if (data.postoCnpj) row("CNPJ", data.postoCnpj);
+
+  if (viagem) {
+    row("MODALIDADE", "VIAGEM / POSTO EXTERNO");
+    travelNotice();
+  } else {
+    row("POSTO", data.postoNome);
+    if (data.postoCnpj) row("CNPJ", data.postoCnpj);
+  }
+
   row("FUNCIONARIO", data.mecanicoNome);
   row("EMPRESA/FILIAL", [data.empresa, data.filial].filter(Boolean).join(" - "));
   row("VEICULO/PLACA", [data.veiculo, data.placa].filter(Boolean).join(" / "));
@@ -121,6 +140,7 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
 
   line();
   row("REGISTRO", data.id || "SALVO");
+  if (viagem) centered("APRESENTAR RECIBO DO POSTO PARA REEMBOLSO", 6.5, true);
   centered("Comprovante gerado automaticamente", 6);
 
   const safe = (data.placa || data.mecanicoNome || "abastecimento")
