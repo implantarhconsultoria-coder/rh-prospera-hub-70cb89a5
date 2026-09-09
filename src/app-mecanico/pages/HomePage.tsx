@@ -14,6 +14,7 @@ import {
   Gauge,
   LogIn,
   LogOut,
+  UtensilsCrossed,
   Wrench,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -193,7 +194,7 @@ export default function HomePage() {
   const RecentIcon = ({ kind }: { kind: string }) => kind === "fuel" ? <Fuel className="h-4 w-4" /> : kind === "maintenance" ? <Wrench className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />;
 
   return (
-    <div className="space-y-4 pb-2">
+    <div className="space-y-4 pb-2 pt-[env(safe-area-inset-top)]">
       <header className="flex items-center justify-between gap-3 px-0.5 pt-1">
         <div className="min-w-0">
           <h1 className="truncate text-[26px] font-black tracking-tight text-white sm:text-3xl">{greeting}, <span className="text-amber-400">{firstName}</span></h1>
@@ -213,8 +214,10 @@ export default function HomePage() {
           <span className="text-[9px] font-semibold text-fuchsia-400 sm:text-[11px]">Operação</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <ActionCard icon={LogIn} title="Entrada de Ponto" subtitle={hasEntry ? "Entrada já registrada" : "Registre o início da jornada de trabalho"} disabled={hasEntry} onClick={() => navigate(`${base}/ponto?tipo=entrada`)} />
-          <ActionCard icon={LogOut} title="Saída de Ponto" subtitle={hasExit ? "Saída já registrada" : "Registre o fim da jornada de trabalho"} disabled={!hasEntry || hasExit || (Boolean(almocoInicio) && !almocoFim)} onClick={() => navigate(`${base}/ponto?tipo=saida`)} />
+          <ActionCard icon={LogIn} title="Entrada de Ponto" subtitle={hasEntry ? `Entrada às ${pointTime(entrada)}` : "Registre o início da jornada"} disabled={hasEntry} onClick={() => navigate(`${base}/ponto?tipo=entrada`)} />
+          <ActionCard icon={UtensilsCrossed} title="Início do Almoço" subtitle={almocoInicio ? `Iniciado às ${pointTime(almocoInicio)}` : "Registre a saída para o intervalo"} disabled={!hasEntry || hasExit || Boolean(almocoInicio)} onClick={() => navigate(`${base}/ponto?tipo=almoco_inicio`)} />
+          <ActionCard icon={Clock3} title="Fim do Almoço" subtitle={almocoFim ? `Retorno às ${pointTime(almocoFim)}` : almocoInicio ? "Registre o retorno do intervalo" : "Disponível após iniciar o almoço"} disabled={!almocoInicio || Boolean(almocoFim) || hasExit} onClick={() => navigate(`${base}/ponto?tipo=almoco_fim`)} />
+          <ActionCard icon={LogOut} title="Saída de Ponto" subtitle={hasExit ? `Saída às ${pointTime(saida)}` : "Registre o fim da jornada"} disabled={!hasEntry || hasExit || (Boolean(almocoInicio) && !almocoFim)} onClick={() => navigate(`${base}/ponto?tipo=saida`)} />
           <ActionCard icon={Gauge} title="Ponto do Carro / KM" subtitle="Registre hodômetro e localização" onClick={() => navigate(`${base}/veiculo`)} />
           <ActionCard icon={Fuel} title="Solicitação de Abastecimento" subtitle="Solicite combustível de forma controlada" onClick={() => navigate(`${base}/abastecimento`)} />
           <ActionCard icon={Wrench} title="Manutenção" subtitle="Abra e acompanhe ordens de serviço" onClick={() => navigate(`${base}/chamados`)} />
