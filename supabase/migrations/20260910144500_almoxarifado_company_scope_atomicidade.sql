@@ -232,17 +232,8 @@ alter policy almox_write on public.almoxarifado_importacao_erros using (public.a
 alter policy almox_read on public.almoxarifado_transferencias using (public.almoxarifado_is_central(auth.uid()));
 alter policy almox_write on public.almoxarifado_transferencias using (public.almoxarifado_is_central(auth.uid())) with check (public.almoxarifado_is_central(auth.uid()));
 
-create or replace view public.almoxarifado_inteligencia with (security_invoker=true) as
-with consumo as (
-  select s.item_id,coalesce(sum(case when s.created_at>=now()-interval '90 days' then coalesce(s.quantidade_utilizada,s.quantidade,0)-coalesce(s.quantidade_devolvida,0) else 0 end),0) as consumo_90d,max(s.created_at) as ultima_saida
-  from public.almoxarifado_saidas s group by s.item_id
-), entrada as (
-  select e.item_id,max(e.created_at) as ultima_entrada,(array_agg(e.fornecedor order by e.created_at desc))[1] as ultimo_fornecedor,(array_agg(e.valor_unitario order by e.created_at desc))[1] as ultimo_valor
-  from public.almoxarifado_entradas e group by e.item_id
-)
-select i.id as item_id,i.codigo_topac,i.codigo_alternativo,i.codigo_barras,i.nome,i.empresa,coalesce(i.quantidade,0) as saldo,coalesce(i.estoque_minimo,0) as estoque_minimo,coalesce(c.consumo_90d,0) as consumo_90d,ceil(coalesce(c.consumo_90d,0)/3.0) as media_mensal,ceil((coalesce(c.consumo_90d,0)/3.0)*1.5) as compra_sugerida,c.ultima_saida,e.ultima_entrada,e.ultimo_fornecedor,e.ultimo_valor,
-case when coalesce(i.quantidade,0)<=0 then 'SEM ESTOQUE' when coalesce(i.quantidade,0)<=coalesce(i.estoque_minimo,0) then 'COMPRAR' when coalesce(i.estoque_minimo,0)>0 and coalesce(i.quantidade,0)<=coalesce(i.estoque_minimo,0)*1.25 then 'ATENÇÃO' else 'IDEAL' end as status
-from public.almoxarifado_itens i left join consumo c on c.item_id=i.id left join entrada e on e.item_id=i.id;
+-- Preserva a definição/tipos atuais e apenas força a view a obedecer o RLS das tabelas base.
+alter view public.almoxarifado_inteligencia set (security_invoker=true);
 revoke all on public.almoxarifado_inteligencia from anon;
 grant select on public.almoxarifado_inteligencia to authenticated;
 
