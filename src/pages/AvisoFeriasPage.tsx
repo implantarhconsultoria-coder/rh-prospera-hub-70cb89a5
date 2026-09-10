@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { CalendarCheck, Printer, Save, ArrowLeft, AlertTriangle, Mail } from 'lucide-react';
-import { formatDate, feriasStatus } from '@/lib/calculations';
+import { feriasStatus } from '@/lib/calculations';
 import { toast } from 'sonner';
 import { getDestinatariosFerias, CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
@@ -63,6 +63,15 @@ const addDaysISO = (value: string, days: number) => {
   const date = toDateOnly(value);
   date.setDate(date.getDate() + days);
   return toISODateOnly(date);
+};
+
+// Datas no formato YYYY-MM-DD são datas civis, não instantes UTC.
+// Evita que 21/09 apareça como 20/09 no fuso do Brasil.
+const formatDate = (value: string) => {
+  if (!value) return '—';
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return new Date(value).toLocaleDateString('pt-BR');
 };
 
 const feriasPeriodoStatus = (inicio?: string, fim?: string): Pick<FeriasInfo, 'code' | 'label'> | null => {
@@ -147,6 +156,7 @@ const AvisoFeriasPage: React.FC = () => {
   const [feriasAvisos, setFeriasAvisos] = useState<FeriasAvisoRow[]>([]);
   const [savingFerias, setSavingFerias] = useState(false);
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
+  const [lastDocId, setLastDocId] = useState('');
   const printRef = useRef<HTMLDivElement>(null);
 
   const feriasByEmployee = useMemo(() => {
@@ -227,21 +237,20 @@ const AvisoFeriasPage: React.FC = () => {
   const emp = employees.find(e => e.id === selectedEmpId);
   const company = emp ? companies.find(c => c.id === emp.companyId) : null;
 
-  const calcRetorno = () => {
-    if (!inicioFerias) return '';
-    return addDaysISO(inicioFerias, Math.max(0, diasFerias - 1));
-  };
-  const retorno = calcRetorno();
+  // O primeiro dia conta como dia 1.
+  // Ex.: 21/09/2026 + 30 dias => último dia 20/10/2026 e retorno 21/10/2026.
+  const fimFerias = inicioFerias ? addDaysISO(inicioFerias, Math.max(0, diasFerias - 1)) : '';
+  const retorno = inicioFerias ? addDaysISO(inicioFerias, Math.max(0, diasFerias)) : '';
 
   const salvarFeriasNoBanco = async (options: { silent?: boolean; avisoPdfUrl?: string } = {}) => {
     if (!emp || !inicioFerias) { toast.error('Selecione funcionario e data'); return null; }
-    if (!retorno) { toast.error('Informe o periodo de ferias'); return null; }
+    if (!fimFerias || !retorno) { toast.error('Informe o periodo de ferias'); return null; }
 
     setSavingFerias(true);
     try {
       const avisoAtual = feriasByEmployee.get(emp.id);
-      const statusAtual = feriasPeriodoStatus(inicioFerias, retorno);
-      const observacao = `Ferias de ${diasFerias} dias. Inicio: ${formatDate(inicioFerias)}. Fim/retorno previsto: ${formatDate(retorno)}.`;
+      const statusAtual = feriasPeriodoStatus(inicioFerias, fimFerias);
+      const observacao = `Ferias de ${diasFerias} dias. Inicio: ${formatDate(inicioFerias)}. Ultimo dia: ${formatDate(fimFerias)}. Retorno previsto: ${formatDate(retorno)}.`;
       const payload: Record<string, unknown> = {
         funcionario_id: emp.id,
         company_id: emp.companyId,
@@ -250,7 +259,7 @@ const AvisoFeriasPage: React.FC = () => {
         funcionario_cargo: emp.cargo,
         empresa_nome: company?.name || '',
         periodo_gozo_inicio: inicioFerias,
-        periodo_gozo_fim: retorno,
+        periodo_gozo_fim: fimFerias,
         data_retorno: retorno,
         dias_ferias: diasFerias,
         status: statusAtual?.code || 'marcada',
@@ -277,7 +286,7 @@ const AvisoFeriasPage: React.FC = () => {
       setFeriasAvisos(prev => [saved, ...prev.filter(item => item.id !== saved.id)]);
 
       await updateEmployee(emp.id, {
-        observacoes: `${emp.observacoes || ''}\n[FERIAS] Inicio: ${inicioFerias} | Fim/retorno previsto: ${retorno} | ${diasFerias} dias | Status: ${statusAtual?.label || 'Ferias marcadas'}`.trim(),
+        observacoes: `${emp.observacoes || ''}\n[FERIAS] Inicio: ${inicioFerias} | Ultimo dia: ${fimFerias} | Retorno: ${retorno} | ${diasFerias} dias | Status: ${statusAtual?.label || 'Ferias marcadas'}`.trim(),
       });
 
       if (!options.silent) toast.success('Ferias salvas e status atualizado!');
@@ -308,8 +317,6 @@ const AvisoFeriasPage: React.FC = () => {
     });
   };
 
-  const [lastDocId, setLastDocId] = useState('');
-
   const getNomeUsuarioAtual = async () => {
     if (!session?.user) return '';
     const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
@@ -325,7 +332,7 @@ const AvisoFeriasPage: React.FC = () => {
       companyId: emp.companyId,
       empresaNome: company.name || '',
       tipoDocumento: 'Aviso de Ferias',
-      descricao: `Ferias de ${diasFerias} dias - Inicio: ${new Date(inicioFerias).toLocaleDateString('pt-BR')} - Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '-'}`,
+      descricao: `Ferias de ${diasFerias} dias - Inicio: ${formatDate(inicioFerias)} - Ultimo dia: ${formatDate(fimFerias)} - Retorno: ${formatDate(retorno)}`,
       conteudo: pdf.blob,
       extensao: 'pdf',
       storageTipo: 'aviso-ferias',
@@ -371,8 +378,9 @@ const AvisoFeriasPage: React.FC = () => {
       `CPF: ${emp.cpf}`,
       `Cargo: ${emp.cargo}`,
       `Empresa: ${company?.name || ''}`,
-      `Inicio: ${new Date(inicioFerias).toLocaleDateString('pt-BR')}`,
-      `Retorno: ${retorno ? new Date(retorno).toLocaleDateString('pt-BR') : '-'}`,
+      `Inicio: ${formatDate(inicioFerias)}`,
+      `Ultimo dia: ${formatDate(fimFerias)}`,
+      `Retorno: ${formatDate(retorno)}`,
       `Dias: ${diasFerias}`,
       ``,
       `Segue aviso em anexo.`,
@@ -405,10 +413,10 @@ const AvisoFeriasPage: React.FC = () => {
     const fer = buildFeriasInfo(
       emp.dataAdmissao,
       feriasByEmployee.get(emp.id),
-      inicioFerias && retorno ? { inicio: inicioFerias, fim: retorno, dias: diasFerias } : undefined,
+      inicioFerias && fimFerias ? { inicio: inicioFerias, fim: fimFerias, dias: diasFerias } : undefined,
     );
     return (
-      <div className="space-y-5 animate-fade-in">
+      <div className="space-y-5 animate-fade-in" ref={printRef}>
         <div className="card-premium p-6 gradient-primary text-primary-foreground">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => setSelectedEmpId('')} className="text-primary-foreground hover:bg-primary-foreground/10">
@@ -432,14 +440,14 @@ const AvisoFeriasPage: React.FC = () => {
             <div><span className="text-xs text-muted-foreground block">Admissão</span><strong>{formatDate(emp.dataAdmissao)}</strong></div>
             <div><span className="text-xs text-muted-foreground block">Meses no Período</span><strong>{fer.mesesNoPeriodo} meses</strong></div>
             <div><span className="text-xs text-muted-foreground block">CPF</span>{emp.cpf}</div>
-            <div><span className="text-xs text-muted-foreground block">Inicio marcado</span><strong>{fer.inicio ? formatDate(fer.inicio) : 'Sem data'}</strong></div>
-            <div><span className="text-xs text-muted-foreground block">Fim/retorno</span><strong>{fer.fim ? formatDate(fer.fim) : 'Sem data'}</strong></div>
+            <div><span className="text-xs text-muted-foreground block">Início marcado</span><strong>{fer.inicio ? formatDate(fer.inicio) : 'Sem data'}</strong></div>
+            <div><span className="text-xs text-muted-foreground block">Fim das férias</span><strong>{fer.fim ? formatDate(fer.fim) : 'Sem data'}</strong></div>
           </div>
         </div>
 
         <div className="card-premium p-5 space-y-4">
           <h2 className="text-sm font-bold text-foreground">Dados das Férias</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div><label className="text-xs text-muted-foreground block mb-1">Início das Férias</label>
               <Input type="date" value={inicioFerias} onChange={e => setInicioFerias(e.target.value)} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Dias de Férias</label>
@@ -450,7 +458,9 @@ const AvisoFeriasPage: React.FC = () => {
                 <option value={15}>15 dias</option>
                 <option value={10}>10 dias</option>
               </select></div>
-            <div><label className="text-xs text-muted-foreground block mb-1">Retorno Previsto</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">Fim das Férias</label>
+              <p className="text-sm font-medium bg-muted/50 px-3 py-2 rounded-md">{fimFerias ? formatDate(fimFerias) : '—'}</p></div>
+            <div><label className="text-xs text-muted-foreground block mb-1">Retorno ao Trabalho</label>
               <p className="text-sm font-medium bg-muted/50 px-3 py-2 rounded-md">{retorno ? formatDate(retorno) : '—'}</p></div>
           </div>
           <div className="flex gap-3 flex-wrap">
