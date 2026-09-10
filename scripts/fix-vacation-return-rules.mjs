@@ -9,7 +9,11 @@ const replaceOnce = (oldText, newText, label) => {
   source = source.replace(oldText, newText);
 };
 
-if (!source.includes('const calcPeriodoFerias = () => {')) {
+// Compatibilidade com versões antigas da tela. Se o cálculo novo já estiver no
+// fonte, não tenta reaplicar o patch antigo durante o build.
+const calculoNovoJaAplicado = source.includes('const fimFerias = inicioFerias ? addDaysISO');
+
+if (!calculoNovoJaAplicado && !source.includes('const calcPeriodoFerias = () => {')) {
   replaceOnce(
 `const addDaysISO = (value: string, days: number) => {
   const date = toDateOnly(value);
