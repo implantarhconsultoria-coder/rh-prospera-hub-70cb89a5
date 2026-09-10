@@ -33,7 +33,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
-  { label: 'Aviso de Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
+  { label: 'Solicitar Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
   { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
   { label: 'Pré-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
