@@ -135,14 +135,14 @@ const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }
       const duplicate = primarySeen.has(codigo); primarySeen.add(codigo); knownCodes.add(codigo); if (alternativo) knownCodes.add(alternativo);
       const saldo = toNumber(r[9]); const valorEstoque = toNumber(r[3]);
       const observacoes: string[] = [];
-      if (duplicate) observacoes.push(`Código TOPAC duplicado na planilha: ${codigo}`);
+      if (duplicate) observacoes.push(`Código TOPAC duplicado na planilha: ${codigo}; mantido como linha distinta pelo nome.`);
       return {
         row: index + 2, codigo_topac: codigo, codigo_alternativo: alternativo, codigo_sku: codigo, nome,
-        categoria: cleanText(r[4]), aplicacao: cleanText(r[4]), unidade: 'un', saldo,
+        categoria: '', aplicacao: cleanText(r[4]), unidade: 'un', saldo,
         minimo: toNumber(r[10]), valor_unitario: saldo > 0 && valorEstoque > 0 ? valorEstoque / saldo : 0,
         valor_estoque: valorEstoque, entrada_total: toNumber(r[5]), saida_total: toNumber(r[6]),
         ajuste_aumentar: toNumber(r[7]), ajuste_diminuir: toNumber(r[8]), status_planilha: cleanText(r[11]),
-        ultimo_pedido: toIsoDate(r[12]), ultima_saida: toIsoDate(r[13]), localizacao: '', inativo: duplicate,
+        ultimo_pedido: toIsoDate(r[12]), ultima_saida: toIsoDate(r[13]), localizacao: '', inativo: false,
         observacoes: observacoes.join(' | '),
       };
     }).filter(Boolean) as any[];
@@ -162,15 +162,15 @@ const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }
     const totalSaldo = items.reduce((sum, item) => sum + toNumber(item.saldo), 0);
     const itemBatches = chunk(items, 300); const entryBatches = chunk(entries, 300); const exitBatches = chunk(exits, 250);
 
-    setProgress(`Planilha validada: ${items.length.toLocaleString('pt-BR')} itens, ${entries.length.toLocaleString('pt-BR')} entradas e ${exits.length.toLocaleString('pt-BR')} saídas.`);
+    setProgress(`Planilha validada: ${items.length.toLocaleString('pt-BR')} registros vinculados, ${entries.length.toLocaleString('pt-BR')} entradas e ${exits.length.toLocaleString('pt-BR')} saídas.`);
     for (let i = 0; i < itemBatches.length; i += 1) { setProgress(`Estoque ${i + 1}/${itemBatches.length}`); await sendBatch(lote, 1000 + i, 'items', itemBatches[i]); }
     for (let i = 0; i < entryBatches.length; i += 1) { setProgress(`Entradas ${i + 1}/${entryBatches.length} — ${entries.length.toLocaleString('pt-BR')}`); await sendBatch(lote, 2000 + i, 'entries', entryBatches[i]); }
     for (let i = 0; i < exitBatches.length; i += 1) { setProgress(`Saídas ${i + 1}/${exitBatches.length} — ${exits.length.toLocaleString('pt-BR')}`); await sendBatch(lote, 3000 + i, 'exits', exitBatches[i]); }
 
     setProgress('Conferindo saldo e contagens com a planilha...');
     const result = await sendBatch(lote, 9000, 'finalize', { items: items.length, entries: entries.length, exits: exits.length, total_saldo: totalSaldo });
-    if (!result?.ok) throw new Error(`Importação incompleta. Estoque ${result?.items}/${result?.expected_items}; entradas ${result?.entries}/${result?.expected_entries}; saídas ${result?.exits}/${result?.expected_exits}.`);
-    toast.success(`Importação conferida: ${result.items} itens, ${result.entries} entradas e ${result.exits} saídas.`);
+    if (!result?.ok) throw new Error(`Importação incompleta. Registros ${result?.items}/${result?.expected_items}; entradas ${result?.entries}/${result?.expected_entries}; saídas ${result?.exits}/${result?.expected_exits}.`);
+    toast.success(`Importação conferida: ${result.items} registros vinculados, ${result.entries} entradas e ${result.exits} saídas.`);
     setProgress('Importação concluída e validada. Atualizando...');
     window.setTimeout(() => window.location.reload(), 1000);
   };
