@@ -65,8 +65,8 @@ fs.writeFileSync(pagePath, page, 'utf8');
 
 for (const menuPath of ['src/components/AppSidebar.tsx', 'src/components/AdminMobileLayout.tsx']) {
   let source = fs.readFileSync(menuPath, 'utf8');
-  const desired = /label: 'Solicitar Férias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/;
-  const current = /label: 'Aviso de Férias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/g;
+  const desired = /label: 'Solicitar F[eé]rias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/;
+  const current = /label: 'Aviso de F[eé]rias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/g;
 
   if (!desired.test(source)) {
     const matches = source.match(current) || [];
