@@ -1,4 +1,5 @@
 name: Corrigir datas do aviso de ferias
+# trigger: 2026-09-10 - corrigir ultimo dia e retorno
 
 on:
   push:
