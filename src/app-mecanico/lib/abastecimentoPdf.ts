@@ -40,16 +40,6 @@ const imageData = async (source: string): Promise<string | null> => {
   }
 };
 
-const formatMoney = (value?: number | null) =>
-  typeof value === "number" && Number.isFinite(value)
-    ? value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-    : "-";
-
-const formatNumber = (value?: number | null, digits = 2) =>
-  typeof value === "number" && Number.isFinite(value)
-    ? value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })
-    : "-";
-
 const photoFormat = (source: string) => source.toLowerCase().includes("png") ? "PNG" : "JPEG";
 
 export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData) {
@@ -59,7 +49,6 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
     data.codigo ? QRCode.toDataURL(data.codigo, { margin: 0, width: 220 }) : Promise.resolve(null),
   ]);
 
-  // Modelo visual aprovado: recibo vertical, limpo, com dados grandes e as duas fotos lado a lado.
   const pageW = 148;
   const pageH = 220;
   const pdf = new jsPDF({ unit: "mm", format: [pageW, pageH], orientation: "portrait" });
@@ -87,38 +76,23 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
     return Math.max(8, lines.length * 3.7 + 4.5);
   };
 
-  const metric = (label: string, value: string) => {
-    const h = 14.5;
-    pdf.setDrawColor(215);
-    pdf.setFillColor(249, 249, 249);
-    pdf.roundedRect(margin, y, contentW, h, 1.8, 1.8, "FD");
-
-    pdf.setTextColor(55);
+  const addPhotoBox = (title: string, subtitle: string, source: string | null, x: number, boxW: number, boxH: number) => {
+    pdf.setTextColor(20);
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(8.5);
-    pdf.text(label, margin + 7, y + 9.1);
-
-    pdf.setTextColor(5);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(15);
-    pdf.text(value, pageW - margin - 7, y + 10.3, { align: "right" });
-    y += h + 2.2;
-  };
-
-  const addPhotoBox = (title: string, source: string | null, x: number, boxW: number, boxH: number) => {
-    pdf.setTextColor(30);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(8);
+    pdf.setFontSize(8.2);
     pdf.text(title, x + boxW / 2, y, { align: "center" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setTextColor(95);
+    pdf.setFontSize(6.2);
+    pdf.text(subtitle, x + boxW / 2, y + 3.4, { align: "center" });
 
-    const top = y + 3.3;
+    const top = y + 6;
     pdf.setDrawColor(180);
     pdf.setFillColor(246, 246, 246);
     pdf.roundedRect(x, top, boxW, boxH, 1.8, 1.8, "FD");
 
     if (!source) {
       pdf.setTextColor(120);
-      pdf.setFont("helvetica", "normal");
       pdf.setFontSize(7);
       pdf.text("Foto indisponível", x + boxW / 2, top + boxH / 2, { align: "center" });
       return;
@@ -136,13 +110,11 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
       pdf.addImage(source, photoFormat(source), drawX, drawY, drawW, drawH, undefined, "FAST");
     } catch {
       pdf.setTextColor(120);
-      pdf.setFont("helvetica", "normal");
       pdf.setFontSize(7);
       pdf.text("Foto indisponível", x + boxW / 2, top + boxH / 2, { align: "center" });
     }
   };
 
-  // Cabeçalho
   pdf.setTextColor(5);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(17);
@@ -161,7 +133,7 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
   const timeText = data.createdAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   pdf.text(`Data: ${dateText}`, pageW - margin, y - 0.4, { align: "right" });
   pdf.text(`Hora: ${timeText}`, pageW - margin, y + 4.2, { align: "right" });
-  y += 5;
+  y += 6;
 
   if (viagem) {
     pdf.setDrawColor(35);
@@ -198,7 +170,6 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
   rule(y, true);
   y += 5;
 
-  // Dados do funcionário e veículo
   const colGap = 5;
   const colW = (contentW - colGap) / 2;
   const h1 = labelValue("Funcionário", data.mecanicoNome, margin, colW);
@@ -212,52 +183,45 @@ export async function gerarCupomAbastecimentoPdf(data: AbastecimentoReceiptData)
   const h4 = labelValue("Combustível", data.combustivel || "-", margin + colW + colGap, colW);
   y = yRow2 + Math.max(h3, h4) + 3;
 
-  // Números principais — exatamente como na foto/modelo aprovado.
-  metric("Total a pagar", formatMoney(data.valor));
-  metric("Litros", `${formatNumber(data.litros, 3)} L`);
-  metric("Preço por litro", formatMoney(data.valorPorLitro));
-  metric("KM", data.kmAtual != null ? `${formatNumber(data.kmAtual, 0)} km` : "-");
+  pdf.setDrawColor(190);
+  pdf.setFillColor(249, 249, 249);
+  pdf.roundedRect(margin, y, contentW, 13, 1.8, 1.8, "FD");
+  pdf.setTextColor(20);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8.5);
+  pdf.text("REGISTRO POR FOTOS", pageW / 2, y + 5, { align: "center" });
+  pdf.setFont("helvetica", "normal");
+  pdf.setTextColor(80);
+  pdf.setFontSize(6.8);
+  pdf.text("Valor, litros, preço e KM constam nas imagens originais abaixo.", pageW / 2, y + 9.5, { align: "center" });
+  y += 19;
 
-  // Provas fotográficas lado a lado.
   const photoGap = 5;
   const photoW = (contentW - photoGap) / 2;
-  const photoH = 43;
-  addPhotoBox("Foto da bomba", bomba, margin, photoW, photoH);
-  addPhotoBox("Foto do painel / KM", painel, margin + photoW + photoGap, photoW, photoH);
-  y += photoH + 9;
+  const photoH = viagem ? 56 : 62;
+  addPhotoBox("FOTO DA BOMBA", "Valor • Litros • Preço/L", bomba, margin, photoW, photoH);
+  addPhotoBox("FOTO DO PAINEL", "KM / Hodômetro", painel, margin + photoW + photoGap, photoW, photoH);
+  y += photoH + 13;
 
   rule(y, true);
   y += 4;
-
-  // Rodapé / protocolo
   pdf.setTextColor(65);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(6.8);
   if (data.codigo) pdf.text(`Protocolo: ${data.codigo}`, margin, y + 3.5);
   pdf.text(`Registro: ${data.id || "SALVO"}`, margin, y + 7.2);
-
-  if (qr) {
-    pdf.addImage(qr, "PNG", pageW - margin - 17, y - 1, 17, 17);
-  }
+  if (qr) pdf.addImage(qr, "PNG", pageW - margin - 17, y - 1, 17, 17);
 
   pdf.setTextColor(viagem ? 10 : 95);
   pdf.setFont("helvetica", viagem ? "bold" : "normal");
   pdf.setFontSize(viagem ? 7.1 : 6.2);
   pdf.text(
-    viagem ? "APRESENTAR RECIBO DO POSTO PARA REEMBOLSO" : "Comprovante gerado automaticamente pelo TOPAC RH PRO",
-    pageW / 2,
-    pageH - 6,
-    { align: "center" },
+    viagem ? "APRESENTAR RECIBO DO POSTO PARA REEMBOLSO" : "Comprovante fotográfico gerado pelo TOPAC RH PRO",
+    pageW / 2, pageH - 6, { align: "center" },
   );
 
   const safe = (data.placa || data.mecanicoNome || "abastecimento")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-|-$/g, "");
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
 
-  return {
-    blob: pdf.output("blob"),
-    fileName: `COMPROVANTE-ABASTECIMENTO-${safe}.pdf`,
-  };
+  return { blob: pdf.output("blob"), fileName: `COMPROVANTE-ABASTECIMENTO-${safe}.pdf` };
 }
