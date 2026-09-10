@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Building2, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
+import { AppContext } from '@/context/AppContextValue';
 import { supabase } from '@/integrations/supabase/client';
 import LegacyAlmoxarifadoPage from '@/pages/AlmoxarifadoPageLegacy';
 
@@ -13,7 +14,8 @@ type ScopeState = 'idle' | 'loading' | 'ready' | 'error';
 
 const AlmoxarifadoPage: React.FC = () => {
   const location = useLocation();
-  const { session, companies, dataLoading } = useApp();
+  const app = useApp();
+  const { session, companies, dataLoading } = app;
   const isExternalPortal = location.pathname.includes('/almoxarifado-ext/');
 
   const topacCompanies = useMemo(
@@ -33,6 +35,15 @@ const AlmoxarifadoPage: React.FC = () => {
     () => topacCompanies.find(company => company.id === selectedCompanyId) || null,
     [topacCompanies, selectedCompanyId],
   );
+
+  const scopedApp = useMemo(() => {
+    if (!selectedCompany) return app;
+    return {
+      ...app,
+      companies: [selectedCompany],
+      employees: app.employees.filter(employee => employee.companyId === selectedCompany.id),
+    };
+  }, [app, selectedCompany]);
 
   useEffect(() => {
     if (isExternalPortal || dataLoading) return;
@@ -94,7 +105,7 @@ const AlmoxarifadoPage: React.FC = () => {
           <div>
             <h1 className="text-lg font-bold">Selecione a unidade do Almoxarifado</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Estoque, entradas, saídas e histórico serão vinculados somente à unidade escolhida.
+              Estoque, entradas, saídas, funcionários e histórico ficarão vinculados somente à unidade escolhida.
             </p>
           </div>
         </div>
@@ -155,33 +166,35 @@ const AlmoxarifadoPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <ShieldCheck className="w-4 h-4 text-green-600 shrink-0" />
-          <div className="min-w-0">
-            <div className="text-xs text-muted-foreground">Unidade ativa</div>
-            <div className="text-sm font-semibold truncate">{selectedCompany.name}</div>
+    <AppContext.Provider value={scopedApp}>
+      <div className="space-y-3">
+        <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldCheck className="w-4 h-4 text-green-600 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">Unidade ativa</div>
+              <div className="text-sm font-semibold truncate">{selectedCompany.name}</div>
+            </div>
           </div>
+          <select
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            value={selectedCompanyId}
+            onChange={event => {
+              const value = event.target.value;
+              setScopeState('loading');
+              setSelectedCompanyId(value);
+              window.localStorage.setItem(STORAGE_KEY, value);
+            }}
+          >
+            {topacCompanies.map(company => (
+              <option key={company.id} value={company.id}>{company.name}</option>
+            ))}
+          </select>
         </div>
-        <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          value={selectedCompanyId}
-          onChange={event => {
-            const value = event.target.value;
-            setScopeState('loading');
-            setSelectedCompanyId(value);
-            window.localStorage.setItem(STORAGE_KEY, value);
-          }}
-        >
-          {topacCompanies.map(company => (
-            <option key={company.id} value={company.id}>{company.name}</option>
-          ))}
-        </select>
-      </div>
 
-      <LegacyAlmoxarifadoPage key={selectedCompanyId} />
-    </div>
+        <LegacyAlmoxarifadoPage key={selectedCompanyId} />
+      </div>
+    </AppContext.Provider>
   );
 };
 
