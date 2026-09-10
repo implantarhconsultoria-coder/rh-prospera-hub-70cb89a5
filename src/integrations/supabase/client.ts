@@ -114,6 +114,15 @@ functionsAny.invoke = async (functionName: string, options?: any) => {
   return { data: fallback, error: null };
 };
 
+// Supabase v2 expõe `functions` por getter; fixe a instância interceptada no cliente
+// para que todas as chamadas do aplicativo passem pelo fallback acima.
+Object.defineProperty(supabaseClient as any, 'functions', {
+  value: functionsAny,
+  configurable: false,
+  enumerable: true,
+  writable: false,
+});
+
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 export const supabase = supabaseClient;
