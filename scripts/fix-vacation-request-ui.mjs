@@ -65,15 +65,15 @@ fs.writeFileSync(pagePath, page, 'utf8');
 
 for (const menuPath of ['src/components/AppSidebar.tsx', 'src/components/AdminMobileLayout.tsx']) {
   let source = fs.readFileSync(menuPath, 'utf8');
-  const oldItem = "label: 'Aviso de Férias', path: '/aviso-ferias'";
-  const newItem = "label: 'Solicitar Férias', path: '/aviso-ferias'";
+  const desired = /label: 'Solicitar Férias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/;
+  const current = /label: 'Aviso de Férias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/g;
 
-  if (!source.includes(newItem)) {
-    const count = source.split(oldItem).length - 1;
-    if (count < 1) {
-      throw new Error(`[ferias] menu ${menuPath}: item nao encontrado`);
+  if (!desired.test(source)) {
+    const matches = source.match(current) || [];
+    if (matches.length < 1) {
+      throw new Error(`[ferias] menu ${menuPath}: item de ferias nao encontrado`);
     }
-    source = source.split(oldItem).join(newItem);
+    source = source.replace(current, "label: 'Solicitar Férias'");
     fs.writeFileSync(menuPath, source, 'utf8');
   }
 }
