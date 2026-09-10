@@ -1,1 +1,1 @@
-export { default } from "./AbastecimentoPageV2";
+export { default } from "./AbastecimentoPageV3";
