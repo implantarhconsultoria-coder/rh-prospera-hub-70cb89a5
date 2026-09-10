@@ -6,6 +6,7 @@ import { useApp } from '@/context/AppContext';
 import { AppContext } from '@/context/AppContextValue';
 import { supabase } from '@/integrations/supabase/client';
 import LegacyAlmoxarifadoPage from '@/pages/AlmoxarifadoPageLegacy';
+import AlmoxarifadoExcelImporter from '@/components/AlmoxarifadoExcelImporter';
 
 const STORAGE_KEY = 'topac_almox_company_id';
 const TOPAC_COMPANY_CODES = new Set(['topac-matriz', 'topac-pg', 'topac-gyn']);
@@ -191,6 +192,13 @@ const AlmoxarifadoPage: React.FC = () => {
             ))}
           </select>
         </div>
+
+        {app.userRole === 'admin' && (
+          <AlmoxarifadoExcelImporter
+            companyCode={selectedCompany.codigo}
+            companyName={selectedCompany.name}
+          />
+        )}
 
         <LegacyAlmoxarifadoPage key={selectedCompanyId} />
       </div>
