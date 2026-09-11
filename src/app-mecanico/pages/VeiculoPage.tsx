@@ -293,9 +293,10 @@ export default function VeiculoPage() {
         onClose={() => setCameraOpen(false)}
         onCapture={onCapture}
         facing="environment"
-        allowGallery={false}
+        allowGallery
+        galleryMaxAgeMinutes={60}
         title={mode === "start" ? "Painel na saída" : "Painel na chegada"}
-        hint="Mostre o hodômetro/KM total com nitidez. A foto deve ser tirada agora."
+        hint="Mostre o hodômetro/KM total com nitidez. Foto da galeria: somente imagens tiradas há no máximo 1 hora."
       />
     </div>
   );
