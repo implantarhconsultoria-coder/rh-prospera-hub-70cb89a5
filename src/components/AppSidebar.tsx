@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, Users, FileCheck, FileText, LogOut,
   HardHat, Shirt, History, CalendarCheck, FileX, Fuel, Car, Stethoscope,
   UserCheck, Package, ClipboardList, Receipt, ClipboardCheck, Wrench, FileSearch,
-  ShoppingCart, Headphones, PanelLeftClose, PanelLeftOpen,
+  ShoppingCart, Headphones, PanelLeftClose, PanelLeftOpen, Radar,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ const operationalItems: MenuItem[] = [
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Combustível', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
+  { label: 'Rastreamento da Frota', icon: Radar, path: '/admin/monitoramento' },
   { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
