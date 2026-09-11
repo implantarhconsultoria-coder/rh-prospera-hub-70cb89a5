@@ -8,6 +8,7 @@ import { Loader2, ShieldCheck, AlertCircle } from "lucide-react";
 
 interface Opcao { id: string; nome: string; empresa: string; filial: string; funcao: string; }
 interface PinValidationResult { ok?: boolean; error?: string; count?: number; usuarios?: Opcao[]; }
+interface DirectValidationResult { ok?: boolean; error?: string; usuario?: Opcao; }
 
 const acessoRpc = supabase as unknown as {
   rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
@@ -66,6 +67,45 @@ export default function AcessoMecanicoPage() {
   useEffect(() => {
     aplicarIdentidadeMecanico();
   }, []);
+
+  useEffect(() => {
+    const token = searchParams.get("direto") || "";
+    if (!token) return;
+
+    let ativo = true;
+    const liberarDireto = async () => {
+      setLoading(true);
+      setErro(null);
+      setOpcoes(null);
+      try {
+        const { data, error } = await acessoRpc.rpc("app_mecanico_validar_link_direto", {
+          p_token: token,
+        });
+        if (!ativo) return;
+
+        const res = data as DirectValidationResult | null;
+        if (error || !res?.ok || !res.usuario?.id) {
+          console.error("Erro no acesso direto do app mecânico:", error || res?.error || data);
+          setErro("Este acesso direto é inválido, expirou ou foi desativado.");
+          return;
+        }
+
+        const usuario = res.usuario;
+        localStorage.setItem("app_mecanico_acesso_id", usuario.id);
+        const qr = searchParams.get("qr") || searchParams.get("codigo") || "";
+        navigate(`/app-mecanico/${usuario.id}${qr ? `/abastecimento?qr=${encodeURIComponent(qr)}` : ""}`, { replace: true });
+      } catch (error) {
+        if (!ativo) return;
+        console.error("Falha inesperada no acesso direto do app mecânico:", error);
+        setErro("Não foi possível liberar o acesso direto agora. Tente novamente.");
+      } finally {
+        if (ativo) setLoading(false);
+      }
+    };
+
+    void liberarDireto();
+    return () => { ativo = false; };
+  }, [navigate, searchParams]);
 
   const validar = async (e?: React.FormEvent) => {
     e?.preventDefault();
