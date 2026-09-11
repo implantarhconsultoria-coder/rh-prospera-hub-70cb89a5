@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, MessageCircle, RefreshCw, Users } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Loader2, MessageCircle, RefreshCw, Send, Users } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +45,13 @@ type PendingEmployee = PendingRow & {
   whatsappPhone: string;
 };
 
-const PendingPayrollSignatures: React.FC<{ companyId: string; competencia: string }> = ({ companyId, competencia }) => {
+type PendingPayrollSignaturesProps = {
+  companyId: string;
+  competencia: string;
+  autoOpen?: boolean;
+};
+
+const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ companyId, competencia, autoOpen = false }) => {
   const { companies, employees } = useApp();
   const company = companies.find(item => item.id === companyId);
   const portalSlug = String((company as any)?.codigo || '').trim().toLowerCase();
@@ -55,6 +61,9 @@ const PendingPayrollSignatures: React.FC<{ companyId: string; competencia: strin
   const [rows, setRows] = useState<PendingRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkIndex, setBulkIndex] = useState(0);
+  const autoOpenedRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!companyId || !competencia) return;
@@ -100,13 +109,37 @@ const PendingPayrollSignatures: React.FC<{ companyId: string; competencia: strin
     })
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [rows, employees]);
 
-  const sendWhatsApp = (employee: PendingEmployee) => {
+  const sendWhatsApp = useCallback((employee: PendingEmployee) => {
     if (!employee.whatsappPhone) return;
     const text = `Olá, ${employee.name}! Seu documento de ${competenceLabel(competencia)} está disponível no Portal TOPAC RH PRO da ${company?.name || 'empresa'} e ainda consta como pendente de assinatura.\n\nAcesse pelo link abaixo e entre com seu CPF, data de nascimento e os 4 últimos números do celular cadastrado:\n\n${portalUrl}`;
     window.open(`https://wa.me/${employee.whatsappPhone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
-  };
+  }, [company?.name, competencia, portalUrl]);
 
-  const withoutPhone = pending.filter(item => !item.whatsappPhone).length;
+  const validPending = useMemo(() => pending.filter(item => Boolean(item.whatsappPhone)), [pending]);
+  const withoutPhone = pending.length - validPending.length;
+  const bulkDone = validPending.length > 0 && bulkIndex >= validPending.length;
+  const currentBulk = bulkIndex < validPending.length ? validPending[bulkIndex] : null;
+
+  const startBulk = useCallback(() => {
+    setBulkIndex(0);
+    setBulkOpen(true);
+  }, []);
+
+  const sendCurrentBulk = useCallback(() => {
+    if (!currentBulk) return;
+    sendWhatsApp(currentBulk);
+    setBulkIndex(index => Math.min(index + 1, validPending.length));
+  }, [currentBulk, sendWhatsApp, validPending.length]);
+
+  useEffect(() => {
+    if (!autoOpen || loading || autoOpenedRef.current || pending.length === 0) return;
+    autoOpenedRef.current = true;
+    setOpen(true);
+  }, [autoOpen, loading, pending.length]);
+
+  useEffect(() => {
+    autoOpenedRef.current = false;
+  }, [companyId, competencia]);
 
   return (
     <>
@@ -133,9 +166,18 @@ const PendingPayrollSignatures: React.FC<{ companyId: string; competencia: strin
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
               Atualizar
             </Button>
-            <Button size="sm" onClick={() => setOpen(true)} disabled={loading || pending.length === 0}>
+            <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={loading || pending.length === 0}>
               <Users className="mr-2 h-4 w-4" />
-              Ver quem não assinou
+              Ver pendentes
+            </Button>
+            <Button
+              size="sm"
+              onClick={startBulk}
+              disabled={loading || validPending.length === 0}
+              className="bg-emerald-600 text-white hover:bg-emerald-500"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Enviar em massa
             </Button>
           </div>
         </div>
@@ -147,9 +189,20 @@ const PendingPayrollSignatures: React.FC<{ companyId: string; competencia: strin
             <DialogTitle>Pendentes de assinatura — {competenceLabel(competencia)}</DialogTitle>
           </DialogHeader>
 
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs">
-            <span><strong>{company?.name || 'Empresa'}</strong> · {pending.length} pendente(s)</span>
-            <span className="text-muted-foreground">Clique no funcionário para abrir o WhatsApp já com a mensagem e o link.</span>
+          <div className="mb-2 flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <span><strong>{company?.name || 'Empresa'}</strong> · {pending.length} pendente(s)</span>
+              <p className="mt-1 text-muted-foreground">Envie individualmente ou use o envio em massa para percorrer todos os contatos válidos.</p>
+            </div>
+            <Button
+              size="sm"
+              onClick={startBulk}
+              disabled={validPending.length === 0}
+              className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500"
+            >
+              <Send className="mr-2 h-4 w-4" />
+              Enviar em massa ({validPending.length})
+            </Button>
           </div>
 
           <div className="space-y-2">
@@ -167,15 +220,80 @@ const PendingPayrollSignatures: React.FC<{ companyId: string; competencia: strin
                   size="sm"
                   onClick={() => sendWhatsApp(employee)}
                   disabled={!employee.whatsappPhone}
-                  className="shrink-0"
+                  className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500"
                   title={employee.whatsappPhone ? `Enviar lembrete para ${employee.name}` : 'Funcionário sem telefone válido cadastrado'}
                 >
                   <MessageCircle className="mr-2 h-4 w-4" />
-                  {employee.whatsappPhone ? 'Mandar no WhatsApp' : 'Sem telefone'}
+                  {employee.whatsappPhone ? 'Enviar WhatsApp' : 'Sem telefone'}
                 </Button>
               </div>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Envio em massa — {company?.name || 'Empresa'}</DialogTitle>
+          </DialogHeader>
+
+          {validPending.length === 0 ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
+              Nenhum pendente possui telefone válido para WhatsApp.
+            </div>
+          ) : bulkDone ? (
+            <div className="space-y-4 text-center">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500/15 text-emerald-400">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="font-semibold text-foreground">Fila concluída</p>
+                <p className="mt-1 text-xs text-muted-foreground">Foram preparados {validPending.length} contatos pendentes para envio pelo WhatsApp.</p>
+              </div>
+              <Button className="w-full" onClick={() => setBulkOpen(false)}>Concluir</Button>
+            </div>
+          ) : currentBulk ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-400">Contato {bulkIndex + 1} de {validPending.length}</p>
+                    <p className="mt-1 truncate text-base font-bold text-foreground">{currentBulk.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatPhone(currentBulk.phoneRaw)}</p>
+                  </div>
+                  <MessageCircle className="h-8 w-8 shrink-0 text-emerald-400" />
+                </div>
+              </div>
+
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${Math.round((bulkIndex / validPending.length) * 100)}%` }}
+                />
+              </div>
+
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                O WhatsApp abre a conversa com a mensagem pronta. Envie e, ao voltar ao TOPAC RH PRO, continue para o próximo contato.
+              </p>
+
+              <Button
+                className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
+                onClick={sendCurrentBulk}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Abrir WhatsApp e avançar
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setBulkIndex(index => Math.min(index + 1, validPending.length))}
+              >
+                Pular este contato
+              </Button>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </>
