@@ -38,6 +38,49 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TOPAC RH PRO">
+
+<style id="topac-mobile-fixed-layout">
+  @media (max-width: 900px) {
+    html, body, #root {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100vw !important;
+      margin: 0 !important;
+      overflow-x: hidden !important;
+      overscroll-behavior-x: none !important;
+      touch-action: pan-y;
+    }
+    body, #root, #root > *, main, main > *, .topac-neon-skin, .topac-neon-skin main {
+      box-sizing: border-box !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+    .topac-neon-skin, .topac-neon-skin main, .topac-neon-skin main > div {
+      width: 100% !important;
+      overflow-x: hidden !important;
+    }
+    #root * { box-sizing: border-box; }
+    main [class*="grid"], main [class*="flex"], main article, main section, main header,
+    main footer, main form, main fieldset, main nav {
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+    main img, main video, main canvas, main svg, main input, main select, main textarea {
+      max-width: 100% !important;
+    }
+    main pre, main code {
+      max-width: 100% !important;
+      white-space: pre-wrap !important;
+      overflow-wrap: anywhere !important;
+    }
+    main .overflow-x-auto, main [class*="overflow-x-auto"] {
+      width: 100% !important;
+      max-width: 100% !important;
+      overscroll-behavior-x: contain;
+    }
+  }
+</style>
+
 </head>
 
   <body class="notranslate" translate="no">
@@ -267,6 +310,17 @@
 
           link.setAttribute('href', '/acesso-mecanico');
           const parent = link.parentElement;
+
+if (window.innerWidth <= 900) {
+  parent.style.display = 'grid';
+  parent.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+  parent.style.gap = '8px';
+  parent.style.width = '100%';
+  parent.style.maxWidth = '100%';
+  parent.style.minWidth = '0';
+  parent.style.overflow = 'hidden';
+}
+
           if (parent.querySelector('[data-topac-mechanic-share="true"]')) return;
 
           const copyButton = document.createElement('button');
@@ -309,6 +363,23 @@
           });
 
           parent.append(copyButton, shareButton);
+
+if (window.innerWidth <= 900) {
+  [...parent.children].forEach((item) => {
+    item.style.width = '100%';
+    item.style.maxWidth = '100%';
+    item.style.minWidth = '0';
+    item.style.margin = '0';
+    item.style.justifyContent = 'center';
+    item.style.paddingLeft = '6px';
+    item.style.paddingRight = '6px';
+    item.style.fontSize = '10px';
+    item.style.whiteSpace = 'nowrap';
+    item.style.overflow = 'hidden';
+    item.style.textOverflow = 'ellipsis';
+  });
+}
+
         };
 
         const observer = new MutationObserver(() => requestAnimationFrame(enhanceMechanicShare));
