@@ -232,5 +232,91 @@
         setTimeout(enhance, 1000);
       })();
     </script>
+    <script>
+      (() => {
+        const mechanicUrl = 'https://topacrh.pro/acesso-mecanico';
+
+        const copyText = async (text) => {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+          }
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.setAttribute('readonly', '');
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          textarea.remove();
+        };
+
+        const flash = (button, text) => {
+          const original = button.textContent;
+          button.textContent = text;
+          setTimeout(() => { button.textContent = original; }, 1400);
+        };
+
+        const enhanceMechanicShare = () => {
+          if (!location.pathname.startsWith('/admin/app-mecanico')) return;
+          const link = [...document.querySelectorAll('a')].find((item) =>
+            item.textContent?.trim().includes('Link dos mecânicos') || item.getAttribute('href') === '/mecanicos'
+          );
+          if (!link || !link.parentElement) return;
+
+          link.setAttribute('href', '/acesso-mecanico');
+          const parent = link.parentElement;
+          if (parent.querySelector('[data-topac-mechanic-share="true"]')) return;
+
+          const copyButton = document.createElement('button');
+          copyButton.type = 'button';
+          copyButton.className = link.className;
+          copyButton.dataset.topacMechanicShare = 'true';
+          copyButton.textContent = 'Copiar link';
+          copyButton.addEventListener('click', async () => {
+            try {
+              await copyText(mechanicUrl);
+              flash(copyButton, 'Copiado!');
+            } catch {
+              window.prompt('Copie o link:', mechanicUrl);
+            }
+          });
+
+          const shareButton = document.createElement('button');
+          shareButton.type = 'button';
+          shareButton.className = link.className;
+          shareButton.dataset.topacMechanicShare = 'true';
+          shareButton.textContent = 'Compartilhar';
+          shareButton.addEventListener('click', async () => {
+            const shareData = {
+              title: 'TOPAC Mecânicos',
+              text: 'Acesso ao App dos Mecânicos TOPAC',
+              url: mechanicUrl,
+            };
+            try {
+              if (navigator.share) {
+                await navigator.share(shareData);
+              } else {
+                window.open(`https://wa.me/?text=${encodeURIComponent(`${shareData.text}\n${mechanicUrl}`)}`, '_blank', 'noopener,noreferrer');
+              }
+            } catch (error) {
+              if (error?.name !== 'AbortError') {
+                await copyText(mechanicUrl);
+                flash(shareButton, 'Link copiado!');
+              }
+            }
+          });
+
+          parent.append(copyButton, shareButton);
+        };
+
+        const observer = new MutationObserver(() => requestAnimationFrame(enhanceMechanicShare));
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        window.addEventListener('DOMContentLoaded', enhanceMechanicShare);
+        window.addEventListener('popstate', enhanceMechanicShare);
+        setTimeout(enhanceMechanicShare, 600);
+      })();
+    </script>
   </body>
 </html>
