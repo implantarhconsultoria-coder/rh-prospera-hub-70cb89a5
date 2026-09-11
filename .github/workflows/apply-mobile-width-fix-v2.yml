@@ -1,0 +1,131 @@
+name: Apply mobile fixed width v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-mobile-width-fix-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Aplicar enquadramento mobile global
+        shell: bash
+        run: |
+          cat > /tmp/fix_mobile.py <<'PY'
+          from pathlib import Path
+
+          style = '''
+          <style id="topac-mobile-fixed-layout">
+            @media (max-width: 900px) {
+              html, body, #root {
+                width: 100% !important;
+                min-width: 0 !important;
+                max-width: 100vw !important;
+                margin: 0 !important;
+                overflow-x: hidden !important;
+                overscroll-behavior-x: none !important;
+                touch-action: pan-y;
+              }
+              body, #root, #root > *, main, main > *, .topac-neon-skin, .topac-neon-skin main {
+                box-sizing: border-box !important;
+                min-width: 0 !important;
+                max-width: 100% !important;
+              }
+              .topac-neon-skin, .topac-neon-skin main, .topac-neon-skin main > div {
+                width: 100% !important;
+                overflow-x: hidden !important;
+              }
+              #root * { box-sizing: border-box; }
+              main [class*="grid"], main [class*="flex"], main article, main section, main header,
+              main footer, main form, main fieldset, main nav {
+                min-width: 0 !important;
+                max-width: 100% !important;
+              }
+              main img, main video, main canvas, main svg, main input, main select, main textarea {
+                max-width: 100% !important;
+              }
+              main pre, main code {
+                max-width: 100% !important;
+                white-space: pre-wrap !important;
+                overflow-wrap: anywhere !important;
+              }
+              main .overflow-x-auto, main [class*="overflow-x-auto"] {
+                width: 100% !important;
+                max-width: 100% !important;
+                overscroll-behavior-x: contain;
+              }
+            }
+          </style>
+          '''
+
+          for name in ('index.html', 'mecanicos.html'):
+              p = Path(name)
+              s = p.read_text(encoding='utf-8')
+              if 'id="topac-mobile-fixed-layout"' not in s:
+                  s = s.replace('</head>', style + '\n</head>', 1)
+              p.write_text(s, encoding='utf-8')
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          marker = "const parent = link.parentElement;"
+          if marker in s and 'parent.style.gridTemplateColumns' not in s:
+              s = s.replace(marker, marker + """
+
+          if (window.innerWidth <= 900) {
+            parent.style.display = 'grid';
+            parent.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+            parent.style.gap = '8px';
+            parent.style.width = '100%';
+            parent.style.maxWidth = '100%';
+            parent.style.minWidth = '0';
+            parent.style.overflow = 'hidden';
+          }
+          """, 1)
+
+          marker2 = "parent.append(copyButton, shareButton);"
+          if marker2 in s and 'item.style.textOverflow' not in s:
+              s = s.replace(marker2, marker2 + """
+
+          if (window.innerWidth <= 900) {
+            [...parent.children].forEach((item) => {
+              item.style.width = '100%';
+              item.style.maxWidth = '100%';
+              item.style.minWidth = '0';
+              item.style.margin = '0';
+              item.style.justifyContent = 'center';
+              item.style.paddingLeft = '6px';
+              item.style.paddingRight = '6px';
+              item.style.fontSize = '10px';
+              item.style.whiteSpace = 'nowrap';
+              item.style.overflow = 'hidden';
+              item.style.textOverflow = 'ellipsis';
+            });
+          }
+          """, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+          python /tmp/fix_mobile.py
+
+      - name: Commitar correção
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Nada para corrigir"
+            exit 0
+          fi
+          git config user.name "TOPAC Automation"
+          git config user.email "actions@github.com"
+          git add index.html mecanicos.html
+          git commit -m "fix: manter todos os apps mobile enquadrados"
+          git push origin main
