@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, FileSignature } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,8 +20,10 @@ const SIGNATURE_COMPANIES = [
 
 const FolhaPagamentoPage: React.FC = () => {
   const { companies } = useApp();
+  const [searchParams] = useSearchParams();
   const [selectedCompany, setSelectedCompany] = useState('');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
+  const autoOpenPending = searchParams.get('acao') === 'cobrar';
 
   const signatureCompanies = useMemo(() => SIGNATURE_COMPANIES
     .map(config => {
@@ -77,7 +80,7 @@ const FolhaPagamentoPage: React.FC = () => {
 
       {selectedCompany ? (
         <>
-          <PendingPayrollSignatures companyId={selectedCompany} competencia={competencia} />
+          <PendingPayrollSignatures companyId={selectedCompany} competencia={competencia} autoOpen={autoOpenPending} />
           <PayrollSignatureModule companyId={selectedCompany} competencia={competencia} />
           <BenefitSignatureGenerator companyId={selectedCompany} competencia={competencia} />
         </>
