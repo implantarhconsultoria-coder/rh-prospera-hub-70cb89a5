@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FileCheck, FileText, LogOut, Menu, X, ArrowLeft, Search,
   HardHat, Shirt, History, Clock, CalendarCheck, FileX, Fuel, Car, Stethoscope,
   UserCheck, Package, ClipboardList, ClipboardCheck, Wrench, FileSearch, ShoppingCart,
-  ChevronRight,
+  ChevronRight, Radar,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ const ALL_ITEMS: Item[] = [
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado', group: 'Operacional' },
   { label: 'Combustivel (Galoes)', icon: Fuel, path: '/admin/galoes-combustivel', group: 'Operacional' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos', group: 'Operacional' },
+  { label: 'Rastreamento da Frota', icon: Radar, path: '/admin/monitoramento', group: 'Operacional' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi', group: 'Operacional' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', group: 'Operacional' },
   { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo', group: 'Operacional' },
