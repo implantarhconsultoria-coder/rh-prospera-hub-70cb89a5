@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import VoiceCommandFab from '@/components/admin-mobile/VoiceCommandFab';
 import AssistenteFab from '@/components/assistente/AssistenteFab';
 import GlobalSearch, { SearchModule } from '@/components/admin-mobile/GlobalSearch';
+import AdminMobileDashboard from '@/components/admin-mobile/AdminMobileDashboard';
+import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
 
@@ -43,10 +45,10 @@ const ALL_ITEMS: Item[] = [
 ];
 
 const HOME_QUICK: Item[] = [
-  { label: 'Empresas', icon: Building2, path: '/admin/empresas', group: '', tint: 'from-violet-500/15 to-violet-500/5 text-violet-600 dark:text-violet-400' },
-  { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento', group: '', tint: 'from-emerald-500/15 to-emerald-500/5 text-emerald-600 dark:text-emerald-400' },
-  { label: 'EPI', icon: HardHat, path: '/admin/epi', group: '', tint: 'from-orange-500/15 to-orange-500/5 text-orange-600 dark:text-orange-400' },
-  { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', group: '', tint: 'from-cyan-500/15 to-cyan-500/5 text-cyan-600 dark:text-cyan-400' },
+  { label: 'Empresas', icon: Building2, path: '/admin/empresas', group: '', tint: 'border-violet-500/25 bg-[linear-gradient(145deg,rgba(139,92,246,.13),rgba(7,6,12,.98))] text-violet-400' },
+  { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento', group: '', tint: 'border-emerald-500/20 bg-[linear-gradient(145deg,rgba(16,185,129,.10),rgba(7,6,12,.98))] text-emerald-400' },
+  { label: 'EPI', icon: HardHat, path: '/admin/epi', group: '', tint: 'border-orange-500/20 bg-[linear-gradient(145deg,rgba(249,115,22,.10),rgba(7,6,12,.98))] text-orange-400' },
+  { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', group: '', tint: 'border-cyan-500/20 bg-[linear-gradient(145deg,rgba(6,182,212,.10),rgba(7,6,12,.98))] text-cyan-400' },
 ];
 
 const DIRECTOR_ITEMS: Item[] = [
@@ -55,7 +57,7 @@ const DIRECTOR_ITEMS: Item[] = [
 ];
 
 const DIRECTOR_HOME_QUICK: Item[] = [
-  { label: 'Relatorio', icon: FileText, path: '/admin/relatorio', group: '', tint: 'from-violet-500/15 to-violet-500/5 text-violet-600 dark:text-violet-400' },
+  { label: 'Relatorio', icon: FileText, path: '/admin/relatorio', group: '', tint: 'border-violet-500/25 bg-[linear-gradient(145deg,rgba(139,92,246,.13),rgba(7,6,12,.98))] text-violet-400' },
 ];
 
 const AdminMobileLayout: React.FC = () => {
@@ -89,39 +91,40 @@ const AdminMobileLayout: React.FC = () => {
   if (isDirector && !isDirectorRouteAllowed(location.pathname)) return <DirectorBlocked />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex flex-col">
-      <header className="sticky top-0 z-30 backdrop-blur-md bg-card/85 border-b border-border/60 flex items-center gap-2 px-3 h-14">
+    <div className="min-h-screen bg-[#03030a] text-zinc-100 flex flex-col">
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-fuchsia-500/15 bg-[#05050c]/95 px-3 backdrop-blur-xl">
         {!isHome ? (
-          <Button size="icon" variant="ghost" className="rounded-full" onClick={() => nav(-1)} aria-label="Voltar"><ArrowLeft className="w-5 h-5" /></Button>
+          <Button size="icon" variant="ghost" className="rounded-full text-zinc-300" onClick={() => nav(-1)} aria-label="Voltar"><ArrowLeft className="w-5 h-5" /></Button>
         ) : (
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 shadow-md shadow-primary/20"><Building2 className="w-5 h-5 text-primary-foreground" /></div>
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-fuchsia-500/25 bg-[linear-gradient(145deg,#ffb400,#9f2cff)] shadow-[0_0_24px_rgba(168,85,247,.16)]"><Building2 className="w-5 h-5 text-black" /></div>
         )}
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-sm truncate leading-tight">{current?.label || 'Painel Admin'}</div>
-          <div className="text-[10px] text-muted-foreground truncate">{session?.user?.email}</div>
+          <div className="text-[10px] text-zinc-600 truncate">{session?.user?.email}</div>
         </div>
-        <Button size="icon" variant="ghost" className="rounded-full" onClick={() => setSearchOpen(true)} aria-label="Buscar"><Search className="w-5 h-5" /></Button>
-        <Button size="icon" variant="ghost" className="rounded-full" onClick={() => setDrawerOpen(true)} aria-label="Menu"><Menu className="w-5 h-5" /></Button>
+        <Button size="icon" variant="ghost" className="rounded-full text-zinc-300" onClick={() => setSearchOpen(true)} aria-label="Buscar"><Search className="w-5 h-5" /></Button>
+        {!isDirector && <AdminRequestNotifications />}
+        <Button size="icon" variant="ghost" className="rounded-full text-zinc-300" onClick={() => setDrawerOpen(true)} aria-label="Menu"><Menu className="w-5 h-5" /></Button>
       </header>
 
       {drawerOpen && (
         <>
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-          <aside className="fixed right-0 top-0 z-50 h-full w-[88%] max-w-sm bg-card border-l border-border flex flex-col animate-in slide-in-from-right duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+          <aside className="fixed right-0 top-0 z-50 flex h-full w-[88%] max-w-sm flex-col border-l border-fuchsia-500/20 bg-[#07070d] animate-in slide-in-from-right duration-200">
+            <div className="flex items-center justify-between border-b border-white/[.06] p-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold">{initials}</div>
-                <div><div className="text-sm font-semibold leading-tight">{profileLabel}</div><div className="text-[10px] text-muted-foreground truncate max-w-[180px]">{session?.user?.email}</div></div>
+                <div className="grid h-10 w-10 place-items-center rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 font-bold text-fuchsia-300">{initials}</div>
+                <div><div className="text-sm font-semibold leading-tight">{profileLabel}</div><div className="text-[10px] text-zinc-600 truncate max-w-[180px]">{session?.user?.email}</div></div>
               </div>
               <Button size="icon" variant="ghost" onClick={() => setDrawerOpen(false)}><X className="w-5 h-5" /></Button>
             </div>
             <nav className="flex-1 overflow-y-auto p-3 space-y-5">
               {Object.entries(grouped).map(([group, items]) => (
                 <div key={group}>
-                  <div className="px-2 mb-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{group}</div>
+                  <div className="px-2 mb-2 text-[10px] uppercase tracking-wider text-zinc-600 font-semibold">{group}</div>
                   <div className="space-y-1">
                     {items.map(it => (
-                      <button key={it.path} onClick={() => go(it.path)} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition', location.pathname === it.path ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-muted/60 active:bg-muted')}>
+                      <button key={it.path} onClick={() => go(it.path)} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition', location.pathname === it.path ? 'border border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-300' : 'text-zinc-300 hover:bg-white/[.04] active:bg-white/[.06]')}>
                         <it.icon className="w-4 h-4 shrink-0 opacity-90" /><span className="flex-1 truncate">{it.label}</span><ChevronRight className="w-4 h-4 opacity-40" />
                       </button>
                     ))}
@@ -129,26 +132,27 @@ const AdminMobileLayout: React.FC = () => {
                 </div>
               ))}
             </nav>
-            <div className="p-3 border-t border-border"><Button size="lg" variant="outline" className="w-full rounded-xl" onClick={async () => { await logout(); nav('/'); }}><LogOut className="w-4 h-4 mr-2" /> Sair</Button></div>
+            <div className="p-3 border-t border-white/[.06]"><Button size="lg" variant="outline" className="w-full rounded-xl border-fuchsia-500/20 bg-transparent" onClick={async () => { await logout(); nav('/'); }}><LogOut className="w-4 h-4 mr-2" /> Sair</Button></div>
           </aside>
         </>
       )}
 
       <main className="flex-1 px-3 pt-3 pb-24">
         {isHome ? (
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div className="px-1 pt-1">
-              <h1 className="text-2xl font-bold tracking-tight">{isDirector ? 'Painel executivo' : `Ola, ${displayName}`}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">{isDirector ? 'Indicadores e relatorios liberados.' : 'O que vamos fazer hoje?'}</p>
+              <h1 className="text-2xl font-black tracking-tight text-white">{isDirector ? 'Painel executivo' : `Olá, ${displayName}`}</h1>
+              <p className="text-sm text-zinc-600 mt-0.5">{isDirector ? 'Indicadores e relatórios liberados.' : 'O que vamos fazer hoje?'}</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               {quickItems.map(it => (
-                <button key={it.path} onClick={() => go(it.path)} className={cn('rounded-2xl border border-border/70 bg-gradient-to-br p-4 text-left min-h-[104px] shadow-sm active:scale-[.98] transition', it.tint)}>
-                  <it.icon className="w-6 h-6 mb-3" /><div className="font-semibold text-sm text-foreground">{it.label}</div>
+                <button key={it.path} onClick={() => go(it.path)} className={cn('relative min-h-[112px] overflow-hidden rounded-2xl border p-4 text-left shadow-[0_10px_35px_rgba(0,0,0,.18)] active:scale-[.98] transition', it.tint)}>
+                  <div className="flex items-start justify-between gap-2"><it.icon className="w-7 h-7" /><ChevronRight className="h-4 w-4 text-zinc-700" /></div>
+                  <div className="mt-4 font-bold text-sm text-white">{it.label}</div>
                 </button>
               ))}
             </div>
-            <Outlet />
+            {isDirector ? <Outlet /> : <AdminMobileDashboard />}
           </div>
         ) : <Outlet />}
       </main>
