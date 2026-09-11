@@ -150,13 +150,9 @@ export default function AdminRequestNotifications() {
       </button>
 
       {popup && (
-        <div className="fixed inset-x-3 bottom-[max(18px,env(safe-area-inset-bottom))] z-[80] animate-in slide-in-from-bottom-8 fade-in duration-300">
-          <button
-            type="button"
-            onClick={() => openRequest(popup)}
-            className="w-full overflow-hidden rounded-2xl border border-amber-400/35 bg-[#0a0910]/98 text-left shadow-[0_24px_80px_rgba(0,0,0,.72),0_0_35px_rgba(245,158,11,.10)] backdrop-blur-xl"
-          >
-            <div className="flex items-start gap-3 p-4">
+        <div className="fixed inset-x-3 bottom-[92px] z-[80] animate-in slide-in-from-bottom-8 fade-in duration-300">
+          <div className="flex items-start gap-3 overflow-hidden rounded-2xl border border-amber-400/35 bg-[#0a0910]/98 p-4 text-left shadow-[0_24px_80px_rgba(0,0,0,.72),0_0_35px_rgba(245,158,11,.10)] backdrop-blur-xl">
+            <button type="button" onClick={() => openRequest(popup)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-400">
                 <Fuel className="h-5 w-5" />
               </span>
@@ -168,25 +164,18 @@ export default function AdminRequestNotifications() {
                 <span className="mt-0.5 block text-[10px] text-zinc-500">{popup.placa || 'Sem placa'} · {popup.combustivel || 'Combustível'} · {popup.posto_nome || 'Posto'}</span>
                 <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-fuchsia-400">Toque para liberar <ChevronRight className="h-3.5 w-3.5" /></span>
               </span>
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label="Fechar notificação"
-                onClick={(event) => { event.stopPropagation(); setPopup(null); }}
-                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.stopPropagation(); setPopup(null); } }}
-                className="grid h-7 w-7 place-items-center rounded-full text-zinc-600 active:bg-white/[.06]"
-              >
-                <X className="h-4 w-4" />
-              </span>
-            </div>
-          </button>
+            </button>
+            <button type="button" aria-label="Fechar notificação" onClick={() => setPopup(null)} className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-zinc-600 active:bg-white/[.06]">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 
       {drawerOpen && (
         <>
           <div className="fixed inset-0 z-[85] bg-black/70 backdrop-blur-sm" onClick={() => { setDrawerOpen(false); setSelected(null); }} />
-          <section className="fixed inset-x-0 bottom-0 z-[90] max-h-[82vh] animate-in slide-in-from-bottom duration-250 overflow-hidden rounded-t-[28px] border-t border-fuchsia-500/30 bg-[#07070d] shadow-[0_-28px_90px_rgba(0,0,0,.72)]">
+          <section className="fixed inset-x-0 bottom-0 z-[90] max-h-[82vh] animate-in slide-in-from-bottom duration-300 overflow-hidden rounded-t-[28px] border-t border-fuchsia-500/30 bg-[#07070d] shadow-[0_-28px_90px_rgba(0,0,0,.72)]">
             <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-zinc-700" />
             <div className="flex items-center justify-between border-b border-white/[.06] px-4 py-3">
               <div>
@@ -221,7 +210,7 @@ export default function AdminRequestNotifications() {
                       type="button"
                       disabled={acting === selected.id}
                       onClick={() => void decide(selected, 'negar')}
-                      className="flex h-13 items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-black text-red-400 disabled:opacity-50"
+                      className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-black text-red-400 disabled:opacity-50"
                     >
                       {acting === selected.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />} Negar
                     </button>
@@ -229,7 +218,7 @@ export default function AdminRequestNotifications() {
                       type="button"
                       disabled={acting === selected.id}
                       onClick={() => void decide(selected, 'autorizar')}
-                      className="flex h-13 items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-400 disabled:opacity-50"
+                      className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-400 disabled:opacity-50"
                     >
                       {acting === selected.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Autorizar
                     </button>
