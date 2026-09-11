@@ -4,6 +4,7 @@ import { useApp } from '@/context/AppContext';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import PayrollSignatureModule from '@/components/payroll/PayrollSignatureModule';
+import PendingPayrollSignatures from '@/components/payroll/PendingPayrollSignatures';
 import BenefitSignatureGenerator from '@/components/payroll/BenefitSignatureGenerator';
 
 const digits = (value: unknown) => String(value || '').replace(/\D/g, '');
@@ -76,6 +77,7 @@ const FolhaPagamentoPage: React.FC = () => {
 
       {selectedCompany ? (
         <>
+          <PendingPayrollSignatures companyId={selectedCompany} competencia={competencia} />
           <PayrollSignatureModule companyId={selectedCompany} competencia={competencia} />
           <BenefitSignatureGenerator companyId={selectedCompany} competencia={competencia} />
         </>
