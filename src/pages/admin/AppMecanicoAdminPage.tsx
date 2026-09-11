@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Building2, CheckCircle2, Clock3, ExternalLink, Fuel, Gauge,
-  Loader2, LogIn, Printer, RefreshCw, Route, Timer, Users, Wrench,
+  Loader2, LogIn, Printer, Radar, RefreshCw, Route, Users, Wrench,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import AppMecanicoDetailPanel from './AppMecanicoDetailPanel';
+import RastreamentoMecanicosAdminPanel from './RastreamentoMecanicosAdminPanel';
 import { toast } from 'sonner';
 
 const TZ = 'America/Sao_Paulo';
@@ -24,7 +25,7 @@ const duration = (minutes?: number | null) => {
   return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}min`;
 };
 
-type Tab = 'ponto' | 'abastecimento' | 'km' | 'fechamento';
+type Tab = 'ponto' | 'abastecimento' | 'km' | 'fechamento' | 'rastreamento';
 
 type DashboardStats = {
   mecanicos: number;
@@ -148,18 +149,10 @@ function MechanicCard({ row, tab, onOpen }: { row: MecanicoRow; tab: Tab; onOpen
       </div>
 
       <div className="border-t border-white/5 px-3.5 py-3 text-xs">
-        {tab === 'ponto' && (
-          <div className="grid grid-cols-4 gap-2 text-center"><div><span className="block text-[9px] text-zinc-600">Entrada</span><strong className="text-emerald-400">{onlyTime(row.ponto.entrada)}</strong></div><div><span className="block text-[9px] text-zinc-600">Almoço</span><strong className="text-zinc-300">{onlyTime(row.ponto.almoco_inicio)}</strong></div><div><span className="block text-[9px] text-zinc-600">Retorno</span><strong className="text-zinc-300">{onlyTime(row.ponto.almoco_fim)}</strong></div><div><span className="block text-[9px] text-zinc-600">Saída</span><strong className={row.ponto.saida ? 'text-emerald-400' : 'text-amber-400'}>{onlyTime(row.ponto.saida)}</strong></div></div>
-        )}
-        {tab === 'abastecimento' && (
-          <div className="grid grid-cols-3 gap-2"><div><span className="block text-[9px] text-zinc-600">Hoje</span><strong className="text-amber-400">{row.abastecimento.hoje} registro(s)</strong></div><div><span className="block text-[9px] text-zinc-600">Litros</span><strong>{numberBr(row.abastecimento.litros)} L</strong></div><div><span className="block text-[9px] text-zinc-600">Valor</span><strong>{money(row.abastecimento.valor)}</strong></div></div>
-        )}
-        {tab === 'km' && (
-          <div className="grid grid-cols-3 gap-2"><div><span className="block text-[9px] text-zinc-600">Veículo</span><strong className="text-fuchsia-300">{row.km.placa || '—'}</strong></div><div><span className="block text-[9px] text-zinc-600">Saída / chegada</span><strong>{row.km.saida ?? '—'} / {row.km.chegada ?? '—'}</strong></div><div><span className="block text-[9px] text-zinc-600">Rodado</span><strong className="text-amber-400">{numberBr(row.km.total)} km</strong></div></div>
-        )}
-        {tab === 'fechamento' && (
-          <div className="flex items-center justify-between gap-3"><div><span className="block text-[9px] text-zinc-600">Situação de hoje</span><strong className={closeTone}>{row.fechamento.status === 'completo' ? 'Jornada fechada' : row.fechamento.status === 'pendente' ? 'Aguardando saída' : 'Sem jornada iniciada'}</strong></div><div className="text-right"><span className="block text-[9px] text-zinc-600">Batidas</span><strong>{row.ponto.batidas || 0}</strong></div></div>
-        )}
+        {tab === 'ponto' && <div className="grid grid-cols-4 gap-2 text-center"><div><span className="block text-[9px] text-zinc-600">Entrada</span><strong className="text-emerald-400">{onlyTime(row.ponto.entrada)}</strong></div><div><span className="block text-[9px] text-zinc-600">Almoço</span><strong className="text-zinc-300">{onlyTime(row.ponto.almoco_inicio)}</strong></div><div><span className="block text-[9px] text-zinc-600">Retorno</span><strong className="text-zinc-300">{onlyTime(row.ponto.almoco_fim)}</strong></div><div><span className="block text-[9px] text-zinc-600">Saída</span><strong className={row.ponto.saida ? 'text-emerald-400' : 'text-amber-400'}>{onlyTime(row.ponto.saida)}</strong></div></div>}
+        {tab === 'abastecimento' && <div className="grid grid-cols-3 gap-2"><div><span className="block text-[9px] text-zinc-600">Hoje</span><strong className="text-amber-400">{row.abastecimento.hoje} registro(s)</strong></div><div><span className="block text-[9px] text-zinc-600">Litros</span><strong>{numberBr(row.abastecimento.litros)} L</strong></div><div><span className="block text-[9px] text-zinc-600">Valor</span><strong>{money(row.abastecimento.valor)}</strong></div></div>}
+        {tab === 'km' && <div className="grid grid-cols-3 gap-2"><div><span className="block text-[9px] text-zinc-600">Veículo</span><strong className="text-fuchsia-300">{row.km.placa || '—'}</strong></div><div><span className="block text-[9px] text-zinc-600">Saída / chegada</span><strong>{row.km.saida ?? '—'} / {row.km.chegada ?? '—'}</strong></div><div><span className="block text-[9px] text-zinc-600">Rodado</span><strong className="text-amber-400">{numberBr(row.km.total)} km</strong></div></div>}
+        {tab === 'fechamento' && <div className="flex items-center justify-between gap-3"><div><span className="block text-[9px] text-zinc-600">Situação de hoje</span><strong className={closeTone}>{row.fechamento.status === 'completo' ? 'Jornada fechada' : row.fechamento.status === 'pendente' ? 'Aguardando saída' : 'Sem jornada iniciada'}</strong></div><div className="text-right"><span className="block text-[9px] text-zinc-600">Batidas</span><strong>{row.ponto.batidas || 0}</strong></div></div>}
       </div>
     </article>
   );
@@ -255,6 +248,8 @@ export default function AppMecanicoAdminPage() {
     return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'pt-BR'));
   }, [rows]);
 
+  const veiculosApp = useMemo(() => new Set(rows.map((row) => String(row.km?.placa || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()).filter(Boolean)).size, [rows]);
+
   if (!isAdmin) return null;
 
   return (
@@ -264,28 +259,36 @@ export default function AppMecanicoAdminPage() {
         <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Atualizar</Button><Button size="sm" asChild><a href="/mecanicos" target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Link dos mecânicos</a></Button></div>
       </header>
 
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
         <TopCard active={tab === 'ponto'} title="Ponto" value={`${stats.ponto_hoje}/${stats.mecanicos}`} subtitle={`${stats.ponto_aberto} jornada(s) aberta(s)`} icon={Clock3} onClick={() => setTab('ponto')} />
         <TopCard active={tab === 'abastecimento'} title="Abastecimento" value={stats.abastecimentos_hoje} subtitle={`${stats.abastecimentos_pendentes} aguardando autorização`} icon={Fuel} onClick={() => setTab('abastecimento')} />
         <TopCard active={tab === 'km'} title="KM" value={`${numberBr(stats.km_total_hoje)} km`} subtitle={`${stats.km_abertos} veículo(s) em andamento`} icon={Gauge} onClick={() => setTab('km')} />
         <TopCard active={tab === 'fechamento'} title="Fechamento" value={stats.fechamentos_completos} subtitle={`${stats.fechamentos_pendentes} pendente(s) hoje`} icon={CheckCircle2} onClick={() => setTab('fechamento')} />
+        <TopCard active={tab === 'rastreamento'} title="Rastreamento" value={veiculosApp} subtitle="veículo(s) vinculados no app" icon={Radar} onClick={() => setTab('rastreamento')} />
       </div>
 
-      <div className="flex items-center gap-4 rounded-xl border border-white/5 bg-[#08080e] px-4 py-2 text-[11px] text-zinc-500"><span><StatusDot ok /> <strong className="text-emerald-400">{stats.online}</strong> online agora</span><span><Users className="mr-1 inline h-3.5 w-3.5" />{stats.mecanicos} mecânicos monitorados</span><span className="ml-auto hidden sm:inline">Atualização automática a cada 15 segundos</span></div>
+      {tab === 'rastreamento' ? (
+        <RastreamentoMecanicosAdminPanel />
+      ) : (
+        <>
+          <div className="flex items-center gap-4 rounded-xl border border-white/5 bg-[#08080e] px-4 py-2 text-[11px] text-zinc-500"><span><StatusDot ok /> <strong className="text-emerald-400">{stats.online}</strong> online agora</span><span><Users className="mr-1 inline h-3.5 w-3.5" />{stats.mecanicos} mecânicos monitorados</span><span className="ml-auto hidden sm:inline">Atualização automática a cada 15 segundos</span></div>
 
-      {tab === 'abastecimento' && <PendingFuelAuthorizations rows={pendingFuel} acting={acting} decide={decide} />}
+          {tab === 'abastecimento' && <PendingFuelAuthorizations rows={pendingFuel} acting={acting} decide={decide} />}
 
-      <section className="space-y-4">
-        {grouped.map(([empresa, mecanicos]) => (
-          <div key={empresa} className="space-y-2.5">
-            <div className="flex items-center gap-2 border-b border-fuchsia-500/10 pb-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-fuchsia-500/10 text-fuchsia-400"><Building2 className="h-4 w-4" /></span><h2 className="text-sm font-black uppercase tracking-wide text-white">{empresa}</h2><Badge variant="outline" className="text-[10px]">{mecanicos.length}</Badge><span className="ml-auto text-[10px] text-zinc-600">{mecanicos.filter((m) => m.online).length} online</span></div>
-            <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">{mecanicos.map((row) => <MechanicCard key={row.id} row={row} tab={tab} onOpen={setSelectedId} />)}</div>
-          </div>
-        ))}
-        {!rows.length && !loading && <div className="rounded-xl border border-dashed p-10 text-center text-zinc-500">Nenhum mecânico encontrado.</div>}
-      </section>
+          <section className="space-y-4">
+            {grouped.map(([empresa, mecanicos]) => (
+              <div key={empresa} className="space-y-2.5">
+                <div className="flex items-center gap-2 border-b border-fuchsia-500/10 pb-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-fuchsia-500/10 text-fuchsia-400"><Building2 className="h-4 w-4" /></span><h2 className="text-sm font-black uppercase tracking-wide text-white">{empresa}</h2><Badge variant="outline" className="text-[10px]">{mecanicos.length}</Badge><span className="ml-auto text-[10px] text-zinc-600">{mecanicos.filter((m) => m.online).length} online</span></div>
+                <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">{mecanicos.map((row) => <MechanicCard key={row.id} row={row} tab={tab} onOpen={setSelectedId} />)}</div>
+              </div>
+            ))}
+            {!rows.length && !loading && <div className="rounded-xl border border-dashed p-10 text-center text-zinc-500">Nenhum mecânico encontrado.</div>}
+          </section>
 
-      {tab === 'fechamento' && <OperationalClosingReport />}
+          {tab === 'fechamento' && <OperationalClosingReport />}
+        </>
+      )}
+
       {selectedId && <AppMecanicoDetailPanel acessoId={selectedId} onClose={() => setSelectedId(null)} onSaved={() => void load()} />}
     </div>
   );
