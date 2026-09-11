@@ -24,25 +24,35 @@ const formatPhone = (value: unknown) => {
 };
 
 const competenceLabel = (competencia: string) => {
-  const [year, month] = competencia.split('-').map(Number);
+  const [year, month] = String(competencia || '').split('-').map(Number);
   if (!year || !month) return competencia;
-  return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
-    .format(new Date(year, month - 1, 1));
+  return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
 };
 
 type PendingRow = {
   employee_id?: string | null;
   employee_name?: string | null;
   document_id?: string | null;
+  competencia?: string | null;
+  document_type?: string | null;
   holerite_confirmed?: boolean | null;
+  payment_confirmed?: boolean | null;
   signature_status?: string | null;
   signed_at?: string | null;
 };
 
-type PendingEmployee = PendingRow & {
+type PendingDocument = {
+  document_id: string;
+  competencia: string;
+  document_type: string;
+};
+
+type PendingEmployee = {
+  employee_id: string;
   name: string;
   phoneRaw: string;
   whatsappPhone: string;
+  documents: PendingDocument[];
 };
 
 type PendingPayrollSignaturesProps = {
@@ -51,7 +61,14 @@ type PendingPayrollSignaturesProps = {
   autoOpen?: boolean;
 };
 
-const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ companyId, competencia, autoOpen = false }) => {
+const isActuallyPending = (row: PendingRow) => {
+  if (!row.document_id || !row.holerite_confirmed || row.signature_status === 'ASSINADO' || row.signed_at) return false;
+  // Holerite só entra na cobrança quando o pagamento já foi confirmado e o documento está realmente disponível no portal.
+  if (row.document_type === 'HOLERITE' && row.payment_confirmed !== true) return false;
+  return true;
+};
+
+const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ companyId, autoOpen = false }) => {
   const { companies, employees } = useApp();
   const company = companies.find(item => item.id === companyId);
   const portalSlug = String((company as any)?.codigo || '').trim().toLowerCase();
@@ -66,14 +83,14 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
   const autoOpenedRef = useRef(false);
 
   const load = useCallback(async () => {
-    if (!companyId || !competencia) return;
+    if (!companyId) return;
     setLoading(true);
     try {
       const { data, error } = await (supabase as any)
         .from('payroll_admin_status_v')
-        .select('*')
+        .select('employee_id,employee_name,document_id,competencia,document_type,holerite_confirmed,payment_confirmed,signature_status,signed_at')
         .eq('company_id', companyId)
-        .eq('competencia', competencia)
+        .order('competencia', { ascending: false })
         .order('employee_name', { ascending: true, nullsFirst: false });
       if (error) throw error;
       setRows(data || []);
@@ -83,11 +100,9 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
     } finally {
       setLoading(false);
     }
-  }, [companyId, competencia]);
+  }, [companyId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
     const handleRefresh = () => void load();
@@ -95,28 +110,52 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
     return () => window.removeEventListener('topac:refresh-current', handleRefresh);
   }, [load]);
 
-  const pending = useMemo<PendingEmployee[]>(() => rows
-    .filter(row => Boolean(row.document_id) && Boolean(row.holerite_confirmed) && row.signature_status !== 'ASSINADO')
-    .map(row => {
+  const pending = useMemo<PendingEmployee[]>(() => {
+    const grouped = new Map<string, PendingEmployee>();
+
+    rows.filter(isActuallyPending).forEach(row => {
       const employee = employees.find(item => item.id === row.employee_id) as any;
+      const employeeId = String(row.employee_id || '');
+      if (!employeeId) return;
       const phoneRaw = String(employee?.celular || employee?.telefone || '');
-      return {
-        ...row,
+      const current = grouped.get(employeeId) || {
+        employee_id: employeeId,
         name: employee?.name || row.employee_name || 'Funcionário',
         phoneRaw,
         whatsappPhone: normalizeWhatsappPhone(phoneRaw),
+        documents: [],
       };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [rows, employees]);
+
+      current.documents.push({
+        document_id: String(row.document_id),
+        competencia: String(row.competencia || ''),
+        document_type: String(row.document_type || ''),
+      });
+      grouped.set(employeeId, current);
+    });
+
+    return [...grouped.values()]
+      .map(item => ({
+        ...item,
+        documents: item.documents.sort((a, b) => b.competencia.localeCompare(a.competencia)),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [rows, employees]);
 
   const sendWhatsApp = useCallback((employee: PendingEmployee) => {
     if (!employee.whatsappPhone) return;
-    const text = `Olá, ${employee.name}! Seu documento de ${competenceLabel(competencia)} está disponível no Portal TOPAC RH PRO da ${company?.name || 'empresa'} e ainda consta como pendente de assinatura.\n\nAcesse pelo link abaixo e entre com seu CPF, data de nascimento e os 4 últimos números do celular cadastrado:\n\n${portalUrl}`;
+    const months = [...new Set(employee.documents.map(doc => doc.competencia).filter(Boolean))];
+    const pendingText = months.length
+      ? months.map(competenceLabel).join(', ')
+      : 'documento(s) já liberado(s)';
+    const plural = employee.documents.length > 1;
+    const text = `Olá, ${employee.name}! Você possui ${employee.documents.length} documento${plural ? 's' : ''} já liberado${plural ? 's' : ''} no Portal TOPAC RH PRO da ${company?.name || 'empresa'} que ainda ${plural ? 'constam' : 'consta'} como pendente${plural ? 's' : ''} de assinatura.\n\nPendência${plural ? 's' : ''}: ${pendingText}.\n\nAcesse pelo link abaixo e entre com seu CPF, data de nascimento e os 4 últimos números do celular cadastrado:\n\n${portalUrl}`;
     window.open(`https://wa.me/${employee.whatsappPhone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
-  }, [company?.name, competencia, portalUrl]);
+  }, [company?.name, portalUrl]);
 
   const validPending = useMemo(() => pending.filter(item => Boolean(item.whatsappPhone)), [pending]);
   const withoutPhone = pending.length - validPending.length;
+  const totalDocuments = useMemo(() => pending.reduce((sum, item) => sum + item.documents.length, 0), [pending]);
   const bulkDone = validPending.length > 0 && bulkIndex >= validPending.length;
   const currentBulk = bulkIndex < validPending.length ? validPending[bulkIndex] : null;
 
@@ -139,7 +178,7 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
 
   useEffect(() => {
     autoOpenedRef.current = false;
-  }, [companyId, competencia]);
+  }, [companyId]);
 
   return (
     <>
@@ -151,11 +190,15 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <p className={`text-xs font-bold uppercase ${pending.length ? 'text-amber-300' : 'text-emerald-300'}`}>Pendentes de assinatura</p>
+                <p className={`text-xs font-bold uppercase ${pending.length ? 'text-amber-300' : 'text-emerald-300'}`}>Pendentes reais de assinatura</p>
                 {!loading && <Badge variant="outline" className={pending.length ? 'border-amber-500/40 text-amber-200' : 'border-emerald-500/40 text-emerald-200'}>{pending.length}</Badge>}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                {loading ? 'Atualizando assinaturas...' : pending.length ? `${pending.length} funcionário(s) ainda não assinaram em ${competenceLabel(competencia)}.` : `Todos os documentos liberados de ${competenceLabel(competencia)} já foram assinados.`}
+                {loading
+                  ? 'Atualizando assinaturas...'
+                  : pending.length
+                    ? `${pending.length} funcionário(s) com ${totalDocuments} documento(s) realmente liberado(s) e ainda não assinado(s). O mês selecionado não interfere nesta cobrança.`
+                    : 'Nenhum documento já liberado está pendente de assinatura.'}
               </p>
               {!loading && withoutPhone > 0 && <p className="mt-1 flex items-center gap-1 text-[11px] text-amber-300"><AlertTriangle className="h-3 w-3" />{withoutPhone} pendente(s) sem telefone válido cadastrado.</p>}
             </div>
@@ -170,12 +213,7 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
               <Users className="mr-2 h-4 w-4" />
               Ver pendentes
             </Button>
-            <Button
-              size="sm"
-              onClick={startBulk}
-              disabled={loading || validPending.length === 0}
-              className="bg-emerald-600 text-white hover:bg-emerald-500"
-            >
+            <Button size="sm" onClick={startBulk} disabled={loading || validPending.length === 0} className="bg-emerald-600 text-white hover:bg-emerald-500">
               <Send className="mr-2 h-4 w-4" />
               Enviar em massa
             </Button>
@@ -185,46 +223,32 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[82vh] max-w-3xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Pendentes de assinatura — {competenceLabel(competencia)}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Pendentes reais de assinatura</DialogTitle></DialogHeader>
 
           <div className="mb-2 flex flex-col gap-2 rounded-lg border bg-muted/20 px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <span><strong>{company?.name || 'Empresa'}</strong> · {pending.length} pendente(s)</span>
-              <p className="mt-1 text-muted-foreground">Envie individualmente ou use o envio em massa para percorrer todos os contatos válidos.</p>
+              <span><strong>{company?.name || 'Empresa'}</strong> · {pending.length} funcionário(s) · {totalDocuments} documento(s)</span>
+              <p className="mt-1 text-muted-foreground">A lista considera somente documentos já liberados para assinatura. Mês ainda não fechado ou holerite sem pagamento confirmado não entra.</p>
             </div>
-            <Button
-              size="sm"
-              onClick={startBulk}
-              disabled={validPending.length === 0}
-              className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500"
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Enviar em massa ({validPending.length})
+            <Button size="sm" onClick={startBulk} disabled={validPending.length === 0} className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500">
+              <Send className="mr-2 h-4 w-4" />Enviar em massa ({validPending.length})
             </Button>
           </div>
 
           <div className="space-y-2">
             {pending.map(employee => (
-              <div key={`${employee.employee_id}-${employee.document_id}`} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div key={employee.employee_id} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-sm font-semibold text-foreground">{employee.name}</p>
-                    <Badge variant="outline" className="border-amber-500/40 text-amber-300">Pendente</Badge>
+                    <Badge variant="outline" className="border-amber-500/40 text-amber-300">{employee.documents.length} pendente(s)</Badge>
                   </div>
                   <p className={`mt-1 text-xs ${employee.whatsappPhone ? 'text-muted-foreground' : 'text-red-400'}`}>{formatPhone(employee.phoneRaw)}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{[...new Set(employee.documents.map(doc => doc.competencia).filter(Boolean))].map(competenceLabel).join(' · ')}</p>
                 </div>
 
-                <Button
-                  size="sm"
-                  onClick={() => sendWhatsApp(employee)}
-                  disabled={!employee.whatsappPhone}
-                  className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500"
-                  title={employee.whatsappPhone ? `Enviar lembrete para ${employee.name}` : 'Funcionário sem telefone válido cadastrado'}
-                >
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                  {employee.whatsappPhone ? 'Enviar WhatsApp' : 'Sem telefone'}
+                <Button size="sm" onClick={() => sendWhatsApp(employee)} disabled={!employee.whatsappPhone} className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500" title={employee.whatsappPhone ? `Enviar lembrete para ${employee.name}` : 'Funcionário sem telefone válido cadastrado'}>
+                  <MessageCircle className="mr-2 h-4 w-4" />{employee.whatsappPhone ? 'Enviar WhatsApp' : 'Sem telefone'}
                 </Button>
               </div>
             ))}
@@ -234,23 +258,14 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Envio em massa — {company?.name || 'Empresa'}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Envio em massa — {company?.name || 'Empresa'}</DialogTitle></DialogHeader>
 
           {validPending.length === 0 ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
-              Nenhum pendente possui telefone válido para WhatsApp.
-            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">Nenhum pendente possui telefone válido para WhatsApp.</div>
           ) : bulkDone ? (
             <div className="space-y-4 text-center">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500/15 text-emerald-400">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="font-semibold text-foreground">Fila concluída</p>
-                <p className="mt-1 text-xs text-muted-foreground">Foram preparados {validPending.length} contatos pendentes para envio pelo WhatsApp.</p>
-              </div>
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500/15 text-emerald-400"><CheckCircle2 className="h-6 w-6" /></div>
+              <div><p className="font-semibold text-foreground">Fila concluída</p><p className="mt-1 text-xs text-muted-foreground">Foram preparados {validPending.length} contatos com pendências reais para envio pelo WhatsApp.</p></div>
               <Button className="w-full" onClick={() => setBulkOpen(false)}>Concluir</Button>
             </div>
           ) : currentBulk ? (
@@ -260,38 +275,16 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-400">Contato {bulkIndex + 1} de {validPending.length}</p>
                     <p className="mt-1 truncate text-base font-bold text-foreground">{currentBulk.name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{formatPhone(currentBulk.phoneRaw)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{formatPhone(currentBulk.phoneRaw)} · {currentBulk.documents.length} documento(s)</p>
                   </div>
                   <MessageCircle className="h-8 w-8 shrink-0 text-emerald-400" />
                 </div>
               </div>
 
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-all"
-                  style={{ width: `${Math.round((bulkIndex / validPending.length) * 100)}%` }}
-                />
-              </div>
-
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                O WhatsApp abre a conversa com a mensagem pronta. Envie e, ao voltar ao TOPAC RH PRO, continue para o próximo contato.
-              </p>
-
-              <Button
-                className="w-full bg-emerald-600 text-white hover:bg-emerald-500"
-                onClick={sendCurrentBulk}
-              >
-                <Send className="mr-2 h-4 w-4" />
-                Abrir WhatsApp e avançar
-              </Button>
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setBulkIndex(index => Math.min(index + 1, validPending.length))}
-              >
-                Pular este contato
-              </Button>
+              <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${Math.round((bulkIndex / validPending.length) * 100)}%` }} /></div>
+              <p className="text-xs leading-relaxed text-muted-foreground">O WhatsApp abre a conversa com a mensagem pronta. Envie e, ao voltar ao TOPAC RH PRO, continue para o próximo contato.</p>
+              <Button className="w-full bg-emerald-600 text-white hover:bg-emerald-500" onClick={sendCurrentBulk}><Send className="mr-2 h-4 w-4" />Abrir WhatsApp e avançar</Button>
+              <Button variant="outline" className="w-full" onClick={() => setBulkIndex(index => Math.min(index + 1, validPending.length))}>Pular este contato</Button>
             </div>
           ) : null}
         </DialogContent>
