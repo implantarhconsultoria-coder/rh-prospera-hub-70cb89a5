@@ -68,19 +68,21 @@ const FolhaPagamentoPage: React.FC = () => {
         })}
       </div>
 
-      <Card className="p-4 flex flex-wrap items-end gap-3">
-        <div className="w-52">
-          <label className="text-xs text-muted-foreground">Competência do documento</label>
-          <Input type="month" value={competencia} onChange={event => setCompetencia(event.target.value)} />
-        </div>
-        <div className="pb-2 text-xs text-muted-foreground">
-          Empresa aberta: <strong className="text-foreground">{selectedCompanyData?.signatureLabel || '—'}</strong>
-        </div>
-      </Card>
-
       {selectedCompany ? (
         <>
           <PendingPayrollSignatures companyId={selectedCompany} competencia={competencia} autoOpen={autoOpenPending} />
+
+          <Card className="p-4 flex flex-wrap items-end gap-3">
+            <div className="w-52">
+              <label className="text-xs text-muted-foreground">Competência para lançar/consultar documentos</label>
+              <Input type="month" value={competencia} onChange={event => setCompetencia(event.target.value)} />
+            </div>
+            <div className="pb-2 text-xs text-muted-foreground">
+              Empresa aberta: <strong className="text-foreground">{selectedCompanyData?.signatureLabel || '—'}</strong>
+              <span className="ml-2">· Este mês não interfere na lista de pendentes acima.</span>
+            </div>
+          </Card>
+
           <PayrollSignatureModule companyId={selectedCompany} competencia={competencia} />
           <BenefitSignatureGenerator companyId={selectedCompany} competencia={competencia} />
         </>
