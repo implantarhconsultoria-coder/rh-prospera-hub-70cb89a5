@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, ChevronRight, FileCheck2, FileText, Fuel, Users, Wrench,
+  Building2, ChevronRight, FileCheck2, FileText, Fuel, MessageCircle, Users, Wrench,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
@@ -105,44 +105,58 @@ export default function AdminMobileDashboard() {
 
   return (
     <div className="space-y-3">
-      <button
-        type="button"
-        onClick={() => navigate('/admin/folha-pagamento')}
-        className="w-full overflow-hidden rounded-2xl border border-fuchsia-500/25 bg-[#080810] text-left shadow-[0_14px_40px_rgba(0,0,0,.24)] active:scale-[.99] transition"
-      >
-        <div className="flex items-center justify-between border-b border-white/[.06] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl border border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-400">
-              <FileCheck2 className="h-5 w-5" />
-            </span>
-            <div>
-              <div className="text-[11px] font-black uppercase tracking-[.08em] text-white">Assinatura Digital</div>
-              <div className="text-[10px] text-zinc-500">Visão geral dos documentos</div>
+      <section className="w-full overflow-hidden rounded-2xl border border-fuchsia-500/25 bg-[#080810] text-left shadow-[0_14px_40px_rgba(0,0,0,.24)]">
+        <button
+          type="button"
+          onClick={() => navigate('/admin/folha-pagamento')}
+          className="w-full text-left active:scale-[.99] transition"
+        >
+          <div className="flex items-center justify-between border-b border-white/[.06] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="grid h-9 w-9 place-items-center rounded-xl border border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-400">
+                <FileCheck2 className="h-5 w-5" />
+              </span>
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-[.08em] text-white">Assinatura Digital</div>
+                <div className="text-[10px] text-zinc-500">Visão geral dos documentos</div>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-zinc-600" />
+          </div>
+
+          <div className="grid grid-cols-2 divide-x divide-white/[.06]">
+            <div className="px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Assinados</div>
+              <div className="mt-1 text-3xl font-black leading-none text-[#ffb400]">{loading ? '—' : br(signed)}</div>
+              <div className="mt-2 text-[10px] text-emerald-400">{signaturePct}% concluído</div>
+            </div>
+            <div className="px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Pendentes</div>
+              <div className="mt-1 text-3xl font-black leading-none text-[#ffb400]">{loading ? '—' : br(pending)}</div>
+              <div className="mt-2 text-[10px] text-fuchsia-400">Toque para conferir</div>
             </div>
           </div>
-          <ChevronRight className="h-5 w-5 text-zinc-600" />
-        </div>
 
-        <div className="grid grid-cols-2 divide-x divide-white/[.06]">
-          <div className="px-4 py-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Assinados</div>
-            <div className="mt-1 text-3xl font-black leading-none text-[#ffb400]">{loading ? '—' : br(signed)}</div>
-            <div className="mt-2 text-[10px] text-emerald-400">{signaturePct}% concluído</div>
+          <div className="mx-4 mb-4 h-2 overflow-hidden rounded-full bg-white/[.06]">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-fuchsia-600 via-violet-500 to-[#ffb400] transition-all duration-500"
+              style={{ width: `${signaturePct}%` }}
+            />
           </div>
-          <div className="px-4 py-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Pendentes</div>
-            <div className="mt-1 text-3xl font-black leading-none text-[#ffb400]">{loading ? '—' : br(pending)}</div>
-            <div className="mt-2 text-[10px] text-fuchsia-400">Toque para conferir</div>
-          </div>
-        </div>
+        </button>
 
-        <div className="mx-4 mb-4 h-2 overflow-hidden rounded-full bg-white/[.06]">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-fuchsia-600 via-violet-500 to-[#ffb400] transition-all duration-500"
-            style={{ width: `${signaturePct}%` }}
-          />
+        <div className="border-t border-white/[.06] p-3">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/folha-pagamento?acao=cobrar')}
+            disabled={loading || pending === 0}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-xs font-black uppercase tracking-[.06em] text-emerald-300 transition active:scale-[.98] disabled:cursor-not-allowed disabled:border-white/[.06] disabled:bg-white/[.03] disabled:text-zinc-600"
+          >
+            <MessageCircle className="h-4 w-4" />
+            {pending > 0 ? `Cobrar ${br(pending)} pendente${pending === 1 ? '' : 's'}` : 'Nenhuma assinatura pendente'}
+          </button>
         </div>
-      </button>
+      </section>
 
       <div className="grid grid-cols-2 gap-3">
         {cards.map(card => (
