@@ -12,6 +12,7 @@ interface Props {
   title?: string;
   hint?: string;
   allowGallery?: boolean;
+  galleryMaxAgeMinutes?: number;
 }
 
 const getCameraMessage = (error: unknown) => {
@@ -31,10 +32,132 @@ const getCameraMessage = (error: unknown) => {
   return "Não foi possível abrir a câmera. Tente novamente ou selecione uma foto da galeria.";
 };
 
+const parseExifDate = (value: string) => {
+  const match = value.trim().match(/^(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const readExifCaptureDate = async (file: File): Promise<Date | null> => {
+  if (!/jpe?g/i.test(file.type) && !/\.jpe?g$/i.test(file.name)) return null;
+
+  try {
+    const buffer = await file.slice(0, Math.min(file.size, 1024 * 1024)).arrayBuffer();
+    const view = new DataView(buffer);
+    if (view.byteLength < 12 || view.getUint16(0, false) !== 0xffd8) return null;
+
+    let offset = 2;
+    while (offset + 4 < view.byteLength) {
+      if (view.getUint8(offset) !== 0xff) {
+        offset += 1;
+        continue;
+      }
+
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xda || marker === 0xd9) break;
+      const segmentLength = view.getUint16(offset + 2, false);
+      if (segmentLength < 2 || offset + 2 + segmentLength > view.byteLength) break;
+
+      if (marker === 0xe1 && segmentLength >= 8) {
+        const exifStart = offset + 4;
+        const isExif = String.fromCharCode(
+          view.getUint8(exifStart),
+          view.getUint8(exifStart + 1),
+          view.getUint8(exifStart + 2),
+          view.getUint8(exifStart + 3),
+        ) === "Exif";
+
+        if (isExif) {
+          const tiffStart = exifStart + 6;
+          if (tiffStart + 8 > view.byteLength) return null;
+          const endian = view.getUint16(tiffStart, false);
+          const little = endian === 0x4949;
+          if (!little && endian !== 0x4d4d) return null;
+
+          const get16 = (position: number) => view.getUint16(position, little);
+          const get32 = (position: number) => view.getUint32(position, little);
+          const readAscii = (entryOffset: number) => {
+            const count = get32(entryOffset + 4);
+            if (!count) return "";
+            const valueOffset = count <= 4 ? entryOffset + 8 : tiffStart + get32(entryOffset + 8);
+            if (valueOffset < 0 || valueOffset + count > view.byteLength) return "";
+            let text = "";
+            for (let i = 0; i < count; i += 1) {
+              const code = view.getUint8(valueOffset + i);
+              if (!code) break;
+              text += String.fromCharCode(code);
+            }
+            return text;
+          };
+          const scanIfd = (ifdOffset: number, wantedTags: number[]) => {
+            if (ifdOffset < 0 || ifdOffset + 2 > view.byteLength) return null;
+            const entries = get16(ifdOffset);
+            for (let index = 0; index < entries; index += 1) {
+              const entry = ifdOffset + 2 + index * 12;
+              if (entry + 12 > view.byteLength) break;
+              const tag = get16(entry);
+              if (wantedTags.includes(tag)) {
+                const parsed = parseExifDate(readAscii(entry));
+                if (parsed) return parsed;
+              }
+            }
+            return null;
+          };
+
+          const ifd0 = tiffStart + get32(tiffStart + 4);
+          if (ifd0 + 2 > view.byteLength) return null;
+          const entries = get16(ifd0);
+          let exifIfd: number | null = null;
+          for (let index = 0; index < entries; index += 1) {
+            const entry = ifd0 + 2 + index * 12;
+            if (entry + 12 > view.byteLength) break;
+            if (get16(entry) === 0x8769) {
+              exifIfd = tiffStart + get32(entry + 8);
+              break;
+            }
+          }
+
+          if (exifIfd != null) {
+            const original = scanIfd(exifIfd, [0x9003, 0x9004]);
+            if (original) return original;
+          }
+
+          const generic = scanIfd(ifd0, [0x0132]);
+          if (generic) return generic;
+        }
+      }
+
+      offset += 2 + segmentLength;
+    }
+  } catch (error) {
+    console.warn("Não foi possível ler EXIF da foto:", error);
+  }
+
+  return null;
+};
+
+const getGalleryCaptureDate = async (file: File) => {
+  const exifDate = await readExifCaptureDate(file);
+  if (exifDate) return exifDate;
+  if (Number.isFinite(file.lastModified) && file.lastModified > 0) {
+    const browserDate = new Date(file.lastModified);
+    if (!Number.isNaN(browserDate.getTime())) return browserDate;
+  }
+  return null;
+};
+
+const sameLocalDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear()
+  && a.getMonth() === b.getMonth()
+  && a.getDate() === b.getDate();
+
 /**
  * Câmera mobile-first reutilizável do app mecânico.
  * A galeria fica liberada por padrão para garantir envio de fotos já existentes.
  * Use allowGallery={false} somente em capturas que precisem ser obrigatoriamente ao vivo.
+ * Use galleryMaxAgeMinutes para bloquear fotos antigas em fluxos que aceitam galeria com limite de tempo.
  */
 export default function CameraCapture({
   open,
@@ -44,6 +167,7 @@ export default function CameraCapture({
   title = "Foto",
   hint,
   allowGallery = true,
+  galleryMaxAgeMinutes,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -54,6 +178,7 @@ export default function CameraCapture({
   const [starting, setStarting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [galleryBlock, setGalleryBlock] = useState<string | null>(null);
   const galleryEnabled = allowGallery !== false;
 
   const stop = () => {
@@ -69,6 +194,7 @@ export default function CameraCapture({
     setStarting(true);
     setErro(null);
     setFoto(null);
+    setGalleryBlock(null);
     stop();
 
     try {
@@ -138,15 +264,35 @@ export default function CameraCapture({
     }
     ctx.drawImage(v, 0, 0, c.width, c.height);
     ctx.restore();
+    setGalleryBlock(null);
     setFoto(c.toDataURL("image/jpeg", 0.85));
     stop();
   };
 
-  const carregarDaGaleria = (file?: File) => {
+  const carregarDaGaleria = async (file?: File) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast.error("Selecione um arquivo de imagem.");
       return;
+    }
+
+    setGalleryBlock(null);
+    if (galleryMaxAgeMinutes && galleryMaxAgeMinutes > 0) {
+      const capturedAt = await getGalleryCaptureDate(file);
+      const now = new Date();
+      const ageMs = capturedAt ? now.getTime() - capturedAt.getTime() : Number.POSITIVE_INFINITY;
+      const maxAgeMs = galleryMaxAgeMinutes * 60 * 1000;
+      const futureToleranceMs = 5 * 60 * 1000;
+      const invalid = !capturedAt || !sameLocalDay(capturedAt, now) || ageMs > maxAgeMs || ageMs < -futureToleranceMs;
+
+      if (invalid) {
+        setFoto(null);
+        setGalleryBlock(
+          "A imagem selecionada foi tirada fora do período permitido para este registro.\n\nPara registrar o KM, a foto precisa ter sido tirada há no máximo 1 hora.\n\nTire uma nova foto do painel ou selecione uma imagem recente para continuar.",
+        );
+        toast.error("Foto não aceita: imagem fora do período permitido.");
+        return;
+      }
     }
 
     const image = new Image();
@@ -173,6 +319,7 @@ export default function CameraCapture({
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
       setFoto(canvas.toDataURL("image/jpeg", 0.88));
       setErro(null);
+      setGalleryBlock(null);
       stop();
       URL.revokeObjectURL(objectUrl);
     };
@@ -236,7 +383,7 @@ export default function CameraCapture({
             accept="image/*"
             className="hidden"
             onChange={(event) => {
-              carregarDaGaleria(event.target.files?.[0]);
+              void carregarDaGaleria(event.target.files?.[0]);
               event.target.value = "";
             }}
           />
@@ -252,6 +399,13 @@ export default function CameraCapture({
         </div>
 
         <div className="p-4 bg-black space-y-3">
+          {galleryBlock && (
+            <div className="rounded-lg border border-red-500/50 bg-red-950/60 p-3 text-red-100">
+              <div className="mb-2 flex items-center gap-2 text-sm font-bold"><AlertTriangle className="h-5 w-5" /> FOTO NÃO ACEITA</div>
+              <p className="whitespace-pre-line text-xs leading-relaxed">{galleryBlock}</p>
+            </div>
+          )}
+
           {foto ? (
             <>
               <div className="grid grid-cols-2 gap-3">
