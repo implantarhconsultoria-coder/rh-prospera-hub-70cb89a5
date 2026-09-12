@@ -108,8 +108,8 @@ changed = patch(
 
 changed = patch(
   'src/pages/AvisoFeriasPage.tsx',
-  `            <Button onClick={handleEnviarEmailFerias} variant="outline" className="border-primary text-primary hover:bg-primary/10">\n              <Mail className="w-4 h-4 mr-2" /> Enviar por E-mail\n            </Button>`,
-  `            <Button onClick={handleEnviarEmailFerias} variant="outline" className="border-primary text-primary hover:bg-primary/10">\n              <Mail className="w-4 h-4 mr-2" /> Enviar por E-mail\n            </Button>\n            <VacationSignatureButton\n              employee={emp}\n              company={company}\n              inicioFerias={inicioFerias}\n              fimFerias={fimFerias}\n              retorno={retorno}\n              diasFerias={diasFerias}\n              session={session}\n              onBeforePublish={() => salvarFeriasNoBanco({ silent: true })}\n            />`,
+  `          </div>\n        </div>\n        <EmailPdfModal`,
+  `            <VacationSignatureButton\n              employee={emp}\n              company={company}\n              inicioFerias={inicioFerias}\n              fimFerias={fimFerias}\n              retorno={retorno}\n              diasFerias={diasFerias}\n              session={session}\n              onBeforePublish={() => salvarFeriasNoBanco({ silent: true })}\n            />\n          </div>\n        </div>\n        <EmailPdfModal`,
   '<VacationSignatureButton',
 ) || changed;
 
