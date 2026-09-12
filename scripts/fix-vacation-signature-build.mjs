@@ -16,23 +16,23 @@ let changed = false;
 // API pública: Aviso de Férias é um documento assinável sem depender de pagamento.
 changed = patch(
   'api/payroll-public.ts',
-  "const ADIANTAMENTO = 'ADIANTAMENTO';\nconst BENEFIT_TYPES",
-  "const ADIANTAMENTO = 'ADIANTAMENTO';\nconst AVISO_FERIAS = 'AVISO_FERIAS';\nconst BENEFIT_TYPES",
+  "const RECIBO_GARAGEM = 'RECIBO_GARAGEM';",
+  "const RECIBO_GARAGEM = 'RECIBO_GARAGEM';\nconst AVISO_FERIAS = 'AVISO_FERIAS';",
   "const AVISO_FERIAS = 'AVISO_FERIAS';",
 ) || changed;
 
 changed = patch(
   'api/payroll-public.ts',
-  "  if (type === ADIANTAMENTO) return 'Recibo de Adiantamento';\n  return 'Holerite';",
-  "  if (type === AVISO_FERIAS) return 'Aviso de Férias';\n  if (type === ADIANTAMENTO) return 'Recibo de Adiantamento';\n  return 'Holerite';",
+  "  if (type === RECIBO_GARAGEM) return 'Recibo de Garagem';\n  return 'Holerite';",
+  "  if (type === RECIBO_GARAGEM) return 'Recibo de Garagem';\n  if (type === AVISO_FERIAS) return 'Aviso de Férias';\n  return 'Holerite';",
   "if (type === AVISO_FERIAS) return 'Aviso de Férias';",
 ) || changed;
 
 changed = patch(
   'api/payroll-public.ts',
-  "  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO) {",
-  "  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO && doc.document_type !== AVISO_FERIAS) {",
-  "doc.document_type !== ADIANTAMENTO && doc.document_type !== AVISO_FERIAS",
+  "  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO && doc.document_type !== RECIBO_GARAGEM) {",
+  "  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO && doc.document_type !== RECIBO_GARAGEM && doc.document_type !== AVISO_FERIAS) {",
+  "doc.document_type !== RECIBO_GARAGEM && doc.document_type !== AVISO_FERIAS",
 ) || changed;
 
 changed = patch(
@@ -45,8 +45,8 @@ changed = patch(
 // Arquivo pessoal: mantém o aviso assinado disponível com o nome correto.
 changed = patch(
   'api/payroll-archive.ts',
-  "    const complement = doc.payment_kind === 'COMPLEMENTAR';\n    const baseLabel = doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : 'Holerite';\n    const label = complement && benefitTypes.length ? `${baseLabel} — Pagamento complementar` : baseLabel;\n    return {\n      id: `payroll:${doc.id}`,\n      source: 'payroll',\n      category: benefitTypes.length ? 'beneficio' : 'pagamento',",
-  "    const complement = doc.payment_kind === 'COMPLEMENTAR';\n    const isVacation = doc.document_type === 'AVISO_FERIAS';\n    const baseLabel = isVacation ? 'Aviso de Férias' : doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : 'Holerite';\n    const label = complement && benefitTypes.length ? `${baseLabel} — Pagamento complementar` : baseLabel;\n    return {\n      id: `payroll:${doc.id}`,\n      source: 'payroll',\n      category: isVacation ? 'documento' : benefitTypes.length ? 'beneficio' : 'pagamento',",
+  "    const complement = doc.payment_kind === 'COMPLEMENTAR';\n    const baseLabel = doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : doc.document_type === 'RECIBO_GARAGEM' ? 'Recibo de Garagem' : 'Holerite';\n    const label = complement && benefitTypes.length ? `${baseLabel} — Pagamento complementar` : baseLabel;\n    return {\n      id: `payroll:${doc.id}`,\n      source: 'payroll',\n      category: doc.document_type === 'RECIBO_GARAGEM' ? 'garagem' : benefitTypes.length ? 'beneficio' : 'pagamento',",
+  "    const complement = doc.payment_kind === 'COMPLEMENTAR';\n    const isVacation = doc.document_type === 'AVISO_FERIAS';\n    const baseLabel = isVacation ? 'Aviso de Férias' : doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : doc.document_type === 'RECIBO_GARAGEM' ? 'Recibo de Garagem' : 'Holerite';\n    const label = complement && benefitTypes.length ? `${baseLabel} — Pagamento complementar` : baseLabel;\n    return {\n      id: `payroll:${doc.id}`,\n      source: 'payroll',\n      category: isVacation ? 'documento' : doc.document_type === 'RECIBO_GARAGEM' ? 'garagem' : benefitTypes.length ? 'beneficio' : 'pagamento',",
   "const isVacation = doc.document_type === 'AVISO_FERIAS';",
 ) || changed;
 
@@ -88,6 +88,7 @@ const publicReplacements = [
   ['Portal de Holerites e Recibos', 'Portal de Documentos'],
   ['Nenhum holerite ou recibo é exibido antes da validação.', 'Nenhum documento é exibido antes da validação.'],
   ['Holerites assinados e recibos ficam guardados aqui para consulta futura.', 'Seus documentos assinados e recibos ficam guardados aqui para consulta futura.'],
+  ['Holerites assinados, recibos de benefícios e recibos de garagem ficam guardados aqui para consulta futura.', 'Seus documentos assinados, recibos de benefícios e recibos de garagem ficam guardados aqui para consulta futura.'],
 ];
 for (const [from, to] of publicReplacements) {
   if (publicText.includes(from)) {
