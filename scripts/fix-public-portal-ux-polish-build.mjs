@@ -183,3 +183,5 @@ replaceOnce(
 
 fs.writeFileSync(path, source, 'utf8');
 console.log('[public-portal-polish] login alinhado, botoes visiveis e acesso facial sem flash de login');
+
+await import('./fix-public-birthdate-input-build.mjs');
