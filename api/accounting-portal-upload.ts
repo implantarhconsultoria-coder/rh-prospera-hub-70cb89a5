@@ -1,11 +1,24 @@
+import { Buffer } from 'node:buffer';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
 
 const BUCKET = 'contabilidade-inbox';
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
 const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
 const TOPAC_CENTRAL_EMAIL = 'adm.matriz@topac.com.br';
 const TOPAC_ROBSON_EMAIL = 'robson@topac.com.br';
+const TOPAC_GOIANIA_EMAIL = 'adm.gyn@topac.com.br';
+
+const TYPE_LABELS: Record<string, string> = {
+  recibos_holerites: 'Recibos / Holerites',
+  folha_processada: 'Folha processada',
+  contrato: 'Contrato de trabalho',
+  rescisao: 'Documentos de rescisão',
+  ferias: 'Documentos de férias',
+  retorno_folha: 'Retorno da contabilidade',
+  outro: 'Outro documento',
+};
 
 const safeFile = (value: unknown) =>
   String(value || 'documento.pdf')
@@ -22,7 +35,6 @@ const cleanEmails = (value: unknown): string[] => {
 };
 
 const uniqueEmails = (values: string[]) => Array.from(new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean)));
-
 const htmlEscape = (value: unknown) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -69,119 +81,106 @@ const counterpartFor = (email: string) => {
   return '';
 };
 
-const sendFormalizationEmail = async (service: any, input: {
-  portal: string;
-  companyName: string;
-  uploadId: string;
-  userName: string;
-  userEmail: string;
-  typeLabel: string;
-  competence: string;
-  fileName: string;
-  observation: string;
-  createdAt: string;
-}) => {
+const getEmailRouting = async (service: any, portal: string, userEmail: string) => {
+  const senderEmail = cleanEmails(userEmail)[0] || '';
+  if (portal === 'principal') {
+    const counterpart = counterpartFor(senderEmail);
+    const to = [TOPAC_CENTRAL_EMAIL];
+    const cc = uniqueEmails([TOPAC_ROBSON_EMAIL, ...(counterpart ? [counterpart] : [])])
+      .filter((email) => email !== senderEmail && !to.includes(email));
+    return { to, cc };
+  }
+
   const { data: config } = await service
     .from('contabilidade_portal_config')
     .select('formalizacao_destinos,ativo')
-    .eq('portal', input.portal)
+    .eq('portal', portal)
     .maybeSingle();
-
   const configured = config?.ativo ? cleanEmails(config?.formalizacao_destinos) : [];
-  if (!configured.length) {
-    return { status: 'aguardando_configuracao', to: [] as string[], cc: [] as string[] };
-  }
+  const primary = configured[0] || TOPAC_GOIANIA_EMAIL;
+  const to = [primary];
+  const cc = uniqueEmails(configured.slice(1)).filter((email) => email !== senderEmail && email !== primary);
+  return { to, cc };
+};
 
-  const senderEmail = cleanEmails(input.userEmail)[0] || '';
-  let to: string[] = [];
-  let cc: string[] = [];
+const defaultSubject = (companyName: string, typeLabel: string, competence?: string | null) =>
+  ['Retorno da Contabilidade', typeLabel, companyName, competence || ''].filter(Boolean).join(' - ');
 
-  if (input.portal === 'principal') {
-    // Mesma direção já usada no fluxo oficial da plataforma:
-    // Contabilidade -> Central TOPAC; a outra pessoa da AAT e Robson acompanham.
-    const counterpart = counterpartFor(senderEmail);
-    to = [TOPAC_CENTRAL_EMAIL];
-    cc = uniqueEmails([TOPAC_ROBSON_EMAIL, ...(counterpart ? [counterpart] : [])])
-      .filter((email) => email !== senderEmail && !to.includes(email));
-  } else {
-    const primary = configured[0];
-    const baseCc = configured.slice(1);
-    to = [primary];
-    cc = uniqueEmails(baseCc).filter((email) => email !== senderEmail && email !== primary);
-  }
+const defaultBody = (input: {
+  companyName: string;
+  typeLabel: string;
+  competence?: string | null;
+  employeeName?: string | null;
+  fileName: string;
+  observation?: string | null;
+  userName: string;
+}) => [
+  'Prezados,',
+  '',
+  `Segue em anexo o retorno da Contabilidade referente a ${input.typeLabel}.`,
+  '',
+  `Empresa: ${input.companyName}`,
+  input.employeeName ? `Funcionário: ${input.employeeName}` : '',
+  input.competence ? `Competência / referência: ${input.competence}` : '',
+  `Documento: ${input.fileName}`,
+  input.observation ? `Observação: ${input.observation}` : '',
+  '',
+  'O PDF segue anexado para conferência e arquivamento no TOPAC RH PRO.',
+  '',
+  'Atenciosamente,',
+  input.userName || 'Contabilidade',
+  'Contabilidade',
+].filter((line, index, list) => line !== '' || (index > 0 && list[index - 1] !== '')).join('\n');
 
+const sendStoredPdfEmail = async (service: any, input: {
+  to: string[];
+  cc: string[];
+  subject: string;
+  body: string;
+  replyTo?: string;
+  bucket: string;
+  path: string;
+  fileName: string;
+}) => {
   const resendKey = String(process.env.RESEND_API_KEY || '').trim();
-  if (!resendKey) return { status: 'erro_configuracao_email', to, cc };
+  if (!resendKey) throw Object.assign(new Error('Envio de e-mail não configurado no servidor.'), { status: 503 });
+  if (!input.to.length) throw Object.assign(new Error('Informe ao menos um destinatário.'), { status: 400 });
+  if (!input.subject.trim() || !input.body.trim()) throw Object.assign(new Error('Assunto e mensagem são obrigatórios.'), { status: 400 });
+
+  const { data: pdf, error: downloadError } = await service.storage.from(input.bucket).download(input.path);
+  if (downloadError || !pdf) throw downloadError || new Error('pdf_nao_encontrado');
+  const bytes = Buffer.from(await pdf.arrayBuffer());
+  if (!bytes.length) throw new Error('pdf_anexo_vazio');
+  if (bytes.length > MAX_EMAIL_ATTACHMENT_BYTES) {
+    throw Object.assign(new Error('O PDF está salvo na plataforma, mas excede 20 MB para envio automático por e-mail. Use o e-mail manual.'), { status: 413 });
+  }
 
   const from = String(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>').trim();
-  // Quando a Central responder ao e-mail gerado pelo portal, a resposta volta para quem enviou
-  // (Vanessa ou Marisa), mantendo o mesmo comportamento do fluxo existente no Outlook.
-  const replyTo = senderEmail || String(process.env.EMAIL_REPLY_TO || process.env.REPLY_TO || TOPAC_CENTRAL_EMAIL).trim();
-  const competenceText = input.competence ? ` · Competência ${input.competence}` : '';
-  const subject = `[TOPAC RH PRO] Documento recebido da Contabilidade · ${input.companyName}${competenceText}`;
-  const registeredAt = new Date(input.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const replyTo = cleanEmails(input.replyTo)[0] || String(process.env.EMAIL_REPLY_TO || process.env.REPLY_TO || TOPAC_CENTRAL_EMAIL).trim();
+  const htmlBody = htmlEscape(input.body).replace(/\n/g, '<br>');
 
-  const text = [
-    'Prezados,',
-    '',
-    'Fica formalizado o recebimento de documento realizado diretamente pelo Portal da Contabilidade do TOPAC RH PRO.',
-    '',
-    `Empresa: ${input.companyName}`,
-    `Tipo: ${input.typeLabel}`,
-    input.competence ? `Competência: ${input.competence}` : '',
-    `Arquivo: ${input.fileName}`,
-    `Enviado por: ${input.userName}${input.userEmail ? ` <${input.userEmail}>` : ''}`,
-    `Data e hora do registro: ${registeredAt}`,
-    input.observation ? `Observação: ${input.observation}` : '',
-    `ID da operação: ${input.uploadId}`,
-    '',
-    'O arquivo foi recebido e armazenado diretamente na Central da Contabilidade do TOPAC RH PRO.',
-    'Este e-mail serve exclusivamente para formalizar o registro da operação.',
-    '',
-    'TOPAC RH PRO',
-  ].filter(Boolean).join('\n');
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from,
+      to: input.to,
+      ...(input.cc.length ? { cc: input.cc } : {}),
+      reply_to: replyTo,
+      subject: input.subject,
+      text: input.body,
+      html: `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#111827;line-height:1.55"><div style="max-width:720px">${htmlBody}</div></body></html>`,
+      attachments: [{ filename: input.fileName, content: bytes.toString('base64') }],
+    }),
+  });
 
-  const html = `
-    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.55;max-width:680px">
-      <h2 style="margin-bottom:6px">Documento recebido da Contabilidade</h2>
-      <p style="color:#4b5563;margin-top:0">Registro automático de formalização — TOPAC RH PRO</p>
-      <table style="width:100%;border-collapse:collapse;margin:18px 0">
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><b>Empresa</b></td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${htmlEscape(input.companyName)}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><b>Tipo</b></td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${htmlEscape(input.typeLabel)}</td></tr>
-        ${input.competence ? `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><b>Competência</b></td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${htmlEscape(input.competence)}</td></tr>` : ''}
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><b>Arquivo</b></td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${htmlEscape(input.fileName)}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><b>Enviado por</b></td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${htmlEscape(input.userName)}${input.userEmail ? ` &lt;${htmlEscape(input.userEmail)}&gt;` : ''}</td></tr>
-        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><b>Registrado em</b></td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${htmlEscape(registeredAt)}</td></tr>
-        ${input.observation ? `<tr><td style="padding:8px;border-bottom:1px solid #e5e7eb"><b>Observação</b></td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${htmlEscape(input.observation)}</td></tr>` : ''}
-        <tr><td style="padding:8px"><b>ID da operação</b></td><td style="padding:8px;font-family:monospace">${htmlEscape(input.uploadId)}</td></tr>
-      </table>
-      <p><b>O arquivo já foi recebido e armazenado na Central da Contabilidade.</b> Este e-mail formaliza o registro da operação.</p>
-    </div>`;
-
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from,
-        to,
-        ...(cc.length ? { cc } : {}),
-        reply_to: replyTo,
-        subject,
-        text,
-        html,
-      }),
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      console.warn('[accounting-portal-upload][email]', response.status, detail.slice(0, 500));
-      return { status: 'erro_envio_email', to, cc };
-    }
-    return { status: 'enviado', to, cc };
-  } catch (error) {
-    console.warn('[accounting-portal-upload][email]', error);
-    return { status: 'erro_envio_email', to, cc };
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    console.warn('[accounting-portal-upload][email]', response.status, detail.slice(0, 800));
+    throw Object.assign(new Error('O PDF foi salvo, mas o provedor recusou o envio do e-mail.'), { status: 502 });
   }
+  const provider = await response.json().catch(() => ({}));
+  return { provider_id: provider?.id || null };
 };
 
 export default async function handler(req: any, res?: any) {
@@ -222,28 +221,24 @@ export default async function handler(req: any, res?: any) {
       const employeeName = String(body.funcionario_nome || '').trim().slice(0, 180) || null;
       const observation = String(body.observacao || '').trim().slice(0, 2000) || null;
       const fileSize = Number(body.tamanho_bytes || 0) || null;
+      const deferEmail = body.defer_email === true;
       if (!companyId || !storagePath || !fileName) return sendJson(res, { ok: false, error: 'dados_invalidos' }, 400);
 
       const user = await validateSession(service, portal, token, companyId);
-
       const prefix = storagePath.split('/').slice(0, -1).join('/');
       const base = storagePath.split('/').pop() || '';
       const { data: objects, error: listError } = await service.storage.from(BUCKET).list(prefix, { search: base, limit: 20 });
       if (listError) throw listError;
-      if (!(objects || []).some((item: any) => item.name === base)) {
-        return sendJson(res, { ok: false, error: 'arquivo_nao_encontrado' }, 400);
-      }
+      if (!(objects || []).some((item: any) => item.name === base)) return sendJson(res, { ok: false, error: 'arquivo_nao_encontrado' }, 400);
 
-      const { data: company, error: companyError } = await service
-        .from('empresas')
-        .select('id,nome,codigo')
-        .eq('id', companyId)
-        .single();
+      const { data: company, error: companyError } = await service.from('empresas').select('id,nome,codigo').eq('id', companyId).single();
       if (companyError) throw companyError;
+      const typeLabel = TYPE_LABELS[type] || type;
+      const routing = await getEmailRouting(service, portal, String(user.email || ''));
 
       const { data: existing } = await service
         .from('contabilidade_portal_uploads')
-        .select('id,formalizacao_email_status,formalizacao_email_em,formalizacao_destinos')
+        .select('*')
         .eq('storage_path', storagePath)
         .maybeSingle();
       if (existing) {
@@ -254,10 +249,17 @@ export default async function handler(req: any, res?: any) {
           email_status: existing.formalizacao_email_status,
           formalizado_em: existing.formalizacao_email_em,
           destinatarios: existing.formalizacao_destinos || [],
+          email_to: routing.to,
+          email_cc: routing.cc,
+          company_name: company.nome,
+          type_label: typeLabel,
+          sender_name: user.nome,
+          sender_email: user.email || '',
         });
       }
 
       const now = new Date().toISOString();
+      const initialStatus = deferEmail ? 'aguardando_envio' : 'processando';
       const { data: upload, error: uploadError } = await service
         .from('contabilidade_portal_uploads')
         .insert({
@@ -272,7 +274,8 @@ export default async function handler(req: any, res?: any) {
           storage_bucket: BUCKET,
           storage_path: storagePath,
           status: 'recebido',
-          formalizacao_email_status: 'processando',
+          formalizacao_email_status: initialStatus,
+          formalizacao_destinos: uniqueEmails([...routing.to, ...routing.cc]),
           created_at: now,
           updated_at: now,
         })
@@ -280,49 +283,105 @@ export default async function handler(req: any, res?: any) {
         .single();
       if (uploadError) throw uploadError;
 
-      const typeLabels: Record<string, string> = {
-        recibos_holerites: 'Recibos / Holerites',
-        folha_processada: 'Folha processada',
-        contrato: 'Contrato de trabalho',
-        rescisao: 'Documentos de rescisão',
-        ferias: 'Documentos de férias',
-        retorno_folha: 'Retorno da contabilidade',
-        outro: 'Outro documento',
-      };
+      if (deferEmail) {
+        return sendJson(res, {
+          ok: true,
+          upload_id: upload.id,
+          email_status: 'aguardando_envio',
+          email_to: routing.to,
+          email_cc: routing.cc,
+          company_name: company.nome,
+          type_label: typeLabel,
+          sender_name: user.nome,
+          sender_email: user.email || '',
+        });
+      }
 
-      const mail = await sendFormalizationEmail(service, {
-        portal,
+      const subject = defaultSubject(company.nome, typeLabel, competence);
+      const text = defaultBody({
         companyName: company.nome,
-        uploadId: upload.id,
-        userName: user.nome,
-        userEmail: String(user.email || ''),
-        typeLabel: typeLabels[type] || type,
-        competence: competence || '',
+        typeLabel,
+        competence,
+        employeeName,
         fileName,
-        observation: observation || '',
-        createdAt: now,
+        observation,
+        userName: user.nome,
       });
 
-      const formalizedAt = mail.status === 'enviado' ? new Date().toISOString() : null;
-      const allRecipients = uniqueEmails([...(mail.to || []), ...(mail.cc || [])]);
-      await service
-        .from('contabilidade_portal_uploads')
-        .update({
-          formalizacao_email_status: mail.status,
+      try {
+        await sendStoredPdfEmail(service, {
+          to: routing.to,
+          cc: routing.cc,
+          subject,
+          body: text,
+          replyTo: String(user.email || ''),
+          bucket: BUCKET,
+          path: storagePath,
+          fileName,
+        });
+        const formalizedAt = new Date().toISOString();
+        await service.from('contabilidade_portal_uploads').update({
+          formalizacao_email_status: 'enviado',
           formalizacao_email_em: formalizedAt,
-          formalizacao_destinos: allRecipients,
+          formalizacao_destinos: uniqueEmails([...routing.to, ...routing.cc]),
+          updated_at: formalizedAt,
+        }).eq('id', upload.id);
+        return sendJson(res, { ok: true, upload_id: upload.id, email_status: 'enviado', formalizado_em: formalizedAt, email_to: routing.to, email_cc: routing.cc });
+      } catch (mailError: any) {
+        await service.from('contabilidade_portal_uploads').update({
+          formalizacao_email_status: 'erro_envio_email',
           updated_at: new Date().toISOString(),
-        })
-        .eq('id', upload.id);
+        }).eq('id', upload.id);
+        return sendJson(res, { ok: true, upload_id: upload.id, email_status: 'erro_envio_email', email_to: routing.to, email_cc: routing.cc, email_error: String(mailError?.message || mailError) });
+      }
+    }
 
-      return sendJson(res, {
-        ok: true,
-        upload_id: upload.id,
-        email_status: mail.status,
-        formalizado_em: formalizedAt,
-        email_to: mail.to,
-        email_cc: mail.cc,
-      });
+    if (action === 'send_email') {
+      const uploadId = String(body.upload_id || '').trim();
+      if (!uploadId) return sendJson(res, { ok: false, error: 'upload_id_obrigatorio' }, 400);
+
+      const { data: upload, error: uploadError } = await service
+        .from('contabilidade_portal_uploads')
+        .select('*')
+        .eq('id', uploadId)
+        .maybeSingle();
+      if (uploadError || !upload) return sendJson(res, { ok: false, error: 'documento_nao_encontrado' }, 404);
+
+      const user = await validateSession(service, portal, token, upload.empresa_id);
+      const routing = await getEmailRouting(service, portal, String(user.email || ''));
+      const to = cleanEmails(body.to).length ? cleanEmails(body.to) : routing.to;
+      const cc = cleanEmails(body.cc);
+      const subject = String(body.subject || '').trim().slice(0, 240);
+      const text = String(body.body || '').trim().slice(0, 12000);
+      if (!to.length || !subject || !text) return sendJson(res, { ok: false, error: 'dados_email_invalidos', message: 'Destinatário, assunto e mensagem são obrigatórios.' }, 400);
+
+      try {
+        const provider = await sendStoredPdfEmail(service, {
+          to,
+          cc,
+          subject,
+          body: text,
+          replyTo: String(user.email || ''),
+          bucket: upload.storage_bucket,
+          path: upload.storage_path,
+          fileName: upload.arquivo_nome,
+        });
+        const now = new Date().toISOString();
+        await service.from('contabilidade_portal_uploads').update({
+          formalizacao_email_status: 'enviado',
+          formalizacao_email_em: now,
+          formalizacao_destinos: uniqueEmails([...to, ...cc]),
+          updated_at: now,
+        }).eq('id', uploadId);
+        return sendJson(res, { ok: true, email_status: 'enviado', formalizado_em: now, provider_id: provider.provider_id, email_to: to, email_cc: cc });
+      } catch (error: any) {
+        await service.from('contabilidade_portal_uploads').update({
+          formalizacao_email_status: 'erro_envio_email',
+          formalizacao_destinos: uniqueEmails([...to, ...cc]),
+          updated_at: new Date().toISOString(),
+        }).eq('id', uploadId);
+        return sendJson(res, { ok: false, error: 'email_send_failed', message: String(error?.message || error) }, Number(error?.status || 502));
+      }
     }
 
     if (action === 'view') {
@@ -343,9 +402,7 @@ export default async function handler(req: any, res?: any) {
         .maybeSingle();
       if (!allowed) return sendJson(res, { ok: false, error: 'empresa_nao_autorizada' }, 403);
 
-      const { data: signed, error: signedError } = await service.storage
-        .from(upload.storage_bucket)
-        .createSignedUrl(upload.storage_path, 600);
+      const { data: signed, error: signedError } = await service.storage.from(upload.storage_bucket).createSignedUrl(upload.storage_path, 600);
       if (signedError || !signed?.signedUrl) throw signedError || new Error('signed_url_failed');
       return sendJson(res, { ok: true, url: signed.signedUrl, arquivo_nome: upload.arquivo_nome, expires_in: 600 });
     }
