@@ -272,8 +272,8 @@ export const downloadEmailWithAttachment = async ({
 };
 
 export const CC_OBRIGATORIO = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
-export const DESTINATARIOS_CONTABILIDADE = [EMAIL_CONTABILIDADE_VANESSA] as const;
-export const CC_CONTABILIDADE = [EMAIL_CONTABILIDADE_MARISA, ...CC_OBRIGATORIO] as const;
+export const DESTINATARIOS_CONTABILIDADE = [EMAIL_CONTABILIDADE_MARISA, EMAIL_CONTABILIDADE_VANESSA] as const;
+export const CC_CONTABILIDADE = CC_OBRIGATORIO;
 export const DESTINATARIOS_ASO = ['agendamento@ponteaereaseguranca.com.br'] as const;
 
 export const getDestinatariosFerias = (unidade: string): readonly string[] => {
