@@ -18,6 +18,8 @@ import MecChamadosPage from "@/app-mecanico/pages/ChamadosPage";
 import MecVeiculoPage from "@/app-mecanico/pages/VeiculoPage";
 import MecHistoricoPage from "@/app-mecanico/pages/HistoricoPage";
 import MecAbastecimentoPage from "@/app-mecanico/pages/AbastecimentoPage";
+import ContabilidadeAcessoPage from "@/pages/contabilidade/ContabilidadeAcessoPage";
+import ContabilidadeDashboardPage from "@/pages/contabilidade/ContabilidadeDashboardPage";
 
 const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
 const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
@@ -34,6 +36,7 @@ const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 const currentPath = window.location.pathname;
 const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(currentPath);
 const isMecanicoPublicPortal = /^\/(?:mecanicos|acesso-mecanico|app-mecanico(?:\/|$)|mecanico-ext(?:\/|$))/i.test(currentPath);
+const isContabilidadePublicPortal = /^\/(?:acesso-contabilidade(?:-goiania)?|contabilidade(?:-goiania)?)\/?$/i.test(currentPath);
 
 async function clearLegacyMobileCache() {
   if (typeof window === "undefined") return;
@@ -62,7 +65,7 @@ async function clearLegacyMobileCache() {
   }
 }
 
-if (!isPayrollPublicPortal) {
+if (!isPayrollPublicPortal && !isContabilidadePublicPortal) {
   void clearLegacyMobileCache();
 }
 
@@ -146,6 +149,19 @@ const MecanicoPublicPortal = () => (
   </BrowserRouter>
 );
 
+const ContabilidadePublicPortal = () => (
+  <BrowserRouter>
+    <Sonner />
+    <Routes>
+      <Route path="/acesso-contabilidade" element={<ContabilidadeAcessoPage portal="principal" />} />
+      <Route path="/contabilidade" element={<ContabilidadeDashboardPage portal="principal" />} />
+      <Route path="/acesso-contabilidade-goiania" element={<ContabilidadeAcessoPage portal="goiania" />} />
+      <Route path="/contabilidade-goiania" element={<ContabilidadeDashboardPage portal="goiania" />} />
+      <Route path="*" element={<Navigate to={currentPath.toLowerCase().includes('goiania') ? '/acesso-contabilidade-goiania' : '/acesso-contabilidade'} replace />} />
+    </Routes>
+  </BrowserRouter>
+);
+
 const root = createRoot(document.getElementById("root")!);
 if (isPayrollPublicPortal) {
   root.render(
@@ -161,6 +177,13 @@ if (isPayrollPublicPortal) {
     <ErrorBoundary>
       <GlobalFormContrastGuard />
       <MecanicoPublicPortal />
+    </ErrorBoundary>
+  );
+} else if (isContabilidadePublicPortal) {
+  root.render(
+    <ErrorBoundary>
+      <GlobalFormContrastGuard />
+      <ContabilidadePublicPortal />
     </ErrorBoundary>
   );
 } else {
