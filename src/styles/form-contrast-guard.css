@@ -51,3 +51,24 @@ textarea.topac-light-control[readonly] {
   color: #334155 !important;
   -webkit-text-fill-color: #334155 !important;
 }
+
+/* Guarda global: ação desabilitada continua claramente visível em qualquer módulo. */
+button:disabled,
+button[disabled],
+[role="button"][aria-disabled="true"] {
+  opacity: .8 !important;
+  cursor: not-allowed !important;
+  visibility: visible !important;
+}
+
+button:disabled > *,
+button[disabled] > *,
+[role="button"][aria-disabled="true"] > * {
+  opacity: 1 !important;
+}
+
+button:disabled svg,
+button[disabled] svg,
+[role="button"][aria-disabled="true"] svg {
+  opacity: .95 !important;
+}
