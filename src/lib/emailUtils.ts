@@ -46,18 +46,21 @@ const EMAIL_GOIANIA_ANTIGO = 'gyn@topac.com.br';
 
 export const EMAIL_CONTABILIDADE_VANESSA = 'dp@aatconsultoria.com.br' as const;
 export const EMAIL_CONTABILIDADE_MARISA = 'marisa@aatconsultoria.com.br' as const;
+const EMAIL_CONTABILIDADE_LEGADO = 'lucilene@aatconsultoria.com.br';
 
 export const normalizeTopacRecipients = (emails: readonly string[] = []): string[] =>
   Array.from(new Set(
     emails
       .map((email) => String(email || '').trim().toLowerCase())
       .filter(Boolean)
+      .filter((email) => email !== EMAIL_CONTABILIDADE_LEGADO)
       .map((email) => email === EMAIL_GOIANIA_ANTIGO ? EMAIL_GOIANIA : email),
   ));
 
 export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
   const normalizedTo = normalizeTopacRecipients(to);
-  const policy = applyTopacEmailPolicy({ to: normalizedTo, subject, body, cc, moduleOrigin, attachmentNames, attachmentContentTypes });
+  const normalizedCc = normalizeTopacRecipients(cc || []);
+  const policy = applyTopacEmailPolicy({ to: normalizedTo, subject, body, cc: normalizedCc, moduleOrigin, attachmentNames, attachmentContentTypes });
   const enc = encodeURIComponent;
   const params: string[] = [];
   if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
@@ -207,11 +210,12 @@ export const sendEmailWithPdfAttachment = async ({
   }
 
   const normalizedTo = normalizeTopacRecipients(to);
+  const normalizedCc = normalizeTopacRecipients(cc || []);
   const policy = applyTopacEmailPolicy({
     to: normalizedTo,
     subject,
     body,
-    cc,
+    cc: normalizedCc,
     moduleOrigin,
     attachmentNames: rawAttachments.map((item) => item.attachmentName),
     attachmentContentTypes: rawAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type || PDF_CONTENT_TYPE),
