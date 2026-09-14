@@ -19,7 +19,7 @@ const menuItems: MenuItem[] = [
   { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
   { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
   { label: 'Fechamentos das Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
-  { label: 'Apontamento Contabilidade', icon: ClipboardCheck, path: '/admin/apontamento-contabilidade' },
+  { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade' },
   { label: 'Rescisões', icon: FileX, path: '/admin/rescisoes' },
 ];
 
