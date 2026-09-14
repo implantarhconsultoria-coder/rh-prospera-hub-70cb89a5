@@ -1,5 +1,7 @@
+import { PDFDocument } from 'pdf-lib';
 import {
   extractReceiptMetadata as extractReceiptMetadataV2,
+  mergePdfUrls as mergePdfUrlsV2,
   parsePayrollPdf as parsePayrollPdfV2,
   type ParsedPayrollPdf,
   type PayrollEmployeeMatch,
@@ -12,7 +14,6 @@ export {
   extractPayrollDocumentMetadata,
   extractPdfFilesFromZip,
   extractPdfPages,
-  mergePdfUrls,
   onlyDigits,
   readBlobBytes,
   sha256Browser,
@@ -53,6 +54,41 @@ const extractBankTransferAmount = (text: string) => {
 export const extractReceiptMetadata = (text: string) => {
   const base = extractReceiptMetadataV2(text);
   return { ...base, amount: extractBankTransferAmount(text) ?? base.amount };
+};
+
+/**
+ * Dossiê individual:
+ * usa pdf-lib para copiar as páginas originais diretamente, sem rasterizar via PDF.js/jsPDF.
+ * Isso evita travamentos silenciosos do navegador ao consolidar documento + certificado.
+ * Os demais consolidados continuam usando a rotina existente, que preserva as regras de
+ * comprovantes antigos e documentos sequenciais.
+ */
+export const mergePdfUrls = async (sources: Array<{ url: string; label?: string }>, filename: string) => {
+  if (!/^DOSSIE_/i.test(filename)) {
+    return mergePdfUrlsV2(sources, filename);
+  }
+
+  const output = await PDFDocument.create();
+  for (const source of sources) {
+    const response = await fetch(source.url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Falha ao carregar ${source.label || 'PDF'}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    const pages = await output.copyPages(pdf, pdf.getPageIndices());
+    pages.forEach((page) => output.addPage(page));
+  }
+
+  if (!output.getPageCount()) throw new Error('Nenhum PDF para consolidar.');
+  const bytes = await output.save({ addDefaultPage: false, useObjectStreams: false });
+  const blob = new Blob([bytes as any], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 };
 
 /**
