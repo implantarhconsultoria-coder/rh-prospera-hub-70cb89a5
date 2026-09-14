@@ -155,7 +155,10 @@ const sendStoredPdfEmail = async (service: any, input: {
     throw Object.assign(new Error('O PDF está salvo na plataforma, mas excede 20 MB para envio automático por e-mail. Use o e-mail manual.'), { status: 413 });
   }
 
-  const from = String(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>').trim();
+  const configuredFrom = String(process.env.EMAIL_FROM || process.env.MAIL_FROM || '').trim();
+  const from = configuredFrom && !/@resend\.dev/i.test(configuredFrom)
+    ? configuredFrom
+    : 'TOPAC RH PRO <no-reply@topacrh.pro>';
   const replyTo = cleanEmails(input.replyTo)[0] || String(process.env.EMAIL_REPLY_TO || process.env.REPLY_TO || TOPAC_CENTRAL_EMAIL).trim();
   const htmlBody = htmlEscape(input.body).replace(/\n/g, '<br>');
 
