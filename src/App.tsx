@@ -57,7 +57,7 @@ import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
 import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
 import RecibosBeneficioImpressaoPage from "@/pages/RecibosBeneficioImpressaoPage";
 import RelatorioBeneficioIndividualPage from "@/pages/RelatorioBeneficioIndividualPage";
-import ApontamentoContabilidadePage from "@/pages/admin/ApontamentoContabilidadePage";
+import CentralContabilidadePage from "@/pages/admin/CentralContabilidadePage";
 import HistoricoPage from "@/pages/HistoricoPage";
 import AtestadosImportPage from "@/pages/AtestadosImportPage";
 import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
@@ -131,7 +131,6 @@ const queryClient = new QueryClient();
 
 const RoleRedirect = () => {
   const { userRoles, roleLoading } = useApp();
-
   if (roleLoading) return <StableLoading label="Carregando permissao de acesso..." />;
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('diretor_geral')) return <Navigate to="/admin" replace />;
@@ -157,9 +156,7 @@ const MecanicoRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children 
 
 const AuthGate = () => {
   const { isAuthenticated, loading } = useApp();
-
   if (loading) return <StableLoading label="Carregando sessao..." />;
-
   if (!isAuthenticated) {
     return (
       <Routes>
@@ -191,7 +188,8 @@ const AuthGate = () => {
         <Route path="/admin/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/admin/lancamentos" element={<LancamentosPage />} />
         <Route path="/admin/fechamento" element={<FechamentoPage />} />
-        <Route path="/admin/apontamento-contabilidade" element={<ApontamentoContabilidadePage />} />
+        <Route path="/admin/central-contabilidade" element={<CentralContabilidadePage />} />
+        <Route path="/admin/apontamento-contabilidade" element={<Navigate to="/admin/central-contabilidade" replace />} />
         <Route path="/admin/fechamento-ponto" element={<FechamentoPontoPage />} />
         <Route path="/admin/fechamentos-filiais" element={<FechamentosFiliaisPage />} />
         <Route path="/admin/relatorio" element={<RelatorioPage />} />
