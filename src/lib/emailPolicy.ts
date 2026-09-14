@@ -1,7 +1,11 @@
 export const TOPAC_REPORT_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
 export const TOPAC_REPORT_SIGNATURE = 'Atenciosamente,\nAdministrador Topac RH PRO Multiempresas';
 
+export const ACCOUNTING_VANESSA = 'dp@aatconsultoria.com.br' as const;
+export const ACCOUNTING_MARISA = 'marisa@aatconsultoria.com.br' as const;
+
 export type EmailPolicyInput = {
+  to?: readonly string[];
   subject?: string;
   body?: string;
   cc?: readonly string[];
@@ -43,20 +47,41 @@ const uniqueEmails = (values: readonly string[] = []) => Array.from(new Set(
   values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean),
 ));
 
+const accountingCcFor = (to: readonly string[] = []) => {
+  const recipients = uniqueEmails(to);
+  const goesToVanessa = recipients.includes(ACCOUNTING_VANESSA);
+  const goesToMarisa = recipients.includes(ACCOUNTING_MARISA);
+  const isAccounting = recipients.some((email) => email.endsWith('@aatconsultoria.com.br'));
+  if (!isAccounting) return [] as string[];
+
+  return uniqueEmails([
+    ...(goesToVanessa && !goesToMarisa ? [ACCOUNTING_MARISA] : []),
+    ...(goesToMarisa && !goesToVanessa ? [ACCOUNTING_VANESSA] : []),
+    ...TOPAC_REPORT_CC,
+  ]);
+};
+
 export const applyTopacEmailPolicy = (input: EmailPolicyInput) => {
   const report = isReportOrSpreadsheetEmail(input);
+  const accountingCc = accountingCcFor(input.to);
+  const mandatoryCc = uniqueEmails([
+    ...(input.cc || []),
+    ...accountingCc,
+    ...(report ? TOPAC_REPORT_CC : []),
+  ]);
+
   if (!report) {
     return {
       body: String(input.body || '').trim(),
-      cc: uniqueEmails(input.cc),
-      institutional: false,
+      cc: mandatoryCc,
+      institutional: accountingCc.length > 0,
     };
   }
 
   const content = stripExistingSignature(String(input.body || ''));
   return {
     body: `${content}${content ? '\n\n' : ''}${TOPAC_REPORT_SIGNATURE}`,
-    cc: uniqueEmails([...(input.cc || []), ...TOPAC_REPORT_CC]),
+    cc: mandatoryCc,
     institutional: true,
   };
 };
