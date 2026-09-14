@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, ArrowLeft, BadgeCheck, BellRing, BriefcaseBusiness, Building2,
   CalendarDays, CheckCircle2, ChevronRight, Clock3, FileHeart, FileText,
-  FileUp, History, Loader2, LogOut, RefreshCw, Search, Send, UserPlus,
+  History, Loader2, LogOut, Printer, RefreshCw, Search, UserPlus,
   UserRoundX, WalletCards, Banknote,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,7 +38,6 @@ type Evento = {
 };
 type Empresa = { id: string; nome: string; codigo: string; cnpj?: string };
 type Sessao = { token: string; expira_em?: string; usuario?: { id: string; nome: string; email?: string; portal?: string } };
-
 type CategoryMeta = { label: string; short: string; icon: any; iconClass: string; note: string; emphasis?: boolean };
 
 const storageKey = (portal: PortalKind) => `topac_contabilidade_${portal}_session`;
@@ -90,7 +89,7 @@ const categoryMeta: Record<string, CategoryMeta> = {
   adiantamento: { label: 'Adiantamentos', short: 'Adiantamentos', icon: Banknote, iconClass: 'text-sky-400 bg-sky-500/10 border-sky-500/20', note: 'Lançamentos da competência atual' },
   alteracao_salario: { label: 'Alterações salariais', short: 'Salários', icon: WalletCards, iconClass: 'text-[#b85cff] bg-[#1b1028] border-[#4d2469]', note: 'Análise individual obrigatória', emphasis: true },
   alteracao_funcao: { label: 'Alterações de função', short: 'Funções', icon: BriefcaseBusiness, iconClass: 'text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/20', note: 'Análise individual obrigatória', emphasis: true },
-  fechamento: { label: 'Fechamentos', short: 'Fechamentos', icon: FileText, iconClass: 'text-[#9b32ff] bg-[#180d24] border-[#43205c]', note: 'Conferência e retorno ao RH' },
+  fechamento: { label: 'Fechamentos', short: 'Fechamentos', icon: FileText, iconClass: 'text-[#9b32ff] bg-[#180d24] border-[#43205c]', note: 'Conferência dentro da plataforma' },
 };
 
 const needsReview = (e: Evento) => !['adiantamento', 'ferias_alerta'].includes(e.origem_tipo) && e.categoria !== 'adiantamento' && ['aguardando_analise','retificacao','pendencia'].includes(e.status);
@@ -104,15 +103,6 @@ function readSession(portal: PortalKind): Sessao | null {
     return parsed;
   } catch { return null; }
 }
-
-const defaultUploadType = (categoria: string) => ({ fechamento: 'folha_processada', admissao: 'contrato', demissao: 'rescisao', ferias: 'ferias' } as Record<string,string>)[categoria] || 'outro';
-const uploadOptionsFor = (categoria: string): Array<[string,string]> => {
-  if (categoria === 'fechamento') return [['folha_processada','Folha processada'],['recibos_holerites','Recibos / Holerites'],['retorno_folha','Outro retorno da folha']];
-  if (categoria === 'admissao') return [['contrato','Contrato de trabalho'],['outro','Outro documento da admissão']];
-  if (categoria === 'demissao') return [['rescisao','Documentos de rescisão'],['outro','Outro documento da demissão']];
-  if (categoria === 'ferias') return [['ferias','Documentos de férias'],['outro','Outro documento das férias']];
-  return [['outro','Documento de retorno']];
-};
 
 export default function ContabilidadeDashboardPageV2({ portal }: { portal: PortalKind }) {
   const navigate = useNavigate();
@@ -133,11 +123,7 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
   const [historySearch, setHistorySearch] = useState('');
   const [historyMonth, setHistoryMonth] = useState('');
   const [historyCompany, setHistoryCompany] = useState('todas');
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadType, setUploadType] = useState('outro');
-  const [uploadObs, setUploadObs] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadBusy, setUploadBusy] = useState(false);
+  const [adiantamentoReportOpen, setAdiantamentoReportOpen] = useState(false);
   const isGoiania = portal === 'goiania';
 
   const sair = useCallback(async () => {
@@ -163,16 +149,25 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
       setHistorico(Array.isArray(res.historico) ? res.historico : []);
       setEmpresas(Array.isArray(res.empresas) ? res.empresas : []);
       setCompetenciaAtual(String(res.competencia_atual || ''));
-    } catch (err: any) { toast.error(err?.message || 'Não foi possível atualizar o dashboard.'); }
-    finally { setLoading(false); }
+    } catch (err: any) {
+      toast.error(err?.message || 'Não foi possível atualizar o dashboard.');
+    } finally {
+      setLoading(false);
+    }
   }, [navigate, portal]);
 
   useEffect(() => { void carregar(); }, [carregar]);
   useEffect(() => { const timer = window.setInterval(() => void carregar(true), 60_000); return () => clearInterval(timer); }, [carregar]);
 
-  const abrirLista = (key: string) => { setViewKey(key); setSelecionado(null); setEmpresaFiltro('todas'); setBusca(''); setUploadOpen(false); setShowIssueForm(false); };
-  const abrirMovimento = (e: Evento) => { setSelecionado(e); setPendenciaTexto(e.observacao || ''); setShowIssueForm(false); setUploadOpen(false); setUploadType(defaultUploadType(e.categoria)); setUploadObs(''); setUploadFile(null); };
-  const fecharModal = () => { setViewKey(null); setSelecionado(null); setEmpresaFiltro('todas'); setBusca(''); setPendenciaTexto(''); setShowIssueForm(false); setUploadOpen(false); setUploadFile(null); };
+  const abrirLista = (key: string) => {
+    setViewKey(key); setSelecionado(null); setEmpresaFiltro('todas'); setBusca(''); setShowIssueForm(false); setAdiantamentoReportOpen(false);
+  };
+  const abrirMovimento = (e: Evento) => {
+    setSelecionado(e); setPendenciaTexto(e.observacao || ''); setShowIssueForm(false);
+  };
+  const fecharModal = () => {
+    setViewKey(null); setSelecionado(null); setEmpresaFiltro('todas'); setBusca(''); setPendenciaTexto(''); setShowIssueForm(false); setAdiantamentoReportOpen(false);
+  };
 
   const marcar = async (evento: Evento, status: 'conferido' | 'pendencia', observacao?: string) => {
     if (isInformational(evento)) return;
@@ -182,24 +177,38 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
     setUpdating(true);
     try {
       const { data, error } = await supabase.rpc('contabilidade_portal_revisar_sessao' as any, {
-        p_token: current.token, p_portal: portal, p_origem_tipo: evento.origem_tipo, p_origem_id: evento.origem_id,
-        p_status: status, p_observacao: observacao || null,
+        p_token: current.token,
+        p_portal: portal,
+        p_origem_tipo: evento.origem_tipo,
+        p_origem_id: evento.origem_id,
+        p_status: status,
+        p_observacao: observacao || null,
       });
       const res = data as any;
       if (error || !res?.ok) throw new Error('Não foi possível registrar a conferência.');
-      const next = { ...evento, status, observacao: status === 'pendencia' ? (observacao || null) : null, revisor_nome: res.revisor_nome || sessao?.usuario?.nome, revisado_em: res.revisado_em || new Date().toISOString() } as Evento;
+      const next = {
+        ...evento,
+        status,
+        observacao: status === 'pendencia' ? (observacao || null) : null,
+        revisor_nome: res.revisor_nome || sessao?.usuario?.nome,
+        revisado_em: res.revisado_em || new Date().toISOString(),
+      } as Evento;
       setSelecionado(next);
       setEventos(prev => prev.map(x => x.origem_tipo === evento.origem_tipo && x.origem_id === evento.origem_id ? next : x));
-      toast.success(status === 'conferido' ? 'Conferência registrada.' : 'Pendência registrada para o RH.');
+      toast.success(status === 'conferido' ? 'Conferência registrada na plataforma.' : 'Pendência registrada para o RH na plataforma.');
       setShowIssueForm(false);
       await carregar(true);
-    } catch (err: any) { toast.error(err?.message || 'Erro ao salvar.'); }
-    finally { setUpdating(false); }
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao salvar.');
+    } finally {
+      setUpdating(false);
+    }
   };
 
   const pendentes = useMemo(() => eventos.filter(needsReview), [eventos]);
   const hoje = useMemo(() => {
-    const ymd = new Date().toISOString().slice(0,10);
+    const now = new Date();
+    const ymd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
     return eventos.filter(e => String(e.created_at || '').slice(0,10) === ymd).length;
   }, [eventos]);
   const conferidos = useMemo(() => eventos.filter(e => !isInformational(e) && e.status === 'conferido').length, [eventos]);
@@ -223,14 +232,24 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
     else if (viewKey === 'pending') list = list.filter(needsReview);
     else if (viewKey === 'conferred') list = list.filter(e => !isInformational(e) && e.status === 'conferido');
     else if (viewKey === 'retifications') list = list.filter(e => !isInformational(e) && e.status === 'retificacao');
-    else if (viewKey === 'today') { const ymd = new Date().toISOString().slice(0,10); list = list.filter(e => String(e.created_at || '').slice(0,10) === ymd); }
+    else if (viewKey === 'today') {
+      const now = new Date();
+      const ymd = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      list = list.filter(e => String(e.created_at || '').slice(0,10) === ymd);
+    }
     return [...list].sort((a,b) => Date.parse(b.created_at || '0') - Date.parse(a.created_at || '0'));
   }, [eventos, viewKey]);
 
   const listaFiltrada = useMemo(() => {
     const term = busca.trim().toLowerCase();
-    return listaBase.filter(e => (empresaFiltro === 'todas' || e.empresa_id === empresaFiltro) && (!term || `${e.funcionario_nome} ${e.empresa_nome} ${e.titulo} ${e.data_evento || ''}`.toLowerCase().includes(term)));
+    return listaBase.filter(e =>
+      (empresaFiltro === 'todas' || e.empresa_id === empresaFiltro) &&
+      (!term || `${e.funcionario_nome} ${e.empresa_nome} ${e.titulo} ${e.data_evento || ''}`.toLowerCase().includes(term))
+    );
   }, [listaBase, empresaFiltro, busca]);
+
+  const adiantamentosRelatorio = useMemo(() => listaFiltrada.filter(e => e.categoria === 'adiantamento'), [listaFiltrada]);
+  const adiantamentoRelatorioTotal = useMemo(() => adiantamentosRelatorio.reduce((s,e) => s + Number(e.detalhes?.valor || 0), 0), [adiantamentosRelatorio]);
 
   const historicoFiltrado = useMemo(() => {
     const term = historySearch.trim().toLowerCase();
@@ -277,36 +296,15 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
     return raw;
   };
 
-  const competenciaSelecionada = () => {
-    if (!selecionado) return '';
-    const direct = String(selecionado.detalhes?.competencia || '').trim();
-    if (direct) return direct;
-    const raw = String(selecionado.data_evento || '');
-    return /^\d{4}-\d{2}/.test(raw) ? raw.slice(0,7) : '';
-  };
-
-  const enviarRetorno = async () => {
-    const current = readSession(portal);
-    if (!current?.token || !selecionado) return toast.error('Sua sessão expirou. Entre novamente.');
-    if (selecionado.status !== 'conferido') return toast.error('Conclua a conferência antes de enviar o retorno ao RH.');
-    if (!uploadFile) return toast.error('Selecione o PDF que deseja enviar.');
-    if (!/\.pdf$/i.test(uploadFile.name) && uploadFile.type !== 'application/pdf') return toast.error('Envie somente arquivo PDF.');
-    if (uploadFile.size > 50 * 1024 * 1024) return toast.error('O PDF pode ter no máximo 50 MB.');
-    setUploadBusy(true);
-    try {
-      const prepRes = await fetch('/api/accounting-portal-upload', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'prepare', portal, token:current.token, empresa_id:selecionado.empresa_id, arquivo_nome:uploadFile.name, tamanho_bytes:uploadFile.size }) });
-      const prep = await prepRes.json();
-      if (!prepRes.ok || !prep?.ok) throw new Error(prep?.error || 'Não foi possível preparar o envio.');
-      const uploaded = await supabase.storage.from(prep.bucket).uploadToSignedUrl(prep.path, prep.upload_token, uploadFile, { contentType:'application/pdf' });
-      if (uploaded.error) throw uploaded.error;
-      const context = `Retorno referente a ${selecionado.titulo} · ${selecionado.funcionario_nome || selecionado.empresa_nome}`;
-      const finalRes = await fetch('/api/accounting-portal-upload', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'finalize', portal, token:current.token, empresa_id:selecionado.empresa_id, storage_path:prep.path, arquivo_nome:uploadFile.name, tamanho_bytes:uploadFile.size, tipo_documento:uploadType, competencia:competenciaSelecionada() || null, funcionario_nome:selecionado.funcionario_nome || null, observacao:[context,uploadObs].filter(Boolean).join(' — '), origem_tipo:selecionado.origem_tipo, origem_id:selecionado.origem_id }) });
-      const finalData = await finalRes.json();
-      if (!finalRes.ok || !finalData?.ok) throw new Error(finalData?.error || 'O arquivo subiu, mas o registro não foi concluído.');
-      toast.success(finalData.email_status === 'enviado' ? 'Documento recebido pelo RH e formalizado por e-mail.' : 'Documento recebido pelo RH e registrado na plataforma.');
-      setUploadOpen(false); setUploadFile(null); setUploadObs('');
-    } catch (err:any) { toast.error(err?.message || 'Erro ao enviar o documento.'); }
-    finally { setUploadBusy(false); }
+  const imprimirRelatorioAdiantamento = () => {
+    const printable = document.getElementById('relatorio-adiantamento-contabilidade');
+    if (!printable) return;
+    const win = window.open('', '_blank', 'width=1000,height=760');
+    if (!win) return toast.error('O navegador bloqueou a janela de impressão.');
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Relatório de adiantamentos</title><style>body{font-family:Arial,sans-serif;color:#111;padding:28px}h1{font-size:22px;margin:0 0 6px}.sub{font-size:12px;color:#555;margin-bottom:20px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left}th{background:#f4f4f4}.right{text-align:right}.total{margin-top:18px;font-size:16px;font-weight:700;text-align:right}@media print{button{display:none}}</style></head><body>${printable.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    window.setTimeout(() => win.print(), 250);
   };
 
   if (loading) return <div className="min-h-screen bg-[#020609] flex items-center justify-center text-zinc-300"><Loader2 className="w-8 h-8 animate-spin text-[#9b32ff]" /></div>;
@@ -327,7 +325,7 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
       <main className="mx-auto max-w-[1680px] p-4 sm:p-[18px]">
         <section className="rounded-[10px] border border-[#2b2532] bg-[linear-gradient(110deg,#080a0f_0%,#0d0815_58%,#080a0f_100%)] px-5 py-5 sm:px-7 sm:py-6">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div><div className="text-[10px] font-bold uppercase tracking-[.18em] text-[#a855f7]">Visão operacional · {competenciaAtual ? brDate(competenciaAtual) : 'mês atual'}</div><h1 className="mt-1 text-[25px] font-black text-white sm:text-[30px]">Portal da Contabilidade</h1><p className="mt-1 max-w-2xl text-[12px] text-zinc-400">A tela mostra só o mês atual e alertas futuros relevantes. Virou o mês, o concluído sai da operação e permanece apenas no histórico.</p></div>
+            <div><div className="text-[10px] font-bold uppercase tracking-[.18em] text-[#a855f7]">Visão operacional · {competenciaAtual ? brDate(competenciaAtual) : 'mês atual'}</div><h1 className="mt-1 text-[25px] font-black text-white sm:text-[30px]">Portal da Contabilidade</h1><p className="mt-1 max-w-2xl text-[12px] text-zinc-400">Dados recebidos diretamente do TOPAC RH PRO. Sem upload manual e sem depender de envio por e-mail.</p></div>
             <div className="flex items-center gap-2 text-[10px] text-zinc-500"><Clock3 className="h-3.5 w-3.5"/>Atualização automática a cada 1 minuto</div>
           </div>
         </section>
@@ -340,10 +338,11 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
         </section>
 
         <section className="mt-4 rounded-[10px] border border-[#24202c] bg-[#04070b] p-4 sm:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-[14px] font-black text-white">Movimentações do RH</h2><p className="mt-1 text-[10px] text-zinc-500">Tudo em card. Os detalhes só aparecem quando abrir.</p></div><div className="hidden items-center gap-2 text-[10px] text-zinc-500 sm:flex"><Building2 className="h-3.5 w-3.5 text-[#9b32ff]"/>{isGoiania ? '1 empresa liberada' : '4 empresas liberadas'}</div></div>
+          <div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-[14px] font-black text-white">Movimentações do RH</h2><p className="mt-1 text-[10px] text-zinc-500">Informações sincronizadas diretamente da plataforma.</p></div><div className="hidden items-center gap-2 text-[10px] text-zinc-500 sm:flex"><Building2 className="h-3.5 w-3.5 text-[#9b32ff]"/>{isGoiania ? '1 empresa liberada' : '4 empresas liberadas'}</div></div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
             {Object.entries(categoryMeta).map(([key,meta]) => {
-              const Icon = meta.icon; const stats = categoryStats[key] || { total:0, pending:0 };
+              const Icon = meta.icon;
+              const stats = categoryStats[key] || { total:0, pending:0 };
               const dynamicNote = key === 'adiantamento' && stats.total > 0 ? `${stats.total} lançamentos · ${money(adiantamentoTotal)}` : meta.note;
               return <button key={key} type="button" onClick={() => abrirLista(`category:${key}`)} className={`group min-h-[150px] rounded-[8px] border bg-[#06090d] p-4 text-left transition hover:-translate-y-0.5 hover:border-[#6c2aa0] hover:bg-[#090b11] ${meta.emphasis && stats.pending > 0 ? 'border-[#6d5314]' : 'border-[#28232e]'}`}>
                 <div className="flex items-start justify-between gap-2"><div className={`grid h-9 w-9 place-items-center rounded-[7px] border ${meta.iconClass}`}><Icon className="h-[18px] w-[18px]"/></div>{stats.pending > 0 ? <span className="rounded-full border border-[#f4b400]/25 bg-[#f4b400]/10 px-2 py-0.5 text-[9px] font-bold text-[#f4b400]">{stats.pending}</span> : <span className="rounded-full border border-emerald-400/15 bg-emerald-400/5 px-2 py-0.5 text-[9px] font-semibold text-emerald-400/80">OK</span>}</div>
@@ -355,19 +354,34 @@ export default function ContabilidadeDashboardPageV2({ portal }: { portal: Porta
       </main>
 
       <Dialog open={!!viewKey} onOpenChange={open => { if (!open) fecharModal(); }}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto border-[#3a2849] bg-[#05080d] text-zinc-100 sm:max-w-4xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto border-[#3a2849] bg-[#05080d] text-zinc-100 sm:max-w-5xl">
           <DialogHeader><DialogTitle className="pr-8 text-white">{selecionado ? selecionado.titulo : modalTitle}</DialogTitle></DialogHeader>
           {!selecionado ? <div className="space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row"><select value={empresaFiltro} onChange={e => setEmpresaFiltro(e.target.value)} className="h-10 rounded-md border border-[#302739] bg-[#090c11] px-3 text-sm text-zinc-200 sm:min-w-[210px]"><option value="todas">Todas as empresas</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</select><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600"/><Input className="border-[#302739] bg-[#090c11] pl-9 text-zinc-100" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar funcionário..."/></div></div>
-            {listaFiltrada.length === 0 ? <div className="rounded-lg border border-[#28232e] bg-[#070a0e] py-14 text-center text-sm text-zinc-500">Nenhum item neste card.</div> : <div className="grid gap-2">{listaFiltrada.map(e => { const meta = categoryMeta[e.categoria] || categoryMeta.fechamento; const Icon=meta.icon; return <button key={`${e.origem_tipo}-${e.origem_id}`} onClick={() => abrirMovimento(e)} className="flex w-full items-center gap-3 rounded-[8px] border border-[#28232e] bg-[#070a0e] p-3.5 text-left hover:border-[#63308a] hover:bg-[#0a0d12]"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-[7px] border ${meta.iconClass}`}><Icon className="h-[18px] w-[18px]"/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="truncate text-[12px] font-bold text-zinc-100">{e.funcionario_nome || e.empresa_nome}</span>{e.categoria === 'admissao' && e.detalhes?.situacao === 'entrada_prevista' && <span className="rounded-full border border-[#f4b400]/20 bg-[#f4b400]/10 px-2 py-0.5 text-[8px] font-bold uppercase text-[#f4b400]">Entrada prevista</span>}</div><div className="mt-1 truncate text-[10px] text-zinc-500">{e.empresa_nome} · {e.data_evento ? brDate(e.data_evento) : brDateTime(e.created_at)}</div></div><span className={`hidden rounded-full border px-2.5 py-1 text-[9px] font-semibold sm:inline ${statusClass(e)}`}>{labelStatus(e)}</span><ChevronRight className="h-4 w-4 shrink-0 text-zinc-600"/></button>; })}</div>}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <select value={empresaFiltro} onChange={e => { setEmpresaFiltro(e.target.value); setAdiantamentoReportOpen(false); }} className="h-10 rounded-md border border-[#302739] bg-[#090c11] px-3 text-sm text-zinc-200 sm:min-w-[210px]"><option value="todas">Todas as empresas</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</select>
+              <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600"/><Input className="border-[#302739] bg-[#090c11] pl-9 text-zinc-100" value={busca} onChange={e => { setBusca(e.target.value); setAdiantamentoReportOpen(false); }} placeholder="Buscar funcionário..."/></div>
+              {viewKey === 'category:adiantamento' && <Button onClick={() => setAdiantamentoReportOpen(true)} disabled={adiantamentosRelatorio.length === 0} className="bg-sky-600 text-white hover:bg-sky-500"><FileText className="mr-2 h-4 w-4"/>Gerar relatório de adiantamento</Button>}
+            </div>
+
+            {viewKey === 'category:adiantamento' && adiantamentoReportOpen && <div id="relatorio-adiantamento-contabilidade" className="rounded-[9px] border border-sky-500/25 bg-sky-500/[.04] p-4">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><h1 className="text-[16px] font-black text-white">Relatório de adiantamentos</h1><div className="sub mt-1 text-[10px] text-zinc-500">Competência {competenciaAtual ? brDate(competenciaAtual) : 'atual'} · gerado em {brDateTime(new Date().toISOString())}</div></div><Button variant="outline" size="sm" className="border-sky-500/30 text-sky-200" onClick={imprimirRelatorioAdiantamento}><Printer className="mr-2 h-4 w-4"/>Imprimir / salvar PDF</Button></div>
+              <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[620px] text-[11px]"><thead><tr className="border-b border-sky-500/20 text-left text-zinc-500"><th className="py-2 pr-3">Funcionário</th><th className="py-2 pr-3">Empresa</th><th className="py-2 pr-3">Competência</th><th className="py-2 text-right">Adiantamento</th></tr></thead><tbody>{adiantamentosRelatorio.map(e => <tr key={`rel-${e.origem_id}`} className="border-b border-white/[.06]"><td className="py-2.5 pr-3 font-semibold text-zinc-200">{e.funcionario_nome}</td><td className="py-2.5 pr-3 text-zinc-400">{e.empresa_nome}</td><td className="py-2.5 pr-3 text-zinc-400">{brDate(e.detalhes?.competencia || e.data_evento)}</td><td className="py-2.5 text-right font-bold text-sky-200">{money(e.detalhes?.valor)}</td></tr>)}</tbody></table></div>
+              <div className="total mt-4 flex items-center justify-between rounded-md border border-sky-500/15 bg-black/20 px-3 py-2"><span className="text-[11px] text-zinc-500">{adiantamentosRelatorio.length} funcionário(s)</span><span className="text-[15px] font-black text-white">Total: {money(adiantamentoRelatorioTotal)}</span></div>
+            </div>}
+
+            {listaFiltrada.length === 0 ? <div className="rounded-lg border border-[#28232e] bg-[#070a0e] py-14 text-center text-sm text-zinc-500">Nenhum item neste card.</div> : <div className="grid gap-2">{listaFiltrada.map(e => {
+              const meta = categoryMeta[e.categoria] || categoryMeta.fechamento;
+              const Icon=meta.icon;
+              return <button key={`${e.origem_tipo}-${e.origem_id}`} onClick={() => abrirMovimento(e)} className="flex w-full items-center gap-3 rounded-[8px] border border-[#28232e] bg-[#070a0e] p-3.5 text-left hover:border-[#63308a] hover:bg-[#0a0d12]"><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-[7px] border ${meta.iconClass}`}><Icon className="h-[18px] w-[18px]"/></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="truncate text-[12px] font-bold text-zinc-100">{e.funcionario_nome || e.empresa_nome}</span>{e.categoria === 'admissao' && e.detalhes?.situacao === 'entrada_prevista' && <span className="rounded-full border border-[#f4b400]/20 bg-[#f4b400]/10 px-2 py-0.5 text-[8px] font-bold uppercase text-[#f4b400]">Entrada prevista</span>}</div><div className="mt-1 truncate text-[10px] text-zinc-500">{e.empresa_nome} · {e.data_evento ? brDate(e.data_evento) : brDateTime(e.created_at)}</div></div><span className={`hidden rounded-full border px-2.5 py-1 text-[9px] font-semibold sm:inline ${statusClass(e)}`}>{labelStatus(e)}</span><ChevronRight className="h-4 w-4 shrink-0 text-zinc-600"/></button>;
+            })}</div>}
           </div> : <div className="space-y-4">
-            <button onClick={() => { setSelecionado(null); setUploadOpen(false); setShowIssueForm(false); }} className="inline-flex items-center gap-2 text-[11px] font-semibold text-zinc-400 hover:text-white"><ArrowLeft className="h-4 w-4"/>Voltar</button>
+            <button onClick={() => { setSelecionado(null); setShowIssueForm(false); }} className="inline-flex items-center gap-2 text-[11px] font-semibold text-zinc-400 hover:text-white"><ArrowLeft className="h-4 w-4"/>Voltar</button>
             <div className="rounded-[9px] border border-[#302739] bg-[#080b10] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><div className="text-[18px] font-black text-white">{selecionado.funcionario_nome || selecionado.empresa_nome}</div><div className="mt-1 text-[11px] text-zinc-500">{selecionado.empresa_nome} · registrado em {brDateTime(selecionado.created_at)}</div></div><span className={`w-fit rounded-full border px-2.5 py-1 text-[9px] font-semibold ${statusClass(selecionado)}`}>{labelStatus(selecionado)}</span></div></div>
             {selecionado.status === 'retificacao' && <div className="flex gap-2 rounded-[8px] border border-violet-500/25 bg-violet-500/10 p-3 text-[11px] text-violet-200"><AlertTriangle className="h-4 w-4 shrink-0"/><div><strong>Informação alterada após a última conferência.</strong><div className="mt-1 text-violet-300/70">Analise novamente antes de dar novo OK.</div></div></div>}
             <div className="grid gap-x-5 gap-y-3 sm:grid-cols-2">{detailRows(selecionado).map(([label,value],idx) => <div key={`${label}-${idx}`} className="border-b border-[#29242e] pb-2.5"><div className="text-[9px] font-bold uppercase tracking-[.09em] text-zinc-600">{label}</div><div className="mt-1 break-words text-[12px] font-semibold text-zinc-200">{String(value)}</div></div>)}</div>
             {(selecionado.documento_url || selecionado.detalhes?.aso_url) && <div className="rounded-[8px] border border-[#302739] bg-[#080b10] p-3"><div className="mb-2 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Documentos</div><div className="flex flex-wrap gap-2">{selecionado.documento_url && <Button variant="outline" className="border-[#49335c] bg-[#0b0d12] text-zinc-200" onClick={() => window.open(documentUrl(selecionado),'_blank','noopener,noreferrer')}><FileText className="mr-2 h-4 w-4"/>{selecionado.documento_nome || 'Visualizar documento'}</Button>}{selecionado.detalhes?.aso_url && <Button variant="outline" className="border-[#49335c] bg-[#0b0d12] text-zinc-200" onClick={() => window.open(String(selecionado.detalhes?.aso_url),'_blank','noopener,noreferrer')}><FileText className="mr-2 h-4 w-4"/>Visualizar ASO</Button>}</div></div>}
-            {!isInformational(selecionado) && <div className="grid gap-3 rounded-[8px] border border-[#2b2532] bg-[#070a0e] p-3 text-[11px] sm:grid-cols-3"><div><div className="text-zinc-600">Última atualização</div><div className="mt-1 font-semibold text-zinc-300">{brDateTime(selecionado.source_updated_at)}</div></div><div><div className="text-zinc-600">Última conferência</div><div className="mt-1 font-semibold text-zinc-300">{selecionado.revisor_nome ? `${selecionado.revisor_nome} · ${brDateTime(selecionado.revisado_em)}` : 'Ainda não conferido'}</div></div><div><div className="text-zinc-600">Formalização</div><div className="mt-1 font-semibold text-zinc-300">{selecionado.formalizado ? `Sim · ${brDateTime(selecionado.formalizado_em)}` : 'Ainda não formalizado'}</div></div></div>}
-            {isInformational(selecionado) ? <div className="rounded-[8px] border border-sky-500/20 bg-sky-500/5 p-3 text-[11px] text-sky-200"><strong>Informação de acompanhamento.</strong><div className="mt-1 text-sky-300/70">Este item fica visível enquanto estiver dentro da regra operacional e não exige OK.</div></div> : selecionado.status !== 'conferido' ? <div className="border-t border-[#2b2532] pt-4">{showIssueForm && <textarea value={pendenciaTexto} onChange={e => setPendenciaTexto(e.target.value)} className="mb-3 min-h-[86px] w-full rounded-md border border-[#3a2b45] bg-[#090c11] px-3 py-2 text-sm text-zinc-100" placeholder="Descreva a correção necessária..."/>}<div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">{showIssueForm ? <Button variant="outline" disabled={updating} className="border-rose-500/30 text-rose-300" onClick={() => void marcar(selecionado,'pendencia',pendenciaTexto)}><AlertTriangle className="mr-2 h-4 w-4"/>Registrar pendência</Button> : <Button variant="outline" disabled={updating} className="border-[#49335c] text-zinc-300" onClick={() => setShowIssueForm(true)}><AlertTriangle className="mr-2 h-4 w-4"/>Apontar pendência</Button>}<Button disabled={updating} onClick={() => void marcar(selecionado,'conferido')} className="bg-emerald-600 text-white hover:bg-emerald-500">{updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}Conferido / OK</Button></div></div> : <div className="space-y-3 border-t border-[#2b2532] pt-4"><div className="flex gap-2 rounded-[8px] border border-emerald-500/20 bg-emerald-500/8 p-3 text-[11px] text-emerald-200"><BadgeCheck className="h-4 w-4 shrink-0"/><div><strong>Conferência concluída.</strong><div className="mt-0.5 text-emerald-300/70">Se houver retorno documental, envie por este movimento.</div></div></div><div className="flex flex-col gap-2 sm:flex-row sm:justify-end"><Button variant="outline" className="border-[#49335c] text-zinc-300" onClick={() => setShowIssueForm(true)}>Apontar correção</Button><Button className="bg-[#6d28d9] text-white hover:bg-[#7c3aed]" onClick={() => setUploadOpen(v => !v)}><FileUp className="mr-2 h-4 w-4"/>Enviar documento ao RH</Button></div>{showIssueForm && <div className="rounded-[8px] border border-rose-500/20 bg-rose-500/5 p-3"><textarea value={pendenciaTexto} onChange={e => setPendenciaTexto(e.target.value)} className="min-h-[80px] w-full rounded-md border border-[#3a2b45] bg-[#090c11] px-3 py-2 text-sm text-zinc-100" placeholder="Descreva a correção..."/><div className="mt-2 flex justify-end"><Button disabled={updating} variant="outline" className="border-rose-500/30 text-rose-300" onClick={() => void marcar(selecionado,'pendencia',pendenciaTexto)}><AlertTriangle className="mr-2 h-4 w-4"/>Registrar correção</Button></div></div>}{uploadOpen && <div className="rounded-[9px] border border-[#4c2b64] bg-[#0a0b11] p-4"><div className="mb-3"><div className="text-[12px] font-bold text-white">Retorno para o RH</div><div className="mt-1 text-[10px] text-zinc-500">O PDF entra na plataforma e a formalização por e-mail ocorre pelo fluxo já configurado.</div></div><div className="grid gap-3 sm:grid-cols-2"><div><label className="text-[10px] font-semibold text-zinc-400">Tipo</label><select value={uploadType} onChange={e => setUploadType(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-[#34283e] bg-[#080b10] px-3 text-sm text-zinc-200">{uploadOptionsFor(selecionado.categoria).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></div><div><label className="text-[10px] font-semibold text-zinc-400">Competência</label><div className="mt-1 flex h-10 items-center rounded-md border border-[#34283e] bg-[#080b10] px-3 text-sm text-zinc-300">{competenciaSelecionada() || 'Conforme movimento'}</div></div><div className="sm:col-span-2"><input type="file" accept="application/pdf,.pdf" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="block w-full rounded-md border border-[#34283e] bg-[#080b10] p-2 text-xs text-zinc-400"/></div><div className="sm:col-span-2"><textarea value={uploadObs} onChange={e => setUploadObs(e.target.value)} className="min-h-[70px] w-full rounded-md border border-[#34283e] bg-[#080b10] px-3 py-2 text-sm text-zinc-100" placeholder="Observação opcional"/></div></div><div className="mt-3 flex justify-end gap-2"><Button variant="outline" disabled={uploadBusy} onClick={() => { setUploadOpen(false); setUploadFile(null); }}>Cancelar</Button><Button disabled={uploadBusy || !uploadFile} className="bg-[#6d28d9] text-white" onClick={() => void enviarRetorno()}>{uploadBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4"/>}Enviar para o RH</Button></div></div>}</div>}
+            {!isInformational(selecionado) && <div className="grid gap-3 rounded-[8px] border border-[#2b2532] bg-[#070a0e] p-3 text-[11px] sm:grid-cols-3"><div><div className="text-zinc-600">Última atualização</div><div className="mt-1 font-semibold text-zinc-300">{brDateTime(selecionado.source_updated_at)}</div></div><div><div className="text-zinc-600">Última conferência</div><div className="mt-1 font-semibold text-zinc-300">{selecionado.revisor_nome ? `${selecionado.revisor_nome} · ${brDateTime(selecionado.revisado_em)}` : 'Ainda não conferido'}</div></div><div><div className="text-zinc-600">Registro</div><div className="mt-1 font-semibold text-zinc-300">{selecionado.formalizado ? `Formalizado · ${brDateTime(selecionado.formalizado_em)}` : 'Registrado na plataforma'}</div></div></div>}
+            {isInformational(selecionado) ? <div className="rounded-[8px] border border-sky-500/20 bg-sky-500/5 p-3 text-[11px] text-sky-200"><strong>Informação de acompanhamento.</strong><div className="mt-1 text-sky-300/70">Este dado veio diretamente do RH PRO e não exige envio manual.</div></div> : selecionado.status !== 'conferido' ? <div className="border-t border-[#2b2532] pt-4">{showIssueForm && <textarea value={pendenciaTexto} onChange={e => setPendenciaTexto(e.target.value)} className="mb-3 min-h-[86px] w-full rounded-md border border-[#3a2b45] bg-[#090c11] px-3 py-2 text-sm text-zinc-100" placeholder="Descreva a correção necessária..."/>}<div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">{showIssueForm ? <Button variant="outline" disabled={updating} className="border-rose-500/30 text-rose-300" onClick={() => void marcar(selecionado,'pendencia',pendenciaTexto)}><AlertTriangle className="mr-2 h-4 w-4"/>Registrar pendência</Button> : <Button variant="outline" disabled={updating} className="border-[#49335c] text-zinc-300" onClick={() => setShowIssueForm(true)}><AlertTriangle className="mr-2 h-4 w-4"/>Apontar pendência</Button>}<Button disabled={updating} onClick={() => void marcar(selecionado,'conferido')} className="bg-emerald-600 text-white hover:bg-emerald-500">{updating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CheckCircle2 className="mr-2 h-4 w-4"/>}Conferido / OK</Button></div></div> : <div className="space-y-3 border-t border-[#2b2532] pt-4"><div className="flex gap-2 rounded-[8px] border border-emerald-500/20 bg-emerald-500/8 p-3 text-[11px] text-emerald-200"><BadgeCheck className="h-4 w-4 shrink-0"/><div><strong>Conferência concluída.</strong><div className="mt-0.5 text-emerald-300/70">O resultado já está registrado na plataforma. Não é necessário enviar e-mail nem fazer upload.</div></div></div><div className="flex justify-end"><Button variant="outline" className="border-[#49335c] text-zinc-300" onClick={() => setShowIssueForm(true)}>Apontar correção</Button></div>{showIssueForm && <div className="rounded-[8px] border border-rose-500/20 bg-rose-500/5 p-3"><textarea value={pendenciaTexto} onChange={e => setPendenciaTexto(e.target.value)} className="min-h-[80px] w-full rounded-md border border-[#3a2b45] bg-[#090c11] px-3 py-2 text-sm text-zinc-100" placeholder="Descreva a correção..."/><div className="mt-2 flex justify-end"><Button disabled={updating} variant="outline" className="border-rose-500/30 text-rose-300" onClick={() => void marcar(selecionado,'pendencia',pendenciaTexto)}><AlertTriangle className="mr-2 h-4 w-4"/>Registrar correção</Button></div></div>}</div>}
           </div>}
         </DialogContent>
       </Dialog>
