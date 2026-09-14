@@ -19,7 +19,7 @@ import MecVeiculoPage from "@/app-mecanico/pages/VeiculoPage";
 import MecHistoricoPage from "@/app-mecanico/pages/HistoricoPage";
 import MecAbastecimentoPage from "@/app-mecanico/pages/AbastecimentoPage";
 import ContabilidadeAcessoPage from "@/pages/contabilidade/ContabilidadeAcessoPage";
-import ContabilidadeDashboardPage from "@/pages/contabilidade/ContabilidadeDashboardPage";
+import ContabilidadePortalShell from "@/pages/contabilidade/ContabilidadePortalShell";
 
 const PayrollPdfConsolidatorMount = lazy(() => import("@/components/PayrollPdfConsolidator"));
 const EpiBulkPrintEnhancer = lazy(() => import("@/components/EpiBulkPrintEnhancer"));
@@ -154,9 +154,9 @@ const ContabilidadePublicPortal = () => (
     <Sonner />
     <Routes>
       <Route path="/acesso-contabilidade" element={<ContabilidadeAcessoPage portal="principal" />} />
-      <Route path="/contabilidade" element={<ContabilidadeDashboardPage portal="principal" />} />
+      <Route path="/contabilidade" element={<ContabilidadePortalShell portal="principal" />} />
       <Route path="/acesso-contabilidade-goiania" element={<ContabilidadeAcessoPage portal="goiania" />} />
-      <Route path="/contabilidade-goiania" element={<ContabilidadeDashboardPage portal="goiania" />} />
+      <Route path="/contabilidade-goiania" element={<ContabilidadePortalShell portal="goiania" />} />
       <Route path="*" element={<Navigate to={currentPath.toLowerCase().includes('goiania') ? '/acesso-contabilidade-goiania' : '/acesso-contabilidade'} replace />} />
     </Routes>
   </BrowserRouter>
