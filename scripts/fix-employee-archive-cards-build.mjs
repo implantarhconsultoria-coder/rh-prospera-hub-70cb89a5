@@ -86,3 +86,4 @@ const replaceOrFail = (source, before, after, label) => {
 }
 
 console.log('[employee-archive-cards] arquivo pessoal em cards dinâmicos: Holerites, VR, VT, Garagem e Outros');
+await import('./fix-public-portal-ux-polish-build.mjs');
