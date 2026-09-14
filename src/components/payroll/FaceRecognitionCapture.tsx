@@ -72,7 +72,14 @@ const captureJpeg = (video: HTMLVideoElement) => {
 const friendlyError = (code: string) => {
   const errors: Record<string, string> = {
     NotAllowedError: 'A câmera foi bloqueada. Libere a câmera para continuar.',
+    PermissionDeniedError: 'A câmera foi bloqueada. Libere a câmera para continuar.',
     NotFoundError: 'Nenhuma câmera foi encontrada neste aparelho.',
+    DevicesNotFoundError: 'Nenhuma câmera foi encontrada neste aparelho.',
+    NotReadableError: 'A câmera está ocupada por outro aplicativo. Feche a câmera em outros apps e tente novamente.',
+    TrackStartError: 'A câmera está ocupada por outro aplicativo. Feche a câmera em outros apps e tente novamente.',
+    OverconstrainedError: 'Não foi possível iniciar a câmera com esta configuração. Tente novamente.',
+    ConstraintNotSatisfiedError: 'Não foi possível iniciar a câmera com esta configuração. Tente novamente.',
+    AbortError: 'A câmera foi interrompida. Tente novamente.',
     face_library_failed: 'Não foi possível carregar a leitura facial. Verifique a internet e tente novamente.',
     face_not_registered: 'Ainda não há reconhecimento facial cadastrado para este acesso. Entre pelos dados atuais e cadastre seu rosto.',
     face_not_recognized: 'Não conseguimos confirmar este rosto. Posicione-se de frente, com boa iluminação, e tente novamente.',
@@ -82,6 +89,24 @@ const friendlyError = (code: string) => {
     too_many_attempts: 'Muitas tentativas seguidas. Aguarde alguns minutos antes de tentar novamente.',
   };
   return errors[code] || 'Não foi possível concluir a leitura facial. Tente novamente.';
+};
+
+const requestFrontCamera = async () => {
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('NotFoundError');
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'user' },
+        width: { ideal: 720 },
+        height: { ideal: 720 },
+      },
+      audio: false,
+    });
+  } catch (error: any) {
+    const retryable = ['OverconstrainedError', 'ConstraintNotSatisfiedError'].includes(error?.name || '');
+    if (!retryable) throw error;
+    return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  }
 };
 
 const FaceRecognitionCapture: React.FC<Props> = ({ mode, companyScope, session, documentId, onSuccess, onCancel }) => {
@@ -110,15 +135,7 @@ const FaceRecognitionCapture: React.FC<Props> = ({ mode, companyScope, session, 
         apiRef.current = await loadFaceApi();
         if (cancelled) return;
 
-        if (!navigator.mediaDevices?.getUserMedia) throw new Error('NotFoundError');
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'user',
-            width: { ideal: 720 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        });
+        const stream = await requestFrontCamera();
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
