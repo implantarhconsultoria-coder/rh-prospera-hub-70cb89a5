@@ -1,67 +1,34 @@
 import React from 'react';
-import { Outlet, Navigate, NavLink, useNavigate } from 'react-router-dom';
-import { Package, LogOut, Building2 } from 'lucide-react';
+import { Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { Building2, LogOut, Package } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-import ModuleSwitcher from '@/components/ModuleSwitcher';
 import StableLoading from '@/components/StableLoading';
-
-const ITEMS = [
-  { to: '/almoxarifado', label: 'Almoxarifado', icon: Package, end: true },
-];
+import ModuleSwitcher from '@/components/ModuleSwitcher';
 
 const AlmoxarifadoLayout: React.FC = () => {
   const { session, userRoles, roleLoading, logout } = useApp();
-  const nav = useNavigate();
+  const navigate = useNavigate();
   useActivityTracker(session);
 
-  if (roleLoading) return <StableLoading label="Carregando permissao do almoxarifado..." />;
-  if (!userRoles.includes('almoxarifado') && !userRoles.includes('admin')) return <Navigate to="/" replace />;
+  if (roleLoading) return <StableLoading label="Carregando permissão do Almoxarifado..." />;
+  if (!userRoles.includes('almoxarifado') && !userRoles.includes('admin') && !userRoles.includes('diretor_geral')) return <Navigate to="/" replace />;
 
-  return (
-    <div className="min-h-screen bg-background">
-      <aside className="fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex flex-col">
-        <div className="p-4 border-b border-border flex items-center gap-2">
-          <div className="w-9 h-9 rounded-lg bg-amber-500 flex items-center justify-center">
-            <Building2 className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <div className="font-bold text-sm">Portal Almoxarifado</div>
-            <div className="text-[10px] text-muted-foreground">Topac RH PRO</div>
-          </div>
+  return <div className="min-h-screen bg-[#F7F8FC]">
+    <header className="sticky top-0 z-40 border-b border-violet-100 bg-white/95 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 w-full max-w-[1840px] items-center gap-4 px-5 lg:px-8">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-700 to-fuchsia-500 text-white shadow-sm"><Package className="h-5 w-5"/></span>
+          <div className="min-w-0"><div className="truncate text-sm font-black text-slate-950">Dashboard • Almoxarifado</div><div className="truncate text-xs text-slate-500">{session?.user?.email || 'TOPAC RH PRO'}</div></div>
         </div>
-        <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-          {ITEMS.map((it) => (
-            <NavLink
-              key={it.to}
-              to={it.to}
-              end={it.end}
-              className={({ isActive }) => cn(
-                'flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition',
-                isActive ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted',
-              )}
-            >
-              <it.icon className="w-4 h-4" /> {it.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="p-3 border-t border-border space-y-2">
-          <div className="text-xs text-muted-foreground truncate">{session?.user?.email}</div>
-          <Button size="sm" variant="outline" className="w-full" onClick={async () => { await logout(); nav('/'); }}>
-            <LogOut className="w-3 h-3 mr-1" /> Sair
-          </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <ModuleSwitcher />
+          <button type="button" onClick={async()=>{await logout();navigate('/');}} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" title="Sair"><LogOut className="h-4 w-4"/></button>
         </div>
-      </aside>
-      <main className="ml-64 min-h-screen">
-        <div className="p-6 max-w-[1600px] mx-auto">
-          <div className="flex justify-end mb-3 no-print"><ModuleSwitcher /></div>
-          <Outlet />
-        </div>
-      </main>
-    </div>
-  );
+      </div>
+    </header>
+    <main><Outlet /></main>
+  </div>;
 };
 
 export default AlmoxarifadoLayout;
