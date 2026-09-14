@@ -4,6 +4,8 @@ const BUCKET = 'contabilidade-inbox';
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
 const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
+const TOPAC_CENTRAL_EMAIL = 'adm.matriz@topac.com.br';
+const TOPAC_ROBSON_EMAIL = 'robson@topac.com.br';
 
 const safeFile = (value: unknown) =>
   String(value || 'documento.pdf')
@@ -90,17 +92,31 @@ const sendFormalizationEmail = async (service: any, input: {
     return { status: 'aguardando_configuracao', to: [] as string[], cc: [] as string[] };
   }
 
-  const primary = configured[0];
-  const baseCc = configured.slice(1);
-  const counterpart = input.portal === 'principal' ? counterpartFor(input.userEmail) : '';
-  const cc = uniqueEmails([...baseCc, ...(counterpart ? [counterpart] : [])]).filter((email) => email !== primary);
-  const to = [primary];
+  const senderEmail = cleanEmails(input.userEmail)[0] || '';
+  let to: string[] = [];
+  let cc: string[] = [];
+
+  if (input.portal === 'principal') {
+    // Mesma direção já usada no fluxo oficial da plataforma:
+    // Contabilidade -> Central TOPAC; a outra pessoa da AAT e Robson acompanham.
+    const counterpart = counterpartFor(senderEmail);
+    to = [TOPAC_CENTRAL_EMAIL];
+    cc = uniqueEmails([TOPAC_ROBSON_EMAIL, ...(counterpart ? [counterpart] : [])])
+      .filter((email) => email !== senderEmail && !to.includes(email));
+  } else {
+    const primary = configured[0];
+    const baseCc = configured.slice(1);
+    to = [primary];
+    cc = uniqueEmails(baseCc).filter((email) => email !== senderEmail && email !== primary);
+  }
 
   const resendKey = String(process.env.RESEND_API_KEY || '').trim();
   if (!resendKey) return { status: 'erro_configuracao_email', to, cc };
 
   const from = String(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>').trim();
-  const replyTo = String(process.env.EMAIL_REPLY_TO || process.env.REPLY_TO || 'adm.matriz@topac.com.br').trim();
+  // Quando a Central responder ao e-mail gerado pelo portal, a resposta volta para quem enviou
+  // (Vanessa ou Marisa), mantendo o mesmo comportamento do fluxo existente no Outlook.
+  const replyTo = senderEmail || String(process.env.EMAIL_REPLY_TO || process.env.REPLY_TO || TOPAC_CENTRAL_EMAIL).trim();
   const competenceText = input.competence ? ` · Competência ${input.competence}` : '';
   const subject = `[TOPAC RH PRO] Documento recebido da Contabilidade · ${input.companyName}${competenceText}`;
   const registeredAt = new Date(input.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
