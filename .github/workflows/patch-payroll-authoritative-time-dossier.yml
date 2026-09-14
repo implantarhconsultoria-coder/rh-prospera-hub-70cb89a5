@@ -1,4 +1,4 @@
-name: Patch Payroll Authoritative Time and Dossier
+name: Fix Payroll Dossier PDF
 
 on:
   push:
@@ -20,56 +20,23 @@ jobs:
         with:
           node-version: 22
 
-      - name: Patch payroll signature time and dossier
+      - name: Patch dossier generation to server-side PDF
         shell: python
         run: |
           from pathlib import Path
 
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected 1 match, found {count}')
-              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          admin = Path('api/payroll-admin.ts')
+          text = admin.read_text(encoding='utf-8')
 
-          server_path = 'src/server/payrollServer.ts'
-          marker = "export const buildCertificatePdf = (evidence: Record<string, any>) => {\n  const lines = ["
-          helper = r'''const exactSaoPauloDateTime = (value: unknown) => {
-  const raw = String(value || '').trim();
-  const date = new Date(raw);
-  if (!raw || Number.isNaN(date.getTime())) return raw;
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date).reduce<Record<string,string>>((acc, part) => {
-    if (part.type !== 'literal') acc[part.type] = part.value;
-    return acc;
-  }, {});
-  const fraction = (raw.match(/\.(\d{1,6})/)?.[1] || String(date.getUTCMilliseconds()).padStart(3, '0')).padEnd(3, '0');
-  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}.${fraction}`;
-};
+          if "import { PDFDocument } from 'pdf-lib';" not in text:
+              text = "import { PDFDocument } from 'pdf-lib';\n" + text
 
-export const buildCertificatePdf = (evidence: Record<string, any>) => {
-  const lines = ['''
-          replace_once(server_path, marker, helper)
-          replace_once(
-              server_path,
-              "    `Data/hora: ${evidence.signed_at || ''} (America/Sao_Paulo)`,",
-              "    `Data/hora oficial: ${exactSaoPauloDateTime(evidence.signed_at)} (America/Sao_Paulo)`,\n    `Instante oficial UTC: ${evidence.signed_at || ''}`,
-          )
+          marker = "    if (action === 'signed-urls') {"
+          if marker not in text:
+              raise SystemExit('signed-urls marker not found')
 
-          replace_once(
-              'api/payroll-public.ts',
-              "      const signedAt = new Date().toISOString();",
-              "      const { data: authoritativeNow, error: authoritativeNowError } = await service.rpc('payroll_authoritative_now');\n      if (authoritativeNowError || !authoritativeNow) throw new Error('authoritative_signature_clock_failed');\n      const signedAt = String(authoritativeNow);",
-          )
-
-          admin_path = 'api/payroll-admin.ts'
-          signed_urls_marker = "    if (action === 'signed-urls') {"
-          dossier_action = r'''    if (action === 'dossier-signed-documents') {
+          if "action === 'dossier-pdf'" not in text:
+              action = r'''    if (action === 'dossier-pdf') {
       const sourceDoc = await loadDocument(service, String(body.document_id || ''));
       if (!sourceDoc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
 
@@ -81,13 +48,14 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
         const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1 + delta, 1));
         return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
       };
+
       const sourceIsBenefit = benefitTypes.has(String(sourceDoc.document_type || ''));
       const payrollCompetencia = sourceIsBenefit ? shiftCompetencia(sourceDoc.competencia, -1) : sourceDoc.competencia;
       const benefitCompetencia = sourceIsBenefit ? sourceDoc.competencia : shiftCompetencia(sourceDoc.competencia, 1);
 
       const { data: candidateDocs, error: candidateError } = await service
         .from('payroll_documents')
-        .select('id,document_type,competencia,storage_path,original_filename,extracted_data,document_version')
+        .select('id,document_type,competencia,storage_path,extracted_data,document_version')
         .eq('company_id', sourceDoc.company_id)
         .eq('employee_id', sourceDoc.employee_id)
         .in('competencia', Array.from(new Set([payrollCompetencia, benefitCompetencia])));
@@ -98,9 +66,7 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
         || (benefitTypes.has(String(doc.document_type || '')) && doc.competencia === benefitCompetencia),
       );
       const documentIds = scopedDocs.map((doc: any) => doc.id);
-      if (!documentIds.length) return sendJson(res, {
-        ok: true, items: [], payroll_competencia: payrollCompetencia, benefit_competencia: benefitCompetencia,
-      });
+      if (!documentIds.length) return sendJson(res, { ok: false, error: 'dossier_without_documents' }, 404);
 
       const [{ data: signatures, error: signatureError }, { data: receipts, error: receiptError }] = await Promise.all([
         service.from('payroll_signatures')
@@ -118,101 +84,105 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
       const docById = new Map(scopedDocs.map((doc: any) => [doc.id, doc]));
       const receiptByDoc = new Map((receipts || []).map((receipt: any) => [receipt.document_id, receipt]));
       const typeOrder: Record<string, number> = { HOLERITE: 10, ADIANTAMENTO: 20, BENEFICIO_VR: 30, BENEFICIO_VT: 40, BENEFICIO_VR_VT: 50 };
-      const typeLabel: Record<string, string> = {
-        HOLERITE: 'Holerite', ADIANTAMENTO: 'Adiantamento', BENEFICIO_VR: 'Recibo VR',
-        BENEFICIO_VT: 'Recibo VT', BENEFICIO_VR_VT: 'Recibo VR + VT',
-      };
-
       const signedRows = (signatures || [])
         .map((signature: any) => ({ signature, doc: docById.get(signature.document_id) as any }))
         .filter((entry: any) => entry.doc?.storage_path)
-        .sort((a: any, b: any) => {
-          const typeDiff = (typeOrder[a.doc.document_type] || 99) - (typeOrder[b.doc.document_type] || 99);
-          if (typeDiff) return typeDiff;
-          return new Date(a.signature.signed_at).getTime() - new Date(b.signature.signed_at).getTime();
-        });
+        .sort((a: any, b: any) =>
+          (typeOrder[a.doc.document_type] || 99) - (typeOrder[b.doc.document_type] || 99)
+          || new Date(a.signature.signed_at).getTime() - new Date(b.signature.signed_at).getTime(),
+        );
+      if (!signedRows.length) return sendJson(res, { ok: false, error: 'dossier_without_signed_documents' }, 409);
 
-      const items = [];
+      const output = await PDFDocument.create();
+      const appendPdf = async (storagePath: string | null | undefined, label: string) => {
+        if (!storagePath) return;
+        const { data, error } = await service.storage.from(PAYROLL_BUCKET).download(storagePath);
+        if (error || !data) throw new Error(`dossier_file_download_failed:${label}`);
+        const bytes = new Uint8Array(await data.arrayBuffer());
+        const source = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+        const pages = await output.copyPages(source, source.getPageIndices());
+        pages.forEach((page) => output.addPage(page));
+      };
+
       for (const { signature, doc } of signedRows) {
+        await appendPdf(doc.storage_path, `${doc.document_type}:document`);
         const receipt = receiptByDoc.get(doc.id) as any;
-        items.push({
-          document_id: doc.id,
-          document_type: doc.document_type,
-          label: typeLabel[doc.document_type] || doc.document_type,
-          competencia: doc.competencia,
-          signed_at: signature.signed_at,
-          document_version: doc.document_version,
-          document_url: await signedUrl(service, doc.storage_path, 900),
-          certificate_url: signature.certificate_path ? await signedUrl(service, signature.certificate_path, 900) : null,
-          receipt_url: receipt?.storage_path ? await signedUrl(service, receipt.storage_path, 900) : null,
-          document_includes_bank_proof: doc?.extracted_data?.includes_bank_proof === true,
-        });
+        if (doc?.extracted_data?.includes_bank_proof !== true && receipt?.storage_path) {
+          await appendPdf(receipt.storage_path, `${doc.document_type}:receipt`);
+        }
+        if (signature.certificate_path) {
+          await appendPdf(signature.certificate_path, `${doc.document_type}:certificate`);
+        }
       }
 
-      return sendJson(res, {
-        ok: true,
-        items,
-        payroll_competencia: payrollCompetencia,
-        benefit_competencia: benefitCompetencia,
-      });
+      if (!output.getPageCount()) return sendJson(res, { ok: false, error: 'dossier_empty' }, 409);
+      const pdfBytes = await output.save({ addDefaultPage: false, useObjectStreams: false });
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="DOSSIE_ASSINATURAS_${payrollCompetencia}.pdf"`);
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      return res.end(pdfBytes);
     }
 
-    if (action === 'signed-urls') {'''
-          replace_once(admin_path, signed_urls_marker, dossier_action)
+'''
+              text = text.replace(marker, action + marker, 1)
 
-          ui_path = 'src/components/payroll/PayrollPortalAdminModule.tsx'
-          old_dossier = r'''  const dossier = async (row: any) => {
-    if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
-    try {
-      const urls = await apiCall('signed-urls', { document_id: row.document_id });
-      if (!urls.holerite_url || !urls.certificate_url) throw new Error('Dossiê incompleto: documento ou certificado ausente.');
-      const sources: Array<{url:string;label:string}> = [
-        { url: urls.holerite_url, label: 'Recibo + comprovante' },
-        { url: urls.certificate_url, label: 'Certificado' },
-      ];
-      if (!urls.document_includes_bank_proof && urls.receipt_url) sources.push({ url: urls.receipt_url, label: 'Comprovante' });
-      await mergePdfUrls(sources, `DOSSIE_PAGAMENTO_${safeFile(row.employee_name || 'FUNCIONARIO')}_${competencia}.pdf`);
-    } catch (error: any) { toast.error(error.message); }
-  };'''
+          admin.write_text(text, encoding='utf-8')
+
+          ui = Path('src/components/payroll/PayrollPortalAdminModule.tsx')
+          text = ui.read_text(encoding='utf-8')
+          start = text.find('  const dossier = async (row: any) => {')
+          if start < 0:
+              raise SystemExit('dossier function start not found')
+          end = text.find('\n  };', start)
+          if end < 0:
+              raise SystemExit('dossier function end not found')
+          end += len('\n  };')
+
           new_dossier = r'''  const dossier = async (row: any) => {
     if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
     try {
-      const dossierData = await apiCall('dossier-signed-documents', { document_id: row.document_id });
-      const items = Array.isArray(dossierData.items) ? dossierData.items : [];
-      if (!items.length) throw new Error('Dossiê incompleto: nenhuma assinatura concluída encontrada.');
-      const sources: Array<{url:string;label:string}> = [];
-      for (const item of items) {
-        if (item.document_url) sources.push({
-          url: item.document_url,
-          label: `${item.label || item.document_type} ${item.competencia || ''}`.trim(),
-        });
-        if (!item.document_includes_bank_proof && item.receipt_url) sources.push({
-          url: item.receipt_url,
-          label: `Comprovante ${item.competencia || ''}`.trim(),
-        });
-        if (item.certificate_url) sources.push({
-          url: item.certificate_url,
-          label: `Certificado ${item.label || item.document_type} ${item.competencia || ''}`.trim(),
-        });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Sessão administrativa expirada. Entre novamente.');
+
+      const response = await fetch('/api/payroll-admin', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'dossier-pdf', document_id: row.document_id }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || `Falha ${response.status} ao gerar o dossiê.`);
       }
-      if (!sources.length) throw new Error('Dossiê incompleto: arquivos assinados indisponíveis.');
-      await mergePdfUrls(sources, `DOSSIE_ASSINATURAS_${safeFile(row.employee_name || 'FUNCIONARIO')}_${dossierData.payroll_competencia || competencia}.pdf`);
-    } catch (error: any) { toast.error(error.message); }
+
+      const blob = await response.blob();
+      if (!blob.size) throw new Error('O dossiê foi gerado vazio.');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `DOSSIE_ASSINATURAS_${safeFile(row.employee_name || 'FUNCIONARIO')}_${competencia}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      toast.success('Dossiê gerado e baixado.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível gerar o dossiê.');
+    }
   };'''
-          replace_once(ui_path, old_dossier, new_dossier)
+          ui.write_text(text[:start] + new_dossier + text[end:], encoding='utf-8')
 
       - name: Install and build
         run: |
           npm install --legacy-peer-deps --no-package-lock --no-audit --no-fund
           npm run build
 
-      - name: Commit production patch and remove temporary workflow
+      - name: Commit validated fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm .github/workflows/patch-payroll-authoritative-time-dossier.yml
           git add -A
-          git commit -m "fix(payroll): horário oficial e dossiê com VR VT"
+          git commit -m "fix(payroll): gerar dossiê PDF no servidor"
           git push
-
-# trigger: 2026-09-01-authoritative-clock
