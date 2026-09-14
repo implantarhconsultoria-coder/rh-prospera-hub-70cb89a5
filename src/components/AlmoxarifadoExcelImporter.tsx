@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 type Props = { companyCode: string; companyName: string };
 type AnyRow = any[];
+const db = supabase as any;
 
 const cleanText = (value: unknown) => {
   if (value === null || value === undefined) return '';
@@ -72,6 +73,11 @@ const chunk = <T,>(rows: T[], size: number) => {
   return result;
 };
 
+const sha256Hex = async (buffer: ArrayBuffer) => {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+  return Array.from(digest, b => b.toString(16).padStart(2, '0')).join('');
+};
+
 const deterministicLote = async (buffer: ArrayBuffer, companyCode: string) => {
   const salt = new TextEncoder().encode(`TOPAC-ALMOX-V3:${companyCode}:`);
   const source = new Uint8Array(buffer);
@@ -82,6 +88,13 @@ const deterministicLote = async (buffer: ArrayBuffer, companyCode: string) => {
   bytes[6] = (bytes[6] & 0x0f) | 0x50; bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+const rawCell = (value: unknown) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  if (value === undefined) return null;
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
+  return value;
 };
 
 const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }) => {
@@ -100,6 +113,30 @@ const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }
     throw lastError;
   };
 
+  const archiveAllSheets = async (workbook: XLSX.WorkBook, lote: string, file: File, hash: string) => {
+    let archived = 0;
+    for (let sheetIndex = 0; sheetIndex < workbook.SheetNames.length; sheetIndex += 1) {
+      const sheetName = workbook.SheetNames[sheetIndex];
+      const rows = rowsOf(workbook, sheetName)
+        .map((row, index) => [index + 1, { cells: row.map(rawCell) }] as [number, { cells: unknown[] }])
+        .filter(([, data]) => data.cells.some(value => value !== null && value !== '' && value !== undefined));
+      const batches = chunk(rows, 180);
+      for (let i = 0; i < batches.length; i += 1) {
+        setProgress(`Preservando planilha original • ${sheetName} ${i + 1}/${batches.length}`);
+        const { data, error } = await db.rpc('almoxarifado_import_raw_batch_v1', {
+          p_lote: lote,
+          p_arquivo: file.name,
+          p_hash: hash,
+          p_aba: sheetName,
+          p_rows: batches[i],
+        });
+        if (error) throw error;
+        archived += Number(data || 0);
+      }
+    }
+    return archived;
+  };
+
   const handleExcel = async (file: File) => {
     const ext = file.name.toLowerCase().split('.').pop();
     if (!['xlsm', 'xlsx'].includes(ext || '')) throw new Error('Selecione a planilha Excel original (.xlsm ou .xlsx).');
@@ -110,6 +147,7 @@ const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }
     const entradaRows = rowsOf(workbook, 'Entrada');
     const saidaRows = rowsOf(workbook, 'Saídas');
     const lote = await deterministicLote(buffer, companyCode);
+    const fileHash = await sha256Hex(buffer);
 
     const entries = entradaRows.slice(1).map((r, index) => ({
       row: index + 2, codigo: cleanText(r[0]), descricao: cleanText(r[1]), data: toIsoDate(r[2]),
@@ -162,7 +200,7 @@ const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }
     const totalSaldo = items.reduce((sum, item) => sum + toNumber(item.saldo), 0);
     const itemBatches = chunk(items, 300); const entryBatches = chunk(entries, 300); const exitBatches = chunk(exits, 250);
 
-    setProgress(`Planilha validada: ${items.length.toLocaleString('pt-BR')} registros vinculados, ${entries.length.toLocaleString('pt-BR')} entradas e ${exits.length.toLocaleString('pt-BR')} saídas.`);
+    setProgress(`Planilha validada: ${items.length.toLocaleString('pt-BR')} registros, ${entries.length.toLocaleString('pt-BR')} entradas, ${exits.length.toLocaleString('pt-BR')} saídas e ${workbook.SheetNames.length} abas.`);
     for (let i = 0; i < itemBatches.length; i += 1) { setProgress(`Estoque ${i + 1}/${itemBatches.length}`); await sendBatch(lote, 1000 + i, 'items', itemBatches[i]); }
     for (let i = 0; i < entryBatches.length; i += 1) { setProgress(`Entradas ${i + 1}/${entryBatches.length} — ${entries.length.toLocaleString('pt-BR')}`); await sendBatch(lote, 2000 + i, 'entries', entryBatches[i]); }
     for (let i = 0; i < exitBatches.length; i += 1) { setProgress(`Saídas ${i + 1}/${exitBatches.length} — ${exits.length.toLocaleString('pt-BR')}`); await sendBatch(lote, 3000 + i, 'exits', exitBatches[i]); }
@@ -170,9 +208,11 @@ const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }
     setProgress('Conferindo saldo e contagens com a planilha...');
     const result = await sendBatch(lote, 9000, 'finalize', { items: items.length, entries: entries.length, exits: exits.length, total_saldo: totalSaldo });
     if (!result?.ok) throw new Error(`Importação incompleta. Registros ${result?.items}/${result?.expected_items}; entradas ${result?.entries}/${result?.expected_entries}; saídas ${result?.exits}/${result?.expected_exits}.`);
-    toast.success(`Importação conferida: ${result.items} registros vinculados, ${result.entries} entradas e ${result.exits} saídas.`);
-    setProgress('Importação concluída e validada. Atualizando...');
-    window.setTimeout(() => window.location.reload(), 1000);
+
+    const archived = await archiveAllSheets(workbook, lote, file, fileHash);
+    toast.success(`Importação conferida: ${result.items} registros, ${result.entries} entradas, ${result.exits} saídas e todas as ${workbook.SheetNames.length} abas preservadas.`);
+    setProgress(`Concluído • ${archived.toLocaleString('pt-BR')} linhas da planilha original arquivadas. Atualizando...`);
+    window.setTimeout(() => window.location.reload(), 1200);
   };
 
   const onChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,12 +223,12 @@ const AlmoxarifadoExcelImporter: React.FC<Props> = ({ companyCode, companyName }
     finally { setBusy(false); }
   };
 
-  return <div className="no-print rounded-lg border border-primary/30 bg-primary/5 p-4">
+  return <div className="no-print rounded-2xl border border-violet-200 bg-violet-50/50 p-5">
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-      <div className="flex items-start gap-3 min-w-0"><div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><FileSpreadsheet className="w-5 h-5 text-primary" /></div>
-        <div><div className="text-sm font-bold">Importar planilha oficial do Almoxarifado</div><div className="text-xs text-muted-foreground mt-1">Lê as abas Estoque, Entrada e Saídas e preserva a lógica da planilha para <strong>{companyName}</strong>.</div>{progress && <div className="text-xs font-medium mt-2 text-primary">{progress}</div>}</div></div>
+      <div className="flex items-start gap-3 min-w-0"><div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0"><FileSpreadsheet className="w-5 h-5 text-violet-700" /></div>
+        <div><div className="text-sm font-bold">Importar planilha oficial completa do Almoxarifado</div><div className="text-xs text-slate-500 mt-1">Importa Estoque, Entrada e Saídas para operação e arquiva <strong>todas as abas</strong> da planilha original para <strong>{companyName}</strong>.</div>{progress && <div className="text-xs font-semibold mt-2 text-violet-700">{progress}</div>}</div></div>
       <div className="shrink-0"><input ref={inputRef} type="file" className="hidden" accept=".xlsm,.xlsx,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={onChange} />
-        <Button type="button" onClick={() => inputRef.current?.click()} disabled={busy}>{busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}{busy ? 'Importando...' : 'Selecionar Excel (.XLSM)'}</Button></div>
+        <Button type="button" onClick={() => inputRef.current?.click()} disabled={busy} className="bg-violet-700 hover:bg-violet-800">{busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}{busy ? 'Importando...' : 'Selecionar Excel (.XLSM)'}</Button></div>
     </div>
   </div>;
 };
