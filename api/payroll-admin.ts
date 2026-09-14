@@ -1,3 +1,4 @@
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import {
   addEvent,
   assertCompanyEnabled,
@@ -27,6 +28,144 @@ const loadRequest = async (service: any, requestId: string) => {
   if (error || !data) throw Object.assign(new Error('request_not_found'), { status: 404 });
   await assertCompanyEnabled(service, data.company_id);
   return data;
+};
+
+const buildCompleteDossier = async (service: any, sourceDoc: any) => {
+  const { data: docs, error: docsError } = await service
+    .from('payroll_documents')
+    .select('id,company_id,employee_id,competencia,document_type,storage_path,original_filename,extracted_data,created_at')
+    .eq('company_id', sourceDoc.company_id)
+    .eq('employee_id', sourceDoc.employee_id)
+    .not('storage_path', 'is', null)
+    .order('competencia', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (docsError) throw docsError;
+  if (!docs?.length) throw Object.assign(new Error('dossier_without_documents'), { status: 404 });
+
+  const documentIds = docs.map((doc: any) => doc.id);
+  const { data: requests, error: requestError } = await service
+    .from('payroll_signature_requests')
+    .select('id,document_id,status,signed_at')
+    .in('document_id', documentIds);
+  if (requestError) throw requestError;
+
+  const requestIds = (requests || []).map((row: any) => row.id).filter(Boolean);
+  if (!requestIds.length) throw Object.assign(new Error('dossier_without_signed_documents'), { status: 409 });
+
+  const { data: signatures, error: signatureError } = await service
+    .from('payroll_signatures')
+    .select('id,request_id,document_id,certificate_path,signed_at')
+    .in('request_id', requestIds)
+    .order('signed_at', { ascending: true });
+  if (signatureError) throw signatureError;
+  if (!signatures?.length) throw Object.assign(new Error('dossier_without_signed_documents'), { status: 409 });
+
+  const requestById = new Map((requests || []).map((row: any) => [row.id, row]));
+  const docById = new Map(docs.map((doc: any) => [doc.id, doc]));
+  const signedEntries = (signatures || [])
+    .map((signature: any) => {
+      const request = requestById.get(signature.request_id) as any;
+      const documentId = signature.document_id || request?.document_id;
+      const doc = docById.get(documentId) as any;
+      return { signature, doc };
+    })
+    .filter((entry: any) => entry.doc?.storage_path)
+    .sort((a: any, b: any) => {
+      const competenceDiff = String(a.doc.competencia || '').localeCompare(String(b.doc.competencia || ''));
+      if (competenceDiff) return competenceDiff;
+      const typeDiff = String(a.doc.document_type || '').localeCompare(String(b.doc.document_type || ''));
+      if (typeDiff) return typeDiff;
+      return new Date(a.signature.signed_at || 0).getTime() - new Date(b.signature.signed_at || 0).getTime();
+    });
+  if (!signedEntries.length) throw Object.assign(new Error('dossier_without_signed_documents'), { status: 409 });
+
+  const signedDocumentIds = Array.from(new Set(signedEntries.map((entry: any) => entry.doc.id)));
+  const { data: receipts, error: receiptError } = await service
+    .from('payroll_payment_receipts')
+    .select('document_id,storage_path,status,confirmed,created_at')
+    .in('document_id', signedDocumentIds)
+    .eq('status', 'PAGAMENTO_CONFIRMADO')
+    .order('created_at', { ascending: true });
+  if (receiptError) throw receiptError;
+  const receiptByDoc = new Map<string, any>();
+  for (const receipt of receipts || []) receiptByDoc.set(receipt.document_id, receipt);
+
+  const output = await PDFDocument.create();
+  const appended = new Set<string>();
+  const appendPdf = async (storagePath: string | null | undefined, label: string) => {
+    if (!storagePath || appended.has(storagePath)) return;
+    const { data, error } = await service.storage.from(PAYROLL_BUCKET).download(storagePath);
+    if (error || !data) throw new Error(`dossier_file_download_failed:${label}`);
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    try {
+      const source = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+      const pages = await output.copyPages(source, source.getPageIndices());
+      pages.forEach((page) => output.addPage(page));
+      appended.add(storagePath);
+    } catch {
+      throw new Error(`dossier_invalid_pdf:${label}`);
+    }
+  };
+
+  for (const { signature, doc } of signedEntries) {
+    await appendPdf(doc.storage_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:documento`);
+    const receipt = receiptByDoc.get(doc.id);
+    if (doc?.extracted_data?.includes_bank_proof !== true && receipt?.storage_path) {
+      await appendPdf(receipt.storage_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:comprovante`);
+    }
+    if (signature.certificate_path) {
+      await appendPdf(signature.certificate_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:certificado`);
+    }
+  }
+
+  if (!output.getPageCount()) throw Object.assign(new Error('dossier_empty'), { status: 409 });
+  output.setTitle('Dossie completo de assinaturas');
+  output.setSubject('Todos os documentos assinados do funcionario, sem filtro de competencia.');
+  output.setCreator('TOPAC RH PRO');
+  const dossierBytes = await output.save({ addDefaultPage: false, useObjectStreams: false });
+
+  const { data: employee } = await service.from('funcionarios').select('nome').eq('id', sourceDoc.employee_id).maybeSingle();
+  const employeeName = String(employee?.nome || 'FUNCIONARIO');
+  const safeEmployee = employeeName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
+  const basePath = `${sourceDoc.company_id}/dossies/${sourceDoc.employee_id}`;
+  const dossierPath = `${basePath}/DOSSIE_COMPLETO_${safeEmployee}.pdf`;
+  const indexPath = `${basePath}/INDICE_DOSSIE_COMPLETO_${safeEmployee}.pdf`;
+
+  const dossierUpload = await service.storage.from(PAYROLL_BUCKET).upload(
+    dossierPath,
+    new Blob([dossierBytes as any], { type: 'application/pdf' }),
+    { contentType: 'application/pdf', upsert: true },
+  );
+  if (dossierUpload.error) throw dossierUpload.error;
+
+  const indexPdf = await PDFDocument.create();
+  const page = indexPdf.addPage([595.28, 841.89]);
+  const font = await indexPdf.embedFont(StandardFonts.Helvetica);
+  const bold = await indexPdf.embedFont(StandardFonts.HelveticaBold);
+  page.drawText('TOPAC RH PRO - DOSSIE COMPLETO', { x: 48, y: 790, size: 16, font: bold });
+  page.drawText(`Funcionario: ${employeeName}`, { x: 48, y: 760, size: 11, font });
+  page.drawText(`Documentos assinados incluidos: ${signedEntries.length}`, { x: 48, y: 740, size: 11, font });
+  page.drawText('Regra: historico completo, sem filtro de mes/competencia.', { x: 48, y: 720, size: 11, font });
+  let y = 690;
+  for (const { doc } of signedEntries.slice(0, 32)) {
+    const line = `${String(doc.competencia || 'SEM COMPETENCIA')} - ${String(doc.document_type || 'DOCUMENTO')}`;
+    page.drawText(line.slice(0, 90), { x: 58, y, size: 9, font });
+    y -= 17;
+    if (y < 60) break;
+  }
+  const indexBytes = await indexPdf.save({ addDefaultPage: false, useObjectStreams: false });
+  const indexUpload = await service.storage.from(PAYROLL_BUCKET).upload(
+    indexPath,
+    new Blob([indexBytes as any], { type: 'application/pdf' }),
+    { contentType: 'application/pdf', upsert: true },
+  );
+  if (indexUpload.error) throw indexUpload.error;
+
+  return {
+    dossierPath,
+    indexPath,
+    documentCount: signedEntries.length,
+  };
 };
 
 export default async function handler(req: any, res?: any) {
@@ -118,17 +257,23 @@ export default async function handler(req: any, res?: any) {
 
     if (action === 'signed-urls') {
       const doc = await loadDocument(service, String(body.document_id || ''));
-      const { data: receipt } = await service.from('payroll_payment_receipts').select('*').eq('document_id', doc.id).eq('status', 'PAGAMENTO_CONFIRMADO').maybeSingle();
-      const { data: requestRow } = await service.from('payroll_signature_requests').select('id').eq('document_id', doc.id).maybeSingle();
-      const { data: signature } = requestRow
-        ? await service.from('payroll_signatures').select('*').eq('request_id', requestRow.id).maybeSingle()
-        : { data: null } as any;
+      if (!doc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
+
+      // REGRA DO DOSSIÊ: não existe filtro por competência.
+      // Ao solicitar o dossiê a partir de qualquer linha assinada, juntamos TODO o histórico
+      // de documentos assinados desse funcionário na empresa: holerites, adiantamentos,
+      // benefícios, férias e qualquer outro tipo que possua assinatura/certificado.
+      const complete = await buildCompleteDossier(service, doc);
       return sendJson(res, {
         ok: true,
-        holerite_url: await signedUrl(service, doc.storage_path, 900),
-        receipt_url: receipt?.storage_path ? await signedUrl(service, receipt.storage_path, 900) : null,
-        certificate_url: signature?.certificate_path ? await signedUrl(service, signature.certificate_path, 900) : null,
-        document_includes_bank_proof: doc?.extracted_data?.includes_bank_proof === true,
+        holerite_url: await signedUrl(service, complete.dossierPath, 900),
+        // A UI atual exige um segundo PDF. Entregamos um índice gerado pelo próprio servidor,
+        // evitando depender de certificado individual e mantendo o dossiê consolidado íntegro.
+        certificate_url: await signedUrl(service, complete.indexPath, 900),
+        receipt_url: null,
+        document_includes_bank_proof: true,
+        dossier_scope: 'ALL_SIGNED_DOCUMENTS_ALL_COMPETENCIAS',
+        dossier_document_count: complete.documentCount,
       });
     }
 
