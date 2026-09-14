@@ -44,6 +44,9 @@ const PDF_CONTENT_TYPE = 'application/pdf';
 export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;
 const EMAIL_GOIANIA_ANTIGO = 'gyn@topac.com.br';
 
+export const EMAIL_CONTABILIDADE_VANESSA = 'dp@aatconsultoria.com.br' as const;
+export const EMAIL_CONTABILIDADE_MARISA = 'marisa@aatconsultoria.com.br' as const;
+
 export const normalizeTopacRecipients = (emails: readonly string[] = []): string[] =>
   Array.from(new Set(
     emails
@@ -53,8 +56,8 @@ export const normalizeTopacRecipients = (emails: readonly string[] = []): string
   ));
 
 export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
-  const policy = applyTopacEmailPolicy({ subject, body, cc, moduleOrigin, attachmentNames, attachmentContentTypes });
   const normalizedTo = normalizeTopacRecipients(to);
+  const policy = applyTopacEmailPolicy({ to: normalizedTo, subject, body, cc, moduleOrigin, attachmentNames, attachmentContentTypes });
   const enc = encodeURIComponent;
   const params: string[] = [];
   if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
@@ -203,7 +206,9 @@ export const sendEmailWithPdfAttachment = async ({
     throw new Error('Sua sessão expirou. Entre novamente para enviar anexos pela plataforma.');
   }
 
+  const normalizedTo = normalizeTopacRecipients(to);
   const policy = applyTopacEmailPolicy({
+    to: normalizedTo,
     subject,
     body,
     cc,
@@ -214,7 +219,6 @@ export const sendEmailWithPdfAttachment = async ({
 
   const storedAttachments = await uploadEmailAttachments(rawAttachments, authenticatedUserId);
   const documentNames = storedAttachments.map((item) => item.documentName || item.attachmentName).join('; ');
-  const normalizedTo = normalizeTopacRecipients(to);
   let response: Response;
   try {
     response = await fetch('/api/send-email-pdf', {
@@ -268,7 +272,8 @@ export const downloadEmailWithAttachment = async ({
 };
 
 export const CC_OBRIGATORIO = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
-export const DESTINATARIOS_CONTABILIDADE = ['marisa@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br', 'dp@aatconsultoria.com.br'] as const;
+export const DESTINATARIOS_CONTABILIDADE = [EMAIL_CONTABILIDADE_VANESSA] as const;
+export const CC_CONTABILIDADE = [EMAIL_CONTABILIDADE_MARISA, ...CC_OBRIGATORIO] as const;
 export const DESTINATARIOS_ASO = ['agendamento@ponteaereaseguranca.com.br'] as const;
 
 export const getDestinatariosFerias = (unidade: string): readonly string[] => {
