@@ -116,3 +116,5 @@ changed = patch(
 console.log(changed
   ? '[vacation-signature] Aviso de Férias integrado ao portal de assinatura.'
   : '[vacation-signature] Integração já aplicada; nenhuma alteração necessária.');
+
+await import('./fix-employee-archive-cards-build.mjs');
