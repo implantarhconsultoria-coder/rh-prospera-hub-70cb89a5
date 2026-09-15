@@ -32,3 +32,4 @@ if (changed) fs.writeFileSync(file, source);
 console.log('[public-signature-contrast] CPF, nascimento e celular com texto escuro em campos claros');
 
 await import('./fix-payroll-face-build.mjs');
+await import('./fix-facial-access-guard-build.mjs');
