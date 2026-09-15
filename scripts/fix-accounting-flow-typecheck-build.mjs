@@ -118,3 +118,4 @@ patchPayroll();
 patchClosing();
 ensureTsNoCheck(payrollPath);
 ensureTsNoCheck(closingPath);
+await import('./fix-accounting-formalization-senders-build.mjs');
