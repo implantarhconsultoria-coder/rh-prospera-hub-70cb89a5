@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/context/AppContext';
+import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,15 +14,14 @@ import { TIPOS_OCORRENCIA, type MovimentoRow, type FechamentoRow, type TipoOcorr
 
 const FilialFechamentoPage: React.FC = () => {
   const { companies, employees, session } = useApp();
-  const [companyId, setCompanyId] = useState<string>('');
+  const { filialCompanyId } = useFilialFilter();
+  const companyId = filialCompanyId || '';
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [movimentos, setMovimentos] = useState<MovimentoRow[]>([]);
   const [fechamento, setFechamento] = useState<FechamentoRow | null>(null);
   const [historico, setHistorico] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [processando, setProcessando] = useState(false);
-
-  useEffect(() => { if (companies.length && !companyId) setCompanyId(companies[0].id); }, [companies, companyId]);
 
   const carregar = async () => {
     if (!companyId || !competencia) return;
@@ -41,7 +41,7 @@ const FilialFechamentoPage: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [companyId, competencia]);
+  useEffect(() => { void carregar(); /* eslint-disable-next-line */ }, [companyId, competencia]);
 
   // Consolida movimento → totais por funcionário
   const consolidado = useMemo(() => {
@@ -127,6 +127,7 @@ const FilialFechamentoPage: React.FC = () => {
 
   const fechar = async () => {
     if (!session) return;
+    if (!companyId || !empresaAtual) return toast.error('Filial não autorizada para esta sessão.');
     if (!confirm(`Confirmar fechamento de ${empresaNome} • ${competencia}?\n\nIsso vai gerar ${compEmps.length} lançamento(s) e travar a edição da filial.`)) return;
     setProcessando(true);
 
@@ -193,7 +194,7 @@ const FilialFechamentoPage: React.FC = () => {
           .maybeSingle();
 
         if (existing) {
-          await supabase.from('lancamentos_mensais').update(payload).eq('id', (existing as any).id);
+          await supabase.from('lancamentos_mensais').update(payload).eq('id', (existing as any).id).eq('company_id', companyId);
         } else {
           await supabase.from('lancamentos_mensais').insert(payload);
         }
@@ -234,18 +235,17 @@ const FilialFechamentoPage: React.FC = () => {
 
       <div className="card-premium p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
-          <select value={companyId} onChange={e => setCompanyId(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm bg-background">
-            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <label className="text-xs text-muted-foreground block mb-1">Empresa autorizada</label>
+          <div className="min-w-[220px] rounded-lg border bg-background px-3 py-2 text-sm font-semibold text-foreground">
+            {empresaAtual?.name || 'Filial não identificada'}
+          </div>
         </div>
         <div>
           <label className="text-xs text-muted-foreground block mb-1">Competência</label>
           <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="w-44" />
         </div>
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" size="sm" onClick={carregar}>
+          <Button variant="outline" size="sm" onClick={carregar} disabled={!companyId}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
         </div>
@@ -287,7 +287,7 @@ const FilialFechamentoPage: React.FC = () => {
             )}
           </div>
           {!fechado && (
-            <Button onClick={fechar} disabled={processando || compEmps.length === 0} className="gradient-primary text-primary-foreground">
+            <Button onClick={fechar} disabled={processando || compEmps.length === 0 || !companyId} className="gradient-primary text-primary-foreground">
               <FileCheck className="w-4 h-4 mr-2" /> {processando ? 'Processando…' : 'Fechar período e enviar para Lançamentos'}
             </Button>
           )}
