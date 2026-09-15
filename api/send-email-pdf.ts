@@ -9,6 +9,8 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   });
 
+const BLOCKED_EMAIL_RECIPIENTS = new Set(['lucilene' + '@aatconsultoria.com.br']);
+
 const parseBody = (req: any) => {
   if (typeof req?.body === 'object' && req.body !== null) return req.body;
   try { return JSON.parse(req?.body || '{}'); } catch { return {}; }
@@ -17,7 +19,7 @@ const parseBody = (req: any) => {
 const cleanList = (value: unknown) => {
   const raw = Array.isArray(value) ? value.join(' ') : String(value || '');
   const matches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
-  return Array.from(new Set(matches.map((email) => email.trim().toLowerCase())));
+  return Array.from(new Set(matches.map((email) => email.trim().toLowerCase()).filter((email) => !BLOCKED_EMAIL_RECIPIENTS.has(email))));
 };
 
 const EMAIL_TIMEOUT_MS = 30000;
@@ -31,6 +33,7 @@ const PROVIDER_RAW_LIMITS: Record<string, number> = {
 };
 const DEFAULT_EMAIL_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
 const DEFAULT_EMAIL_REPLY_TO = 'adm.matriz@topac.com.br';
+const MANDATORY_EMAIL_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'];
 const TOPAC_DOMAIN_FALLBACK = 'topacrh.pro';
 const PDF_CONTENT_TYPE = 'application/pdf';
 
@@ -477,7 +480,7 @@ export default async function handler(req: any, res?: any) {
     const attachmentNames = attachments.map((attachment) => attachment.attachmentName).join('; ');
     payload = {
       to: cleanList(body.to),
-      cc: cleanList(body.cc),
+      cc: cleanList([body.cc, ...MANDATORY_EMAIL_CC]),
       subject: String(body.subject || '').trim(),
       body: String(body.body || '').trim(),
       ...senderContext,
@@ -486,6 +489,7 @@ export default async function handler(req: any, res?: any) {
       documentId: senderContext.documentId || attachments[0]?.documentId || null,
       documentName: String(body.documentName || body.documentoNome || senderContext.documentName || attachments[0]?.documentName || attachmentNames || '').trim(),
     };
+    payload.cc = payload.cc.filter((email: string) => !payload.to.includes(email));
     if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length) throw new EmailRequestError('dados_invalidos', 'Informe destinatário, assunto, mensagem e anexos antes de enviar.', 400);
 
     const result = provider === 'resend'

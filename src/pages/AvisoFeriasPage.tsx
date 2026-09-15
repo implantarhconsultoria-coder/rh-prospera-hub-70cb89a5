@@ -13,6 +13,7 @@ import { gerarAvisoFeriasPdf, downloadPdf } from '@/lib/pdfGenerator';
 import { supabase } from '@/integrations/supabase/client';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import VacationProgrammingReport from '@/components/ferias/VacationProgrammingReport';
+import VacationSignatureButton from '@/components/ferias/VacationSignatureButton';
 
 type FeriasAvisoRow = {
   id: string;
@@ -95,6 +96,9 @@ const feriasFallbackStatus = (dataAdmissao: string): FeriasInfo => {
     return { code: 'vencido', status: 'vencido', label: 'Vencido', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
   }
   if (raw === 'em dia') {
+    if (fer.periodoAtual >= 1) {
+      return { code: 'atencao', status: 'atenção', label: 'A vencer', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
+    }
     return { code: 'em_dia', status: 'em dia', label: 'Em dia', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
   }
   return { code: 'atencao', status: 'atenção', label: 'Atenção', mesesNoPeriodo: fer.mesesNoPeriodo, periodoAtual: fer.periodoAtual, origem: 'cadastro' };
@@ -154,6 +158,7 @@ const AvisoFeriasPage: React.FC = () => {
   const [diasFerias, setDiasFerias] = useState(30);
   const [filterCompany, setFilterCompany] = useState('');
   const [feriasAvisos, setFeriasAvisos] = useState<FeriasAvisoRow[]>([]);
+  const [officialPeriods, setOfficialPeriods] = useState<any[]>([]);
   const [savingFerias, setSavingFerias] = useState(false);
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
   const [lastDocId, setLastDocId] = useState('');
@@ -199,6 +204,50 @@ const AvisoFeriasPage: React.FC = () => {
     loadFeriasAvisos();
   }, [employees, isFilial, filialCompanyId]);
 
+  const officialByEmployee = useMemo(() => {
+    const latestRefByCompany = new Map<string, string>();
+    officialPeriods.forEach((period: any) => {
+      const companyId = String(period.company_id || '');
+      const reference = String(period.referencia || '');
+      if (!companyId) return;
+      if (reference > (latestRefByCompany.get(companyId) || '')) latestRefByCompany.set(companyId, reference);
+    });
+
+    const map = new Map<string, any[]>();
+    officialPeriods
+      .filter((period: any) => String(period.referencia || '') === latestRefByCompany.get(String(period.company_id || '')))
+      .forEach((period: any) => {
+        if (!period.funcionario_id) return;
+        const current = map.get(period.funcionario_id) || [];
+        map.set(period.funcionario_id, [...current, period].sort((a, b) => String(a.data_limite || '').localeCompare(String(b.data_limite || ''))));
+      });
+    return map;
+  }, [officialPeriods]);
+
+  useEffect(() => {
+    const loadOfficialPeriods = async () => {
+      const employeeIds = employees
+        .filter(e => e.status === 'ativo' && e.categoria === 'operacional')
+        .filter(e => !isFilial || e.companyId === filialCompanyId)
+        .map(e => e.id);
+      if (!employeeIds.length) { setOfficialPeriods([]); return; }
+
+      const { data, error } = await (supabase as any)
+        .from('ferias_periodos_oficiais')
+        .select('id,company_id,funcionario_id,funcionario_codigo,data_admissao,periodo_aquisitivo_inicio,periodo_aquisitivo_fim,data_limite,dias_direito,referencia')
+        .in('funcionario_id', employeeIds)
+        .order('referencia', { ascending: false })
+        .order('data_limite', { ascending: true });
+      if (error) {
+        console.error('[ferias-oficial-resumo]', error);
+        setOfficialPeriods([]);
+        return;
+      }
+      setOfficialPeriods(data || []);
+    };
+    void loadOfficialPeriods();
+  }, [employees, isFilial, filialCompanyId]);
+
   useEffect(() => {
     if (!selectedEmpId) return;
     const aviso = feriasByEmployee.get(selectedEmpId);
@@ -219,8 +268,43 @@ const AvisoFeriasPage: React.FC = () => {
         return true;
       })
       .map(e => {
-        const fer = buildFeriasInfo(e.dataAdmissao, feriasByEmployee.get(e.id));
-        return { ...e, ferCode: fer.code, ferStatus: fer.status, ferLabel: fer.label, ferMeses: fer.mesesNoPeriodo, ferInicio: fer.inicio, ferFim: fer.fim };
+        const aviso = feriasByEmployee.get(e.id);
+        const fallback = buildFeriasInfo(e.dataAdmissao, aviso);
+        const periods = officialByEmployee.get(e.id) || [];
+        const now = todayISO();
+        const acquired = periods.filter((period: any) => String(period.periodo_aquisitivo_fim || '') <= now);
+        const target = (acquired.length ? acquired : periods)[0];
+        if (!target) return { ...e, ferCode: fallback.code, ferStatus: fallback.status, ferLabel: fallback.label, ferMeses: fallback.mesesNoPeriodo, ferInicio: fallback.inicio, ferFim: fallback.fim };
+
+        const livePeriod = aviso?.periodo_gozo_inicio
+          ? feriasPeriodoStatus(aviso.periodo_gozo_inicio, aviso.periodo_gozo_fim || aviso.data_retorno)
+          : null;
+        const liveSchedule = livePeriod && (livePeriod.code === 'marcada' || livePeriod.code === 'em_ferias');
+        const daysRight = Number(target.dias_direito || 0);
+        const limit = String(target.data_limite || '');
+        const acquisitionEnd = String(target.periodo_aquisitivo_fim || '');
+        const daysToLimit = limit ? Math.floor((toDateOnly(limit).getTime() - toDateOnly(now).getTime()) / 86400000) : 99999;
+
+        let code: FeriasStatusCode = 'em_dia';
+        let label = 'Em dia';
+        if (liveSchedule && livePeriod) {
+          code = livePeriod.code;
+          label = livePeriod.label;
+        } else if (acquisitionEnd > now) {
+          code = 'em_dia';
+          label = 'Em aquisição · ' + daysRight.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + 'd · limite ' + formatDate(limit);
+        } else if (limit && limit < now) {
+          code = 'vencido';
+          label = 'Vencido · ' + daysRight.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + 'd · limite ' + formatDate(limit);
+        } else if (daysToLimit <= 30) {
+          code = 'atencao';
+          label = 'Prazo crítico · ' + daysRight.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + 'd · limite ' + formatDate(limit);
+        } else {
+          code = 'em_dia';
+          label = 'A vencer · ' + daysRight.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + 'd · limite ' + formatDate(limit);
+        }
+
+        return { ...e, ferCode: code, ferStatus: legacyBadgeStatus(code), ferLabel: label, ferMeses: fallback.mesesNoPeriodo, ferInicio: liveSchedule ? aviso?.periodo_gozo_inicio : undefined, ferFim: liveSchedule ? (aviso?.periodo_gozo_fim || aviso?.data_retorno) : undefined };
       })
       .filter(e => {
         if (search && !e.name.toLowerCase().includes(search.toLowerCase()) && !e.cpf.includes(search)) return false;
@@ -230,7 +314,7 @@ const AvisoFeriasPage: React.FC = () => {
       .sort((a, b) => {
         return (statusOrder[a.ferCode as FeriasStatusCode] ?? 9) - (statusOrder[b.ferCode as FeriasStatusCode] ?? 9);
       });
-  }, [employees, search, filterCompany, isFilial, filialCompanyId, feriasByEmployee]);
+  }, [employees, search, filterCompany, isFilial, filialCompanyId, feriasByEmployee, officialByEmployee]);
 
   const alertas = useMemo(() => empsList.filter(e => e.ferCode === 'vencido' || e.ferCode === 'atencao' || e.ferCode === 'em_ferias'), [empsList]);
 
@@ -372,7 +456,7 @@ const AvisoFeriasPage: React.FC = () => {
 
     const destinatarios = Array.from(getDestinatariosFerias(company?.name || ''));
     const body = [
-      `Segue aviso de ferias do(a) colaborador(a) abaixo:`,
+      `Segue solicitacao de ferias do(a) colaborador(a) abaixo:`,
       ``,
       `Nome: ${emp.name}`,
       `CPF: ${emp.cpf}`,
@@ -392,7 +476,7 @@ const AvisoFeriasPage: React.FC = () => {
     setEmailPdfDraft({
       to: destinatarios,
       cc: Array.from(CC_OBRIGATORIO),
-      subject: `Aviso de Ferias - ${emp.name} - ${company?.name || ''}`,
+      subject: `Solicitacao de Ferias - ${emp.name} - ${company?.name || ''}`,
       body,
       attachmentBlob: pdf.blob,
       attachmentName: pdf.fileName,
@@ -423,7 +507,7 @@ const AvisoFeriasPage: React.FC = () => {
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold font-display">Aviso de Férias — {emp.name}</h1>
+              <h1 className="text-2xl font-bold font-display">Solicitação de Férias — {emp.name}</h1>
               <p className="text-primary-foreground/70 text-sm">{company?.name} — {emp.cargo}</p>
             </div>
           </div>
@@ -471,8 +555,18 @@ const AvisoFeriasPage: React.FC = () => {
               <Printer className="w-4 h-4 mr-2" /> Gerar e Imprimir Aviso
             </Button>
             <Button onClick={handleEnviarEmailFerias} variant="outline" className="border-primary text-primary hover:bg-primary/10">
-              <Mail className="w-4 h-4 mr-2" /> Enviar por E-mail
+              <Mail className="w-4 h-4 mr-2" /> Solicitar Férias à Contabilidade
             </Button>
+            <VacationSignatureButton
+              employee={emp}
+              company={company}
+              inicioFerias={inicioFerias}
+              fimFerias={fimFerias}
+              retorno={retorno}
+              diasFerias={diasFerias}
+              session={session}
+              onBeforePublish={() => salvarFeriasNoBanco({ silent: true })}
+            />
           </div>
         </div>
         <EmailPdfModal
@@ -495,8 +589,8 @@ const AvisoFeriasPage: React.FC = () => {
             <CalendarCheck className="w-7 h-7" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold font-display">Aviso de Férias</h1>
-            <p className="text-primary-foreground/70 text-sm">Clique no funcionário para gerar o aviso</p>
+            <h1 className="text-2xl font-bold font-display">Solicitar Férias</h1>
+            <p className="text-primary-foreground/70 text-sm">Selecione o funcionário para solicitar as férias à contabilidade</p>
           </div>
         </div>
       </div>

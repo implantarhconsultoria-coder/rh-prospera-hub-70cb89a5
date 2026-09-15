@@ -44,7 +44,7 @@ type BulkRow = {
   saveError?: string;
 };
 
-type PreparedEmail = { to: string; subject: string; body: string };
+type PreparedEmail = { to: string; cc: string[]; subject: string; body: string };
 
 type Props = {
   open: boolean;
@@ -56,6 +56,7 @@ type Props = {
 };
 
 const FINANCE_EMAIL = 'financeiro@topac.com.br';
+const MANDATORY_EMAIL_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'];
 
 const normalize = (value: unknown) => String(value || '')
   .normalize('NFD')
@@ -115,19 +116,39 @@ const emptyBanking = (): BankingData => ({
   banco: '', bancoCodigo: '', agencia: '', conta: '', digito: '', tipoConta: '', titular: '', cpfTitular: '', chavePix: '', tipoChavePix: '', textoOriginal: '',
 });
 
-const bankingFromRow = (row: any): BankingData => ({
-  banco: String(row?.banco || ''),
-  bancoCodigo: String(row?.banco_codigo || ''),
-  agencia: String(row?.agencia || ''),
-  conta: String(row?.conta || ''),
-  digito: String(row?.conta_digito || ''),
-  tipoConta: String(row?.tipo_conta || ''),
-  titular: String(row?.titular_conta || row?.nome || ''),
-  cpfTitular: String(row?.cpf_titular || row?.cpf || ''),
-  chavePix: String(row?.pix || ''),
-  tipoChavePix: String(row?.tipo_chave_pix || ''),
-  textoOriginal: String(row?.dados_bancarios_origem || ''),
-});
+const legacyBankingFromObservacoes = (value: unknown) => {
+  const raw = String(value || '').trim();
+  if (!raw) return { banco: '', agencia: '', conta: '', chavePix: '' };
+  try {
+    const parsed = JSON.parse(raw);
+    const banking = parsed?.__topac_rh_meta === true ? (parsed?.dados_bancarios || {}) : {};
+    return {
+      banco: String(banking?.banco || '').trim(),
+      agencia: String(banking?.agencia || '').trim(),
+      conta: String(banking?.conta || '').trim(),
+      chavePix: String(banking?.pix || '').trim(),
+    };
+  } catch {
+    return { banco: '', agencia: '', conta: '', chavePix: '' };
+  }
+};
+
+const bankingFromRow = (row: any): BankingData => {
+  const legacy = legacyBankingFromObservacoes(row?.observacoes);
+  return {
+    banco: String(row?.banco || legacy.banco || ''),
+    bancoCodigo: String(row?.banco_codigo || ''),
+    agencia: String(row?.agencia || legacy.agencia || ''),
+    conta: String(row?.conta || legacy.conta || ''),
+    digito: String(row?.conta_digito || ''),
+    tipoConta: String(row?.tipo_conta || ''),
+    titular: String(row?.titular_conta || row?.nome || ''),
+    cpfTitular: String(row?.cpf_titular || row?.cpf || ''),
+    chavePix: String(row?.pix || legacy.chavePix || ''),
+    tipoChavePix: String(row?.tipo_chave_pix || ''),
+    textoOriginal: String(row?.dados_bancarios_origem || ''),
+  };
+};
 
 const bankingPayload = (data: BankingData) => {
   const payload: Record<string, string> = {};
@@ -192,6 +213,7 @@ const buildEmailForRow = (row: BulkRow): PreparedEmail => {
   const newLines = row.changes.map((item) => `${item.label}: ${item.newValue}`).join('\n');
   return {
     to: FINANCE_EMAIL,
+    cc: MANDATORY_EMAIL_CC,
     subject: `ALTERAÇÃO DE CONTA BANCÁRIA - ${employee.name} - ${company}`,
     body: `Prezados Robson e Paula,\n\nSolicito a alteração dos dados bancários do funcionário abaixo para os próximos pagamentos.\n\nFuncionário: ${employee.name}\nCPF: ${employee.cpf || 'Não informado'}\nEmpresa: ${company}\n\nDADOS ANTERIORES\n${oldLines}\n\nNOVOS DADOS\n${newLines}\n\nA alteração foi registrada no TOPAC RH PRO.\n\nPeço, por gentileza, que considerem os novos dados bancários para os próximos pagamentos e confirmem a atualização.\n\nAtenciosamente,\nTOPAC RH PRO`,
   };
@@ -205,13 +227,14 @@ const buildConsolidatedEmail = (rows: BulkRow[]): PreparedEmail => {
   }).join('\n\n----------------------------------------\n\n');
   return {
     to: FINANCE_EMAIL,
+    cc: MANDATORY_EMAIL_CC,
     subject: `ALTERAÇÃO DE DADOS BANCÁRIOS - ${rows.length} FUNCIONÁRIOS`,
     body: `Prezados Robson e Paula,\n\nSeguem solicitações de alteração de dados bancários registradas no TOPAC RH PRO.\n\n${sections}\n\nAtenciosamente,\nTOPAC RH PRO`,
   };
 };
 
 const openEmail = (email: PreparedEmail) => {
-  window.location.href = `mailto:${encodeURIComponent(email.to)}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`;
+  window.location.href = `mailto:${encodeURIComponent(email.to)}?cc=${encodeURIComponent(email.cc.join(','))}&subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`;
 };
 
 const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees, companies, companyId, onSaved }) => {
@@ -220,6 +243,7 @@ const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees,
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [preparedEmail, setPreparedEmail] = useState<PreparedEmail | null>(null);
+  const [loadingCurrentBanking, setLoadingCurrentBanking] = useState(false);
 
   const scopedEmployees = useMemo(() => companyId ? employees.filter((employee) => employee.companyId === companyId) : employees, [companyId, employees]);
   const scopeLabel = companyId ? companies.find((company) => company.id === companyId)?.name || 'empresa selecionada' : 'Todas as empresas';
@@ -235,6 +259,7 @@ const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees,
     setSaving(false);
     setAnalyzing(false);
     setPreparedEmail(null);
+    setLoadingCurrentBanking(false);
   };
 
   const close = () => {
@@ -258,7 +283,7 @@ const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees,
       const currentMap = new Map<string, BankingData>();
       if (ids.length) {
         const { data, error } = await (supabase as any).from('funcionarios')
-          .select('id,nome,cpf,banco,banco_codigo,agencia,conta,conta_digito,tipo_conta,titular_conta,cpf_titular,pix,tipo_chave_pix,dados_bancarios_origem')
+          .select('id,nome,cpf,banco,banco_codigo,agencia,conta,conta_digito,tipo_conta,titular_conta,cpf_titular,pix,tipo_chave_pix,dados_bancarios_origem,observacoes')
           .in('id', ids);
         if (error) throw error;
         ((data as any[]) || []).forEach((row) => currentMap.set(row.id, bankingFromRow(row)));
@@ -305,6 +330,7 @@ const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees,
         fields_changed: row.changes.map((item) => item.label),
         source_text: row.source,
         email_to: email.to,
+        email_cc: email.cc.join('; '),
         email_subject: email.subject,
         email_body: email.body,
         email_status: 'PREPARADO',
@@ -331,9 +357,62 @@ const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees,
     toast.success(`${savedRows.length} alteração(ões) bancária(s) registrada(s) no histórico. E-mail do Financeiro preparado.`);
   };
 
+  const sendCurrentBanking = async () => {
+    if (scopedEmployees.length !== 1 || loadingCurrentBanking) return;
+    const employee = scopedEmployees[0];
+    setLoadingCurrentBanking(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('funcionarios')
+        .select('id,nome,cpf,banco,banco_codigo,agencia,conta,conta_digito,tipo_conta,titular_conta,cpf_titular,pix,tipo_chave_pix,dados_bancarios_origem,observacoes')
+        .eq('id', employee.id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('Funcionário não encontrado no cadastro.');
+
+      const current = bankingFromRow(data);
+      const storedFields = [
+        ['Banco', current.banco],
+        ['Código do banco', current.bancoCodigo],
+        ['Agência', current.agencia],
+        ['Conta', current.conta],
+        ['Dígito', current.digito],
+        ['Tipo de conta', current.tipoConta],
+        ['Titular', String(data.titular_conta || '').trim()],
+        ['CPF do titular', String(data.cpf_titular || '').trim()],
+        ['PIX', current.chavePix],
+        ['Tipo de PIX', current.tipoChavePix],
+      ].map(([label, raw]) => [String(label), String(raw || '').trim()] as const)
+        .filter(([, value]) => Boolean(value));
+
+      if (!storedFields.length) {
+        toast.error('Nenhum dado bancário cadastrado para este funcionário.');
+        return;
+      }
+
+      const company = companyName(employee);
+      const lines = storedFields.map(([label, value]) => `${label}: ${value}`).join('\n');
+
+      const email: PreparedEmail = {
+        to: FINANCE_EMAIL,
+        cc: MANDATORY_EMAIL_CC,
+        subject: `DADOS BANCÁRIOS CADASTRADOS - ${employee.name} - ${company}`,
+        body: `Prezados Robson e Paula,\n\nSeguem abaixo os dados bancários que constam atualmente cadastrados no TOPAC RH PRO para o funcionário indicado.\n\nFuncionário: ${employee.name}\nCPF: ${employee.cpf || 'Não informado'}\nEmpresa: ${company}\n\nDADOS BANCÁRIOS CADASTRADOS\n${lines}\n\nEste envio é apenas informativo e representa o cadastro atual. Nenhuma alteração bancária foi realizada nesta operação.\n\nPeço, por gentileza, a conferência e utilização destes dados nos próximos pagamentos.\n\nAtenciosamente,\nTOPAC RH PRO`,
+      };
+
+      setPreparedEmail(email);
+      openEmail(email);
+      toast.success('Dados bancários cadastrados preparados para o Financeiro.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível carregar os dados bancários cadastrados.');
+    } finally {
+      setLoadingCurrentBanking(false);
+    }
+  };
+
   const copyPreparedEmail = async () => {
     if (!preparedEmail) return;
-    await navigator.clipboard.writeText(`Para: ${preparedEmail.to}\nAssunto: ${preparedEmail.subject}\n\n${preparedEmail.body}`);
+    await navigator.clipboard.writeText(`Para: ${preparedEmail.to}\nCc: ${preparedEmail.cc.join('; ')}\nAssunto: ${preparedEmail.subject}\n\n${preparedEmail.body}`);
     toast.success('E-mail copiado.');
   };
 
@@ -349,6 +428,24 @@ const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees,
             <b>Escopo: {scopeLabel}</b>
             <p className="mt-1 text-xs text-muted-foreground">Cole os dados recebidos. O sistema identifica o funcionário, compara com a ficha atual e mostra somente o que realmente mudou antes de salvar.</p>
           </div>
+
+          {scopedEmployees.length === 1 && (
+            <div className="flex flex-col gap-3 rounded-xl border border-violet-400/30 bg-violet-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-bold">Enviar cadastro bancário atual</p>
+                <p className="mt-1 text-xs text-muted-foreground">Envia exatamente os dados bancários que já aparecem na ficha do funcionário, inclusive cadastros antigos. Não altera nada e não inclui salário.</p>
+              </div>
+              <Button type="button" onClick={() => void sendCurrentBanking()} disabled={loadingCurrentBanking || saving || analyzing} className="shrink-0">
+                ${loadingCurrentBanking ? 'Carregando...' : 'Enviar dados cadastrados ao Financeiro'}
+              </Button>
+            </div>
+          )}
+
+          {scopedEmployees.length === 1 && (
+            <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-muted-foreground">
+              <b className="text-amber-300">Alteração de conta:</b> use o campo abaixo somente quando houver mudança. Após salvar, o e-mail compara também com cadastros antigos e discrimina apenas os campos efetivamente alterados, mostrando valor anterior → novo valor.
+            </div>
+          )}
 
           <textarea
             value={text}
@@ -396,7 +493,7 @@ const BulkBankingDataEditor: React.FC<Props> = ({ open, onOpenChange, employees,
 
           {preparedEmail && <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><p className="text-sm font-bold text-amber-300">E-mail do Financeiro pronto</p><p className="text-xs text-muted-foreground">Para Robson e Paula · {preparedEmail.to}</p></div>
+              <div><p className="text-sm font-bold text-amber-300">E-mail do Financeiro pronto</p><p className="text-xs text-muted-foreground">Para Robson e Paula · {preparedEmail.to} · CC: {preparedEmail.cc.join(', ')}</p></div>
               <div className="flex gap-2"><Button type="button" variant="outline" size="sm" onClick={() => void copyPreparedEmail()}><Copy className="mr-2 h-4 w-4" /> Copiar</Button><Button type="button" size="sm" onClick={() => openEmail(preparedEmail)}><Mail className="mr-2 h-4 w-4" /> Abrir no e-mail</Button></div>
             </div>
             <p className="mt-2 text-xs font-semibold">{preparedEmail.subject}</p>

@@ -31,6 +31,13 @@ const safeFile = (value: string) => value.normalize('NFD').replace(/[\u0300-\u03
 const brDateTime = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
 const currency = (value?: number | null) => value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const humanStatus = (value: unknown) => String(value || '').replace(/_/g, ' ');
+const looksLikeBankProof = (page: any) => {
+  const text = normalizeSignatureText(page?.text);
+  if (!text) return false;
+  const payroll = text.includes('recibo de pagamento') || text.includes('demonstrativo de pagamento') || text.includes('total liquido') || text.includes('proventos') || text.includes('salario base');
+  const proof = text.includes('comprovante') || text.includes('pix') || text.includes('transferencia') || text.includes('pagamento realizado') || text.includes('pagamento efetuado') || text.includes('autenticacao bancaria');
+  return proof && !payroll;
+};
 
 const normalizeSignatureText = (value: unknown) => String(value || '')
   .normalize('NFD')
@@ -54,7 +61,7 @@ const mergePairPdfBytes = async (pages: Uint8Array[]) => {
 };
 
 const statusClass = (status: string) => {
-  if (status === 'ASSINADO' || status === 'LIBERADO NO PORTAL' || status === 'PAGAMENTO CONFIRMADO' || status === 'IDENTIFICADO') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+  if (status === 'ASSINADO' || status.includes('LIBERADO') || status === 'PAGAMENTO CONFIRMADO' || status === 'IDENTIFICADO') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
   if (status.includes('ERRO') || status.includes('INVALIDO') || status.includes('NÃO') || status.includes('NAO')) return 'bg-red-500/15 text-red-400 border-red-500/30';
   if (status.includes('PENDENTE') || status.includes('AGUARDANDO')) return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
   return 'bg-sky-500/15 text-sky-300 border-sky-500/30';
@@ -62,8 +69,7 @@ const statusClass = (status: string) => {
 
 const displayStatus = (row: any) => {
   if (row.signature_status === 'ASSINADO') return 'ASSINADO';
-  if (row.holerite_confirmed && row.payment_confirmed) return 'LIBERADO NO PORTAL';
-  if (row.holerite_confirmed) return 'DOCUMENTO PRONTO';
+  if (row.holerite_confirmed) return row.receipt_id ? 'LIBERADO • COMPROVANTE ANEXADO' : 'LIBERADO • COMPROVANTE OPCIONAL';
   return humanStatus(row.holerite_status || 'DOCUMENTO PENDENTE');
 };
 
@@ -116,6 +122,8 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const [timeline, setTimeline] = useState<any>({ events: [], messages: [], employee: '' });
   const [consolidatedFilter, setConsolidatedFilter] = useState<'assinados'|'todos'|'pendentes'>('assinados');
   const unifiedInput = useRef<HTMLInputElement>(null);
+  const lateProofInput = useRef<HTMLInputElement>(null);
+  const [lateProofTarget, setLateProofTarget] = useState<any>(null);
   const autoRefreshRunning = useRef(false);
 
   const load = async (silent = false) => {
@@ -158,10 +166,86 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     catch { window.prompt('Copie o link do Portal de Holerite desta empresa:', portalUrl); }
   };
 
-  const sharePortalWhatsApp = () => {
-    const text = `Pessoal, os documentos para conferência e assinatura estão disponíveis no Portal TOPAC RH PRO da ${company?.name || 'empresa'}. Acesse pelo link abaixo e entre com CPF, data de nascimento e os 4 últimos números do celular cadastrado:
+  const formatMessageCompetencia = (value: unknown) => {
+    const [year, month] = String(value || '').split('-');
+    return year && month ? `${month}/${year}` : String(value || '');
+  };
 
-${portalUrl}`;
+  const buildPortalShareMessage = async () => {
+    const now = new Date();
+    const hourPart = new Intl.DateTimeFormat('pt-BR', {
+      hour: '2-digit',
+      hour12: false,
+      hourCycle: 'h23',
+      timeZone: 'America/Sao_Paulo',
+    }).formatToParts(now).find(part => part.type === 'hour')?.value;
+    const hour = Number(hourPart || '12');
+    const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+
+    const items: Array<{ order: number; label: string; competencia: string }> = [];
+    if (rows.some((row: any) => row.holerite_confirmed)) {
+      items.push({ order: 10, label: 'Pagamento', competencia });
+    }
+
+    try {
+      const { data, error } = await (supabase as any)
+        .from('payroll_documents')
+        .select('document_type,competencia,confirmed,is_current,status,created_at')
+        .eq('company_id', companyId)
+        .eq('is_current', true)
+        .in('document_type', ['ADIANTAMENTO', 'BENEFICIO_VR', 'BENEFICIO_VT', 'BENEFICIO_VR_VT', 'RECIBO_GARAGEM'])
+        .order('competencia', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      const docs = ((data as any[]) || []).filter(row => row?.confirmed !== false && String(row?.status || '').toUpperCase() !== 'SUBSTITUIDO');
+      const currentDocs = docs.filter(row => String(row.competencia || '') === competencia);
+      if (currentDocs.some(row => row.document_type === 'ADIANTAMENTO')) items.push({ order: 20, label: 'Adiantamento salarial', competencia });
+      if (currentDocs.some(row => row.document_type === 'RECIBO_GARAGEM')) items.push({ order: 50, label: 'Recibo de Garagem', competencia });
+
+      const latestByType = (types: string[]) => docs.find(row => types.includes(String(row.document_type || '')));
+      const vrDoc = latestByType(['BENEFICIO_VR', 'BENEFICIO_VR_VT']);
+      const vtDoc = latestByType(['BENEFICIO_VT', 'BENEFICIO_VR_VT']);
+      if (vrDoc) items.push({ order: 30, label: 'Vale-Refeição (VR)', competencia: String(vrDoc.competencia || competencia) });
+      if (vtDoc) items.push({ order: 40, label: 'Vale-Transporte (VT)', competencia: String(vtDoc.competencia || competencia) });
+    } catch (error) {
+      console.warn('[signature-share-message]', error);
+    }
+
+    const unique = Array.from(new Map(items.map(item => [`${item.label}:${item.competencia}`, item])).values())
+      .sort((a, b) => a.order - b.order);
+    const companyName = company?.name || 'empresa';
+    const documentBlock = unique.length
+      ? unique.map(item => `• ${item.label} — competência ${formatMessageCompetencia(item.competencia)}`).join('\n')
+      : '• Documentos disponíveis para conferência e assinatura';
+
+    return `${greeting}!
+
+Segue o link referente aos documentos abaixo para conferência e assinatura digital — ${companyName}:
+
+${documentBlock}
+
+Acesse pelo link:
+${portalUrl}
+
+Para entrar, utilize seu CPF, data de nascimento e os 4 últimos números do celular cadastrado.
+
+Após o acesso, confira os documentos e realize a assinatura digital. Em caso de dúvida, entre em contato no particular.`;
+  };
+
+  const copyPortalMessage = async () => {
+    try {
+      const text = await buildPortalShareMessage();
+      await navigator.clipboard.writeText(text);
+      toast.success('Mensagem de assinatura copiada.');
+    } catch {
+      const text = await buildPortalShareMessage();
+      window.prompt('Copie a mensagem de assinatura:', text);
+    }
+  };
+
+  const sharePortalWhatsApp = async () => {
+    const text = await buildPortalShareMessage();
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -174,12 +258,14 @@ ${portalUrl}`;
     let pending = 0;
     let duplicates = 0;
 
-    // REGRA FIXA DO FECHAMENTO:
-    // página 1 = recibo, 2 = comprovante; 3 = recibo, 4 = comprovante; e assim por diante.
-    // A segunda página NUNCA é tratada como um novo funcionário/documento.
-    for (let index = 0; index < ordered.length; index += 2) {
+    // REGRA NÃO BLOQUEANTE:
+    // cada RECIBO gera um documento. Se a página seguinte for claramente um comprovante bancário, ela entra no par.
+    // Se o comprovante não veio, o recibo segue sozinho para assinatura e o comprovante pode ser anexado depois.
+    for (let index = 0; index < ordered.length;) {
       const receiptPage = ordered[index];
-      const bankPage = ordered[index + 1] || null;
+      const candidateProof = ordered[index + 1] || null;
+      const bankPage = looksLikeBankProof(candidateProof) ? candidateProof : null;
+      index += bankPage ? 2 : 1;
       if (!receiptPage?.bytes?.byteLength) {
         pending += 1;
         continue;
@@ -210,7 +296,7 @@ ${portalUrl}`;
       if (existingError) throw existingError;
       if (existing) { duplicates += 1; continue; }
 
-      const filename = `${safeFile(employeeName)}_${competencia}_RECIBO_COMPROVANTE.pdf`;
+      const filename = `${safeFile(employeeName)}_${competencia}_${bankPage ? 'RECIBO_COMPROVANTE' : 'RECIBO'}.pdf`;
       const documentPath = `${companyId}/${competencia}/holerites/${safeUuid()}-${filename}`;
       const { error: documentStorageError } = await supabase.storage.from(BUCKET).upload(
         documentPath,
@@ -249,7 +335,7 @@ ${portalUrl}`;
           subtipo_documento_detectado: receiptPage.documentSubtype,
           valor_liquido_detectado: receiptPage.amountDetected,
           usou_ocr: receiptPage.usedOcr,
-          regra_importacao: 'PARES_FIXOS_RECIBO_COMPROVANTE_SEM_VALIDACAO',
+          regra_importacao: bankPage ? 'RECIBO_COMPROVANTE_QUANDO_PRESENTE' : 'RECIBO_SEM_COMPROVANTE_NAO_BLOQUEANTE',
         },
         status: 'HOLERITE_PENDENTE',
       }).select('id').single();
@@ -358,13 +444,41 @@ ${portalUrl}`;
 
       await load();
       console.info('[payroll-sequential-upload]', { companyId, competencia, created, pending, duplicates, approvalSteps: 0 });
-      toast.success(`${created} documento(s) RECIBO + COMPROVANTE processados e enviados ao fluxo de assinatura.${pending ? ` ${pending} par(es) foi(ram) preservado(s) para revisão por falta de identificação no RECIBO.` : ''}${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);
+      toast.success(`${created} documento(s) processado(s) e liberado(s) para assinatura. Comprovante é opcional e pode ser anexado depois.${pending ? ` ${pending} par(es) foi(ram) preservado(s) para revisão por falta de identificação no RECIBO.` : ''}${duplicates ? ` ${duplicates} duplicado(s) ignorado(s).` : ''}`);
     } catch (error: any) {
       console.error('[payroll-sequential-upload]', error);
       toast.error(`Falha no processamento: ${error?.message || error}`);
     } finally {
       setUploading(false);
       if (unifiedInput.current) unifiedInput.current.value = '';
+    }
+  };
+
+  const uploadLateProof = async (row: any, file?: File) => {
+    if (!row?.document_id || !file) return;
+    setUploading(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const hash = await sha256Browser(bytes);
+      const filename = safeFile(file.name || `COMPROVANTE_${row.employee_name || 'FUNCIONARIO'}_${competencia}.pdf`);
+      const path = `${companyId}/${competencia}/comprovantes-posteriores/${safeUuid()}-${filename}`;
+      const { error: storageError } = await supabase.storage.from(BUCKET).upload(path, new Blob([bytes as any], { type: 'application/pdf' }), { contentType: 'application/pdf', upsert: false });
+      if (storageError) throw storageError;
+      const { error: insertError } = await (supabase as any).from('payroll_payment_receipts').insert({
+        company_id: companyId, employee_id: row.employee_id, document_id: row.document_id, competencia,
+        storage_bucket: BUCKET, storage_path: path, original_filename: filename, mime_type: 'application/pdf', file_size: bytes.byteLength,
+        receipt_sha256: hash, source_sha256: hash, extracted_data: { upload_posterior: true, opcional: true, nao_bloqueante: true },
+        match_confidence: 100, status: 'PAGAMENTO_IDENTIFICADO', confirmed: false,
+        idempotency_key: `late-proof:${row.document_id}:${hash}`,
+      });
+      if (insertError) { await supabase.storage.from(BUCKET).remove([path]); throw insertError; }
+      toast.success('Comprovante anexado. O documento já podia ser finalizado antes deste anexo.');
+      await load();
+    } catch (error: any) {
+      console.error('[late-proof-upload]', error);
+      toast.error(error?.message || 'Não foi possível anexar o comprovante.');
+    } finally {
+      setUploading(false); setLateProofTarget(null); if (lateProofInput.current) lateProofInput.current.value = '';
     }
   };
 
@@ -389,15 +503,26 @@ ${portalUrl}`;
   const dossier = async (row: any) => {
     if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
     try {
-      const urls = await apiCall('signed-urls', { document_id: row.document_id });
-      if (!urls.holerite_url || !urls.certificate_url) throw new Error('Dossiê incompleto: documento ou certificado ausente.');
-      const sources: Array<{url:string;label:string}> = [
-        { url: urls.holerite_url, label: 'Recibo + comprovante' },
-        { url: urls.certificate_url, label: 'Certificado' },
-      ];
-      if (!urls.document_includes_bank_proof && urls.receipt_url) sources.push({ url: urls.receipt_url, label: 'Comprovante' });
-      await mergePdfUrls(sources, `DOSSIE_PAGAMENTO_${safeFile(row.employee_name || 'FUNCIONARIO')}_${competencia}.pdf`);
-    } catch (error: any) { toast.error(error.message); }
+      const result = await apiCall('dossier-url', { document_id: row.document_id });
+      if (!result.dossier_url) throw new Error('O servidor não retornou o dossiê completo.');
+
+      const response = await fetch(result.dossier_url, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Falha ${response.status} ao baixar o dossiê completo.`);
+      const blob = await response.blob();
+      if (!blob.size) throw new Error('O dossiê completo foi gerado vazio.');
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `DOSSIE_COMPLETO_${safeFile(row.employee_name || 'FUNCIONARIO')}_TODOS_OS_DOCUMENTOS.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 3000);
+      toast.success(`Dossiê completo gerado com ${Number(result.dossier_document_count || 0)} documento(s) assinado(s).`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível gerar o dossiê completo.');
+    }
   };
 
   const consolidated = async () => {
@@ -424,16 +549,17 @@ ${portalUrl}`;
     } catch (error: any) { toast.error(error?.message || 'Não foi possível excluir.'); }
   };
 
-  const releasedCount = rows.filter(r => r.holerite_confirmed && r.payment_confirmed && r.signature_status !== 'ASSINADO').length;
+  const releasedCount = rows.filter(r => r.holerite_confirmed && r.signature_status !== 'ASSINADO').length;
 
   return <div className="mt-5 space-y-4 rounded-2xl border border-emerald-500/25 bg-card p-5">
     <input ref={unifiedInput} type="file" accept="application/pdf,.pdf,.zip,application/zip" multiple className="hidden" onChange={e=>void uploadUnified(Array.from(e.target.files || []))}/>
+    <input ref={lateProofInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={e=>void uploadLateProof(lateProofTarget, e.target.files?.[0])}/>
 
     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
       <div>
         <p className="text-xs uppercase tracking-wide text-emerald-400">Fechamento → Pagamento</p>
-        <h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Recibos, comprovantes e assinatura eletrônica</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Empresa isolada: {company?.name}. Envie o PDF já montado em sequência: RECIBO + COMPROVANTE de cada funcionário. O par segue direto para assinatura, sem etapa de validação do comprovante. VR e VT permanecem separados deste lote.</p>
+        <h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><FileSignature className="h-5 w-5"/>Recibos e assinatura eletrônica · comprovante opcional</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Empresa isolada: {company?.name}. Envie os RECIBOS. Se o comprovante vier logo depois do recibo, ele entra no mesmo par. Se não vier, o recibo é liberado normalmente: o comprovante é OPCIONAL, não bloqueia a finalização e pode ser anexado posteriormente. VR e VT permanecem separados deste lote.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button onClick={()=>unifiedInput.current?.click()} disabled={uploading}><FileUp className="mr-2 h-4 w-4"/>SUBIR PDF SEQUENCIAL</Button>
@@ -444,7 +570,7 @@ ${portalUrl}`;
     <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div><p className="flex items-center gap-2 text-xs font-bold uppercase text-cyan-300"><ShieldCheck className="h-4 w-4"/>Portal de holerite desta empresa</p><p className="mt-2 break-all font-mono text-sm">{portalUrl}</p><p className="mt-2 text-xs text-muted-foreground">Este link aceita somente funcionários vinculados a {company?.name}. O documento completo do par segue para visualizar e assinar.</p></div>
-        <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={()=>void copyPortal()}><Copy className="mr-2 h-4 w-4"/>Copiar link</Button><Button variant="outline" onClick={sharePortalWhatsApp}>Compartilhar no WhatsApp</Button><Button variant="outline" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className="mr-2 h-4 w-4"/>Abrir portal</Button></div>
+        <div className="flex shrink-0 flex-wrap gap-2"><Button variant="outline" onClick={()=>void copyPortal()}><Copy className="mr-2 h-4 w-4"/>Copiar link</Button><Button variant="outline" onClick={()=>void copyPortalMessage()}><Copy className="mr-2 h-4 w-4"/>Copiar mensagem</Button><Button variant="outline" onClick={()=>void sharePortalWhatsApp()}>Compartilhar no WhatsApp</Button><Button variant="outline" onClick={()=>window.open(portalUrl,'_blank','noopener,noreferrer')}><ExternalLink className="mr-2 h-4 w-4"/>Abrir portal</Button></div>
       </div>
     </div>
 
@@ -452,7 +578,7 @@ ${portalUrl}`;
 
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Kpi label="Documentos" value={rows.length}/>
-      <Kpi label="Pagamentos vinculados" value={rows.filter(r=>r.payment_confirmed).length}/>
+      <Kpi label="Comprovantes anexados" value={rows.filter(r=>r.receipt_id).length}/>
       <Kpi label="Liberados no portal" value={releasedCount}/>
       <Kpi label="Assinados" value={rows.filter(r=>r.signature_status==='ASSINADO').length} success/>
     </div>
@@ -460,16 +586,16 @@ ${portalUrl}`;
     <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[1250px] text-xs"><thead className="bg-muted/50"><tr>{['Funcionário','Documento','Comprovante','Portal','Visualização','Assinatura','Status','Ações'].map(h=><th key={h} className="px-3 py-2 text-left uppercase text-muted-foreground">{h}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.document_id} className="border-t align-top">
       <td className="px-3 py-3"><b>{row.employee_name||'—'}</b><div className="text-muted-foreground">{row.employee_role||'—'}</div></td>
       <td className="px-3 py-3">{row.holerite_confirmed?<span className="text-emerald-400">PRONTO</span>:'Pendente'}<div className="text-muted-foreground">{currency(row.net_amount)}</div></td>
-      <td className="px-3 py-3">{row.payment_confirmed?<span className="text-emerald-400">INCLUÍDO NO PAR</span>:<span className="text-muted-foreground">SEM COMPROVANTE NO PAR</span>}</td>
-      <td className="px-3 py-3">{row.holerite_confirmed&&row.payment_confirmed?(row.opened_at?<span className="text-cyan-300">Acessado<br/>{brDateTime(row.opened_at)}</span>:<span className="text-emerald-400">LIBERADO</span>):<span className="text-muted-foreground">Aguardando par completo</span>}</td>
+      <td className="px-3 py-3">{row.receipt_id?<span className="text-emerald-400">ANEXADO</span>:<span className="text-amber-300">OPCIONAL · PODE ANEXAR DEPOIS</span>}</td>
+      <td className="px-3 py-3">{row.holerite_confirmed?(row.opened_at?<span className="text-cyan-300">Acessado<br/>{brDateTime(row.opened_at)}</span>:<span className="text-emerald-400">LIBERADO</span>):<span className="text-muted-foreground">Aguardando documento</span>}</td>
       <td className="px-3 py-3">{brDateTime(row.viewed_at)}</td><td className="px-3 py-3">{brDateTime(row.signed_at)}</td>
       <td className="px-3 py-3"><Badge variant="outline" className={statusClass(displayStatus(row))}>{displayStatus(row)}</Badge></td>
-      <td className="px-3 py-3"><div className="flex max-w-[520px] flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'holerite')}>Documento</Button>{row.receipt_id&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'receipt')}>Comprovante</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'certificate')}>Certificado</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="outline" onClick={()=>void dossier(row)}><FileArchive className="mr-1 h-3 w-3"/>Dossiê</Button>}{row.request_id&&<Button size="sm" variant="ghost" onClick={()=>void openTimeline(row)}><Clock3 className="mr-1 h-3 w-3"/>Histórico</Button>}{row.signature_status!=='ASSINADO'&&<Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={()=>void deleteEntry(row)}><Trash2 className="mr-1 h-3 w-3"/>Excluir</Button>}</div></td>
+      <td className="px-3 py-3"><div className="flex max-w-[520px] flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'holerite')}>Documento</Button>{row.receipt_id&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'receipt')}>Comprovante</Button>}{!row.receipt_id&&<Button size="sm" variant="outline" onClick={()=>{setLateProofTarget(row);lateProofInput.current?.click();}}><FileUp className="mr-1 h-3 w-3"/>Anexar comprovante</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'certificate')}>Certificado</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="outline" onClick={()=>void dossier(row)}><FileArchive className="mr-1 h-3 w-3"/>Dossiê</Button>}{row.request_id&&<Button size="sm" variant="ghost" onClick={()=>void openTimeline(row)}><Clock3 className="mr-1 h-3 w-3"/>Histórico</Button>}{row.signature_status!=='ASSINADO'&&<Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={()=>void deleteEntry(row)}><Trash2 className="mr-1 h-3 w-3"/>Excluir</Button>}</div></td>
     </tr>)}{!rows.length&&<tr><td colSpan={8} className="p-8 text-center text-muted-foreground">Nenhum documento recebido nesta competência.</td></tr>}</tbody></table></div>
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3"><FileArchive className="h-4 w-4"/><b className="text-xs">SALVAR PDF CONSOLIDADO</b><select value={consolidatedFilter} onChange={e=>setConsolidatedFilter(e.target.value as any)} className="rounded border bg-background px-2 py-1.5 text-xs"><option value="assinados">Somente assinados</option><option value="todos">Todos</option><option value="pendentes">Somente pendentes</option></select><Button size="sm" variant="outline" onClick={()=>void consolidated()}>Salvar consolidado</Button></div>
 
-    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando lote...</b><p className="mt-1 text-xs text-muted-foreground">Registrando cada par RECIBO + COMPROVANTE de {company?.name}, sem aprovação de comprovante.</p></div></div>}
+    {uploading&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60"><div className="rounded-xl border bg-background p-5 text-center"><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin"/><b>Processando lote...</b><p className="mt-1 text-xs text-muted-foreground">Registrando recibos; comprovantes presentes entram no par, os ausentes ficam opcionais de {company?.name}, sem aprovação de comprovante.</p></div></div>}
 
     <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}><DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto"><DialogHeader><DialogTitle>Histórico — {timeline.employee}</DialogTitle></DialogHeader><div className="space-y-2">{[...(timeline.events||[]).map((e:any)=>({...e,_kind:'evento'})),...(timeline.messages||[]).map((m:any)=>({...m,_kind:'mensagem'}))].sort((a:any,b:any)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime()).map((item:any,index:number)=><div key={`${item._kind}-${item.id}-${index}`} className="rounded-lg border p-3 text-xs"><div className="flex justify-between gap-3"><b>{item.event_type||item.message_kind}</b><span className="text-muted-foreground">{brDateTime(item.created_at)}</span></div><div className="mt-1 text-muted-foreground">{item._kind==='mensagem'?`${item.status} · ${item.channel}${item.error?` · ${item.error}`:''}`:JSON.stringify(item.payload||{})}</div></div>)}</div></DialogContent></Dialog>
   </div>;

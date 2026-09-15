@@ -21,11 +21,14 @@ const AUTH_METHOD = 'CPF_NASCIMENTO_CELULAR4';
 const SESSION_MINUTES = 30;
 const MAX_IP_ATTEMPTS_15M = 8;
 const MAX_CPF_ATTEMPTS_15M = 5;
+const MANUAL_AUTH_FAILURES = ['INVALID_FORMAT', 'NO_MATCH_IN_COMPANY_SCOPE', 'SIGNATURE_EXCLUDED'];
 const HOLERITE = 'HOLERITE';
 const BENEFICIO = 'BENEFICIO_VR_VT';
 const BENEFICIO_VR = 'BENEFICIO_VR';
 const BENEFICIO_VT = 'BENEFICIO_VT';
 const ADIANTAMENTO = 'ADIANTAMENTO';
+const RECIBO_GARAGEM = 'RECIBO_GARAGEM';
+const AVISO_FERIAS = 'AVISO_FERIAS';
 const BENEFIT_TYPES = new Set([BENEFICIO, BENEFICIO_VR, BENEFICIO_VT]);
 
 const COMPANY_SCOPE_CNPJS: Record<string, string> = {
@@ -55,6 +58,8 @@ const documentLabel = (type: string, paymentKind?: string | null) => {
   if (type === BENEFICIO_VT) return complement ? 'Recibo VT — Pagamento complementar' : 'Recibo VT';
   if (type === BENEFICIO) return complement ? 'Recibo VR / VT — Pagamento complementar' : 'Recibo VR / VT';
   if (type === ADIANTAMENTO) return 'Recibo de Adiantamento';
+  if (type === RECIBO_GARAGEM) return 'Recibo de Garagem';
+  if (type === AVISO_FERIAS) return 'Aviso de Férias';
   return 'Holerite';
 };
 
@@ -152,7 +157,6 @@ const availableDocuments = async (service: any, employeeId: string, companyId: s
   const requestByDoc = new Map((requests || []).map((row: any) => [row.document_id, row]));
 
   return docs
-    .filter((doc: any) => doc.document_type !== HOLERITE || receiptByDoc.has(doc.id))
     .map((doc: any) => {
       const receipt: any = receiptByDoc.get(doc.id);
       const signature: any = signatureByDoc.get(doc.id);
@@ -199,9 +203,9 @@ const ensureRequest = async (service: any, req: any, sessionRow: any, documentId
       .eq('status', 'PAGAMENTO_CONFIRMADO')
       .eq('confirmed', true)
       .maybeSingle();
-    if (result.error || !result.data) throw Object.assign(new Error('payment_not_confirmed'), { status: 409 });
-    receipt = result.data;
-  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO) {
+    if (result.error) throw result.error;
+    receipt = result.data || null;
+  } else if (!BENEFIT_TYPES.has(doc.document_type) && doc.document_type !== ADIANTAMENTO && doc.document_type !== RECIBO_GARAGEM && doc.document_type !== AVISO_FERIAS) {
     throw Object.assign(new Error('document_not_available'), { status: 404 });
   }
 
@@ -287,8 +291,8 @@ const authenticate = async (service: any, req: any, res: any, body: any, scopedC
   const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
 
   const [{ count: ipCount }, { count: cpfCount }] = await Promise.all([
-    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('ip', ip).gte('created_at', cutoff),
-    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('identifier_hash', identifierHash).gte('created_at', cutoff),
+    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('ip', ip).eq('success', false).in('failure_reason', MANUAL_AUTH_FAILURES).gte('created_at', cutoff),
+    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('identifier_hash', identifierHash).eq('success', false).in('failure_reason', MANUAL_AUTH_FAILURES).gte('created_at', cutoff),
   ]);
   if (Number(ipCount || 0) >= MAX_IP_ATTEMPTS_15M || Number(cpfCount || 0) >= MAX_CPF_ATTEMPTS_15M) {
     await service.from('payroll_public_access_attempts').insert({ identifier_hash: identifierHash, ip, success: false, failure_reason: 'RATE_LIMIT' });
@@ -554,7 +558,7 @@ export default async function handler(req: any, res?: any) {
       await service.from('payroll_terms_acceptances').insert({
         company_id: sessionRow.company_id,
         employee_id: sessionRow.employee_id,
-        term_version: BENEFIT_TYPES.has(doc.document_type) ? 'benefit-signature-v1' : 'payroll-signature-v1',
+        term_version: doc.document_type === AVISO_FERIAS ? 'vacation-notice-signature-v1' : BENEFIT_TYPES.has(doc.document_type) ? 'benefit-signature-v1' : 'payroll-signature-v1',
         accepted: true,
         authentication_method: AUTH_METHOD,
         accepted_at: signedAt,

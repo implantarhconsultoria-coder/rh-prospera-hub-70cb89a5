@@ -257,21 +257,27 @@ export default async function handler(req: any, res?: any) {
 
     if (action === 'signed-urls') {
       const doc = await loadDocument(service, String(body.document_id || ''));
-      if (!doc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
+      const { data: receipt } = await service.from('payroll_payment_receipts').select('*').eq('document_id', doc.id).eq('status', 'PAGAMENTO_CONFIRMADO').maybeSingle();
+      const { data: requestRow } = await service.from('payroll_signature_requests').select('id').eq('document_id', doc.id).maybeSingle();
+      const { data: signature } = requestRow
+        ? await service.from('payroll_signatures').select('*').eq('request_id', requestRow.id).maybeSingle()
+        : { data: null } as any;
+      return sendJson(res, {
+        ok: true,
+        holerite_url: await signedUrl(service, doc.storage_path, 900),
+        receipt_url: receipt?.storage_path ? await signedUrl(service, receipt.storage_path, 900) : null,
+        certificate_url: signature?.certificate_path ? await signedUrl(service, signature.certificate_path, 900) : null,
+        document_includes_bank_proof: doc?.extracted_data?.includes_bank_proof === true,
+      });
+    }
 
-      // REGRA DO DOSSIÊ: não existe filtro por competência.
-      // Ao solicitar o dossiê a partir de qualquer linha assinada, juntamos TODO o histórico
-      // de documentos assinados desse funcionário na empresa: holerites, adiantamentos,
-      // benefícios, férias e qualquer outro tipo que possua assinatura/certificado.
+    if (action === 'dossier-url') {
+      const doc = await loadDocument(service, String(body.document_id || ''));
+      if (!doc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
       const complete = await buildCompleteDossier(service, doc);
       return sendJson(res, {
         ok: true,
-        holerite_url: await signedUrl(service, complete.dossierPath, 900),
-        // A UI atual exige um segundo PDF. Entregamos um índice gerado pelo próprio servidor,
-        // evitando depender de certificado individual e mantendo o dossiê consolidado íntegro.
-        certificate_url: await signedUrl(service, complete.indexPath, 900),
-        receipt_url: null,
-        document_includes_bank_proof: true,
+        dossier_url: await signedUrl(service, complete.dossierPath, 900),
         dossier_scope: 'ALL_SIGNED_DOCUMENTS_ALL_COMPETENCIAS',
         dossier_document_count: complete.documentCount,
       });

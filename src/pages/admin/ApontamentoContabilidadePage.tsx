@@ -1123,7 +1123,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
       para = [
         'marisa@aatconsultoria.com.br',
         'dp@aatconsultoria.com.br',
-        'lucilene@aatconsultoria.com.br',
+        '',
       ];
     }
 
@@ -1181,7 +1181,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
       const para = [
         'marisa@aatconsultoria.com.br',
         'dp@aatconsultoria.com.br',
-        'lucilene@aatconsultoria.com.br',
+        '',
       ];
       const cc = Array.from(CC_OBRIGATORIO);
       const nomes = grupos.map((g) => g.company.name).join(', ');

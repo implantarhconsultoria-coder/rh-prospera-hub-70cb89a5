@@ -7,6 +7,8 @@ import EmployeeSmartEditOverlay from '@/components/EmployeeSmartEditOverlay';
 import EpiSemestralAlert from '@/components/EpiSemestralAlert';
 import ArchiveCoverDialog from '@/components/ArchiveCoverDialog';
 import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';
+import CabinetLabelsAddon from '@/components/CabinetLabelsAddon';
+import SupportCenter from '@/components/SupportCenter';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -111,6 +113,7 @@ const AppLayout: React.FC = () => {
     return (
       <div className="topac-neon-skin min-h-screen bg-[#020609] text-zinc-100">
         <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>
+        <SupportCenter />
       </div>
     );
   }
@@ -245,6 +248,8 @@ const AppLayout: React.FC = () => {
       )}
 
       <FechamentoEtiquetasAddon />
+      <CabinetLabelsAddon />
+      <SupportCenter />
       <ArchiveCoverDialog open={archiveCoverOpen} onOpenChange={setArchiveCoverOpen} />
       <EmployeeSmartEditOverlay />
       <AssistenteFab />

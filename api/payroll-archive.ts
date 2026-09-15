@@ -90,6 +90,13 @@ const benefitFlags = (value: string) => {
   return { vr, vt };
 };
 
+const personalOtherFlags = (value: string) => {
+  const text = normalizeText(value);
+  const ferias = text.includes('ferias') || text.includes('feria');
+  const reembolso = text.includes('reembolso') || text.includes('ressarcimento');
+  return { ferias, reembolso, allowed: ferias || reembolso };
+};
+
 const loadArchive = async (service: any, employeeId: string, companyId: string) => {
   const { data: payrollDocs, error: payrollError } = await service
     .from('payroll_documents')
@@ -118,7 +125,6 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
 
   const signedPayroll = (payrollDocs || []).filter((doc: any) => {
     if (!signatureByDocument.has(doc.id)) return false;
-    if (doc.document_type === 'HOLERITE' && !paidDocuments.has(doc.id)) return false;
     return true;
   });
 
@@ -137,6 +143,14 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
     return flags.vr || flags.vt;
   });
 
+  const historicalOtherDocs = (benefitDocs || []).filter((doc: any) => {
+    if (importedSourceIds.has(doc.id)) return false;
+    const text = [doc.tipo_documento, doc.categoria, doc.descricao, doc.nome_arquivo].filter(Boolean).join(' | ');
+    const benefits = benefitFlags(text);
+    if (benefits.vr || benefits.vt) return false;
+    return personalOtherFlags(text).allowed;
+  });
+
   const payrollItems = await Promise.all(signedPayroll.map(async (doc: any) => {
     const signature: any = signatureByDocument.get(doc.id);
     const bucket = doc.storage_bucket || 'payroll-private';
@@ -144,13 +158,21 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
     if (!url) return null;
     const benefitTypes = doc.document_type === 'BENEFICIO_VR' ? ['VR'] : doc.document_type === 'BENEFICIO_VT' ? ['VT'] : doc.document_type === 'BENEFICIO_VR_VT' ? ['VR', 'VT'] : [];
     const complement = doc.payment_kind === 'COMPLEMENTAR';
-    const baseLabel = doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : 'Holerite';
+    const isVacation = doc.document_type === 'AVISO_FERIAS';
+    const baseLabel = isVacation ? 'Aviso de Férias' : doc.document_type === 'BENEFICIO_VR' ? 'Recibo VR' : doc.document_type === 'BENEFICIO_VT' ? 'Recibo VT' : doc.document_type === 'BENEFICIO_VR_VT' ? 'Recibo VR / VT' : doc.document_type === 'ADIANTAMENTO' ? 'Recibo de Adiantamento' : doc.document_type === 'RECIBO_GARAGEM' ? 'Recibo de Garagem' : 'Holerite';
     const label = complement && benefitTypes.length ? `${baseLabel} — Pagamento complementar` : baseLabel;
     return {
       id: `payroll:${doc.id}`,
       source: 'payroll',
-      category: benefitTypes.length ? 'beneficio' : 'pagamento',
+      category: isVacation ? 'documento' : doc.document_type === 'RECIBO_GARAGEM' ? 'garagem' : benefitTypes.length ? 'beneficio' : 'pagamento',
       benefit_types: benefitTypes,
+      archive_kinds: doc.document_type === 'HOLERITE' ? ['holerite']
+        : doc.document_type === 'BENEFICIO_VR' ? ['vr']
+        : doc.document_type === 'BENEFICIO_VT' ? ['vt']
+        : doc.document_type === 'BENEFICIO_VR_VT' ? ['vr', 'vt']
+        : doc.document_type === 'RECIBO_GARAGEM' ? ['garagem']
+        : ['outros'],
+      document_type: doc.document_type,
       label,
       competencia: doc.competencia,
       filename: doc.original_filename || '',
@@ -177,6 +199,8 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
       source: 'historico',
       category: 'beneficio',
       benefit_types: [flags.vr ? 'VR' : null, flags.vt ? 'VT' : null].filter(Boolean),
+      archive_kinds: [flags.vr ? 'vr' : null, flags.vt ? 'vt' : null].filter(Boolean),
+      document_type: doc.tipo_documento || doc.categoria || 'BENEFICIO',
       label: flags.vr && flags.vt ? 'Recibo VR + VT' : flags.vr ? 'Recibo VR' : 'Recibo VT',
       competencia: doc.competencia || '',
       filename: doc.nome_arquivo || '',
@@ -187,7 +211,33 @@ const loadArchive = async (service: any, employeeId: string, companyId: string) 
     };
   }));
 
-  return [...payrollItems, ...benefitItems]
+  const otherItems = await Promise.all(historicalOtherDocs.map(async (doc: any) => {
+    const text = [doc.tipo_documento, doc.categoria, doc.descricao, doc.nome_arquivo].filter(Boolean).join(' | ');
+    const flags = personalOtherFlags(text);
+    const path = doc.storage_path || (doc.arquivo_url && !/^https?:\/\//i.test(doc.arquivo_url) ? doc.arquivo_url : '');
+    const bucket = doc.storage_bucket || 'documentos-funcionarios';
+    const url = path
+      ? await createFileUrl(service, bucket, path)
+      : (/^https?:\/\//i.test(doc.arquivo_url || '') ? doc.arquivo_url : null);
+    if (!url) return null;
+    return {
+      id: `other:${doc.id}`,
+      source: 'historico',
+      category: 'outros',
+      archive_kinds: ['outros'],
+      benefit_types: [],
+      document_type: doc.tipo_documento || doc.categoria || 'OUTROS',
+      label: flags.reembolso ? 'Reembolso' : flags.ferias ? 'Férias' : (doc.tipo_documento || 'Documento'),
+      competencia: doc.competencia || '',
+      filename: doc.nome_arquivo || '',
+      date: doc.data_documento || doc.created_at,
+      signed: false,
+      signed_at: null,
+      url,
+    };
+  }));
+
+  return [...payrollItems, ...benefitItems, ...otherItems]
     .filter(Boolean)
     .sort((a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
 };

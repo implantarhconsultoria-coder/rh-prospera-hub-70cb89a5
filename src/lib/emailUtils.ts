@@ -43,10 +43,11 @@ const PDF_CONTENT_TYPE = 'application/pdf';
 
 export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;
 const EMAIL_GOIANIA_ANTIGO = 'gyn@topac.com.br';
+const EMAILS_REMOVIDOS = new Set(['lucilene' + '@aatconsultoria.com.br']);
 
 export const EMAIL_CONTABILIDADE_VANESSA = 'dp@aatconsultoria.com.br' as const;
 export const EMAIL_CONTABILIDADE_MARISA = 'marisa@aatconsultoria.com.br' as const;
-const EMAIL_CONTABILIDADE_LEGADO = 'lucilene@aatconsultoria.com.br';
+const EMAIL_CONTABILIDADE_LEGADO = '';
 
 export const normalizeTopacRecipients = (emails: readonly string[] = []): string[] =>
   Array.from(new Set(

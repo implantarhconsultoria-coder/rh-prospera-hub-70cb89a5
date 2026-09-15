@@ -39,7 +39,7 @@ export type EmailPdfDraft = {
 type EmailAttachment = NonNullable<EmailPdfDraft['attachments']>[number];
 type EmailPdfModalProps = { open: boolean; draft: EmailPdfDraft | null; onOpenChange: (open: boolean) => void };
 
-const ATESTADO_TO = ['marisa@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br', 'dp@aatconsultoria.com.br'];
+const ATESTADO_TO = ['marisa@aatconsultoria.com.br', '', 'dp@aatconsultoria.com.br'];
 const ATESTADO_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'];
 
 const parseEmails = (value: string) => {
@@ -157,7 +157,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     if (!draft || !open) return;
     const atestado = isAtestadoSubject(draft.subject || '');
     const admissional = isAdmissionalSubject(draft.subject || '');
-    const baseBody = atestado ? buildAtestadoBody(draft.body || '') : admissional ? buildAdmissionalBody(draft.body || '') : draft.body || '';
+    const baseBody = atestado ? buildAtestadoBody(draft.body || '') : draft.body || '';
     const baseCc = atestado ? ATESTADO_CC : draft.cc || [];
     const policy = applyTopacEmailPolicy({
       subject: draft.subject,

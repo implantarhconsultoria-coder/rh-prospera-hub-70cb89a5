@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, CheckCircle2, FileSearch, Loader2, Mail, RefreshCw, Save, Trash2, Upload } from 'lucide-react';
-import { CC_OBRIGATORIO, sendEmailWithPdfAttachment } from '@/lib/emailUtils';
+import { CC_OBRIGATORIO } from '@/lib/emailUtils';
 import { gerarAutorizacaoExameAdmissionalPdf } from '@/lib/pdfGenerator';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
@@ -98,7 +98,7 @@ const initialForm: Partial<PreCadastro> = {
 };
 
 const ADMISSION_BUCKETS = ['documentos-admissionais', 'documentos-funcionarios', 'atestados', 'documentos-ativos'];
-const CONTABILIDADE_DESTINATARIOS = ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', 'lucilene@aatconsultoria.com.br'];
+const CONTABILIDADE_DESTINATARIOS = ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br', ''];
 const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
 const LOW_CONFIDENCE = 0.75;
 
@@ -133,6 +133,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('TOXICOLOG')) return 'TOXICOLOGICO';
   if (normalizado.includes('GUIA') && normalizado.includes('ASO')) return 'GUIA ASO';
   if (normalizado.includes('ASO') || normalizado.includes('EXAME')) return 'ASO';
+  if (/DOCUMENTACAO[_ ]UNIFICADA|DOCUMENTOS[_ ]UNIFICADOS|ARQUIVO[_ ]UNICO/.test(normalizado)) return 'DOCUMENTACAO UNIFICADA';
   if (normalizado.includes('FICHA') || normalizado.includes('DADOS CADASTRAIS') || normalizado.includes('DOCUMENTACAO ADMISSIONAL')) return 'FICHA/DOCUMENTACAO';
   if (normalizado.includes('CONTRATO')) return 'CONTRATO';
   return 'NAO RECONHECIDO';
@@ -270,10 +271,11 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
 
   const missingDocs = useMemo(() => {
     const categorias = new Set(documentos.map(d => d.categoria));
+    const unificado = categorias.has('DOCUMENTACAO UNIFICADA');
     const missing: string[] = [];
-    if (!categorias.has('FICHA/DOCUMENTACAO')) missing.push('Ficha/documentação admissional');
-    if (!categorias.has('ASO')) missing.push('ASO');
-    if ((form.exige_toxicologico || isGuincheiro(form.funcao)) && !categorias.has('TOXICOLOGICO')) missing.push('Toxicológico');
+    if (!unificado && !categorias.has('FICHA/DOCUMENTACAO')) missing.push('Ficha/documentação admissional');
+    if (!unificado && !categorias.has('ASO')) missing.push('ASO');
+    if (!unificado && (form.exige_toxicologico || isGuincheiro(form.funcao)) && !categorias.has('TOXICOLOGICO')) missing.push('Toxicológico');
     return missing;
   }, [documentos, form.exige_toxicologico, form.funcao]);
   const selectedDocs = documentos.filter(d => d.selecionado);
@@ -317,6 +319,21 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     setUploadProgress(''); toast.success(`${ok} de ${lista.length} documento(s) enviado(s).`); await carregarDocumentos();
   };
 
+  const uploadUnificado = async (file?: File | null) => {
+    if (!file || !form.id) return toast.error('Salve o pré-cadastro antes de anexar documentos.');
+    if (!(file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) return toast.error('Para documentação unificada, envie um arquivo PDF.');
+    try {
+      setUploadProgress('Enviando PDF único com a documentação...');
+      await uploadDocumento('documentacao_unificada', file);
+      setUploadProgress('');
+      toast.success('PDF único anexado. Ele pode conter documentos admissionais e ASO e não bloqueia a finalização.');
+      await carregarDocumentos();
+    } catch (error: any) {
+      setUploadProgress('');
+      toast.error(error?.message || 'Não foi possível anexar o PDF único.');
+    }
+  };
+
   const uploadASO = async (file?: File | null) => { if (!file || !form.id) return; const url = await uploadAdmissionFile(file, `aso/${form.id}`); await (supabase as any).from('pre_cadastro_documentos').insert({ pre_cadastro_id: form.id, tipo_documento: 'aso', nome_arquivo: file.name, arquivo_url: url }); await (supabase as any).from('pre_cadastros_admissionais').update({ arquivo_aso_url: url }).eq('id', form.id); setForm(prev => ({ ...prev, arquivo_aso_url: url })); await carregarDocumentos({ ...form, arquivo_aso_url: url }); };
   const uploadToxicologico = async (file?: File | null) => { if (!file || !form.id) return; const url = await uploadAdmissionFile(file, `toxicologico/${form.id}`); await (supabase as any).from('pre_cadastro_documentos').insert({ pre_cadastro_id: form.id, tipo_documento: 'toxicologico', nome_arquivo: file.name, arquivo_url: url }); await (supabase as any).from('pre_cadastros_admissionais').update({ arquivo_toxicologico_url: url, exige_toxicologico: true }).eq('id', form.id); setForm(prev => ({ ...prev, arquivo_toxicologico_url: url, exige_toxicologico: true })); await carregarDocumentos({ ...form, arquivo_toxicologico_url: url, exige_toxicologico: true }); };
 
@@ -341,7 +358,31 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const excluirDuplicadosSelecionados = async () => { for (const doc of documentos.filter(d => d.duplicado && d.selecionado)) await excluirDocumento(doc); };
 
   const carregarAnexosSelecionados = async () => Promise.all(selectedDocs.map(async doc => { const response = await fetch(doc.url); if (!response.ok) throw new Error(`Nao foi possivel baixar ${doc.nome}`); const attachmentBlob = await response.blob(); return { attachmentBlob, attachmentName: doc.nome, attachmentContentType: attachmentBlob.type || mimeFromFileName(doc.nome), documentId: doc.id, documentName: doc.nome, label: doc.categoria }; }));
-  const enviarContabilidade = async () => { if (!selectedDocs.length) return toast.error('Selecione pelo menos um documento.'); if (!window.confirm(`Enviar e-mail automaticamente com ${selectedDocs.length} anexo(s)?`)) return; try { const attachments = await carregarAnexosSelecionados(); const { data: sessionData } = await supabase.auth.getSession(); const authUser = sessionData.session?.user; await sendEmailWithPdfAttachment({ to: CONTABILIDADE_DESTINATARIOS, cc: Array.from(CC_OBRIGATORIO), subject: `Documentação admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`, body: buildContabilidadeEmailBody(form), attachments, senderUserId: authUser?.id, senderName: String(authUser?.user_metadata?.nome_completo || authUser?.email || ''), senderEmail: authUser?.email, moduleOrigin: 'pre-cadastro admissional', documentName: `Documentação admissional - ${form.nome || ''}`, authToken: sessionData.session?.access_token }); toast.success('E-mail enviado automaticamente para a contabilidade.'); } catch (error) { console.error('Falha no envio automático para contabilidade:', error); toast.error(error?.message || 'Não foi possível enviar o e-mail automaticamente.'); } };
+  const enviarContabilidade = async () => {
+    if (!selectedDocs.length) return toast.error('Selecione pelo menos um documento.');
+    try {
+      const attachments = await carregarAnexosSelecionados();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const authUser = sessionData.session?.user;
+      setEmailPdfDraft({
+        to: CONTABILIDADE_DESTINATARIOS,
+        cc: Array.from(CC_OBRIGATORIO),
+        subject: `Documentação admissional - ${form.nome || ''} - ${form.empresa_nome || ''}`,
+        body: buildContabilidadeEmailBody(form),
+        attachments,
+        checklistItems: selectedDocs.map(doc => ({ label: doc.nome, found: true, detail: doc.categoria })),
+        missingWarnings: missingDocs.length ? [`Pendências informativas: ${missingDocs.join(', ')}. Elas não bloqueiam este envio nem a finalização do pré-cadastro.`] : [],
+        senderUserId: authUser?.id,
+        senderName: String(authUser?.user_metadata?.nome_completo || authUser?.email || ''),
+        senderEmail: authUser?.email,
+        moduleOrigin: 'pre-cadastro admissional',
+        documentName: `Documentação admissional - ${form.nome || ''}`,
+      });
+    } catch (error: any) {
+      console.error('Falha ao preparar e-mail para contabilidade:', error);
+      toast.error(error?.message || 'Não foi possível preparar o e-mail para a contabilidade.');
+    }
+  };
 
   const migrarDocumentosPreCadastro = async (funcionarioId: string) => { if (!form.id || !funcionarioId || !form.empresa_id) return 0; const empresa = companies.find(c => c.id === form.empresa_id); const { data: docs } = await (supabase as any).from('pre_cadastro_documentos').select('*').eq('pre_cadastro_id', form.id); let migrados = 0; for (const doc of docs || []) { if (!doc.arquivo_url) continue; await registrarDocumento({ funcionarioId, funcionarioNome: form.nome || 'Funcionario', companyId: form.empresa_id, empresaNome: empresa?.name || form.empresa_nome || '', tipoDocumento: categoriaPreCadastro(doc.tipo_documento), categoria: categoriaPreCadastro(doc.tipo_documento), origem: 'pre_cadastro', descricao: doc.nome_arquivo || '', arquivoUrl: doc.arquivo_url, nomeArquivo: doc.nome_arquivo || '', dataDocumento: doc.created_at || new Date().toISOString(), geradoPorUserId: session?.user?.id || ZERO_UUID, geradoPorNome: session?.user?.email || 'Sistema', unidade: empresa?.name || form.empresa_nome || '' }); migrados += 1; } return migrados; };
   const aprovarOficial = async () => { if (!form.id || !form.empresa_id || !form.nome) return; const { data: funcionarioId, error } = await (supabase as any).rpc('admin_pre_cadastro_aprovar_oficial', { p_id: form.id }); if (error) return toast.error(error.message); await migrarDocumentosPreCadastro(String(funcionarioId || '')); await Promise.all([carregar(), refreshData()]); };
@@ -369,12 +410,12 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
         </div>
 
         <div className="rounded-xl border p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">Conferência de documentos</h3><p className="text-xs text-muted-foreground">Confira faltantes, duplicados e escolha o que será enviado.</p></div><Button size="sm" variant="outline" onClick={() => carregarDocumentos()} disabled={documentosLoading}><RefreshCw className="w-4 h-4 mr-2" />Atualizar</Button></div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2"><Summary label="Total" value={documentos.length} /><Summary label="Selecionados" value={selectedDocs.length} /><Summary label="Duplicados" value={duplicateDocs.length} attention={duplicateDocs.length > 0} /><Summary label="Faltantes" value={missingDocs.length} danger={missingDocs.length > 0} /></div>
-          {missingDocs.length > 0 && <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"><strong>Faltando:</strong> {missingDocs.join(', ')}</div>}
+          <div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-bold">Conferência de documentos</h3><p className="text-xs text-muted-foreground">Você pode anexar documentos separados ou um PDF único com tudo, inclusive ASO. Pendências são informativas e nunca bloqueiam Salvar, Aprovar ou enviar para a contabilidade.</p></div><Button size="sm" variant="outline" onClick={() => carregarDocumentos()} disabled={documentosLoading}><RefreshCw className="w-4 h-4 mr-2" />Atualizar</Button></div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2"><Summary label="Total" value={documentos.length} /><Summary label="Selecionados" value={selectedDocs.length} /><Summary label="Duplicados" value={duplicateDocs.length} attention={duplicateDocs.length > 0} /><Summary label="Pendências" value={missingDocs.length} attention={missingDocs.length > 0} /></div>
+          {missingDocs.length > 0 && <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-300"><strong>Pendência informativa:</strong> {missingDocs.join(', ')} <span className="font-normal">— isso não bloqueia a continuidade.</span></div>}
           <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={selectAll}>Selecionar todos</Button><Button size="sm" variant="outline" onClick={clearAll}>Limpar seleção</Button><Button size="sm" variant="outline" onClick={selectDuplicates}>Selecionar duplicados</Button><Button size="sm" variant="destructive" onClick={excluirDuplicadosSelecionados} disabled={!documentos.some(d => d.duplicado && d.selecionado)}><Trash2 className="w-4 h-4 mr-2" />Excluir duplicados selecionados</Button></div>
           <div className="space-y-2">{documentos.map(doc => <div key={doc.key} className={`grid grid-cols-[auto_1fr_auto] gap-3 items-center rounded-lg border p-3 ${doc.duplicado ? 'border-warning bg-warning/10' : 'border-border'}`}><input type="checkbox" checked={doc.selecionado} onChange={() => toggleDocumento(doc.key)} /><div><div className="font-medium text-sm">{doc.nome}</div><div className="text-xs text-muted-foreground">{doc.categoria} · {doc.created_at ? new Date(doc.created_at).toLocaleDateString('pt-BR') : 'sem data'}</div><Badge variant="outline" className={`mt-1 ${doc.duplicado ? 'text-warning' : doc.categoria === 'NAO RECONHECIDO' ? 'text-muted-foreground' : 'text-primary'}`}>{doc.duplicado ? 'Possível duplicado' : doc.categoria === 'NAO RECONHECIDO' ? 'Não reconhecido' : 'OK'}</Badge></div><div className="flex gap-2"><a href={doc.url} target="_blank" rel="noreferrer" className="text-sm underline">Abrir</a><button onClick={() => excluirDocumento(doc)} className="text-destructive"><Trash2 className="w-4 h-4" /></button></div></div>)}{!documentosLoading && documentos.length === 0 && <div className="text-sm text-muted-foreground">Nenhum documento anexado.</div>}</div>
-          <div className="flex flex-wrap gap-2 items-center"><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer"><Upload className="w-4 h-4" />Selecionar vários documentos<input multiple type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadEmLote(e.target.files)} /></label>{uploadProgress && <span className="text-sm text-primary">{uploadProgress}</span>}<label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer">Subir ASO<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadASO(e.target.files?.[0])} /></label>{(isGuincheiro(form.funcao) || form.exige_toxicologico) && <label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer">Subir Toxicológico<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadToxicologico(e.target.files?.[0])} /></label>}</div>
+          <div className="flex flex-wrap gap-2 items-center"><label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer"><Upload className="w-4 h-4" />Documentos separados<input multiple type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadEmLote(e.target.files)} /></label><label className="inline-flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-4 py-2 text-sm cursor-pointer"><FileSearch className="w-4 h-4" />PDF único (documentos + ASO)<input type="file" accept=".pdf" className="hidden" onChange={e => uploadUnificado(e.target.files?.[0])} /></label>{uploadProgress && <span className="text-sm text-primary">{uploadProgress}</span>}<label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer">Subir ASO<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadASO(e.target.files?.[0])} /></label>{(isGuincheiro(form.funcao) || form.exige_toxicologico) && <label className="inline-flex items-center gap-2 rounded-md border px-4 py-2 text-sm cursor-pointer">Subir Toxicológico<input type="file" accept=".pdf,image/*" className="hidden" onChange={e => uploadToxicologico(e.target.files?.[0])} /></label>}</div>
         </div>
 
         <div className="flex flex-wrap gap-2"><Button onClick={salvar} disabled={saving}><Save className="w-4 h-4 mr-2" />Salvar</Button><Button onClick={gerarGuiaAso} variant="outline"><FileSearch className="w-4 h-4 mr-2" />Gerar Guia ASO</Button><Button onClick={enviarGuiaAso} variant="outline"><Mail className="w-4 h-4 mr-2" />Enviar guia ASO</Button><Button onClick={enviarContabilidade} disabled={selectedDocs.length === 0} variant="outline"><ArrowRight className="w-4 h-4 mr-2" />E-mail contabilidade ({selectedDocs.length})</Button><Button onClick={aprovarOficial}><CheckCircle2 className="w-4 h-4 mr-2" />Aprovar cadastro oficial</Button></div>

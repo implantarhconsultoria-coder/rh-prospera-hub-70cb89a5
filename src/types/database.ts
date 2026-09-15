@@ -205,7 +205,7 @@ export const mapEmployee = (row: any): Employee => {
     pix: cleanNullableText(row.pix) || notes.banking.pix || '',
     banco: cleanNullableText(row.banco) || notes.banking.banco || '',
     agencia: cleanNullableText(row.agencia) || notes.banking.agencia || '',
-    conta: cleanNullableText(row.conta) || notes.banking.conta || '',
+    conta: cleanNullableText(row.conta) ? (cleanNullableText(row.conta_digito) && !cleanNullableText(row.conta).endsWith(`-${cleanNullableText(row.conta_digito)}`) ? `${cleanNullableText(row.conta)}-${cleanNullableText(row.conta_digito)}` : cleanNullableText(row.conta)) : notes.banking.conta || '',
     observacoes: notes.text,
     inss: row.inss ? Number(row.inss) : undefined,
     liquido: row.liquido ? Number(row.liquido) : undefined,
@@ -329,6 +329,15 @@ export const employeeToRow = (data: Partial<Employee>) => {
   if (data.celular !== undefined) row.celular = data.celular;
   if (data.email !== undefined) row.email = data.email;
   if (data.endereco !== undefined) row.endereco = data.endereco;
+  if (data.pix !== undefined) row.pix = data.pix;
+  if (data.banco !== undefined) row.banco = data.banco;
+  if (data.agencia !== undefined) row.agencia = data.agencia;
+  if (data.conta !== undefined) {
+    const rawConta = String(data.conta || '').trim();
+    const match = rawConta.match(/^(.*?)[-\s]+([0-9A-Za-z])$/);
+    row.conta = match ? match[1].trim() : rawConta;
+    row.conta_digito = match ? match[2].trim() : null;
+  }
   if (data.observacoes !== undefined) row.observacoes = data.observacoes;
   return row;
 };

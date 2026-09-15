@@ -54,9 +54,8 @@ const localIsoDate = (offsetDays = 0) => {
 
 const resolveAsoExamDate = (date?: string) => {
   const value = String(date || '').trim();
-  const today = localIsoDate();
   const tomorrow = localIsoDate(1);
-  return !value || value === today ? tomorrow : value;
+  return value || tomorrow;
 };
 
 const cleanFilePart = (value?: string) => cleanText(value || 'SEM_INFORMACAO')
@@ -214,7 +213,7 @@ export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: strin
     ['Nascimento', fmtBR(d.dataNascimento)], ['Setor/GHE', d.setorGhe || '---'],
   ]);
   y = drawBlock(doc, y, 'Dados do Exame', [
-    ['Data do Exame', fmtBR(dataExame)], ['Tipo', d.tipoExame],
+    [normalizePlain(d.tipoExame).includes('DEMISSIONAL') ? 'Data prevista do exame' : 'Data do Exame', fmtBR(dataExame)], ['Tipo', d.tipoExame],
     ['Obra/Local', d.obraLocal || '-'], ['Responsavel', d.responsavelContato || '-'],
     ['NR35', d.trabalhoAltura ? 'Sim' : 'Nao'],
     ['NR33', d.espacoConfinado ? 'Sim' : 'Nao'],
@@ -303,7 +302,7 @@ const gerarAutorizacaoExameGoianiaPdf = (d: FichaASOData): { blob: Blob; fileNam
   const topY = row(8);
   doc.line(x + 89, topY, x + 89, topY + 8);
   write(`Nome Da Empresa: ${d.empresa || ''}`, x + 2, topY + 5.4, { size: 10, bold: true, maxWidth: 84 });
-  write(`DATA: ${fmtBR(dataExame)}`, x + 91, topY + 5.4, { size: 10, bold: true });
+  write(`${tipoNormalizado.includes('DEMISSIONAL') ? 'DATA PREVISTA DO EXAME' : 'DATA'}: ${fmtBR(dataExame)}`, x + 91, topY + 5.4, { size: 10, bold: true });
 
   const dadosY = row(44);
   write(`OBRA / LOCAL: ${d.obraLocal || ''}`, x + 2, dadosY + 5.2, { size: 9.8, bold: true, maxWidth: 168 });
@@ -434,7 +433,7 @@ export const gerarAutorizacaoExameAdmissionalPdf = (d: FichaASOData): { blob: Bl
   doc.rect(x + 90, y, w - 90, empresaH);
   write(`NOME DA EMPRESA: ${d.empresa || ''}`, x + 3, y + 8, { size: 9.5, bold: true, maxWidth: 84 });
   write(`CNPJ:${d.cnpj || ''}`, x + 3, y + 15, { size: 9.5, bold: true });
-  write(`DATA DO EXAME: ${fmtBR(dataExame)}`, x + 93, y + 12, { size: 9.5, bold: true });
+  write(`${normalizePlain(tipoExame).includes('DEMISSIONAL') ? 'DATA PREVISTA DO EXAME' : 'DATA DO EXAME'}: ${fmtBR(dataExame)}`, x + 93, y + 12, { size: 9.5, bold: true });
   next(empresaH);
 
   const funcionarioH = 50;

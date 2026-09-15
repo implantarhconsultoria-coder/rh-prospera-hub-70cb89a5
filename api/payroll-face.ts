@@ -230,6 +230,9 @@ const identify = async (service: any, req: any, body: any, scopedCompany: any) =
   const { count } = await service.from('payroll_public_access_attempts')
     .select('id', { count: 'exact', head: true })
     .eq('ip', ip)
+    .eq('company_id', scopedCompany.companyId)
+    .eq('success', false)
+    .in('failure_reason', ['FACE_NO_MATCH', 'FACE_AMBIGUOUS'])
     .gte('created_at', cutoff);
   if (Number(count || 0) >= MAX_IP_ATTEMPTS_15M) {
     throw Object.assign(new Error('too_many_attempts'), { status: 429 });
