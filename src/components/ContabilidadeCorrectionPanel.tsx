@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,6 +48,31 @@ export default function ContabilidadeCorrectionPanel({ mode, portal = 'principal
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [adminHost, setAdminHost] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'admin') return;
+    const mount = () => {
+      if (window.location.pathname !== '/admin/central-contabilidade') { setAdminHost(null); return; }
+      const heading = Array.from(document.querySelectorAll('h1')).find(el => /Central da Contabilidade/i.test(el.textContent || ''));
+      const root = heading?.closest('.space-y-5.animate-fade-in') as HTMLElement | null;
+      if (!root) return;
+      let host = root.querySelector<HTMLElement>('[data-contabilidade-correction-host="true"]');
+      if (!host) {
+        host = document.createElement('div');
+        host.dataset.contabilidadeCorrectionHost = 'true';
+        const flowHost = root.querySelector<HTMLElement>('[data-contabilidade-folha-admin-host="true"]');
+        if (flowHost?.nextSibling) root.insertBefore(host, flowHost.nextSibling);
+        else root.prepend(host);
+      }
+      setAdminHost(host);
+    };
+    mount();
+    const observer = new MutationObserver(mount);
+    observer.observe(document.body, { childList:true, subtree:true });
+    const timer = window.setInterval(mount, 700);
+    return () => { observer.disconnect(); window.clearInterval(timer); };
+  }, [mode]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -143,7 +169,7 @@ export default function ContabilidadeCorrectionPanel({ mode, portal = 'principal
 
   if (!loading && cycles.length === 0) return null;
 
-  return (
+  const panel = (
     <section className={`${compact ? 'mt-3' : 'mb-5'} overflow-hidden rounded-xl border border-rose-500/20 bg-[#08090d]`}>
       <div className="flex items-center justify-between gap-3 border-b border-rose-500/15 px-4 py-3">
         <div>
@@ -172,4 +198,7 @@ export default function ContabilidadeCorrectionPanel({ mode, portal = 'principal
       )}
     </section>
   );
+
+  if (mode === 'admin') return adminHost ? createPortal(panel, adminHost) : null;
+  return panel;
 }
