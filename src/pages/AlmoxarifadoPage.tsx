@@ -4,14 +4,19 @@ import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import AlmoxarifadoDesktopV2 from '@/components/AlmoxarifadoDesktopV2';
+import { AlmoxarifadoAccessGate, useAlmoxarifadoAccess } from '@/components/AlmoxarifadoAccessGate';
 
 const AlmoxarifadoPage: React.FC = () => {
   const { session, companies, dataLoading } = useApp();
+  const access = useAlmoxarifadoAccess();
   const matriz = useMemo(() => companies.find((c:any) => c.codigo === 'topac-matriz') || null, [companies]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (dataLoading || !session?.user?.id || !matriz?.id) return;
+    if (!access.allowed || dataLoading || !session?.user?.id || !matriz?.id) {
+      setReady(false);
+      return;
+    }
     let active = true;
     setReady(false);
     supabase.rpc('almoxarifado_set_company_context' as any, { p_company_id: matriz.id }).then(({ error }) => {
@@ -24,10 +29,12 @@ const AlmoxarifadoPage: React.FC = () => {
       setReady(true);
     });
     return () => { active = false; };
-  }, [dataLoading, matriz?.id, session?.user?.id]);
+  }, [access.allowed, dataLoading, matriz?.id, session?.user?.id]);
+
+  if (!access.allowed) return <AlmoxarifadoAccessGate state={access} />;
 
   if (dataLoading || !ready) {
-    return <div className="grid min-h-[520px] place-items-center bg-[#F7F8FC]"><div className="flex items-center gap-2 text-slate-500"><Loader2 className="h-5 w-5 animate-spin"/>Abrindo estoque central TOPAC...</div></div>;
+    return <div className="grid min-h-[520px] place-items-center bg-background"><div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin"/>Abrindo estoque central TOPAC...</div></div>;
   }
   return <AlmoxarifadoDesktopV2 />;
 };
