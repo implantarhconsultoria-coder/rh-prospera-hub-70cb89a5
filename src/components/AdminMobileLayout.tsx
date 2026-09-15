@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, FileText, History, Home, Search, Users, Wrench,
+  ArrowLeft, FileText, History, Home, Search, Users, Wrench,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -79,24 +79,26 @@ const AdminMobileLayout: React.FC = () => {
         </header>
       )}
 
-      <main className={isHome ? 'pb-28' : 'px-3 pt-3 pb-28'}>
+      <main className={isHome ? 'pb-8' : 'px-3 pt-3 pb-28'}>
         {isHome ? (isDirector ? <Outlet /> : <AdminMobileDashboard onSearch={() => setSearchOpen(true)} />) : <Outlet />}
       </main>
 
-      <nav className="fixed bottom-2 left-1/2 z-50 grid w-[calc(100%-16px)] max-w-lg -translate-x-1/2 grid-cols-5 rounded-[24px] border border-fuchsia-500/20 bg-[#090611]/94 px-1.5 pb-[calc(7px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_45px_rgba(0,0,0,.50),0_0_35px_rgba(168,85,247,.08)] backdrop-blur-xl">
-        {bottomItems.map(item => (
-          <button
-            key={item.path}
-            type="button"
-            onClick={() => nav(item.path)}
-            className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[9px] font-semibold transition active:scale-95 ${item.active ? 'text-fuchsia-300' : 'text-zinc-500'}`}
-          >
-            <item.icon className={`h-[22px] w-[22px] ${item.active ? 'drop-shadow-[0_0_8px_rgba(232,121,249,.75)]' : ''}`} />
-            <span>{item.label}</span>
-            {item.active && <span className="absolute bottom-0 h-[2px] w-7 rounded-full bg-fuchsia-400 shadow-[0_0_10px_rgba(232,121,249,.9)]" />}
-          </button>
-        ))}
-      </nav>
+      {!isHome && (
+        <nav className="fixed bottom-2 left-1/2 z-50 grid w-[calc(100%-16px)] max-w-lg -translate-x-1/2 grid-cols-5 rounded-[24px] border border-fuchsia-500/20 bg-[#090611]/94 px-1.5 pb-[calc(7px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_45px_rgba(0,0,0,.50),0_0_35px_rgba(168,85,247,.08)] backdrop-blur-xl">
+          {bottomItems.map(item => (
+            <button
+              key={item.path}
+              type="button"
+              onClick={() => nav(item.path)}
+              className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[9px] font-semibold transition active:scale-95 ${item.active ? 'text-fuchsia-300' : 'text-zinc-500'}`}
+            >
+              <item.icon className={`h-[22px] w-[22px] ${item.active ? 'drop-shadow-[0_0_8px_rgba(232,121,249,.75)]' : ''}`} />
+              <span>{item.label}</span>
+              {item.active && <span className="absolute bottom-0 h-[2px] w-7 rounded-full bg-fuchsia-400 shadow-[0_0_10px_rgba(232,121,249,.9)]" />}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {isHome && (
         <div className="fixed right-3 top-[calc(12px+env(safe-area-inset-top))] z-40 flex items-center gap-1">
@@ -104,14 +106,15 @@ const AdminMobileLayout: React.FC = () => {
             <Search className="h-4.5 w-4.5" />
           </button>
           {!isDirector && <div className="rounded-full border border-fuchsia-500/20 bg-[#0b0712]/90 backdrop-blur-xl"><AdminRequestNotifications /></div>}
-          <span className="grid h-10 w-10 place-items-center rounded-full border border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-300">
-            <Bell className="h-4.5 w-4.5" />
-          </span>
         </div>
       )}
 
-      <VoiceCommandFab />
-      <AssistenteFab />
+      {!isHome && (
+        <>
+          <VoiceCommandFab />
+          <AssistenteFab />
+        </>
+      )}
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} query={searchQ} onQuery={setSearchQ} modules={searchModules} />
     </div>
   );
