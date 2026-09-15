@@ -67,15 +67,16 @@ for (const menuPath of ['src/components/AppSidebar.tsx', 'src/components/AdminMo
   let source = fs.readFileSync(menuPath, 'utf8');
   const desired = /label: 'Solicitar F[eé]rias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/;
   const current = /label: 'Aviso de F[eé]rias'(?=[^}\n]*path: '\/(?:admin\/)?aviso-ferias')/g;
+  const centralized = source.includes('Central da Contabilidade') || source.includes('modulo=ferias');
 
-  if (!desired.test(source)) {
+  if (!desired.test(source) && !centralized) {
     const matches = source.match(current) || [];
     if (matches.length < 1) {
-      throw new Error(`[ferias] menu ${menuPath}: item de ferias nao encontrado`);
+      throw new Error(`[ferias] menu ${menuPath}: fluxo de ferias nao encontrado nem centralizado`);
     }
     source = source.replace(current, "label: 'Solicitar Férias'");
     fs.writeFileSync(menuPath, source, 'utf8');
   }
 }
 
-console.log('[ferias] fluxo Solicitar Ferias -> Contabilidade aplicado');
+console.log('[ferias] fluxo Solicitar Ferias -> Contabilidade aplicado/centralizado');

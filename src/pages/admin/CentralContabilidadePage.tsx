@@ -1,14 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  AlertTriangle, Building2, CheckCircle2, Clock3, Eye, FileCheck2, FileText,
-  Loader2, RefreshCw, Send, UploadCloud, Users,
+  AlertTriangle, Building2, CalendarCheck, CheckCircle2, ChevronLeft, Clock3, Eye,
+  FileCheck2, FileSearch, FileText, FileX, Loader2, RefreshCw, Send, Stethoscope,
+  UploadCloud, Users,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import FechamentoPage from '@/pages/FechamentoPage';
+import PreCadastroAdmissionalPage from '@/pages/PreCadastroAdmissionalPage';
+import RescisaoPage from '@/pages/RescisaoPage';
+import AvisoFeriasPage from '@/pages/AvisoFeriasPage';
+import ASOPage from '@/pages/ASOPage';
+import EmailsContabilidadePage from '@/pages/admin/EmailsContabilidadePage';
 import { toast } from 'sonner';
 
 type TabKey = 'visao' | 'movimentacoes' | 'documentos' | 'fechamento';
+type ModuleKey = 'pre-cadastro' | 'rescisao' | 'ferias' | 'aso' | 'clinicas';
 type Revisao = {
   id:string; origem_tipo:string; origem_id:string; empresa_id:string; status:string;
   observacao?:string|null; revisor_nome?:string|null; revisado_em?:string|null;
@@ -22,6 +30,8 @@ type Upload = {
   formalizacao_destinos?:string[]|null; origem_tipo?:string|null; origem_id?:string|null; created_at:string;
 };
 type PortalUser = { id:string; nome:string; email?:string|null; portal:string };
+
+const MODULE_KEYS: ModuleKey[] = ['pre-cadastro','rescisao','ferias','aso','clinicas'];
 
 const brDateTime = (value?: string | null) => {
   if (!value) return '—';
@@ -41,12 +51,16 @@ const reviewHasDocument = (r:Revisao) => ['atestado_doc','atestado','admissao','
 
 const CentralContabilidadePage: React.FC = () => {
   const { companies } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<TabKey>('visao');
   const [revisoes, setRevisoes] = useState<Revisao[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const moduleParam = searchParams.get('modulo') || '';
+  const activeModule: ModuleKey | null = MODULE_KEYS.includes(moduleParam as ModuleKey) ? moduleParam as ModuleKey : null;
 
   const companyMap = useMemo(() => new Map(companies.map((c) => [c.id, c.name])), [companies]);
   const userMap = useMemo(() => new Map(portalUsers.map((u) => [u.id, u])), [portalUsers]);
@@ -86,6 +100,21 @@ const CentralContabilidadePage: React.FC = () => {
     return uploads.filter((u) => new Date(u.created_at).toLocaleDateString('en-CA') === key).length
       + revisoes.filter((r) => new Date(r.updated_at || r.created_at).toLocaleDateString('en-CA') === key).length;
   }, [uploads, revisoes]);
+
+  const openModule = (key: ModuleKey) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('modulo', key);
+    setSearchParams(next);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const closeModule = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('modulo');
+    setSearchParams(next);
+    setTab('visao');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const authToken = async () => {
     const { data } = await supabase.auth.getSession();
@@ -164,6 +193,16 @@ const CentralContabilidadePage: React.FC = () => {
     { key:'fechamento', label:'Fechamento', icon:Send },
   ];
 
+  const processCards:Array<{key:ModuleKey;title:string;description:string;icon:React.ElementType}> = [
+    { key:'pre-cadastro', title:'Pré-cadastro', description:'Admissão, documentação e preparação do novo funcionário.', icon:FileSearch },
+    { key:'rescisao', title:'Rescisões', description:'Solicitação, acompanhamento e documentos de desligamento.', icon:FileX },
+    { key:'ferias', title:'Solicitação de Férias', description:'Solicitar férias e formalizar o envio para a contabilidade.', icon:CalendarCheck },
+    { key:'aso', title:'ASO', description:'Controle dos exames ocupacionais e documentos do funcionário.', icon:Stethoscope },
+    { key:'clinicas', title:'Envio para Clínicas', description:'Solicitações, e-mails e acompanhamento dos envios às clínicas.', icon:Send },
+  ];
+
+  const activeTitle = processCards.find(item => item.key === activeModule)?.title || '';
+
   return (
     <div className="space-y-5 animate-fade-in">
       <section className="overflow-hidden rounded-xl border border-[#2b2335] bg-[#05070b] shadow-[0_18px_50px_rgba(0,0,0,.24)]">
@@ -171,28 +210,63 @@ const CentralContabilidadePage: React.FC = () => {
           <div>
             <div className="text-[11px] font-bold uppercase tracking-[.18em] text-[#a855f7]">Administração TOPAC RH PRO</div>
             <h1 className="mt-1 text-2xl font-black text-white">Central da Contabilidade</h1>
-            <p className="mt-1 max-w-3xl text-sm text-zinc-400">Acompanhe o que a contabilidade conferiu, abra os documentos da competência e formalize os retornos sem sair da central.</p>
+            <p className="mt-1 max-w-3xl text-sm text-zinc-400">Todos os processos de RH que envolvem contabilidade e clínicas ficam centralizados aqui.</p>
           </div>
           <button onClick={() => void carregar()} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#3b2b4b] bg-[#0b0d12] px-4 py-2 text-xs font-bold text-zinc-200 hover:border-[#8b22ff]">
             <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`} /> Atualizar
           </button>
         </div>
+
         <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
           <MetricCard icon={AlertTriangle} label="Pendências / retificações" value={pendencias.length} tone="amber" />
           <MetricCard icon={CheckCircle2} label="Conferidos" value={conferidos.length} tone="green" />
           <MetricCard icon={FileText} label="Documentos recebidos" value={uploads.length} tone="purple" />
           <MetricCard icon={Clock3} label="Movimentações hoje" value={hoje} tone="blue" />
         </div>
-        <div className="flex gap-1 overflow-x-auto border-t border-[#211b28] bg-[#07090d] px-3 py-2">
+
+        <div className="border-t border-[#211b28] bg-[#07090d] p-4">
+          <div className="mb-3 text-[10px] font-black uppercase tracking-[.18em] text-zinc-500">Processos da Central</div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {processCards.map(({key,title,description,icon:Icon}) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => openModule(key)}
+                className={`group rounded-xl border p-4 text-left transition ${activeModule===key ? 'border-[#8b22ff] bg-[#241039] shadow-[0_0_28px_rgba(139,34,255,.12)]' : 'border-[#2b2631] bg-[#090b10] hover:-translate-y-0.5 hover:border-[#7131a8]'}`}
+              >
+                <div className="flex items-center justify-between"><Icon className="h-5 w-5 text-[#ffc400]"/><span className="text-[10px] font-bold text-zinc-600 group-hover:text-zinc-400">Abrir →</span></div>
+                <div className="mt-3 text-sm font-black text-white">{title}</div>
+                <div className="mt-1 text-[10px] leading-relaxed text-zinc-500">{description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!activeModule && <div className="flex gap-1 overflow-x-auto border-t border-[#211b28] bg-[#07090d] px-3 py-2">
           {tabs.map(({key,label,icon:Icon}) => (
             <button key={key} onClick={() => setTab(key)} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-bold ${tab===key?'bg-[#25123d] text-white ring-1 ring-[#7131a8]':'text-zinc-500 hover:bg-white/[.035] hover:text-zinc-200'}`}>
               <Icon className={`h-4 w-4 ${tab===key?'text-[#ffc400]':'text-[#8b22ff]'}`} />{label}
             </button>
           ))}
-        </div>
+        </div>}
       </section>
 
-      {loading ? (
+      {activeModule ? (
+        <section className="space-y-4 rounded-xl border border-[#31263c] bg-[#04060a] p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-[#292230] bg-[#080a0e] px-4 py-3">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[.16em] text-violet-400">Central da Contabilidade</div>
+              <div className="mt-1 text-base font-black text-white">{activeTitle}</div>
+            </div>
+            <button type="button" onClick={closeModule} className="inline-flex items-center gap-2 rounded-md border border-[#41314f] px-3 py-2 text-xs font-bold text-zinc-300 hover:border-violet-500 hover:text-white"><ChevronLeft className="h-4 w-4"/>Voltar à Central</button>
+          </div>
+          {activeModule === 'pre-cadastro' && <PreCadastroAdmissionalPage />}
+          {activeModule === 'rescisao' && <RescisaoPage />}
+          {activeModule === 'ferias' && <AvisoFeriasPage />}
+          {activeModule === 'aso' && <ASOPage />}
+          {activeModule === 'clinicas' && <EmailsContabilidadePage />}
+        </section>
+      ) : loading ? (
         <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-[#27222e] bg-[#05070b]"><Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" /></div>
       ) : tab === 'fechamento' ? (
         <FechamentoPage />
