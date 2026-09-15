@@ -121,13 +121,13 @@ export default function ContabilidadeCorrectionPanel({ mode, portal = 'principal
   const correct = async (cycle:Cycle) => {
     const companyName = companyMap.get(cycle.empresa_id) || 'Empresa';
     const reason = window.prompt(
-      `CORRIGIR ENVIO — ${processLabel(cycle.tipo)}\n${companyName} · ${monthLabel(cycle.competencia)}\n\nInforme obrigatoriamente o motivo da correção:`,
+      `EDITAR / CORRIGIR ENVIO — ${processLabel(cycle.tipo)}\n${companyName} · ${monthLabel(cycle.competencia)}\n\nInforme obrigatoriamente o motivo da correção:`,
       '',
     );
     if (reason === null) return;
     if (reason.trim().length < 3) return toast.error('Informe a justificativa da correção.');
     const confirmed = window.confirm(
-      `Confirmar a correção deste envio?\n\n${companyName}\n${processLabel(cycle.tipo)} · ${monthLabel(cycle.competencia)}\n\nO lote enviado será retirado da plataforma e será enviado um e-mail de RETIFICAÇÃO pedindo para desconsiderar o e-mail anterior.`,
+      `Confirmar a correção deste envio?\n\n${companyName}\n${processLabel(cycle.tipo)} · ${monthLabel(cycle.competencia)}\n\nO lote enviado será retirado da plataforma e o TOPAC RH PRO enviará uma RETIFICAÇÃO oficial pedindo para desconsiderar o e-mail anterior.`,
     );
     if (!confirmed) return;
 
@@ -154,9 +154,9 @@ export default function ContabilidadeCorrectionPanel({ mode, portal = 'principal
       });
 
       if (emailError || !emailData?.ok) {
-        toast.warning('O envio errado foi retirado da plataforma, mas o e-mail de retificação ficou pendente. Avise o RH para reenviar a retificação.');
+        toast.warning('O envio errado foi retirado da plataforma, mas a retificação oficial ficou pendente. O sistema registrou a correção para reenvio.');
       } else {
-        toast.success('Envio corrigido. Lote retirado da plataforma e e-mail de retificação enviado pedindo para desconsiderar o anterior.');
+        toast.success('Envio corrigido. Lote retirado da plataforma e retificação oficial enviada pelo TOPAC RH PRO.');
       }
       await load(true);
       window.setTimeout(() => window.location.reload(), 900);
@@ -173,8 +173,8 @@ export default function ContabilidadeCorrectionPanel({ mode, portal = 'principal
     <section className={`${compact ? 'mt-3' : 'mb-5'} overflow-hidden rounded-xl border border-rose-500/20 bg-[#08090d]`}>
       <div className="flex items-center justify-between gap-3 border-b border-rose-500/15 px-4 py-3">
         <div>
-          <div className="flex items-center gap-2 text-sm font-black text-white"><RotateCcw className="h-4 w-4 text-rose-300" />Correção de envio</div>
-          <div className="mt-1 text-[10px] text-zinc-500">Use somente quando PDFs forem enviados na empresa errada ou o lote precisar ser desconsiderado.</div>
+          <div className="flex items-center gap-2 text-sm font-black text-white"><RotateCcw className="h-4 w-4 text-rose-300" />Editar / corrigir envio</div>
+          <div className="mt-1 text-[10px] text-zinc-500">Para corrigir empresa, arquivos ou lote enviado. Exige justificativa e gera retificação oficial pelo sistema.</div>
         </div>
         <button type="button" onClick={() => void load()} disabled={loading} className="rounded-md border border-[#3b303d] p-2 text-zinc-400 hover:text-white"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /></button>
       </div>
@@ -190,7 +190,7 @@ export default function ContabilidadeCorrectionPanel({ mode, portal = 'principal
                 <div className="mt-1 text-[10px] text-zinc-500">{processLabel(cycle.tipo)} · {monthLabel(cycle.competencia)} · {cycle.status.replace(/_/g,' ')}</div>
               </div>
               <Button type="button" size="sm" variant="outline" disabled={busy === cycle.id} onClick={() => void correct(cycle)} className="shrink-0 border-rose-500/35 bg-rose-500/[.05] text-rose-200 hover:bg-rose-500/10 hover:text-rose-100">
-                {busy === cycle.id ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="mr-2 h-3.5 w-3.5" />}Corrigir envio
+                {busy === cycle.id ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="mr-2 h-3.5 w-3.5" />}Editar / corrigir
               </Button>
             </div>
           ))}
