@@ -7,9 +7,9 @@
     "node": "22.x"
   },
   "scripts": {
-    "predev": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs && node scripts/fix-almoxarifado-migracao-build.mjs && node scripts/fix-pre-cadastro-inteligente-contrast-build.mjs && node scripts/fix-ferias-official-overview-build.mjs && node scripts/fix-signature-share-message-build.mjs && node scripts/fix-public-signature-input-contrast-build.mjs && node scripts/fix-aso-demissional-date-build.mjs && node scripts/fix-archive-cover-dismissal-date-build.mjs && node scripts/fix-vacation-signature-build.mjs",
+    "predev": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs && node scripts/fix-almoxarifado-migracao-build.mjs && node scripts/fix-pre-cadastro-inteligente-contrast-build.mjs && node scripts/fix-ferias-official-overview-build.mjs && node scripts/fix-signature-share-message-build.mjs && node scripts/fix-public-signature-input-contrast-build.mjs && node scripts/fix-aso-demissional-date-build.mjs && node scripts/fix-archive-cover-dismissal-date-build.mjs && node scripts/fix-vacation-signature-build.mjs && node scripts/fix-accounting-flow-typecheck-build.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs && node scripts/fix-almoxarifado-migracao-build.mjs && node scripts/fix-pre-cadastro-inteligente-contrast-build.mjs && node scripts/fix-ferias-official-overview-build.mjs && node scripts/fix-signature-share-message-build.mjs && node scripts/fix-public-signature-input-contrast-build.mjs && node scripts/fix-aso-demissional-date-build.mjs && node scripts/fix-archive-cover-dismissal-date-build.mjs && node scripts/fix-vacation-signature-build.mjs",
+    "prebuild": "node scripts/fix-vacation-return-build.mjs && node scripts/fix-fechamento-grid-build.mjs && node scripts/fix-email-cc-build.mjs && node scripts/fix-goiania-he60-build.mjs && node scripts/fix-almoxarifado-migracao-build.mjs && node scripts/fix-pre-cadastro-inteligente-contrast-build.mjs && node scripts/fix-ferias-official-overview-build.mjs && node scripts/fix-signature-share-message-build.mjs && node scripts/fix-public-signature-input-contrast-build.mjs && node scripts/fix-aso-demissional-date-build.mjs && node scripts/fix-archive-cover-dismissal-date-build.mjs && node scripts/fix-vacation-signature-build.mjs && node scripts/fix-accounting-flow-typecheck-build.mjs",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -68,7 +68,7 @@
     "qr-scanner": "^1.4.2",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
-    "react-day-picker": "^8.10.1",
+    "react-day-picker": "^8.10.0",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.61.1",
     "react-is": "^18.3.1",
@@ -93,6 +93,7 @@
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.32.0",
