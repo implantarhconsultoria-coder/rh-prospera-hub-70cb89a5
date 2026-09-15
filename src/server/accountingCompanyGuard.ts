@@ -94,7 +94,7 @@ export async function validateAccountingPdfCompany(
     }
 
     const detected = detectCompanies(text, companies || []);
-    const companyMap = new Map((companies || []).map((row: any) => [clean(row.id), row]));
+    const companyMap = new Map<string, any>((companies || []).map((row: any) => [clean(row.id), row] as [string, any]));
 
     if (detected.byCnpj.size > 1) {
       return {
@@ -105,9 +105,9 @@ export async function validateAccountingPdfCompany(
     }
 
     if (detected.byCnpj.size === 1) {
-      const [detectedId] = Array.from(detected.byCnpj);
+      const detectedId = Array.from(detected.byCnpj)[0];
       if (detectedId !== expectedCompanyId) {
-        const found = companyMap.get(detectedId);
+        const found: any = companyMap.get(detectedId);
         return {
           ok: false,
           code: 'empresa_documento_divergente',
@@ -126,9 +126,9 @@ export async function validateAccountingPdfCompany(
     }
 
     if (detected.byName.size === 1) {
-      const [detectedId] = Array.from(detected.byName);
+      const detectedId = Array.from(detected.byName)[0];
       if (detectedId !== expectedCompanyId) {
-        const found = companyMap.get(detectedId);
+        const found: any = companyMap.get(detectedId);
         return {
           ok: false,
           code: 'empresa_documento_divergente',
