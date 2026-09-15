@@ -60,3 +60,4 @@ if (changed) {
 }
 
 await import('./fix-almoxarifado-card-dashboard-build.mjs');
+await import('./fix-almoxarifado-card-visual-hotfix-build.mjs');
