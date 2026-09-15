@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '@/context/AppContext';
+import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +15,10 @@ import EmployeeCombobox from '@/components/EmployeeCombobox';
 
 const MovimentoDiarioPage: React.FC = () => {
   const { companies, employees, session } = useApp();
+  const { filialCompanyId } = useFilialFilter();
   const navigate = useNavigate();
-  const filialCompanies = companies;
-  const [companyId, setCompanyId] = useState<string>('');
+  const companyId = filialCompanyId || '';
+  const company = companies.find((item) => item.id === companyId);
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [movimentos, setMovimentos] = useState<MovimentoRow[]>([]);
   const [fechamento, setFechamento] = useState<FechamentoRow | null>(null);
@@ -32,10 +34,6 @@ const MovimentoDiarioPage: React.FC = () => {
     observacao: '',
   });
 
-  useEffect(() => {
-    if (filialCompanies.length && !companyId) setCompanyId(filialCompanies[0].id);
-  }, [filialCompanies, companyId]);
-
   const carregar = async () => {
     if (!companyId || !competencia) return;
     setLoading(true);
@@ -48,15 +46,23 @@ const MovimentoDiarioPage: React.FC = () => {
     setLoading(false);
   };
 
-  useEffect(() => { carregar(); /* eslint-disable-next-line */ }, [companyId, competencia]);
+  useEffect(() => {
+    setForm((current) => ({ ...current, funcionario_id: '' }));
+    void carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, competencia]);
 
   const fechado = fechamento?.status === 'fechado';
   const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || '';
 
   const adicionar = async () => {
+    if (!companyId) return toast.error('Filial não autorizada para esta sessão.');
     if (!form.funcionario_id) return toast.error('Selecione um funcionario');
     if (!session) return;
     if (fechado) return toast.error('Periodo fechado - nao e possivel alimentar movimento');
+
+    const employee = employees.find((item) => item.id === form.funcionario_id);
+    if (!employee || employee.companyId !== companyId) return toast.error('Funcionário fora da filial autorizada.');
 
     const { error } = await supabase.from('movimento_diario').insert({
       company_id: companyId,
@@ -77,9 +83,10 @@ const MovimentoDiarioPage: React.FC = () => {
   };
 
   const remover = async (id: string) => {
+    if (!companyId) return toast.error('Filial não autorizada para esta sessão.');
     if (fechado) return toast.error('Periodo fechado');
     if (!confirm('Remover este movimento?')) return;
-    const { error } = await supabase.from('movimento_diario').delete().eq('id', id);
+    const { error } = await supabase.from('movimento_diario').delete().eq('id', id).eq('company_id', companyId);
     if (error) return toast.error(error.message);
     carregar();
   };
@@ -129,22 +136,21 @@ const MovimentoDiarioPage: React.FC = () => {
 
       <div className="card-premium p-4 flex flex-wrap gap-3 items-end">
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Empresa</label>
-          <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
-            {filialCompanies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-          </select>
+          <label className="text-xs text-muted-foreground block mb-1">Empresa autorizada</label>
+          <div className="min-w-[220px] rounded-lg border bg-background px-3 py-2 text-sm font-semibold text-foreground">
+            {company?.name || 'Filial não identificada'}
+          </div>
         </div>
         <div>
           <label className="text-xs text-muted-foreground block mb-1">Competencia</label>
           <Input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} className="w-44" />
         </div>
-        <Button variant="outline" size="sm" onClick={carregar} className="ml-auto">
+        <Button variant="outline" size="sm" onClick={carregar} className="ml-auto" disabled={!companyId}>
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
         </Button>
       </div>
 
-      {!fechado && (
+      {!fechado && companyId && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card-premium p-4">
           <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Plus className="w-4 h-4 text-primary" /> Registrar ocorrencia</h2>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
@@ -208,7 +214,7 @@ const MovimentoDiarioPage: React.FC = () => {
               <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground text-sm">Nenhum movimento registrado.</td></tr>
             )}
             {movimentos.map((movimento) => {
-              const employee = employees.find((item) => item.id === movimento.funcionario_id);
+              const employee = employees.find((item) => item.id === movimento.funcionario_id && item.companyId === companyId);
               const tipoCfg = TIPOS_OCORRENCIA.find((tipo) => tipo.value === movimento.tipo);
               return (
                 <tr key={movimento.id} className="border-b hover:bg-muted/20">
@@ -249,7 +255,7 @@ const MovimentoDiarioPage: React.FC = () => {
             </thead>
             <tbody>
               {Array.from(consolidado.entries()).map(([funcionarioId, totais]) => {
-                const employee = employees.find((item) => item.id === funcionarioId);
+                const employee = employees.find((item) => item.id === funcionarioId && item.companyId === companyId);
                 if (!employee) return null;
                 return (
                   <tr key={funcionarioId} className="border-b hover:bg-muted/20">
