@@ -31,6 +31,7 @@ const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastr
 const PedidoDemissaoModelDialog = lazy(() => import("@/components/PedidoDemissaoModelDialog"));
 const ContabilidadeAdminInboxAddon = lazy(() => import("@/components/ContabilidadeAdminInboxAddon"));
 const ContabilidadeFolhaAdminAddon = lazy(() => import("@/components/ContabilidadeFolhaAdminAddon"));
+const PayrollAccountingSourceAddon = lazy(() => import("@/components/PayrollAccountingSourceAddon"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
 const MOBILE_BUILD_TAG = "20260908-mecanicos-oficial-v2";
@@ -108,8 +109,9 @@ const RouteEnhancers = () => {
   const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios';
   const isContabilidadeAdmin = path === '/admin/apontamento-contabilidade';
   const isContabilidadeCentral = path === '/admin/central-contabilidade';
+  const isAssinaturaDigital = path === '/admin/assinatura-digital';
 
-  if (!isFechamento && !isRelatorioVr && !isEpi && !isPreCadastro && !isPedidoDemissao && !isContabilidadeAdmin && !isContabilidadeCentral) return null;
+  if (!isFechamento && !isRelatorioVr && !isEpi && !isPreCadastro && !isPedidoDemissao && !isContabilidadeAdmin && !isContabilidadeCentral && !isAssinaturaDigital) return null;
 
   return (
     <Suspense fallback={null}>
@@ -123,6 +125,7 @@ const RouteEnhancers = () => {
       {isPedidoDemissao && <PedidoDemissaoModelDialog />}
       {isContabilidadeAdmin && <ContabilidadeAdminInboxAddon />}
       {isContabilidadeCentral && <ContabilidadeFolhaAdminAddon />}
+      {isAssinaturaDigital && <PayrollAccountingSourceAddon />}
     </Suspense>
   );
 };
