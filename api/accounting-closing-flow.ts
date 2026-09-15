@@ -44,12 +44,12 @@ async function getOrCreatePaymentCycle(service: any, companyId: string, competen
   return data;
 }
 
-async function accountingRecipients(service: any, companyId: string) {
+async function accountingRecipients(service: any, companyId: string): Promise<{ owner:any; emails:string[] }> {
   const { data: access, error: accessError } = await service.from('contabilidade_portal_acesso_empresas')
     .select('portal_user_id')
     .eq('empresa_id', companyId);
   if (accessError) throw accessError;
-  const ids = Array.from(new Set((access || []).map((row: any) => clean(row.portal_user_id)).filter(Boolean)));
+  const ids = Array.from(new Set<string>((access || []).map((row: any) => clean(row.portal_user_id)).filter(Boolean) as string[]));
   if (!ids.length) throw new Error('contabilidade_sem_acesso_empresa');
   const { data: users, error: usersError } = await service.from('contabilidade_portal_usuarios')
     .select('id,nome,email,portal,ativo')
@@ -60,7 +60,7 @@ async function accountingRecipients(service: any, companyId: string) {
   const rows = users || [];
   if (!rows.length) throw new Error('contabilidade_sem_usuario_ativo');
   const owner = rows.find((row: any) => clean(row.email).toLowerCase() === 'dp@aatconsultoria.com.br') || rows[0];
-  const emails = Array.from(new Set(rows.map((row: any) => clean(row.email).toLowerCase()).filter(Boolean)));
+  const emails = Array.from(new Set<string>((rows.map((row: any) => clean(row.email).toLowerCase()).filter(Boolean)) as string[]));
   return { owner, emails };
 }
 
