@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, FileText, History, Home, Search, Users, Wrench,
+  ArrowLeft, Building2, FileText, History, Home, Search, Wrench,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -18,11 +18,15 @@ type SearchItem = { label: string; path: string };
 const SEARCH_ITEMS: SearchItem[] = [
   { label: 'Dashboard', path: '/admin' },
   { label: 'Empresas', path: '/admin/empresas' },
-  { label: 'Funcionários', path: '/admin/funcionarios' },
-  { label: 'Fechamento', path: '/admin/fechamento' },
+  { label: 'Central da Contabilidade', path: '/admin/central-contabilidade' },
+  { label: 'Pré-cadastro', path: '/admin/central-contabilidade?modulo=pre-cadastro' },
+  { label: 'Rescisões', path: '/admin/central-contabilidade?modulo=rescisao' },
+  { label: 'Solicitar Férias', path: '/admin/central-contabilidade?modulo=ferias' },
+  { label: 'ASO', path: '/admin/central-contabilidade?modulo=aso' },
+  { label: 'Envio para Clínicas', path: '/admin/central-contabilidade?modulo=clinicas' },
+  { label: 'Fechamento', path: '/admin/central-contabilidade' },
   { label: 'Ponto', path: '/admin/fechamento-ponto' },
   { label: 'Assinatura Digital / Holerites', path: '/admin/folha-pagamento' },
-  { label: 'Solicitar Férias', path: '/admin/aviso-ferias' },
   { label: 'EPI', path: '/admin/epi' },
   { label: 'Uniformes', path: '/admin/uniformes' },
   { label: 'Almoxarifado', path: '/admin/almoxarifado' },
@@ -31,8 +35,6 @@ const SEARCH_ITEMS: SearchItem[] = [
   { label: 'App Mecânicos', path: '/admin/app-mecanico' },
   { label: 'Operacional', path: '/admin/operacional' },
   { label: 'Relatórios', path: '/admin/relatorio' },
-  { label: 'ASO', path: '/admin/aso' },
-  { label: 'Pré-cadastro', path: '/admin/pre-cadastro-admissional' },
   { label: 'Compras', path: '/admin/compras' },
   { label: 'Histórico', path: '/admin/historico' },
 ];
@@ -55,7 +57,7 @@ const AdminMobileLayout: React.FC = () => {
 
   const bottomItems = [
     { label: 'Início', icon: Home, path: '/admin', active: location.pathname === '/admin' },
-    { label: 'Pessoas', icon: Users, path: '/admin/funcionarios', active: location.pathname.startsWith('/admin/funcionarios') },
+    { label: 'Empresas', icon: Building2, path: '/admin/empresas', active: location.pathname.startsWith('/admin/empresas') || location.pathname.startsWith('/admin/funcionarios') },
     { label: 'Documentos', icon: FileText, path: '/admin/folha-pagamento', active: location.pathname.startsWith('/admin/folha-pagamento') },
     { label: 'Operação', icon: Wrench, path: '/admin/app-mecanico', active: location.pathname.startsWith('/admin/app-mecanico') },
     { label: 'Histórico', icon: History, path: '/admin/historico', active: location.pathname.startsWith('/admin/historico') },
