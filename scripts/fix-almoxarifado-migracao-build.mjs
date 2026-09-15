@@ -39,7 +39,6 @@ replaceOnce(
   'botão importar',
 );
 
-// Remove da interface o importador CSV antigo que gravava diretamente no banco.
 const oldImportBlock = `            {showImport && (\n              <div className=\"border rounded-lg p-4 bg-muted/20\">\n                <p className=\"text-xs text-muted-foreground mb-2\">Envie um CSV/TXT com colunas: Nome, Categoria, Unidade, Quantidade, Valor, Localização</p>\n                <input ref={fileRef} type=\"file\" accept=\".csv,.txt,.tsv\" onChange={handleImport} className=\"text-xs\" />\n              </div>\n            )}\n`;
 if (s.includes(oldImportBlock)) {
   s = s.replace(oldImportBlock, '');
@@ -60,3 +59,4 @@ if (changed) {
 }
 
 await import('./fix-almoxarifado-card-dashboard-build.mjs');
+await import('./fix-almoxarifado-card-visual-hotfix-build.mjs');
