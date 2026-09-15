@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Users, FileCheck, FileText, LogOut,
+  LayoutDashboard, Building2, Users, FileText, LogOut,
   HardHat, Shirt, History, CalendarCheck, FileX, Fuel, Car, Stethoscope,
   UserCheck, Package, ClipboardList, Receipt, ClipboardCheck, Wrench, FileSearch,
   ShoppingCart, Headphones, PanelLeftClose, PanelLeftOpen, Radar,
@@ -16,9 +16,7 @@ const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
   { label: 'Funcionários', icon: Users, path: '/admin/funcionarios' },
-  { label: 'Fechamento', icon: FileCheck, path: '/admin/fechamento' },
   { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
-  { label: 'Fechamentos das Filiais', icon: ClipboardCheck, path: '/admin/fechamentos-filiais' },
   { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade' },
   { label: 'Rescisões', icon: FileX, path: '/admin/rescisoes' },
 ];
