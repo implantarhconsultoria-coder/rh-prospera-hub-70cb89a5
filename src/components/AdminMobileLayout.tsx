@@ -22,7 +22,7 @@ const SEARCH_ITEMS: SearchItem[] = [
   { label: 'Fechamento', path: '/admin/fechamento' },
   { label: 'Ponto', path: '/admin/fechamento-ponto' },
   { label: 'Assinatura Digital / Holerites', path: '/admin/folha-pagamento' },
-  { label: 'Férias', path: '/admin/aviso-ferias' },
+  { label: 'Solicitar Férias', path: '/admin/aviso-ferias' },
   { label: 'EPI', path: '/admin/epi' },
   { label: 'Uniformes', path: '/admin/uniformes' },
   { label: 'Almoxarifado', path: '/admin/almoxarifado' },
