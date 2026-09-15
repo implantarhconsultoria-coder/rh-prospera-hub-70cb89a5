@@ -31,6 +31,7 @@ const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastr
 const PedidoDemissaoModelDialog = lazy(() => import("@/components/PedidoDemissaoModelDialog"));
 const ContabilidadeAdminInboxAddon = lazy(() => import("@/components/ContabilidadeAdminInboxAddon"));
 const ContabilidadeFolhaAdminAddon = lazy(() => import("@/components/ContabilidadeFolhaAdminAddon"));
+const ContabilidadeCorrectionPanel = lazy(() => import("@/components/ContabilidadeCorrectionPanel"));
 const PayrollAccountingSourceAddon = lazy(() => import("@/components/PayrollAccountingSourceAddon"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
@@ -125,6 +126,7 @@ const RouteEnhancers = () => {
       {isPedidoDemissao && <PedidoDemissaoModelDialog />}
       {isContabilidadeAdmin && <ContabilidadeAdminInboxAddon />}
       {isContabilidadeCentral && <ContabilidadeFolhaAdminAddon />}
+      {isContabilidadeCentral && <ContabilidadeCorrectionPanel mode="admin" />}
       {isAssinaturaDigital && <PayrollAccountingSourceAddon />}
     </Suspense>
   );
