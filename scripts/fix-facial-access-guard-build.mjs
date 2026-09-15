@@ -36,44 +36,24 @@ const replaceOnce = (source, before, after, label) => {
   if (!source.includes("const MANUAL_AUTH_FAILURES = ['INVALID_FORMAT', 'NO_MATCH_IN_COMPANY_SCOPE', 'SIGNATURE_EXCLUDED'];")) {
     source = replaceOnce(
       source,
-      'const RATE_LIMIT_MAX_ATTEMPTS = 5;',
-      "const RATE_LIMIT_MAX_ATTEMPTS = 5;\nconst MANUAL_AUTH_FAILURES = ['INVALID_FORMAT', 'NO_MATCH_IN_COMPANY_SCOPE', 'SIGNATURE_EXCLUDED'];",
+      'const MAX_CPF_ATTEMPTS_15M = 5;',
+      "const MAX_CPF_ATTEMPTS_15M = 5;\nconst MANUAL_AUTH_FAILURES = ['INVALID_FORMAT', 'NO_MATCH_IN_COMPANY_SCOPE', 'SIGNATURE_EXCLUDED'];",
       'lista de falhas manuais',
     );
   }
 
   source = replaceOnce(
     source,
-`    service
-      .from('payroll_public_access_attempts')
-      .select('id', { count: 'exact', head: true })
-      .eq('identifier_hash', identifierHash)
-      .gte('created_at', since),`,
-`    service
-      .from('payroll_public_access_attempts')
-      .select('id', { count: 'exact', head: true })
-      .eq('identifier_hash', identifierHash)
-      .eq('success', false)
-      .in('failure_reason', MANUAL_AUTH_FAILURES)
-      .gte('created_at', since),`,
-    'limite manual por identificador',
+    "    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('ip', ip).gte('created_at', cutoff),",
+    "    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('ip', ip).eq('success', false).in('failure_reason', MANUAL_AUTH_FAILURES).gte('created_at', cutoff),",
+    'limite manual por IP',
   );
 
   source = replaceOnce(
     source,
-`    service
-      .from('payroll_public_access_attempts')
-      .select('id', { count: 'exact', head: true })
-      .eq('ip', ip)
-      .gte('created_at', since),`,
-`    service
-      .from('payroll_public_access_attempts')
-      .select('id', { count: 'exact', head: true })
-      .eq('ip', ip)
-      .eq('success', false)
-      .in('failure_reason', MANUAL_AUTH_FAILURES)
-      .gte('created_at', since),`,
-    'limite manual por IP',
+    "    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('identifier_hash', identifierHash).gte('created_at', cutoff),",
+    "    service.from('payroll_public_access_attempts').select('id', { count: 'exact', head: true }).eq('identifier_hash', identifierHash).eq('success', false).in('failure_reason', MANUAL_AUTH_FAILURES).gte('created_at', cutoff),",
+    'limite manual por CPF',
   );
 
   fs.writeFileSync(path, source, 'utf8');
