@@ -1,1 +1,1 @@
-export { default } from './ContabilidadeDashboardPageV2';
+export { default } from './ContabilidadeDashboardPageV3';
