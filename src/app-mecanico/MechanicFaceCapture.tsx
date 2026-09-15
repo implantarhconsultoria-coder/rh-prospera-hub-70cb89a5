@@ -179,6 +179,7 @@ export default function MechanicFaceCapture({ mode, accessId, onSuccess, onCance
           setMessage(stableRef.current >= 2 ? "Rosto lido. Confirmando..." : "Mantenha o rosto nessa posição...");
           if (stableRef.current < 2) return;
 
+          const snapshot = captureJpeg(currentVideo);
           submittingRef.current = true;
           stop();
           const response = await fetch("/api/mechanic-face", {
@@ -190,7 +191,7 @@ export default function MechanicFaceCapture({ mode, accessId, onSuccess, onCance
               access_id: accessId || undefined,
               descriptor: Array.from(result.descriptor as Float32Array),
               face_score: Number(result.detection.score || 0),
-              snapshot: captureJpeg(currentVideo),
+              snapshot,
             }),
           });
           const data = await response.json().catch(() => ({}));

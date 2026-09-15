@@ -4,7 +4,7 @@ import { getInsalubridadeAplicavel, getPericulosidadeAplicavel } from '@/lib/emp
 const round2 = (value: number) => Math.round((Number(value) || 0) * 100) / 100;
 
 export const TOPAC_GYN_COMPANY_ID = 'c7a040f2-34b3-42a6-8a3a-f4bb64140ec6';
-export const TOPAC_GYN_CNPJ = '50973087000208';
+export const TOPAC_GYN_CNPJ = '07291648000375';
 
 type CompanyHourRuleRef = string | {
   id?: string | null;

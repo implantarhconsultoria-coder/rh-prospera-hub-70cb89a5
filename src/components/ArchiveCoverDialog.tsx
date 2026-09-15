@@ -381,7 +381,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
                 </div>
               </div>
 
-              <CoverOptionsPanel options={options} dismissalEnabled={!!dismissalDate && !loadingEmployee} loadingEmployee={loadingEmployee} dismissalDate={dismissalDate} bulk={false} toggleOption={toggleOption} />
+              <CoverOptionsPanel options={options} dismissalEnabled={!loadingEmployee} loadingEmployee={loadingEmployee} dismissalDate={dismissalDate} bulk={false} toggleOption={toggleOption} onDismissalDateChange={setDismissalDate} />
             </div>
           )}
 
@@ -424,7 +424,7 @@ const PreviewRow = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const CoverOptionsPanel = ({ options, dismissalEnabled, loadingEmployee, dismissalDate, bulk, toggleOption }: { options: CoverOptions; dismissalEnabled: boolean; loadingEmployee: boolean; dismissalDate: string; bulk: boolean; toggleOption: (key: keyof CoverOptions) => void }) => (
+const CoverOptionsPanel = ({ options, dismissalEnabled, loadingEmployee, dismissalDate, bulk, toggleOption, onDismissalDateChange }: { options: CoverOptions; dismissalEnabled: boolean; loadingEmployee: boolean; dismissalDate: string; bulk: boolean; toggleOption: (key: keyof CoverOptions) => void; onDismissalDateChange?: (value: string) => void }) => (
   <div className="rounded-xl border p-4">
     <div className="text-xs font-semibold">Informações da capa</div>
     <div className="mb-3 mt-0.5 text-[10px] text-muted-foreground">O nome sempre será impresso em destaque.</div>
@@ -435,7 +435,22 @@ const CoverOptionsPanel = ({ options, dismissalEnabled, loadingEmployee, dismiss
       <OptionButton checked={options.dismissal} label="Data de demissão" onClick={() => toggleOption('dismissal')} disabled={!dismissalEnabled} />
     </div>
     {!bulk && loadingEmployee && <div className="mt-3 text-[10px] text-muted-foreground">Conferindo data de demissão...</div>}
-    {!bulk && !loadingEmployee && !dismissalDate && <div className="mt-3 text-[10px] text-muted-foreground">Este funcionário não possui data de demissão cadastrada.</div>}
+    {!bulk && options.dismissal && !loadingEmployee && (
+      <div className="mt-3 space-y-1.5 rounded-lg border border-primary/20 bg-primary/5 p-3">
+        <label className="block text-[10px] font-semibold text-foreground">Data de demissão para esta capa</label>
+        <Input
+          type="date"
+          value={dismissalDate}
+          onChange={(event) => onDismissalDateChange?.(event.target.value)}
+          className={lightFieldClass}
+        />
+        <div className="text-[10px] leading-relaxed text-muted-foreground">
+          {dismissalDate
+            ? 'Data carregada do cadastro. Você pode ajustar aqui conforme o documento que está em mãos. A alteração vale somente para esta capa.'
+            : 'Preencha conforme os documentos que estão em mãos. Esta data será usada somente na capa/PDF e não altera automaticamente o cadastro do funcionário.'}
+        </div>
+      </div>
+    )}
   </div>
 );
 

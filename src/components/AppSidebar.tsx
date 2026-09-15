@@ -31,7 +31,6 @@ const operationalItems: MenuItem[] = [
   { label: 'Combustível', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
   { label: 'Rastreamento da Frota', icon: Radar, path: '/admin/monitoramento' },
-  { label: 'Protocolo', icon: FileCheck, path: '/admin/operacional/protocolo' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
   { label: 'Solicitar Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
@@ -145,7 +144,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
 
       <div className="shrink-0 px-4 pb-3 pt-2">
         {!collapsed && (
-          <div className="mb-3 rounded-[9px] border border-[#282b32] bg-[#06090d] px-4 py-4">
+          <div role="button" tabIndex={0} onClick={() => window.dispatchEvent(new CustomEvent('topac:open-support'))} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') window.dispatchEvent(new CustomEvent('topac:open-support')); }} className="mb-3 cursor-pointer rounded-[9px] border border-[#282b32] bg-[#06090d] px-4 py-4 transition hover:border-violet-500/60 hover:bg-violet-500/5">
             <div className="flex items-center gap-3">
               <Headphones className="h-8 w-8 text-[#9b32ff]" strokeWidth={1.6} />
               <div>

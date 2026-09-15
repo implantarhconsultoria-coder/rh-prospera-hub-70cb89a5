@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
-import ApontamentoContabilidadePage from '@/pages/admin/ApontamentoContabilidadePage';
+import FechamentoPage from '@/pages/FechamentoPage';
 import { toast } from 'sonner';
 
 type TabKey = 'visao' | 'movimentacoes' | 'documentos' | 'fechamento';
@@ -99,7 +99,7 @@ const CentralContabilidadePage: React.FC = () => {
 
   const tabs:Array<{key:TabKey;label:string;icon:React.ElementType}> = [
     { key:'visao', label:'Visão geral', icon:Building2 }, { key:'movimentacoes', label:'Conferências', icon:FileCheck2 },
-    { key:'documentos', label:'Documentos recebidos', icon:UploadCloud }, { key:'fechamento', label:'Fechamento / Envio', icon:Send },
+    { key:'documentos', label:'Documentos recebidos', icon:UploadCloud }, { key:'fechamento', label:'Fechamento', icon:Send },
   ];
 
   return <div className="space-y-5 animate-fade-in">
@@ -112,7 +112,7 @@ const CentralContabilidadePage: React.FC = () => {
       <div className="flex gap-1 overflow-x-auto border-t border-[#211b28] bg-[#07090d] px-3 py-2">{tabs.map(({key,label,icon:Icon}) => <button key={key} onClick={() => setTab(key)} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-bold ${tab===key?'bg-[#25123d] text-white ring-1 ring-[#7131a8]':'text-zinc-500 hover:bg-white/[.035] hover:text-zinc-200'}`}><Icon className={`h-4 w-4 ${tab===key?'text-[#ffc400]':'text-[#8b22ff]'}`} />{label}</button>)}</div>
     </section>
 
-    {loading ? <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-[#27222e] bg-[#05070b]"><Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" /></div> : tab === 'fechamento' ? <ApontamentoContabilidadePage /> : tab === 'visao' ? <div className="grid gap-4 xl:grid-cols-2">
+    {loading ? <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-[#27222e] bg-[#05070b]"><Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" /></div> : tab === 'fechamento' ? <FechamentoPage /> : tab === 'visao' ? <div className="grid gap-4 xl:grid-cols-2">
       <Panel title="Últimas conferências" icon={FileCheck2}>{revisoes.length===0?<Empty text="Nenhuma conferência registrada."/>:revisoes.slice(0,8).map((r)=><div key={r.id} className="flex items-start justify-between gap-3 border-b border-[#1f2026] py-3 last:border-0"><div className="min-w-0"><div className="truncate text-sm font-bold text-zinc-100">{String(r.origem_tipo||'Movimentação').replace(/_/g,' ')}</div><div className="mt-1 text-xs text-zinc-500">{companyMap.get(r.empresa_id)||'Empresa'} · {r.revisor_nome||'Contabilidade'} · {brDateTime(r.revisado_em||r.created_at)}</div>{r.observacao&&<div className="mt-1 line-clamp-2 text-xs text-zinc-400">{r.observacao}</div>}</div><StatusBadge value={r.status}/></div>)}</Panel>
       <Panel title="Últimos documentos recebidos" icon={UploadCloud}>{uploads.length===0?<Empty text="Nenhum documento recebido."/>:uploads.slice(0,8).map((u)=><div key={u.id} className="flex items-center justify-between gap-3 border-b border-[#1f2026] py-3 last:border-0"><div className="min-w-0"><div className="truncate text-sm font-bold text-zinc-100">{u.arquivo_nome}</div><div className="mt-1 text-xs text-zinc-500">{companyMap.get(u.empresa_id)||'Empresa'} · {userMap.get(u.portal_user_id)?.nome||'Contabilidade'} · {brDateTime(u.created_at)}</div></div><button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#3a2c48] px-3 py-1.5 text-xs font-bold text-zinc-200 hover:border-[#8b22ff]">Abrir</button></div>)}</Panel>
       {errosEmail.length>0&&<div className="xl:col-span-2"><Panel title="Formalizações de e-mail com falha" icon={AlertTriangle}><div className="grid gap-2 lg:grid-cols-2">{errosEmail.slice(0,12).map((u)=><div key={u.id} className="rounded-lg border border-rose-500/20 bg-rose-500/[.045] p-3"><div className="text-sm font-bold text-white">{u.arquivo_nome}</div><div className="mt-1 text-xs text-zinc-500">{companyMap.get(u.empresa_id)||'Empresa'} · {brDateTime(u.created_at)}</div><div className="mt-3 flex items-center justify-between gap-2"><StatusBadge value={u.formalizacao_email_status||'erro_envio_email'}/><button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="inline-flex items-center gap-2 rounded-md bg-[#7c24d6] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{busyId===u.id?<Loader2 className="h-3.5 w-3.5 animate-spin"/>:<Send className="h-3.5 w-3.5"/>}Reenviar formalização</button></div></div>)}</div></Panel></div>}

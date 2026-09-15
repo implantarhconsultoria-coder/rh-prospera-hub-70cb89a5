@@ -29,6 +29,22 @@ const competenceLabel = (competencia: string) => {
   return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
 };
 
+const signatureDocumentLabel = (documentType: string) => {
+  if (documentType === 'AVISO_FERIAS') return 'Aviso de Férias';
+  if (documentType === 'BENEFICIO_VR') return 'Recibo VR';
+  if (documentType === 'BENEFICIO_VT') return 'Recibo VT';
+  if (documentType === 'BENEFICIO_VR_VT') return 'Recibo VR / VT';
+  if (documentType === 'ADIANTAMENTO') return 'Recibo de Adiantamento';
+  if (documentType === 'RECIBO_GARAGEM') return 'Recibo de Garagem';
+  return 'Holerite';
+};
+
+const pendingDocumentLabel = (doc: { document_type: string; competencia: string }) => {
+  const label = signatureDocumentLabel(doc.document_type);
+  const competencia = competenceLabel(doc.competencia);
+  return competencia ? `${label} (${competencia})` : label;
+};
+
 type PendingRow = {
   employee_id?: string | null;
   employee_name?: string | null;
@@ -87,7 +103,7 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
     setLoading(true);
     try {
       const { data, error } = await (supabase as any)
-        .from('payroll_admin_status_v')
+        .from('payroll_signature_status_v')
         .select('employee_id,employee_name,document_id,competencia,document_type,holerite_confirmed,payment_confirmed,signature_status,signed_at')
         .eq('company_id', companyId)
         .order('competencia', { ascending: false })
@@ -144,10 +160,7 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
 
   const sendWhatsApp = useCallback((employee: PendingEmployee) => {
     if (!employee.whatsappPhone) return;
-    const months = [...new Set(employee.documents.map(doc => doc.competencia).filter(Boolean))];
-    const pendingText = months.length
-      ? months.map(competenceLabel).join(', ')
-      : 'documento(s) já liberado(s)';
+    const pendingText = [...new Set(employee.documents.map(pendingDocumentLabel))].join(', ') || 'documento(s) já liberado(s)';
     const plural = employee.documents.length > 1;
     const text = `Olá, ${employee.name}! Você possui ${employee.documents.length} documento${plural ? 's' : ''} já liberado${plural ? 's' : ''} no Portal TOPAC RH PRO da ${company?.name || 'empresa'} que ainda ${plural ? 'constam' : 'consta'} como pendente${plural ? 's' : ''} de assinatura.\n\nPendência${plural ? 's' : ''}: ${pendingText}.\n\nAcesse pelo link abaixo e entre com seu CPF, data de nascimento e os 4 últimos números do celular cadastrado:\n\n${portalUrl}`;
     window.open(`https://wa.me/${employee.whatsappPhone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
@@ -244,7 +257,7 @@ const PendingPayrollSignatures: React.FC<PendingPayrollSignaturesProps> = ({ com
                     <Badge variant="outline" className="border-amber-500/40 text-amber-300">{employee.documents.length} pendente(s)</Badge>
                   </div>
                   <p className={`mt-1 text-xs ${employee.whatsappPhone ? 'text-muted-foreground' : 'text-red-400'}`}>{formatPhone(employee.phoneRaw)}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{[...new Set(employee.documents.map(doc => doc.competencia).filter(Boolean))].map(competenceLabel).join(' · ')}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{[...new Set(employee.documents.map(pendingDocumentLabel))].join(' · ')}</p>
                 </div>
 
                 <Button size="sm" onClick={() => sendWhatsApp(employee)} disabled={!employee.whatsappPhone} className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-500" title={employee.whatsappPhone ? `Enviar lembrete para ${employee.name}` : 'Funcionário sem telefone válido cadastrado'}>

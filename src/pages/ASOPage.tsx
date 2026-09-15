@@ -163,6 +163,7 @@ const ASOPage: React.FC = () => {
 
   const handlePrint = async () => {
     if (!emp) { toast.error('Selecione um funcionário'); return; }
+    if (tipoExame === 'Demissional' && !dataExame) { toast.error('Informe a data prevista do exame demissional.'); return; }
     const pdf = gerarPdfAtual();
     if (!pdf) return;
 
@@ -185,6 +186,7 @@ const ASOPage: React.FC = () => {
 
   const handleEnviarEmailAso = async () => {
     if (!emp) { toast.error('Selecione um funcionario'); return; }
+    if (tipoExame === 'Demissional' && !dataExame) { toast.error('Informe a data prevista do exame demissional.'); return; }
     const pdf = gerarPdfAtual();
     if (!pdf) return;
 
@@ -195,7 +197,7 @@ const ASOPage: React.FC = () => {
       `CPF: ${emp.cpf}`,
       `Funcao: ${emp.cargo}`,
       `Empresa: ${company?.name || ''}`,
-      `Data sugerida: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'}`,
+      `${tipoExame === 'Demissional' ? 'Data prevista do exame' : 'Data sugerida'}: ${dataExame ? new Date(dataExame).toLocaleDateString('pt-BR') : 'A definir'}`,
       `Trabalho em Altura: ${trabalhoAltura ? 'Sim' : 'Nao'}`,
       `Espaco Confinado: ${espacoConfinado ? 'Sim' : 'Nao'}`,
     ];
@@ -332,7 +334,7 @@ const ASOPage: React.FC = () => {
         <div className="card-premium p-5 space-y-4">
           <h2 className="text-sm font-bold text-foreground">Dados do Exame</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div><label className="text-xs text-muted-foreground block mb-1">Data do Exame</label>
+            <div><label className="text-xs text-muted-foreground block mb-1">{tipoExame === 'Demissional' ? 'Data prevista do exame demissional' : 'Data do Exame'}</label>
               <Input type="date" value={dataExame} onChange={e => setDataExame(e.target.value)} /></div>
             <div><label className="text-xs text-muted-foreground block mb-1">Tipo de Exame</label>
               <select value={tipoExame} onChange={e => setTipoExame(e.target.value)}

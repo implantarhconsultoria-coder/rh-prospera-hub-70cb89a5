@@ -215,6 +215,12 @@ const FaceRecognitionCapture: React.FC<Props> = ({ mode, companyScope, session, 
             stableRef.current = 0;
             const code = scanError?.message || 'face_failed';
             if (['face_not_recognized', 'face_not_clear'].includes(code)) {
+              submittingRef.current = true;
+              if (timer) {
+                window.clearInterval(timer);
+                timer = null;
+              }
+              stopCamera();
               setError(friendlyError(code));
               setStage('error');
               return;
@@ -225,6 +231,11 @@ const FaceRecognitionCapture: React.FC<Props> = ({ mode, companyScope, session, 
 
         timer = window.setInterval(() => void scan().catch((scanError: any) => {
           if (cancelled) return;
+          if (timer) {
+            window.clearInterval(timer);
+            timer = null;
+          }
+          submittingRef.current = true;
           setError(friendlyError(scanError?.message || 'face_failed'));
           setStage('error');
           stopCamera();

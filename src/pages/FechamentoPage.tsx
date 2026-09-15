@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 import { supabase } from '@/integrations/supabase/client';
 import { entryToRow, type MonthlyEntry } from '@/types/database';
+import FechamentoLabelsPanel from '@/components/FechamentoLabelsPanel';
 
 const HOURS_DOC_RE = /DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/gi;
 const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
@@ -205,7 +206,7 @@ const FechamentoPage: React.FC = () => {
 
   const openPdf = () => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`);
   const statusColor = fechamento.status === 'fechado' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : fechamento.status === 'em_conferencia' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : 'border-violet-400/30 bg-violet-500/10 text-violet-300';
-  const inputClass = 'h-8 min-w-[72px] border-violet-400/20 bg-black/20 text-xs focus:border-violet-400/60';
+  const inputClass = 'h-7 w-full min-w-0 border-violet-400/20 bg-black/20 px-1 text-[10px] focus:border-violet-400/60';
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -245,34 +246,36 @@ const FechamentoPage: React.FC = () => {
           <div><h2 className="text-base font-bold text-foreground">Apontamento para Contabilidade</h2><p className="text-xs text-muted-foreground">Grade única e editável. Funcionário e empresa são fixos; os demais apontamentos podem ser preenchidos aqui.</p></div>
           <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={exportApontamentoCsv}><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button><Button variant="outline" size="sm" onClick={openPdf}><FileText className="mr-2 h-4 w-4" /> PDF</Button></div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1680px] text-sm">
-            <thead className="bg-violet-500/[0.055]"><tr className="border-b border-violet-400/20">{['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.',heSemanalLabel,'HE 100%','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((header) => <th key={header} className="px-3 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground whitespace-nowrap">{header}</th>)}</tr></thead>
+        <div className="max-h-[calc(100vh-315px)] w-full overflow-auto overscroll-contain [scrollbar-gutter:stable]">
+          <table className="w-full table-fixed text-[10px]">
+            <thead className="sticky top-0 z-30 bg-[#070a0f]/[.98] shadow-[0_8px_22px_rgba(0,0,0,.45)] backdrop-blur"><tr className="border-b border-violet-400/30">{['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.',heSemanalLabel,'HE 100%','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((header, index) => <th key={header} style={{ width: ['13%','8%','4%','6%','5%','5%','5%','5%','7%','6%','6%','7%','7%','16%'][index] }} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase leading-tight tracking-[-.01em] text-violet-100 whitespace-normal">{header}</th>)}</tr></thead>
             <tbody>{compEmps.map((emp) => {
               const entry = compEntries.find((item) => item.employeeId === emp.id); if (!entry) return null;
               const calc = calcPayroll(emp, entry);
               const update = (data: Partial<MonthlyEntry>) => queueEntryPersistence(entry, data);
               const docHoras = getHorasDocumento(entry.observacoes);
               return <tr key={emp.id} className="border-b border-violet-400/10 align-top hover:bg-violet-500/[0.025]">
-                <td className="px-3 py-3 font-semibold whitespace-nowrap">{emp.name}</td>
-                <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{selectedCompanyData?.name || '-'}</td>
-                <td className="px-2 py-2"><DecimalInput value={entry.faltasDias} decimals={1} onValueChange={(value) => update({ faltasDias: value })} className={`${inputClass} w-20`} /></td>
-                <td className="px-2 py-2"><Input value={getFaltaDatas(entry.observacoes)} onChange={(event) => update({ observacoes: setFaltaDatas(entry.observacoes, event.target.value) })} placeholder="Ex.: 03, 17" className={`${inputClass} w-28`} /></td>
-                <td className="px-2 py-2 min-w-28"><DecimalInput value={entry.atrasos} decimals={2} onValueChange={(value) => update({ atrasos: value })} className={`${inputClass} w-20`} /><div className="mt-1 text-[10px] text-muted-foreground">{formatCurrency(calc.atrasoVal)}</div></td>
-                <td className="px-2 py-2"><DecimalInput value={docHoras} decimals={2} onValueChange={(value) => update({ observacoes: setHorasDocumento(entry.observacoes, value) })} className={`${inputClass} w-20`} /></td>
-                <td className="px-2 py-2 min-w-28"><DecimalInput value={entry.he50} decimals={2} onValueChange={(value) => update({ he50: value })} className={`${inputClass} w-20`} /><div className="mt-1 text-[10px] text-violet-300">{formatCurrency(calc.he50Val)}</div></td>
-                <td className="px-2 py-2 min-w-28"><DecimalInput value={entry.he100} decimals={2} onValueChange={(value) => update({ he100: value })} className={`${inputClass} w-20`} /><div className="mt-1 text-[10px] text-violet-300">{formatCurrency(calc.he100Val)}</div></td>
-                <td className="px-2 py-2 min-w-36"><MoneyInput value={entry.comissaoBase || 0} onValueChange={(value) => update({ comissaoBase: value })} className={`${inputClass} w-28 text-right`} /><div className="mt-1 text-[10px] text-amber-300">{(calc.comissaoPct * 100).toFixed(0)}% = {formatCurrency(calc.comissaoVal)}</div></td>
-                <td className="px-2 py-2"><MoneyInput value={entry.adicionais || 0} onValueChange={(value) => update({ adicionais: value })} className={`${inputClass} w-28 text-right`} /></td>
-                <td className="px-2 py-2"><MoneyInput value={entry.descontosDiversos || 0} onValueChange={(value) => update({ descontosDiversos: value })} className={`${inputClass} w-28 text-right`} /></td>
-                <td className="px-2 py-2"><MoneyInput value={entry.adiantamento || 0} onValueChange={(value) => update({ adiantamento: value })} className={`${inputClass} w-28 text-right`} /></td>
-                <td className="px-3 py-3 font-extrabold text-violet-200 whitespace-nowrap">{formatCurrency(calc.liquido)}</td>
-                <td className="px-2 py-2 min-w-64"><Input value={getObservacaoLivre(entry.observacoes)} onChange={(event) => update({ observacoes: setObservacaoLivre(entry.observacoes, event.target.value) })} placeholder="Observação..." className={`${inputClass} w-64`} /></td>
+                <td className="px-1 py-2 text-[9px] font-semibold leading-tight break-words">{emp.name}</td>
+                <td className="px-1 py-2 text-[8px] leading-tight text-muted-foreground break-words">{selectedCompanyData?.name || '-'}</td>
+                <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.faltasDias} decimals={1} onValueChange={(value) => update({ faltasDias: value })} className={inputClass} /></td>
+                <td className="px-1 py-1.5 min-w-0"><Input value={getFaltaDatas(entry.observacoes)} onChange={(event) => update({ observacoes: setFaltaDatas(entry.observacoes, event.target.value) })} placeholder="Ex.: 03, 17" className={inputClass} /></td>
+                <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.atrasos} decimals={2} onValueChange={(value) => update({ atrasos: value })} className={inputClass} /><div className="mt-1 text-[10px] text-muted-foreground">{formatCurrency(calc.atrasoVal)}</div></td>
+                <td className="px-1 py-1.5 min-w-0"><DecimalInput value={docHoras} decimals={2} onValueChange={(value) => update({ observacoes: setHorasDocumento(entry.observacoes, value) })} className={inputClass} /></td>
+                <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.he50} decimals={2} onValueChange={(value) => update({ he50: value })} className={inputClass} /><div className="mt-1 text-[10px] text-violet-300">{formatCurrency(calc.he50Val)}</div></td>
+                <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.he100} decimals={2} onValueChange={(value) => update({ he100: value })} className={inputClass} /><div className="mt-1 text-[10px] text-violet-300">{formatCurrency(calc.he100Val)}</div></td>
+                <td className="px-1 py-1.5 min-w-0"><MoneyInput value={entry.comissaoBase || 0} onValueChange={(value) => update({ comissaoBase: value })} className={`${inputClass} text-right`} /><div className="mt-1 text-[10px] text-amber-300">{(calc.comissaoPct * 100).toFixed(0)}% = {formatCurrency(calc.comissaoVal)}</div></td>
+                <td className="px-1 py-1.5 min-w-0"><MoneyInput value={entry.adicionais || 0} onValueChange={(value) => update({ adicionais: value })} className={`${inputClass} text-right`} /></td>
+                <td className="px-1 py-1.5 min-w-0"><MoneyInput value={entry.descontosDiversos || 0} onValueChange={(value) => update({ descontosDiversos: value })} className={`${inputClass} text-right`} /></td>
+                <td className="px-1 py-1.5 min-w-0"><MoneyInput value={entry.adiantamento || 0} onValueChange={(value) => update({ adiantamento: value })} className={`${inputClass} text-right`} /></td>
+                <td className="px-1 py-2 text-[9px] font-extrabold text-violet-200 whitespace-nowrap">{formatCurrency(calc.liquido)}</td>
+                <td className="px-1 py-1.5 min-w-0"><Input value={getObservacaoLivre(entry.observacoes)} onChange={(event) => update({ observacoes: setObservacaoLivre(entry.observacoes, event.target.value) })} placeholder="Observação..." className={inputClass} /></td>
               </tr>;
             })}</tbody>
           </table>
         </div>
       </section>
+
+      <FechamentoLabelsPanel companyId={selectedCompany} competencia={competencia} />
 
       <section className="card-premium space-y-3 p-4">
         <label className="text-xs font-semibold text-muted-foreground">Observação geral do fechamento</label>

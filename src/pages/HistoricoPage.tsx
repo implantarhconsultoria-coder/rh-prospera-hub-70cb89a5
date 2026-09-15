@@ -17,6 +17,7 @@ type BankingChange = {
   changed_at: string;
   fields_changed: string[];
   email_to: string;
+  email_cc?: string | null;
   email_subject?: string | null;
   email_body?: string | null;
   email_status?: string | null;
@@ -32,7 +33,7 @@ const HistoricoPage: React.FC = () => {
   useEffect(() => {
     const load = async () => {
       const { data, error } = await (supabase as any).from('employee_banking_changes')
-        .select('id,employee_id,company_id,changed_at,fields_changed,email_to,email_subject,email_body,email_status')
+        .select('id,employee_id,company_id,changed_at,fields_changed,email_to,email_cc,email_subject,email_body,email_status')
         .order('changed_at', { ascending: false })
         .limit(1000);
       if (error) {
@@ -77,6 +78,7 @@ const HistoricoPage: React.FC = () => {
       description: string;
       printUrl?: string;
       emailTo?: string;
+      emailCc?: string;
       emailSubject?: string;
       emailBody?: string;
     }> = [];
@@ -105,6 +107,7 @@ const HistoricoPage: React.FC = () => {
         employeeId: change.employee_id,
         description: `Alteração bancária: ${(change.fields_changed || []).join(', ') || 'dados bancários'} · e-mail ${change.email_status || 'PREPARADO'} para ${change.email_to}`,
         emailTo: change.email_to,
+        emailCc: change.email_cc || '',
         emailSubject: change.email_subject || '',
         emailBody: change.email_body || '',
       });
@@ -135,13 +138,13 @@ const HistoricoPage: React.FC = () => {
 
   const copyEmail = async (record: typeof records[number]) => {
     if (!record.emailBody) return;
-    await navigator.clipboard.writeText(`Para: ${record.emailTo}\nAssunto: ${record.emailSubject}\n\n${record.emailBody}`);
+    await navigator.clipboard.writeText(`Para: ${record.emailTo}\nCc: ${record.emailCc || 'adm.matriz@topac.com.br; robson@topac.com.br'}\nAssunto: ${record.emailSubject}\n\n${record.emailBody}`);
     toast.success('E-mail da alteração copiado.');
   };
 
   const openEmail = (record: typeof records[number]) => {
     if (!record.emailTo) return;
-    window.location.href = `mailto:${encodeURIComponent(record.emailTo)}?subject=${encodeURIComponent(record.emailSubject || '')}&body=${encodeURIComponent(record.emailBody || '')}`;
+    window.location.href = `mailto:${encodeURIComponent(record.emailTo)}?cc=${encodeURIComponent(record.emailCc || 'adm.matriz@topac.com.br,robson@topac.com.br')}&subject=${encodeURIComponent(record.emailSubject || '')}&body=${encodeURIComponent(record.emailBody || '')}`;
   };
 
   return (

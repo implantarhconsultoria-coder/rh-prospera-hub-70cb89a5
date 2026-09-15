@@ -259,9 +259,14 @@ const EmployeeSmartEditOverlay: React.FC = () => {
         </div>,
         birthTarget,
       )}
-      <Button type="button" onClick={() => setOpen(true)} className="fixed bottom-6 right-24 z-40 gap-2 shadow-xl no-print">
-        <Sparkles className="h-4 w-4" /> Edição inteligente
-      </Button>
+      <div className="fixed bottom-6 right-24 z-40 flex flex-wrap justify-end gap-2 no-print">
+        <Button type="button" variant="outline" onClick={() => setBankingOpen(true)} className="gap-2 border-violet-400/40 bg-[#080b10]/95 text-white shadow-xl hover:bg-violet-500/15">
+          <Landmark className="h-4 w-4 text-violet-400" /> Enviar dados ao Financeiro
+        </Button>
+        <Button type="button" onClick={() => setOpen(true)} className="gap-2 shadow-xl">
+          <Sparkles className="h-4 w-4" /> Edição inteligente
+        </Button>
+      </div>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto border-violet-400/30 bg-[#05080d] text-white">
           <DialogHeader><DialogTitle className="text-white">Leitura Inteligente — {employee.name}</DialogTitle></DialogHeader>

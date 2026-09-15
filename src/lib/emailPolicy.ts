@@ -1,5 +1,6 @@
 export const TOPAC_REPORT_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
 export const TOPAC_REPORT_SIGNATURE = 'Atenciosamente,\nAdministrador Topac RH PRO Multiempresas';
+const EMAILS_REMOVIDOS = new Set(['lucilene' + '@aatconsultoria.com.br']);
 
 export const ACCOUNTING_VANESSA = 'dp@aatconsultoria.com.br' as const;
 export const ACCOUNTING_MARISA = 'marisa@aatconsultoria.com.br' as const;
@@ -44,7 +45,7 @@ const stripExistingSignature = (body: string) => {
 };
 
 const uniqueEmails = (values: readonly string[] = []) => Array.from(new Set(
-  values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean),
+  values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean).filter((email) => !EMAILS_REMOVIDOS.has(email)),
 ));
 
 const accountingCcFor = (to: readonly string[] = []) => {

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import PayrollSignatureModule from '@/components/payroll/PayrollSignatureModule';
 import PendingPayrollSignatures from '@/components/payroll/PendingPayrollSignatures';
 import BenefitSignatureGenerator from '@/components/payroll/BenefitSignatureGenerator';
+import GarageReceiptAdminModule from '@/components/payroll/GarageReceiptAdminModule';
 
 const digits = (value: unknown) => String(value || '').replace(/\D/g, '');
 
@@ -47,7 +48,7 @@ const FolhaPagamentoPage: React.FC = () => {
         <h1 className="text-2xl font-bold font-display text-foreground flex items-center gap-2">
           <FileSignature className="w-6 h-6" /> Assinatura Digital
         </h1>
-        <p className="text-sm text-muted-foreground">Holerites, comprovantes, VR e VT para conferência e assinatura.</p>
+        <p className="text-sm text-muted-foreground">Holerites, recibos de garagem, comprovantes opcionais, VR e VT para conferência e assinatura.</p>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
@@ -84,6 +85,7 @@ const FolhaPagamentoPage: React.FC = () => {
           </Card>
 
           <PayrollSignatureModule companyId={selectedCompany} competencia={competencia} />
+          <GarageReceiptAdminModule companyId={selectedCompany} competencia={competencia} />
           <BenefitSignatureGenerator companyId={selectedCompany} competencia={competencia} />
         </>
       ) : (
