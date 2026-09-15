@@ -1,14 +1,41 @@
+import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
-import { addEvent, getServiceClient, PAYROLL_BUCKET, randomToken, readBody, requireAdmin, sendJson, sha256 } from '../src/server/payrollServer.js';
+import { addEvent, getServiceClient, PAYROLL_BUCKET, readBody, requireAdmin, sendJson, sha256 } from '../src/server/payrollServer.js';
 
 const INBOX_BUCKET = 'contabilidade-inbox';
 const MAX_ORIGINAL_BYTES = 50 * 1024 * 1024;
 const MAX_PAGE_BYTES = 25 * 1024 * 1024;
+const MAX_EMAIL_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
+const TOPAC_CENTRAL_EMAIL = 'adm.matriz@topac.com.br';
+const TOPAC_ROBSON_EMAIL = 'robson@topac.com.br';
+const TOPAC_GOIANIA_EMAIL = 'adm.gyn@topac.com.br';
+const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
+const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
+const DEFAULT_EMAIL_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
+
 const clean = (value: unknown) => String(value || '').trim();
 const safeFile = (value: unknown) => clean(value || 'documento.pdf')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^A-Za-z0-9._-]+/g, '_').replace(/_+/g, '_').slice(0, 140) || 'documento.pdf';
 const digits = (value: unknown) => clean(value).replace(/\D/g, '');
+const uniqueEmails = (values: string[]) => Array.from(new Set(values.map(v => clean(v).toLowerCase()).filter(Boolean)));
+const htmlEscape = (value: unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+const verifiedFrom = () => {
+  const configured = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM);
+  return configured && !/@resend\.dev/i.test(configured) ? configured : DEFAULT_EMAIL_FROM;
+};
+const counterpartFor = (email: unknown) => {
+  const normalized = clean(email).toLowerCase();
+  if (normalized === VANESSA_EMAIL) return MARISA_EMAIL;
+  if (normalized === MARISA_EMAIL) return VANESSA_EMAIL;
+  return '';
+};
+const competenceLabel = (value: unknown) => {
+  const [year, month] = clean(value).split('-');
+  return year && month ? `${month}/${year}` : clean(value);
+};
 
 const competenceNow = () => {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' })
@@ -20,12 +47,6 @@ const validatePortal = (value: unknown) => {
   const portal = clean(value).toLowerCase();
   if (!['principal','goiania'].includes(portal)) throw Object.assign(new Error('portal_invalido'), { status: 400 });
   return portal;
-};
-
-const validateProcess = (value: unknown) => {
-  const type = clean(value).toLowerCase();
-  if (!['adiantamento','pagamento'].includes(type)) throw Object.assign(new Error('processo_invalido'), { status: 400 });
-  return type as 'adiantamento'|'pagamento';
 };
 
 const validateCompetence = (value: unknown) => {
@@ -53,7 +74,7 @@ const allowedCompanies = async (service: any, userId: string) => {
   const { data: access, error } = await service.from('contabilidade_portal_acesso_empresas')
     .select('empresa_id').eq('portal_user_id', userId);
   if (error) throw error;
-  const ids = Array.from(new Set((access || []).map((row: any) => row.empresa_id).filter(Boolean)));
+  const ids = Array.from(new Set((access || []).map((row: any) => String(row.empresa_id || '')).filter(Boolean))) as string[];
   if (!ids.length) return [];
   const { data: companies, error: companyError } = await service.from('empresas')
     .select('id,nome,codigo,cnpj').in('id', ids).order('nome');
@@ -101,6 +122,139 @@ const objectExists = async (service: any, bucket: string, path: string) => {
   return (data || []).some((row: any) => row.name === base);
 };
 
+const buildCycleAttachments = async (service: any, cycleId: string) => {
+  const { data: uploads, error } = await service.from('contabilidade_portal_uploads')
+    .select('id,arquivo_nome,storage_bucket,storage_path,tamanho_bytes')
+    .eq('ciclo_id', cycleId)
+    .order('created_at');
+  if (error) throw error;
+  const attachments: Array<{ filename: string; content: string }> = [];
+  let total = 0;
+  for (const upload of uploads || []) {
+    const declared = Number(upload.tamanho_bytes || 0);
+    if (declared > MAX_EMAIL_ATTACHMENTS_BYTES || total + declared > MAX_EMAIL_ATTACHMENTS_BYTES) continue;
+    const { data: file, error: downloadError } = await service.storage.from(upload.storage_bucket || INBOX_BUCKET).download(upload.storage_path);
+    if (downloadError || !file) continue;
+    const bytes = Buffer.from(await file.arrayBuffer());
+    if (!bytes.length || total + bytes.length > MAX_EMAIL_ATTACHMENTS_BYTES) continue;
+    total += bytes.length;
+    attachments.push({ filename: safeFile(upload.arquivo_nome), content: bytes.toString('base64') });
+  }
+  return { attachments, uploads: uploads || [] };
+};
+
+const sendResend = async (input: { to: string[]; cc?: string[]; replyTo?: string; subject: string; body: string; attachments?: Array<{ filename: string; content: string }> }) => {
+  const resendKey = clean(process.env.RESEND_API_KEY);
+  if (!resendKey) return { status: 'erro', error: 'RESEND_API_KEY ausente' };
+  const to = uniqueEmails(input.to);
+  const cc = uniqueEmails(input.cc || []).filter(email => !to.includes(email));
+  if (!to.length) return { status: 'erro', error: 'destinatario_ausente' };
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.6;max-width:720px">${input.body.split('\n').map(line => line ? `<p style="margin:5px 0">${htmlEscape(line)}</p>` : '<div style="height:8px"></div>').join('')}</div>`;
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: verifiedFrom(),
+      to,
+      ...(cc.length ? { cc } : {}),
+      ...(clean(input.replyTo) ? { reply_to: clean(input.replyTo) } : {}),
+      subject: input.subject,
+      text: input.body,
+      html,
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+    }),
+  });
+  const detail = await response.text().catch(() => '');
+  if (!response.ok) return { status: 'erro', error: detail.slice(0, 1000) || `HTTP ${response.status}` };
+  return { status: 'enviado', error: null };
+};
+
+const sendSubmissionEmail = async (service: any, cycle: any, user: any, identified: number, review: number) => {
+  if (cycle.email_envio_status === 'enviado') return { status: 'enviado', skipped: true };
+  const { data: company } = await service.from('empresas').select('nome').eq('id', cycle.empresa_id).maybeSingle();
+  const companyName = clean(company?.nome) || 'Empresa';
+  const { attachments, uploads } = await buildCycleAttachments(service, cycle.id);
+  const counterpart = counterpartFor(user.email);
+  const to = cycle.portal === 'goiania' ? [TOPAC_GOIANIA_EMAIL] : [TOPAC_CENTRAL_EMAIL];
+  const cc = cycle.portal === 'goiania'
+    ? uniqueEmails([clean(user.email)])
+    : uniqueEmails([TOPAC_ROBSON_EMAIL, clean(user.email), counterpart]);
+  const processLabel = cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento';
+  const names = uploads.map((row: any) => `• ${row.arquivo_nome}`).join('\n');
+  const body = [
+    'Prezados,', '',
+    `A Contabilidade enviou os arquivos de ${processLabel} para conferência no TOPAC RH PRO.`, '',
+    `Empresa: ${companyName}`,
+    `Competência: ${competenceLabel(cycle.competencia)}`,
+    `Enviado por: ${clean(user.nome) || 'Contabilidade'}`,
+    `Documentos identificados: ${identified}`,
+    review ? `Itens para revisão: ${review}` : 'Itens para revisão: 0', '',
+    'Arquivos recebidos:', names || '• Nenhum arquivo listado', '',
+    attachments.length === uploads.length
+      ? 'Os PDFs seguem anexados neste e-mail e também estão disponíveis na Central da Contabilidade.'
+      : 'Os PDFs estão disponíveis na Central da Contabilidade. Os arquivos que couberam no limite do e-mail seguem anexados.', '',
+    'Os documentos identificados já foram preparados na Assinatura Digital, mas permanecem BLOQUEADOS para os funcionários até a autorização final do RH.', '',
+    'Atenciosamente,', 'TOPAC RH PRO',
+  ].join('\n');
+  const result = await sendResend({
+    to, cc, replyTo: clean(user.email),
+    subject: `${processLabel} recebido para conferência - ${companyName} - ${competenceLabel(cycle.competencia)}`,
+    body, attachments,
+  });
+  const now = new Date().toISOString();
+  await service.from('contabilidade_folha_ciclos').update({
+    email_envio_status: result.status,
+    email_envio_em: result.status === 'enviado' ? now : null,
+    updated_at: now,
+  }).eq('id', cycle.id);
+  await service.from('contabilidade_portal_uploads').update({
+    formalizacao_email_status: result.status,
+    formalizacao_email_em: result.status === 'enviado' ? now : null,
+    formalizacao_destinos: uniqueEmails([...to, ...cc]),
+    updated_at: now,
+  }).eq('ciclo_id', cycle.id);
+  return result;
+};
+
+const sendApprovalEmail = async (service: any, cycle: any, documentsReleased: number) => {
+  if (cycle.email_retorno_status === 'enviado') return { status: 'enviado', skipped: true };
+  const [{ data: company }, { data: accountingUser }] = await Promise.all([
+    service.from('empresas').select('nome').eq('id', cycle.empresa_id).maybeSingle(),
+    cycle.enviado_por_portal_user_id
+      ? service.from('contabilidade_portal_usuarios').select('nome,email,portal').eq('id', cycle.enviado_por_portal_user_id).maybeSingle()
+      : Promise.resolve({ data: null } as any),
+  ]);
+  const companyName = clean(company?.nome) || 'Empresa';
+  const processLabel = cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento';
+  const uploaderEmail = clean(accountingUser?.email);
+  const counterpart = counterpartFor(uploaderEmail);
+  const to = uniqueEmails([uploaderEmail || (cycle.portal === 'goiania' ? TOPAC_GOIANIA_EMAIL : VANESSA_EMAIL)]);
+  const cc = cycle.portal === 'goiania'
+    ? uniqueEmails([TOPAC_GOIANIA_EMAIL])
+    : uniqueEmails([counterpart, TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL]).filter(email => !to.includes(email));
+  const body = [
+    'Prezados,', '',
+    `O ${processLabel} enviado para ${companyName} foi conferido e aprovado pelo RH.`, '',
+    `Empresa: ${companyName}`,
+    `Competência: ${competenceLabel(cycle.competencia)}`,
+    `Documentos liberados para assinatura: ${documentsReleased}`, '',
+    'A partir desta autorização, os documentos aprovados ficam disponíveis no portal de Assinatura Digital dos respectivos funcionários.', '',
+    'Atenciosamente,', 'TOPAC RH',
+  ].join('\n');
+  const result = await sendResend({
+    to, cc, replyTo: TOPAC_CENTRAL_EMAIL,
+    subject: `${processLabel} conferido / OK - ${companyName} - ${competenceLabel(cycle.competencia)}`,
+    body,
+  });
+  const now = new Date().toISOString();
+  await service.from('contabilidade_folha_ciclos').update({
+    email_retorno_status: result.status,
+    email_retorno_em: result.status === 'enviado' ? now : null,
+    updated_at: now,
+  }).eq('id', cycle.id);
+  return result;
+};
+
 const portalState = async (service: any, user: any, portal: string) => {
   const competence = competenceNow();
   const companies = await allowedCompanies(service, user.id);
@@ -108,7 +262,7 @@ const portalState = async (service: any, user: any, portal: string) => {
     await ensureCycle(service, { portal, companyId: company.id, competence, type: 'adiantamento' });
     await ensureCycle(service, { portal, companyId: company.id, competence, type: 'pagamento' });
   }
-  const companyIds = companies.map((row: any) => row.id);
+  const companyIds = companies.map((row: any) => String(row.id || '')).filter(Boolean);
   const [{ data: cycles, error: cycleError }, { data: employees, error: employeeError }] = await Promise.all([
     companyIds.length ? service.from('contabilidade_folha_ciclos').select('*').eq('portal', portal).in('empresa_id', companyIds).eq('competencia', competence).eq('ativo', true).order('tipo').order('empresa_id') : Promise.resolve({ data: [], error: null }),
     companyIds.length ? service.from('funcionarios').select('id,nome,cpf,cargo,empresa_id,company_id,registro,matricula_esocial,ativo,status').or(`company_id.in.(${companyIds.join(',')}),empresa_id.in.(${companyIds.join(',')})`).eq('ativo', true).order('nome') : Promise.resolve({ data: [], error: null }),
@@ -129,12 +283,12 @@ const adminState = async (service: any) => {
   const competence = competenceNow();
   const { data: principalUsers, error: userError } = await service.from('contabilidade_portal_usuarios').select('id').eq('portal', 'principal').eq('ativo', true);
   if (userError) throw userError;
-  const userIds = (principalUsers || []).map((row: any) => row.id);
+  const userIds = (principalUsers || []).map((row: any) => String(row.id || '')).filter(Boolean);
   const { data: access, error: accessError } = userIds.length
     ? await service.from('contabilidade_portal_acesso_empresas').select('empresa_id').in('portal_user_id', userIds)
     : { data: [], error: null } as any;
   if (accessError) throw accessError;
-  const companyIds = Array.from(new Set((access || []).map((row: any) => row.empresa_id).filter(Boolean)));
+  const companyIds = Array.from(new Set((access || []).map((row: any) => String(row.empresa_id || '')).filter(Boolean))) as string[];
   for (const companyId of companyIds) {
     await ensureCycle(service, { portal: 'principal', companyId, competence, type: 'adiantamento' });
     await ensureCycle(service, { portal: 'principal', companyId, competence, type: 'pagamento' });
@@ -148,7 +302,7 @@ const adminState = async (service: any) => {
   const cycleIds = (cycles || []).map((row: any) => row.id);
   const [{ data: docs, error: docError }, { data: uploads, error: uploadError }] = await Promise.all([
     cycleIds.length ? service.from('contabilidade_folha_documentos').select('*').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
-    cycleIds.length ? service.from('contabilidade_portal_uploads').select('id,ciclo_id,empresa_id,arquivo_nome,processo_tipo,processamento_status,processamento_detalhes,created_at,storage_bucket,storage_path').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
+    cycleIds.length ? service.from('contabilidade_portal_uploads').select('id,ciclo_id,empresa_id,arquivo_nome,processo_tipo,processamento_status,processamento_detalhes,formalizacao_email_status,created_at,storage_bucket,storage_path').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
   ] as any);
   if (docError) throw docError;
   if (uploadError) throw uploadError;
@@ -188,14 +342,15 @@ export default async function handler(req: any, res?: any) {
         const { data: mapped, error: mapError } = await service.from('contabilidade_folha_documentos')
           .select('id,payroll_document_id,classificacao').eq('ciclo_id', cycle.id).eq('classificacao', 'identificado').not('payroll_document_id', 'is', null);
         if (mapError) throw mapError;
-        const documentIds = (mapped || []).map((row: any) => row.payroll_document_id).filter(Boolean);
+        const documentIds = Array.from(new Set((mapped || []).map((row: any) => String(row.payroll_document_id || '')).filter(Boolean))) as string[];
         const now = new Date().toISOString();
         if (documentIds.length) {
+          const releaseStatus = cycle.tipo === 'adiantamento' ? 'AGUARDANDO_ASSINATURA' : 'AGUARDANDO_PAGAMENTO';
           const { error: docUpdateError } = await service.from('payroll_documents').update({
             confirmed: true,
             confirmed_at: now,
             confirmed_by: user.id,
-            status: 'AGUARDANDO_PAGAMENTO',
+            status: releaseStatus,
             updated_at: now,
           }).in('id', documentIds);
           if (docUpdateError) throw docUpdateError;
@@ -205,7 +360,8 @@ export default async function handler(req: any, res?: any) {
           status: 'conferido', conferido_em: now, conferido_por: user.id, observacao: null, updated_at: now,
         }).eq('id', cycle.id).select('*').single();
         if (error) throw error;
-        return sendJson(res, { ok: true, cycle: data, documentos_liberados: documentIds.length });
+        const emailResult = await sendApprovalEmail(service, { ...cycle, ...data }, documentIds.length);
+        return sendJson(res, { ok: true, cycle: data, documentos_liberados: documentIds.length, email_status: emailResult.status, email_error: emailResult.error || null });
       }
 
       if (action === 'admin_mark_pending') {
@@ -282,14 +438,14 @@ export default async function handler(req: any, res?: any) {
         storage_bucket: INBOX_BUCKET,
         storage_path: path,
         status: 'recebido',
-        formalizacao_email_status: null,
+        formalizacao_email_status: 'pendente',
         processamento_status: 'processando',
         processamento_detalhes: { source_sha256: clean(body.source_sha256) || null },
         created_at: now,
         updated_at: now,
       }).select('*').single();
       if (error) throw error;
-      await service.from('contabilidade_folha_ciclos').update({ status: 'processando', enviado_por_portal_user_id: user.id, updated_at: now }).eq('id', cycle.id);
+      await service.from('contabilidade_folha_ciclos').update({ status: 'processando', enviado_por_portal_user_id: user.id, email_envio_status: 'pendente', updated_at: now }).eq('id', cycle.id);
       return sendJson(res, { ok: true, upload: data });
     }
 
@@ -346,7 +502,15 @@ export default async function handler(req: any, res?: any) {
 
       const documentType = cycle.tipo === 'adiantamento' ? 'ADIANTAMENTO' : 'HOLERITE';
       if (sourceHash) {
-        const { data: duplicateDoc } = await service.from('payroll_documents').select('id').eq('company_id', companyId).eq('source_sha256', sourceHash).eq('source_page_start', page).eq('source_page_end', page).maybeSingle();
+        const { data: duplicateDoc } = await service.from('payroll_documents').select('id')
+          .eq('company_id', companyId)
+          .eq('competencia', cycle.competencia)
+          .eq('document_type', documentType)
+          .eq('source_sha256', sourceHash)
+          .eq('source_page_start', page)
+          .eq('source_page_end', page)
+          .eq('is_current', true)
+          .maybeSingle();
         if (duplicateDoc) {
           const { data: mapping, error: mapError } = await service.from('contabilidade_folha_documentos').insert({
             ciclo_id: cycle.id, portal_upload_id: uploadId, empresa_id: companyId, funcionario_id: employeeId,
@@ -430,7 +594,7 @@ export default async function handler(req: any, res?: any) {
       if (mapError) throw mapError;
       await addEvent(service, {
         company_id: companyId, employee_id: employeeId, event_type: 'DOCUMENTO_RECEBIDO_CONTABILIDADE', actor_type: 'SYSTEM',
-        payload: { document_id: document.id, ciclo_id: cycle.id, processo_tipo: cycle.tipo, competencia: cycle.competencia },
+        payload: { document_id: document.id, ciclo_id: cycle.id, processo_tipo: cycle.tipo, competencia: cycle.competencia, liberado_funcionario: false },
       });
       return sendJson(res, { ok: true, mapping, payroll_document_id: document.id });
     }
@@ -450,7 +614,15 @@ export default async function handler(req: any, res?: any) {
         processamento_detalhes: { identificados: Number(identified || 0), revisar: Number(review || 0) },
         updated_at: now,
       }).eq('ciclo_id', cycle.id);
-      return sendJson(res, { ok: true, cycle: data, identificados: Number(identified || 0), revisar: Number(review || 0) });
+      const emailResult = await sendSubmissionEmail(service, { ...cycle, ...data }, user, Number(identified || 0), Number(review || 0));
+      return sendJson(res, {
+        ok: true,
+        cycle: data,
+        identificados: Number(identified || 0),
+        revisar: Number(review || 0),
+        email_status: emailResult.status,
+        email_error: emailResult.error || null,
+      });
     }
 
     return sendJson(res, { ok: false, error: 'action_invalid' }, 400);
