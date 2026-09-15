@@ -10,7 +10,7 @@ const replacements = [
   ],
   [
     'type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="h-12"',
-    'type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="h-12 bg-white text-slate-950 caret-slate-950 [color-scheme:light] dark:bg-white dark:text-slate-950"',
+    'type="text" inputMode="numeric" autoComplete="bday" maxLength={10} value={birthDate} onChange={(e) => setBirthDate(formatBirthDateInput(e.target.value))} placeholder="DD/MM/AAAA" className="h-12 bg-white text-base text-slate-950 placeholder:text-slate-500 caret-slate-950 dark:bg-white dark:text-slate-950 dark:placeholder:text-slate-500"',
   ],
   [
     'placeholder="0000" className="h-12 text-lg tracking-[.25em]"',
