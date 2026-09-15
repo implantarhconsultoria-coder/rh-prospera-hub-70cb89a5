@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Users, FileText, LogOut,
-  HardHat, Shirt, History, CalendarCheck, FileX, Fuel, Car, Stethoscope,
-  UserCheck, Package, ClipboardList, Receipt, ClipboardCheck, Wrench, FileSearch,
+  LayoutDashboard, Building2, FileText, LogOut,
+  HardHat, Shirt, History, Fuel, Car,
+  UserCheck, Package, ClipboardList, Receipt, ClipboardCheck, Wrench,
   ShoppingCart, Headphones, PanelLeftClose, PanelLeftOpen, Radar,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
@@ -15,10 +15,8 @@ interface MenuItem { label: string; icon: React.ElementType; path: string }
 const menuItems: MenuItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
-  { label: 'Funcionários', icon: Users, path: '/admin/funcionarios' },
   { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
   { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade' },
-  { label: 'Rescisões', icon: FileX, path: '/admin/rescisoes' },
 ];
 
 const operationalItems: MenuItem[] = [
@@ -31,12 +29,8 @@ const operationalItems: MenuItem[] = [
   { label: 'Rastreamento da Frota', icon: Radar, path: '/admin/monitoramento' },
   { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
   { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
-  { label: 'Solicitar Férias', icon: CalendarCheck, path: '/admin/aviso-ferias' },
-  { label: 'ASO', icon: Stethoscope, path: '/admin/aso' },
-  { label: 'Pré-cadastro Admissional', icon: FileSearch, path: '/admin/pre-cadastro-admissional' },
   { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
   { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
-  { label: 'Envios para Clínicas', icon: FileText, path: '/admin/emails-contabilidade' },
   { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 
