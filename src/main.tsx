@@ -93,21 +93,25 @@ window.addEventListener('error', (e) => {
 });
 
 const RouteEnhancers = () => {
-  const [path, setPath] = useState(() => window.location.pathname);
+  const [routeKey, setRouteKey] = useState(() => `${window.location.pathname}${window.location.search}`);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const next = window.location.pathname;
-      setPath(current => current === next ? current : next);
+      const next = `${window.location.pathname}${window.location.search}`;
+      setRouteKey(current => current === next ? current : next);
     }, 500);
     return () => window.clearInterval(timer);
   }, []);
 
+  const [path, query = ''] = routeKey.split('?');
+  const params = new URLSearchParams(query);
+  const centralModule = path === '/admin/central-contabilidade' ? params.get('modulo') : null;
+
   const isFechamento = path === '/admin/fechamento';
   const isRelatorioVr = path.includes('/admin/relatorio-vr');
   const isEpi = path.includes('/admin/epi');
-  const isPreCadastro = path === '/admin/pre-cadastro-admissional';
-  const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios';
+  const isPreCadastro = path === '/admin/pre-cadastro-admissional' || centralModule === 'pre-cadastro';
+  const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios' || centralModule === 'rescisao';
   const isContabilidadeAdmin = path === '/admin/apontamento-contabilidade';
   const isContabilidadeCentral = path === '/admin/central-contabilidade';
   const isAssinaturaDigital = path === '/admin/assinatura-digital';
