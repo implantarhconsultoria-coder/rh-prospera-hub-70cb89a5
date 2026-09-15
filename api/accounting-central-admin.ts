@@ -77,11 +77,17 @@ const retryEmail = async (service:any, uploadId:string) => {
 
   const formalizedAt = emailStatus === 'enviado' ? new Date().toISOString() : null;
   await service.from('contabilidade_portal_uploads').update({ formalizacao_email_status:emailStatus, formalizacao_email_em:formalizedAt, formalizacao_destinos:unique([...to,...cc]), updated_at:new Date().toISOString() }).eq('id', upload.id);
-  await service.from('email_envios_log').insert({
-    user_id:null, usuario_nome:user.nome, email_corporativo_usado:user.email || null, email_remetente:from, reply_to:replyTo,
-    provider:'resend', modulo_origem:'central_contabilidade', documento_id:null, documento_nome:upload.arquivo_nome,
-    destinatarios:to.join(', '), cc:cc.join(', '), assunto:subject, status:emailStatus === 'enviado' ? 'enviado' : 'erro', erro:emailStatus === 'enviado' ? null : detail.slice(0,1000), enviado_em:new Date().toISOString(),
-  }).catch(() => null);
+
+  try {
+    const { error: logError } = await service.from('email_envios_log').insert({
+      user_id:null, usuario_nome:user.nome, email_corporativo_usado:user.email || null, email_remetente:from, reply_to:replyTo,
+      provider:'resend', modulo_origem:'central_contabilidade', documento_id:null, documento_nome:upload.arquivo_nome,
+      destinatarios:to.join(', '), cc:cc.join(', '), assunto:subject, status:emailStatus === 'enviado' ? 'enviado' : 'erro', erro:emailStatus === 'enviado' ? null : detail.slice(0,1000), enviado_em:new Date().toISOString(),
+    });
+    if (logError) console.warn('[accounting-central-admin] email log failed', logError);
+  } catch (logError) {
+    console.warn('[accounting-central-admin] email log failed', logError);
+  }
 
   return { email_status:emailStatus, formalizado_em:formalizedAt, to, cc, detail:emailStatus === 'enviado' ? undefined : detail.slice(0,500) };
 };
