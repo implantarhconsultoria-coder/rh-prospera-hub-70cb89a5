@@ -63,6 +63,23 @@ const AdminMobileLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_15%_-10%,rgba(168,85,247,.18),transparent_28%),radial-gradient(circle_at_100%_14%,rgba(59,130,246,.10),transparent_24%),#05030b] text-zinc-100">
+      <style>{`
+        .mobile-admin-home-shell > div > section:first-child > div:nth-child(2) {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .mobile-admin-home-shell > div > section:first-child > div:nth-child(2)::before {
+          content: '';
+          width: 28px;
+          height: 28px;
+          flex: 0 0 28px;
+          border-radius: 7px;
+          background: url('/icons/icon-192.png?v=20260524-2') center / cover no-repeat;
+          box-shadow: 0 0 12px rgba(217,70,239,.22);
+        }
+      `}</style>
+
       {!isHome && (
         <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-fuchsia-500/15 bg-[#07040e]/94 px-3 backdrop-blur-xl">
           <Button size="icon" variant="ghost" className="rounded-full text-zinc-300 hover:bg-fuchsia-500/10 hover:text-white" onClick={() => nav(-1)} aria-label="Voltar">
@@ -80,7 +97,9 @@ const AdminMobileLayout: React.FC = () => {
       )}
 
       <main className={isHome ? 'pb-8' : 'px-3 pt-3 pb-28'}>
-        {isHome ? (isDirector ? <Outlet /> : <AdminMobileDashboard onSearch={() => setSearchOpen(true)} />) : <Outlet />}
+        {isHome ? (
+          isDirector ? <Outlet /> : <div className="mobile-admin-home-shell"><AdminMobileDashboard onSearch={() => setSearchOpen(true)} /></div>
+        ) : <Outlet />}
       </main>
 
       {!isHome && (
