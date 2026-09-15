@@ -111,3 +111,4 @@ const replaceOnce = (source, before, after, label) => {
 }
 
 console.log('[facial-access-guard] tentativa facial unica e limites facial/manual isolados');
+await import('./fix-mechanic-face-capture-build.mjs');
