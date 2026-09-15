@@ -58,3 +58,5 @@ if (changed) {
 } else {
   console.log('[almox-migracao] nenhuma alteração necessária.');
 }
+
+await import('./fix-almoxarifado-card-dashboard-build.mjs');
