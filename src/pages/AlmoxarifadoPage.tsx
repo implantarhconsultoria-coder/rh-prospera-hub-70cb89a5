@@ -7,13 +7,20 @@ import AlmoxarifadoDesktopV2 from '@/components/AlmoxarifadoDesktopV2';
 import { AlmoxarifadoAccessGate, useAlmoxarifadoAccess } from '@/components/AlmoxarifadoAccessGate';
 
 const AlmoxarifadoPage: React.FC = () => {
-  const { session, companies, dataLoading } = useApp();
+  const { session, companies, dataLoading, userRole, userRoles, roleLoading } = useApp();
   const access = useAlmoxarifadoAccess();
   const matriz = useMemo(() => companies.find((c:any) => c.codigo === 'topac-matriz') || null, [companies]);
   const [ready, setReady] = useState(false);
 
+  const privilegedAccess = useMemo(() => {
+    const roles = new Set([userRole, ...(userRoles || [])].filter(Boolean));
+    return roles.has('admin') || roles.has('diretor_geral');
+  }, [userRole, userRoles]);
+
+  const allowed = privilegedAccess || access.allowed;
+
   useEffect(() => {
-    if (!access.allowed || dataLoading || !session?.user?.id || !matriz?.id) {
+    if (roleLoading || !allowed || dataLoading || !session?.user?.id || !matriz?.id) {
       setReady(false);
       return;
     }
@@ -29,9 +36,13 @@ const AlmoxarifadoPage: React.FC = () => {
       setReady(true);
     });
     return () => { active = false; };
-  }, [access.allowed, dataLoading, matriz?.id, session?.user?.id]);
+  }, [allowed, dataLoading, matriz?.id, roleLoading, session?.user?.id]);
 
-  if (!access.allowed) return <AlmoxarifadoAccessGate state={access} />;
+  if (roleLoading || access.checking) {
+    return <div className="grid min-h-[520px] place-items-center bg-background"><div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin"/>Validando acesso ao Almoxarifado...</div></div>;
+  }
+
+  if (!allowed) return <AlmoxarifadoAccessGate state={access} />;
 
   if (dataLoading || !ready) {
     return <div className="grid min-h-[520px] place-items-center bg-background"><div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin"/>Abrindo estoque central TOPAC...</div></div>;
