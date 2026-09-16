@@ -20,5 +20,13 @@ if (!src.includes('<ContabilidadeVacationDocuments')) {
   console.log('[contabilidade-ferias-docs] upload de aviso e recibo inserido no detalhe das férias');
 }
 
+const closeAfterReview = `      await carregar(true);\n      setSelecionado(null);`;
+const keepVacationOpen = `      await carregar(true);\n      if (evento.origem_tipo === 'ferias' && status === 'conferido') {\n        setSelecionado({\n          ...evento,\n          status: 'conferido',\n          observacao: null,\n          revisor_nome: res.revisor_nome || sessao?.usuario?.nome || null,\n          revisado_em: res.revisado_em || new Date().toISOString(),\n        });\n      } else {\n        setSelecionado(null);\n      }`;
+if (!src.includes(keepVacationOpen)) {
+  if (!src.includes(closeAfterReview)) throw new Error('[contabilidade-ferias-docs] ancora pós-confirmação não encontrada');
+  src = src.replace(closeAfterReview, keepVacationOpen);
+  console.log('[contabilidade-ferias-docs] férias permanece aberta após confirmar para receber os PDFs');
+}
+
 fs.writeFileSync(file, src);
 console.log('[contabilidade-ferias-docs] fluxo pronto: confirmar férias -> anexar aviso + recibo PDF');
