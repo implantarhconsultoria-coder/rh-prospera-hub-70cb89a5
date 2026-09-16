@@ -1,0 +1,1 @@
+-- Placeholder migration file; applied in production via Supabase migration tooling.
