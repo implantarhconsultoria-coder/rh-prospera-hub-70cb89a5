@@ -19,7 +19,7 @@ const PreCadastroFseButtonPlacement = () => {
         if (printButton.parentElement !== actionBar || saveButton.nextElementSibling !== printButton) saveButton.insertAdjacentElement('afterend', printButton);
       }
 
-      printButton.className = 'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-violet-500/25 bg-violet-500/[.06] px-4 py-2 text-sm font-semibold text-violet-100 transition-colors hover:bg-violet-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:pointer-events-none disabled:opacity-50';
+      printButton.className = 'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-primary/30 bg-primary/[0.07] px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition-all hover:border-primary/55 hover:bg-primary/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50';
       printButton.style.position = 'static';
       printButton.style.inset = 'auto';
       printButton.style.margin = '0';
