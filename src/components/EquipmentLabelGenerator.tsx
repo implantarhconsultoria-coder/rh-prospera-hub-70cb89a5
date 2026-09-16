@@ -21,6 +21,8 @@ const M27_URI = `data:image/webp;base64,${m27Data}`;
 const SPRITE_URI = `data:image/webp;base64,${sprite1}${sprite2}${sprite3}`;
 
 const imageCache = new Map<string, Promise<HTMLImageElement>>();
+const cutoutCache = new Map<number, HTMLCanvasElement>();
+
 const loadImage = (src: string) => {
   const cached = imageCache.get(src);
   if (cached) return cached;
@@ -45,7 +47,14 @@ const roundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.closePath();
 };
 
-const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number, start: number, min: number, family = 'Arial Black, Arial, sans-serif') => {
+const fitText = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  start: number,
+  min: number,
+  family = 'Arial Black, Arial, sans-serif',
+) => {
   let size = start;
   while (size > min) {
     ctx.font = `900 ${size}px ${family}`;
@@ -55,28 +64,72 @@ const fitText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number, 
   return size;
 };
 
-const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let line = '';
-  words.forEach((word) => {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else line = test;
-  });
-  if (line) lines.push(line);
-  return lines;
-};
-
-const drawImageCover = (ctx: CanvasRenderingContext2D, image: CanvasImageSource & { width: number; height: number }, x: number, y: number, w: number, h: number) => {
+const drawImageCover = (
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource & { width: number; height: number },
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) => {
   const scale = Math.max(w / image.width, h / image.height);
   const sw = w / scale;
   const sh = h / scale;
   const sx = (image.width - sw) / 2;
   const sy = (image.height - sh) / 2;
   ctx.drawImage(image, sx, sy, sw, sh, x, y, w, h);
+};
+
+const drawImageContain = (
+  ctx: CanvasRenderingContext2D,
+  image: CanvasImageSource & { width: number; height: number },
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) => {
+  const scale = Math.min(w / image.width, h / image.height);
+  const dw = image.width * scale;
+  const dh = image.height * scale;
+  ctx.drawImage(image, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+};
+
+const getEquipmentCutout = async (item: EquipmentLabelTemplate) => {
+  const cached = cutoutCache.get(item.spriteIndex);
+  if (cached) return cached;
+
+  const sprite = await loadImage(SPRITE_URI);
+  const cols = 4;
+  const rows = 7;
+  const cellW = Math.floor(sprite.width / cols);
+  const cellH = Math.floor(sprite.height / rows);
+  const col = item.spriteIndex % cols;
+  const row = Math.floor(item.spriteIndex / cols);
+
+  const raw = document.createElement('canvas');
+  raw.width = cellW;
+  raw.height = cellH;
+  const rctx = raw.getContext('2d', { willReadFrequently: true });
+  if (!rctx) return raw;
+  rctx.drawImage(sprite, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+
+  // Remove o papel branco/cinza do catálogo e preserva o equipamento real.
+  const image = rctx.getImageData(0, 0, cellW, cellH);
+  const d = image.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const chroma = max - min;
+    const brightness = (r + g + b) / 3;
+    if (brightness > 244 && chroma < 16) d[i + 3] = 0;
+    else if (brightness > 225 && chroma < 18) d[i + 3] = Math.round(255 * ((244 - brightness) / 19));
+  }
+  rctx.putImageData(image, 0, 0);
+  cutoutCache.set(item.spriteIndex, raw);
+  return raw;
 };
 
 const drawVariableBox = (
@@ -89,36 +142,69 @@ const drawVariableBox = (
   h: number,
   scale: number,
 ) => {
-  roundedRect(ctx, x, y, w, h, 18 * scale);
-  ctx.fillStyle = '#06162f';
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.55)';
+  ctx.shadowBlur = 18 * scale;
+  ctx.shadowOffsetY = 8 * scale;
+  roundedRect(ctx, x, y, w, h, 20 * scale);
+  ctx.fillStyle = '#071a35';
   ctx.fill();
+  ctx.restore();
+
+  roundedRect(ctx, x, y, w, h, 20 * scale);
   ctx.strokeStyle = '#ffd400';
   ctx.lineWidth = Math.max(3, 5 * scale);
   ctx.stroke();
 
   const headerH = h * 0.36;
   ctx.save();
-  roundedRect(ctx, x, y, w, headerH + 12 * scale, 18 * scale);
+  roundedRect(ctx, x, y, w, headerH + 12 * scale, 20 * scale);
   ctx.clip();
-  ctx.fillStyle = '#ffd400';
+  const grad = ctx.createLinearGradient(x, y, x + w, y);
+  grad.addColorStop(0, '#ffdf00');
+  grad.addColorStop(1, '#ffc400');
+  ctx.fillStyle = grad;
   ctx.fillRect(x, y, w, headerH + 12 * scale);
   ctx.restore();
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#050d1b';
-  ctx.font = `900 ${Math.max(17, 24 * scale)}px Arial Black, Arial, sans-serif`;
+  ctx.fillStyle = '#061325';
+  ctx.font = `900 ${Math.max(18, 29 * scale)}px Arial Black, Arial, sans-serif`;
   ctx.fillText(label, x + w / 2, y + headerH / 2);
 
   const safe = value.trim() || '---';
-  const fontSize = fitText(ctx, safe, w * 0.88, 60 * scale, 25 * scale);
-  ctx.font = `900 ${fontSize}px Arial Black, Arial, sans-serif`;
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = 'rgba(0,0,0,.65)';
-  ctx.shadowBlur = 4 * scale;
+  const fontSize = fitText(ctx, safe, w * 0.90, 66 * scale, 27 * scale);
+  ctx.font = `900 ${fontSize}px Impact, Arial Black, Arial, sans-serif`;
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = 'rgba(0,0,0,.8)';
+  ctx.shadowBlur = 5 * scale;
   ctx.shadowOffsetY = 3 * scale;
-  ctx.fillText(safe, x + w / 2, y + headerH + (h - headerH) / 2 + 2 * scale);
+  ctx.fillText(safe, x + w / 2, y + headerH + (h - headerH) / 2 + 3 * scale);
   ctx.shadowColor = 'transparent';
+};
+
+const iconForSpec = (spec: string) => {
+  const s = spec.toLowerCase();
+  if (s.includes('peso')) return 'KG';
+  if (s.includes('pressão')) return '◴';
+  if (s.includes('motor') || s.includes('potência')) return '⚙';
+  if (s.includes('combustível') || s.includes('tanque')) return '▣';
+  if (s.includes('dimens') || s.includes('comprimento') || s.includes('largura')) return '◇';
+  if (s.includes('ruído')) return ')))';
+  if (s.includes('consumo de ar') || s.includes('pcm') || s.includes('descarga')) return '≋';
+  if (s.includes('golpes') || s.includes('impactos') || s.includes('frequência')) return '◷';
+  if (s.includes('ferramenta') || s.includes('encaixe')) return '⌕';
+  if (s.includes('profundidade')) return '↓';
+  if (s.includes('velocidade')) return '≫';
+  if (s.includes('área')) return 'm²';
+  return '◆';
+};
+
+const splitSpec = (spec: string) => {
+  const index = spec.indexOf(':');
+  if (index < 0) return { label: '', value: spec };
+  return { label: spec.slice(0, index + 1), value: spec.slice(index + 1).trim() };
 };
 
 const drawApprovedM27 = async (
@@ -131,23 +217,21 @@ const drawApprovedM27 = async (
   const base = await loadImage(M27_URI);
   drawImageCover(ctx, base, 0, 0, width, height);
 
-  // A arte-base aprovada permanece intacta. Apenas o conteúdo dos dois campos variáveis é limpo e reescrito.
-  const bodyColor = '#06162f';
-  ctx.fillStyle = bodyColor;
+  // Mantém exatamente a arte aprovada do M-27 e troca somente os valores.
+  ctx.fillStyle = '#06162f';
   ctx.fillRect(width * 0.718, height * 0.409, width * 0.238, height * 0.056);
   ctx.fillRect(width * 0.718, height * 0.516, width * 0.238, height * 0.056);
-
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#fff';
   ctx.shadowColor = 'rgba(0,0,0,.72)';
   ctx.shadowBlur = Math.max(3, width * 0.004);
   ctx.shadowOffsetY = Math.max(2, width * 0.003);
 
   const drawValue = (value: string, y: number) => {
     const safe = value.trim() || '---';
-    const size = fitText(ctx, safe, width * 0.224, width * 0.065, width * 0.035, 'Arial Black, Impact, Arial, sans-serif');
-    ctx.font = `900 ${size}px Arial Black, Impact, Arial, sans-serif`;
+    const size = fitText(ctx, safe, width * 0.224, width * 0.065, width * 0.035, 'Impact, Arial Black, Arial, sans-serif');
+    ctx.font = `900 ${size}px Impact, Arial Black, Arial, sans-serif`;
     ctx.fillText(safe, width * 0.837, height * y);
   };
   drawValue(patrimonio, 0.437);
@@ -155,7 +239,7 @@ const drawApprovedM27 = async (
   ctx.shadowColor = 'transparent';
 };
 
-const drawApprovedStyle = async (
+const drawFinalPoster = async (
   ctx: CanvasRenderingContext2D,
   item: EquipmentLabelTemplate,
   patrimonio: string,
@@ -164,91 +248,86 @@ const drawApprovedStyle = async (
   height: number,
 ) => {
   const base = await loadImage(M27_URI);
-  const sprite = await loadImage(SPRITE_URI);
   drawImageCover(ctx, base, 0, 0, width, height);
   const scale = width / 1535;
 
-  // Mantém topo, logo, textura e rodapé da identidade aprovada; substitui somente a área específica do equipamento.
-  const cover = ctx.createLinearGradient(0, height * 0.19, 0, height * 0.89);
-  cover.addColorStop(0, '#061a39');
-  cover.addColorStop(0.48, '#07305a');
-  cover.addColorStop(1, '#051a36');
-  ctx.fillStyle = cover;
-  ctx.fillRect(0, height * 0.195, width, height * 0.69);
+  // Refaz a área central no mesmo padrão das artes finais aprovadas.
+  const central = ctx.createLinearGradient(0, height * 0.19, 0, height * 0.90);
+  central.addColorStop(0, '#061a38');
+  central.addColorStop(0.46, '#082b55');
+  central.addColorStop(1, '#05182f');
+  ctx.fillStyle = central;
+  ctx.fillRect(0, height * 0.19, width, height * 0.705);
 
-  // linhas decorativas do padrão TOPAC
-  ctx.strokeStyle = 'rgba(255,212,0,.65)';
-  ctx.lineWidth = Math.max(2, 3 * scale);
-  ctx.beginPath();
-  ctx.moveTo(width * 0.03, height * 0.23);
-  ctx.lineTo(width * 0.20, height * 0.23);
-  ctx.moveTo(width * 0.80, height * 0.23);
-  ctx.lineTo(width * 0.97, height * 0.23);
-  ctx.stroke();
+  // textura geométrica discreta
+  ctx.save();
+  ctx.globalAlpha = 0.10;
+  ctx.strokeStyle = '#2a75b8';
+  ctx.lineWidth = 2 * scale;
+  for (let i = -2; i < 11; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * width * 0.13, height * 0.19);
+    ctx.lineTo((i + 4) * width * 0.13, height * 0.89);
+    ctx.stroke();
+  }
+  ctx.restore();
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = '#fff';
+  ctx.font = `800 ${Math.max(16, width * 0.024)}px Arial, sans-serif`;
+  ctx.fillText('DA LOCAÇÃO À MANUTENÇÃO E TRANSPORTE', width / 2, height * 0.205);
+
   const title = item.title.toUpperCase();
-  const titleSize = fitText(ctx, title, width * 0.91, width * 0.082, width * 0.045, 'Impact, Arial Black, Arial, sans-serif');
+  const titleSize = fitText(ctx, title, width * 0.91, width * 0.091, width * 0.046, 'Impact, Arial Black, Arial, sans-serif');
   ctx.font = `900 ${titleSize}px Impact, Arial Black, Arial, sans-serif`;
-  ctx.shadowColor = 'rgba(0,0,0,.5)';
-  ctx.shadowBlur = 5 * scale;
-  ctx.fillText(title, width / 2, height * 0.255);
+  ctx.fillStyle = '#f7f7f7';
+  ctx.shadowColor = 'rgba(0,0,0,.65)';
+  ctx.shadowBlur = 7 * scale;
+  ctx.shadowOffsetY = 5 * scale;
+  ctx.fillText(title, width / 2, height * 0.262);
   ctx.shadowColor = 'transparent';
 
   const bandX = width * 0.20;
-  const bandY = height * 0.292;
-  const bandW = width * 0.60;
-  const bandH = height * 0.052;
+  const bandY = height * 0.303;
+  const bandW = width * 0.61;
+  const bandH = height * 0.050;
   const band = ctx.createLinearGradient(bandX, bandY, bandX + bandW, bandY);
-  band.addColorStop(0, '#ffd400');
-  band.addColorStop(0.75, '#ffca00');
-  band.addColorStop(1, '#e9a900');
+  band.addColorStop(0, '#ffdf00');
+  band.addColorStop(0.8, '#ffc400');
+  band.addColorStop(1, '#e4a300');
   ctx.fillStyle = band;
   ctx.fillRect(bandX, bandY, bandW, bandH);
-  ctx.fillStyle = '#06162f';
+  ctx.fillStyle = '#07162f';
   const modelText = `${item.brand} ${item.model}`.toUpperCase();
-  const modelSize = fitText(ctx, modelText, bandW * 0.88, width * 0.048, width * 0.025);
+  const modelSize = fitText(ctx, modelText, bandW * 0.88, width * 0.050, width * 0.025);
   ctx.font = `900 ${modelSize}px Arial Black, Arial, sans-serif`;
   ctx.fillText(modelText, width / 2, bandY + bandH / 2);
 
-  const imageX = width * 0.035;
-  const imageY = height * 0.37;
-  const imageW = width * 0.64;
-  const imageH = height * 0.225;
-  roundedRect(ctx, imageX, imageY, imageW, imageH, 18 * scale);
-  ctx.fillStyle = '#061c3c';
-  ctx.fill();
+  const cutout = await getEquipmentCutout(item);
+  const imageX = width * 0.025;
+  const imageY = height * 0.355;
+  const imageW = width * 0.66;
+  const imageH = height * 0.255;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.52)';
+  ctx.shadowBlur = 22 * scale;
+  ctx.shadowOffsetY = 12 * scale;
+  drawImageContain(ctx, cutout, imageX, imageY, imageW, imageH);
+  ctx.restore();
 
-  // sprite: 4 colunas x 7 linhas, 28 equipamentos únicos, na mesma ordem do catálogo.
-  const cols = 4;
-  const rows = 7;
-  const cellW = sprite.width / cols;
-  const cellH = sprite.height / rows;
-  const col = item.spriteIndex % cols;
-  const row = Math.floor(item.spriteIndex / cols);
-  const sx = col * cellW;
-  const sy = row * cellH;
-  const photoCanvas = document.createElement('canvas');
-  photoCanvas.width = Math.max(1, Math.round(cellW));
-  photoCanvas.height = Math.max(1, Math.round(cellH));
-  const pctx = photoCanvas.getContext('2d');
-  if (pctx) pctx.drawImage(sprite, sx, sy, cellW, cellH, 0, 0, photoCanvas.width, photoCanvas.height);
-  drawImageCover(ctx, photoCanvas, imageX + 5 * scale, imageY + 5 * scale, imageW - 10 * scale, imageH - 10 * scale);
-
-  const boxX = width * 0.705;
-  const boxW = width * 0.26;
-  const boxH = height * 0.096;
+  const boxX = width * 0.715;
+  const boxW = width * 0.255;
+  const boxH = height * 0.095;
   drawVariableBox(ctx, 'Patrimônio', patrimonio, boxX, height * 0.382, boxW, boxH, scale);
   drawVariableBox(ctx, 'Número de Série', serie, boxX, height * 0.495, boxW, boxH, scale);
 
   const specsX = width * 0.035;
-  const specsY = height * 0.625;
+  const specsY = height * 0.635;
   const specsW = width * 0.93;
   const specsH = height * 0.235;
   roundedRect(ctx, specsX, specsY, specsW, specsH, 18 * scale);
-  ctx.fillStyle = 'rgba(3,23,50,.97)';
+  ctx.fillStyle = 'rgba(3,23,50,.975)';
   ctx.fill();
   ctx.strokeStyle = '#55c7ff';
   ctx.lineWidth = Math.max(2, 3 * scale);
@@ -256,37 +335,41 @@ const drawApprovedStyle = async (
 
   const headerW = specsW * 0.40;
   ctx.fillStyle = '#ffd400';
-  ctx.fillRect(specsX, specsY, headerW, height * 0.043);
+  ctx.fillRect(specsX, specsY, headerW, height * 0.042);
   ctx.fillStyle = '#07172f';
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.font = `900 ${Math.max(17, width * 0.026)}px Arial Black, Arial, sans-serif`;
-  ctx.fillText('DADOS TÉCNICOS', specsX + width * 0.022, specsY + height * 0.0215);
+  ctx.font = `900 ${Math.max(17, width * 0.027)}px Arial Black, Arial, sans-serif`;
+  ctx.fillText('DADOS TÉCNICOS', specsX + width * 0.023, specsY + height * 0.021);
 
   const count = item.specs.length;
-  const columns = count > 5 ? 2 : 1;
-  const perColumn = Math.ceil(count / columns);
+  const columns = count >= 5 ? 2 : Math.min(count, 3);
+  const rows = Math.ceil(count / columns);
   const innerTop = specsY + height * 0.058;
   const innerBottom = specsY + specsH - height * 0.018;
-  const rowH = (innerBottom - innerTop) / Math.max(perColumn, 1);
-  const colGap = width * 0.035;
-  const colW = columns === 2 ? (specsW - colGap - width * 0.05) / 2 : specsW - width * 0.05;
-  const fontSize = Math.max(14, Math.min(width * 0.019, rowH * 0.33));
-  ctx.font = `700 ${fontSize}px Arial, sans-serif`;
-  ctx.textBaseline = 'top';
+  const rowH = (innerBottom - innerTop) / Math.max(rows, 1);
+  const colW = (specsW - width * 0.05) / columns;
 
   item.specs.forEach((spec, index) => {
-    const c = columns === 2 && index >= perColumn ? 1 : 0;
-    const r = columns === 2 ? index % perColumn : index;
-    const x = specsX + width * 0.025 + c * (colW + colGap);
-    const y = innerTop + r * rowH;
+    const col = Math.floor(index / rows);
+    const row = index % rows;
+    const x = specsX + width * 0.025 + col * colW;
+    const y = innerTop + row * rowH;
+    const { label, value } = splitSpec(spec);
+
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
     ctx.fillStyle = '#ffd400';
-    ctx.beginPath();
-    ctx.arc(x, y + fontSize * 0.47, Math.max(3, width * 0.0032), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    const lines = wrapText(ctx, spec, colW - width * 0.018).slice(0, 2);
-    lines.forEach((line, lineIndex) => ctx.fillText(line, x + width * 0.012, y + lineIndex * fontSize * 1.06));
+    ctx.font = `900 ${Math.max(16, width * 0.025)}px Arial Black, Arial, sans-serif`;
+    ctx.fillText(iconForSpec(spec), x + width * 0.028, y + rowH * 0.18);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#e8edf5';
+    ctx.font = `500 ${Math.max(12, width * 0.0155)}px Arial, sans-serif`;
+    if (label) ctx.fillText(label, x + width * 0.057, y + rowH * 0.05);
+    const valueSize = fitText(ctx, value, colW - width * 0.075, width * 0.025, width * 0.014, 'Arial Black, Arial, sans-serif');
+    ctx.fillStyle = '#ffd400';
+    ctx.font = `900 ${valueSize}px Arial Black, Arial, sans-serif`;
+    ctx.fillText(value, x + width * 0.057, y + rowH * (label ? 0.42 : 0.27));
   });
 };
 
@@ -308,7 +391,7 @@ const renderLabel = async (
   ctx.imageSmoothingQuality = 'high';
   ctx.clearRect(0, 0, width, height);
   if (item.specialTemplate === 'm27') await drawApprovedM27(ctx, width, height, patrimonio, serie);
-  else await drawApprovedStyle(ctx, item, patrimonio, serie, width, height);
+  else await drawFinalPoster(ctx, item, patrimonio, serie, width, height);
 };
 
 type Props = { embedded?: boolean };
@@ -327,6 +410,7 @@ const EquipmentLabelGenerator: React.FC<Props> = ({ embedded = false }) => {
     () => EQUIPMENT_LABEL_CATALOG.find((item) => item.id === selectedId) || EQUIPMENT_LABEL_CATALOG[0],
     [selectedId],
   );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return EQUIPMENT_LABEL_CATALOG.filter((item) =>
@@ -354,6 +438,7 @@ const EquipmentLabelGenerator: React.FC<Props> = ({ embedded = false }) => {
   };
 
   const fileBase = `${selected.brand}-${selected.model}-${patrimonio || 'sem-patrimonio'}`.replace(/[^a-zA-Z0-9_-]+/g, '-');
+
   const downloadPng = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -362,6 +447,7 @@ const EquipmentLabelGenerator: React.FC<Props> = ({ embedded = false }) => {
     link.href = canvas.toDataURL('image/png');
     link.click();
   };
+
   const downloadPdf = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -382,7 +468,9 @@ const EquipmentLabelGenerator: React.FC<Props> = ({ embedded = false }) => {
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <button onClick={() => setCategory('Todos')} className={`rounded-full px-3 py-1.5 text-xs font-bold ${category === 'Todos' ? 'bg-violet-600 text-white' : 'bg-white/5 text-zinc-400'}`}>Todos</button>
-              {EQUIPMENT_CATEGORIES.map((cat) => <button key={cat} onClick={() => setCategory(cat)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${category === cat ? 'bg-violet-600 text-white' : 'bg-white/5 text-zinc-400'}`}>{cat}</button>)}
+              {EQUIPMENT_CATEGORIES.map((cat) => (
+                <button key={cat} onClick={() => setCategory(cat)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${category === cat ? 'bg-violet-600 text-white' : 'bg-white/5 text-zinc-400'}`}>{cat}</button>
+              ))}
             </div>
           </div>
 
@@ -403,12 +491,18 @@ const EquipmentLabelGenerator: React.FC<Props> = ({ embedded = false }) => {
             <div className="mb-5">
               <div className="text-[11px] font-bold uppercase tracking-[.15em] text-violet-400">{selected.category}</div>
               <h2 className="mt-1 text-xl font-black text-white">{selected.title} • {selected.brand} {selected.model}</h2>
-              <p className="mt-1 text-xs text-zinc-500">A arte e os dados técnicos são fixos. Somente os dois campos abaixo podem ser alterados.</p>
+              <p className="mt-1 text-xs text-zinc-500">Arte final e dados técnicos fixos. Somente Patrimônio e Número de Série podem ser alterados.</p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div><label className="text-xs font-bold uppercase tracking-wide text-zinc-500">Patrimônio</label><Input value={patrimonio} onChange={(e) => setPatrimonio(e.target.value.toUpperCase())} className="mt-2 h-12 text-lg font-black" placeholder="Ex.: A10.157" /></div>
-              <div><label className="text-xs font-bold uppercase tracking-wide text-zinc-500">Número de Série</label><Input value={serie} onChange={(e) => setSerie(e.target.value.toUpperCase())} className="mt-2 h-12 text-lg font-black" placeholder="Ex.: 1165" /></div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-zinc-500">Patrimônio</label>
+                <Input value={patrimonio} onChange={(e) => setPatrimonio(e.target.value.toUpperCase())} className="mt-2 h-12 text-lg font-black" placeholder="Ex.: A10.157" />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wide text-zinc-500">Número de Série</label>
+                <Input value={serie} onChange={(e) => setSerie(e.target.value.toUpperCase())} className="mt-2 h-12 text-lg font-black" placeholder="Ex.: 1165" />
+              </div>
             </div>
 
             <div className="mt-5">
@@ -416,14 +510,22 @@ const EquipmentLabelGenerator: React.FC<Props> = ({ embedded = false }) => {
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 {(Object.keys(LABEL_SIZES) as LabelSizeKey[]).map((key) => {
                   const s = LABEL_SIZES[key];
-                  return <button key={key} onClick={() => setSizeKey(key)} className={`rounded-xl border p-3 text-center ${sizeKey === key ? 'border-[#ffc400] bg-[#ffc400]/10 text-white' : 'border-[#30263b] bg-white/[0.02] text-zinc-400 hover:border-violet-500'}`}><div className="font-black">{s.label}</div><div className="text-xs">{s.widthMm / 10} × {s.heightMm / 10} cm</div>{selected.recommendedSize === key && <div className="mt-1 text-[9px] font-bold text-[#ffc400]">RECOMENDADO</div>}</button>;
+                  return (
+                    <button key={key} onClick={() => setSizeKey(key)} className={`rounded-xl border p-3 text-center ${sizeKey === key ? 'border-[#ffc400] bg-[#ffc400]/10 text-white' : 'border-[#30263b] bg-white/[0.02] text-zinc-400 hover:border-violet-500'}`}>
+                      <div className="font-black">{s.label}</div>
+                      <div className="text-xs">{s.widthMm / 10} × {s.heightMm / 10} cm</div>
+                      {selected.recommendedSize === key && <div className="mt-1 text-[9px] font-bold text-[#ffc400]">RECOMENDADO</div>}
+                    </button>
+                  );
                 })}
               </div>
             </div>
 
             <div className="mt-5 rounded-xl border border-[#29232f] bg-black/20 p-4">
               <div className="mb-2 text-xs font-black uppercase tracking-wide text-[#ffc400]">Dados técnicos fixos</div>
-              <div className="grid gap-x-4 gap-y-1.5 text-xs text-zinc-400 md:grid-cols-2">{selected.specs.map((spec) => <div key={spec}>• {spec}</div>)}</div>
+              <div className="grid gap-x-4 gap-y-1.5 text-xs text-zinc-400 md:grid-cols-2">
+                {selected.specs.map((spec) => <div key={spec}>• {spec}</div>)}
+              </div>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-3">
