@@ -2,11 +2,13 @@ import { digits, getServiceClient, randomToken, readBody, sendJson } from '../sr
 
 const BUCKET = 'documentos-admissionais';
 const DEFAULT_REQUIREMENTS = [
-  { tipo: 'documento_identificacao', label: 'Documento de identificação com CPF (RG ou CNH)', obrigatorio: true },
+  { tipo: 'documento_identificacao', label: 'RG / CIN com CPF', obrigatorio: true },
   { tipo: 'comprovante_endereco', label: 'Comprovante de endereço', obrigatorio: true },
   { tipo: 'ctps', label: 'CTPS Digital', obrigatorio: true },
   { tipo: 'pis_nis', label: 'PIS / NIS', obrigatorio: true },
   { tipo: 'titulo_eleitoral', label: 'Título de eleitor', obrigatorio: true },
+  { tipo: 'cnh', label: 'CNH', obrigatorio: false },
+  { tipo: 'reservista', label: 'Certificado de reservista', obrigatorio: false },
 ];
 
 const getHeader = (req:any, name:string) => typeof req?.headers?.get === 'function'
@@ -16,6 +18,8 @@ const getBearer = (req:any) => String(getHeader(req, 'authorization') || '').mat
 const clean = (value:unknown) => String(value ?? '').trim();
 const safeName = (value:unknown) => clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]+/g, '_').slice(0, 120) || 'arquivo';
 const isoDate = (value:unknown) => /^\d{4}-\d{2}-\d{2}$/.test(clean(value)) ? clean(value) : null;
+const asObject = (value:unknown):Record<string, any> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
+const asArray = (value:unknown):any[] => Array.isArray(value) ? value : [];
 const allowedCandidateFields = ['nome','cpf','rg','data_nascimento','endereco','email','celular','filiacao','escolaridade'] as const;
 
 const validateAdmin = async (req:any, service:any) => {
@@ -25,9 +29,7 @@ const validateAdmin = async (req:any, service:any) => {
   if (error || !user) throw Object.assign(new Error('sessao_invalida'), { status: 401 });
   const { data: roles, error: roleError } = await service.from('user_roles').select('role').eq('user_id', user.id);
   if (roleError) throw roleError;
-  if (!(roles || []).some((r:any) => ['admin','diretor_geral'].includes(String(r.role)))) {
-    throw Object.assign(new Error('sem_permissao'), { status: 403 });
-  }
+  if (!(roles || []).some((r:any) => ['admin','diretor_geral'].includes(String(r.role)))) throw Object.assign(new Error('sem_permissao'), { status: 403 });
   return user;
 };
 
@@ -58,6 +60,52 @@ const listDocs = async (service:any, preCadastroId:string) => {
   return data || [];
 };
 
+const requirementsForFse = (fse:any) => DEFAULT_REQUIREMENTS.map(req => ({
+  ...req,
+  obrigatorio: req.obrigatorio || (req.tipo === 'cnh' && !!clean(fse?.cnh)) || (req.tipo === 'reservista' && !!clean(fse?.reservista)),
+}));
+
+const formatAddress = (fse:any) => [
+  [clean(fse.logradouro), clean(fse.numero)].filter(Boolean).join(', '),
+  clean(fse.bairro),
+  [clean(fse.cidade), clean(fse.estado)].filter(Boolean).join('/'),
+  clean(fse.cep) ? `CEP ${clean(fse.cep)}` : '',
+].filter(Boolean).join(' - ');
+
+const formatExperience = (fse:any) => asArray(fse.experiencias).filter((x:any) => clean(x?.empresa)).map((x:any, i:number) =>
+  `${i + 1}. ${clean(x.empresa)} | ${clean(x.cargo)} | ${clean(x.admissao)} a ${clean(x.demissao)} | R$ ${clean(x.salario)}`,
+).join('\n');
+
+const mapFseToPre = (fse:any) => ({
+  nome: clean(fse.nome).slice(0, 180),
+  cpf: digits(fse.cpf).slice(0, 11),
+  rg: clean(fse.rg).slice(0, 180),
+  data_nascimento: isoDate(fse.data_nascimento),
+  celular: digits(fse.celular).slice(0, 13),
+  email: clean(fse.email).slice(0, 180),
+  filiacao: [`Pai: ${clean(fse.pai)}`, `Mãe: ${clean(fse.mae)}`].filter(x => !x.endsWith(': ')).join(' | ').slice(0, 500),
+  endereco: formatAddress(fse).slice(0, 500),
+  escolaridade: [clean(fse.escolaridade_nivel), clean(fse.escolaridade_ano) ? `Ano ${clean(fse.escolaridade_ano)}` : '', clean(fse.curso_instituicao)].filter(Boolean).join(' | ').slice(0, 500),
+  experiencia: formatExperience(fse).slice(0, 3000),
+  epi: [`Camisa: ${clean(fse.epi_camisa)}`, `Calça: ${clean(fse.epi_calca)}`, `Bota: ${clean(fse.epi_bota)}`].filter(x => !x.endsWith(': ')).join(' | ').slice(0, 500),
+});
+
+const validateFse = (fse:any) => {
+  const missing:string[] = [];
+  if (!clean(fse.nome)) missing.push('Nome completo');
+  if (digits(fse.cpf).length !== 11) missing.push('CPF');
+  if (!isoDate(fse.data_nascimento)) missing.push('Data de nascimento');
+  if (digits(fse.celular).length < 10) missing.push('Celular');
+  if (!clean(fse.logradouro)) missing.push('Rua / Logradouro');
+  if (!clean(fse.numero)) missing.push('Número');
+  if (!clean(fse.bairro)) missing.push('Bairro');
+  if (!clean(fse.cidade)) missing.push('Cidade');
+  if (!clean(fse.estado)) missing.push('Estado');
+  if (!clean(fse.escolaridade_nivel)) missing.push('Formação escolar');
+  if (!fse.declaracao_aceita) missing.push('Declaração e confirmação dos dados');
+  return missing;
+};
+
 const publicState = async (service:any, token:string) => {
   const { request, pre } = await loadRequest(service, token);
   const documentos = await listDocs(service, pre.id);
@@ -65,12 +113,18 @@ const publicState = async (service:any, token:string) => {
     await service.from('pre_cadastro_solicitacoes_documentos').update({ iniciado_em: new Date().toISOString(), status: 'em_preenchimento', updated_at: new Date().toISOString() }).eq('id', request.id);
     request.status = 'em_preenchimento';
   }
+  const dados = asObject(request.dados_candidato);
+  const extra = asObject(pre.dados_extraidos);
+  const fse = asObject(dados.fse || extra.fse_digital);
+  const requisitos = Array.isArray(request.requisitos) ? request.requisitos : requirementsForFse(fse);
   return {
     id: request.id,
     status: request.status,
-    requisitos: Array.isArray(request.requisitos) ? request.requisitos : DEFAULT_REQUIREMENTS,
+    requisitos,
     concluido_em: request.concluido_em,
     aso_gerado_em: request.aso_gerado_em,
+    ficha_concluida_em: dados.ficha_concluida_em || null,
+    fse,
     candidato: {
       nome: pre.nome || '', cpf: pre.cpf || '', rg: pre.rg || '', data_nascimento: pre.data_nascimento || '',
       endereco: pre.endereco || '', email: pre.email || '', celular: pre.celular || request.telefone || '',
@@ -106,6 +160,7 @@ export default async function handler(req:any, res?:any) {
       await validateAdmin(req, service);
       const pre = await resolvePreCadastroForAdmin(service, body);
       if (!pre?.id) return sendJson(res, { ok:false, error:'pre_cadastro_nao_encontrado' }, 404);
+      if (!clean(pre.empresa_nome) || !clean(pre.funcao)) return sendJson(res, { ok:false, error:'salve_empresa_funcao_antes_do_link' }, 400);
       const telefone = digits(body.telefone || pre.celular);
       if (telefone.length < 10) return sendJson(res, { ok:false, error:'celular_candidato_obrigatorio' }, 400);
       const { data: existing, error: existingError } = await service.from('pre_cadastro_solicitacoes_documentos').select('*').eq('pre_cadastro_id', pre.id).maybeSingle();
@@ -130,16 +185,38 @@ export default async function handler(req:any, res?:any) {
         request = data;
       }
       if (telefone !== digits(pre.celular)) await service.from('pre_cadastros_admissionais').update({ celular: telefone, updated_at: now }).eq('id', pre.id);
-      const url = `${originFor(req)}/pre-cadastro/documentos/${request.token}`;
-      return sendJson(res, { ok:true, url, telefone, nome:pre.nome || '', status:request.status, expires_at:request.expires_at });
+      const url = `${originFor(req)}/pre-cadastro/ficha/${request.token}`;
+      return sendJson(res, { ok:true, url, documentos_url:`${originFor(req)}/pre-cadastro/documentos/${request.token}`, telefone, nome:pre.nome || '', status:request.status, expires_at:request.expires_at });
     }
 
     const token = clean(body.token);
     if (action === 'state') return sendJson(res, { ok:true, ...(await publicState(service, token)) });
 
     const { request, pre } = await loadRequest(service, token);
-    if (request.status === 'concluido' && !['state','register_aso'].includes(action)) {
-      return sendJson(res, { ok:false, error:'processo_ja_concluido' }, 409);
+    const allowedAfterConclusion = action === 'state' || action === 'register_aso' || (action === 'create_upload' && clean(body.tipo) === 'guia_aso');
+    if (request.status === 'concluido' && !allowedAfterConclusion) return sendJson(res, { ok:false, error:'processo_ja_concluido' }, 409);
+
+    if (action === 'save_fse' || action === 'complete_fse') {
+      const fse = asObject(body.fse);
+      const existingDados = asObject(request.dados_candidato);
+      const mapped = mapFseToPre(fse);
+      const now = new Date().toISOString();
+      const requirements = requirementsForFse(fse);
+      const missing = action === 'complete_fse' ? validateFse(fse) : [];
+      if (missing.length) return sendJson(res, { ok:false, error:'ficha_incompleta', campos:missing }, 400);
+      const dadosPatch:any = { ...existingDados, fse };
+      if (action === 'complete_fse') dadosPatch.ficha_concluida_em = now;
+      const extra = { ...asObject(pre.dados_extraidos), fse_digital:fse, fse_digital_atualizado_em:now };
+      const currentHistory = Array.isArray(pre.historico) ? pre.historico : [];
+      const prePatch:any = { ...mapped, dados_extraidos:extra, updated_at:now };
+      if (action === 'complete_fse') prePatch.historico = [...currentHistory, { em:now, acao:'ficha_fse_digital_concluida_via_link' }];
+      const { error:preError } = await service.from('pre_cadastros_admissionais').update(prePatch).eq('id',pre.id);
+      if (preError) throw preError;
+      const { error:reqError } = await service.from('pre_cadastro_solicitacoes_documentos').update({
+        dados_candidato:dadosPatch, requisitos:requirements, status:'em_preenchimento', iniciado_em:request.iniciado_em || now, updated_at:now,
+      }).eq('id',request.id);
+      if (reqError) throw reqError;
+      return sendJson(res, { ok:true, ficha_concluida_em:dadosPatch.ficha_concluida_em || null, documentos_url:`${originFor(req)}/pre-cadastro/documentos/${token}` });
     }
 
     if (action === 'save_fields') {
@@ -147,8 +224,8 @@ export default async function handler(req:any, res?:any) {
       const patch:any = {};
       for (const key of allowedCandidateFields) {
         if (!(key in fields)) continue;
-        if (key === 'data_nascimento') patch[key] = isoDate(fields[key]);
-        else patch[key] = clean(fields[key]).slice(0, key === 'endereco' ? 300 : 180);
+        if (key === 'data_nascimento') patch[key] = isoDate((fields as any)[key]);
+        else patch[key] = clean((fields as any)[key]).slice(0, key === 'endereco' ? 300 : 180);
       }
       if (patch.cpf) patch.cpf = digits(patch.cpf).slice(0, 11);
       if (patch.celular) patch.celular = digits(patch.celular).slice(0, 13);
@@ -195,6 +272,7 @@ export default async function handler(req:any, res?:any) {
 
     if (action === 'finalize') {
       const latest = await publicState(service, token);
+      if (!latest.ficha_concluida_em) return sendJson(res, { ok:false, error:'ficha_nao_concluida' }, 400);
       const requisitos:any[] = Array.isArray(latest.requisitos) ? latest.requisitos : DEFAULT_REQUIREMENTS;
       const tipos = new Set((latest.documentos || []).map((d:any) => clean(d.tipo)));
       const faltando = requisitos.filter((r:any) => r.obrigatorio && !tipos.has(clean(r.tipo))).map((r:any) => r.label);
@@ -206,7 +284,7 @@ export default async function handler(req:any, res?:any) {
       if (faltando.length || camposFaltando.length) return sendJson(res, { ok:false, error:'pendencias_obrigatorias', documentos:faltando, campos:camposFaltando }, 400);
       const now = new Date().toISOString();
       const currentHistory = Array.isArray(pre.historico) ? pre.historico : [];
-      const conference = { ...(pre.conferencia || {}), candidato_documentos: { status:'concluido', concluido_em:now, solicitacao_id:request.id } };
+      const conference = { ...asObject(pre.conferencia), candidato_documentos: { status:'concluido', concluido_em:now, solicitacao_id:request.id } };
       const { error: preError } = await service.from('pre_cadastros_admissionais').update({
         status:'aguardando_aso', conferencia:conference, historico:[...currentHistory,{ em:now, acao:'documentacao_candidato_concluida_via_link' }], updated_at:now,
       }).eq('id',pre.id);
@@ -226,7 +304,7 @@ export default async function handler(req:any, res?:any) {
       const { error:docError } = await service.from('pre_cadastro_documentos').insert({ pre_cadastro_id:pre.id,tipo_documento:'guia_aso',nome_arquivo:safeName(body.fileName || 'GUIA_ASO.pdf'),arquivo_url:publicUrl,status:'gerado_automaticamente',dados_extraidos:{origem:'finalizacao_candidato',solicitacao_id:request.id,gerado_em:now} });
       if (docError) throw docError;
       await service.from('pre_cadastro_solicitacoes_documentos').update({ aso_gerado_em:now, updated_at:now }).eq('id',request.id);
-      const conference = { ...(pre.conferencia || {}), guia_aso: { gerada_automaticamente_em:now, arquivo_url:publicUrl } };
+      const conference = { ...asObject(pre.conferencia), guia_aso: { gerada_automaticamente_em:now, arquivo_url:publicUrl } };
       await service.from('pre_cadastros_admissionais').update({ conferencia:conference, updated_at:now }).eq('id',pre.id);
       return sendJson(res,{ok:true,url:publicUrl,gerado_em:now});
     }
