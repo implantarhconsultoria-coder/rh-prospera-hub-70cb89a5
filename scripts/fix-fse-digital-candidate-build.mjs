@@ -44,3 +44,4 @@ patch('src/pages/PreCadastroAdmissionalOcrPage.tsx',(source)=>{
 },'pré-cadastro identifica ID e ASO retornado segue automaticamente para contabilidade');
 
 await import('./fix-platform-visual-consistency-build.mjs');
+await import('./fix-abastecimento-auto-liberacao-build.mjs');
