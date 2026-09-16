@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, MessageCircle, Send } from 'lucide-react';
+import { Copy, Link2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -32,21 +32,29 @@ const selectedCardData = () => {
 const ensureMounts = () => {
   let root = document.getElementById(ROOT_ID);
   if (!root) {
-    const heading = Array.from(document.querySelectorAll('h2')).find(node => clean(node.textContent).toLowerCase().includes('conferencia admissional')) as HTMLElement | undefined;
-    const card = heading?.closest('.card-premium') as HTMLElement | null;
-    if (!heading || !card) return null;
-    root = document.createElement('div'); root.id = ROOT_ID;
-    root.className = 'grid grid-cols-1 gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[.035] p-3 sm:grid-cols-2';
-    const reactMount = document.createElement('div'); reactMount.id = REACT_ID; reactMount.className = 'min-w-0';
-    const fseSlot = document.createElement('div'); fseSlot.id = FSE_ID; fseSlot.className = 'min-w-0';
+    root = document.createElement('div');
+    root.id = ROOT_ID;
+    root.className = 'no-print fixed bottom-4 right-4 z-[40] grid w-[min(390px,calc(100vw-2rem))] grid-cols-1 gap-2 rounded-2xl border border-violet-500/35 bg-[#06090d]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,.60),0_0_34px_rgba(124,44,255,.16)] backdrop-blur-xl sm:grid-cols-2';
+
+    const reactMount = document.createElement('div');
+    reactMount.id = REACT_ID;
+    reactMount.className = 'min-w-0';
+
+    const fseSlot = document.createElement('div');
+    fseSlot.id = FSE_ID;
+    fseSlot.className = 'min-w-0';
+
     root.append(reactMount, fseSlot);
-    const header = heading.parentElement;
-    if (header?.parentElement === card) header.insertAdjacentElement('afterend', root); else card.insertBefore(root, card.children[1] || null);
+    document.body.appendChild(root);
   }
   return document.getElementById(REACT_ID);
 };
 
-const normalizeWhatsapp = (value: string) => { let phone = digits(value); if (phone.length === 10 || phone.length === 11) phone = `55${phone}`; return phone; };
+const normalizeWhatsapp = (value: string) => {
+  let phone = digits(value);
+  if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
+  return phone;
+};
 
 export default function PreCadastroCandidateActions() {
   const [mount, setMount] = useState<HTMLElement | null>(null);
@@ -54,10 +62,16 @@ export default function PreCadastroCandidateActions() {
   const [lastLink, setLastLink] = useState('');
 
   useEffect(() => {
-    const place = () => setMount(ensureMounts()); place();
-    const timer = window.setInterval(place, 600); const observer = new MutationObserver(place);
-    observer.observe(document.body, { childList:true, subtree:true });
-    return () => { window.clearInterval(timer); observer.disconnect(); };
+    const place = () => setMount(ensureMounts());
+    place();
+    const timer = window.setInterval(place, 600);
+    const observer = new MutationObserver(place);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      window.clearInterval(timer);
+      observer.disconnect();
+      document.getElementById(ROOT_ID)?.remove();
+    };
   }, []);
 
   const createLink = async () => {
@@ -65,23 +79,32 @@ export default function PreCadastroCandidateActions() {
     const cpf = fieldByLabel('CPF') || selected.cpf;
     const phone = fieldByLabel('Celular') || fieldByLabel('Telefone');
     const name = fieldByLabel('Nome') || selected.name || 'candidato';
+
     if (!selected.id && digits(cpf).length !== 11) return toast.error('Selecione o pré-cadastro antes de gerar a ficha digital.');
     if (digits(phone).length < 10) return toast.error('Informe o celular/WhatsApp do candidato no pré-cadastro.');
 
-    setBusy(true); const popup = window.open('about:blank', '_blank');
+    setBusy(true);
+    const popup = window.open('about:blank', '_blank');
     try {
-      const { data:sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error('Sessão administrativa não encontrada.');
+
       const response = await fetch('/api/pre-cadastro-candidato', {
-        method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${accessToken}` },
-        body:JSON.stringify({ action:'admin_create', preCadastroId:selected.id || undefined, cpf:digits(cpf), telefone:digits(phone) }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'admin_create', preCadastroId: selected.id || undefined, cpf: digits(cpf), telefone: digits(phone) }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.ok) {
-        const message = data?.error === 'celular_candidato_obrigatorio' ? 'Informe o celular do candidato.' : data?.error === 'salve_empresa_funcao_antes_do_link' ? 'Salve a empresa e a função antes de enviar a ficha. Isso garante a geração automática da guia ASO.' : (data?.error || 'Não foi possível gerar o link.');
+        const message = data?.error === 'celular_candidato_obrigatorio'
+          ? 'Informe o celular do candidato.'
+          : data?.error === 'salve_empresa_funcao_antes_do_link'
+            ? 'Salve a empresa e a função antes de enviar a ficha. Isso garante a geração automática da guia ASO.'
+            : (data?.error || 'Não foi possível gerar o link.');
         throw new Error(message);
       }
+
       setLastLink(data.url);
       const message = [
         `Olá, ${name}.`, '',
@@ -91,24 +114,46 @@ export default function PreCadastroCandidateActions() {
         'Ao concluir a ficha, o próprio sistema mostrará a etapa final de documentos. A contratação só seguirá quando os itens obrigatórios estiverem completos.',
       ].join('\n');
       const wa = `https://wa.me/${normalizeWhatsapp(phone)}?text=${encodeURIComponent(message)}`;
-      if (popup) popup.location.href = wa; else window.open(wa, '_blank', 'noopener,noreferrer');
+      if (popup) popup.location.href = wa;
+      else window.open(wa, '_blank', 'noopener,noreferrer');
       try { await navigator.clipboard.writeText(data.url); } catch {}
       toast.success('Ficha digital criada. WhatsApp aberto e link copiado.');
-    } catch (error:any) {
-      if (popup) popup.close(); toast.error(error?.message || 'Não foi possível preparar a ficha.');
-    } finally { setBusy(false); }
+    } catch (error: any) {
+      if (popup) popup.close();
+      toast.error(error?.message || 'Não foi possível preparar a ficha.');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const copyLast = async () => { if (!lastLink) return; try { await navigator.clipboard.writeText(lastLink); toast.success('Link copiado.'); } catch { toast.error('Não foi possível copiar o link.'); } };
+  const copyLast = async () => {
+    if (!lastLink) return;
+    try {
+      await navigator.clipboard.writeText(lastLink);
+      toast.success('Link copiado.');
+    } catch {
+      toast.error('Não foi possível copiar o link.');
+    }
+  };
 
   if (!mount) return null;
   return createPortal(
     <div className="flex h-full flex-col gap-2">
-      <Button type="button" className="min-h-11 w-full" disabled={busy} onClick={() => void createLink()}>
-        {busy ? <Send className="mr-2 h-4 w-4 animate-pulse" /> : <MessageCircle className="mr-2 h-4 w-4" />}
-        {busy ? 'Preparando ficha...' : 'Enviar ficha + documentos ao candidato'}
+      <Button
+        type="button"
+        className="min-h-11 w-full border border-violet-400/40 bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_10px_28px_rgba(124,58,237,.25)] hover:from-violet-500 hover:to-indigo-500"
+        disabled={busy}
+        onClick={() => void createLink()}
+      >
+        {busy ? <Send className="h-4 w-4 animate-pulse" /> : <Link2 className="h-4 w-4" />}
+        {busy ? 'Preparando ficha...' : 'Enviar ficha por link'}
       </Button>
-      {lastLink && <button type="button" onClick={() => void copyLast()} className="flex items-center justify-center gap-2 text-[11px] font-semibold text-violet-300"><Copy className="h-3.5 w-3.5" />Copiar link novamente</button>}
-    </div>, mount,
+      {lastLink && (
+        <button type="button" onClick={() => void copyLast()} className="flex items-center justify-center gap-2 text-[11px] font-semibold text-violet-300 hover:text-violet-200">
+          <Copy className="h-3.5 w-3.5" />Copiar link novamente
+        </button>
+      )}
+    </div>,
+    mount,
   );
 }
