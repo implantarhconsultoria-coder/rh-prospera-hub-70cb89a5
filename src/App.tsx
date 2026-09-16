@@ -63,6 +63,7 @@ import AtestadosImportPage from "@/pages/AtestadosImportPage";
 import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
 import ConferenciaPontoPage from "@/pages/ConferenciaPontoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
+import EtiquetasPage from "@/pages/EtiquetasPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
@@ -209,6 +210,7 @@ const AuthGate = () => {
         <Route path="/admin/importar-fechamento" element={<ImportacaoFechamentoPage />} />
         <Route path="/admin/conferencia-ponto" element={<ConferenciaPontoPage />} />
         <Route path="/admin/almoxarifado" element={<AlmoxarifadoPage />} />
+        <Route path="/admin/etiquetas" element={<EtiquetasPage />} />
         <Route path="/admin/folha-pagamento" element={<FolhaPagamentoPage />} />
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
         <Route path="/admin/compras" element={<ComprasPage />} />
