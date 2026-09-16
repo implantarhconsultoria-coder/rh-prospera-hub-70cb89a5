@@ -29,24 +29,34 @@ const selectedCardData = () => {
   return { id, cpf, name };
 };
 
-const ensureMounts = () => {
+const findSaveActionBar = () => {
+  const saveButton = Array.from(document.querySelectorAll('button')).find(
+    button => clean(button.textContent) === 'Salvar',
+  ) as HTMLButtonElement | undefined;
+  return saveButton?.parentElement || null;
+};
+
+const ensureMount = () => {
+  const actionBar = findSaveActionBar();
+  const parent = actionBar?.parentElement;
+  if (!actionBar || !parent) return null;
+
   let root = document.getElementById(ROOT_ID);
   if (!root) {
-    root = document.createElement('div');
+    root = document.createElement('section');
     root.id = ROOT_ID;
-    root.className = 'no-print fixed bottom-4 right-4 z-[40] grid w-[min(390px,calc(100vw-2rem))] grid-cols-1 gap-2 rounded-2xl border border-violet-500/35 bg-[#06090d]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,.60),0_0_34px_rgba(124,44,255,.16)] backdrop-blur-xl sm:grid-cols-2';
+    root.className = 'no-print w-full rounded-xl border border-border bg-card/70 p-4 shadow-sm';
+    root.setAttribute('aria-label', 'Ficha digital do candidato');
 
     const reactMount = document.createElement('div');
     reactMount.id = REACT_ID;
-    reactMount.className = 'min-w-0';
-
-    const fseSlot = document.createElement('div');
-    fseSlot.id = FSE_ID;
-    fseSlot.className = 'min-w-0';
-
-    root.append(reactMount, fseSlot);
-    document.body.appendChild(root);
+    root.appendChild(reactMount);
   }
+
+  if (root.parentElement !== parent || root.nextElementSibling !== actionBar) {
+    parent.insertBefore(root, actionBar);
+  }
+
   return document.getElementById(REACT_ID);
 };
 
@@ -62,7 +72,7 @@ export default function PreCadastroCandidateActions() {
   const [lastLink, setLastLink] = useState('');
 
   useEffect(() => {
-    const place = () => setMount(ensureMounts());
+    const place = () => setMount(ensureMount());
     place();
     const timer = window.setInterval(place, 600);
     const observer = new MutationObserver(place);
@@ -80,8 +90,12 @@ export default function PreCadastroCandidateActions() {
     const phone = fieldByLabel('Celular') || fieldByLabel('Telefone');
     const name = fieldByLabel('Nome') || selected.name || 'candidato';
 
-    if (!selected.id && digits(cpf).length !== 11) return toast.error('Selecione o pré-cadastro antes de gerar a ficha digital.');
-    if (digits(phone).length < 10) return toast.error('Informe o celular/WhatsApp do candidato no pré-cadastro.');
+    if (!selected.id && digits(cpf).length !== 11) {
+      return toast.error('Selecione o pré-cadastro antes de gerar a ficha digital.');
+    }
+    if (digits(phone).length < 10) {
+      return toast.error('Informe o celular/WhatsApp do candidato no pré-cadastro.');
+    }
 
     setBusy(true);
     const popup = window.open('about:blank', '_blank');
@@ -93,7 +107,12 @@ export default function PreCadastroCandidateActions() {
       const response = await fetch('/api/pre-cadastro-candidato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'admin_create', preCadastroId: selected.id || undefined, cpf: digits(cpf), telefone: digits(phone) }),
+        body: JSON.stringify({
+          action: 'admin_create',
+          preCadastroId: selected.id || undefined,
+          cpf: digits(cpf),
+          telefone: digits(phone),
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.ok) {
@@ -107,10 +126,13 @@ export default function PreCadastroCandidateActions() {
 
       setLastLink(data.url);
       const message = [
-        `Olá, ${name}.`, '',
+        `Olá, ${name}.`,
+        '',
         'A TOPAC iniciou seu processo de pré-cadastro admissional.',
-        'Abra o link abaixo no celular, preencha a Ficha de Solicitação de Emprego e anexe os documentos que já tiver.', '',
-        data.url, '',
+        'Abra o link abaixo no celular, preencha a Ficha de Solicitação de Emprego e anexe os documentos que já tiver.',
+        '',
+        data.url,
+        '',
         'Ao concluir a ficha, o próprio sistema mostrará a etapa final de documentos. A contratação só seguirá quando os itens obrigatórios estiverem completos.',
       ].join('\n');
       const wa = `https://wa.me/${normalizeWhatsapp(phone)}?text=${encodeURIComponent(message)}`;
@@ -137,21 +159,47 @@ export default function PreCadastroCandidateActions() {
   };
 
   if (!mount) return null;
+
   return createPortal(
-    <div className="flex h-full flex-col gap-2">
-      <Button
-        type="button"
-        className="min-h-11 w-full border border-violet-400/40 bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-[0_10px_28px_rgba(124,58,237,.25)] hover:from-violet-500 hover:to-indigo-500"
-        disabled={busy}
-        onClick={() => void createLink()}
-      >
-        {busy ? <Send className="h-4 w-4 animate-pulse" /> : <Link2 className="h-4 w-4" />}
-        {busy ? 'Preparando ficha...' : 'Enviar ficha por link'}
-      </Button>
+    <div className="space-y-3">
+      <div>
+        <div className="flex items-center gap-2 font-semibold text-foreground">
+          <Link2 className="h-4 w-4 text-primary" />
+          Ficha digital do candidato
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Envie a ficha por WhatsApp ou abra a FSE-2026 para impressão.
+        </p>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button
+          type="button"
+          className="min-h-11 w-full"
+          disabled={busy}
+          onClick={() => void createLink()}
+        >
+          {busy ? <Send className="h-4 w-4 animate-pulse" /> : <Link2 className="h-4 w-4" />}
+          {busy ? 'Preparando ficha...' : 'Enviar ficha por link'}
+        </Button>
+        <div id={FSE_ID} className="min-w-0" />
+      </div>
+
       {lastLink && (
-        <button type="button" onClick={() => void copyLast()} className="flex items-center justify-center gap-2 text-[11px] font-semibold text-violet-300 hover:text-violet-200">
-          <Copy className="h-3.5 w-3.5" />Copiar link novamente
-        </button>
+        <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3 sm:flex-row sm:items-center">
+          <a
+            href={lastLink}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 flex-1 truncate text-sm font-medium text-primary underline underline-offset-4"
+          >
+            {lastLink}
+          </a>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copyLast()}>
+            <Copy className="h-3.5 w-3.5" />
+            Copiar novamente
+          </Button>
+        </div>
       )}
     </div>,
     mount,
