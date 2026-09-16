@@ -52,10 +52,20 @@ const AlmoxarifadoPage: React.FC = () => {
 
   if (view === 'etiquetas') return <EquipmentLabelGenerator onBack={() => setView('almoxarifado')} />;
 
-  return <div className="bg-[#F7F8FC]">
+  return <div className="almox-v2 bg-[#F7F8FC]">
+    <style>{`
+      .almox-v2 button { opacity: 1 !important; }
+      .almox-v2 button:disabled { opacity: .72 !important; }
+      .almox-v2 button .text-slate-400 { color: #475569 !important; }
+      .almox-v2 button .text-slate-500 { color: #334155 !important; }
+      .almox-v2 button[class*="bg-white"] { color: #0f172a !important; border-color: #cbd5e1 !important; }
+      .almox-v2 button[class*="bg-white"]:hover { border-color: #7c3aed !important; background: #f5f3ff !important; }
+      .almox-v2 button[class*="amber"], .almox-v2 button[class*="yellow"] { color: #422006 !important; }
+      .almox-v2 button:focus-visible { outline: 3px solid #facc15 !important; outline-offset: 2px; }
+    `}</style>
     <div className="mx-auto w-full max-w-[1780px] px-5 pt-5 lg:px-8">
-      <button onClick={() => setView('etiquetas')} className="flex w-full items-center justify-between rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 to-white p-4 text-left shadow-sm transition hover:border-violet-400 hover:shadow-md">
-        <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-violet-700 text-white"><Printer className="h-5 w-5"/></span><div><div className="font-black text-slate-950">CATÁLOGO DE EQUIPAMENTOS • GERAR ETIQUETA</div><div className="text-sm text-slate-500">Escolha o modelo, informe patrimônio e série e gere em 6x9, 9x13 ou 13x18 cm.</div></div></div><span className="text-2xl font-black text-violet-700">›</span>
+      <button onClick={() => setView('etiquetas')} className="flex w-full items-center justify-between rounded-2xl border border-violet-300 bg-gradient-to-r from-violet-100 to-white p-4 text-left text-slate-950 shadow-sm transition hover:border-violet-500 hover:shadow-md">
+        <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-violet-700 text-white"><Printer className="h-5 w-5"/></span><div><div className="font-black text-slate-950">CATÁLOGO DE EQUIPAMENTOS • GERAR ETIQUETA</div><div className="text-sm font-medium text-slate-700">Escolha o modelo, informe patrimônio e série e gere em 6x9, 9x13 ou 13x18 cm.</div></div></div><span className="text-2xl font-black text-violet-700">›</span>
       </button>
     </div>
     <AlmoxarifadoDesktopV2 />
