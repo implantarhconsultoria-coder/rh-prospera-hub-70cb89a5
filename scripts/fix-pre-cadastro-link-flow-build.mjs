@@ -59,12 +59,34 @@ patch('src/components/AdminMobileLayout.tsx', (source) => {
   }
   text = text.replace('      {!isHome && (\n        <nav className=', '      {!isHome && !isPreCadastro && (\n        <nav className=');
   text = text.replace('      {!isHome && (\n        <>\n          <VoiceCommandFab />', '      {!isHome && !isPreCadastro && (\n        <>\n          <VoiceCommandFab />');
-  return text;
-}, 'mobile limpo no pré-cadastro e Ponto removido dos acessos');
+  text = text.replace(
+`      {isHome && (
+        <div className="fixed right-3 top-[calc(12px+env(safe-area-inset-top))] z-40 flex items-center gap-1">
+          <button onClick={() => setSearchOpen(true)} className="grid h-10 w-10 place-items-center rounded-full border border-fuchsia-500/20 bg-[#0b0712]/90 text-zinc-300 backdrop-blur-xl" aria-label="Buscar">
+            <Search className="h-4.5 w-4.5" />
+          </button>
+          {!isDirector && <div className="rounded-full border border-fuchsia-500/20 bg-[#0b0712]/90 backdrop-blur-xl"><AdminRequestNotifications /></div>}
+        </div>
+      )}
 
-patch('src/components/admin-mobile/AdminMobileDashboard.tsx', (source) =>
-  source.replace("    { label: 'Ponto', icon: BarChart3, path: '/admin/fechamento-ponto', accent: 'text-fuchsia-300' },\n", ''),
-'card Ponto removido do painel móvel');
+`, '');
+  return text;
+}, 'mobile limpo no pré-cadastro e home sem botões flutuantes');
+
+patch('src/components/admin-mobile/AdminMobileDashboard.tsx', (source) => {
+  let text = source;
+  text = text.replace("    { label: 'Ponto', icon: BarChart3, path: '/admin/fechamento-ponto', accent: 'text-fuchsia-300' },\n", '');
+  text = text.replace("    { label: 'Funcionários', icon: Users, path: '/admin/funcionarios', accent: 'text-fuchsia-300' },\n", '');
+  text = text.replace("    { label: 'Férias', icon: CalendarDays, path: '/admin/aviso-ferias', accent: 'text-fuchsia-300' },", "    { label: 'Férias', icon: CalendarDays, path: '/admin/central-contabilidade?modulo=ferias', accent: 'text-fuchsia-300' },");
+  text = text.replace("    { label: 'ASO', icon: Stethoscope, path: '/admin/aso', accent: 'text-emerald-300' },", "    { label: 'ASO', icon: Stethoscope, path: '/admin/central-contabilidade?modulo=aso', accent: 'text-emerald-300' },");
+  if (!text.includes("{ label: 'Central da Contabilidade', icon: ClipboardCheck")) {
+    text = text.replace(
+      "  const accesses = [\n    { label: 'Fechamento'",
+      "  const accesses = [\n    { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade', accent: 'text-fuchsia-300' },\n    { label: 'Fechamento'",
+    );
+  }
+  return text;
+}, 'home móvel sem Funcionários/Ponto duplicados e RH centralizado');
 
 patch('src/components/AppLayout.tsx', (source) => {
   let text = source;
@@ -75,9 +97,13 @@ patch('src/components/AppLayout.tsx', (source) => {
     );
   }
   text = text.replace(/      <SupportCenter \/>/g, '      {!isPreCadastroView && <SupportCenter />}');
+  text = text.replace(
+    '        <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>\n        {!isPreCadastroView && <SupportCenter />}\n',
+    '        <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>\n',
+  );
   text = text.replace('      <AssistenteFab />\n    </div>', '      {!isPreCadastroView && <AssistenteFab />}\n    </div>');
   return text;
-}, 'botões flutuantes ocultados no pré-cadastro');
+}, 'suporte flutuante removido do mobile; desktop preservado');
 
 patch('src/pages/CandidatoDocumentosPage.tsx', (source) => {
   let text = source;
