@@ -45,3 +45,4 @@ patch('src/pages/PreCadastroAdmissionalOcrPage.tsx',(source)=>{
 
 await import('./fix-platform-visual-consistency-build.mjs');
 await import('./fix-abastecimento-auto-liberacao-build.mjs');
+await import('./fix-contabilidade-ferias-documentos-build.mjs');
