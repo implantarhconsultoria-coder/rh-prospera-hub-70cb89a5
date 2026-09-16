@@ -91,3 +91,21 @@ patch('src/pages/CandidatoDocumentosPage.tsx', (source) => {
   );
   return text;
 }, 'tipagem da ficha digital validada');
+
+patch('api/pre-cadastro-candidato.ts', (source) => {
+  let text = source;
+  text = text.replace(
+    "      if (!pre?.id) return sendJson(res, { ok:false, error:'pre_cadastro_nao_encontrado' }, 404);\n      const telefone = digits(body.telefone || pre.celular);",
+    "      if (!pre?.id) return sendJson(res, { ok:false, error:'pre_cadastro_nao_encontrado' }, 404);\n      if (!clean(pre.empresa_nome) || !clean(pre.funcao)) return sendJson(res, { ok:false, error:'salve_empresa_funcao_antes_do_link' }, 400);\n      const telefone = digits(body.telefone || pre.celular);",
+  );
+  text = text.replace(
+    "    if (request.status === 'concluido' && !['state','register_aso'].includes(action)) {\n      return sendJson(res, { ok:false, error:'processo_ja_concluido' }, 409);\n    }",
+    "    const allowedAfterConclusion = action === 'state' || action === 'register_aso' || (action === 'create_upload' && clean(body.tipo) === 'guia_aso');\n    if (request.status === 'concluido' && !allowedAfterConclusion) {\n      return sendJson(res, { ok:false, error:'processo_ja_concluido' }, 409);\n    }",
+  );
+  return text;
+}, 'ASO automático liberado após conclusão e link exige empresa/função salvas');
+
+patch('src/components/PreCadastroCandidateActions.tsx', (source) => source.replace(
+  "      if (!response.ok || !data?.ok) throw new Error(data?.error === 'celular_candidato_obrigatorio' ? 'Informe o celular do candidato.' : (data?.error || 'Não foi possível gerar o link.'));",
+  "      if (!response.ok || !data?.ok) {\n        const message = data?.error === 'celular_candidato_obrigatorio' ? 'Informe o celular do candidato.' : data?.error === 'salve_empresa_funcao_antes_do_link' ? 'Salve a empresa e a função antes de enviar o link. Isso garante a geração automática da guia ASO.' : (data?.error || 'Não foi possível gerar o link.');\n        throw new Error(message);\n      }",
+), 'validação administrativa do link aplicada');
