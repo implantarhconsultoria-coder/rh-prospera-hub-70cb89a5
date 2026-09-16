@@ -30,3 +30,5 @@ replace(
 
 fs.writeFileSync(file, src);
 console.log('[abastecimento-gateway] OCR ligado ao Vercel AI Gateway');
+
+await import('./fix-abastecimento-ocr-nao-bloqueante-build.mjs');
