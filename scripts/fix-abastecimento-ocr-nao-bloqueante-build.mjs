@@ -127,28 +127,6 @@ replace(
 );
 
 replace(
-`      const result = data as { ok?: boolean; error?: string; id?: string; duplicado?: boolean; valor?: number; litros?: number; valor_por_litro?: number; km_atual?: number } | null;
-      if (error || !result?.ok) return toast.error(fuelErrorMessage(result?.error || error?.message));
-
-      const info: ReceiptInfo = {`,
-`      const result = data as { ok?: boolean; error?: string; id?: string; duplicado?: boolean; valor?: number; litros?: number; valor_por_litro?: number; km_atual?: number; ocr_pendente?: boolean } | null;
-      if (error || !result?.ok) return toast.error(fuelErrorMessage(result?.error || error?.message));
-
-      const completarLeituraNoSistema = async () => {
-        const [bombaProcessada, kmProcessado] = await Promise.all([
-          leituraBomba ? Promise.resolve(leituraBomba) : lerBombaAutomaticamente(fotoBombaUrl),
-          kmLido ? Promise.resolve(kmLido) : lerPainelAutomaticamente(fotoPainelUrl),
-        ]);
-        if (bombaProcessada || kmProcessado) await persistirLeituraOcr(current.id, bombaProcessada, kmProcessado);
-      };
-      void completarLeituraNoSistema().catch((ocrError) => console.warn("OCR continuará pendente para conferência na plataforma:", ocrError));
-
-      const info: ReceiptInfo = {`,
-  'OCR continua no sistema depois da finalizacao',
-  'const completarLeituraNoSistema = async () =>',
-);
-
-replace(
 `        valor: Number(result.valor ?? leituraBomba.valor),
         litros: Number(result.litros ?? leituraBomba.litros),
         valorPorLitro: Number(result.valor_por_litro ?? leituraBomba.precoLitro),
@@ -159,6 +137,13 @@ replace(
         kmAtual: Number(result.km_atual ?? kmLido ?? 0),`,
   'recibo tolera OCR pendente',
 );
+
+if (!src.includes('const completarLeituraNoSistema = async () =>')) {
+  const marker = '      setReceipt(info);';
+  if (!src.includes(marker)) throw new Error('[abastecimento-ocr-async] ancora pós-finalização não encontrada');
+  src = src.replace(marker, `      const completarLeituraNoSistema = async () => {\n        const [bombaProcessada, kmProcessado] = await Promise.all([\n          leituraBomba ? Promise.resolve(leituraBomba) : lerBombaAutomaticamente(fotoBombaUrl),\n          kmLido ? Promise.resolve(kmLido) : lerPainelAutomaticamente(fotoPainelUrl),\n        ]);\n        if (bombaProcessada || kmProcessado) await persistirLeituraOcr(current.id, bombaProcessada, kmProcessado);\n      };\n      void completarLeituraNoSistema().catch((ocrError) => console.warn("OCR continuará pendente para conferência na plataforma:", ocrError));\n\n${marker}`);
+  console.log('[abastecimento-ocr-async] OCR continua no sistema depois da finalizacao');
+}
 
 replace(
   '      toast.success(`Abastecimento concluído automaticamente: R$ ${info.valor.toFixed(2).replace(".", ",")} · ${info.litros.toFixed(3).replace(".", ",")} L · KM ${info.kmAtual.toLocaleString("pt-BR")}.`);',
