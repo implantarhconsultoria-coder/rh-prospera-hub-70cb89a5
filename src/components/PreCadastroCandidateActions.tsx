@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 const ROOT_ID = 'topac-pre-cadastro-actions';
 const REACT_ID = 'topac-pre-cadastro-react-actions';
 const FSE_ID = 'topac-pre-cadastro-fse-slot';
-
 const clean = (value: unknown) => String(value || '').replace(/\s+/g, ' ').trim();
 const digits = (value: unknown) => clean(value).replace(/\D/g, '');
 
@@ -26,7 +25,8 @@ const selectedCardData = () => {
   const text = clean(selected?.textContent);
   const cpf = text.match(/\d{3}\.\d{3}\.\d{3}-\d{2}|\d{11}/)?.[0] || '';
   const name = clean(selected?.querySelector('.font-semibold')?.textContent);
-  return { cpf, name };
+  const id = selected?.dataset?.preCadastroId || '';
+  return { id, cpf, name };
 };
 
 const ensureMounts = () => {
@@ -35,28 +35,18 @@ const ensureMounts = () => {
     const heading = Array.from(document.querySelectorAll('h2')).find(node => clean(node.textContent).toLowerCase().includes('conferencia admissional')) as HTMLElement | undefined;
     const card = heading?.closest('.card-premium') as HTMLElement | null;
     if (!heading || !card) return null;
-    root = document.createElement('div');
-    root.id = ROOT_ID;
+    root = document.createElement('div'); root.id = ROOT_ID;
     root.className = 'grid grid-cols-1 gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[.035] p-3 sm:grid-cols-2';
-    const reactMount = document.createElement('div');
-    reactMount.id = REACT_ID;
-    reactMount.className = 'min-w-0';
-    const fseSlot = document.createElement('div');
-    fseSlot.id = FSE_ID;
-    fseSlot.className = 'min-w-0';
+    const reactMount = document.createElement('div'); reactMount.id = REACT_ID; reactMount.className = 'min-w-0';
+    const fseSlot = document.createElement('div'); fseSlot.id = FSE_ID; fseSlot.className = 'min-w-0';
     root.append(reactMount, fseSlot);
     const header = heading.parentElement;
-    if (header?.parentElement === card) header.insertAdjacentElement('afterend', root);
-    else card.insertBefore(root, card.children[1] || null);
+    if (header?.parentElement === card) header.insertAdjacentElement('afterend', root); else card.insertBefore(root, card.children[1] || null);
   }
   return document.getElementById(REACT_ID);
 };
 
-const normalizeWhatsapp = (value: string) => {
-  let phone = digits(value);
-  if (phone.length === 10 || phone.length === 11) phone = `55${phone}`;
-  return phone;
-};
+const normalizeWhatsapp = (value: string) => { let phone = digits(value); if (phone.length === 10 || phone.length === 11) phone = `55${phone}`; return phone; };
 
 export default function PreCadastroCandidateActions() {
   const [mount, setMount] = useState<HTMLElement | null>(null);
@@ -64,10 +54,8 @@ export default function PreCadastroCandidateActions() {
   const [lastLink, setLastLink] = useState('');
 
   useEffect(() => {
-    const place = () => setMount(ensureMounts());
-    place();
-    const timer = window.setInterval(place, 600);
-    const observer = new MutationObserver(place);
+    const place = () => setMount(ensureMounts()); place();
+    const timer = window.setInterval(place, 600); const observer = new MutationObserver(place);
     observer.observe(document.body, { childList:true, subtree:true });
     return () => { window.clearInterval(timer); observer.disconnect(); };
   }, []);
@@ -77,54 +65,50 @@ export default function PreCadastroCandidateActions() {
     const cpf = fieldByLabel('CPF') || selected.cpf;
     const phone = fieldByLabel('Celular') || fieldByLabel('Telefone');
     const name = fieldByLabel('Nome') || selected.name || 'candidato';
-    if (digits(cpf).length !== 11) return toast.error('Selecione e salve o pré-cadastro com CPF antes de enviar o link.');
+    if (!selected.id && digits(cpf).length !== 11) return toast.error('Selecione o pré-cadastro antes de gerar a ficha digital.');
     if (digits(phone).length < 10) return toast.error('Informe o celular/WhatsApp do candidato no pré-cadastro.');
 
-    setBusy(true);
-    const popup = window.open('about:blank', '_blank');
+    setBusy(true); const popup = window.open('about:blank', '_blank');
     try {
       const { data:sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error('Sessão administrativa não encontrada.');
       const response = await fetch('/api/pre-cadastro-candidato', {
         method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${accessToken}` },
-        body:JSON.stringify({ action:'admin_create', cpf, telefone:digits(phone) }),
+        body:JSON.stringify({ action:'admin_create', preCadastroId:selected.id || undefined, cpf:digits(cpf), telefone:digits(phone) }),
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.ok) throw new Error(data?.error === 'celular_candidato_obrigatorio' ? 'Informe o celular do candidato.' : (data?.error || 'Não foi possível gerar o link.'));
+      if (!response.ok || !data?.ok) {
+        const message = data?.error === 'celular_candidato_obrigatorio' ? 'Informe o celular do candidato.' : data?.error === 'salve_empresa_funcao_antes_do_link' ? 'Salve a empresa e a função antes de enviar a ficha. Isso garante a geração automática da guia ASO.' : (data?.error || 'Não foi possível gerar o link.');
+        throw new Error(message);
+      }
       setLastLink(data.url);
       const message = [
         `Olá, ${name}.`, '',
         'A TOPAC iniciou seu processo de pré-cadastro admissional.',
-        'Preencha sua ficha e envie todos os documentos obrigatórios pelo link seguro abaixo:', '',
+        'Abra o link abaixo no celular, preencha a Ficha de Solicitação de Emprego e anexe os documentos que já tiver.', '',
         data.url, '',
-        'O envio só poderá ser finalizado quando todos os itens obrigatórios estiverem completos.',
+        'Ao concluir a ficha, o próprio sistema mostrará a etapa final de documentos. A contratação só seguirá quando os itens obrigatórios estiverem completos.',
       ].join('\n');
       const wa = `https://wa.me/${normalizeWhatsapp(phone)}?text=${encodeURIComponent(message)}`;
       if (popup) popup.location.href = wa; else window.open(wa, '_blank', 'noopener,noreferrer');
       try { await navigator.clipboard.writeText(data.url); } catch {}
-      toast.success('Link criado. WhatsApp aberto com a mensagem pronta e link copiado.');
+      toast.success('Ficha digital criada. WhatsApp aberto e link copiado.');
     } catch (error:any) {
-      if (popup) popup.close();
-      toast.error(error?.message || 'Não foi possível preparar a solicitação.');
+      if (popup) popup.close(); toast.error(error?.message || 'Não foi possível preparar a ficha.');
     } finally { setBusy(false); }
   };
 
-  const copyLast = async () => {
-    if (!lastLink) return;
-    try { await navigator.clipboard.writeText(lastLink); toast.success('Link copiado.'); }
-    catch { toast.error('Não foi possível copiar o link.'); }
-  };
+  const copyLast = async () => { if (!lastLink) return; try { await navigator.clipboard.writeText(lastLink); toast.success('Link copiado.'); } catch { toast.error('Não foi possível copiar o link.'); } };
 
   if (!mount) return null;
   return createPortal(
     <div className="flex h-full flex-col gap-2">
       <Button type="button" className="min-h-11 w-full" disabled={busy} onClick={() => void createLink()}>
         {busy ? <Send className="mr-2 h-4 w-4 animate-pulse" /> : <MessageCircle className="mr-2 h-4 w-4" />}
-        {busy ? 'Preparando link...' : 'Enviar documentos ao candidato'}
+        {busy ? 'Preparando ficha...' : 'Enviar ficha + documentos ao candidato'}
       </Button>
       {lastLink && <button type="button" onClick={() => void copyLast()} className="flex items-center justify-center gap-2 text-[11px] font-semibold text-violet-300"><Copy className="h-3.5 w-3.5" />Copiar link novamente</button>}
-    </div>,
-    mount,
+    </div>, mount,
   );
 }
