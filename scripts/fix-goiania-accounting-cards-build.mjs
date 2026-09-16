@@ -1,4 +1,5 @@
 import './fix-abastecimento-ocr-automatico-build.mjs';
+import './fix-abastecimento-ocr-gateway-build.mjs';
 import fs from 'node:fs';
 
 const file = 'src/pages/contabilidade/ContabilidadeFolhaFluxo.tsx';
