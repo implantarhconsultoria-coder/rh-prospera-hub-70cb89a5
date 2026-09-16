@@ -1,8 +1,15 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "node scripts/generate-app-icons.mjs && node scripts/normalize-source-encoding.mjs && npm run build && node scripts/patch-dist-app-icons.mjs",
   "outputDirectory": "dist",
+  "functions": {
+    "api/abastecimento-ocr.ts": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/tesseract.js-core/**"
+    }
+  },
   "rewrites": [
     { "source": "/api/frota-upload", "destination": "/api/frota-upload-v2" },
     { "source": "/api/payroll-public", "destination": "/api/payroll-public-v2" },
