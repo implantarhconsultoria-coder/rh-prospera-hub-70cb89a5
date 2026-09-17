@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
 import { Download, Eye, FileText, Printer } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
@@ -34,6 +35,11 @@ const escapeHtml = (value: unknown) => clean(value)
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
+
+const normalizeText = (value: unknown) => clean(value)
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
 
 const mapEmpresa = (row: any): EmpresaDetalhe => ({
   id: clean(row?.id),
@@ -71,6 +77,19 @@ const motivoTexto: Record<Motivo, string> = {
   nao_informar: '',
 };
 
+const isRescisaoRoute = () => {
+  const path = window.location.pathname;
+  if (path === '/admin/rescisoes') return true;
+  if (path !== '/admin/central-contabilidade') return false;
+  return new URLSearchParams(window.location.search).get('modulo') === 'rescisao';
+};
+
+const findRescisaoHeaderTarget = () => {
+  const heading = Array.from(document.querySelectorAll('h1')).find((node) => normalizeText(node.textContent) === 'rescisoes');
+  const target = heading?.parentElement?.parentElement;
+  return target instanceof HTMLElement ? target : null;
+};
+
 const PedidoDemissaoModelDialog: React.FC = () => {
   const { companies, employees } = useApp();
   const [open, setOpen] = useState(false);
@@ -82,6 +101,22 @@ const PedidoDemissaoModelDialog: React.FC = () => {
   const [aviso, setAviso] = useState<Aviso>('cumprir');
   const [motivo, setMotivo] = useState<Motivo>('nao_informar');
   const [motivoOutro, setMotivoOutro] = useState('');
+  const [mountTarget, setMountTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isRescisaoRoute()) {
+      setMountTarget(null);
+      return;
+    }
+    const syncTarget = () => {
+      const next = findRescisaoHeaderTarget();
+      setMountTarget((current) => current === next ? current : next);
+    };
+    syncTarget();
+    const observer = new MutationObserver(syncTarget);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   const funcionario = employees.find((item) => item.id === employeeId) || null;
   const funcionariosEmpresa = useMemo(() => employees
@@ -200,10 +235,12 @@ const PedidoDemissaoModelDialog: React.FC = () => {
     pdf.save(`modelo-carta-pedido-demissao-${safeName}.pdf`);
   };
 
-  return (
+  if (!isRescisaoRoute() || !mountTarget) return null;
+
+  const dialog = (
     <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPreview(false); }}>
       <DialogTrigger asChild>
-        <Button className="fixed bottom-24 right-6 z-[65] shadow-xl no-print" size="lg">
+        <Button variant="outline" className="shrink-0 no-print">
           <FileText className="mr-2 h-4 w-4" /> Modelo Carta de Demissão
         </Button>
       </DialogTrigger>
@@ -278,6 +315,8 @@ const PedidoDemissaoModelDialog: React.FC = () => {
       </DialogContent>
     </Dialog>
   );
+
+  return createPortal(dialog, mountTarget);
 };
 
 export default PedidoDemissaoModelDialog;
