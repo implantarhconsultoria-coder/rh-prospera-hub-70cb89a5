@@ -42,6 +42,7 @@ export const MAX_EMAIL_ATTACHMENTS = 30;
 const PDF_CONTENT_TYPE = 'application/pdf';
 
 export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;
+export const EMAIL_CONTABILIDADE_GOIANIA = 'requisicao@incocontabilidade.com.br' as const;
 const EMAIL_GOIANIA_ANTIGO = 'gyn@topac.com.br';
 const EMAILS_REMOVIDOS = new Set(['lucilene' + '@aatconsultoria.com.br']);
 
@@ -67,7 +68,7 @@ export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmen
   if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
   params.push(`subject=${enc(subject)}`);
   params.push(`body=${enc(policy.body)}`);
-  window.location.href = `mailto:${normalizedTo.map(enc).join(',')}?${params.join('&')}`;
+  window.location.href = `mailto:${policy.to.map(enc).join(',')}?${params.join('&')}`;
 };
 
 const safeFileName = (value: string) =>
@@ -233,7 +234,7 @@ export const sendEmailWithPdfAttachment = async ({
         authorization: `Bearer ${effectiveAuthToken}`,
       },
       body: JSON.stringify({
-        to: normalizedTo,
+        to: policy.to,
         cc: policy.cc,
         subject,
         body: policy.body,
@@ -281,14 +282,26 @@ export const DESTINATARIOS_CONTABILIDADE = [EMAIL_CONTABILIDADE_MARISA, EMAIL_CO
 export const CC_CONTABILIDADE = CC_OBRIGATORIO;
 export const DESTINATARIOS_ASO = ['agendamento@ponteaereaseguranca.com.br'] as const;
 
-export const getDestinatariosFerias = (unidade: string): readonly string[] => {
+export const isGoianiaUnidade = (unidade: string) => {
   const normalized = String(unidade || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-  return normalized.includes('GOIANIA') || normalized.includes('GOIANA')
-    ? ['requisicao@incocontabilidade.com.br']
-    : DESTINATARIOS_CONTABILIDADE;
+  return normalized.includes('GOIANIA') || normalized.includes('GOIANA') || normalized.includes('GYN');
 };
 
-export const getDestinatariosRescisao = (unidade: string): readonly string[] => getDestinatariosFerias(unidade);
+export const getDestinatariosFerias = (unidade: string): readonly string[] =>
+  isGoianiaUnidade(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;
+
+export const getDestinatariosRescisao = (unidade: string): readonly string[] =>
+  isGoianiaUnidade(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;
+
+/** Todo processo de RH de Goiania inclui ADM Goiania em copia. */
+export const getCcRh = (unidade: string): readonly string[] =>
+  isGoianiaUnidade(unidade) ? [...CC_OBRIGATORIO, EMAIL_GOIANIA] : CC_OBRIGATORIO;
+
+/** Regra pronta para o futuro fechamento/apontamento delegado de Goiania. */
+export const getDestinatariosFechamento = (unidade: string): readonly string[] =>
+  isGoianiaUnidade(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;
+
+export const getCcFechamento = (unidade: string): readonly string[] => getCcRh(unidade);
 export const DESTINATARIOS = {
   ferias: getDestinatariosFerias(''),
   rescisao: getDestinatariosRescisao(''),

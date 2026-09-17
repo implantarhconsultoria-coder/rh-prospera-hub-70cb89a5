@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { CalendarCheck, Printer, Save, ArrowLeft, AlertTriangle, Mail } from 'lucide-react';
 import { feriasStatus } from '@/lib/calculations';
 import { toast } from 'sonner';
-import { getDestinatariosFerias, CC_OBRIGATORIO } from '@/lib/emailUtils';
+import { getDestinatariosFerias, getCcRh } from '@/lib/emailUtils';
 import { arquivarDocumentoFuncionario, marcarComoEnviado } from '@/lib/documentoHistorico';
 import { gerarAvisoFeriasPdf, downloadPdf } from '@/lib/pdfGenerator';
 import { supabase } from '@/integrations/supabase/client';
@@ -455,6 +455,7 @@ const AvisoFeriasPage: React.FC = () => {
     if (!pdf) return;
 
     const destinatarios = Array.from(getDestinatariosFerias(company?.name || ''));
+    const copia = Array.from(getCcRh(company?.name || ''));
     const body = [
       `Segue solicitacao de ferias do(a) colaborador(a) abaixo:`,
       ``,
@@ -475,7 +476,7 @@ const AvisoFeriasPage: React.FC = () => {
 
     setEmailPdfDraft({
       to: destinatarios,
-      cc: Array.from(CC_OBRIGATORIO),
+      cc: copia,
       subject: `Solicitacao de Ferias - ${emp.name} - ${company?.name || ''}`,
       body,
       attachmentBlob: pdf.blob,
@@ -486,7 +487,7 @@ const AvisoFeriasPage: React.FC = () => {
         const documentoId = (registro as any)?.id || lastDocId;
         if (documentoId && session?.user) {
           const nomeUsuario = await getNomeUsuarioAtual();
-          await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));
+          await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...destinatarios, ...copia].join(', '));
         }
       },
     });

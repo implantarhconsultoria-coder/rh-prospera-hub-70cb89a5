@@ -4,6 +4,8 @@ const EMAILS_REMOVIDOS = new Set(['lucilene' + '@aatconsultoria.com.br']);
 
 export const ACCOUNTING_VANESSA = 'dp@aatconsultoria.com.br' as const;
 export const ACCOUNTING_MARISA = 'marisa@aatconsultoria.com.br' as const;
+export const GOIANIA_ADMIN_EMAIL = 'adm.gyn@topac.com.br' as const;
+export const GOIANIA_ACCOUNTING_EMAIL = 'requisicao@incocontabilidade.com.br' as const;
 
 export type EmailPolicyInput = {
   to?: readonly string[];
@@ -48,6 +50,23 @@ const uniqueEmails = (values: readonly string[] = []) => Array.from(new Set(
   values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean).filter((email) => !EMAILS_REMOVIDOS.has(email)),
 ));
 
+const routingText = (input: EmailPolicyInput) => normalize([
+  input.subject,
+  input.body,
+  input.moduleOrigin,
+  ...(input.attachmentNames || []),
+].join(' '));
+
+const isGoianiaContext = (input: EmailPolicyInput) => {
+  const text = routingText(input);
+  return text.includes('goiania') || text.includes('goiana') || /\bgyn\b/.test(text);
+};
+
+const isFechamentoOuApontamento = (input: EmailPolicyInput) => {
+  const text = routingText(input);
+  return text.includes('fechamento') || text.includes('apontamento');
+};
+
 const accountingCcFor = (to: readonly string[] = []) => {
   const recipients = uniqueEmails(to);
   const goesToVanessa = recipients.includes(ACCOUNTING_VANESSA);
@@ -64,23 +83,32 @@ const accountingCcFor = (to: readonly string[] = []) => {
 
 export const applyTopacEmailPolicy = (input: EmailPolicyInput) => {
   const report = isReportOrSpreadsheetEmail(input);
-  const accountingCc = accountingCcFor(input.to);
+  const goiania = isGoianiaContext(input);
+  const fechamentoOuApontamento = goiania && isFechamentoOuApontamento(input);
+  const policyTo = uniqueEmails([
+    ...(input.to || []),
+    ...(fechamentoOuApontamento ? [GOIANIA_ACCOUNTING_EMAIL] : []),
+  ]);
+  const accountingCc = accountingCcFor(policyTo);
   const mandatoryCc = uniqueEmails([
     ...(input.cc || []),
     ...accountingCc,
+    ...(goiania ? [GOIANIA_ADMIN_EMAIL] : []),
     ...(report ? TOPAC_REPORT_CC : []),
   ]);
 
   if (!report) {
     return {
+      to: policyTo,
       body: String(input.body || '').trim(),
       cc: mandatoryCc,
-      institutional: accountingCc.length > 0,
+      institutional: accountingCc.length > 0 || goiania,
     };
   }
 
   const content = stripExistingSignature(String(input.body || ''));
   return {
+    to: policyTo,
     body: `${content}${content ? '\n\n' : ''}${TOPAC_REPORT_SIGNATURE}`,
     cc: mandatoryCc,
     institutional: true,
