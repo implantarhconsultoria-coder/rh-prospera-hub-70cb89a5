@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
 import { Download, Eye, FileText, Printer } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
@@ -32,7 +33,7 @@ const escapeHtml = (value: unknown) => clean(value)
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
+  .replace(/\"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
 const mapEmpresa = (row: any): EmpresaDetalhe => ({
@@ -82,6 +83,14 @@ const PedidoDemissaoModelDialog: React.FC = () => {
   const [aviso, setAviso] = useState<Aviso>('cumprir');
   const [motivo, setMotivo] = useState<Motivo>('nao_informar');
   const [motivoOutro, setMotivoOutro] = useState('');
+  const [mountTarget, setMountTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const locate = () => setMountTarget(document.getElementById('rescisao-carta-anchor'));
+    locate();
+    const timer = window.setInterval(locate, 300);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const funcionario = employees.find((item) => item.id === employeeId) || null;
   const funcionariosEmpresa = useMemo(() => employees
@@ -200,10 +209,12 @@ const PedidoDemissaoModelDialog: React.FC = () => {
     pdf.save(`modelo-carta-pedido-demissao-${safeName}.pdf`);
   };
 
-  return (
+  if (!mountTarget) return null;
+
+  return createPortal((
     <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPreview(false); }}>
       <DialogTrigger asChild>
-        <Button className="fixed bottom-24 right-6 z-[65] shadow-xl no-print" size="lg">
+        <Button className="no-print shadow-sm" size="sm" variant="outline">
           <FileText className="mr-2 h-4 w-4" /> Modelo Carta de Demissão
         </Button>
       </DialogTrigger>
@@ -277,7 +288,7 @@ const PedidoDemissaoModelDialog: React.FC = () => {
         </div></div>}
       </DialogContent>
     </Dialog>
-  );
+  ), mountTarget);
 };
 
 export default PedidoDemissaoModelDialog;
