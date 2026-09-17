@@ -1,0 +1,6 @@
+-- Aplicado em produção em 16/09/2026.
+-- A função almoxarifado_criar_carga_v2 valida a janela operacional em America/Sao_Paulo,
+-- exige autorização excepcional fora do horário, vincula a autorização à retirada e mantém baixa transacional.
+-- Horário: seg-qui 07:00-18:00; sex 07:00-17:00; fim de semana somente com autorização.
+-- A função almoxarifado_fechar_mes(date) persiste abertura, entradas, retiradas, fechamento e detalhe por funcionário
+-- em almoxarifado_fechamentos_mensais. A definição executável está registrada na migration aplicada no projeto Supabase.
