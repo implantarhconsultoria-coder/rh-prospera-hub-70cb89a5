@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import AlmoxarifadoDesktopV4 from '@/components/AlmoxarifadoDesktopV4';
+import AlmoxarifadoFechamentoOperacional from '@/components/almoxarifado/AlmoxarifadoFechamentoOperacional';
 import { AlmoxarifadoAccessGate, useAlmoxarifadoAccess } from '@/components/AlmoxarifadoAccessGate';
 
 const AlmoxarifadoPage: React.FC = () => {
@@ -24,6 +25,6 @@ const AlmoxarifadoPage: React.FC = () => {
   if (roleLoading || access.checking) return <div className="grid min-h-[520px] place-items-center bg-background"><div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin"/>Validando acesso ao Almoxarifado...</div></div>;
   if (!allowed) return <AlmoxarifadoAccessGate state={access} />;
   if (dataLoading || !ready) return <div className="grid min-h-[520px] place-items-center bg-background"><div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin"/>Abrindo estoque central TOPAC...</div></div>;
-  return <AlmoxarifadoDesktopV4 />;
+  return <><AlmoxarifadoDesktopV4 /><AlmoxarifadoFechamentoOperacional /></>;
 };
 export default AlmoxarifadoPage;
