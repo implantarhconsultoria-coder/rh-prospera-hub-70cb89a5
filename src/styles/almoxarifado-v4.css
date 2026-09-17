@@ -1,0 +1,445 @@
+.almoxarifado-page-shell {
+  --almox-bg: #070b12;
+  --almox-surface: #0d1320;
+  --almox-surface-2: #111a2a;
+  --almox-border: rgba(148, 163, 184, 0.18);
+  --almox-border-strong: rgba(148, 163, 184, 0.28);
+  --almox-text: #f8fafc;
+  --almox-muted: #94a3b8;
+  --almox-yellow: #facc15;
+  --almox-yellow-2: #f59e0b;
+  --almox-purple: #8b5cf6;
+  --almox-green: #22c55e;
+  --almox-cyan: #22d3ee;
+  width: 100%;
+  min-height: 100%;
+  padding: 22px clamp(18px, 2.1vw, 34px) 52px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(124, 58, 237, 0.09), transparent 30%),
+    radial-gradient(circle at 88% 8%, rgba(250, 204, 21, 0.055), transparent 24%);
+}
+
+.almoxarifado-page-shell .almox-v3 {
+  width: min(100%, 1500px);
+  margin: 0 auto;
+  padding: 0 !important;
+}
+
+.almoxarifado-page-shell .almox-v3 > .mb-6:first-child {
+  margin: 0 0 20px !important;
+  padding: 24px 26px;
+  border: 1px solid var(--almox-border);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(17, 26, 42, 0.96), rgba(9, 14, 24, 0.96));
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
+}
+
+.almoxarifado-page-shell .almox-v3 > .mb-6:first-child h1 {
+  margin: 0;
+  font-size: clamp(26px, 2vw, 34px);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.almoxarifado-page-shell .almox-v3 > .mb-6:first-child p {
+  margin-top: 8px;
+  color: var(--almox-muted) !important;
+  font-size: 14px;
+}
+
+.almoxarifado-page-shell .almox-hub-card {
+  position: relative;
+  min-height: 154px;
+  padding: 22px;
+  overflow: hidden;
+  text-align: left;
+  border: 1px solid var(--almox-border);
+  border-radius: 18px;
+  color: var(--almox-text);
+  background: linear-gradient(145deg, rgba(17, 26, 42, 0.92), rgba(10, 15, 25, 0.96));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.19);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.almoxarifado-page-shell .almox-hub-card::after {
+  content: '';
+  position: absolute;
+  inset: auto -34px -45px auto;
+  width: 130px;
+  height: 130px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.17), transparent 68%);
+  pointer-events: none;
+}
+
+.almoxarifado-page-shell .almox-hub-card:hover,
+.almoxarifado-page-shell .almox-hub-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: rgba(250, 204, 21, 0.46);
+  background: linear-gradient(145deg, rgba(20, 30, 48, 0.98), rgba(11, 17, 29, 0.98));
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(250, 204, 21, 0.08);
+  outline: none;
+}
+
+.almoxarifado-page-shell .almox-hub-icon,
+.almoxarifado-page-shell .almox-support-icon {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  border-radius: 13px;
+  color: var(--almox-yellow);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.almoxarifado-page-shell .almox-hub-title {
+  margin-top: 17px !important;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.almoxarifado-page-shell .almox-hub-subtitle {
+  margin-top: 7px;
+  max-width: 31ch;
+  color: var(--almox-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.almoxarifado-page-shell .almox-panel {
+  border: 1px solid var(--almox-border) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(145deg, rgba(15, 23, 38, 0.96), rgba(9, 14, 24, 0.98)) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+.almoxarifado-page-shell .almox-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 9px 13px;
+  border: 1px solid var(--almox-border);
+  border-radius: 11px;
+  color: #dbe4f0;
+  background: rgba(15, 23, 42, 0.65);
+  font-size: 13px;
+  font-weight: 700;
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+
+.almoxarifado-page-shell .almox-back:hover {
+  color: white;
+  border-color: rgba(250, 204, 21, 0.42);
+  background: rgba(30, 41, 59, 0.72);
+}
+
+.almoxarifado-page-shell .almox-label {
+  display: block;
+  color: #dbe4f0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+.almoxarifado-page-shell .almox-control,
+.almoxarifado-page-shell .almox-textarea,
+.almoxarifado-page-shell .almox-operacional-persistencia input,
+.almoxarifado-page-shell .almox-operacional-persistencia select,
+.almoxarifado-page-shell .almox-operacional-persistencia textarea {
+  width: 100%;
+  min-height: 43px;
+  border: 1px solid var(--almox-border-strong) !important;
+  border-radius: 11px !important;
+  color: #f8fafc !important;
+  background: #080d16 !important;
+  box-shadow: none !important;
+  font-size: 13px;
+}
+
+.almoxarifado-page-shell .almox-control {
+  padding: 0 12px;
+}
+
+.almoxarifado-page-shell .almox-textarea,
+.almoxarifado-page-shell .almox-operacional-persistencia textarea {
+  min-height: 92px;
+  padding: 11px 12px;
+  resize: vertical;
+}
+
+.almoxarifado-page-shell .almox-control:focus,
+.almoxarifado-page-shell .almox-textarea:focus,
+.almoxarifado-page-shell .almox-operacional-persistencia input:focus,
+.almoxarifado-page-shell .almox-operacional-persistencia select:focus,
+.almoxarifado-page-shell .almox-operacional-persistencia textarea:focus {
+  border-color: rgba(250, 204, 21, 0.58) !important;
+  outline: 2px solid rgba(250, 204, 21, 0.09);
+  outline-offset: 1px;
+}
+
+.almoxarifado-page-shell input[type='file']::file-selector-button {
+  margin-right: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #111827;
+  background: #facc15;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.almoxarifado-page-shell .almox-operacional-persistencia {
+  width: min(100%, 1500px);
+  margin: 24px auto 0;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.almoxarifado-page-shell .almox-support-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 13px;
+  padding: 0 2px;
+}
+
+.almoxarifado-page-shell .almox-support-header h2 {
+  margin: 0;
+  color: var(--almox-text);
+  font-size: 17px;
+  font-weight: 850;
+  letter-spacing: -0.015em;
+}
+
+.almoxarifado-page-shell .almox-support-header p {
+  margin: 4px 0 0;
+  color: var(--almox-muted);
+  font-size: 12px;
+}
+
+.almoxarifado-page-shell .almox-support-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.almoxarifado-page-shell .almox-support-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 88px;
+  padding: 15px;
+  text-align: left;
+  border: 1px solid var(--almox-border);
+  border-radius: 15px;
+  color: var(--almox-text);
+  background: rgba(13, 19, 32, 0.78);
+  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.almoxarifado-page-shell .almox-support-card:hover,
+.almoxarifado-page-shell .almox-support-card.active {
+  transform: translateY(-1px);
+  border-color: rgba(250, 204, 21, 0.38);
+  background: rgba(17, 26, 42, 0.94);
+}
+
+.almoxarifado-page-shell .almox-support-card strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.almoxarifado-page-shell .almox-support-card small {
+  display: block;
+  margin-top: 4px;
+  color: var(--almox-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.almoxarifado-page-shell .almox-support-arrow {
+  margin-left: auto;
+  color: #64748b;
+}
+
+.almoxarifado-page-shell .almox-support-detail {
+  margin-top: 12px;
+  padding: 18px;
+  border: 1px solid rgba(250, 204, 21, 0.19);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(14, 22, 36, 0.97), rgba(8, 13, 22, 0.98));
+}
+
+.almoxarifado-page-shell .almox-support-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.almoxarifado-page-shell .almox-section-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--almox-text);
+}
+
+.almoxarifado-page-shell .almox-section-title > svg {
+  margin-top: 2px;
+  color: var(--almox-yellow);
+}
+
+.almoxarifado-page-shell .almox-section-title strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.almoxarifado-page-shell .almox-section-title small {
+  display: block;
+  margin-top: 3px;
+  color: var(--almox-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.almoxarifado-page-shell .almox-support-close {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid var(--almox-border);
+  border-radius: 10px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.almoxarifado-page-shell .almox-support-close:hover {
+  color: white;
+  border-color: rgba(250, 204, 21, 0.38);
+}
+
+.almoxarifado-page-shell .almox-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.almoxarifado-page-shell .almox-field {
+  display: grid;
+  gap: 6px;
+}
+
+.almoxarifado-page-shell .almox-field.full {
+  grid-column: 1 / -1;
+}
+
+.almoxarifado-page-shell .almox-field > span {
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.almoxarifado-page-shell .almox-primary {
+  display: inline-flex;
+  min-height: 43px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 11px;
+  color: #141414;
+  background: linear-gradient(135deg, #fde047, #facc15 55%, #f59e0b);
+  box-shadow: 0 8px 18px rgba(250, 204, 21, 0.11);
+  font-size: 12px;
+  font-weight: 900;
+  transition: transform .16s ease, filter .16s ease;
+}
+
+.almoxarifado-page-shell .almox-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.almoxarifado-page-shell .almox-primary:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.almoxarifado-page-shell .almox-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  grid-column: 1 / -1;
+}
+
+.almoxarifado-page-shell .spin {
+  animation: almox-spin .9s linear infinite;
+}
+
+@keyframes almox-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1050px) {
+  .almoxarifado-page-shell .almox-support-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .almoxarifado-page-shell .almox-support-card {
+    min-height: 76px;
+  }
+}
+
+@media (max-width: 760px) {
+  .almoxarifado-page-shell {
+    padding: 14px 12px 34px;
+  }
+
+  .almoxarifado-page-shell .almox-v3 > .mb-6:first-child {
+    padding: 19px;
+    border-radius: 16px;
+  }
+
+  .almoxarifado-page-shell .almox-hub-card {
+    min-height: 130px;
+    padding: 18px;
+  }
+
+  .almoxarifado-page-shell .almox-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .almoxarifado-page-shell .almox-field.full,
+  .almoxarifado-page-shell .almox-form-actions {
+    grid-column: auto;
+  }
+
+  .almoxarifado-page-shell .almox-primary {
+    width: 100%;
+  }
+
+  .almoxarifado-page-shell .almox-support-detail {
+    padding: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .almoxarifado-page-shell *,
+  .almoxarifado-page-shell *::before,
+  .almoxarifado-page-shell *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation-duration: .001ms !important;
+  }
+}
