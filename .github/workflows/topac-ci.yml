@@ -1,135 +1,91 @@
 name: TOPAC CI
 
 on:
-  push:
-    branches: [fix/rescisao-goiania-fluxo-email-1709]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: topac-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  patch:
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
         with:
-          ref: fix/rescisao-goiania-fluxo-email-1709
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+          node-version: 22
           cache: npm
-      - name: Aplicar ajustes
-        run: |
-          python <<'PY'
-          from pathlib import Path
 
-          def rep(path, old, new, n=1):
-              p=Path(path); t=p.read_text()
-              if old not in t: raise SystemExit(f'padrao ausente: {path}: {old[:80]}')
-              p.write_text(t.replace(old,new,n))
+      - name: Install
+        run: npm ci
 
-          rep('src/main.tsx', "const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios' || centralModule === 'rescisao';", "const isPedidoDemissao = path === '/admin/rescisoes' || centralModule === 'rescisao';")
+      - name: Lint changed scope
+        run: >-
+          npx eslint
+          src/lib/emailPolicy.ts
+          src/lib/bankingParser.ts
+          src/lib/abastecimentoReports.ts
+          src/lib/emailUtils.ts
+          src/lib/funcionariosBase.ts
+          src/lib/smartTextParser.ts
+          src/lib/vehicleSync.ts
+          src/lib/savePdf.ts
+          src/lib/rescisaoCalc.ts
+          src/lib/rescisaoPdf.ts
+          src/lib/epiRules.ts
+          src/components/BankingDataEditor.tsx
+          src/components/EmailPdfModal.tsx
+          src/components/EmployeeSmartTextPanel.tsx
+          src/components/EmployeeSmartEditOverlay.tsx
+          src/components/AppLayout.tsx
+          src/components/FilialLayout.tsx
+          src/components/EpiSemestralAlert.tsx
+          src/pages/FuncionariosPage.tsx
+          src/pages/ProtocoloPage.tsx
+          src/pages/RelatorioImpressaoPage.tsx
+          src/pages/RelatorioBeneficioIndividualPage.tsx
+          src/pages/RescisaoPage.tsx
+          src/pages/EPIPage.tsx
+          src/pages/admin/CombustivelQRAdminPage.tsx
+          src/lib/__tests__/bankingParser.test.ts
+          src/lib/__tests__/abastecimentoReports.test.ts
+          src/lib/__tests__/emailPolicy.test.ts
+          src/lib/__tests__/emailAttachmentTransport.test.ts
+          src/lib/__tests__/pdfStandardization.test.ts
+          src/lib/__tests__/rescisaoCalc.test.ts
+          src/lib/__tests__/rescisaoIntegration.test.ts
+          src/lib/__tests__/smartTextParser.test.ts
+          src/lib/__tests__/vehicleSync.test.ts
+          src/lib/__tests__/protocoloFrotaSource.test.ts
+          src/lib/__tests__/epiRules.test.ts
+          --rule '@typescript-eslint/no-explicit-any: off'
+          --rule 'react-hooks/exhaustive-deps: off'
+          --rule 'no-useless-escape: off'
 
-          rep('src/pages/RescisaoPage.tsx', "import { DESTINATARIOS_CONTABILIDADE, CC_OBRIGATORIO } from '@/lib/emailUtils';", "import { getCcRescisao, getDestinatariosRescisao } from '@/lib/emailUtils';")
-          rep('src/pages/RescisaoPage.tsx', "        <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setMemoryOpen(false); }}>", "        <div id=\"rescisao-carta-anchor\" className=\"flex items-center gap-2\" />\n        <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setMemoryOpen(false); }}>")
-          p=Path('src/pages/RescisaoPage.tsx'); t=p.read_text()
-          old="""    setEmailPdfDraft({
-      to: [...DESTINATARIOS_CONTABILIDADE], cc: [...CC_OBRIGATORIO],
-      subject: `Memória de Cálculo da Rescisão - ${row.funcionario_nome || ''}`,"""
-          new="""    const destinatariosRescisao = [...getDestinatariosRescisao(row.empresa_nome || '')];
-    const copiaRescisao = [...getCcRescisao(row.empresa_nome || '')];
-    setEmailPdfDraft({
-      to: destinatariosRescisao, cc: copiaRescisao,
-      subject: `Memória de Cálculo da Rescisão - ${row.funcionario_nome || ''}`,"""
-          if old not in t: raise SystemExit('bloco email rescisao ausente')
-          t=t.replace(old,new,1)
-          old2="await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...DESTINATARIOS_CONTABILIDADE, ...CC_OBRIGATORIO].join(', '));"
-          if old2 not in t: raise SystemExit('historico destinatarios ausente')
-          t=t.replace(old2,"await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...destinatariosRescisao, ...copiaRescisao].join(', '));",1)
-          p.write_text(t)
+      - name: Tests changed scope
+        run: >-
+          npx vitest run
+          src/lib/__tests__/bankingParser.test.ts
+          src/lib/__tests__/abastecimentoReports.test.ts
+          src/lib/__tests__/emailPolicy.test.ts
+          src/lib/__tests__/emailAttachmentTransport.test.ts
+          src/lib/__tests__/pdfStandardization.test.ts
+          src/lib/__tests__/rescisaoCalc.test.ts
+          src/lib/__tests__/rescisaoIntegration.test.ts
+          src/lib/__tests__/smartTextParser.test.ts
+          src/lib/__tests__/vehicleSync.test.ts
+          src/lib/__tests__/protocoloFrotaSource.test.ts
+          src/lib/__tests__/epiRules.test.ts
 
-          p=Path('src/components/PedidoDemissaoModelDialog.tsx'); t=p.read_text()
-          t=t.replace("import React, { useEffect, useMemo, useState } from 'react';", "import React, { useEffect, useMemo, useState } from 'react';\nimport { createPortal } from 'react-dom';",1)
-          marker="  const [motivoOutro, setMotivoOutro] = useState('');"
-          if marker not in t: raise SystemExit('estado carta ausente')
-          t=t.replace(marker, marker+"\n  const [mountTarget, setMountTarget] = useState<HTMLElement | null>(null);\n\n  useEffect(() => {\n    const locate = () => setMountTarget(document.getElementById('rescisao-carta-anchor'));\n    locate();\n    const timer = window.setInterval(locate, 300);\n    return () => window.clearInterval(timer);\n  }, []);",1)
-          old="  return (\n    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPreview(false); }}>"
-          if old not in t: raise SystemExit('return carta ausente')
-          t=t.replace(old,"  if (!mountTarget) return null;\n\n  return createPortal((\n    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPreview(false); }}>",1)
-          t=t.replace('<Button className="fixed bottom-24 right-6 z-[65] shadow-xl no-print" size="lg">','<Button className="no-print shadow-sm" size="sm" variant="outline">',1)
-          tail="  );\n};\n\nexport default PedidoDemissaoModelDialog;"
-          if tail not in t: raise SystemExit('final carta ausente')
-          t=t.replace(tail,"  ), mountTarget);\n};\n\nexport default PedidoDemissaoModelDialog;",1)
-          p.write_text(t)
-
-          p=Path('src/lib/emailUtils.ts'); t=p.read_text()
-          t=t.replace("export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;", "export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;\nexport const EMAIL_CONTABILIDADE_GOIANIA = 'requisicao@incocontabilidade.com.br' as const;",1)
-          old="""export const getDestinatariosFerias = (unidade: string): readonly string[] => {
-  const normalized = String(unidade || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
-  return normalized.includes('GOIANIA') || normalized.includes('GOIANA')
-    ? ['requisicao@incocontabilidade.com.br']
-    : DESTINATARIOS_CONTABILIDADE;
-};
-
-export const getDestinatariosRescisao = (unidade: string): readonly string[] => getDestinatariosFerias(unidade);"""
-          new="""const isGoianiaUnit = (unidade: string) => {
-  const normalized = String(unidade || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
-  return normalized.includes('GOIANIA') || normalized.includes('GOIANA') || normalized.includes('GYN');
-};
-
-export const getCcRh = (unidade: string): readonly string[] =>
-  isGoianiaUnit(unidade) ? [...CC_OBRIGATORIO, EMAIL_GOIANIA] : CC_OBRIGATORIO;
-
-export const getDestinatariosFerias = (unidade: string): readonly string[] =>
-  isGoianiaUnit(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;
-
-export const getDestinatariosRescisao = (unidade: string): readonly string[] =>
-  isGoianiaUnit(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;
-
-export const getCcRescisao = (unidade: string): readonly string[] => getCcRh(unidade);"""
-          if old not in t: raise SystemExit('helpers email ausentes')
-          p.write_text(t.replace(old,new,1))
-
-          p=Path('src/lib/emailPolicy.ts'); t=p.read_text()
-          t=t.replace("export const ACCOUNTING_MARISA = 'marisa@aatconsultoria.com.br' as const;", "export const ACCOUNTING_MARISA = 'marisa@aatconsultoria.com.br' as const;\nexport const TOPAC_GOIANIA_ADMIN = 'adm.gyn@topac.com.br' as const;\nexport const ACCOUNTING_GOIANIA_FLAVIA = 'requisicao@incocontabilidade.com.br' as const;",1)
-          old="""export const applyTopacEmailPolicy = (input: EmailPolicyInput) => {
-  const report = isReportOrSpreadsheetEmail(input);
-  const accountingCc = accountingCcFor(input.to);
-  const mandatoryCc = uniqueEmails([
-    ...(input.cc || []),
-    ...accountingCc,
-    ...(report ? TOPAC_REPORT_CC : []),
-  ]);"""
-          new="""export const applyTopacEmailPolicy = (input: EmailPolicyInput) => {
-  const report = isReportOrSpreadsheetEmail(input);
-  const accountingCc = accountingCcFor(input.to);
-  const context = normalize([input.subject, input.body, input.moduleOrigin, ...(input.attachmentNames || [])].join(' '));
-  const goianiaContext = context.includes('goiania') || context.includes('gyn') || context.includes('topac filial goiania');
-  const fechamentoOuApontamento = context.includes('fechamento') || context.includes('apontamento');
-  const mandatoryCc = uniqueEmails([
-    ...(input.cc || []),
-    ...accountingCc,
-    ...(report ? TOPAC_REPORT_CC : []),
-    ...(goianiaContext ? [TOPAC_GOIANIA_ADMIN] : []),
-    ...(goianiaContext && fechamentoOuApontamento ? [ACCOUNTING_GOIANIA_FLAVIA] : []),
-  ]);"""
-          if old not in t: raise SystemExit('politica email ausente')
-          p.write_text(t.replace(old,new,1))
-
-          # restaura o workflow original do main e remove workflow temporario
-          import subprocess
-          original=subprocess.check_output(['git','show','origin/main:.github/workflows/topac-ci.yml'], text=True)
-          Path('.github/workflows/topac-ci.yml').write_text(original)
-          temp=Path('.github/workflows/patch-rescisao-goiania-1709.yml')
-          if temp.exists(): temp.unlink()
-          PY
-      - run: npm ci
-      - run: npm run build
-      - name: Commit e push
-        run: |
-          git config user.name topac-rh-pro-bot
-          git config user.email actions@users.noreply.github.com
-          git add src/main.tsx src/pages/RescisaoPage.tsx src/components/PedidoDemissaoModelDialog.tsx src/lib/emailUtils.ts src/lib/emailPolicy.ts .github/workflows/topac-ci.yml .github/workflows/patch-rescisao-goiania-1709.yml
-          git commit -m "fix: separa rescisao de Goiania e fixa modelo de carta"
-          git push origin HEAD:fix/rescisao-goiania-fluxo-email-1709
+      - name: Build
+        run: npm run build
