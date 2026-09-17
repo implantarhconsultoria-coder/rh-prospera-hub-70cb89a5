@@ -1,84 +1,57 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Layers } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import EmployeeAccessControl from '@/components/EmployeeAccessControl';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-
-interface ModuleDef { role: string; label: string; path: string; filialCodigo?: string; }
-
-const PORTAL_MODULES: ModuleDef[] = [
-  { role: 'admin', label: 'Administracao', path: '/admin' },
-  { role: 'filial_matriz', label: 'RH Matriz', path: '/filial' },
-  { role: 'filial_praia', label: 'RH Praia Grande', path: '/filial' },
-  { role: 'filial_goiania', label: 'RH Goiania', path: '/filial' },
-  { role: 'almoxarifado', label: 'Almoxarifado', path: '/almoxarifado' },
-  { role: 'operacional', label: 'Operacional', path: '/operacional' },
-  { role: 'tecnico_campo', label: 'Campo', path: '/campo' },
-];
-
-const ADMIN_MODULES: ModuleDef[] = [
-  { role: 'admin', label: 'Central TOPAC', path: '/admin' },
-  { role: 'empresas', label: 'Empresas', path: '/admin/empresas' },
-  { role: 'fechamento', label: 'Fechamento', path: '/admin/fechamento' },
-  { role: 'operacional', label: 'Operacional', path: '/admin/chamados' },
-  { role: 'app_mecanico', label: 'App dos mecanicos', path: '/admin/app-mecanico' },
-  { role: 'filial_matriz', label: 'Filial Matriz', path: '/filial', filialCodigo: 'topac-matriz' },
-  { role: 'filial_praia', label: 'Filial Praia Grande', path: '/filial', filialCodigo: 'topac-pg' },
-  { role: 'filial_goiania', label: 'Filial Goiania', path: '/filial', filialCodigo: 'topac-gyn' },
-  { role: 'almoxarifado', label: 'Almoxarifado', path: '/admin/almoxarifado' },
-];
 
 const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const { userRoles } = useApp();
   const navigate = useNavigate();
-  const isAdmin = userRoles.includes('admin');
-  const isDirector = userRoles.includes('diretor_geral') && !isAdmin;
-  const available = isAdmin
-    ? ADMIN_MODULES
-    : isDirector
-      ? [
-          { role: 'diretor_geral', label: 'Central TOPAC', path: '/admin' },
-          { role: 'relatorios', label: 'Relatorios', path: '/admin/relatorio' },
-        ]
-      : PORTAL_MODULES.filter((m) => userRoles.includes(m.role as any));
+  const location = useLocation();
 
-  const abrirModulo = (modulo: ModuleDef) => {
-    if (modulo.filialCodigo) {
-      sessionStorage.setItem('admin_filial_preview_codigo', modulo.filialCodigo);
-    } else {
-      sessionStorage.removeItem('admin_filial_preview_codigo');
-    }
-    navigate(modulo.path);
-  };
+  const isAdmin = userRoles.includes('admin');
+  const isDirector = userRoles.includes('diretor_geral');
+  const canPreview = isAdmin || isDirector;
+
+  const adminPortalTarget = location.pathname.startsWith('/admin/almoxarifado')
+    ? { label: 'Acessar Portal do Usuário', path: '/almoxarifado' }
+    : location.pathname.startsWith('/admin/operacional') || location.pathname.startsWith('/admin/chamados')
+      ? { label: 'Acessar Portal do Usuário', path: '/operacional' }
+      : null;
+
+  const portalBackTarget = location.pathname.startsWith('/almoxarifado')
+    ? '/admin/almoxarifado'
+    : location.pathname.startsWith('/operacional')
+      ? '/admin/operacional'
+      : null;
 
   return (
     <div className="flex items-center gap-2">
-      <EmployeeAccessControl />
-      {available.length >= 2 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size={compact ? 'sm' : 'default'} className="gap-2 shadow-md">
-              <Layers className="w-4 h-4" />
-              {!compact && <span>Trocar modulo</span>}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60 bg-popover z-50">
-            <DropdownMenuLabel>Modulos da Central TOPAC</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {available.map((m) => (
-              <DropdownMenuItem key={m.role + m.path + (m.filialCodigo || '')} onClick={() => abrirModulo(m)}>{m.label}</DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {isAdmin && <EmployeeAccessControl />}
+
+      {canPreview && adminPortalTarget && (
+        <Button
+          variant="outline"
+          size={compact ? 'sm' : 'default'}
+          onClick={() => navigate(adminPortalTarget.path)}
+          className="gap-2 border-[#5b2a78] bg-[#120b19] text-white shadow-md hover:border-[#8b3fe7] hover:bg-[#1a0f24] hover:text-white"
+        >
+          <ExternalLink className="h-4 w-4" />
+          {!compact && <span>{adminPortalTarget.label}</span>}
+        </Button>
+      )}
+
+      {canPreview && portalBackTarget && (
+        <Button
+          variant="outline"
+          size={compact ? 'sm' : 'default'}
+          onClick={() => navigate(portalBackTarget)}
+          className="gap-2 border-[#5b2a78] bg-[#120b19] text-white shadow-md hover:border-[#8b3fe7] hover:bg-[#1a0f24] hover:text-white"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {!compact && <span>Voltar ao painel administrativo</span>}
+        </Button>
       )}
     </div>
   );
