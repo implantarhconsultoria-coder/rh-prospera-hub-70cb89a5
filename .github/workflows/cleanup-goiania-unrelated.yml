@@ -1,0 +1,35 @@
+name: Cleanup Goiania Unrelated
+
+on:
+  push:
+    branches:
+      - fix/goiania-rescisao-fluxo-1709-v2
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/goiania-rescisao-fluxo-1709-v2
+          fetch-depth: 0
+      - name: Remover alteracao fora do escopo
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/main.tsx')
+          s = p.read_text()
+          s = s.replace('const PreCadastroCandidateActions = lazy(() => import("@/components/PreCadastroCandidateActions"));\n', '')
+          s = s.replace('      {isPreCadastro && <PreCadastroCandidateActions />}\n', '')
+          p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/cleanup-goiania-unrelated.yml
+          git add src/main.tsx
+          git commit -m "chore: remove alteracao fora do escopo"
+          git push origin HEAD:fix/goiania-rescisao-fluxo-1709-v2
