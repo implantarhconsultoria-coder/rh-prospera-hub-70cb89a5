@@ -35,7 +35,7 @@ const ContabilidadeCorrectionPanel = lazy(() => import("@/components/Contabilida
 const PayrollAccountingSourceAddon = lazy(() => import("@/components/PayrollAccountingSourceAddon"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
 
-const MOBILE_BUILD_TAG = "20260908-mecanicos-oficial-v2";
+const MOBILE_BUILD_TAG = "20260917-rescisao-goiania-v1";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 const currentPath = window.location.pathname;
 const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(currentPath);
@@ -115,6 +115,33 @@ const RouteEnhancers = () => {
   const isContabilidadeAdmin = path === '/admin/apontamento-contabilidade';
   const isContabilidadeCentral = path === '/admin/central-contabilidade';
   const isAssinaturaDigital = path === '/admin/assinatura-digital';
+
+  useEffect(() => {
+    if (!isPedidoDemissao) {
+      document.getElementById('rescisao-carta-anchor')?.remove();
+      return;
+    }
+
+    const ensureAnchor = () => {
+      if (document.getElementById('rescisao-carta-anchor')) return;
+      const title = Array.from(document.querySelectorAll('h1')).find((node) =>
+        node.textContent?.trim().toLowerCase() === 'rescisões' || node.textContent?.trim().toLowerCase() === 'rescisoes'
+      );
+      const header = title?.parentElement?.parentElement;
+      if (!(header instanceof HTMLElement)) return;
+      const anchor = document.createElement('div');
+      anchor.id = 'rescisao-carta-anchor';
+      anchor.className = 'flex items-center gap-2';
+      header.appendChild(anchor);
+    };
+
+    ensureAnchor();
+    const timer = window.setInterval(ensureAnchor, 250);
+    return () => {
+      window.clearInterval(timer);
+      document.getElementById('rescisao-carta-anchor')?.remove();
+    };
+  }, [isPedidoDemissao, routeKey]);
 
   if (!isFechamento && !isRelatorioVr && !isEpi && !isPreCadastro && !isPedidoDemissao && !isContabilidadeAdmin && !isContabilidadeCentral && !isAssinaturaDigital) return null;
 
