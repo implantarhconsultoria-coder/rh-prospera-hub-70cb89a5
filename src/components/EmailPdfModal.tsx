@@ -144,7 +144,8 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     return dedupeAttachments(source);
   }, [draft]);
 
-  const applyPolicy = (bodyValue: string, ccValues: readonly string[]) => applyTopacEmailPolicy({
+  const applyPolicy = (bodyValue: string, ccValues: readonly string[], toValues: readonly string[]) => applyTopacEmailPolicy({
+    to: toValues,
     subject: draft?.subject || subject,
     body: bodyValue,
     cc: ccValues,
@@ -157,9 +158,11 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     if (!draft || !open) return;
     const atestado = isAtestadoSubject(draft.subject || '');
     const admissional = isAdmissionalSubject(draft.subject || '');
-    const baseBody = atestado ? buildAtestadoBody(draft.body || '') : draft.body || '';
+    const baseBody = atestado ? buildAtestadoBody(draft.body || '') : admissional ? buildAdmissionalBody(draft.body || '') : draft.body || '';
+    const baseTo = normalizeTopacRecipients(atestado ? ATESTADO_TO : draft.to);
     const baseCc = atestado ? ATESTADO_CC : draft.cc || [];
     const policy = applyTopacEmailPolicy({
+      to: baseTo,
       subject: draft.subject,
       body: baseBody,
       cc: baseCc,
@@ -167,7 +170,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       attachmentNames: preparedAttachments.map((item) => item.attachmentName),
       attachmentContentTypes: preparedAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type),
     });
-    setTo(formatEmails(normalizeTopacRecipients(atestado ? ATESTADO_TO : draft.to)));
+    setTo(formatEmails(policy.to));
     setCc(formatEmails(policy.cc));
     setSubject(draft.subject || '');
     setBody(policy.body);
@@ -175,10 +178,10 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
 
   const getPreparedEmail = () => {
     const atestado = isAtestadoSubject(subject);
-    const toList = normalizeTopacRecipients(atestado ? [...ATESTADO_TO] : parseEmails(to));
+    const rawTo = normalizeTopacRecipients(atestado ? [...ATESTADO_TO] : parseEmails(to));
     const inputCc = atestado ? [...ATESTADO_CC] : parseEmails(cc);
-    const policy = applyPolicy(body, inputCc);
-    return { toList, ccList: policy.cc, preparedBody: policy.body, attachments: preparedAttachments };
+    const policy = applyPolicy(body, inputCc, rawTo);
+    return { toList: policy.to, ccList: policy.cc, preparedBody: policy.body, attachments: preparedAttachments };
   };
 
   const validate = (attachments: EmailAttachment[]) => {
