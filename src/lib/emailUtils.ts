@@ -68,7 +68,7 @@ export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmen
   if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
   params.push(`subject=${enc(subject)}`);
   params.push(`body=${enc(policy.body)}`);
-  window.location.href = `mailto:${normalizedTo.map(enc).join(',')}?${params.join('&')}`;
+  window.location.href = `mailto:${policy.to.map(enc).join(',')}?${params.join('&')}`;
 };
 
 const safeFileName = (value: string) =>
@@ -234,7 +234,7 @@ export const sendEmailWithPdfAttachment = async ({
         authorization: `Bearer ${effectiveAuthToken}`,
       },
       body: JSON.stringify({
-        to: normalizedTo,
+        to: policy.to,
         cc: policy.cc,
         subject,
         body: policy.body,
