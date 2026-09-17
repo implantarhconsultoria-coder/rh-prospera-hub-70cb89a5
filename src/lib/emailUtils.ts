@@ -42,6 +42,7 @@ export const MAX_EMAIL_ATTACHMENTS = 30;
 const PDF_CONTENT_TYPE = 'application/pdf';
 
 export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;
+export const EMAIL_CONTABILIDADE_GOIANIA = 'requisicao@incocontabilidade.com.br' as const;
 const EMAIL_GOIANIA_ANTIGO = 'gyn@topac.com.br';
 const EMAILS_REMOVIDOS = new Set(['lucilene' + '@aatconsultoria.com.br']);
 
@@ -58,16 +59,54 @@ export const normalizeTopacRecipients = (emails: readonly string[] = []): string
       .map((email) => email === EMAIL_GOIANIA_ANTIGO ? EMAIL_GOIANIA : email),
   ));
 
-export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
+const normalizeContext = (value: unknown) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+const isGoianiaContext = (value: unknown) => {
+  const text = normalizeContext(value);
+  return text.includes('goiania') || text.includes('goiana') || text.includes('gyn') || text.includes('topac filial goiania');
+};
+
+const routeTopacRecipients = ({
+  to,
+  cc,
+  subject,
+  body,
+  moduleOrigin,
+}: Pick<EmailParams, 'to' | 'cc' | 'subject' | 'body' | 'moduleOrigin'>) => {
   const normalizedTo = normalizeTopacRecipients(to);
   const normalizedCc = normalizeTopacRecipients(cc || []);
-  const policy = applyTopacEmailPolicy({ to: normalizedTo, subject, body, cc: normalizedCc, moduleOrigin, attachmentNames, attachmentContentTypes });
+  const context = normalizeContext([subject, body, moduleOrigin].filter(Boolean).join(' '));
+  const goiania = isGoianiaContext(context);
+  const rescisao = context.includes('rescis');
+  const fechamentoOuApontamento = context.includes('fechamento') || context.includes('apontamento');
+
+  if (!goiania) return { to: normalizedTo, cc: normalizedCc };
+
+  const goianiaCc = normalizeTopacRecipients([
+    ...normalizedCc,
+    EMAIL_GOIANIA,
+    ...(rescisao ? ['adm.matriz@topac.com.br', 'robson@topac.com.br'] : []),
+    ...(fechamentoOuApontamento ? [EMAIL_CONTABILIDADE_GOIANIA] : []),
+  ]);
+
+  return {
+    to: rescisao ? [EMAIL_CONTABILIDADE_GOIANIA] : normalizedTo,
+    cc: goianiaCc,
+  };
+};
+
+export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
+  const routed = routeTopacRecipients({ to, cc, subject, body, moduleOrigin });
+  const policy = applyTopacEmailPolicy({ to: routed.to, subject, body, cc: routed.cc, moduleOrigin, attachmentNames, attachmentContentTypes });
   const enc = encodeURIComponent;
   const params: string[] = [];
   if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
   params.push(`subject=${enc(subject)}`);
   params.push(`body=${enc(policy.body)}`);
-  window.location.href = `mailto:${normalizedTo.map(enc).join(',')}?${params.join('&')}`;
+  window.location.href = `mailto:${routed.to.map(enc).join(',')}?${params.join('&')}`;
 };
 
 const safeFileName = (value: string) =>
@@ -210,13 +249,12 @@ export const sendEmailWithPdfAttachment = async ({
     throw new Error('Sua sessão expirou. Entre novamente para enviar anexos pela plataforma.');
   }
 
-  const normalizedTo = normalizeTopacRecipients(to);
-  const normalizedCc = normalizeTopacRecipients(cc || []);
+  const routed = routeTopacRecipients({ to, cc, subject, body, moduleOrigin });
   const policy = applyTopacEmailPolicy({
-    to: normalizedTo,
+    to: routed.to,
     subject,
     body,
-    cc: normalizedCc,
+    cc: routed.cc,
     moduleOrigin,
     attachmentNames: rawAttachments.map((item) => item.attachmentName),
     attachmentContentTypes: rawAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type || PDF_CONTENT_TYPE),
@@ -233,7 +271,7 @@ export const sendEmailWithPdfAttachment = async ({
         authorization: `Bearer ${effectiveAuthToken}`,
       },
       body: JSON.stringify({
-        to: normalizedTo,
+        to: routed.to,
         cc: policy.cc,
         subject,
         body: policy.body,
@@ -281,14 +319,19 @@ export const DESTINATARIOS_CONTABILIDADE = [EMAIL_CONTABILIDADE_MARISA, EMAIL_CO
 export const CC_CONTABILIDADE = CC_OBRIGATORIO;
 export const DESTINATARIOS_ASO = ['agendamento@ponteaereaseguranca.com.br'] as const;
 
-export const getDestinatariosFerias = (unidade: string): readonly string[] => {
-  const normalized = String(unidade || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-  return normalized.includes('GOIANIA') || normalized.includes('GOIANA')
-    ? ['requisicao@incocontabilidade.com.br']
-    : DESTINATARIOS_CONTABILIDADE;
-};
+const isGoianiaUnit = (unidade: string) => isGoianiaContext(unidade);
 
-export const getDestinatariosRescisao = (unidade: string): readonly string[] => getDestinatariosFerias(unidade);
+export const getCcRh = (unidade: string): readonly string[] =>
+  isGoianiaUnit(unidade) ? [...CC_OBRIGATORIO, EMAIL_GOIANIA] : CC_OBRIGATORIO;
+
+export const getDestinatariosFerias = (unidade: string): readonly string[] =>
+  isGoianiaUnit(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;
+
+export const getDestinatariosRescisao = (unidade: string): readonly string[] =>
+  isGoianiaUnit(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;
+
+export const getCcRescisao = (unidade: string): readonly string[] => getCcRh(unidade);
+
 export const DESTINATARIOS = {
   ferias: getDestinatariosFerias(''),
   rescisao: getDestinatariosRescisao(''),
