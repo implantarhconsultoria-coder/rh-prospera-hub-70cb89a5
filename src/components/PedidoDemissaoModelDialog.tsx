@@ -203,7 +203,7 @@ const PedidoDemissaoModelDialog: React.FC = () => {
   return (
     <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPreview(false); }}>
       <DialogTrigger asChild>
-        <Button className="fixed bottom-24 right-6 z-[65] shadow-xl no-print" size="lg">
+        <Button variant="outline" className="no-print" size="sm">
           <FileText className="mr-2 h-4 w-4" /> Modelo Carta de Demissão
         </Button>
       </DialogTrigger>

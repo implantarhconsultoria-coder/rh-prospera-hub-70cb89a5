@@ -28,7 +28,7 @@ const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPa
 const FechamentoPagamentoAddon = lazy(() => import("@/components/FechamentoPagamentoAddon"));
 const PreCadastroFsePrintAddon = lazy(() => import("@/components/PreCadastroFsePrintAddon"));
 const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastroFseButtonPlacement"));
-const PedidoDemissaoModelDialog = lazy(() => import("@/components/PedidoDemissaoModelDialog"));
+const PreCadastroCandidateActions = lazy(() => import("@/components/PreCadastroCandidateActions"));
 const ContabilidadeAdminInboxAddon = lazy(() => import("@/components/ContabilidadeAdminInboxAddon"));
 const ContabilidadeFolhaAdminAddon = lazy(() => import("@/components/ContabilidadeFolhaAdminAddon"));
 const ContabilidadeCorrectionPanel = lazy(() => import("@/components/ContabilidadeCorrectionPanel"));
@@ -111,12 +111,11 @@ const RouteEnhancers = () => {
   const isRelatorioVr = path.includes('/admin/relatorio-vr');
   const isEpi = path.includes('/admin/epi');
   const isPreCadastro = path === '/admin/pre-cadastro-admissional' || centralModule === 'pre-cadastro';
-  const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios' || centralModule === 'rescisao';
   const isContabilidadeAdmin = path === '/admin/apontamento-contabilidade';
   const isContabilidadeCentral = path === '/admin/central-contabilidade';
   const isAssinaturaDigital = path === '/admin/assinatura-digital';
 
-  if (!isFechamento && !isRelatorioVr && !isEpi && !isPreCadastro && !isPedidoDemissao && !isContabilidadeAdmin && !isContabilidadeCentral && !isAssinaturaDigital) return null;
+  if (!isFechamento && !isRelatorioVr && !isEpi && !isPreCadastro && !isContabilidadeAdmin && !isContabilidadeCentral && !isAssinaturaDigital) return null;
 
   return (
     <Suspense fallback={null}>
@@ -127,7 +126,7 @@ const RouteEnhancers = () => {
       {isEpi && <EpiBulkPrintEnhancer />}
       {isPreCadastro && <PreCadastroFsePrintAddon />}
       {isPreCadastro && <PreCadastroFseButtonPlacement />}
-      {isPedidoDemissao && <PedidoDemissaoModelDialog />}
+      {isPreCadastro && <PreCadastroCandidateActions />}
       {isContabilidadeAdmin && <ContabilidadeAdminInboxAddon />}
       {isContabilidadeCentral && <ContabilidadeFolhaAdminAddon />}
       {isContabilidadeCentral && <ContabilidadeCorrectionPanel mode="admin" />}

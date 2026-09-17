@@ -26,11 +26,12 @@ import {
 import { gerarRescisaoPdf, type RescisaoPdfData } from '@/lib/rescisaoPdf';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
-import { DESTINATARIOS_CONTABILIDADE, CC_OBRIGATORIO } from '@/lib/emailUtils';
+import { getDestinatariosRescisao, getCcRh } from '@/lib/emailUtils';
 import { registrarDocumento, uploadDocumentoArquivo, marcarComoEnviado } from '@/lib/documentoHistorico';
 import EmployeeCombobox from '@/components/EmployeeCombobox';
 import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import PedidoDemissaoModelDialog from '@/components/PedidoDemissaoModelDialog';
 
 const discountLabels: Record<RescisaoDescontoTipo, string> = {
   faltas: 'Faltas',
@@ -513,15 +514,18 @@ const RescisaoPage: React.FC = () => {
     let registro: any = null;
     if (options.arquivar !== false) registro = await arquivarRescisaoDocumento(row, pdf).catch(() => null);
     const nomeUsuario = await getNomeUsuarioAtual();
+    const unidade = row.empresa_nome || empresa?.name || '';
+    const destinatarios = Array.from(getDestinatariosRescisao(unidade));
+    const copia = Array.from(getCcRh(unidade));
     setEmailPdfDraft({
-      to: [...DESTINATARIOS_CONTABILIDADE], cc: [...CC_OBRIGATORIO],
+      to: destinatarios, cc: copia,
       subject: `Memória de Cálculo da Rescisão - ${row.funcionario_nome || ''}`,
       body: buildEmailBody(row), attachmentBlob: pdf.blob, attachmentName: pdf.fileName,
       senderUserId: session?.user?.id, senderName: nomeUsuario, senderEmail: session?.user?.email,
       moduleOrigin: 'rescisoes', documentId: registro?.id, documentName: 'Memoria de Calculo da Rescisao',
       afterSend: async () => {
         if (registro?.id && session?.user) {
-          await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...DESTINATARIOS_CONTABILIDADE, ...CC_OBRIGATORIO].join(', '));
+          await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...destinatarios, ...copia].join(', '));
           await fetchList();
         }
       },
@@ -656,6 +660,7 @@ const RescisaoPage: React.FC = () => {
           <h1 className="text-2xl font-bold font-display flex items-center gap-2"><FileX className="w-6 h-6" /> Rescisões</h1>
           <p className="text-sm text-muted-foreground">Cálculo auditável integrado a RH, férias e fechamento.</p>
         </div>
+        <PedidoDemissaoModelDialog />
         <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setMemoryOpen(false); }}>
           <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" />Nova Rescisão</Button></DialogTrigger>
           <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
