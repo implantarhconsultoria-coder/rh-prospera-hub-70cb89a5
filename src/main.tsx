@@ -111,7 +111,7 @@ const RouteEnhancers = () => {
   const isRelatorioVr = path.includes('/admin/relatorio-vr');
   const isEpi = path.includes('/admin/epi');
   const isPreCadastro = path === '/admin/pre-cadastro-admissional' || centralModule === 'pre-cadastro';
-  const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios' || centralModule === 'rescisao';
+  const isPedidoDemissao = path === '/admin/rescisoes' || centralModule === 'rescisao';
   const isContabilidadeAdmin = path === '/admin/apontamento-contabilidade';
   const isContabilidadeCentral = path === '/admin/central-contabilidade';
   const isAssinaturaDigital = path === '/admin/assinatura-digital';
