@@ -1,0 +1,115 @@
+name: Patch Goiania Rescisao Fluxo
+
+on:
+  push:
+    branches:
+      - fix/goiania-rescisao-fluxo-1709
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/goiania-rescisao-fluxo-1709
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar ajustes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if old not in s:
+                  raise SystemExit(f'Padrao nao encontrado em {path}: {old[:100]!r}')
+              p.write_text(s.replace(old, new, 1))
+
+          # 1) Modelo da carta deixa de ser enhancer flutuante global.
+          p = Path('src/main.tsx')
+          s = p.read_text()
+          s = s.replace('const PedidoDemissaoModelDialog = lazy(() => import("@/components/PedidoDemissaoModelDialog"));\n', '')
+          s = s.replace("  const isPedidoDemissao = path === '/admin/rescisoes' || path === '/admin/funcionarios' || centralModule === 'rescisao';\n", '')
+          s = s.replace(' && !isPedidoDemissao', '')
+          s = s.replace('      {isPedidoDemissao && <PedidoDemissaoModelDialog />}\n', '')
+          p.write_text(s)
+
+          # 2) Politica centralizada de destinatarios por unidade.
+          p = Path('src/lib/emailUtils.ts')
+          s = p.read_text()
+          old = "export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;\n"
+          new = "export const EMAIL_GOIANIA = 'adm.gyn@topac.com.br' as const;\nexport const EMAIL_CONTABILIDADE_GOIANIA = 'requisicao@incocontabilidade.com.br' as const;\n"
+          if 'EMAIL_CONTABILIDADE_GOIANIA' not in s:
+              if old not in s: raise SystemExit('EMAIL_GOIANIA nao encontrado')
+              s = s.replace(old, new, 1)
+
+          old_block = """export const getDestinatariosFerias = (unidade: string): readonly string[] => {\n  const normalized = String(unidade || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();\n  return normalized.includes('GOIANIA') || normalized.includes('GOIANA')\n    ? ['requisicao@incocontabilidade.com.br']\n    : DESTINATARIOS_CONTABILIDADE;\n};\n\nexport const getDestinatariosRescisao = (unidade: string): readonly string[] => getDestinatariosFerias(unidade);\nexport const DESTINATARIOS = {\n"""
+          new_block = """export const isGoianiaUnidade = (unidade: string) => {\n  const normalized = String(unidade || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();\n  return normalized.includes('GOIANIA') || normalized.includes('GOIANA') || normalized.includes('GYN');\n};\n\nexport const getDestinatariosFerias = (unidade: string): readonly string[] =>\n  isGoianiaUnidade(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;\n\nexport const getDestinatariosRescisao = (unidade: string): readonly string[] =>\n  isGoianiaUnidade(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;\n\n/** Todo fluxo de RH de Goiania inclui ADM Goiania em copia. */\nexport const getCcRh = (unidade: string): readonly string[] =>\n  isGoianiaUnidade(unidade) ? [...CC_OBRIGATORIO, EMAIL_GOIANIA] : CC_OBRIGATORIO;\n\n/** Fechamento/apontamento de Goiania sera encaminhado para Dona Flavia quando a operacao for delegada. */\nexport const getDestinatariosFechamento = (unidade: string): readonly string[] =>\n  isGoianiaUnidade(unidade) ? [EMAIL_CONTABILIDADE_GOIANIA] : DESTINATARIOS_CONTABILIDADE;\n\nexport const getCcFechamento = (unidade: string): readonly string[] => getCcRh(unidade);\n\nexport const DESTINATARIOS = {\n"""
+          if old_block not in s: raise SystemExit('Bloco de destinatarios nao encontrado')
+          s = s.replace(old_block, new_block, 1)
+          p.write_text(s)
+
+          # 3) Ferias de Goiania: Dona Flavia + ADM/Robson + ADM Goiania.
+          p = Path('src/pages/AvisoFeriasPage.tsx')
+          s = p.read_text()
+          s = s.replace("import { getDestinatariosFerias, CC_OBRIGATORIO } from '@/lib/emailUtils';", "import { getDestinatariosFerias, getCcRh } from '@/lib/emailUtils';")
+          s = s.replace("    const destinatarios = Array.from(getDestinatariosFerias(company?.name || ''));\n", "    const destinatarios = Array.from(getDestinatariosFerias(company?.name || ''));\n    const copia = Array.from(getCcRh(company?.name || ''));\n", 1)
+          s = s.replace("      cc: Array.from(CC_OBRIGATORIO),", "      cc: copia,", 1)
+          s = s.replace("          await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...destinatarios, ...CC_OBRIGATORIO].join(', '));", "          await marcarComoEnviado(documentoId, session.user.id, nomeUsuario, [...destinatarios, ...copia].join(', '));", 1)
+          p.write_text(s)
+
+          # 4) Rescisao usa roteamento por empresa e incorpora o modelo da carta no proprio modulo.
+          p = Path('src/pages/RescisaoPage.tsx')
+          s = p.read_text()
+          s = s.replace("import { DESTINATARIOS_CONTABILIDADE, CC_OBRIGATORIO } from '@/lib/emailUtils';", "import { getDestinatariosRescisao, getCcRh } from '@/lib/emailUtils';")
+          if "import PedidoDemissaoModelDialog" not in s:
+              anchor = "import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';\n"
+              s = s.replace(anchor, anchor + "import PedidoDemissaoModelDialog from '@/components/PedidoDemissaoModelDialog';\n", 1)
+          old = """    const nomeUsuario = await getNomeUsuarioAtual();\n    setEmailPdfDraft({\n      to: [...DESTINATARIOS_CONTABILIDADE], cc: [...CC_OBRIGATORIO],\n"""
+          new = """    const nomeUsuario = await getNomeUsuarioAtual();\n    const unidade = row.empresa_nome || empresa?.name || '';\n    const destinatarios = Array.from(getDestinatariosRescisao(unidade));\n    const copia = Array.from(getCcRh(unidade));\n    setEmailPdfDraft({\n      to: destinatarios, cc: copia,\n"""
+          if old not in s: raise SystemExit('Envio rescisao nao encontrado')
+          s = s.replace(old, new, 1)
+          s = s.replace("          await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...DESTINATARIOS_CONTABILIDADE, ...CC_OBRIGATORIO].join(', '));", "          await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...destinatarios, ...copia].join(', '));", 1)
+          old_header = """        </div>\n        <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setMemoryOpen(false); }}>\n          <DialogTrigger asChild><Button><Plus className=\"w-4 h-4 mr-2\" />Nova Rescisão</Button></DialogTrigger>\n"""
+          new_header = """        </div>\n        <div className=\"flex flex-wrap items-center gap-2\">\n          <PedidoDemissaoModelDialog />\n          <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setMemoryOpen(false); }}>\n          <DialogTrigger asChild><Button><Plus className=\"w-4 h-4 mr-2\" />Nova Rescisão</Button></DialogTrigger>\n"""
+          if old_header not in s: raise SystemExit('Cabecalho rescisao nao encontrado')
+          s = s.replace(old_header, new_header, 1)
+          # fecha wrapper novo imediatamente apos fechamento do Dialog principal no bloco de cabecalho.
+          # O Dialog termina antes da lista; localizar o primeiro fechamento que antecede o bloco seguinte usando marcador do EmailPdfModal/estrutura.
+          marker = """        </Dialog>\n      </div>\n\n      <div className=\"grid gap-3\">\n"""
+          if marker in s:
+              s = s.replace(marker, """        </Dialog>\n        </div>\n      </div>\n\n      <div className=\"grid gap-3\">\n""", 1)
+          else:
+              # fallback comum: primeiro fechamento do Dialog seguido do fechamento do header.
+              marker2 = """        </Dialog>\n      </div>\n"""
+              idx = s.find(marker2, s.find('Nova Rescisão'))
+              if idx < 0: raise SystemExit('Fechamento do header de rescisao nao encontrado')
+              s = s[:idx] + s[idx:].replace(marker2, """        </Dialog>\n        </div>\n      </div>\n""", 1)
+          p.write_text(s)
+
+          # 5) Botao da carta agora e normal, dentro do modulo Rescisoes; nada flutuante.
+          p = Path('src/components/PedidoDemissaoModelDialog.tsx')
+          s = p.read_text()
+          old = '<Button className="fixed bottom-24 right-6 z-[65] shadow-xl no-print" size="lg">'
+          new = '<Button variant="outline" className="no-print" size="sm">'
+          if old not in s: raise SystemExit('Trigger flutuante da carta nao encontrado')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Validar build
+        run: npm ci --prefer-offline --no-audit --no-fund && npm run build
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.tsx src/lib/emailUtils.ts src/pages/AvisoFeriasPage.tsx src/pages/RescisaoPage.tsx src/components/PedidoDemissaoModelDialog.tsx
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "fix: separa fluxo de Goiania e fixa carta em rescisoes"
+          git push origin HEAD:fix/goiania-rescisao-fluxo-1709
