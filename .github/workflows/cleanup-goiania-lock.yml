@@ -1,0 +1,29 @@
+name: Cleanup Goiania Lock
+
+on:
+  push:
+    branches:
+      - fix/goiania-rescisao-fluxo-1709-v2
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/goiania-rescisao-fluxo-1709-v2
+          fetch-depth: 0
+      - name: Restaurar lock sem alterar dependencias
+        run: |
+          git fetch origin main
+          git checkout origin/main -- package-lock.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/cleanup-goiania-lock.yml
+          git add package-lock.json
+          git commit -m "chore: preserva lockfile do projeto"
+          git push origin HEAD:fix/goiania-rescisao-fluxo-1709-v2
