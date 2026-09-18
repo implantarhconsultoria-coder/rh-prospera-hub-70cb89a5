@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import EpiDailyDeliveryPage from '@/pages/EpiDailyDeliveryPage';
 import EPIManagementPage from '@/pages/EPIManagementPage';
+import ProtocoloEntregaLivrePage from '@/pages/ProtocoloEntregaLivrePage';
 
 const EPIPage: React.FC = () => {
-  const [mode, setMode] = useState<'daily' | 'management'>(() => {
+  const [mode, setMode] = useState<'daily' | 'management' | 'protocol'>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.has('ficha') || params.has('solicitacao') ? 'management' : 'daily';
   });
@@ -18,9 +19,16 @@ const EPIPage: React.FC = () => {
         <Button variant={mode === 'management' ? 'default' : 'outline'} onClick={() => setMode('management')}>
           Gestão semestral / fichas
         </Button>
+        <Button variant={mode === 'protocol' ? 'default' : 'outline'} onClick={() => setMode('protocol')}>
+          Protocolo de Entrega Livre
+        </Button>
       </div>
 
-      {mode === 'daily' ? <EpiDailyDeliveryPage /> : <EPIManagementPage />}
+      {mode === 'daily'
+        ? <EpiDailyDeliveryPage />
+        : mode === 'management'
+          ? <EPIManagementPage />
+          : <ProtocoloEntregaLivrePage />}
     </div>
   );
 };
