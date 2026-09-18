@@ -39,6 +39,31 @@ replaceOnce(
   'onClick={() => void abrirWhatsApp(r.phone)}',
 );
 
+
+replaceOnce(
+  mechanicFile,
+  `    "Aguardando liberação no TOPAC RH PRO.",`,
+  `    "Liberação automática confirmada no TOPAC RH PRO após o envio ao WhatsApp.",`,
+  'mensagem do WhatsApp informa liberação automática',
+  'Liberação automática confirmada no TOPAC RH PRO após o envio ao WhatsApp.',
+);
+
+replaceOnce(
+  mechanicFile,
+  `      toast.success(result.existing ? "Solicitação em andamento recuperada." : "Solicitação enviada. Aguarde a liberação.");`,
+  `      toast.success(result.existing ? "Solicitação em andamento recuperada." : "Solicitação enviada. A liberação acontece automaticamente após abrir o WhatsApp.");`,
+  'toast remove dependência de aprovação manual',
+  'A liberação acontece automaticamente após abrir o WhatsApp.',
+);
+
+replaceOnce(
+  mechanicFile,
+  `Toda nova solicitação entra como <b>PENDENTE</b>. Somente a administração libera.`,
+  `Ao enviar a solicitação pelo WhatsApp, o abastecimento é liberado automaticamente. A administração recebe apenas a notificação.`,
+  'aviso do mecânico explica o fluxo automático',
+  'A administração recebe apenas a notificação.',
+);
+
 const adminFile = 'src/pages/admin/AppMecanicoAdminPage.tsx';
 
 replaceOnce(
