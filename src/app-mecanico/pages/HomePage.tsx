@@ -217,7 +217,13 @@ export default function HomePage() {
           <ActionCard icon={LogIn} title="Entrada de Ponto" subtitle={hasEntry ? `Entrada às ${pointTime(entrada)}` : "Registre o início da jornada"} disabled={hasEntry} onClick={() => navigate(`${base}/ponto?tipo=entrada`)} />
           <ActionCard icon={UtensilsCrossed} title="Início do Almoço" subtitle={almocoInicio ? `Iniciado às ${pointTime(almocoInicio)}` : "Registre a saída para o intervalo"} disabled={!hasEntry || hasExit || Boolean(almocoInicio)} onClick={() => navigate(`${base}/ponto?tipo=almoco_inicio`)} />
           <ActionCard icon={Clock3} title="Fim do Almoço" subtitle={almocoFim ? `Retorno às ${pointTime(almocoFim)}` : almocoInicio ? "Registre o retorno do intervalo" : "Disponível após iniciar o almoço"} disabled={!almocoInicio || Boolean(almocoFim) || hasExit} onClick={() => navigate(`${base}/ponto?tipo=almoco_fim`)} />
-          <ActionCard icon={LogOut} title="Saída de Ponto" subtitle={hasExit ? `Saída às ${pointTime(saida)}` : "Registre o fim da jornada"} disabled={!hasEntry || hasExit || (Boolean(almocoInicio) && !almocoFim)} onClick={() => navigate(`${base}/ponto?tipo=saida`)} />
+          <ActionCard
+            icon={LogOut}
+            title="Saída de Ponto"
+            subtitle={hasExit ? `Saída às ${pointTime(saida)}` : (!weekend && (!almocoInicio || !almocoFim)) ? "Disponível após concluir o almoço" : "Registre o fim da jornada"}
+            disabled={!hasEntry || hasExit || (!weekend && (!almocoInicio || !almocoFim)) || (Boolean(almocoInicio) && !almocoFim)}
+            onClick={() => navigate(`${base}/ponto?tipo=saida`)}
+          />
           <ActionCard icon={Gauge} title="Ponto do Carro / KM" subtitle="Registre hodômetro e localização" onClick={() => navigate(`${base}/veiculo`)} />
           <ActionCard icon={Fuel} title="Solicitação de Abastecimento" subtitle="Solicite combustível de forma controlada" onClick={() => navigate(`${base}/abastecimento`)} />
           <ActionCard icon={Wrench} title="Manutenção" subtitle="Abra e acompanhe ordens de serviço" onClick={() => navigate(`${base}/chamados`)} />
