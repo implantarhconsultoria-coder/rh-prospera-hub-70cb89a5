@@ -1,0 +1,31 @@
+name: Temporary manual signature export
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/temp-manual-signature-export-20260918.yml"
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download generated PDFs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p export
+          curl -fL "https://djfjnxmbvjgweqzjvqtr.supabase.co/storage/v1/object/public/temp-manual-signature-export-20260918/topac-matriz/9c3d2d30-92a1-4010-ae25-5268c198dc36.pdf" -o "export/ASSINATURAS_MANUAIS_TOPAC_MATRIZ_2026-08-20_A_2026-09-20.pdf"
+          curl -fL "https://djfjnxmbvjgweqzjvqtr.supabase.co/storage/v1/object/public/temp-manual-signature-export-20260918/topac-praia-grande/a1857dd7-8669-42bc-8d7f-d8d56fbea91a.pdf" -o "export/ASSINATURAS_MANUAIS_TOPAC_PRAIA_GRANDE_2026-08-20_A_2026-09-20.pdf"
+          curl -fL "https://djfjnxmbvjgweqzjvqtr.supabase.co/storage/v1/object/public/temp-manual-signature-export-20260918/topac-goiania/c2259ba4-fb93-4b96-844b-5b959dec1cf2.pdf" -o "export/ASSINATURAS_MANUAIS_TOPAC_GOIANIA_2026-08-20_A_2026-09-20.pdf"
+          curl -fL "https://djfjnxmbvjgweqzjvqtr.supabase.co/storage/v1/object/public/temp-manual-signature-export-20260918/alqui-obras/b2d3c6b7-71b5-463a-9d18-da584714b412.pdf" -o "export/ASSINATURAS_MANUAIS_ALQUI_OBRAS_2026-08-20_A_2026-09-20.pdf"
+          curl -fL "https://djfjnxmbvjgweqzjvqtr.supabase.co/storage/v1/object/public/temp-manual-signature-export-20260918/lmt/19289b8e-d9af-484c-971c-39725b776422.pdf" -o "export/ASSINATURAS_MANUAIS_LMT_2026-08-20_A_2026-09-20.pdf"
+          ls -lh export
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: assinaturas-manuais-20260918
+          path: export/*.pdf
+          if-no-files-found: error
+          retention-days: 1
