@@ -205,6 +205,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       status?: string | null;
     };
     type PendingDoc = {
+      employee_id?: string | null;
       employee_name?: string | null;
       competencia?: string | null;
       document_type?: string | null;
@@ -253,11 +254,27 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
 
       const { data: pendingData, error: pendingError } = await (supabase as any)
         .from('payroll_signature_status_v')
-        .select('employee_name,competencia,document_type,signed_at,signature_status,holerite_confirmed')
+        .select('employee_id,employee_name,competencia,document_type,signed_at,signature_status,holerite_confirmed')
         .eq('company_id', companyId)
         .eq('holerite_confirmed', true)
         .order('competencia', { ascending: false });
       if (pendingError) throw pendingError;
+
+      const { data: activeEmployees, error: activeEmployeesError } = await (supabase as any)
+        .from('funcionarios')
+        .select('id,status,ativo,data_demissao')
+        .or(`company_id.eq.${companyId},empresa_id.eq.${companyId}`);
+      if (activeEmployeesError) throw activeEmployeesError;
+
+      const eligibleEmployeeIds = new Set(
+        ((activeEmployees as any[]) || [])
+          .filter((employee) =>
+            String(employee?.status || 'ativo').toLowerCase() === 'ativo'
+            && employee?.ativo !== false
+            && !employee?.data_demissao
+          )
+          .map((employee) => String(employee.id))
+      );
 
       const grouped = new Map<string, { type: string; competencia: string; names: Set<string> }>();
       ((pendingData as PendingDoc[]) || []).forEach((row) => {
@@ -265,6 +282,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         const comp = String(row.competencia || '');
         const signed = Boolean(row.signed_at) || String(row.signature_status || '').toUpperCase() === 'ASSINADO';
         if (!type || !comp || signed || currentKeys.has(`${type}:${comp}`)) return;
+        if (!row.employee_id || !eligibleEmployeeIds.has(String(row.employee_id))) return;
 
         const name = String(row.employee_name || '').trim();
         if (!name) return;
