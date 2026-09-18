@@ -64,6 +64,7 @@ export default function AdminRequestNotifications() {
       .from('abastecimento_autorizacoes')
       .select('id,funcionario_nome,empresa_nome,filial,placa,combustivel,posto_nome,solicitado_em,autorizado_em,autorizado_por_nome,status')
       .eq('status', 'autorizado')
+      .eq('autorizado_por_nome', 'Sistema TOPAC')
       .gte('solicitado_em', since)
       .order('autorizado_em', { ascending: false })
       .limit(30);
@@ -86,7 +87,7 @@ export default function AdminRequestNotifications() {
         { event: '*', schema: 'public', table: 'abastecimento_autorizacoes' },
         (payload: any) => {
           const next = payload?.new as FuelAuthorization | undefined;
-          if (next?.id && next.status === 'autorizado' && !shownIds.current.has(next.id)) {
+          if (next?.id && next.status === 'autorizado' && next.autorizado_por_nome === 'Sistema TOPAC' && !shownIds.current.has(next.id)) {
             rememberShown(next.id);
             setPopup(next);
           }
