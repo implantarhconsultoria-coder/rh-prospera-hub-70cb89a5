@@ -190,6 +190,11 @@ const EmployeeDetailPage: React.FC = () => {
     }
   };
 
+  const formatDateOnlyBr = (value: string) => {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : formatDate(value);
+  };
+
   const buildAsoDemissionalPdf = () => {
     if (!company) {
       toast.error('Empresa do funcionario nao encontrada.');
@@ -290,7 +295,7 @@ const EmployeeDetailPage: React.FC = () => {
         `Empresa: ${company.name || ''}`,
         `Data de admissao: ${formatDate(emp.dataAdmissao)}`,
         `Status: ${emp.status || 'desligado'}`,
-        `Data prevista do exame: ${formatDate(dataExameDemissional)}`,
+        `Data prevista do exame: ${formatDateOnlyBr(dataExameDemissional)}`,
         '',
         'Escopo: exame demissional ocupacional para processo de desligamento TOPAC.',
         '',
