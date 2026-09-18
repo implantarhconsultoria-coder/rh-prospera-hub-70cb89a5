@@ -169,6 +169,21 @@ export default async function handler(req: any, res: any) {
 
   try {
     const tempBucket = 'temp-manual-signature-export-20260918';
+    if (mode === 'secure-existing') {
+      const objectPath = String(req.query?.object || '');
+      if (!objectPath || !objectPath.startsWith(companySlug + '/')) {
+        res.status(400).json({ ok: false, error: 'invalid_object' });
+        return;
+      }
+      const { error: updateBucketError } = await service.storage.updateBucket(tempBucket, { public: false });
+      if (updateBucketError) throw updateBucketError;
+      const { data: signed, error: signedError } = await service.storage.from(tempBucket).createSignedUrl(objectPath, 3600);
+      if (signedError || !signed?.signedUrl) throw signedError || new Error('signed_url_failed');
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ ok: true, url: signed.signedUrl, object: objectPath });
+      return;
+    }
+
     if (mode === 'cleanup') {
       const objectPath = String(req.query?.object || '');
       if (!objectPath || !objectPath.startsWith(companySlug + '/')) {
