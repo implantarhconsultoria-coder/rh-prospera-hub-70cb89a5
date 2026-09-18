@@ -171,6 +171,20 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     return year && month ? `${month}/${year}` : String(value || '');
   };
 
+  const signatureDocumentLabel = (type: unknown) => {
+    const value = String(type || '').toUpperCase();
+    const labels: Record<string, string> = {
+      HOLERITE: 'Pagamento / Holerite',
+      ADIANTAMENTO: 'Adiantamento salarial',
+      BENEFICIO_VR: 'Vale-Refeição (VR)',
+      BENEFICIO_VT: 'Vale-Transporte (VT)',
+      BENEFICIO_VR_VT: 'Vale-Refeição / Vale-Transporte (VR/VT)',
+      RECIBO_GARAGEM: 'Recibo de Garagem',
+      AVISO_FERIAS: 'Aviso de Férias',
+    };
+    return labels[value] || value.replace(/_/g, ' ').toLowerCase().replace(/(^|\\s)\\S/g, (letter) => letter.toUpperCase());
+  };
+
   const buildPortalShareMessage = async () => {
     const now = new Date();
     const hourPart = new Intl.DateTimeFormat('pt-BR', {
@@ -181,56 +195,119 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
     }).formatToParts(now).find(part => part.type === 'hour')?.value;
     const hour = Number(hourPart || '12');
     const greeting = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+    const companyName = company?.name || 'empresa';
 
-    const items: Array<{ order: number; label: string; competencia: string }> = [];
-    if (rows.some((row: any) => row.holerite_confirmed)) {
-      items.push({ order: 10, label: 'Pagamento', competencia });
-    }
+    type ShareDoc = {
+      document_type: string;
+      competencia: string;
+      created_at?: string | null;
+      confirmed?: boolean | null;
+      status?: string | null;
+    };
+    type PendingDoc = {
+      employee_name?: string | null;
+      competencia?: string | null;
+      document_type?: string | null;
+      signed_at?: string | null;
+      signature_status?: string | null;
+      holerite_confirmed?: boolean | null;
+    };
+
+    let announcement: Array<{ type: string; competencia: string }> = [];
+    let pendingGroups: Array<{ type: string; competencia: string; names: string[] }> = [];
 
     try {
-      const { data, error } = await (supabase as any)
+      const { data: docsData, error: docsError } = await (supabase as any)
         .from('payroll_documents')
         .select('document_type,competencia,confirmed,is_current,status,created_at')
         .eq('company_id', companyId)
         .eq('is_current', true)
-        .in('document_type', ['ADIANTAMENTO', 'BENEFICIO_VR', 'BENEFICIO_VT', 'BENEFICIO_VR_VT', 'RECIBO_GARAGEM'])
-        .order('competencia', { ascending: false })
+        .eq('confirmed', true)
         .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (docsError) throw docsError;
 
-      const docs = ((data as any[]) || []).filter(row => row?.confirmed !== false && String(row?.status || '').toUpperCase() !== 'SUBSTITUIDO');
-      const currentDocs = docs.filter(row => String(row.competencia || '') === competencia);
-      if (currentDocs.some(row => row.document_type === 'ADIANTAMENTO')) items.push({ order: 20, label: 'Adiantamento salarial', competencia });
-      if (currentDocs.some(row => row.document_type === 'RECIBO_GARAGEM')) items.push({ order: 50, label: 'Recibo de Garagem', competencia });
+      const docs = ((docsData as ShareDoc[]) || []).filter((row) =>
+        String(row?.status || '').toUpperCase() !== 'SUBSTITUIDO'
+        && row?.document_type
+        && row?.competencia
+      );
 
-      const latestByType = (types: string[]) => docs.find(row => types.includes(String(row.document_type || '')));
-      const vrDoc = latestByType(['BENEFICIO_VR', 'BENEFICIO_VR_VT']);
-      const vtDoc = latestByType(['BENEFICIO_VT', 'BENEFICIO_VR_VT']);
-      if (vrDoc) items.push({ order: 30, label: 'Vale-Refeição (VR)', competencia: String(vrDoc.competencia || competencia) });
-      if (vtDoc) items.push({ order: 40, label: 'Vale-Transporte (VT)', competencia: String(vtDoc.competencia || competencia) });
+      const latestDoc = docs[0];
+      if (latestDoc) {
+        const latestType = String(latestDoc.document_type || '');
+        const latestCompetencia = String(latestDoc.competencia || '');
+        announcement = [{ type: latestType, competencia: latestCompetencia }];
+
+        // VR e VT pertencem ao mesmo envio mensal quando são o lote mais recente.
+        if (['BENEFICIO_VR', 'BENEFICIO_VT', 'BENEFICIO_VR_VT'].includes(latestType)) {
+          const benefitTypes = new Set(['BENEFICIO_VR', 'BENEFICIO_VT', 'BENEFICIO_VR_VT']);
+          const sameBenefitCompetencia = docs
+            .filter((row) => String(row.competencia || '') === latestCompetencia && benefitTypes.has(String(row.document_type || '')))
+            .map((row) => String(row.document_type || ''));
+          const uniqueBenefitTypes = Array.from(new Set(sameBenefitCompetencia));
+          announcement = uniqueBenefitTypes.map((type) => ({ type, competencia: latestCompetencia }));
+        }
+      }
+
+      const currentKeys = new Set(announcement.map((item) => `${item.type}:${item.competencia}`));
+
+      const { data: pendingData, error: pendingError } = await (supabase as any)
+        .from('payroll_signature_status_v')
+        .select('employee_name,competencia,document_type,signed_at,signature_status,holerite_confirmed')
+        .eq('company_id', companyId)
+        .eq('holerite_confirmed', true)
+        .order('competencia', { ascending: false });
+      if (pendingError) throw pendingError;
+
+      const grouped = new Map<string, { type: string; competencia: string; names: Set<string> }>();
+      ((pendingData as PendingDoc[]) || []).forEach((row) => {
+        const type = String(row.document_type || '');
+        const comp = String(row.competencia || '');
+        const signed = Boolean(row.signed_at) || String(row.signature_status || '').toUpperCase() === 'ASSINADO';
+        if (!type || !comp || signed || currentKeys.has(`${type}:${comp}`)) return;
+
+        const name = String(row.employee_name || '').trim();
+        if (!name) return;
+        const key = `${type}:${comp}`;
+        const entry = grouped.get(key) || { type, competencia: comp, names: new Set<string>() };
+        entry.names.add(name);
+        grouped.set(key, entry);
+      });
+
+      pendingGroups = Array.from(grouped.values())
+        .map((item) => ({ type: item.type, competencia: item.competencia, names: Array.from(item.names).sort((a, b) => a.localeCompare(b, 'pt-BR')) }))
+        .sort((a, b) => b.competencia.localeCompare(a.competencia) || signatureDocumentLabel(a.type).localeCompare(signatureDocumentLabel(b.type), 'pt-BR'));
     } catch (error) {
       console.warn('[signature-share-message]', error);
     }
 
-    const unique = Array.from(new Map(items.map(item => [`${item.label}:${item.competencia}`, item])).values())
-      .sort((a, b) => a.order - b.order);
-    const companyName = company?.name || 'empresa';
-    const documentBlock = unique.length
-      ? unique.map(item => `• ${item.label} — competência ${formatMessageCompetencia(item.competencia)}`).join('\n')
-      : '• Documentos disponíveis para conferência e assinatura';
+    if (!announcement.length) {
+      announcement = [{ type: 'DOCUMENTOS', competencia }];
+    }
+
+    const announcementBlock = announcement
+      .map((item) => `• ${signatureDocumentLabel(item.type)} — competência ${formatMessageCompetencia(item.competencia)}`)
+      .join('\n');
+
+    const pendingBlock = pendingGroups.length
+      ? `\n\n⚠️ Ainda constam assinaturas pendentes:\n\n${pendingGroups.map((item) =>
+          `• ${signatureDocumentLabel(item.type)} — competência ${formatMessageCompetencia(item.competencia)}\n  Precisa(m) assinar: ${item.names.join(', ')}`
+        ).join('\n\n')}`
+      : '';
 
     return `${greeting}!
 
-Segue o link referente aos documentos abaixo para conferência e assinatura digital — ${companyName}:
+Pessoal, segue o link para conferência e assinatura digital — ${companyName}.
 
-${documentBlock}
+Documento deste envio:
+${announcementBlock}${pendingBlock}
 
 Acesse pelo link:
 ${portalUrl}
 
 Para entrar, utilize seu CPF, data de nascimento e os 4 últimos números do celular cadastrado.
 
-Após o acesso, confira os documentos e realize a assinatura digital. Em caso de dúvida, entre em contato no particular.`;
+Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo mesmo portal. Em caso de dúvida, entre em contato no particular.`;
   };
 
   const copyPortalMessage = async () => {
