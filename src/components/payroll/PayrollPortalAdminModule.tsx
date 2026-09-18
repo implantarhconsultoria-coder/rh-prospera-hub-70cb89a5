@@ -230,6 +230,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
       const docs = ((docsData as ShareDoc[]) || []).filter((row) =>
         String(row?.status || '').toUpperCase() !== 'SUBSTITUIDO'
         && row?.document_type
+        && String(row.document_type || '').toUpperCase() !== 'AVISO_FERIAS'
         && row?.competencia
       );
 
@@ -281,7 +282,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
         const type = String(row.document_type || '');
         const comp = String(row.competencia || '');
         const signed = Boolean(row.signed_at) || String(row.signature_status || '').toUpperCase() === 'ASSINADO';
-        if (!type || !comp || signed || currentKeys.has(`${type}:${comp}`)) return;
+        if (!type || type.toUpperCase() === 'AVISO_FERIAS' || !comp || signed || currentKeys.has(`${type}:${comp}`)) return;
         if (!row.employee_id || !eligibleEmployeeIds.has(String(row.employee_id))) return;
 
         const name = String(row.employee_name || '').trim();
