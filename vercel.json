@@ -13,12 +13,14 @@
   "rewrites": [
     { "source": "/api/frota-upload", "destination": "/api/frota-upload-v2" },
     { "source": "/api/payroll-public", "destination": "/api/payroll-public-v2" },
+    { "source": "/holerite", "destination": "/assinatura-indisponivel.html" },
+    { "source": "/holerite/:path*", "destination": "/assinatura-indisponivel.html" },
     { "source": "/mecanicos", "destination": "/mecanicos.html" },
     { "source": "/acesso-mecanico", "destination": "/mecanicos.html" },
     { "source": "/app-mecanico/:path*", "destination": "/mecanicos.html" },
     { "source": "/mecanico-ext/:path*", "destination": "/mecanicos.html" },
     { "source": "/analise-juridica-assinatura-digital-topac-rh-pro", "destination": "/analise-juridica-assinatura-digital-topac-rh-pro.html" },
-    { "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|manifest-mecanico.json|manifest-rhpro-install-20260908.json|manifest-mecanicos-install-20260908.json|sw.js|service-worker.js|placeholder.svg|icons/|apple-touch-icon.png|favicon-16.png|favicon-32.png|analise-juridica-assinatura-digital-topac-rh-pro.html).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|favicon.ico|robots.txt|manifest.json|manifest-mecanico.json|manifest-rhpro-install-20260908.json|manifest-mecanicos-install-20260908.json|sw.js|service-worker.js|placeholder.svg|icons/|apple-touch-icon.png|favicon-16.png|favicon-32.png|assinatura-indisponivel.html|analise-juridica-assinatura-digital-topac-rh-pro.html).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -28,6 +30,22 @@
     {
       "source": "/(manifest.json|manifest-mecanico.json|manifest-rhpro-install-20260908.json|manifest-mecanicos-install-20260908.json|sw.js|service-worker.js|mecanicos.html|analise-juridica-assinatura-digital-topac-rh-pro.html|icons/.*)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    },
+    {
+      "source": "/assinatura-indisponivel.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
+        { "key": "Pragma", "value": "no-cache" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive, nosnippet" }
+      ]
+    },
+    {
+      "source": "/api/payroll-public",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }]
+    },
+    {
+      "source": "/api/payroll-public-v2",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }]
     }
   ],
   "crons": [{ "path": "/api/cleanup-email-attachments", "schedule": "17 3 * * *" }]
