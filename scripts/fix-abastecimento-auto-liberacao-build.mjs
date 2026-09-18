@@ -13,57 +13,6 @@ const replaceOnce = (file, oldText, newText, label, marker = newText) => {
   console.log(`[abastecimento-auto] ${label}`);
 };
 
-const mechanicFile = 'src/app-mecanico/pages/AbastecimentoPageV4.tsx';
-
-replaceOnce(
-  mechanicFile,
-  `  const abrirWhatsApp = (phone: string, auth = autorizacao, station = postoAtual) => {\n    if (!auth) return;\n    window.open(\`https://wa.me/\${phone}?text=\${encodeURIComponent(buildWhatsAppText(auth, station))}\`, "_blank", "noopener,noreferrer");\n  };`,
-  `  const liberarAposWhatsApp = async (auth: Authorization) => {\n    const { data, error } = await supabaseRpc.rpc("app_mecanico_liberar_abastecimento_apos_whatsapp", {\n      p_acesso_id: mecanico.acesso_id,\n      p_autorizacao_id: auth.id,\n    });\n    const result = data as StatusResult | null;\n    if (error || !result?.ok || !result.authorization) {\n      toast.error("Solicitação enviada, mas não foi possível confirmar a liberação. Tente novamente.");\n      return null;\n    }\n    const current = result.authorization;\n    setAutorizacao(current);\n    if (current.status === "autorizado") setStep(chooseAuthorizedStep());\n    return current;\n  };\n\n  const abrirWhatsApp = async (phone: string, auth = autorizacao, station = postoAtual) => {\n    if (!auth) return;\n    const popup = window.open(\`https://wa.me/\${phone}?text=\${encodeURIComponent(buildWhatsAppText(auth, station))}\`, "_blank", "noopener,noreferrer");\n    if (!popup) {\n      toast.error("Não foi possível abrir o WhatsApp. Tente novamente.");\n      return;\n    }\n    await liberarAposWhatsApp(auth);\n  };`,
-  'WhatsApp passa a confirmar a liberação da própria solicitação',
-  'app_mecanico_liberar_abastecimento_apos_whatsapp',
-);
-
-replaceOnce(
-  mechanicFile,
-  `      if (!result.existing) {\n        WHATSAPP_RECIPIENTS.forEach(r =>\n          window.open(\`https://wa.me/\${r.phone}?text=\${encodeURIComponent(buildWhatsAppText(auth, result.posto || null))}\`, "_blank", "noopener,noreferrer")\n        );\n      }`,
-  `      if (!result.existing) {\n        let whatsappOpened = false;\n        WHATSAPP_RECIPIENTS.forEach(r => {\n          const popup = window.open(\`https://wa.me/\${r.phone}?text=\${encodeURIComponent(buildWhatsAppText(auth, result.posto || null))}\`, "_blank", "noopener,noreferrer");\n          if (popup) whatsappOpened = true;\n        });\n        if (whatsappOpened) await liberarAposWhatsApp(auth);\n      }`,
-  'solicitação nova libera somente após o handoff ao WhatsApp',
-  'if (whatsappOpened) await liberarAposWhatsApp(auth);',
-);
-
-replaceOnce(
-  mechanicFile,
-  `onClick={() => abrirWhatsApp(r.phone)}`,
-  `onClick={() => void abrirWhatsApp(r.phone)}`,
-  'botões de reenvio do WhatsApp também liberam a solicitação',
-  'onClick={() => void abrirWhatsApp(r.phone)}',
-);
-
-
-replaceOnce(
-  mechanicFile,
-  `    "Aguardando liberação no TOPAC RH PRO.",`,
-  `    "Liberação automática confirmada no TOPAC RH PRO após o envio ao WhatsApp.",`,
-  'mensagem do WhatsApp informa liberação automática',
-  'Liberação automática confirmada no TOPAC RH PRO após o envio ao WhatsApp.',
-);
-
-replaceOnce(
-  mechanicFile,
-  `      toast.success(result.existing ? "Solicitação em andamento recuperada." : "Solicitação enviada. Aguarde a liberação.");`,
-  `      toast.success(result.existing ? "Solicitação em andamento recuperada." : "Solicitação enviada. A liberação acontece automaticamente após abrir o WhatsApp.");`,
-  'toast remove dependência de aprovação manual',
-  'A liberação acontece automaticamente após abrir o WhatsApp.',
-);
-
-replaceOnce(
-  mechanicFile,
-  `Toda nova solicitação entra como <b>PENDENTE</b>. Somente a administração libera.`,
-  `Ao enviar a solicitação pelo WhatsApp, o abastecimento é liberado automaticamente. A administração recebe apenas a notificação.`,
-  'aviso do mecânico explica o fluxo automático',
-  'A administração recebe apenas a notificação.',
-);
-
 const adminFile = 'src/pages/admin/AppMecanicoAdminPage.tsx';
 
 replaceOnce(
@@ -96,4 +45,4 @@ replaceOnce(
   `row.status === 'autorizado' ? <Badge`,
 );
 
-console.log('[abastecimento-auto] fluxo pronto: solicitação -> WhatsApp -> liberação automática, mantendo registro no painel');
+console.log('[abastecimento-auto] fluxo pronto: solicitação criada -> liberação automática no banco; WhatsApp permanece com a mensagem original');
