@@ -15,12 +15,13 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import {
   Archive, Search, RefreshCw, X, Building2, User, FileText,
-  Bell, Moon, Menu, ChevronDown,
+  Moon, Menu, ChevronDown,
 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import StableLoading from '@/components/StableLoading';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
+import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
 import { toast } from 'sonner';
@@ -167,10 +168,7 @@ const AppLayout: React.FC = () => {
           </button>
 
           <div className="ml-auto flex h-full items-center gap-3">
-            <button className="relative grid h-9 w-9 place-items-center rounded-full text-zinc-300 transition hover:bg-white/[0.04] hover:text-white" aria-label="Notificações">
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-[2px] top-[1px] grid h-[16px] min-w-[16px] place-items-center rounded-full bg-[#7c2cff] px-1 text-[9px] font-bold text-white">8</span>
-            </button>
+            {userRole === 'admin' && <AdminRequestNotifications />}
             <button className="grid h-9 w-9 place-items-center rounded-full text-zinc-300 transition hover:bg-white/[0.04] hover:text-white" aria-label="Tema escuro">
               <Moon className="h-[19px] w-[19px]" />
             </button>
