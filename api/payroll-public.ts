@@ -49,7 +49,9 @@ const normalizeSignatureText = (value: unknown) => String(value || '')
   .trim();
 const isSignatureExcluded = (employee: any) => {
   const cargo = normalizeSignatureText(employee?.cargo);
-  return cargo.includes('socio') || cargo.includes('pro labore') || cargo.includes('prolabore');
+  const status = normalizeSignatureText(employee?.status || 'ativo');
+  const inactive = employee?.ativo === false || status !== 'ativo' || Boolean(employee?.data_demissao);
+  return inactive || cargo.includes('socio') || cargo.includes('pro labore') || cargo.includes('prolabore');
 };
 
 const documentLabel = (type: string, paymentKind?: string | null) => {
@@ -118,7 +120,7 @@ const validatePublicSession = async (service: any, rawSession: string, expectedC
   if (data.company_id !== expectedCompanyId) {
     throw Object.assign(new Error('invalid_session'), { status: 401 });
   }
-  const { data: sessionEmployee } = await service.from('funcionarios').select('id,nome,cargo').eq('id', data.employee_id).maybeSingle();
+  const { data: sessionEmployee } = await service.from('funcionarios').select('id,nome,cargo,status,ativo,data_demissao').eq('id', data.employee_id).maybeSingle();
   if (isSignatureExcluded(sessionEmployee || { id: data.employee_id })) {
     await service.from('payroll_public_sessions').update({ revoked_at: new Date().toISOString() }).eq('id', data.id);
     throw Object.assign(new Error('invalid_session'), { status: 401 });
@@ -319,7 +321,7 @@ const authenticate = async (service: any, req: any, res: any, body: any, scopedC
   const match = scopedMatches[0];
   const { data: employee, error: employeeError } = await service
     .from('funcionarios')
-    .select('id,nome,cargo')
+    .select('id,nome,cargo,status,ativo,data_demissao')
     .eq('id', match.employee_id)
     .single();
   if (employeeError || !employee) return genericIdentityError(res);
@@ -385,7 +387,7 @@ export default async function handler(req: any, res?: any) {
 
     if (action === 'list') {
       const [{ data: employee }, { data: company }] = await Promise.all([
-        service.from('funcionarios').select('id,nome,cargo').eq('id', sessionRow.employee_id).single(),
+        service.from('funcionarios').select('id,nome,cargo,status,ativo,data_demissao').eq('id', sessionRow.employee_id).single(),
         service.from('empresas').select('id,nome').eq('id', sessionRow.company_id).single(),
       ]);
       return sendJson(res, {
