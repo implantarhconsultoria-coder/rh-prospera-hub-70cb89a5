@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { getServiceClient } from '../src/server/payrollServer.js';
 
@@ -134,6 +134,7 @@ export default async function handler(req: any, res: any) {
 
   const rawToken = String(req.query?.token || '');
   const companySlug = String(req.query?.company || '');
+  const mode = String(req.query?.mode || 'download');
   if (!rawToken || !COMPANY_NAMES[companySlug]) {
     res.status(404).end();
     return;
@@ -154,6 +155,31 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
+    const tempBucket = 'temp-manual-signature-export-20260918';
+    if (mode === 'cleanup') {
+      const objectPath = String(req.query?.object || '');
+      if (!objectPath || !objectPath.startsWith(companySlug + '/')) {
+        res.status(400).json({ ok: false, error: 'invalid_object' });
+        return;
+      }
+      const { error: removeError } = await service.storage.from(tempBucket).remove([objectPath]);
+      if (removeError) throw removeError;
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ ok: true, removed: objectPath });
+      return;
+    }
+
+    if (mode === 'drop-bucket') {
+      const { data: listed } = await service.storage.from(tempBucket).list(companySlug, { limit: 1000 });
+      const paths = (listed || []).map((x: any) => companySlug + '/' + x.name);
+      if (paths.length) await service.storage.from(tempBucket).remove(paths);
+      const { error: deleteError } = await service.storage.deleteBucket(tempBucket);
+      if (deleteError && !String(deleteError.message || '').toLowerCase().includes('not found')) throw deleteError;
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     const companyName = COMPANY_NAMES[companySlug];
     const { data: company, error: companyError } = await service
       .from('empresas')
@@ -230,6 +256,37 @@ export default async function handler(req: any, res: any) {
 
     const bytes = await out.save({ useObjectStreams: false });
     const filename = `ASSINATURAS_MANUAIS_${companySlug.toUpperCase().replace(/-/g, '_')}_2026-08-20_A_2026-09-20.pdf`;
+
+    if (mode === 'upload') {
+      const { data: existingBucket } = await service.storage.getBucket(tempBucket);
+      if (!existingBucket) {
+        const { error: createBucketError } = await service.storage.createBucket(tempBucket, {
+          public: true,
+          fileSizeLimit: 50 * 1024 * 1024,
+          allowedMimeTypes: ['application/pdf'],
+        });
+        if (createBucketError) throw createBucketError;
+      }
+
+      const objectPath = `${companySlug}/${randomUUID()}.pdf`;
+      const { error: uploadError } = await service.storage.from(tempBucket).upload(
+        objectPath,
+        Buffer.from(bytes),
+        { contentType: 'application/pdf', cacheControl: '60', upsert: false },
+      );
+      if (uploadError) throw uploadError;
+      const { data: publicData } = service.storage.from(tempBucket).getPublicUrl(objectPath);
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({
+        ok: true,
+        url: publicData.publicUrl,
+        object: objectPath,
+        filename,
+        pages: out.getPageCount(),
+        employees: employeeOrder.length,
+      });
+      return;
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
