@@ -70,6 +70,7 @@ const EmployeeDetailPage: React.FC = () => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [dataExameDemissional, setDataExameDemissional] = useState('');
 
   const emp = employees.find(e => e.id === id);
   const isAdmin = userRoles.includes('admin');
@@ -194,7 +195,10 @@ const EmployeeDetailPage: React.FC = () => {
       toast.error('Empresa do funcionario nao encontrada.');
       return null;
     }
-    const dataExame = new Date().toISOString().slice(0, 10);
+    if (!dataExameDemissional) {
+      toast.error('Informe a data do exame demissional.');
+      return null;
+    }
     return gerarAutorizacaoExameAdmissionalPdf({
       empresa: company.name || '',
       cnpj: company.cnpj || '',
@@ -205,7 +209,7 @@ const EmployeeDetailPage: React.FC = () => {
       dataAdmissao: emp.dataAdmissao || '',
       dataNascimento: (emp as any).dataNascimento || '',
       setorGhe: (emp as any).setorGhe || '',
-      dataExame,
+      dataExame: dataExameDemissional,
       tipoExame: 'Demissional',
       obraLocal: company.name || '',
       trabalhoAltura: false,
@@ -286,6 +290,7 @@ const EmployeeDetailPage: React.FC = () => {
         `Empresa: ${company.name || ''}`,
         `Data de admissao: ${formatDate(emp.dataAdmissao)}`,
         `Status: ${emp.status || 'desligado'}`,
+        `Data prevista do exame: ${formatDate(dataExameDemissional)}`,
         '',
         'Escopo: exame demissional ocupacional para processo de desligamento TOPAC.',
         '',
@@ -401,13 +406,24 @@ const EmployeeDetailPage: React.FC = () => {
                   <p className="text-sm font-semibold text-foreground">ASO demissional</p>
                   <p className="text-xs text-muted-foreground">Funcionario desligado/inativo. Gere a guia e envie a solicitacao do exame demissional.</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={gerarAsoDemissional}>
-                    <FileText className="w-4 h-4 mr-2" /> Gerar ASO demissional
-                  </Button>
-                  <Button type="button" onClick={enviarAsoDemissional}>
-                    <Mail className="w-4 h-4 mr-2" /> Enviar exame demissional
-                  </Button>
+                <div className="flex flex-col gap-2 md:items-end">
+                  <div className="w-full md:w-56">
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Data do exame demissional</label>
+                    <Input
+                      type="date"
+                      value={dataExameDemissional}
+                      onChange={(e) => setDataExameDemissional(e.target.value)}
+                      className="bg-background"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" onClick={gerarAsoDemissional}>
+                      <FileText className="w-4 h-4 mr-2" /> Gerar ASO demissional
+                    </Button>
+                    <Button type="button" onClick={enviarAsoDemissional}>
+                      <Mail className="w-4 h-4 mr-2" /> Enviar exame demissional
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
