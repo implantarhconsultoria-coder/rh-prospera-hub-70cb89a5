@@ -9,7 +9,7 @@ export interface DeliveryItem {
 
 export interface Delivery {
   id: string;
-  type: 'epi' | 'uniforme';
+  type: 'epi' | 'uniforme' | 'protocolo';
   employeeId: string;
   companyId: string;
   date: string; // ISO date
@@ -56,3 +56,6 @@ export const UNIFORM_TYPES = [
 ];
 
 export const RESPONSIBILITY_TEXT = `Declaro ter recebido gratuitamente os Equipamentos de Proteção Individual (EPI) / Uniformes acima descritos, assumindo a responsabilidade de usá-los durante a jornada de trabalho, guardá-los e conservá-los, devolvendo-os quando danificados ou no término do contrato de trabalho. Comprometo-me a cumprir as Normas Internas da Empresa e as Normas Regulamentadoras (NR's) pertinentes, referentes ao uso adequado, guarda e conservação dos mesmos, bem como comunicar ao empregador qualquer alteração que os torne impróprios para uso.`;
+
+
+export const GENERIC_DELIVERY_RESPONSIBILITY_TEXT = `Declaro ter recebido os itens acima descritos, em perfeito estado e nas quantidades informadas, assumindo a responsabilidade por sua guarda, conservação e uso adequado durante o período em que permanecerem sob minha responsabilidade. Comprometo-me a devolvê-los quando solicitado, quando não forem mais necessários ou no término do vínculo, ressalvado o desgaste natural decorrente do uso regular.`;
