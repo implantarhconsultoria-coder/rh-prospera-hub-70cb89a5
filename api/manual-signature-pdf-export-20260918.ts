@@ -23,7 +23,7 @@ const ptDate = (value: string | null | undefined, fallback: string) => {
 
 const eventInfo = (doc: any) => {
   if (doc.competencia === '2026-08' && doc.document_type === 'HOLERITE') {
-    return { order: 1, label: 'Adiantamento salarial - competencia 08/2026', date: '20/08/2026' };
+    return { order: 1, label: 'Recibo / adiantamento - referencia de 20/08', date: '20/08/2026' };
   }
   if (doc.document_type === 'BENEFICIO_VR') {
     return {
@@ -40,10 +40,20 @@ const eventInfo = (doc: any) => {
     };
   }
   if (doc.document_type === 'HOLERITE') {
-    return { order: 4, label: 'Salario / Holerite - pagamento do dia 05', date: '05/09/2026' };
+    return { order: 4, label: 'Salario / Holerite - referencia do dia 05', date: '05/09/2026' };
+  }
+  if (doc.document_type === 'RECIBO_GARAGEM') {
+    return { order: 5, label: 'Recibo de Garagem - referencia do dia 05', date: '05/09/2026' };
+  }
+  if (doc.document_type === 'AVISO_FERIAS') {
+    return {
+      order: 6,
+      label: 'Aviso de Ferias - referencia de emissao',
+      date: ptDate(doc.created_at, '12/09/2026'),
+    };
   }
   if (doc.document_type === 'ADIANTAMENTO') {
-    return { order: 5, label: 'Adiantamento salarial - pagamento do dia 20', date: '20/09/2026' };
+    return { order: 7, label: 'Adiantamento salarial - referencia do dia 20', date: '20/09/2026' };
   }
   return { order: 9, label: doc.document_type || 'Documento', date: '' };
 };
@@ -91,7 +101,7 @@ const drawCover = async (pdf: PDFDocument, company: any, employee: any, docs: an
   const boxHeight = 72;
   page.drawRectangle({ x: MARGIN, y: boxTop - boxHeight, width: PAGE_W - MARGIN * 2, height: boxHeight, borderWidth: 1, borderColor: line });
   page.drawText('ORIENTACAO PARA ASSINATURA', { x: MARGIN + 14, y: boxTop - 21, size: 10, font: bold, color: dark });
-  const instruction = 'Assine cada documento usando a data indicada abaixo. Os documentos deste funcionario estao impressos logo apos esta capa, na mesma ordem da lista.';
+  const instruction = 'As datas abaixo identificam o pagamento ou a referencia de cada documento. A assinatura manual deve ser feita com a data real em que for coletada.';
   const insLines = wrap(instruction, regular, 9.5, PAGE_W - MARGIN * 2 - 28);
   let iy = boxTop - 40;
   for (const ln of insLines) {
@@ -100,7 +110,7 @@ const drawCover = async (pdf: PDFDocument, company: any, employee: any, docs: an
   }
 
   let y = boxTop - boxHeight - 34;
-  page.drawText('DATA A COLOCAR NA ASSINATURA', { x: MARGIN, y, size: 11, font: bold, color: dark });
+  page.drawText('DATA DE PAGAMENTO / REFERENCIA', { x: MARGIN, y, size: 11, font: bold, color: dark });
   y -= 24;
 
   docs.forEach((doc, index) => {
@@ -120,6 +130,9 @@ const drawCover = async (pdf: PDFDocument, company: any, employee: any, docs: an
   y -= 32;
   page.drawText('Assinatura do funcionario:', { x: MARGIN, y, size: 10, font: regular, color: muted });
   page.drawLine({ start: { x: MARGIN + 128, y: y - 2 }, end: { x: PAGE_W - MARGIN, y: y - 2 }, thickness: 0.8, color: muted });
+  y -= 34;
+  page.drawText('Data real da assinatura:', { x: MARGIN, y, size: 10, font: regular, color: muted });
+  page.drawText('____/____/________', { x: MARGIN + 120, y, size: 10, font: bold, color: dark });
 
   page.drawText('Pacote preparado para coleta de assinatura manual.', {
     x: MARGIN, y: 42, size: 8.5, font: regular, color: muted,
@@ -195,17 +208,12 @@ export default async function handler(req: any, res: any) {
       .eq('is_current', true)
       .eq('confirmed', true)
       .in('competencia', ['2026-08', '2026-09'])
-      .in('document_type', ['HOLERITE', 'BENEFICIO_VR', 'BENEFICIO_VT', 'ADIANTAMENTO']);
+      .in('document_type', ['HOLERITE', 'BENEFICIO_VR', 'BENEFICIO_VT', 'ADIANTAMENTO', 'RECIBO_GARAGEM', 'AVISO_FERIAS']);
     if (docsError) throw docsError;
 
     const selected = (docs || []).filter((d: any) => {
-      if (d.competencia === '2026-08' && d.document_type === 'HOLERITE') {
-        return d.extracted_data?.tipo_documento_detectado === 'SALARY_ADVANCE'
-          || d.extracted_data?.subtipo_documento_detectado === 'ADTO';
-      }
-      if (d.competencia === '2026-09' && ['BENEFICIO_VR','BENEFICIO_VT','HOLERITE','ADIANTAMENTO'].includes(d.document_type)) {
-        return true;
-      }
+      if (d.competencia === '2026-08' && d.document_type === 'HOLERITE') return true;
+      if (d.competencia === '2026-09' && ['BENEFICIO_VR','BENEFICIO_VT','HOLERITE','ADIANTAMENTO','RECIBO_GARAGEM','AVISO_FERIAS'].includes(d.document_type)) return true;
       return false;
     });
 
