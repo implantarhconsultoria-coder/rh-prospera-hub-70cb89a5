@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
-import { RESPONSIBILITY_TEXT, type Delivery } from '@/data/deliveries';
+import { GENERIC_DELIVERY_RESPONSIBILITY_TEXT, RESPONSIBILITY_TEXT, type Delivery } from '@/data/deliveries';
 import type { Company, Employee } from '@/types/database';
 import { formatDate } from '@/lib/calculations';
 import { registrarDocumento } from '@/lib/documentoHistorico';
@@ -44,7 +44,7 @@ const EntregaImpressaoPage: React.FC = () => {
         delivery: ctxDelivery,
         emp: employees.find(e => e.id === ctxDelivery.employeeId) || null,
         company: companies.find(c => c.id === ctxDelivery.companyId) || null,
-        returnPath: ctxDelivery.type === 'uniforme' ? '/uniformes' : '/epi',
+        returnPath: ctxDelivery.type === 'uniforme' ? '/uniformes' : ctxDelivery.type === 'protocolo' ? '/admin/epi' : '/epi',
       };
     }
 
@@ -57,7 +57,7 @@ const EntregaImpressaoPage: React.FC = () => {
             delivery: parsed.delivery,
             emp: parsed.employee,
             company: parsed.company,
-            returnPath: parsed.delivery?.type === 'uniforme' ? '/uniformes' : '/epi',
+            returnPath: parsed.delivery?.type === 'uniforme' ? '/uniformes' : parsed.delivery?.type === 'protocolo' ? '/admin/epi' : '/epi',
           };
         }
       }
@@ -74,7 +74,7 @@ const EntregaImpressaoPage: React.FC = () => {
     if (registradoRef.current) return;
     if (!delivery || !emp || !company) return;
     registradoRef.current = true;
-    const tipoDoc = delivery.type === 'epi' ? 'EPI' : 'Uniforme';
+    const tipoDoc = delivery.type === 'epi' ? 'EPI' : delivery.type === 'uniforme' ? 'Uniforme' : 'Protocolo';
     const itensResumo = (delivery.items || [])
       .map((it) => `${it.tipo}${it.tamanho ? ` ${it.tamanho}` : ''} x${it.quantidade}`)
       .join(', ');
@@ -83,9 +83,11 @@ const EntregaImpressaoPage: React.FC = () => {
       funcionarioNome: emp.name,
       companyId: company.id,
       empresaNome: company.name,
-      tipoDocumento: `Ficha de Entrega - ${tipoDoc}`,
+      tipoDocumento: delivery.type === 'protocolo' ? 'Protocolo de Entrega' : `Ficha de Entrega - ${tipoDoc}`,
       competencia: (delivery.date || '').slice(0, 7),
-      descricao: `Entrega de ${tipoDoc} (${(delivery.items || []).length} itens): ${itensResumo}`,
+      descricao: delivery.type === 'protocolo'
+        ? `Protocolo de entrega (${(delivery.items || []).length} itens): ${itensResumo}`
+        : `Entrega de ${tipoDoc} (${(delivery.items || []).length} itens): ${itensResumo}`,
       geradoPorUserId: session?.user?.id || '00000000-0000-0000-0000-000000000000',
       geradoPorNome: session?.user?.user_metadata?.nome_completo || session?.user?.email || 'Sistema',
       unidade: company.city,
@@ -96,14 +98,26 @@ const EntregaImpressaoPage: React.FC = () => {
   if (!emp || !company) return <div className="p-10 text-center">Dados incompletos.</div>;
 
   const isEpi = delivery.type === 'epi';
-  const title = isEpi ? 'FICHA DE ENTREGA DE EPI' : 'FICHA DE ENTREGA DE UNIFORMES';
-  const setor = emp.categoria === 'operacional' ? 'Operacional' : 'Sócio';
+  const isProtocol = delivery.type === 'protocolo';
+  const useDetailedLayout = isEpi || isProtocol;
+  const title = isProtocol
+    ? 'PROTOCOLO DE ENTREGA'
+    : isEpi
+      ? 'FICHA DE ENTREGA DE EPI'
+      : 'FICHA DE ENTREGA DE UNIFORMES';
+  const setor = String(emp.categoria || '—').replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
+  const responsibilityText = isProtocol ? GENERIC_DELIVERY_RESPONSIBILITY_TEXT : RESPONSIBILITY_TEXT;
 
   const handleSalvarPdf = async () => {
     try {
       await saveElementAsPdf({
         element: document.getElementById('entrega-print'),
-        fileName: buildPdfFileName(isEpi ? 'ficha entrega epi' : 'ficha entrega uniforme', company.name, emp.name, delivery.date),
+        fileName: buildPdfFileName(
+          isProtocol ? 'protocolo entrega' : isEpi ? 'ficha entrega epi' : 'ficha entrega uniforme',
+          company.name,
+          emp.name,
+          delivery.date,
+        ),
       });
       toast.success('PDF salvo com sucesso.');
     } catch (error: any) {
@@ -160,7 +174,7 @@ const EntregaImpressaoPage: React.FC = () => {
           </div>
         </div>
 
-        {isEpi ? (
+        {useDetailedLayout ? (
           <>
             <div className="border border-gray-400 rounded p-3 mb-4">
               <p className="text-[9px] uppercase text-gray-500 mb-2 font-bold">DADOS DO COLABORADOR</p>
@@ -242,7 +256,7 @@ const EntregaImpressaoPage: React.FC = () => {
 
         <div className="border border-gray-400 rounded p-3 mb-6">
           <p className="text-[9px] uppercase text-gray-500 mb-1 font-bold">TERMO DE RESPONSABILIDADE</p>
-          <p className="text-xs leading-relaxed text-justify">{RESPONSIBILITY_TEXT}</p>
+          <p className="text-xs leading-relaxed text-justify">{responsibilityText}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-16 mt-16">
