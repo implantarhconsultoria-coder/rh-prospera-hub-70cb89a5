@@ -64,6 +64,7 @@ import ImportacaoFechamentoPage from "@/pages/ImportacaoFechamentoPage";
 import ConferenciaPontoPage from "@/pages/ConferenciaPontoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import EtiquetasPage from "@/pages/EtiquetasPage";
+import EstoqueInternoPage from "@/pages/EstoqueInternoPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
@@ -131,10 +132,11 @@ const EXT_ITEMS_CAMPO = [
 const queryClient = new QueryClient();
 
 const RoleRedirect = () => {
-  const { userRoles, roleLoading } = useApp();
+  const { userRoles, roleLoading, session } = useApp();
   if (roleLoading) return <StableLoading label="Carregando permissao de acesso..." />;
   if (userRoles.includes('admin')) return <Navigate to="/admin" replace />;
   if (userRoles.includes('diretor_geral')) return <Navigate to="/admin" replace />;
+  if (['faturamento.matriz@topac.com.br','fat2.matriz@topac.com.br','fat3.matriz@topac.com.br','compras@topac.com.br','financeiro@topac.com.br'].includes((session?.user?.email||'').toLowerCase())) return <Navigate to="/estoque-interno" replace />;
   if (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania')) return <Navigate to="/filial" replace />;
   if (userRoles.includes('almoxarifado')) return <Navigate to="/almoxarifado" replace />;
   if (userRoles.includes('operacional')) return <Navigate to="/operacional" replace />;
@@ -210,6 +212,7 @@ const AuthGate = () => {
         <Route path="/admin/importar-fechamento" element={<ImportacaoFechamentoPage />} />
         <Route path="/admin/conferencia-ponto" element={<ConferenciaPontoPage />} />
         <Route path="/admin/almoxarifado" element={<AlmoxarifadoPage />} />
+        <Route path="/admin/estoque-interno" element={<EstoqueInternoPage />} />
         <Route path="/admin/etiquetas" element={<EtiquetasPage />} />
         <Route path="/admin/folha-pagamento" element={<FolhaPagamentoPage />} />
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
@@ -231,6 +234,8 @@ const AuthGate = () => {
         <Route path="/admin/faturamento/*" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/financeiro/*" element={<Navigate to="/admin" replace />} />
       </Route>
+
+      <Route path="/estoque-interno" element={<EstoqueInternoPage />} />
 
       <Route element={<FilialLayout />}>
         <Route path="/filial" element={<FilialDashboardPage />} />
