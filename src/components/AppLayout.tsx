@@ -49,7 +49,7 @@ const AppLayout: React.FC = () => {
       ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionários', '/admin/funcionarios'],
       ['Pré-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
       ['Fechamento', '/admin/fechamento'], ['EPI', '/admin/epi'],
-      ['Frota / Documentos', '/admin/documentos-ativos'], ['Almoxarifado', '/admin/almoxarifado'],
+      ['Frota / Documentos', '/admin/documentos-ativos'], ['Almoxarifado', '/admin/almoxarifado'], ['Estoque Interno', '/admin/estoque-interno'],
       ['Relatório de Abastecimento', '/admin/abastecimento-qrcode'], ['Assinatura Digital', '/admin/folha-pagamento'],
     ]
       .filter(([label, path]) => `${label} ${path}`.toLowerCase().includes(q))
