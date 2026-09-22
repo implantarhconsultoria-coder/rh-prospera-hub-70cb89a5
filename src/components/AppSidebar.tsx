@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FileText, LogOut,
   HardHat, Shirt, History, Fuel, Car,
   UserCheck, Package, ClipboardList, Receipt, ClipboardCheck, Wrench,
-  ShoppingCart, Headphones, PanelLeftClose, PanelLeftOpen, Radar, Tags,
+  ShoppingCart, Headphones, PanelLeftClose, PanelLeftOpen, Radar, Tags, Archive,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,7 @@ const operationalItems: MenuItem[] = [
   { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico' },
   { label: 'Relatório de Abastecimento', icon: Fuel, path: '/admin/abastecimento-qrcode' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
+  { label: 'Estoque Interno', icon: Archive, path: '/admin/estoque-interno' },
   { label: 'Etiquetas', icon: Tags, path: '/admin/etiquetas' },
   { label: 'Combustível', icon: Fuel, path: '/admin/galoes-combustivel' },
   { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
