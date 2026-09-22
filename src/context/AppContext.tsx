@@ -169,63 +169,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const updateEmployee = useCallback(async (id: string, data: Partial<Employee>) => {
-    setEmployees(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
     const currentEmployee = employees.find(e => e.id === id);
+    if (!currentEmployee) {
+      toast.error('Funcionário não encontrado no cadastro oficial.');
+      return { ok: false, error: new Error('Funcionário não encontrado') };
+    }
+
+    // Enviar apenas campos alterados: uma ficha aberta há muito tempo não pode
+    // sobrescrever dados novos de outro módulo com uma cópia antiga inteira.
+    const changes = Object.fromEntries(
+      Object.entries(data).filter(([key, value]) =>
+        key in currentEmployee && !Object.is((currentEmployee as unknown as Record<string, unknown>)[key], value),
+      ),
+    ) as Partial<Employee>;
+    if (Object.keys(changes).length === 0) return { ok: true };
+
     const row = employeeToRow({
-      ...data,
-      name: data.name ?? currentEmployee?.name,
-      cargo: data.cargo ?? currentEmployee?.cargo,
-      insalubridadeValor: data.insalubridadeValor ?? currentEmployee?.insalubridadeValor,
+      ...changes,
+      ...(changes.cargo !== undefined
+        ? { insalubridadeValor: changes.insalubridadeValor ?? currentEmployee.insalubridadeValor }
+        : {}),
     });
     const hasBankingData = ['pix', 'banco', 'agencia', 'conta'].some((key) =>
-      Object.prototype.hasOwnProperty.call(data, key),
+      Object.prototype.hasOwnProperty.call(changes, key),
     );
-    if (hasBankingData || data.observacoes !== undefined) {
+    if (hasBankingData || changes.observacoes !== undefined) {
       row.observacoes = buildEmployeeObservacoes(
-        data.observacoes ?? currentEmployee?.observacoes ?? '',
+        changes.observacoes ?? currentEmployee.observacoes ?? '',
         {
-          pix: data.pix ?? currentEmployee?.pix ?? '',
-          banco: data.banco ?? currentEmployee?.banco ?? '',
-          agencia: data.agencia ?? currentEmployee?.agencia ?? '',
-          conta: data.conta ?? currentEmployee?.conta ?? '',
+          pix: changes.pix ?? currentEmployee.pix ?? '',
+          banco: changes.banco ?? currentEmployee.banco ?? '',
+          agencia: changes.agencia ?? currentEmployee.agencia ?? '',
+          conta: changes.conta ?? currentEmployee.conta ?? '',
         },
       );
     }
-    if (Object.keys(row).length > 0) {
-      let payload = { ...row };
-      let result = await supabase
+
+    if (Object.keys(row).length === 0) {
+      toast.error('Não foi possível identificar campos do cadastro oficial para atualizar.');
+      return { ok: false, error: new Error('Nenhum campo gravável') };
+    }
+
+    try {
+      // A tabela funcionarios é a fonte oficial. Não mostrar os valores no
+      // restante do aplicativo antes de o Supabase confirmar a gravação.
+      const { data: saved, error } = await supabase
         .from('funcionarios')
-        .update(payload)
+        .update(row)
         .eq('id', id)
         .select('*')
         .single();
 
-      let missingColumn = missingColumnFromError(result.error);
-      while (result.error && missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
-        delete payload[missingColumn];
-        if (Object.keys(payload).length === 0) break;
-        result = await supabase
-          .from('funcionarios')
-          .update(payload)
-          .eq('id', id)
-          .select('*')
-          .single();
-        missingColumn = missingColumnFromError(result.error);
+      // Nunca descartar colunas com erro e declarar sucesso parcial.
+      if (error || !saved) {
+        const saveError = error ?? new Error('O banco não confirmou a atualização do funcionário.');
+        console.error('Erro ao salvar funcionário:', saveError);
+        toast.error('Erro ao salvar funcionário: ' + saveError.message);
+        return { ok: false, error: saveError };
       }
 
-      const { data: saved, error } = result;
-      if (error) {
-        console.error('Erro ao salvar funcionario:', error);
-        toast.error('Erro ao salvar funcionario: ' + error.message);
-        await fetchData();
-        return { ok: false, error };
-      }
-      if (saved) {
-        setEmployees(prev => prev.map(e => e.id === id ? mapEmployee(saved) : e));
-      }
+      setEmployees(prev => prev.map(e => e.id === id ? mapEmployee(saved) : e));
+      return { ok: true };
+    } catch (error) {
+      console.error('Erro inesperado ao salvar funcionário:', error);
+      toast.error('Não foi possível confirmar a gravação no cadastro oficial.');
+      return { ok: false, error };
     }
-    return { ok: true };
-  }, [employees, fetchData]);
+  }, [employees]);
 
   /**
    * Garante que existem lancamentos para todos os funcionarios ativos da empresa/competencia.

@@ -63,6 +63,7 @@ const EmployeeDetailPage: React.FC = () => {
     activeTab: 0,
     isEditing: false,
     draft: null as Employee | null,
+    original: null as Employee | null,
   });
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -118,23 +119,39 @@ const EmployeeDetailPage: React.FC = () => {
   });
 
   const startEditing = () => {
-    setDetailState((current) => ({ ...current, isEditing: true, draft: { ...emp } }));
+    setDetailState((current) => ({ ...current, isEditing: true, draft: { ...emp }, original: { ...emp } }));
   };
 
   const cancelEditing = () => {
-    setDetailState((current) => ({ ...current, isEditing: false, draft: null }));
+    setDetailState((current) => ({ ...current, isEditing: false, draft: null, original: null }));
   };
 
   const saveEditing = async () => {
     if (!detailState.draft || savingEdit) return;
     if (!detailState.draft.name?.trim()) return toast.error('Nome do funcionário é obrigatório.');
     if (!companies.some((item) => item.id === detailState.draft?.companyId)) return toast.error('Selecione uma empresa válida.');
+
+    // Comparar com a ficha no início da edição, não com uma cópia potencialmente
+    // atualizada por outro módulo enquanto o usuário estava preenchendo.
+    const original = detailState.original || emp;
+    const changes = Object.fromEntries(
+      Object.entries(detailState.draft).filter(([key, value]) =>
+        !Object.is((original as unknown as Record<string, unknown>)[key], value),
+      ),
+    ) as Partial<Employee>;
+
+    if (Object.keys(changes).length === 0) {
+      cancelEditing();
+      toast.info('Nenhuma alteração para salvar.');
+      return;
+    }
+
     setSavingEdit(true);
     try {
-      const result = await updateEmployee(emp.id, detailState.draft);
-      if (!result.ok) return;
-      setDetailState((current) => ({ ...current, isEditing: false, draft: null }));
-      toast.success('Alterações do funcionário salvas no banco.');
+      const result = await updateEmployee(emp.id, changes);
+      if (!result.ok) return; // Manter formulário aberto para corrigir e tentar novamente.
+      setDetailState((current) => ({ ...current, isEditing: false, draft: null, original: null }));
+      toast.success('Cadastro oficial do funcionário atualizado no Supabase.');
     } finally {
       setSavingEdit(false);
     }
@@ -348,7 +365,7 @@ const EmployeeDetailPage: React.FC = () => {
 
       {isEditing && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm text-foreground">
-          <strong>Modo de edição ativo.</strong> As alterações ficam em rascunho e só são gravadas no Supabase ao clicar em <strong>Salvar alterações</strong>.
+          <strong>Editando o cadastro do funcionário.</strong> Clique em <strong>Salvar alterações</strong> para gravar diretamente na ficha oficial. A confirmação aparece somente após o banco concluir a atualização.
         </div>
       )}
 
