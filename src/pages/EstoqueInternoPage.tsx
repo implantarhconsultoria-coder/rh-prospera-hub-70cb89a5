@@ -92,7 +92,7 @@ export default function EstoqueInternoPage() {
     );
     if (filterType) q=q.eq('tipo',filterType);
     if (filterItem) q=q.eq('item_id',filterItem);
-    if (month) q=q.gte('data_movimento',month+'-01').lte('data_movimento',month+'-31');
+    if (month) { const parts=month.split('-'); const nextMonth=new Date(Date.UTC(Number(parts[0]),Number(parts[1]),1)).toISOString().slice(0,10); q=q.gte('data_movimento',month+'-01').lt('data_movimento',nextMonth); }
     const r=await q.order('data_movimento',{ascending:false,nullsFirst:false})
       .order('linha_origem',{ascending:false,nullsFirst:false}).range(page*80,page*80+79);
     if (r.error) toast.error('Erro ao carregar movimentações: '+r.error.message);
