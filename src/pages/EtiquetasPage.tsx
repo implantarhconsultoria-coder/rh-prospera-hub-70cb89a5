@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Archive, HardHat, Tags, Users } from 'lucide-react';
+import { Archive, Fuel, HardHat, Tags, Users } from 'lucide-react';
 import EquipmentLabelGenerator from '@/components/EquipmentLabelGenerator';
 import EmployeeLabelsStandalone from '@/components/labels/EmployeeLabelsStandalone';
 import FolderLabelsStandalone from '@/components/labels/FolderLabelsStandalone';
 import CabinetLabelsStandalone from '@/components/labels/CabinetLabelsStandalone';
+import PostoReceiptCoverStandalone from '@/components/labels/PostoReceiptCoverStandalone';
 
-type Tab = 'equipamentos' | 'funcionarios' | 'pastas' | 'armarios';
+type Tab = 'equipamentos' | 'funcionarios' | 'pastas' | 'armarios' | 'posto';
 
 const cards: Array<{ id: Tab; title: string; description: string; icon: React.ElementType }> = [
   { id: 'equipamentos', title: 'Equipamentos', description: 'Catálogo TOPAC com patrimônio, série e impressão.', icon: HardHat },
   { id: 'funcionarios', title: 'Funcionários A4', description: 'Etiquetas por empresa, competência ou seleção manual.', icon: Users },
   { id: 'pastas', title: 'Pasta A-Z', description: 'Nomes em 2,5 × 1 cm, individual, empresas ou todos.', icon: Tags },
   { id: 'armarios', title: 'Armário 20 × 8', description: 'Etiquetas grandes de organização e arquivo.', icon: Archive },
+  { id: 'posto', title: 'Recibos do Posto', description: 'Capa A4 inteira, retrato, identificação central de 10 cm e período editável.', icon: Fuel },
 ];
 
 const EtiquetasPage: React.FC = () => {
@@ -26,7 +28,7 @@ const EtiquetasPage: React.FC = () => {
         <p className="mt-1 text-sm text-zinc-500">Central exclusiva para criação e impressão de todas as etiquetas. Nenhuma ferramenta desta área fica misturada com Fechamento ou Almoxarifado.</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {cards.map((item) => {
           const Icon = item.icon;
           const active = item.id === tab;
@@ -49,6 +51,7 @@ const EtiquetasPage: React.FC = () => {
         {tab === 'funcionarios' && <EmployeeLabelsStandalone />}
         {tab === 'pastas' && <FolderLabelsStandalone />}
         {tab === 'armarios' && <CabinetLabelsStandalone />}
+        {tab === 'posto' && <PostoReceiptCoverStandalone />}
       </section>
     </div>
   );
