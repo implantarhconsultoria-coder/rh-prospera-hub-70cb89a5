@@ -27,7 +27,8 @@ const ROLE_REDIRECTS: Record<string, string> = {
   tecnico_campo: '/campo',
 };
 
-const getRedirectPath = (roles: string[]) => {
+const getRedirectPath = (roles: string[], email = '') => {
+  if (!roles.includes('admin') && !roles.includes('diretor_geral') && ['faturamento.matriz@topac.com.br','fat2.matriz@topac.com.br','fat3.matriz@topac.com.br','compras@topac.com.br','financeiro@topac.com.br'].includes(email.toLowerCase())) return '/estoque-interno';
   const role = Object.keys(ROLE_REDIRECTS).find((key) => roles.includes(key));
   return role ? ROLE_REDIRECTS[role] : '/admin';
 };
@@ -39,15 +40,15 @@ const OPERATIONAL_STATS = [
 ];
 
 const LoginPage: React.FC = () => {
-  const { isAuthenticated, userRoles, roleLoading } = useApp();
+  const { isAuthenticated, userRoles, roleLoading, session } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || roleLoading) return;
-    window.location.replace(getRedirectPath(userRoles));
-  }, [isAuthenticated, roleLoading, userRoles]);
+    window.location.replace(getRedirectPath(userRoles, session?.user?.email || ''));
+  }, [isAuthenticated, roleLoading, userRoles, session?.user?.email]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
