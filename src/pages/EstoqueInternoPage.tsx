@@ -208,9 +208,22 @@ export default function EstoqueInternoPage() {
 
   const itemById=useMemo(()=>new Map(items.map(i=>[i.id,i])),[items]);
   const selected=items.find(i=>String(i.codigo)===code);
-  const filtered=items.filter(i=>(String(i.codigo)+' '+i.descricao+' '+(i.aplicacao||''))
-    .toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
   const attention=items.filter(i=>i.estoque_minimo!==null && Number(i.estoque_minimo)>=0 && Number(i.saldo_atual)<=Number(i.estoque_minimo));
+  const filtered=items.filter(i=>(String(i.codigo)+' '+i.descricao+' '+(i.aplicacao||''))
+    .toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
+    .filter(i=>productMetric==='reposicao'?attention.includes(i):productMetric==='sem_saldo'?Number(i.saldo_atual)===0:true)
+    .sort((a,b)=>productMetric==='quantidade'?Number(b.saldo_atual)-Number(a.saldo_atual):a.codigo-b.codigo);
+  const toggleTab=(next:Tab)=>{
+    setTab(current=>current===next&&productMetric===null?null:next);
+    setProductMetric(null);
+    setPage(0);
+  };
+  const toggleMetric=(next:ProductMetric)=>{
+    if(tab==='produtos'&&productMetric===next){setTab(null);setProductMetric(null);}
+    else {setTab('produtos');setProductMetric(next);}
+    setSearch('');
+    setPage(0);
+  };
   const totalQty=items.reduce((s,i)=>s+Number(i.saldo_atual||0),0);
   const suggestedEmployees = useMemo(() => {
     const needle = destination.trim().toLocaleLowerCase('pt-BR');
