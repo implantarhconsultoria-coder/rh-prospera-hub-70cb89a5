@@ -361,7 +361,7 @@ export default function EstoqueInternoPage() {
 
       </>}
       {tab==='produtos'&&<section className={wrapBox}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Materiais do escritório</h2><div className="flex gap-2">{!staffPortal&&access.pode_gerenciar&&<button className={primaryButton} onClick={()=>setProductOpen(!productOpen)}><Plus className="h-4 w-4"/> Produto</button>}{!staffPortal&&<button className="rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-500" onClick={()=>downloadCSV()}>Exportar CSV</button>}</div></div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">{productMetric==='reposicao'?'Produtos que precisam de reposição':productMetric==='sem_saldo'?'Produtos sem saldo':productMetric==='quantidade'?'Quantidades disponíveis por produto':'Materiais do escritório'}</h2><div className="flex gap-2">{!staffPortal&&access.pode_gerenciar&&<button className={primaryButton} onClick={()=>setProductOpen(!productOpen)}><Plus className="h-4 w-4"/> Produto</button>}{!staffPortal&&<button className="rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-500" onClick={()=>downloadCSV()}>Exportar CSV</button>}</div></div>
         {productOpen&&<form onSubmit={submitItem} className="mb-5 grid gap-3 rounded-xl border border-violet-500/40 p-4 md:grid-cols-3">
           <input required type="number" min="1" placeholder="Código" className={inputStyle} value={newItem.codigo} onChange={e=>setNewItem({...newItem,codigo:e.target.value})}/>
           <input required placeholder="Descrição" className={inputStyle} value={newItem.descricao} onChange={e=>setNewItem({...newItem,descricao:e.target.value})}/>
@@ -372,7 +372,7 @@ export default function EstoqueInternoPage() {
           <button disabled={busy} className={primaryButton}>Cadastrar produto</button>
         </form>}
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-        <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s)</p>
+        <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s){productMetric==='quantidade'?' • Quantidade total: '+brQty(totalQty):''}</p>
         <div className="overflow-x-auto rounded-lg border border-[#30283a]">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-[#15121b] text-xs uppercase text-zinc-400"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead>
