@@ -52,7 +52,7 @@ export default function EstoqueInternoPage() {
   const [moves, setMoves] = useState<Movement[]>([]);
   const [moveCount, setMoveCount] = useState(0);
   const [page, setPage] = useState(0);
-  const [tab, setTab] = useState<Tab>('visao');
+  const [tab, setTab] = useState<Tab>(standalone ? 'produtos' : 'visao');
   const [search, setSearch] = useState('');
   const [movementSearch, setMovementSearch] = useState('');
   const [busy, setBusy] = useState(false);
