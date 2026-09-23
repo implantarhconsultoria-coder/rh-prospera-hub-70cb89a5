@@ -18,7 +18,7 @@ type Movement = {
   historico_importado: boolean; data_suspeita: boolean; linha_origem: number | null;
 };
 type Access = { nome: string; email: string; ativo: boolean; pode_movimentar: boolean; pode_gerenciar: boolean; };
-type StockEmployee = { id: string; nome: string; cargo: string | null; status: string | null; };
+type StockEmployee = { id: string; nome: string; cargo: string | null; status: string | null; company_id: string | null; };
 type Tab = 'visao' | 'produtos' | 'entrada' | 'saida' | 'historico' | 'relatorios';
 const TABS: Array<{key: Tab; label: string; icon: React.ElementType}> = [
   {key:'visao',label:'Visão geral',icon:Package},
@@ -29,6 +29,18 @@ const TABS: Array<{key: Tab; label: string; icon: React.ElementType}> = [
   {key:'relatorios',label:'Relatórios',icon:FileText},
 ];
 const db = supabase as any;
+// Somente a lista de destinatários da saída do estoque do escritório.
+// A filial Praia Grande entra apenas pelos dois nomes expressamente autorizados.
+const STOCK_RECIPIENT_COMPANIES = [
+  'fc7b015f-e53a-49cf-a714-19b647220933', // LMT
+  '447c276c-572b-4ec7-9b87-b5de4206f431', // TOPAC MATRIZ
+  '67275dcd-150b-44bc-a445-bd31efc31ca9', // ALQUI OBRAS
+] as const;
+const STOCK_PRAIA_COMPANY = '92c89397-d788-48d4-bc1a-f23f3e64e637';
+const STOCK_PRAIA_RECIPIENTS = new Set([
+  'ANTONIO CARLOS SERVILIO',
+  'EDENILSON PEREIRA VITOR',
+]);
 const brQty = (n: number) => Number(n || 0).toLocaleString('pt-BR', {maximumFractionDigits:3});
 const brDate = (s: string | null) => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : 'Sem data (planilha)';
 const nowMonth = () => new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}).slice(0,7);
@@ -155,7 +167,8 @@ export default function EstoqueInternoPage() {
       setEmployeesLoading(true);
       setEmployeesError('');
       const result = await db.from('funcionarios')
-        .select('id,nome,cargo,status')
+        .select('id,nome,cargo,status,company_id')
+        .in('company_id',[...STOCK_RECIPIENT_COMPANIES,STOCK_PRAIA_COMPANY])
         .eq('ativo',true)
         .is('excluido_em',null)
         .order('nome',{ascending:true})
@@ -169,7 +182,13 @@ export default function EstoqueInternoPage() {
       }
       const seen = new Set<string>();
       setEmployees(((result.data||[]) as StockEmployee[])
-        .filter(employee => employee.nome?.trim() && !['desligado','excluido'].includes((employee.status||'').toLocaleLowerCase('pt-BR')))
+        .filter(employee => {
+          if (!employee.nome?.trim()) return false;
+          const isPraia = employee.company_id === STOCK_PRAIA_COMPANY;
+          if (isPraia) return STOCK_PRAIA_RECIPIENTS.has(employee.nome.trim().toLocaleUpperCase('pt-BR'));
+          return STOCK_RECIPIENT_COMPANIES.some(id=>id===employee.company_id)
+            && !['desligado','excluido'].includes((employee.status||'').toLocaleLowerCase('pt-BR'));
+        })
         .filter(employee => {
           const key = employee.nome.trim().toLocaleLowerCase('pt-BR');
           if (seen.has(key)) return false;
