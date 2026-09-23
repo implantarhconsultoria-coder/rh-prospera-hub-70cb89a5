@@ -48,7 +48,6 @@ const ACTIVE_PRODUCT_SINCE = '2024-01-01';
 const CURRENT_MOVEMENTS_SINCE = '2020-01-01';
 const brQty = (n: number) => Number(n || 0).toLocaleString('pt-BR', {maximumFractionDigits:3});
 const brDate = (s: string | null) => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : 'Sem data (planilha)';
-const nowMonth = () => new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}).slice(0,7);
 const safeCsv = (x: unknown) => {
   const s = String(x ?? '');
   const guarded = /^[=+\-@]/.test(s.trim()) ? "'" + s : s;
@@ -232,14 +231,14 @@ export default function EstoqueInternoPage() {
 
   const itemById=useMemo(()=>new Map(items.map(i=>[i.id,i])),[items]);
   const selected=items.find(i=>String(i.codigo)===code);
-  const attention=items.filter(i=>i.estoque_minimo!==null && Number(i.estoque_minimo)>=0 && Number(i.saldo_atual)<=Number(i.estoque_minimo));
   const isCurrentProduct=(item:StockItem)=>!!item.ultima_movimentacao&&item.ultima_movimentacao>=ACTIVE_PRODUCT_SINCE;
   const currentProducts=items.filter(isCurrentProduct);
   const legacyProducts=items.filter(i=>!isCurrentProduct(i));
+  const attention=currentProducts.filter(i=>i.estoque_minimo!==null && Number(i.estoque_minimo)>=0 && Number(i.saldo_atual)<=Number(i.estoque_minimo));
   const filtered=items.filter(i=>{
       const searching=search.trim().length>0;
       // Busca textual e indicadores pesquisam TODO o cadastro, inclusive o arquivo.
-      if(searching || productMetric!==null || productScope==='todos')return true;
+      if(searching || productScope==='todos')return true;
       return productScope==='arquivo'?!isCurrentProduct(i):isCurrentProduct(i);
     })
     .filter(i=>(String(i.codigo)+' '+i.descricao+' '+(i.aplicacao||''))
@@ -260,11 +259,11 @@ export default function EstoqueInternoPage() {
   };
   const toggleMetric=(next:ProductMetric)=>{
     if(tab==='produtos'&&productMetric===next){setTab(null);setProductMetric(null);}
-    else {setTab('produtos');setProductMetric(next);}
+    else {setTab('produtos');setProductMetric(next);setProductScope('atual');}
     setSearch('');
     setPage(0);
   };
-  const totalQty=items.reduce((s,i)=>s+Number(i.saldo_atual||0),0);
+  const totalQty=currentProducts.reduce((s,i)=>s+Number(i.saldo_atual||0),0);
   const suggestedEmployees = useMemo(() => {
     const needle = destination.trim().toLocaleLowerCase('pt-BR');
     return (needle ? employees.filter(e => (e.nome+' '+(e.cargo||'')).toLocaleLowerCase('pt-BR').includes(needle)) : employees);
@@ -327,7 +326,7 @@ export default function EstoqueInternoPage() {
     const doc=new jsPDF({unit:'mm',format:'a4'});
     doc.setFontSize(17);doc.text('TOPAC RH PRO | ESTOQUE INTERNO',14,17);
     doc.setFontSize(10);doc.text('Escritório | Posição atual | '+new Date().toLocaleString('pt-BR'),14,25);
-    doc.text('Produtos: '+items.length+'  |  Itens em atenção: '+attention.length+'  |  Quantidade total: '+brQty(totalQty),14,32);
+    doc.text('Produtos em uso: '+currentProducts.length+'  |  Itens em atenção: '+attention.length+'  |  Quantidade total: '+brQty(totalQty),14,32);
     let y=42;doc.setFontSize(8);
     for(const it of filtered){
       if(y>280){doc.addPage();y=18;}
@@ -377,10 +376,10 @@ export default function EstoqueInternoPage() {
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores do estoque — clique para abrir detalhes">
         {([
-          {key:'produtos',title:'Produtos cadastrados',value:items.length,Icon:Package,color:'text-violet-400'},
-          {key:'quantidade',title:'Quantidade total',value:brQty(totalQty),Icon:Archive,color:'text-emerald-400'},
-          {key:'reposicao',title:'Precisam de reposição',value:attention.length,Icon:TriangleAlert,color:'text-amber-400'},
-          {key:'sem_saldo',title:'Sem saldo',value:items.filter(i=>Number(i.saldo_atual)===0).length,Icon:ArrowDownCircle,color:'text-red-400'},
+          {key:'produtos',title:'Produtos em uso',value:currentProducts.length,Icon:Package,color:'text-violet-400'},
+          {key:'quantidade',title:'Quantidade em uso',value:brQty(totalQty),Icon:Archive,color:'text-emerald-400'},
+          {key:'reposicao',title:'Em uso: precisam de reposição',value:attention.length,Icon:TriangleAlert,color:'text-amber-400'},
+          {key:'sem_saldo',title:'Em uso: sem saldo',value:currentProducts.filter(i=>Number(i.saldo_atual)===0).length,Icon:ArrowDownCircle,color:'text-red-400'},
         ] as const).map(metric=>{
           const isOpen=tab==='produtos'&&productMetric===metric.key;
           const Icon=metric.Icon;
