@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Archive, ArrowDownCircle, ArrowUpCircle, Download, FileText, History, Loader2, LogOut, Package, Plus, RefreshCw, Search, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Archive, ArrowDownCircle, ArrowUpCircle, Download, FileText, History, Loader2, LogOut, Package, Plus, RefreshCw, Search, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 
+type WithdrawalItem = { codigo: number; quantidade: string };
 type StockItem = {
   id: string; codigo: number; descricao: string; aplicacao: string | null;
   unidade: string; saldo_atual: number; saldo_inicial: number; ultima_movimentacao?: string | null;
@@ -78,7 +79,8 @@ export default function EstoqueInternoPage() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [code, setCode] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [withdrawalItems, setWithdrawalItems] = useState<WithdrawalItem[]>([]);
   const [destination, setDestination] = useState('');
   const [employees, setEmployees] = useState<StockEmployee[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
@@ -231,6 +233,28 @@ export default function EstoqueInternoPage() {
 
   const itemById=useMemo(()=>new Map(items.map(i=>[i.id,i])),[items]);
   const selected=items.find(i=>String(i.codigo)===code);
+  const withdrawalTotal=withdrawalItems.reduce((sum,item)=>sum+Number(item.quantidade||0),0);
+  const addWithdrawalItem=()=>{
+    if(!selected){toast.error('Escolha um material para adicionar');return;}
+    const qty=Number(quantity.replace(',','.'));
+    if(!Number.isFinite(qty)||qty<=0){toast.error('Informe a quantidade do material');return;}
+    const already=withdrawalItems.find(item=>item.codigo===selected.codigo);
+    const combined=Number(((already?Number(already.quantidade):0)+qty).toFixed(3));
+    if(combined>Number(selected.saldo_atual)){
+      toast.error('Saldo insuficiente para '+selected.descricao+'. Disponível: '+brQty(Number(selected.saldo_atual))+' '+selected.unidade);
+      return;
+    }
+    if(!already&&withdrawalItems.length>=50){toast.error('Limite de 50 produtos por saída');return;}
+    setWithdrawalItems(current=>already
+      ? current.map(item=>item.codigo===selected.codigo?{...item,quantidade:String(combined)}:item)
+      : [...current,{codigo:selected.codigo,quantidade:String(qty)}]);
+    setCode('');
+    setMaterialSearch('');
+    setQuantity('1');
+  };
+  const removeWithdrawalItem=(codigo:number)=>{
+    setWithdrawalItems(current=>current.filter(item=>item.codigo!==codigo));
+  };
   const isCurrentProduct=(item:StockItem)=>!!item.ultima_movimentacao&&item.ultima_movimentacao>=ACTIVE_PRODUCT_SINCE;
   const currentProducts=items.filter(isCurrentProduct);
   const legacyProducts=items.filter(i=>!isCurrentProduct(i));
@@ -278,21 +302,62 @@ export default function EstoqueInternoPage() {
 
   const submitMovement=async(e:React.FormEvent)=>{
     e.preventDefault();
-    if(!access?.pode_movimentar||!selected) {toast.error('Selecione um produto');return;}
+    if(!access?.pode_movimentar){toast.error('Acesso sem permissão para movimentar');return;}
+    if(busy)return;
+    if(tab==='saida'){
+      if(!withdrawalItems.length){toast.error('Adicione pelo menos um produto à saída');return;}
+      if(!destination.trim()){toast.error('Informe para quem foi entregue');return;}
+      for(const entry of withdrawalItems){
+        const current=items.find(i=>i.codigo===entry.codigo);
+        const requested=Number(entry.quantidade.replace(',','.'));
+        if(!current||!Number.isFinite(requested)||requested<=0){
+          toast.error('Confira a quantidade e o produto em cada item');return;
+        }
+        if(requested>Number(current.saldo_atual)){
+          toast.error('Saldo insuficiente para '+current.descricao+'. Disponível: '+brQty(Number(current.saldo_atual))+' '+current.unidade);
+          return;
+        }
+      }
+      setBusy(true);
+      try {
+        const result=await db.rpc('estoque_interno_movimentar_lote',{
+          p_itens:withdrawalItems.map(entry=>({
+            codigo:entry.codigo, quantidade:Number(entry.quantidade.replace(',','.')),
+          })),
+          p_destinatario:destination.trim(),
+          p_observacao:notes.trim()||null,
+        });
+        if(result.error)throw result.error;
+        toast.success(withdrawalItems.length+' produto(s) entregues. Saldos atualizados numa única saída.');
+        setWithdrawalItems([]);setCode('');setMaterialSearch('');setQuantity('1');
+        setDestination('');setNotes('');setPage(0);
+        await load(true);await loadMoves();
+      } catch(error:any){
+        toast.error('Saída não registrada: '+(error?.message||'verifique o estoque e tente novamente'));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if(!selected){toast.error('Selecione um produto');return;}
     const qty=Number(quantity.replace(',','.'));
-    if(!Number.isFinite(qty)||qty<=0) {toast.error('Informe uma quantidade maior que zero');return;}
-    if(tab==='saida'&&!destination.trim()){toast.error('Informe o destinatário');return;}
+    if(!Number.isFinite(qty)||qty<=0){toast.error('Informe uma quantidade maior que zero');return;}
     setBusy(true);
-    const r=await db.rpc('estoque_interno_movimentar',{
-      p_codigo:selected.codigo,p_tipo:tab,p_quantidade:qty,
-      p_destinatario:destination.trim()||null,p_observacao:notes.trim()||null,
-      p_preco_unitario:tab==='entrada'&&unitCost ? Number(unitCost.replace(',','.')) : null
-    });
-    setBusy(false);
-    if(r.error){toast.error(r.error.message);return;}
-    toast.success((tab==='entrada'?'Entrada':'Saída')+' registrada e saldo atualizado');
-    setQuantity('');setDestination('');setNotes('');setUnitCost('');
-    await load(true);setPage(0);await loadMoves();
+    try {
+      const r=await db.rpc('estoque_interno_movimentar',{
+        p_codigo:selected.codigo,p_tipo:'entrada',p_quantidade:qty,
+        p_destinatario:destination.trim()||null,p_observacao:notes.trim()||null,
+        p_preco_unitario:unitCost ? Number(unitCost.replace(',','.')) : null,
+      });
+      if(r.error)throw r.error;
+      toast.success('Entrada registrada e saldo atualizado');
+      setQuantity('1');setDestination('');setNotes('');setUnitCost('');
+      await load(true);setPage(0);await loadMoves();
+    } catch(error:any){
+      toast.error(error?.message||'Erro ao registrar entrada');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submitItem=async(e:React.FormEvent)=>{
@@ -449,7 +514,7 @@ export default function EstoqueInternoPage() {
           <label className="grid gap-1 text-xs text-zinc-400">Material
             <input type="search" value={materialSearch} onChange={e=>setMaterialSearch(e.target.value)}
               placeholder="Buscar produto pelo nome ou código, inclusive no arquivo" className={inputStyle+' mb-1'} />
-            <select required value={code} onChange={e=>setCode(e.target.value)} className={inputStyle}>
+            <select required={tab==='entrada'} value={code} onChange={e=>setCode(e.target.value)} className={inputStyle}>
               <option value="">Selecione pelo código ou descrição</option>
               {selectableForMove.map(i=><option key={i.id} value={i.codigo}>{i.codigo} — {i.descricao} • Saldo {brQty(Number(i.saldo_atual))}{!isCurrentProduct(i)?' • Arquivo':''}</option>)}
             </select>
@@ -460,8 +525,52 @@ export default function EstoqueInternoPage() {
           </label>
           {selected&&<div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-3 text-sm"><strong>{selected.descricao}</strong><div className="mt-1 text-zinc-300">Saldo disponível: <b className="text-[#ffc400]">{brQty(Number(selected.saldo_atual))} {selected.unidade}</b></div></div>}
           <label className="grid gap-1 text-xs text-zinc-400">Quantidade
-            <input required type="number" step="any" min="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} placeholder="0" className={inputStyle}/>
+            <input required={tab==='entrada'} type="number" step="any" min="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} placeholder="1" className={inputStyle}/>
           </label>
+          {tab==='saida'&&<>
+            <button type="button" disabled={busy||!access.pode_movimentar}
+              onClick={addWithdrawalItem}
+              className="flex h-11 items-center justify-center gap-2 rounded-lg border border-violet-500 bg-violet-500/15 px-4 text-sm font-bold text-violet-100 hover:bg-violet-500/25 disabled:opacity-40">
+              <Plus className="h-5 w-5"/> Adicionar produto à saída
+            </button>
+            <div className="overflow-hidden rounded-xl border border-[#4d3a62] bg-[#11101a]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#4d3a62] bg-[#20182c] px-4 py-3">
+                <div><h3 className="text-sm font-black text-white">Itens desta saída</h3>
+                  <p className="mt-1 text-xs text-zinc-400">Como na entrega de EPI: adicione quantos materiais precisar, confira e confirme tudo junto.</p></div>
+                <span className="rounded-full bg-violet-500/20 px-3 py-1 text-xs font-bold text-violet-200">{withdrawalItems.length} produto(s)</span>
+              </div>
+              {withdrawalItems.length===0
+                ? <p className="px-4 py-7 text-center text-sm text-zinc-400">Nenhum produto adicionado. Escolha o material e clique em “Adicionar produto à saída”.</p>
+                : <div className="divide-y divide-[#35283f]">{withdrawalItems.map((entry,index)=>{
+                    const product=items.find(item=>item.codigo===entry.codigo);
+                    const qty=Number(entry.quantidade.replace(',','.'));
+                    const invalid=!product||!Number.isFinite(qty)||qty<=0||qty>Number(product.saldo_atual);
+                    return <div key={entry.codigo} className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_125px_45px] md:items-end">
+                      <div className="min-w-0">
+                        <div className="mb-1 text-[11px] font-bold text-violet-300">ITEM {index+1} · CÓDIGO {entry.codigo}</div>
+                        <div className="text-sm font-semibold text-white">{product?.descricao||'Produto não encontrado'}</div>
+                        <div className="mt-1 text-xs text-zinc-400">Saldo: {brQty(Number(product?.saldo_atual||0))} {product?.unidade||''}</div>
+                      </div>
+                      <label className="grid gap-1 text-xs text-zinc-400">Quantidade
+                        <input aria-label={'Quantidade de '+(product?.descricao||entry.codigo)} type="number" min="0.001" step="any"
+                          className={inputStyle+(invalid?' border-red-400':'')}
+                          value={entry.quantidade}
+                          onChange={e=>setWithdrawalItems(current=>current.map(it=>it.codigo===entry.codigo?{...it,quantidade:e.target.value}:it))}/>
+                      </label>
+                      <button type="button" title={'Remover '+(product?.descricao||entry.codigo)} aria-label={'Remover '+(product?.descricao||entry.codigo)}
+                        onClick={()=>removeWithdrawalItem(entry.codigo)}
+                        className="flex h-10 items-center justify-center rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10">
+                        <Trash2 className="h-4 w-4"/>
+                      </button>
+                      {invalid&&<p className="text-xs text-red-400 md:col-span-3">Quantidade inválida ou acima do saldo disponível. Corrija antes de confirmar.</p>}
+                    </div>;
+                  })}</div>}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#4d3a62] bg-[#181320] px-4 py-3 text-xs text-zinc-300">
+                <span>Você pode editar a quantidade ou remover um item sem perder os demais.</span>
+                <strong>{withdrawalItems.length} produto(s) · {brQty(withdrawalTotal)} unidade(s) de diferentes materiais</strong>
+              </div>
+            </div>
+          </>}
           {tab==='saida'?<div className="grid gap-1 text-xs text-zinc-400">
             <label htmlFor="estoque-interno-destinatario">Para quem foi entregue? *</label>
             <div className="relative">
@@ -504,7 +613,7 @@ export default function EstoqueInternoPage() {
           <label className="grid gap-1 text-xs text-zinc-400">Observação (opcional)
             <textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} className={inputStyle+' h-auto py-2'}/>
           </label>
-          <button disabled={busy||!access.pode_movimentar} className={primaryButton}>{busy?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Confirmar {tab==='entrada'?'entrada':'saída'}</button>
+          <button disabled={busy||!access.pode_movimentar||(tab==='saida'&&withdrawalItems.length===0)} className={primaryButton+' min-h-12'}>{busy?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}{tab==='saida'?'Confirmar saída de '+withdrawalItems.length+' produto(s)':'Confirmar entrada'}</button>
         </form>
       </section>}
       {(isStockTab||tab==='historico'||(!staffPortal&&tab==='relatorios'))&&<section className={wrapBox}>
