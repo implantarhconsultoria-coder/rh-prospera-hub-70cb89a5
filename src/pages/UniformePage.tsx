@@ -22,11 +22,36 @@ const UNIDADES:{value:Unidade;label:string}[]=[
 const SIZE_OPTIONS=['M','G','GG','XG','G1','G2','G3'];
 const MODELO_OPTIONS=['MANGA CURTA','MANGA LONGA','POLO','PADRAO','USADO'];
 const fmt=(n:number)=>new Intl.NumberFormat('pt-BR').format(n);
+// Rascunho da ficha recebida em 23/09/2026: NENHUM valor é importado sem conferência.
+// A ficha não tem unidade assinalada; alguns números e modelos manuscritos são incertos.
+type DraftRow={id:string;tipo:string;modelo:string;tamanho:string;saldo:string;duvidoso:boolean;marcado:boolean};
+const INITIAL_SHEET_DRAFT:DraftRow[]=[
+  {id:'cm-m',tipo:'Camiseta operacional',modelo:'MANGA CURTA',tamanho:'M',saldo:'8',duvidoso:false,marcado:true},
+  {id:'ml-m',tipo:'Camiseta operacional',modelo:'MANGA LONGA',tamanho:'M',saldo:'4',duvidoso:false,marcado:true},
+  {id:'cm-g',tipo:'Camiseta operacional',modelo:'MANGA CURTA',tamanho:'G',saldo:'6',duvidoso:false,marcado:true},
+  {id:'ml-g',tipo:'Camiseta operacional',modelo:'MANGA LONGA',tamanho:'G',saldo:'3',duvidoso:false,marcado:true},
+  {id:'cm-gg',tipo:'Camiseta operacional',modelo:'MANGA CURTA',tamanho:'GG',saldo:'15',duvidoso:true,marcado:false},
+  {id:'ml-gg',tipo:'Camiseta operacional',modelo:'MANGA LONGA',tamanho:'GG',saldo:'1',duvidoso:true,marcado:false},
+  {id:'cm-g1',tipo:'Camiseta operacional',modelo:'MANGA CURTA',tamanho:'G1',saldo:'6',duvidoso:false,marcado:true},
+  {id:'ml-g1',tipo:'Camiseta operacional',modelo:'MANGA LONGA',tamanho:'G1',saldo:'6',duvidoso:false,marcado:true},
+  {id:'cm-g2',tipo:'Camiseta operacional',modelo:'MANGA CURTA',tamanho:'G2',saldo:'2',duvidoso:true,marcado:false},
+  {id:'cm-g3',tipo:'Camiseta operacional',modelo:'MANGA CURTA',tamanho:'G3',saldo:'4',duvidoso:true,marcado:false},
+  {id:'ml-g3',tipo:'Camiseta operacional',modelo:'MANGA LONGA',tamanho:'G3',saldo:'2',duvidoso:true,marcado:false},
+  {id:'cal-m',tipo:'Calça operacional',modelo:'PADRAO',tamanho:'M',saldo:'6',duvidoso:false,marcado:true},
+  {id:'cal-g',tipo:'Calça operacional',modelo:'PADRAO',tamanho:'G',saldo:'8',duvidoso:false,marcado:true},
+  {id:'cal-gg',tipo:'Calça operacional',modelo:'PADRAO',tamanho:'GG',saldo:'7',duvidoso:false,marcado:true},
+  {id:'cal-g1',tipo:'Calça operacional',modelo:'PADRAO',tamanho:'G1',saldo:'6',duvidoso:false,marcado:true},
+  {id:'cal-g2',tipo:'Calça operacional',modelo:'PADRAO',tamanho:'G2',saldo:'1',duvidoso:true,marcado:false},
+  {id:'cal-g3',tipo:'Calça operacional',modelo:'PADRAO',tamanho:'G3',saldo:'1',duvidoso:true,marcado:false},
+];
 
 const UniformePage:React.FC=()=>{
   const {companies,employees,session}=useApp();
   const navigate=useNavigate();
   const [mode,setMode]=useState<Mode>('painel');
+  const [draft,setDraft]=useState<DraftRow[]>(INITIAL_SHEET_DRAFT);
+  const [draftOpen,setDraftOpen]=useState(false);
+  const [draftConfirmed,setDraftConfirmed]=useState(false);
   const [unit,setUnit]=useState<Unidade|''>('');
   const [stock,setStock]=useState<Stock[]>([]);
   const [history,setHistory]=useState<RecordedDelivery[]>([]);
@@ -73,6 +98,34 @@ const UniformePage:React.FC=()=>{
   const changed=()=>{requestId.current=crypto.randomUUID();};
   const editLine=(key:string,data:Partial<Line>)=>{setLines(old=>old.map(l=>l.key===key?{...l,...data}:l));changed();};
 
+  const changeDraft=(id:string,change:Partial<DraftRow>)=>{
+    setDraft(old=>old.map(row=>row.id===id?{...row,...change}:row));
+    setDraftConfirmed(false);
+  };
+  const importDraft=async()=>{
+    if(!unit){toast.error('Selecione primeiro a unidade indicada pelo responsável da contagem.');return;}
+    if(!draftConfirmed){toast.error('Confirme que revisou a unidade, modelos e quantidades da ficha.');return;}
+    const rows=draft.filter(d=>d.marcado);
+    if(!rows.length){toast.error('Marque ao menos uma variação para lançar.');return;}
+    if(rows.some(d=>!d.tipo.trim()||!d.modelo.trim()||!d.tamanho.trim()||!/^\\d{1,6}$/.test(d.saldo))){
+      toast.error('Revise as quantidades: somente inteiros iguais ou maiores que zero.');return;
+    }
+    const duplicates=rows.map(d=>[d.tipo,d.modelo,d.tamanho].join('|'));
+    if(new Set(duplicates).size!==duplicates.length){toast.error('Há duas linhas iguais. Corrija antes de importar.');return;}
+    if(rows.some(d=>unitStock.some(s=>s.tipo===d.tipo&&s.modelo===d.modelo&&s.tamanho===d.tamanho))){
+      if(!window.confirm('Algumas variações já possuem saldo no banco. Esta contagem vai SUBSTITUIR o saldo atual dessas variações. Deseja continuar?'))return;
+    }
+    setBusy(true);
+    const result=await db.rpc('uniforme_importar_contagem',{p_unidade:unit,p_linhas:rows.map(d=>({
+      tipo:d.tipo,tamanho:d.tamanho,modelo:d.modelo,saldo:Number(d.saldo),
+    })),p_observacao:'Levantamento físico enviado em 23/09/2026, conferido manualmente antes da importação'});
+    setBusy(false);
+    if(result.error){toast.error('Nenhum item importado: '+result.error.message);return;}
+    toast.success(result.data+' variações importadas para '+UNIDADES.find(u=>u.value===unit)?.label+'.');
+    setDraft(old=>old.map(d=>d.marcado?{...d,marcado:false}:d));
+    setDraftConfirmed(false);setDraftOpen(false);
+    await refresh();
+  };
   const stockCount=async(e:React.FormEvent)=>{
     e.preventDefault();
     if(!unit){toast.error('Escolha a unidade física antes de registrar a contagem. A ficha digitalizada não marcou a unidade.');return;}
@@ -178,6 +231,37 @@ const UniformePage:React.FC=()=>{
         <Button variant="outline" onClick={()=>setMode('entregas')}>Entregar uniforme</Button></div>
     </div>}
     {mode==='estoque'&&<div className="space-y-4">
+      <div className="card-premium p-5 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="font-bold">Ficha manuscrita recebida • rascunho para conferência</h2>
+            <p className="text-xs text-muted-foreground">Os números abaixo foram interpretados da digitalização; nada foi importado automaticamente.</p></div>
+          <Button size="sm" variant="outline" onClick={()=>setDraftOpen(v=>!v)}>{draftOpen?'Recolher ficha':'Conferir e importar ficha'}</Button>
+        </div>
+        {draftOpen&&<>
+          <p className="text-sm text-amber-600">A ficha não marca São Paulo, Praia Grande ou Goiânia. Confira a unidade acima. A caligrafia do GG, G2/G3, polos femininas e 20 camisetas usadas precisa de revisão; itens incertos iniciam desmarcados.</p>
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto rounded border">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="sticky top-0 bg-background"><tr className="border-b text-left text-xs text-muted-foreground">
+                {['Lançar','Produto','Modelo','Tamanho','Quantidade','Leitura'].map(x=><th key={x} className="p-2">{x}</th>)}
+              </tr></thead>
+              <tbody>{draft.map(d=><tr key={d.id} className="border-b">
+                <td className="p-2"><input type="checkbox" checked={d.marcado} onChange={e=>changeDraft(d.id,{marcado:e.target.checked})}/></td>
+                <td className="p-2">{d.tipo}</td>
+                <td className="p-2"><Input className="h-8 text-xs min-w-28" value={d.modelo} onChange={e=>changeDraft(d.id,{modelo:e.target.value})}/></td>
+                <td className="p-2"><Input className="h-8 w-20 text-xs" value={d.tamanho} onChange={e=>changeDraft(d.id,{tamanho:e.target.value})}/></td>
+                <td className="p-2"><Input className="h-8 w-20 text-xs" type="number" min="0" value={d.saldo} onChange={e=>changeDraft(d.id,{saldo:e.target.value})}/></td>
+                <td className={'p-2 text-xs '+(d.duvidoso?'text-amber-600':'text-emerald-600')}>{d.duvidoso?'Conferir caligrafia':'Mais legível'}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground">Não preenchi itens em branco como zero. Polos por tamanho, tamanhos EXG/XGG e camisetas usadas exigem cadastro separado após conferência, para não misturar peças.</p>
+          <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={draftConfirmed} onChange={e=>setDraftConfirmed(e.target.checked)}/>
+            Confirmei a unidade física, o tipo/modelo, os tamanhos e os números selecionados.</label>
+          <Button type="button" disabled={busy||!unit||!draftConfirmed||!draft.some(d=>d.marcado)} onClick={()=>void importDraft()}>
+            Importar {draft.filter(d=>d.marcado).length} variações conferidas
+          </Button>
+        </>}
+      </div>
       <form onSubmit={stockCount} className="card-premium p-5 space-y-4">
         <h2 className="font-bold">Contagem física / entrada de novas peças</h2>
         <div className="flex flex-wrap gap-2">
