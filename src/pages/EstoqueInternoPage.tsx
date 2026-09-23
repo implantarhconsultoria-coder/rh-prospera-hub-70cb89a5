@@ -251,7 +251,7 @@ export default function EstoqueInternoPage() {
         </div>
       </>}
       {tab==='produtos'&&<section className={wrapBox}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Materiais do escritório</h2><div className="flex gap-2">{!staffPortal&&access.pode_gerenciar&&<button className={primaryButton} onClick={()=>setProductOpen(!productOpen)}><Plus className="h-4 w-4"/> Produto</button>}<button className="rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-500" onClick={()=>downloadCSV()}>Exportar CSV</button></div></div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Materiais do escritório</h2><div className="flex gap-2">{!staffPortal&&access.pode_gerenciar&&<button className={primaryButton} onClick={()=>setProductOpen(!productOpen)}><Plus className="h-4 w-4"/> Produto</button>}{!staffPortal&&<button className="rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-500" onClick={()=>downloadCSV()}>Exportar CSV</button>}</div></div>
         {productOpen&&<form onSubmit={submitItem} className="mb-5 grid gap-3 rounded-xl border border-violet-500/40 p-4 md:grid-cols-3">
           <input required type="number" min="1" placeholder="Código" className={inputStyle} value={newItem.codigo} onChange={e=>setNewItem({...newItem,codigo:e.target.value})}/>
           <input required placeholder="Descrição" className={inputStyle} value={newItem.descricao} onChange={e=>setNewItem({...newItem,descricao:e.target.value})}/>
@@ -304,7 +304,7 @@ export default function EstoqueInternoPage() {
           <button disabled={busy||!access.pode_movimentar} className={primaryButton}>{busy?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Confirmar {tab==='entrada'?'entrada':'saída'}</button>
         </form>
       </section>}
-      {(isStockTab||tab==='historico'||tab==='relatorios')&&<section className={wrapBox}>
+      {(isStockTab||tab==='historico'||(!staffPortal&&tab==='relatorios'))&&<section className={wrapBox}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">{tab==='entrada'?'Lista de entradas':tab==='saida'?'Lista de saídas':tab==='historico'?'Histórico de movimentações':'Relatórios'}</h2><p className="text-xs text-zinc-500">{moveCount} registros nos filtros • 80 por página</p></div><div className="flex gap-2"><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm hover:border-violet-400" onClick={()=>downloadCSV(true)}><Download className="mr-2 inline h-4 w-4"/>CSV da página</button>{tab==='relatorios'&&<><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm" onClick={()=>downloadCSV()}>Estoque CSV</button><button className={primaryButton} onClick={downloadPDF}><FileText className="h-4 w-4"/>Estoque PDF</button></>}</div></div>
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input aria-label="Pesquisar produto nas movimentações" className={inputStyle+' pl-10'} placeholder="Pesquisar produto pelo código, nome ou aplicação..." value={movementSearch} onChange={e=>{setMovementSearch(e.target.value);setPage(0);}}/></div>
         <div className="mb-5 grid gap-3 md:grid-cols-4">
