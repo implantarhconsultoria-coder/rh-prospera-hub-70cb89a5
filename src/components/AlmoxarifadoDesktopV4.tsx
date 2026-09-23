@@ -74,6 +74,7 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   const [entries, setEntries] = useState<any[]>([]);
   const [loads, setLoads] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  const [withdrawalSearch, setWithdrawalSearch] = useState('');
   const [personId, setPersonId] = useState('');
   const [itemId, setItemId] = useState('');
   const [qty, setQty] = useState('1');
@@ -119,8 +120,26 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
 
   const fetchData = async () => {
     setLoading(true);
+    // A API retorna no máximo uma página por chamada (normalmente 1.000).
+    // O inventário importado ultrapassa esse limite; buscar todas as páginas
+    // evita que um produto existente desapareça nas telas de entrada/saída.
+    const fetchAllStock = async () => {
+      const all: any[] = [];
+      const pageSize = 500;
+      for (let offset = 0; ; offset += pageSize) {
+        const page = await db.from('almoxarifado_estoque_resumo')
+          .select('*').eq('ativo', true)
+          .order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (page.error) throw page.error;
+        const rows = page.data || [];
+        all.push(...rows);
+        if (rows.length < pageSize) return all;
+      }
+    };
     const [stockResult, entriesResult, loadsResult] = await Promise.all([
-      db.from('almoxarifado_estoque_resumo').select('*').eq('ativo', true),
+      fetchAllStock().then(data => ({ data, error: null }))
+        .catch(error => ({ data: null, error })),
       db.from('almoxarifado_entradas').select('*').gte('data_entrada', START).order('data_entrada', { ascending: false }),
       db.from('almoxarifado_cargas').select('*').gte('created_at', START + 'T00:00:00').order('created_at', { ascending: false }),
     ]);
@@ -150,6 +169,13 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
         String(value || '').toLowerCase().includes(search.toLowerCase())
       )
   );
+  const withdrawalOptions = stock.filter((item: any) =>
+    (Number(item.saldo) > 0 || item.id === itemId) &&
+    (!withdrawalSearch.trim() || item.id === itemId ||
+      [item.codigo_topac, item.codigo_alternativo, item.nome, item.aplicacao].some((value) =>
+        String(value || '').toLocaleLowerCase('pt-BR').includes(withdrawalSearch.trim().toLocaleLowerCase('pt-BR'))
+      ))
+  );
 
   const add = () => {
     const item: any = itemMap.get(itemId);
@@ -170,6 +196,7 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     });
     setItemId('');
     setQty('1');
+    setWithdrawalSearch('');
   };
 
   const saveWithdrawal = async () => {
@@ -558,10 +585,18 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
               />
             </div>
             <div className="almox-panel p-5">
+              <div className="mb-3">
+                <Input value={withdrawalSearch} onChange={(event) => setWithdrawalSearch(event.target.value)}
+                  placeholder="Buscar material pelo nome ou código em todo o Almoxarifado" />
+                <p className="mt-1 text-xs text-slate-400">
+                  {withdrawalOptions.length} material(is) para selecionar • catálogo completo: {stock.length}.
+                  Só materiais com saldo positivo podem sair.
+                </p>
+              </div>
               <div className="grid gap-2 md:grid-cols-[1fr_110px_auto]">
                 <select className="almox-control" value={itemId} onChange={(event) => setItemId(event.target.value)}>
                   <option value="">Material...</option>
-                  {stock.map((item: any) => (
+                  {withdrawalOptions.map((item: any) => (
                     <option key={item.id} value={item.id}>
                       {item.codigo_topac} — {item.nome} — saldo {item.saldo}
                     </option>
@@ -570,6 +605,9 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
                 <Input value={qty} onChange={(event) => setQty(event.target.value)} type="number" min="1" />
                 <Button onClick={add}>Adicionar</Button>
               </div>
+              {withdrawalSearch.trim() && withdrawalOptions.length === 0 && (
+                <p className="mt-2 text-sm text-amber-300">Nenhum material com saldo disponível corresponde à busca. Consulte o estoque geral ou registre a entrada se o material estiver fisicamente disponível.</p>
+              )}
               <div className="mt-4 space-y-2">
                 {cart.map((item) => (
                   <div key={item.item_id} className="flex justify-between rounded-xl border border-slate-700 p-3 text-white">
