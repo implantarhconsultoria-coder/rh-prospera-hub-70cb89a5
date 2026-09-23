@@ -335,14 +335,30 @@ export default function EstoqueInternoPage() {
           {!staffPortal&&TABS.filter(t=>t.key==='visao'||t.key==='relatorios').map(t=>{const Icon=t.icon;return <button key={t.key} type="button" onClick={()=>toggleTab(t.key)} aria-pressed={tab===t.key} aria-expanded={tab===t.key} className={'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold '+(tab===t.key?'border-violet-500 bg-[#312048] text-[#ffc400]':'border-[#30283a] text-zinc-400 hover:text-white')}><Icon className="h-4 w-4"/>{t.label}</button>;})}
         </div>
       </div>
-      {(staffPortal||tab==='visao')&&<>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[['Produtos cadastrados',items.length,Package,'text-violet-400'],['Quantidade total',brQty(totalQty),Archive,'text-emerald-400'],['Precisam de reposição',attention.length,TriangleAlert,'text-amber-400'],['Sem saldo',items.filter(i=>Number(i.saldo_atual)===0).length,ArrowDownCircle,'text-red-400']].map(([title,val,Icon,color]:any)=><div key={title} className={wrapBox}><div className="text-xs text-zinc-400">{title}</div><div className="mt-3 flex items-center justify-between"><strong className="text-3xl">{val}</strong><Icon className={'h-7 w-7 '+color}/></div></div>)}
-        </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores do estoque — clique para abrir detalhes">
+        {([
+          {key:'produtos',title:'Produtos cadastrados',value:items.length,Icon:Package,color:'text-violet-400'},
+          {key:'quantidade',title:'Quantidade total',value:brQty(totalQty),Icon:Archive,color:'text-emerald-400'},
+          {key:'reposicao',title:'Precisam de reposição',value:attention.length,Icon:TriangleAlert,color:'text-amber-400'},
+          {key:'sem_saldo',title:'Sem saldo',value:items.filter(i=>Number(i.saldo_atual)===0).length,Icon:ArrowDownCircle,color:'text-red-400'},
+        ] as const).map(metric=>{
+          const isOpen=tab==='produtos'&&productMetric===metric.key;
+          const Icon=metric.Icon;
+          return <button key={metric.key} type="button" aria-expanded={isOpen}
+            aria-pressed={isOpen} onClick={()=>toggleMetric(metric.key)}
+            className={wrapBox+' text-left transition hover:border-violet-400 '+(isOpen?'border-violet-500 bg-[#241a32]':'')}>
+            <div className="text-xs text-zinc-400">{metric.title}</div>
+            <div className="mt-3 flex items-center justify-between"><strong className="text-3xl">{metric.value}</strong><Icon className={'h-7 w-7 '+metric.color}/></div>
+            <div className="mt-2 text-[11px] text-zinc-500">{isOpen?'Clique para fechar':'Clique para consultar'}</div>
+          </button>;
+        })}
+      </div>
+      {tab==='visao'&&<>
         <div className={'grid gap-4 '+(!staffPortal?'xl:grid-cols-2':'')}>
           <section className={wrapBox}><h2 className="mb-3 text-lg font-bold">Estoque em atenção</h2><div className="max-h-[440px] overflow-y-auto">{attention.length?attention.slice(0,25).map(i=><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} key={i.id} className="flex w-full items-center justify-between border-b border-[#29242e] py-3 text-left text-sm hover:text-[#ffc400]"><span><span className="mr-2 text-zinc-500">{i.codigo}</span>{i.descricao}</span><span className="ml-2 shrink-0 font-bold text-amber-400">{brQty(Number(i.saldo_atual))} {i.unidade}</span></button>):<p className="text-sm text-zinc-500">Nenhum item abaixo do mínimo informado.</p>}</div></section>
           {!staffPortal&&<section className={wrapBox}><h2 className="mb-3 text-lg font-bold">Controle e rastreabilidade</h2><div className="space-y-3 text-sm text-zinc-300"><p>Inventário histórico importado e identificado como origem Excel.</p><p>Cada entrada e saída nova grava usuário autenticado, data, quantidade e saldo anterior e posterior.</p><p>As datas ausentes ou inconsistentes do arquivo original permanecem sinalizadas, sem data fabricada.</p><p>Este controle não altera os materiais, cargas ou saldos do almoxarifado dos mecânicos.</p></div><button onClick={()=>setTab('historico')} className="mt-4 text-sm font-bold text-violet-400 hover:underline">Abrir histórico completo →</button></section>}
         </div>
+
       </>}
       {tab==='produtos'&&<section className={wrapBox}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Materiais do escritório</h2><div className="flex gap-2">{!staffPortal&&access.pode_gerenciar&&<button className={primaryButton} onClick={()=>setProductOpen(!productOpen)}><Plus className="h-4 w-4"/> Produto</button>}{!staffPortal&&<button className="rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-500" onClick={()=>downloadCSV()}>Exportar CSV</button>}</div></div>
