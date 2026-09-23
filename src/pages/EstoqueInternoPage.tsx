@@ -323,15 +323,16 @@ export default function EstoqueInternoPage() {
           {TABS.filter(t=>t.key==='produtos'||t.key==='entrada'||t.key==='saida'||t.key==='historico').map(t=>{
             const Icon=t.icon;
             const hint=t.key==='produtos'?'Consultar e pesquisar materiais':t.key==='entrada'?'Registrar e consultar entradas':t.key==='saida'?'Registrar e consultar saídas':'Pesquisar movimentações';
-            return <button key={t.key} type="button" aria-pressed={tab===t.key} onClick={()=>{setTab(t.key);setPage(0);}}
-              className={'flex min-h-[102px] flex-col items-start justify-between rounded-xl border p-4 text-left transition hover:border-violet-400 '+(tab===t.key?'border-violet-500 bg-[#241a32]':'border-[#30283a] bg-[#0d1017]')}>
+            return <button key={t.key} type="button" aria-pressed={tab===t.key&&productMetric===null}
+              aria-expanded={tab===t.key&&productMetric===null} onClick={()=>toggleTab(t.key)}
+              className={'flex min-h-[102px] flex-col items-start justify-between rounded-xl border p-4 text-left transition hover:border-violet-400 '+(tab===t.key&&productMetric===null?'border-violet-500 bg-[#241a32]':'border-[#30283a] bg-[#0d1017]')}>
               <Icon className={'h-6 w-6 '+(tab===t.key?'text-[#ffc400]':'text-violet-400')}/>
               <div><div className="text-base font-bold text-white">{t.label}</div><div className="mt-1 text-xs text-zinc-400">{hint}</div></div>
             </button>;
           })}
         </nav>
         <div className="flex gap-2">
-          {!staffPortal&&TABS.filter(t=>t.key==='visao'||t.key==='relatorios').map(t=>{const Icon=t.icon;return <button key={t.key} onClick={()=>{setTab(t.key);setPage(0);}} aria-pressed={tab===t.key} className={'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold '+(tab===t.key?'border-violet-500 bg-[#312048] text-[#ffc400]':'border-[#30283a] text-zinc-400 hover:text-white')}><Icon className="h-4 w-4"/>{t.label}</button>;})}
+          {!staffPortal&&TABS.filter(t=>t.key==='visao'||t.key==='relatorios').map(t=>{const Icon=t.icon;return <button key={t.key} type="button" onClick={()=>toggleTab(t.key)} aria-pressed={tab===t.key} aria-expanded={tab===t.key} className={'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold '+(tab===t.key?'border-violet-500 bg-[#312048] text-[#ffc400]':'border-[#30283a] text-zinc-400 hover:text-white')}><Icon className="h-4 w-4"/>{t.label}</button>;})}
         </div>
       </div>
       {(staffPortal||tab==='visao')&&<>
