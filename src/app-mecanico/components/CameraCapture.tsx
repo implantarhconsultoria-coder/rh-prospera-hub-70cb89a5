@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Camera, RotateCcw, Check, X, Loader2, AlertTriangle, ImageUp } from "lucide-react";
@@ -15,150 +15,101 @@ interface Props {
   galleryMaxAgeMinutes?: number;
 }
 
+const MAX_CAPTURE_SIDE = 1440;
+const JPEG_QUALITY = 0.8;
+
 const getCameraMessage = (error: unknown) => {
-  const name = error instanceof DOMException ? error.name : "";
+  const name = error instanceof DOMException ? error.name : String((error as { name?: string })?.name || "");
   if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-    return "Permita acesso à câmera no navegador ou selecione uma foto da galeria.";
+    return "A câmera está bloqueada. Libere a permissão da câmera nas configurações do navegador e tente novamente.";
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-    return "Nenhuma câmera foi encontrada neste aparelho. Selecione uma foto da galeria.";
+    return "Nenhuma câmera foi encontrada neste aparelho.";
   }
   if (name === "NotReadableError" || name === "TrackStartError") {
-    return "A câmera está em uso por outro aplicativo. Feche a câmera ou selecione uma foto da galeria.";
+    return "A câmera está sendo usada por outro aplicativo. Feche a câmera em outros apps e tente novamente.";
   }
   if (typeof window !== "undefined" && !window.isSecureContext && window.location.hostname !== "localhost") {
-    return "Abra o app em um endereço seguro HTTPS ou selecione uma foto da galeria.";
+    return "Abra o app pelo endereço seguro HTTPS para liberar a câmera.";
   }
-  return "Não foi possível abrir a câmera. Tente novamente ou selecione uma foto da galeria.";
+  return "Não foi possível abrir a câmera. Tente novamente.";
 };
 
-const parseExifDate = (value: string) => {
-  const match = value.trim().match(/^(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
-  if (!match) return null;
-  const [, year, month, day, hour, minute, second] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
-  return Number.isNaN(date.getTime()) ? null : date;
-};
+const waitForVideo = (video: HTMLVideoElement) => new Promise<void>((resolve, reject) => {
+  if (video.readyState >= 2 && video.videoWidth > 0) {
+    resolve();
+    return;
+  }
+  const timer = window.setTimeout(() => {
+    cleanup();
+    reject(new Error("camera_timeout"));
+  }, 10000);
+  const onReady = () => {
+    if (!video.videoWidth) return;
+    cleanup();
+    resolve();
+  };
+  const onError = () => {
+    cleanup();
+    reject(new Error("camera_video_failed"));
+  };
+  const cleanup = () => {
+    window.clearTimeout(timer);
+    video.removeEventListener("loadedmetadata", onReady);
+    video.removeEventListener("canplay", onReady);
+    video.removeEventListener("error", onError);
+  };
+  video.addEventListener("loadedmetadata", onReady);
+  video.addEventListener("canplay", onReady);
+  video.addEventListener("error", onError);
+});
 
-const readExifCaptureDate = async (file: File): Promise<Date | null> => {
-  if (!/jpe?g/i.test(file.type) && !/\.jpe?g$/i.test(file.name)) return null;
-
+const requestCamera = async (facing: "user" | "environment") => {
+  if (!navigator.mediaDevices?.getUserMedia) throw new DOMException("Camera unavailable", "NotFoundError");
   try {
-    const buffer = await file.slice(0, Math.min(file.size, 1024 * 1024)).arrayBuffer();
-    const view = new DataView(buffer);
-    if (view.byteLength < 12 || view.getUint16(0, false) !== 0xffd8) return null;
-
-    let offset = 2;
-    while (offset + 4 < view.byteLength) {
-      if (view.getUint8(offset) !== 0xff) {
-        offset += 1;
-        continue;
-      }
-
-      const marker = view.getUint8(offset + 1);
-      if (marker === 0xda || marker === 0xd9) break;
-      const segmentLength = view.getUint16(offset + 2, false);
-      if (segmentLength < 2 || offset + 2 + segmentLength > view.byteLength) break;
-
-      if (marker === 0xe1 && segmentLength >= 8) {
-        const exifStart = offset + 4;
-        const isExif = String.fromCharCode(
-          view.getUint8(exifStart),
-          view.getUint8(exifStart + 1),
-          view.getUint8(exifStart + 2),
-          view.getUint8(exifStart + 3),
-        ) === "Exif";
-
-        if (isExif) {
-          const tiffStart = exifStart + 6;
-          if (tiffStart + 8 > view.byteLength) return null;
-          const endian = view.getUint16(tiffStart, false);
-          const little = endian === 0x4949;
-          if (!little && endian !== 0x4d4d) return null;
-
-          const get16 = (position: number) => view.getUint16(position, little);
-          const get32 = (position: number) => view.getUint32(position, little);
-          const readAscii = (entryOffset: number) => {
-            const count = get32(entryOffset + 4);
-            if (!count) return "";
-            const valueOffset = count <= 4 ? entryOffset + 8 : tiffStart + get32(entryOffset + 8);
-            if (valueOffset < 0 || valueOffset + count > view.byteLength) return "";
-            let text = "";
-            for (let i = 0; i < count; i += 1) {
-              const code = view.getUint8(valueOffset + i);
-              if (!code) break;
-              text += String.fromCharCode(code);
-            }
-            return text;
-          };
-          const scanIfd = (ifdOffset: number, wantedTags: number[]) => {
-            if (ifdOffset < 0 || ifdOffset + 2 > view.byteLength) return null;
-            const entries = get16(ifdOffset);
-            for (let index = 0; index < entries; index += 1) {
-              const entry = ifdOffset + 2 + index * 12;
-              if (entry + 12 > view.byteLength) break;
-              const tag = get16(entry);
-              if (wantedTags.includes(tag)) {
-                const parsed = parseExifDate(readAscii(entry));
-                if (parsed) return parsed;
-              }
-            }
-            return null;
-          };
-
-          const ifd0 = tiffStart + get32(tiffStart + 4);
-          if (ifd0 + 2 > view.byteLength) return null;
-          const entries = get16(ifd0);
-          let exifIfd: number | null = null;
-          for (let index = 0; index < entries; index += 1) {
-            const entry = ifd0 + 2 + index * 12;
-            if (entry + 12 > view.byteLength) break;
-            if (get16(entry) === 0x8769) {
-              exifIfd = tiffStart + get32(entry + 8);
-              break;
-            }
-          }
-
-          if (exifIfd != null) {
-            const original = scanIfd(exifIfd, [0x9003, 0x9004]);
-            if (original) return original;
-          }
-
-          const generic = scanIfd(ifd0, [0x0132]);
-          if (generic) return generic;
-        }
-      }
-
-      offset += 2 + segmentLength;
-    }
-  } catch (error) {
-    console.warn("Não foi possível ler EXIF da foto:", error);
+    return await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: facing },
+        width: { ideal: 1280 },
+        height: { ideal: 1600 },
+      },
+      audio: false,
+    });
+  } catch (error: unknown) {
+    const name = String((error as { name?: string })?.name || "");
+    if (!["OverconstrainedError", "ConstraintNotSatisfiedError"].includes(name)) throw error;
+    return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   }
-
-  return null;
 };
 
-const getGalleryCaptureDate = async (file: File) => {
-  const exifDate = await readExifCaptureDate(file);
-  if (exifDate) return exifDate;
-  if (Number.isFinite(file.lastModified) && file.lastModified > 0) {
-    const browserDate = new Date(file.lastModified);
-    if (!Number.isNaN(browserDate.getTime())) return browserDate;
+const drawScaled = (
+  canvas: HTMLCanvasElement,
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  mirror = false,
+) => {
+  const scale = Math.min(1, MAX_CAPTURE_SIDE / Math.max(sourceWidth, sourceHeight));
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Não foi possível preparar a foto.");
+  context.save();
+  if (mirror) {
+    context.translate(canvas.width, 0);
+    context.scale(-1, 1);
   }
-  return null;
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
+  context.restore();
 };
 
-const sameLocalDay = (a: Date, b: Date) =>
-  a.getFullYear() === b.getFullYear()
-  && a.getMonth() === b.getMonth()
-  && a.getDate() === b.getDate();
+const canvasToBlob = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => {
+  canvas.toBlob((blob) => {
+    if (!blob) reject(new Error("Não foi possível gerar a foto. Tente novamente."));
+    else resolve(blob);
+  }, "image/jpeg", JPEG_QUALITY);
+});
 
-/**
- * Câmera mobile-first reutilizável do app mecânico.
- * A galeria fica liberada por padrão para garantir envio de fotos já existentes.
- * Use allowGallery={false} somente em capturas que precisem ser obrigatoriamente ao vivo.
- * Use galleryMaxAgeMinutes para bloquear fotos antigas em fluxos que aceitam galeria com limite de tempo.
- */
 export default function CameraCapture({
   open,
   onClose,
@@ -173,100 +124,79 @@ export default function CameraCapture({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const openRef = useRef(open);
+  const startIdRef = useRef(0);
   const [foto, setFoto] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [galleryBlock, setGalleryBlock] = useState<string | null>(null);
   const galleryEnabled = allowGallery !== false;
 
-  const stop = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
+  const stop = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
-  };
+  }, []);
 
-  const start = async () => {
-    if (starting) return;
+  const start = useCallback(async () => {
+    const startId = ++startIdRef.current;
     setStarting(true);
     setErro(null);
     setFoto(null);
-    setGalleryBlock(null);
     stop();
-
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setErro(galleryEnabled
-          ? "Este navegador não liberou acesso à câmera. Selecione uma foto da galeria."
-          : "Este navegador não liberou acesso à câmera. Use Chrome/Safari atualizado ou HTTPS.");
-        return;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: facing }, width: { ideal: 1080 }, height: { ideal: 1440 } },
-        audio: false,
-      });
-
-      if (!openRef.current) {
+      const stream = await requestCamera(facing);
+      if (startId !== startIdRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      const video = videoRef.current;
+      if (!video) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error("camera_video_failed");
       }
+      streamRef.current = stream;
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      await video.play();
+      await waitForVideo(video);
     } catch (error) {
       console.error("Erro ao iniciar câmera do app mecânico:", error);
+      stop();
       setErro(getCameraMessage(error));
     } finally {
-      setStarting(false);
+      if (startId === startIdRef.current) setStarting(false);
     }
-  };
+  }, [facing, stop]);
 
   useEffect(() => {
-    openRef.current = open;
     if (open) void start();
-    else stop();
+    else {
+      startIdRef.current += 1;
+      stop();
+      setFoto(null);
+      setErro(null);
+    }
     return () => {
-      openRef.current = false;
+      startIdRef.current += 1;
       stop();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, facing]);
+  }, [open, start, stop]);
 
   const tirar = () => {
-    const v = videoRef.current;
-    const c = canvasRef.current;
-    if (!v || !c) {
-      toast.error("Câmera não inicializada. Tente novamente.");
-      return;
-    }
-    if (!v.videoWidth || !v.videoHeight) {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
       toast.error("A câmera ainda não está pronta. Tente novamente.");
       return;
     }
-    c.width = v.videoWidth;
-    c.height = v.videoHeight;
-    const ctx = c.getContext("2d");
-    if (!ctx) {
-      toast.error("Não foi possível preparar a foto.");
-      return;
+    try {
+      drawScaled(canvas, video, video.videoWidth, video.videoHeight, facing === "user");
+      setFoto(canvas.toDataURL("image/jpeg", JPEG_QUALITY));
+      stop();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível tirar a foto.");
     }
-    ctx.save();
-    if (facing === "user") {
-      ctx.translate(c.width, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.drawImage(v, 0, 0, c.width, c.height);
-    ctx.restore();
-    setGalleryBlock(null);
-    setFoto(c.toDataURL("image/jpeg", 0.85));
-    stop();
   };
 
   const carregarDaGaleria = async (file?: File) => {
@@ -275,22 +205,12 @@ export default function CameraCapture({
       toast.error("Selecione um arquivo de imagem.");
       return;
     }
-
-    setGalleryBlock(null);
     if (galleryMaxAgeMinutes && galleryMaxAgeMinutes > 0) {
-      const capturedAt = await getGalleryCaptureDate(file);
-      const now = new Date();
-      const ageMs = capturedAt ? now.getTime() - capturedAt.getTime() : Number.POSITIVE_INFINITY;
-      const maxAgeMs = galleryMaxAgeMinutes * 60 * 1000;
-      const futureToleranceMs = 5 * 60 * 1000;
-      const invalid = !capturedAt || !sameLocalDay(capturedAt, now) || ageMs > maxAgeMs || ageMs < -futureToleranceMs;
-
-      if (invalid) {
-        setFoto(null);
-        setGalleryBlock(
-          "A imagem selecionada foi tirada fora do período permitido para este registro.\n\nPara registrar o KM, a foto precisa ter sido tirada há no máximo 1 hora.\n\nTire uma nova foto do painel ou selecione uma imagem recente para continuar.",
-        );
-        toast.error("Foto não aceita: imagem fora do período permitido.");
+      const capturedAt = Number(file.lastModified || 0);
+      const age = Date.now() - capturedAt;
+      const maxAge = galleryMaxAgeMinutes * 60 * 1000;
+      if (!capturedAt || age < -5 * 60 * 1000 || age > maxAge) {
+        toast.error("Foto não aceita: use uma imagem recente ou tire uma nova foto.");
         return;
       }
     }
@@ -298,30 +218,18 @@ export default function CameraCapture({
     const image = new Image();
     const objectUrl = URL.createObjectURL(file);
     image.onload = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) {
+      try {
+        const canvas = canvasRef.current;
+        if (!canvas) throw new Error("Não foi possível preparar a imagem.");
+        drawScaled(canvas, image, image.naturalWidth, image.naturalHeight);
+        setFoto(canvas.toDataURL("image/jpeg", JPEG_QUALITY));
+        setErro(null);
+        stop();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Não foi possível abrir essa imagem.");
+      } finally {
         URL.revokeObjectURL(objectUrl);
-        toast.error("Não foi possível preparar a imagem.");
-        return;
       }
-
-      const maxDimension = 2000;
-      const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        URL.revokeObjectURL(objectUrl);
-        toast.error("Não foi possível preparar a imagem.");
-        return;
-      }
-
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      setFoto(canvas.toDataURL("image/jpeg", 0.88));
-      setErro(null);
-      setGalleryBlock(null);
-      stop();
-      URL.revokeObjectURL(objectUrl);
     };
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -331,29 +239,25 @@ export default function CameraCapture({
   };
 
   const confirmar = async () => {
-    if (!canvasRef.current || saving) return;
+    const canvas = canvasRef.current;
+    if (!canvas || saving) return;
     setSaving(true);
-    canvasRef.current.toBlob(async (blob) => {
-      if (!blob) {
-        setSaving(false);
-        toast.error("Não foi possível gerar a foto. Tente novamente.");
-        return;
-      }
-      try {
-        await onCapture(blob);
-        stop();
-        onClose();
-      } catch (error: unknown) {
-        console.error("Erro ao salvar foto do app mecânico:", error);
-        toast.error(error instanceof Error ? error.message : "Erro ao salvar foto");
-      } finally {
-        setSaving(false);
-      }
-    }, "image/jpeg", 0.88);
+    try {
+      const blob = await canvasToBlob(canvas);
+      if (blob.size > 5 * 1024 * 1024) throw new Error("A foto ficou muito grande. Tire novamente.");
+      await onCapture(blob);
+      stop();
+      onClose();
+    } catch (error) {
+      console.error("Erro ao salvar foto do app mecânico:", error);
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar foto");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { stop(); onClose(); } }}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !saving) { stop(); onClose(); } }}>
       <DialogContent className="max-w-md p-0 overflow-hidden bg-black border-0">
         <div className="relative bg-black aspect-[3/4] w-full flex items-center justify-center">
           {starting && (
@@ -362,7 +266,7 @@ export default function CameraCapture({
             </div>
           )}
           {erro && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10 p-6 text-center">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 z-10 p-6 text-center bg-black">
               <AlertTriangle className="w-10 h-10 text-yellow-400" />
               <p className="text-sm">{erro}</p>
               <div className="flex flex-col gap-2 w-full max-w-xs">
@@ -374,7 +278,7 @@ export default function CameraCapture({
           {foto ? (
             <img src={foto} alt="Captura" className="w-full h-full object-contain" />
           ) : (
-            <video ref={videoRef} playsInline muted className="w-full h-full object-cover" style={facing === "user" ? { transform: "scaleX(-1)" } : undefined} />
+            <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover" style={facing === "user" ? { transform: "scaleX(-1)" } : undefined} />
           )}
           <canvas ref={canvasRef} className="hidden" />
           <input
@@ -390,7 +294,7 @@ export default function CameraCapture({
 
           <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/70 to-transparent flex items-center justify-between text-white">
             <div className="flex items-center gap-2"><Camera className="w-5 h-5" /><span className="font-semibold text-sm">{title}</span></div>
-            <button onClick={() => { stop(); onClose(); }} className="p-1 rounded-full bg-white/10 hover:bg-white/20"><X className="w-4 h-4" /></button>
+            <button onClick={() => { if (!saving) { stop(); onClose(); } }} className="p-1 rounded-full bg-white/10 hover:bg-white/20" aria-label="Fechar"><X className="w-4 h-4" /></button>
           </div>
 
           {hint && !foto && !starting && !erro && (
@@ -399,13 +303,6 @@ export default function CameraCapture({
         </div>
 
         <div className="p-4 bg-black space-y-3">
-          {galleryBlock && (
-            <div className="rounded-lg border border-red-500/50 bg-red-950/60 p-3 text-red-100">
-              <div className="mb-2 flex items-center gap-2 text-sm font-bold"><AlertTriangle className="h-5 w-5" /> FOTO NÃO ACEITA</div>
-              <p className="whitespace-pre-line text-xs leading-relaxed">{galleryBlock}</p>
-            </div>
-          )}
-
           {foto ? (
             <>
               <div className="grid grid-cols-2 gap-3">
@@ -425,7 +322,7 @@ export default function CameraCapture({
           ) : (
             <>
               <div className="flex justify-center">
-                <Button onClick={tirar} disabled={starting || !!erro} className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40">
+                <Button onClick={tirar} disabled={starting || !!erro} className="w-20 h-20 rounded-full bg-white hover:bg-white/90 p-0 border-4 border-white/40" aria-label="Tirar foto">
                   <div className="w-full h-full rounded-full bg-white border-2 border-black/20" />
                 </Button>
               </div>
