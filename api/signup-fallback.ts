@@ -48,7 +48,8 @@ export default async function handler(req: any, res?: any) {
     return send({ ok: false, error: 'dados_invalidos' }, 400);
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  // Mesmo Supabase do Estoque Interno e do cliente publicado; evitar env legada de outro projeto.
+  const supabaseUrl = 'https://djfjnxmbvjgweqzjvqtr.supabase.co';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
