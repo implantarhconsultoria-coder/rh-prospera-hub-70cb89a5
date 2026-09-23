@@ -75,29 +75,46 @@ export default function EstoqueInternoPage() {
     }
     if (!quiet) setInitializing(true);
     setAccessError('');
-    // O banco verifica auth.uid() e a role oficial de admin. Não depender do
-    // e-mail do JWT, de cache local ou de uma segunda whitelist de front-end.
-    const a = await db.rpc('estoque_interno_meu_acesso').maybeSingle();
-    if (a.error) {
-      setAccess(null);setItems([]);setMoves([]);
-      setAccessError('Não foi possível verificar seu acesso agora. '+a.error.message);
-      setInitializing(false);
-      return;
+    // Consultar a tabela existente diretamente: uma RPC recém-criada pode não
+    // constar no schema cache do PostgREST, mesmo já estando no PostgreSQL.
+    const a = await db.from('estoque_interno_acessos')
+      .select('nome,email,ativo,pode_movimentar,pode_gerenciar')
+      .eq('email',email).maybeSingle();
+    let currentAccess: Access | null = !a.error && a.data?.ativo ? a.data as Access : null;
+
+    if (!currentAccess) {
+      // A role oficial de administrador é independente da lista de colaboradores
+      // autorizados; todas as consultas e escritas seguem protegidas no servidor.
+      const admin = await db.from('user_roles').select('role')
+        .eq('user_id',session.user.id).eq('role','admin').maybeSingle();
+      if (!admin.error && admin.data?.role === 'admin') {
+        currentAccess = {
+          nome: session.user.user_metadata?.nome_completo || session.user.user_metadata?.full_name || 'Administrador TOPAC',
+          email, ativo: true, pode_movimentar: true, pode_gerenciar: true,
+        };
+      } else {
+        setAccess(null);setItems([]);setMoves([]);
+        setAccessError(a.error
+          ? 'Falha ao consultar o acesso: '+a.error.message
+          : admin.error
+            ? 'Falha ao confirmar a função de administrador: '+admin.error.message
+            : 'Sua conta não possui permissão ativa para o Estoque Interno.');
+        setInitializing(false);
+        return;
+      }
     }
-    if (!a.data?.ativo) {
-      setAccess(null);setItems([]);setMoves([]);
-      setAccessError('Sua conta não possui permissão ativa para o Estoque Interno.');
-      setInitializing(false);
-      return;
-    }
-    setAccess(a.data as Access);
     const r = await db.from('estoque_interno_itens')
       .select('id,codigo,descricao,aplicacao,unidade,saldo_atual,saldo_inicial,estoque_minimo,estoque_maximo')
       .order('codigo',{ascending:true});
-    if (r.error) toast.error('Erro ao carregar o inventário: ' + r.error.message);
-    else setItems((r.data || []) as StockItem[]);
+    if (r.error) {
+      setAccess(null);setItems([]);setMoves([]);
+      setAccessError('Não foi possível carregar os produtos: '+r.error.message);
+    } else {
+      setAccess(currentAccess);
+      setItems((r.data || []) as StockItem[]);
+    }
     setInitializing(false);
-  },[session?.user?.id]);
+  },[session?.user?.id,email]);
   const loadMoves = useCallback(async () => {
     if (!access) return;
     let q = db.from('estoque_interno_movimentos').select(
