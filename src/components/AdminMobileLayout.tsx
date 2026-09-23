@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Building2, FileText, History, Home, Search, Wrench,
+  ArrowLeft, Building2, FileText, Home, Search, Wrench, Shirt, Archive,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -24,12 +24,18 @@ const SEARCH_ITEMS: SearchItem[] = [
   { label: 'Solicitar Férias', path: '/admin/central-contabilidade?modulo=ferias' },
   { label: 'ASO', path: '/admin/central-contabilidade?modulo=aso' },
   { label: 'Envio para Clínicas', path: '/admin/central-contabilidade?modulo=clinicas' },
-  { label: 'Fechamento', path: '/admin/central-contabilidade' },
   { label: 'Ponto', path: '/admin/fechamento-ponto' },
   { label: 'Assinatura Digital / Holerites', path: '/admin/folha-pagamento' },
   { label: 'EPI', path: '/admin/epi' },
-  { label: 'Uniformes', path: '/admin/uniformes' },
+  { label: 'Uniformes / Estoque de Uniformes', path: '/admin/uniformes' },
+  { label: 'Estoque Interno do Escritório', path: '/admin/estoque-interno' },
+  { label: 'Tela da Equipe do Escritório', path: '/estoque-interno' },
   { label: 'Almoxarifado', path: '/admin/almoxarifado' },
+  { label: 'Etiquetas', path: '/admin/etiquetas' },
+  { label: 'Combustível', path: '/admin/galoes-combustivel' },
+  { label: 'Rastreamento da Frota', path: '/admin/monitoramento' },
+  { label: 'Prestadores', path: '/admin/prestadores' },
+  { label: 'Histórico de Documentos', path: '/admin/historico' },
   { label: 'Frota / Documentos', path: '/admin/documentos-ativos' },
   { label: 'Abastecimento', path: '/admin/abastecimento-qrcode' },
   { label: 'App Mecânicos', path: '/admin/app-mecanico' },
@@ -60,7 +66,8 @@ const AdminMobileLayout: React.FC = () => {
     { label: 'Empresas', icon: Building2, path: '/admin/empresas', active: location.pathname.startsWith('/admin/empresas') || location.pathname.startsWith('/admin/funcionarios') },
     { label: 'Documentos', icon: FileText, path: '/admin/folha-pagamento', active: location.pathname.startsWith('/admin/folha-pagamento') },
     { label: 'Operação', icon: Wrench, path: '/admin/app-mecanico', active: location.pathname.startsWith('/admin/app-mecanico') },
-    { label: 'Histórico', icon: History, path: '/admin/historico', active: location.pathname.startsWith('/admin/historico') },
+    { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', active: location.pathname.startsWith('/admin/uniformes') },
+    { label: 'Estoque', icon: Archive, path: '/admin/estoque-interno', active: location.pathname.startsWith('/admin/estoque-interno') },
   ];
 
   return (
@@ -84,7 +91,7 @@ const AdminMobileLayout: React.FC = () => {
 
       {!isHome && (
         <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-fuchsia-500/15 bg-[#07040e]/94 px-3 backdrop-blur-xl">
-          <Button size="icon" variant="ghost" className="rounded-full text-zinc-300 hover:bg-fuchsia-500/10 hover:text-white" onClick={() => nav(-1)} aria-label="Voltar">
+          <Button size="icon" variant="ghost" className="rounded-full text-zinc-300 hover:bg-fuchsia-500/10 hover:text-white" onClick={() => nav('/admin')} aria-label="Voltar para o início">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="min-w-0 flex-1">
@@ -98,14 +105,14 @@ const AdminMobileLayout: React.FC = () => {
         </header>
       )}
 
-      <main className={isHome ? 'pb-8' : 'px-3 pt-3 pb-28'}>
+      <main className={isHome ? 'pb-8' : 'px-3 pt-3 pb-32'}>
         {isHome ? (
           isDirector ? <Outlet /> : <div className="mobile-admin-home-shell"><AdminMobileDashboard onSearch={() => setSearchOpen(true)} /></div>
         ) : <Outlet />}
       </main>
 
       {!isHome && (
-        <nav className="fixed bottom-2 left-1/2 z-50 grid w-[calc(100%-16px)] max-w-lg -translate-x-1/2 grid-cols-5 rounded-[24px] border border-fuchsia-500/20 bg-[#090611]/94 px-1.5 pb-[calc(7px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_45px_rgba(0,0,0,.50),0_0_35px_rgba(168,85,247,.08)] backdrop-blur-xl">
+        <nav className="fixed bottom-2 left-1/2 z-50 grid w-[calc(100%-16px)] max-w-xl -translate-x-1/2 grid-cols-6 rounded-[24px] border border-fuchsia-500/20 bg-[#090611]/94 px-1.5 pb-[calc(7px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_45px_rgba(0,0,0,.50),0_0_35px_rgba(168,85,247,.08)] backdrop-blur-xl">
           {bottomItems.map(item => (
             <button
               key={item.path}
