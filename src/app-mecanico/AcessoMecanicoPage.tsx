@@ -4,8 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, ShieldCheck, AlertCircle, ScanFace, CheckCircle2 } from "lucide-react";
-import MechanicFaceCapture from "./MechanicFaceCapture";
+import { Loader2, ShieldCheck, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface Opcao { id: string; nome: string; empresa: string; filial: string; funcao: string; }
 interface PinValidationResult { ok?: boolean; error?: string; count?: number; usuarios?: Opcao[]; }
@@ -16,9 +15,12 @@ const acessoRpc = supabase as unknown as {
 
 const MECHANIC_ICON = "/icons/topac-mecanicos-oficial-20260908-1050-180.png";
 const MECHANIC_MANIFEST = "/manifest-mecanicos-install-20260908.json";
+const SESSION_KEY = "topac_mecanico_session_v2";
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 const normalizarUsuarios = (usuarios: unknown): Opcao[] => {
   if (!Array.isArray(usuarios)) return [];
+  const vistos = new Set<string>();
   return usuarios
     .map((item) => item as Partial<Opcao>)
     .filter((item) => Boolean(item?.id))
@@ -28,7 +30,12 @@ const normalizarUsuarios = (usuarios: unknown): Opcao[] => {
       empresa: String(item.empresa || ""),
       filial: String(item.filial || ""),
       funcao: String(item.funcao || ""),
-    }));
+    }))
+    .filter((item) => {
+      if (vistos.has(item.id)) return false;
+      vistos.add(item.id);
+      return true;
+    });
 };
 
 const mensagemErroPin = (error?: string) => {
@@ -36,6 +43,24 @@ const mensagemErroPin = (error?: string) => {
   if (error === "pin_nao_encontrado") return "PIN não encontrado. Confira os 4 últimos números do CPF.";
   if (error === "sem_permissao_modulo") return "Seu acesso ainda não está liberado para o App Mecânicos.";
   return "PIN inválido ou acesso não liberado.";
+};
+
+const limparIdentidadeAnterior = () => {
+  localStorage.removeItem("app_mecanico_acesso_id");
+  localStorage.removeItem("acesso_externo");
+  sessionStorage.removeItem(SESSION_KEY);
+};
+
+const criarSessao = (accessId: string) => {
+  const issuedAt = Date.now();
+  const session = {
+    version: 2,
+    accessId,
+    nonce: globalThis.crypto?.randomUUID?.() || `${issuedAt}-${Math.random().toString(16).slice(2)}`,
+    issuedAt,
+    expiresAt: issuedAt + SESSION_TTL_MS,
+  };
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
 };
 
 const aplicarIdentidadeMecanico = () => {
@@ -63,16 +88,15 @@ export default function AcessoMecanicoPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [opcoes, setOpcoes] = useState<Opcao[] | null>(null);
-  const [pendingUser, setPendingUser] = useState<Opcao | null>(null);
-  const [faceMode, setFaceMode] = useState<"login" | "enroll" | null>(null);
-  const [faceAccessId, setFaceAccessId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     aplicarIdentidadeMecanico();
+    limparIdentidadeAnterior();
   }, []);
 
   const entrarPorId = (accessId: string) => {
-    localStorage.setItem("app_mecanico_acesso_id", accessId);
+    limparIdentidadeAnterior();
+    criarSessao(accessId);
     const qr = searchParams.get("qr") || searchParams.get("codigo") || "";
     navigate(`/app-mecanico/${accessId}${qr ? `/abastecimento?qr=${encodeURIComponent(qr)}` : ""}`, { replace: true });
   };
@@ -85,42 +109,11 @@ export default function AcessoMecanicoPage() {
     entrarPorId(u.id);
   };
 
-  const prepararEntrada = async (u: Opcao) => {
-    if (!u.id) return entrar(u);
-    setLoading(true);
-    setErro(null);
-    try {
-      const response = await fetch("/api/mechanic-face", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ action: "status", access_id: u.id }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok && data?.ok && data?.enrolled) {
-        entrar(u);
-        return;
-      }
-      if (response.ok && data?.ok) {
-        setPendingUser(u);
-        setOpcoes(null);
-        return;
-      }
-      entrar(u);
-    } catch {
-      // O facial nunca bloqueia o método que já funcionava por PIN.
-      entrar(u);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const validar = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (loading) return;
     setErro(null);
     setOpcoes(null);
-    setPendingUser(null);
 
     if (pin.length !== 4) {
       setErro("Digite os 4 últimos números do CPF.");
@@ -152,42 +145,20 @@ export default function AcessoMecanicoPage() {
         return;
       }
 
-      if ((res.count === 1 || usuarios.length === 1) && usuarios[0]) {
-        await prepararEntrada(usuarios[0]);
-      } else {
-        setOpcoes(usuarios);
+      const countInformado = Number(res.count);
+      const respostaCoerente = !Number.isFinite(countInformado) || countInformado === usuarios.length;
+      if (usuarios.length === 1 && respostaCoerente) {
+        entrar(usuarios[0]);
+        return;
       }
+
+      setOpcoes(usuarios);
     } catch (error) {
       console.error("Falha inesperada no acesso do app mecânico:", error);
       setErro("Não foi possível validar agora. Verifique a conexão e tente novamente.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleFaceSuccess = async (data: any) => {
-    if (faceMode === "login") {
-      const accessId = String(data?.access_id || "");
-      if (!accessId) {
-        setFaceMode(null);
-        setErro("Não foi possível identificar o cadastro. Entre pelo PIN.");
-        return;
-      }
-      setFaceMode(null);
-      entrarPorId(accessId);
-      return;
-    }
-
-    if (faceMode === "enroll" && pendingUser) {
-      setFaceMode(null);
-      entrar(pendingUser);
-    }
-  };
-
-  const abrirCadastroFacial = () => {
-    if (!pendingUser?.id) return;
-    setFaceAccessId(pendingUser.id);
-    setFaceMode("enroll");
   };
 
   return (
@@ -213,36 +184,8 @@ export default function AcessoMecanicoPage() {
 
         <Card className="border-purple-500/25 bg-[#100d17]/95 text-white shadow-2xl shadow-black/40 backdrop-blur">
           <CardContent className="p-5">
-            {pendingUser ? (
-              <div className="space-y-4">
-                <div className="text-center">
-                  <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-fuchsia-500/10 text-fuchsia-300"><ScanFace className="h-7 w-7" /></div>
-                  <h2 className="mt-3 text-lg font-black">Ative seu acesso facial</h2>
-                  <p className="mt-2 text-sm leading-6 text-zinc-400">{pendingUser.nome}, cadastre seu rosto uma vez. Depois você entra no App Mecânicos apenas olhando para a câmera.</p>
-                </div>
-                <Button type="button" onClick={abrirCadastroFacial} className="h-14 w-full bg-gradient-to-r from-fuchsia-700 to-purple-500 text-base font-black text-white">
-                  <ScanFace className="mr-2 h-5 w-5" />CADASTRAR MEU ROSTO
-                </Button>
-                <Button type="button" variant="outline" onClick={() => entrar(pendingUser)} className="h-12 w-full border-zinc-700 bg-black/20 text-zinc-200 hover:bg-white/5 hover:text-white">
-                  Entrar agora sem cadastrar
-                </Button>
-                <p className="text-center text-[11px] leading-5 text-zinc-500">Se você já cadastrou o rosto no Portal de Documentos, o sistema reaproveita o mesmo cadastro automaticamente.</p>
-              </div>
-            ) : !opcoes ? (
+            {!opcoes ? (
               <form onSubmit={validar} className="space-y-5">
-                <Button
-                  type="button"
-                  onClick={() => { setFaceAccessId(undefined); setFaceMode("login"); setErro(null); }}
-                  className="h-14 w-full bg-gradient-to-r from-fuchsia-700 to-purple-500 text-base font-black text-white hover:from-fuchsia-600 hover:to-purple-400"
-                  disabled={loading}
-                >
-                  <ScanFace className="mr-2 h-5 w-5" />ENTRAR COM MEU ROSTO
-                </Button>
-
-                <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[.16em] text-zinc-600">
-                  <div className="h-px flex-1 bg-zinc-800" /><span>ou use seu PIN</span><div className="h-px flex-1 bg-zinc-800" />
-                </div>
-
                 <div className="rounded-xl border border-purple-500/20 bg-black/20 p-4">
                   <label className="mb-3 block text-sm font-semibold text-zinc-200">PIN de acesso</label>
                   <Input
@@ -257,7 +200,7 @@ export default function AcessoMecanicoPage() {
                     disabled={loading}
                   />
                   <p className="mt-3 text-center text-xs text-zinc-400">
-                    Primeiro acesso? Digite os <strong className="text-zinc-200">4 últimos números do seu CPF</strong>. Depois você poderá cadastrar seu rosto.
+                    Digite os <strong className="text-zinc-200">4 últimos números do seu CPF</strong>.
                   </p>
                 </div>
 
@@ -270,32 +213,32 @@ export default function AcessoMecanicoPage() {
 
                 <Button
                   type="submit"
-                  className="h-14 w-full bg-[#17121f] text-base font-bold text-white hover:bg-[#21182e]"
+                  className="h-14 w-full bg-gradient-to-r from-fuchsia-700 to-purple-500 text-base font-black text-white hover:from-fuchsia-600 hover:to-purple-400"
                   disabled={loading || pin.length !== 4}
                 >
-                  {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar pelo PIN"}
+                  {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Entrar no App Mecânicos"}
                 </Button>
 
                 <div className="flex items-center justify-center gap-2 text-[11px] text-zinc-500">
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  Mesmo reconhecimento facial do Portal de Documentos
+                  A sessão fica vinculada somente a este acesso
                 </div>
               </form>
             ) : (
               <div className="space-y-3">
                 <div>
                   <p className="font-semibold">Encontramos mais de um cadastro</p>
-                  <p className="text-xs text-zinc-400">Selecione seu nome para continuar.</p>
+                  <p className="text-xs text-zinc-400">Confira nome e unidade antes de continuar.</p>
                 </div>
                 {opcoes.map((u) => (
                   <button
                     key={u.id}
-                    onClick={() => void prepararEntrada(u)}
+                    onClick={() => entrar(u)}
                     className="w-full rounded-xl border border-purple-500/20 bg-black/20 p-4 text-left transition hover:border-purple-400/60 hover:bg-purple-950/20"
                     disabled={loading}
                   >
                     <div className="font-semibold">{u.nome}</div>
-                    <div className="mt-1 text-xs text-zinc-400">{[u.empresa, u.funcao].filter(Boolean).join(" • ")}</div>
+                    <div className="mt-1 text-xs text-zinc-400">{[u.empresa, u.filial, u.funcao].filter(Boolean).join(" • ")}</div>
                   </button>
                 ))}
                 <Button variant="ghost" className="w-full text-zinc-300 hover:bg-white/5 hover:text-white" onClick={() => { setOpcoes(null); setPin(""); setErro(null); }}>
@@ -307,18 +250,9 @@ export default function AcessoMecanicoPage() {
         </Card>
 
         <div className="flex items-center justify-center gap-2 text-[10px] text-zinc-600">
-          <CheckCircle2 className="h-3.5 w-3.5" /> Cadastro facial único para documentos e App Mecânicos
+          <CheckCircle2 className="h-3.5 w-3.5" /> Sessão protegida contra reaproveitamento de outro usuário
         </div>
       </div>
-
-      {faceMode && (
-        <MechanicFaceCapture
-          mode={faceMode}
-          accessId={faceMode === "enroll" ? faceAccessId : undefined}
-          onSuccess={handleFaceSuccess}
-          onCancel={() => setFaceMode(null)}
-        />
-      )}
     </div>
   );
 }
