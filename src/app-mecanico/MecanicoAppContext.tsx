@@ -23,7 +23,16 @@ interface MecanicoAppCtx {
   recarregar: () => Promise<void>;
 }
 
+interface MechanicSession {
+  version: number;
+  accessId: string;
+  nonce: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+
 const Ctx = createContext<MecanicoAppCtx | null>(null);
+const SESSION_KEY = "topac_mecanico_session_v2";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useMecanicoApp = () => {
@@ -56,6 +65,35 @@ const normalizarMecanico = (input: Partial<Mecanico> | undefined | null): Mecani
   };
 };
 
+const lerSessao = (): MechanicSession | null => {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<MechanicSession>;
+    if (
+      value.version !== 2
+      || !value.accessId
+      || !value.nonce
+      || !Number.isFinite(value.issuedAt)
+      || !Number.isFinite(value.expiresAt)
+      || Number(value.expiresAt) <= Date.now()
+    ) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return value as MechanicSession;
+  } catch {
+    sessionStorage.removeItem(SESSION_KEY);
+    return null;
+  }
+};
+
+const limparSessao = () => {
+  sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem("app_mecanico_acesso_id");
+  localStorage.removeItem("acesso_externo");
+};
+
 export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const { acessoId } = useParams<{ acessoId: string }>();
   const navigate = useNavigate();
@@ -63,9 +101,17 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
+  const sair = useCallback(() => {
+    limparSessao();
+    setMecanico(null);
+    navigate("/mecanicos", { replace: true });
+  }, [navigate]);
+
   const carregar = useCallback(async () => {
-    if (!acessoId) {
-      setErro("Acesso inválido. Entre novamente pelo PIN.");
+    const sessao = lerSessao();
+    if (!acessoId || !sessao || sessao.accessId !== acessoId) {
+      limparSessao();
+      setErro("Sessão encerrada ou pertencente a outro usuário. Entre novamente pelo PIN.");
       setMecanico(null);
       setLoading(false);
       return;
@@ -79,19 +125,19 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
       const result = data as ValidarAcessoResult | null;
       const mecanicoNormalizado = normalizarMecanico(result?.mecanico);
 
-      if (error || !result?.ok || !mecanicoNormalizado) {
+      if (error || !result?.ok || !mecanicoNormalizado || mecanicoNormalizado.acesso_id !== sessao.accessId) {
         console.error("Erro ao validar acesso do app mecânico:", error || result?.error || data);
+        limparSessao();
         setErro(
           result?.error === "bloqueado"
             ? "Acesso bloqueado pelo administrador."
-            : "Acesso não autorizado ou cadastro incompleto. Entre novamente pelo PIN."
+            : "Acesso não autorizado ou sessão divergente. Entre novamente pelo PIN."
         );
         setMecanico(null);
         return;
       }
 
       setMecanico(mecanicoNormalizado);
-      localStorage.setItem("app_mecanico_acesso_id", mecanicoNormalizado.acesso_id);
     } catch (error) {
       console.error("Falha inesperada ao carregar app mecânico:", error);
       setErro("Falha ao carregar o app mecânico. Verifique a internet e tente novamente.");
@@ -108,8 +154,15 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
     let active = true;
     const heartbeat = async () => {
       if (!active || document.visibilityState === "hidden") return;
+      const sessao = lerSessao();
+      if (!sessao || sessao.accessId !== mecanico.acesso_id) {
+        sair();
+        return;
+      }
       try {
-        await mecanicoRpc.rpc("app_mecanico_validar_acesso", { p_acesso_id: mecanico.acesso_id });
+        const { data, error } = await mecanicoRpc.rpc("app_mecanico_validar_acesso", { p_acesso_id: mecanico.acesso_id });
+        const result = data as ValidarAcessoResult | null;
+        if (error || !result?.ok || result.mecanico?.acesso_id !== mecanico.acesso_id) sair();
       } catch (error) {
         console.warn("Heartbeat do app mecânico indisponível:", error);
       }
@@ -123,13 +176,7 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [mecanico?.acesso_id]);
-
-  const sair = () => {
-    localStorage.removeItem("app_mecanico_acesso_id");
-    localStorage.removeItem("acesso_externo");
-    navigate("/mecanicos", { replace: true });
-  };
+  }, [mecanico?.acesso_id, sair]);
 
   if (loading) {
     return (
@@ -146,7 +193,7 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
           <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
           <p className="text-base text-foreground">{erro || "Acesso inválido"}</p>
           <button
-            onClick={() => navigate("/mecanicos", { replace: true })}
+            onClick={sair}
             className="text-primary underline text-sm"
           >
             Entrar novamente
