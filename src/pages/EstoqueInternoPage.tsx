@@ -424,9 +424,9 @@ export default function EstoqueInternoPage() {
         <p className="mb-3 text-xs text-zinc-400">Em uso: produtos movimentados desde 2024 ou cadastrados agora. Os mais antigos ficam no arquivo, sem alterar saldo ou histórico; a busca encontra todos.</p>
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Pesquisar também nos produtos antigos por código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s){productMetric==='quantidade'?' • Quantidade total: '+brQty(totalQty):''}</p>
-        <div className="overflow-x-auto rounded-lg border border-[#30283a]">
+        <div className="max-h-[68vh] overflow-auto rounded-lg border border-[#30283a]" aria-label="Produtos com cabeçalho fixo durante a rolagem">
           <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="bg-[#15121b] text-xs uppercase text-zinc-400"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead>
+            <thead className="sticky top-0 z-20 bg-[#15121b] text-xs uppercase text-zinc-300 shadow-[0_2px_0_#44334f]"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th scope="col" key={h} className="sticky top-0 bg-[#15121b] border-b border-[#44334f] p-3">{h}</th>)}</tr></thead>
             <tbody>{filtered.map(i=>{
               const low=attention.includes(i),zero=Number(i.saldo_atual)===0;
               return <tr key={i.id} className="border-b border-[#241f29] hover:bg-white/[.03]">
