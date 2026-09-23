@@ -44,6 +44,7 @@ export default function EstoqueInternoPage() {
   const { session, logout } = useApp();
   const location = useLocation();
   const standalone = location.pathname === '/estoque-interno';
+  const staffPortal = standalone;
   const email = (session?.user?.email || '').toLowerCase();
   const [access, setAccess] = useState<Access | null>(null);
   const [accessError, setAccessError] = useState('');
@@ -215,9 +216,9 @@ export default function EstoqueInternoPage() {
   if(!access)return <main className="flex min-h-[70vh] items-center justify-center bg-[#05070c] p-4"><div className={wrapBox+' max-w-xl text-center'}><ShieldCheck className="mx-auto mb-4 h-10 w-10 text-violet-400"/><h1 className="text-2xl font-bold text-white">Não foi possível abrir o Estoque Interno</h1><p className="mt-2 text-sm text-zinc-400">{accessError||'Aguardando autenticação da conta.'}</p><p className="mt-2 text-xs text-zinc-500">Conta: {email||'não identificada'}</p><button type="button" className={primaryButton+' mt-5'} onClick={()=>void load()}><RefreshCw className="h-4 w-4"/>Tentar novamente</button></div></main>;
 
   return <main className={(standalone?'min-h-screen ':'')+'bg-[#05070c] p-4 pb-12 text-white md:p-7'}>
-    {standalone&&<header className="mx-auto mb-6 flex max-w-[1500px] items-center justify-between border-b border-[#332943] pb-5">
-      <div><div className="text-xl font-black">TOPAC <span className="text-violet-400">RH PRO</span></div><div className="text-xs text-zinc-500">Ambiente do Escritório</div></div>
-      <button onClick={()=>void logout()} className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white"><LogOut className="h-4 w-4"/> Sair</button>
+    {standalone&&<header className="mx-auto mb-6 flex max-w-[1500px] items-center justify-between gap-3 border-b border-[#332943] pb-5">
+      <div><div className="text-xl font-black">TOPAC <span className="text-violet-400">RH PRO</span></div><div className="mt-1 text-xs font-semibold tracking-wider text-[#ffc400]">PORTAL EXCLUSIVO DO ESCRITÓRIO</div></div>
+      <button onClick={()=>void logout()} className="flex items-center gap-2 rounded-lg border border-[#44334f] px-3 py-2 text-xs text-zinc-300 hover:text-white"><LogOut className="h-4 w-4"/> Encerrar acesso</button>
     </header>}
     <div className="mx-auto max-w-[1500px] space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
