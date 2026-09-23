@@ -13,6 +13,7 @@ type Unidade = 'SAO_PAULO' | 'PRAIA_GRANDE' | 'GOIANIA';
 type Mode = 'painel' | 'estoque' | 'entregas' | 'historico';
 type Stock = { id:string; unidade:Unidade; tipo:string; tamanho:string; modelo:string; saldo:number; minimo:number; observacao:string|null; atualizado_em:string };
 type RecordedDelivery = { id:string; funcionario_id:string; company_id:string; unidade:Unidade; data_entrega:string; itens:DeliveryItem[]; gerado_por:string; criado_em:string };
+type Move={id:string;estoque_id:string;tipo:'entrada'|'contagem'|'saida';quantidade:number;saldo_antes:number;saldo_depois:number;funcionario_id:string|null;criado_em:string;observacao:string|null};
 type Line = { key:string; estoqueId:string; quantidade:number };
 const UNIDADES:{value:Unidade;label:string}[]=[
   {value:'SAO_PAULO',label:'São Paulo'},
@@ -55,6 +56,7 @@ const UniformePage:React.FC=()=>{
   const [unit,setUnit]=useState<Unidade|''>('');
   const [stock,setStock]=useState<Stock[]>([]);
   const [history,setHistory]=useState<RecordedDelivery[]>([]);
+  const [movements,setMovements]=useState<Move[]>([]);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [stockError,setStockError]=useState('');
@@ -73,14 +75,17 @@ const UniformePage:React.FC=()=>{
 
   const refresh=useCallback(async()=>{
     setLoading(true);setStockError('');
-    const [s,h]=await Promise.all([
+    const [s,h,m]=await Promise.all([
       db.from('uniforme_estoque').select('id,unidade,tipo,tamanho,modelo,saldo,minimo,observacao,atualizado_em').order('tipo').order('tamanho').order('modelo'),
       db.from('uniforme_entregas').select('id,funcionario_id,company_id,unidade,data_entrega,itens,gerado_por,criado_em').order('criado_em',{ascending:false}).limit(80),
+      db.from('uniforme_movimentos').select('id,estoque_id,tipo,quantidade,saldo_antes,saldo_depois,funcionario_id,criado_em,observacao').order('criado_em',{ascending:false}).limit(200),
     ]);
     if(s.error){setStockError('Não foi possível carregar o estoque: '+s.error.message);setStock([]);}
     else setStock((s.data||[]) as Stock[]);
     if(h.error)toast.error('Histórico de uniformes indisponível: '+h.error.message);
     else setHistory((h.data||[]) as RecordedDelivery[]);
+    if(m.error)toast.error('Movimentações de uniformes indisponíveis: '+m.error.message);
+    else setMovements((m.data||[]) as Move[]);
     setLoading(false);
   },[]);
   useEffect(()=>{void refresh();},[refresh]);
@@ -357,6 +362,17 @@ const UniformePage:React.FC=()=>{
           <p className="text-xs text-muted-foreground">{new Date(d.criado_em).toLocaleString('pt-BR')} • {d.itens.map(i=>i.tipo+' '+i.tamanho+' x'+i.quantidade).join('; ')}</p></div>
         <Button variant="outline" size="sm" onClick={()=>reprint(d)}>Reimprimir ficha</Button>
       </div>)}
+      <h3 className="font-bold pt-4">Movimentações de estoque</h3>
+      <p className="text-xs text-muted-foreground">Contagens, entradas e saídas confirmadas, com saldo antes/depois.</p>
+      {movements.filter(m=>stock.some(s=>s.id===m.estoque_id&&s.unidade===unit)).map(m=>{
+        const s=stock.find(s=>s.id===m.estoque_id);
+        return <div key={m.id} className="border-b py-2 text-sm flex flex-wrap justify-between gap-2">
+          <span>{new Date(m.criado_em).toLocaleString('pt-BR')} • <strong>{m.tipo==='saida'?'Saída':m.tipo==='entrada'?'Entrada':'Contagem'}</strong> • {s?.tipo} {s?.modelo} {s?.tamanho}
+            {m.funcionario_id?' • '+(employees.find(e=>e.id===m.funcionario_id)?.name||'Colaborador'):''}</span>
+          <span className="font-semibold">{m.saldo_antes} → {m.saldo_depois} ({m.tipo==='saida'?'-':'+'}{m.quantidade})</span>
+          {m.observacao&&<p className="basis-full text-xs text-muted-foreground">{m.observacao}</p>}
+        </div>;
+      })}
     </div>}
   </div>;
 };
