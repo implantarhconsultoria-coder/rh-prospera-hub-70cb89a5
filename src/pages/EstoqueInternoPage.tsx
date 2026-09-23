@@ -46,6 +46,7 @@ export default function EstoqueInternoPage() {
   const standalone = location.pathname === '/estoque-interno';
   const email = (session?.user?.email || '').toLowerCase();
   const [access, setAccess] = useState<Access | null>(null);
+  const [accessError, setAccessError] = useState('');
   const [initializing, setInitializing] = useState(true);
   const [items, setItems] = useState<StockItem[]>([]);
   const [moves, setMoves] = useState<Movement[]>([]);
@@ -68,12 +69,25 @@ export default function EstoqueInternoPage() {
   const [filterItem, setFilterItem] = useState('');
 
   const load = useCallback(async (quiet = false) => {
-    if (!email) {setInitializing(false); return;}
+    if (!session?.user?.id) {
+      setAccess(null);setAccessError('');setInitializing(false);
+      return;
+    }
     if (!quiet) setInitializing(true);
-    const a = await db.from('estoque_interno_acessos').select('nome,email,ativo,pode_movimentar,pode_gerenciar').eq('email',email).maybeSingle();
-    if (a.error || !a.data?.ativo) {
-      setAccess(null);setItems([]);setMoves([]);setInitializing(false);
-      if (a.error) toast.error('Falha ao verificar a permissão: ' + a.error.message);
+    setAccessError('');
+    // O banco verifica auth.uid() e a role oficial de admin. Não depender do
+    // e-mail do JWT, de cache local ou de uma segunda whitelist de front-end.
+    const a = await db.rpc('estoque_interno_meu_acesso').maybeSingle();
+    if (a.error) {
+      setAccess(null);setItems([]);setMoves([]);
+      setAccessError('Não foi possível verificar seu acesso agora. '+a.error.message);
+      setInitializing(false);
+      return;
+    }
+    if (!a.data?.ativo) {
+      setAccess(null);setItems([]);setMoves([]);
+      setAccessError('Sua conta não possui permissão ativa para o Estoque Interno.');
+      setInitializing(false);
       return;
     }
     setAccess(a.data as Access);
@@ -83,8 +97,7 @@ export default function EstoqueInternoPage() {
     if (r.error) toast.error('Erro ao carregar o inventário: ' + r.error.message);
     else setItems((r.data || []) as StockItem[]);
     setInitializing(false);
-  },[email]);
-
+  },[session?.user?.id]);
   const loadMoves = useCallback(async () => {
     if (!access) return;
     let q = db.from('estoque_interno_movimentos').select(
@@ -182,7 +195,7 @@ export default function EstoqueInternoPage() {
   };
 
   if(initializing)return <div className="flex min-h-[70vh] items-center justify-center gap-2 bg-[#05070c] text-zinc-300"><Loader2 className="h-5 w-5 animate-spin"/> Carregando Estoque Interno...</div>;
-  if(!access)return <main className="flex min-h-[70vh] items-center justify-center bg-[#05070c] p-4"><div className={wrapBox+' max-w-xl text-center'}><ShieldCheck className="mx-auto mb-4 h-10 w-10 text-violet-400"/><h1 className="text-2xl font-bold text-white">Acesso restrito ao escritório</h1><p className="mt-2 text-sm text-zinc-400">A conta {email||'atual'} não está autorizada para o Estoque Interno. Solicite acesso ao administrador da TOPAC.</p></div></main>;
+  if(!access)return <main className="flex min-h-[70vh] items-center justify-center bg-[#05070c] p-4"><div className={wrapBox+' max-w-xl text-center'}><ShieldCheck className="mx-auto mb-4 h-10 w-10 text-violet-400"/><h1 className="text-2xl font-bold text-white">Não foi possível abrir o Estoque Interno</h1><p className="mt-2 text-sm text-zinc-400">{accessError||'Aguardando autenticação da conta.'}</p><p className="mt-2 text-xs text-zinc-500">Conta: {email||'não identificada'}</p><button type="button" className={primaryButton+' mt-5'} onClick={()=>void load()}><RefreshCw className="h-4 w-4"/>Tentar novamente</button></div></main>;
 
   return <main className={(standalone?'min-h-screen ':'')+'bg-[#05070c] p-4 pb-12 text-white md:p-7'}>
     {standalone&&<header className="mx-auto mb-6 flex max-w-[1500px] items-center justify-between border-b border-[#332943] pb-5">
