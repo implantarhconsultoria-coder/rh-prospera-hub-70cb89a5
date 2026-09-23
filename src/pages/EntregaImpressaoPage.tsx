@@ -5,10 +5,11 @@ import { GENERIC_DELIVERY_RESPONSIBILITY_TEXT, RESPONSIBILITY_TEXT, type Deliver
 import type { Company, Employee } from '@/types/database';
 import { formatDate } from '@/lib/calculations';
 import { registrarDocumento } from '@/lib/documentoHistorico';
+import { supabase } from '@/integrations/supabase/client';
 import { buildPdfFileName, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
-type DeliveryPreview = Pick<Delivery, 'type' | 'date' | 'items'> & { responsavel?: string };
+type DeliveryPreview = Pick<Delivery, 'type' | 'date' | 'items'> & { id?: string; responsavel?: string };
 
 interface EntregaPreviewData {
   delivery: DeliveryPreview;
@@ -78,7 +79,16 @@ const EntregaImpressaoPage: React.FC = () => {
     const itensResumo = (delivery.items || [])
       .map((it) => `${it.tipo}${it.tamanho ? ` ${it.tamanho}` : ''} x${it.quantidade}`)
       .join(', ');
-    registrarDocumento({
+    const docMarker=delivery.type==='uniforme' && delivery.id && /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(delivery.id)
+      ? 'UNIFORME_ENTREGA_ID:'+delivery.id : '';
+    const register = async () => {
+      if(docMarker){
+        const {data:previous,error:lookupError}=await supabase.from('documentos_funcionario')
+          .select('id').eq('funcionario_id',emp.id).eq('observacao',docMarker).limit(1);
+        if(lookupError){console.warn('Não foi possível verificar histórico da ficha:',lookupError.message);}
+        else if(previous?.length)return;
+      }
+      await registrarDocumento({
       funcionarioId: emp.id,
       funcionarioNome: emp.name,
       companyId: company.id,
@@ -91,7 +101,10 @@ const EntregaImpressaoPage: React.FC = () => {
       geradoPorUserId: session?.user?.id || '00000000-0000-0000-0000-000000000000',
       geradoPorNome: session?.user?.user_metadata?.nome_completo || session?.user?.email || 'Sistema',
       unidade: company.city,
-    }).catch((e) => console.error('Falha ao registrar documento de entrega:', e));
+      ...(docMarker?{observacao:docMarker}:{}),
+    });
+    };
+    void register().catch((e) => console.error('Falha ao registrar documento de entrega:', e));
   }, [delivery, emp, company, session]);
 
   if (!delivery) return <div className="p-10 text-center text-lg">Documento indisponível. Gere novamente pela tela anterior.</div>;
@@ -170,6 +183,7 @@ const EntregaImpressaoPage: React.FC = () => {
               <p className="text-sm font-bold">{title}</p>
               <p className="text-xs">Data: {formatDate(delivery.date)}</p>
               <p className="text-xs">Emissão: {formatDate(new Date().toISOString())}</p>
+              {delivery.type==='uniforme'&&delivery.id&&<p className="text-[9px] text-gray-600">Ficha: {delivery.id.slice(0,8).toUpperCase()}</p>}
             </div>
           </div>
         </div>
