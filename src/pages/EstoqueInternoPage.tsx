@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Archive, ArrowDownCircle, ArrowUpCircle, Download, FileText, History, Loader2, LogOut, Package, Plus, RefreshCw, Search, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
@@ -54,10 +54,11 @@ const inputStyle = 'h-10 w-full rounded-lg border border-[#3d3448] bg-[#080b10] 
 const primaryButton = 'inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#ffc400] px-4 text-sm font-bold text-black hover:bg-[#ffe082] disabled:cursor-not-allowed disabled:opacity-40';
 
 export default function EstoqueInternoPage() {
-  const { session, logout } = useApp();
+  const { session, logout, userRoles } = useApp();
   const location = useLocation();
   const standalone = location.pathname === '/estoque-interno';
   const staffPortal = standalone;
+  const isTopacAdmin = userRoles.includes('admin');
   const email = (session?.user?.email || '').toLowerCase();
   const [access, setAccess] = useState<Access | null>(null);
   const [accessError, setAccessError] = useState('');
@@ -288,12 +289,19 @@ export default function EstoqueInternoPage() {
   return <main className={(standalone?'min-h-screen ':'')+'bg-[#05070c] p-4 pb-12 text-white md:p-7'}>
     {standalone&&<header className="mx-auto mb-6 flex max-w-[1500px] items-center justify-between gap-3 border-b border-[#332943] pb-5">
       <div><div className="text-xl font-black">TOPAC <span className="text-violet-400">RH PRO</span></div><div className="mt-1 text-xs font-semibold tracking-wider text-[#ffc400]">PORTAL EXCLUSIVO DO ESCRITÓRIO</div></div>
-      <button onClick={()=>void logout()} className="flex items-center gap-2 rounded-lg border border-[#44334f] px-3 py-2 text-xs text-zinc-300 hover:text-white"><LogOut className="h-4 w-4"/> Encerrar acesso</button>
+      <div className="flex items-center gap-2">
+        {isTopacAdmin&&<Link to="/admin/estoque-interno" className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-bold text-violet-200 hover:border-violet-400">Voltar à minha tela administrativa</Link>}
+        <button onClick={()=>void logout()} className="flex items-center gap-2 rounded-lg border border-[#44334f] px-3 py-2 text-xs text-zinc-300 hover:text-white"><LogOut className="h-4 w-4"/> Encerrar acesso</button>
+      </div>
     </header>}
     <div className="mx-auto max-w-[1500px] space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><div className="text-[11px] font-bold uppercase tracking-[.18em] text-violet-400">{staffPortal?'PAINEL DA EQUIPE • ESCRITÓRIO':'TOPAC RH PRO • ESCRITÓRIO'}</div><h1 className="mt-1 text-3xl font-black">{staffPortal?'Materiais do Escritório':'Estoque Interno'}</h1><p className="mt-1 text-sm text-zinc-500">{staffPortal?'Consulte produtos, registre entradas e saídas e acompanhe o histórico.':'Materiais administrativos • controle independente do almoxarifado operacional'}</p></div>
-        <div className="flex items-center gap-3"><span className="rounded-lg border border-[#443050] px-3 py-2 text-xs text-zinc-300">{access.nome}</span><button onClick={()=>void refresh()} disabled={refreshing} className="rounded-lg border border-[#493552] p-2 hover:border-violet-400" title="Atualizar"><RefreshCw className={'h-5 w-5 '+(refreshing?'animate-spin':'')}/></button></div>
+        <div className="flex items-center gap-3">
+          {!staffPortal&&isTopacAdmin&&<Link to="/estoque-interno" className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs font-bold text-violet-200 hover:border-violet-400">Ver a tela da equipe</Link>}
+          <span className="rounded-lg border border-[#443050] px-3 py-2 text-xs text-zinc-300">{access.nome}</span>
+          <button onClick={()=>void refresh()} disabled={refreshing} className="rounded-lg border border-[#493552] p-2 hover:border-violet-400" title="Atualizar"><RefreshCw className={'h-5 w-5 '+(refreshing?'animate-spin':'')}/></button>
+        </div>
       </div>
       <div className="space-y-3">
         <nav aria-label="Acesso rápido ao estoque" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
