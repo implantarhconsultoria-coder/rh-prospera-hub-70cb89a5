@@ -326,7 +326,7 @@ export default function EstoqueInternoPage() {
     const doc=new jsPDF({unit:'mm',format:'a4'});
     doc.setFontSize(17);doc.text('TOPAC RH PRO | ESTOQUE INTERNO',14,17);
     doc.setFontSize(10);doc.text('Escritório | Posição atual | '+new Date().toLocaleString('pt-BR'),14,25);
-    doc.text('Produtos em uso: '+currentProducts.length+'  |  Itens em atenção: '+attention.length+'  |  Quantidade total: '+brQty(totalQty),14,32);
+    doc.text('Produtos nesta lista: '+filtered.length+'  |  Itens em atenção: '+attention.length+'  |  Quantidade total: '+brQty(totalQty),14,32);
     let y=42;doc.setFontSize(8);
     for(const it of filtered){
       if(y>280){doc.addPage();y=18;}
@@ -421,7 +421,7 @@ export default function EstoqueInternoPage() {
             {scope.label} ({scope.count})
           </button>)}
         </div>
-        <p className="mb-3 text-xs text-zinc-400">Em uso: última movimentação válida de 2024 em diante. Arquivo preservado sem alterar saldo ou histórico; qualquer produto pode ser localizado pela busca.</p>
+        <p className="mb-3 text-xs text-zinc-400">Em uso: produtos movimentados desde 2024 ou cadastrados agora. Os mais antigos ficam no arquivo, sem alterar saldo ou histórico; a busca encontra todos.</p>
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Pesquisar também nos produtos antigos por código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s){productMetric==='quantidade'?' • Quantidade total: '+brQty(totalQty):''}</p>
         <div className="overflow-x-auto rounded-lg border border-[#30283a]">
