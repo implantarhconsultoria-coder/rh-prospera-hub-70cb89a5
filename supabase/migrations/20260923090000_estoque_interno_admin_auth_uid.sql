@@ -22,7 +22,7 @@ begin
    coalesce(nullif(btrim(p_unidade),''),'Unidade'),p_aplicacao,p_minimo,p_maximo)
  returning id into v_id;
  return v_id;
-end $function$
+end $function$;
 
 
 CREATE OR REPLACE FUNCTION public.estoque_interno_meu_acesso()
@@ -46,7 +46,7 @@ AS $function$
  left join public.estoque_interno_acessos a on a.email = lower(u.email)
  where u.id = auth.uid()
    and (admin.is_admin or coalesce(a.ativo,false))
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.estoque_interno_movimentar(p_codigo integer, p_tipo text, p_quantidade numeric, p_destinatario text DEFAULT NULL::text, p_observacao text DEFAULT NULL::text, p_preco_unitario numeric DEFAULT NULL::numeric)
