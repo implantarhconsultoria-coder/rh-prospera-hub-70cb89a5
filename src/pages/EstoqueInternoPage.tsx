@@ -20,6 +20,7 @@ type Movement = {
 type Access = { nome: string; email: string; ativo: boolean; pode_movimentar: boolean; pode_gerenciar: boolean; };
 type StockEmployee = { id: string; nome: string; cargo: string | null; status: string | null; company_id: string | null; };
 type Tab = 'visao' | 'produtos' | 'entrada' | 'saida' | 'historico' | 'relatorios';
+type ProductMetric = 'produtos' | 'quantidade' | 'reposicao' | 'sem_saldo';
 const TABS: Array<{key: Tab; label: string; icon: React.ElementType}> = [
   {key:'visao',label:'Visão geral',icon:Package},
   {key:'produtos',label:'Produtos',icon:Archive},
@@ -67,7 +68,8 @@ export default function EstoqueInternoPage() {
   const [moves, setMoves] = useState<Movement[]>([]);
   const [moveCount, setMoveCount] = useState(0);
   const [page, setPage] = useState(0);
-  const [tab, setTab] = useState<Tab>(standalone ? 'produtos' : 'visao');
+  const [tab, setTab] = useState<Tab | null>(null);
+  const [productMetric, setProductMetric] = useState<ProductMetric | null>(null);
   const [search, setSearch] = useState('');
   const [movementSearch, setMovementSearch] = useState('');
   const [busy, setBusy] = useState(false);
