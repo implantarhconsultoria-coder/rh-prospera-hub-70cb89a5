@@ -82,18 +82,9 @@ export default async function handler(req: any, res?: any) {
       if (error) throw error;
       user = data.user;
     } else {
-      await supabase.auth.admin.updateUserById(user.id, {
-        email_confirm: true,
-        password,
-        user_metadata: {
-          ...user.user_metadata,
-          nome_completo: user.user_metadata?.nome_completo || nomeCompleto,
-          cpf: user.user_metadata?.cpf || cpf,
-          telefone: user.user_metadata?.telefone || telefone,
-          cadastro_origem: user.user_metadata?.cadastro_origem || 'topac_cadastro_fallback',
-          cadastro_motivo: motivo,
-        },
-      });
+      // Nunca alterar senha de conta existente pelo endpoint público de cadastro.
+      // Quem já tem conta deve entrar normalmente ou utilizar recuperação de senha.
+      return send({ ok: false, error: 'conta_ja_existe_use_recuperacao_de_senha' }, 409);
     }
 
     const { error: profileError } = await supabase
