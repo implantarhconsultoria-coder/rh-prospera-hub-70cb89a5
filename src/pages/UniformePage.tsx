@@ -107,7 +107,7 @@ const UniformePage:React.FC=()=>{
     if(!draftConfirmed){toast.error('Confirme que revisou a unidade, modelos e quantidades da ficha.');return;}
     const rows=draft.filter(d=>d.marcado);
     if(!rows.length){toast.error('Marque ao menos uma variação para lançar.');return;}
-    if(rows.some(d=>!d.tipo.trim()||!d.modelo.trim()||!d.tamanho.trim()||!/^\\d{1,6}$/.test(d.saldo))){
+    if(rows.some(d=>!d.tipo.trim()||!d.modelo.trim()||!d.tamanho.trim()||!/^\d{1,6}$/.test(d.saldo))){
       toast.error('Revise as quantidades: somente inteiros iguais ou maiores que zero.');return;
     }
     const duplicates=rows.map(d=>[d.tipo,d.modelo,d.tamanho].join('|'));
