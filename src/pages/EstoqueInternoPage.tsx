@@ -18,6 +18,7 @@ type Movement = {
   historico_importado: boolean; data_suspeita: boolean; linha_origem: number | null;
 };
 type Access = { nome: string; email: string; ativo: boolean; pode_movimentar: boolean; pode_gerenciar: boolean; };
+type StockEmployee = { id: string; nome: string; cargo: string | null; status: string | null; };
 type Tab = 'visao' | 'produtos' | 'entrada' | 'saida' | 'historico' | 'relatorios';
 const TABS: Array<{key: Tab; label: string; icon: React.ElementType}> = [
   {key:'visao',label:'Visão geral',icon:Package},
@@ -61,6 +62,12 @@ export default function EstoqueInternoPage() {
   const [code, setCode] = useState('');
   const [quantity, setQuantity] = useState('');
   const [destination, setDestination] = useState('');
+  const [employees, setEmployees] = useState<StockEmployee[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [employeesError, setEmployeesError] = useState('');
+  const [recipientOpen, setRecipientOpen] = useState(false);
+  const [recipientIndex, setRecipientIndex] = useState(0);
+  const [employeeRetry, setEmployeeRetry] = useState(0);
   const [notes, setNotes] = useState('');
   const [unitCost, setUnitCost] = useState('');
   const [productOpen, setProductOpen] = useState(false);
@@ -139,6 +146,41 @@ export default function EstoqueInternoPage() {
     else {setMoves((r.data||[]) as Movement[]);setMoveCount(r.count||0);}
   },[access,filterType,filterItem,month,page,tab,movementSearch,items]);
 
+  // Mostra os colaboradores reais da TOPAC, sem CPF, telefone, salario ou dados bancarios.
+  // Carrega ao abrir Saídas para que os nomes apareçam mesmo antes de digitar.
+  useEffect(()=>{
+    if (!access || tab!=='saida') return;
+    let cancelled = false;
+    const getEmployees = async () => {
+      setEmployeesLoading(true);
+      setEmployeesError('');
+      const result = await db.from('funcionarios')
+        .select('id,nome,cargo,status')
+        .eq('ativo',true)
+        .is('excluido_em',null)
+        .order('nome',{ascending:true})
+        .limit(300);
+      if (cancelled) return;
+      setEmployeesLoading(false);
+      if (result.error) {
+        setEmployees([]);
+        setEmployeesError('Não foi possível carregar funcionários. Digite o destinatário manualmente.');
+        return;
+      }
+      const seen = new Set<string>();
+      setEmployees(((result.data||[]) as StockEmployee[])
+        .filter(employee => employee.nome?.trim() && !['desligado','excluido'].includes((employee.status||'').toLocaleLowerCase('pt-BR')))
+        .filter(employee => {
+          const key = employee.nome.trim().toLocaleLowerCase('pt-BR');
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }));
+    };
+    void getEmployees();
+    return ()=>{cancelled=true;};
+  },[access?.email,tab,employeeRetry]);
+
   useEffect(()=>{void load();},[load]);
   useEffect(()=>{void loadMoves();},[loadMoves]);
 
@@ -148,6 +190,15 @@ export default function EstoqueInternoPage() {
     .toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
   const attention=items.filter(i=>i.estoque_minimo!==null && Number(i.estoque_minimo)>=0 && Number(i.saldo_atual)<=Number(i.estoque_minimo));
   const totalQty=items.reduce((s,i)=>s+Number(i.saldo_atual||0),0);
+  const suggestedEmployees = useMemo(() => {
+    const needle = destination.trim().toLocaleLowerCase('pt-BR');
+    return (needle ? employees.filter(e => (e.nome+' '+(e.cargo||'')).toLocaleLowerCase('pt-BR').includes(needle)) : employees);
+  },[destination,employees]);
+  const pickEmployee = (employee: StockEmployee) => {
+    setDestination(employee.nome.trim());
+    setRecipientOpen(false);
+    setRecipientIndex(0);
+  };
   const isStockTab=tab==='entrada'||tab==='saida';
   const refresh=async()=>{setRefreshing(true);await load(true);await loadMoves();setRefreshing(false);};
 
@@ -292,9 +343,42 @@ export default function EstoqueInternoPage() {
           <label className="grid gap-1 text-xs text-zinc-400">Quantidade
             <input required type="number" step="any" min="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)} placeholder="0" className={inputStyle}/>
           </label>
-          <label className="grid gap-1 text-xs text-zinc-400">{tab==='saida'?'Para quem foi entregue? *':'Fornecedor / origem (opcional)'}
-            <input required={tab==='saida'} value={destination} onChange={e=>setDestination(e.target.value)} placeholder={tab==='saida'?'Nome do funcionário ou setor':'Compra, transferência, fornecedor...'} className={inputStyle}/>
-          </label>
+          {tab==='saida'?<div className="grid gap-1 text-xs text-zinc-400">
+            <label htmlFor="estoque-interno-destinatario">Para quem foi entregue? *</label>
+            <div className="relative">
+              <input id="estoque-interno-destinatario" required autoComplete="off" role="combobox"
+                aria-autocomplete="list" aria-expanded={recipientOpen} aria-controls="estoque-interno-funcionarios"
+                value={destination} onFocus={()=>{setRecipientOpen(true);setRecipientIndex(0);}}
+                onBlur={()=>setRecipientOpen(false)}
+                onChange={e=>{setDestination(e.target.value);setRecipientOpen(true);setRecipientIndex(0);}}
+                onKeyDown={e=>{
+                  if (e.key==='Escape') setRecipientOpen(false);
+                  if (e.key==='ArrowDown' && recipientOpen) {e.preventDefault();setRecipientIndex(i=>Math.min(i+1,Math.max(0,suggestedEmployees.length-1)));}
+                  if (e.key==='ArrowUp' && recipientOpen) {e.preventDefault();setRecipientIndex(i=>Math.max(0,i-1));}
+                  if (e.key==='Enter' && recipientOpen && suggestedEmployees.length>0) {e.preventDefault();pickEmployee(suggestedEmployees[recipientIndex]||suggestedEmployees[0]);}
+                }}
+                placeholder="Clique para escolher o funcionário ou digite um setor" className={inputStyle+' pr-10'}/>
+              <Search className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-violet-400"/>
+              {recipientOpen&&<div id="estoque-interno-funcionarios" role="listbox" aria-label="Funcionários da TOPAC"
+                className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-64 overflow-y-auto rounded-lg border border-violet-500/50 bg-[#11121c] p-1 shadow-2xl">
+                {employeesLoading&&<p className="px-3 py-3 text-xs text-zinc-400">Carregando funcionários...</p>}
+                {!employeesLoading&&employeesError&&<div className="px-3 py-2 text-xs text-amber-300">{employeesError}
+                  <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>setEmployeeRetry(n=>n+1)} className="ml-2 underline">Tentar novamente</button>
+                </div>}
+                {!employeesLoading&&!employeesError&&suggestedEmployees.length===0&&<p className="px-3 py-3 text-xs text-zinc-400">Nenhum funcionário encontrado. Você pode informar outro nome ou setor.</p>}
+                {!employeesLoading&&!employeesError&&suggestedEmployees.map((employee,index)=><button
+                  type="button" role="option" aria-selected={index===recipientIndex} key={employee.id}
+                  onMouseDown={e=>e.preventDefault()} onClick={()=>pickEmployee(employee)}
+                  className={'flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left text-sm hover:bg-violet-500/20 '+(index===recipientIndex?'bg-violet-500/20 text-white':'text-zinc-200')}>
+                  <span className="font-semibold">{employee.nome}</span>
+                  {employee.cargo&&<span className="text-[11px] text-zinc-400">{employee.cargo}</span>}
+                </button>)}
+              </div>}
+            </div>
+            <p className="text-[11px] text-zinc-500">Selecione um funcionário da lista. Para setor ou visitante, informe o nome manualmente.</p>
+          </div>:<label className="grid gap-1 text-xs text-zinc-400">Fornecedor / origem (opcional)
+            <input value={destination} onChange={e=>setDestination(e.target.value)} placeholder="Compra, transferência, fornecedor..." className={inputStyle}/>
+          </label>}
           {tab==='entrada'&&<label className="grid gap-1 text-xs text-zinc-400">Preço unitário (opcional)
             <input type="number" step="any" min="0" value={unitCost} onChange={e=>setUnitCost(e.target.value)} className={inputStyle}/>
           </label>}
