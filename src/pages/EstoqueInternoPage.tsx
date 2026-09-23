@@ -22,8 +22,8 @@ type Tab = 'visao' | 'produtos' | 'entrada' | 'saida' | 'historico' | 'relatorio
 const TABS: Array<{key: Tab; label: string; icon: React.ElementType}> = [
   {key:'visao',label:'Visão geral',icon:Package},
   {key:'produtos',label:'Produtos',icon:Archive},
-  {key:'entrada',label:'Entrada',icon:ArrowUpCircle},
-  {key:'saida',label:'Saída',icon:ArrowDownCircle},
+  {key:'entrada',label:'Entradas',icon:ArrowUpCircle},
+  {key:'saida',label:'Saídas',icon:ArrowDownCircle},
   {key:'historico',label:'Histórico',icon:History},
   {key:'relatorios',label:'Relatórios',icon:FileText},
 ];
@@ -53,7 +53,7 @@ export default function EstoqueInternoPage() {
   const [page, setPage] = useState(0);
   const [tab, setTab] = useState<Tab>('visao');
   const [search, setSearch] = useState('');
-  const [productView, setProductView] = useState<'cards' | 'lista'>('cards');
+  const [movementSearch, setMovementSearch] = useState('');
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [code, setCode] = useState('');
@@ -91,14 +91,22 @@ export default function EstoqueInternoPage() {
       'id,item_id,tipo,quantidade,data_movimento,destinatario,origem_responsavel,preco_unitario,observacao,ator_email,historico_importado,data_suspeita,linha_origem',
       {count:'exact'}
     );
-    if (filterType) q=q.eq('tipo',filterType);
+    const activeType = tab === 'entrada' || tab === 'saida' ? tab : filterType;
+    if (activeType) q=q.eq('tipo',activeType);
     if (filterItem) q=q.eq('item_id',filterItem);
+    if (movementSearch.trim()) {
+      const needle = movementSearch.toLocaleLowerCase('pt-BR').trim();
+      const matchingIds = items.filter(i => (String(i.codigo)+' '+i.descricao+' '+(i.aplicacao||''))
+        .toLocaleLowerCase('pt-BR').includes(needle)).map(i=>i.id);
+      if (!matchingIds.length) {setMoves([]);setMoveCount(0);return;}
+      q=q.in('item_id',matchingIds);
+    }
     if (month) { const parts=month.split('-'); const nextMonth=new Date(Date.UTC(Number(parts[0]),Number(parts[1]),1)).toISOString().slice(0,10); q=q.gte('data_movimento',month+'-01').lt('data_movimento',nextMonth); }
     const r=await q.order('data_movimento',{ascending:false,nullsFirst:false})
       .order('linha_origem',{ascending:false,nullsFirst:false}).range(page*80,page*80+79);
     if (r.error) toast.error('Erro ao carregar movimentações: '+r.error.message);
     else {setMoves((r.data||[]) as Movement[]);setMoveCount(r.count||0);}
-  },[access,filterType,filterItem,month,page]);
+  },[access,filterType,filterItem,month,page,tab,movementSearch,items]);
 
   useEffect(()=>{void load();},[load]);
   useEffect(()=>{void loadMoves();},[loadMoves]);
@@ -186,9 +194,22 @@ export default function EstoqueInternoPage() {
         <div><div className="text-[11px] font-bold uppercase tracking-[.18em] text-violet-400">TOPAC RH PRO • ESCRITÓRIO</div><h1 className="mt-1 text-3xl font-black">Estoque Interno</h1><p className="mt-1 text-sm text-zinc-500">Materiais administrativos • controle independente do almoxarifado operacional</p></div>
         <div className="flex items-center gap-3"><span className="rounded-lg border border-[#443050] px-3 py-2 text-xs text-zinc-300">{access.nome}</span><button onClick={()=>void refresh()} disabled={refreshing} className="rounded-lg border border-[#493552] p-2 hover:border-violet-400" title="Atualizar"><RefreshCw className={'h-5 w-5 '+(refreshing?'animate-spin':'')}/></button></div>
       </div>
-      <nav className="flex flex-wrap gap-2 rounded-xl border border-[#30283a] bg-[#0b0d13] p-2">
-        {TABS.map(t=>{const Icon=t.icon;return <button key={t.key} onClick={()=>{setTab(t.key);setPage(0);}} className={'inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition '+(tab===t.key?'bg-[#312048] text-[#ffc400]':'text-zinc-400 hover:bg-[#18141e] hover:text-white')}><Icon className="h-4 w-4"/>{t.label}</button>;})}
-      </nav>
+      <div className="space-y-3">
+        <nav aria-label="Acesso rápido ao estoque" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {TABS.filter(t=>t.key==='produtos'||t.key==='entrada'||t.key==='saida'||t.key==='historico').map(t=>{
+            const Icon=t.icon;
+            const hint=t.key==='produtos'?'Consultar e pesquisar materiais':t.key==='entrada'?'Registrar e consultar entradas':t.key==='saida'?'Registrar e consultar saídas':'Pesquisar movimentações';
+            return <button key={t.key} type="button" aria-pressed={tab===t.key} onClick={()=>{setTab(t.key);setPage(0);}}
+              className={'flex min-h-[102px] flex-col items-start justify-between rounded-xl border p-4 text-left transition hover:border-violet-400 '+(tab===t.key?'border-violet-500 bg-[#241a32]':'border-[#30283a] bg-[#0d1017]')}>
+              <Icon className={'h-6 w-6 '+(tab===t.key?'text-[#ffc400]':'text-violet-400')}/>
+              <div><div className="text-base font-bold text-white">{t.label}</div><div className="mt-1 text-xs text-zinc-400">{hint}</div></div>
+            </button>;
+          })}
+        </nav>
+        <div className="flex gap-2">
+          {TABS.filter(t=>t.key==='visao'||t.key==='relatorios').map(t=>{const Icon=t.icon;return <button key={t.key} onClick={()=>{setTab(t.key);setPage(0);}} aria-pressed={tab===t.key} className={'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold '+(tab===t.key?'border-violet-500 bg-[#312048] text-[#ffc400]':'border-[#30283a] text-zinc-400 hover:text-white')}><Icon className="h-4 w-4"/>{t.label}</button>;})}
+        </div>
+      </div>
       {tab==='visao'&&<>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[['Produtos cadastrados',items.length,Package,'text-violet-400'],['Quantidade total',brQty(totalQty),Archive,'text-emerald-400'],['Precisam de reposição',attention.length,TriangleAlert,'text-amber-400'],['Sem saldo',items.filter(i=>Number(i.saldo_atual)===0).length,ArrowDownCircle,'text-red-400']].map(([title,val,Icon,color]:any)=><div key={title} className={wrapBox}><div className="text-xs text-zinc-400">{title}</div><div className="mt-3 flex items-center justify-between"><strong className="text-3xl">{val}</strong><Icon className={'h-7 w-7 '+color}/></div></div>)}
@@ -210,40 +231,24 @@ export default function EstoqueInternoPage() {
           <button disabled={busy} className={primaryButton}>Cadastrar produto</button>
         </form>}
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-xs text-zinc-500">{filtered.length} produto(s) no filtro</span>
-          <div role="group" aria-label="Visualização dos produtos" className="inline-flex rounded-lg border border-[#44334f] bg-[#080b10] p-1">
-            <button type="button" aria-pressed={productView==='cards'} onClick={()=>setProductView('cards')} className={'rounded-md px-4 py-2 text-xs font-bold transition '+(productView==='cards'?'bg-[#312048] text-[#ffc400]':'text-zinc-400 hover:text-white')}>Cards</button>
-            <button type="button" aria-pressed={productView==='lista'} onClick={()=>setProductView('lista')} className={'rounded-md px-4 py-2 text-xs font-bold transition '+(productView==='lista'?'bg-[#312048] text-[#ffc400]':'text-zinc-400 hover:text-white')}>Lista</button>
-          </div>
+        <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s)</p>
+        <div className="overflow-x-auto rounded-lg border border-[#30283a]">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="bg-[#15121b] text-xs uppercase text-zinc-400"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead>
+            <tbody>{filtered.map(i=>{
+              const low=attention.includes(i),zero=Number(i.saldo_atual)===0;
+              return <tr key={i.id} className="border-b border-[#241f29] hover:bg-white/[.03]">
+                <td className="p-3 font-bold text-violet-400">{i.codigo}</td>
+                <td className="p-3 font-semibold">{i.descricao}<div className="mt-1 text-xs font-normal text-zinc-500">{i.aplicacao||'Material do escritório'}</div></td>
+                <td className="p-3 text-zinc-400">{i.unidade}</td>
+                <td className={'p-3 font-black tabular-nums '+(zero?'text-red-400':low?'text-amber-400':'text-[#ffc400]')}>{brQty(Number(i.saldo_atual))}</td>
+                <td className="p-3 text-zinc-400">{i.estoque_minimo??'—'}</td><td className="p-3 text-zinc-400">{i.estoque_maximo??'—'}</td>
+                <td className={'p-3 font-semibold '+(zero?'text-red-400':low?'text-amber-400':'text-emerald-400')}>{zero?'SEM SALDO':low?'REPOR':'DISPONÍVEL'}</td>
+                <td className="p-3"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button></div></td>
+              </tr>;
+            })}</tbody>
+          </table>
         </div>
-        {productView==='cards' ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {filtered.map(i=>{
-              const low=attention.includes(i);
-              const zero=Number(i.saldo_atual)===0;
-              return <article key={i.id} className={'flex min-h-[236px] flex-col rounded-xl border bg-[#080b10] p-4 transition hover:border-violet-500/60 '+(low?'border-amber-500/35':'border-[#30283a]')}>
-                <div className="flex items-start justify-between gap-2">
-                  <span className="rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-black text-violet-300">CÓD. {i.codigo}</span>
-                  <span className={'rounded-full px-2.5 py-1 text-[10px] font-black '+(zero?'bg-red-500/15 text-red-300':low?'bg-amber-500/15 text-amber-300':'bg-emerald-500/15 text-emerald-300')}>{zero?'SEM SALDO':low?'REPOR':'DISPONÍVEL'}</span>
-                </div>
-                <h3 className="mt-4 min-h-[44px] text-base font-bold leading-snug text-white">{i.descricao}</h3>
-                <p className="mt-1 text-xs text-zinc-500">{i.aplicacao||'Material do escritório'} • {i.unidade}</p>
-                <div className="mt-4 rounded-lg border border-[#342a3e] bg-[#101019] p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-zinc-500">Saldo disponível</div>
-                  <div className={'mt-1 text-3xl font-black tabular-nums '+(low?'text-amber-400':'text-[#ffc400]')}>{brQty(Number(i.saldo_atual))}<span className="ml-2 text-xs font-medium text-zinc-400">{i.unidade}</span></div>
-                  <div className="mt-2 flex justify-between text-[11px] text-zinc-500"><span>Mínimo: {i.estoque_minimo??'—'}</span><span>Máximo: {i.estoque_maximo??'—'}</span></div>
-                </div>
-                <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
-                  <button type="button" onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-500/40 px-3 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/10"><ArrowUpCircle className="h-4 w-4"/>Entrada</button>
-                  <button type="button" disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 px-3 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40"><ArrowDownCircle className="h-4 w-4"/>Saída</button>
-                </div>
-              </article>;
-            })}
-          </div>
-        ) : (
-        <div className="overflow-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="text-xs uppercase text-zinc-500"><tr>{['Código','Material','Unidade','Saldo','Mínimo','Máximo','Situação',''].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead><tbody>{filtered.map(i=><tr key={i.id} className="border-b border-[#241f29] hover:bg-white/[.03]"><td className="p-3 text-violet-400">{i.codigo}</td><td className="p-3 font-semibold">{i.descricao}<div className="text-xs font-normal text-zinc-500">{i.aplicacao}</div></td><td className="p-3 text-zinc-400">{i.unidade}</td><td className="p-3 font-bold">{brQty(Number(i.saldo_atual))}</td><td className="p-3 text-zinc-400">{i.estoque_minimo??'—'}</td><td className="p-3 text-zinc-400">{i.estoque_maximo??'—'}</td><td className={'p-3 '+(attention.includes(i)?'text-amber-400':'text-emerald-400')}>{attention.includes(i)?'REPOR':'DISPONÍVEL'}</td><td className="p-3"><button onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs text-[#ffc400] hover:underline">Retirar</button></td></tr>)}</tbody></table></div>
-        )}
         {filtered.length===0&&<p className="py-8 text-center text-sm text-zinc-500">Nenhum material corresponde à busca.</p>}
       </section>}
       {isStockTab&&<section className={wrapBox+' max-w-3xl'}>
@@ -268,11 +273,12 @@ export default function EstoqueInternoPage() {
           <button disabled={busy||!access.pode_movimentar} className={primaryButton}>{busy?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Confirmar {tab==='entrada'?'entrada':'saída'}</button>
         </form>
       </section>}
-      {(tab==='historico'||tab==='relatorios')&&<section className={wrapBox}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">{tab==='historico'?'Histórico de movimentações':'Relatórios'}</h2><p className="text-xs text-zinc-500">{moveCount} registros nos filtros • 80 por página</p></div><div className="flex gap-2"><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm hover:border-violet-400" onClick={()=>downloadCSV(true)}><Download className="mr-2 inline h-4 w-4"/>CSV da página</button>{tab==='relatorios'&&<><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm" onClick={()=>downloadCSV()}>Estoque CSV</button><button className={primaryButton} onClick={downloadPDF}><FileText className="h-4 w-4"/>Estoque PDF</button></>}</div></div>
+      {(isStockTab||tab==='historico'||tab==='relatorios')&&<section className={wrapBox}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">{tab==='entrada'?'Lista de entradas':tab==='saida'?'Lista de saídas':tab==='historico'?'Histórico de movimentações':'Relatórios'}</h2><p className="text-xs text-zinc-500">{moveCount} registros nos filtros • 80 por página</p></div><div className="flex gap-2"><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm hover:border-violet-400" onClick={()=>downloadCSV(true)}><Download className="mr-2 inline h-4 w-4"/>CSV da página</button>{tab==='relatorios'&&<><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm" onClick={()=>downloadCSV()}>Estoque CSV</button><button className={primaryButton} onClick={downloadPDF}><FileText className="h-4 w-4"/>Estoque PDF</button></>}</div></div>
+        <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input aria-label="Pesquisar produto nas movimentações" className={inputStyle+' pl-10'} placeholder="Pesquisar produto pelo código, nome ou aplicação..." value={movementSearch} onChange={e=>{setMovementSearch(e.target.value);setPage(0);}}/></div>
         <div className="mb-5 grid gap-3 md:grid-cols-4">
           <label className="text-xs text-zinc-400">Competência<input type="month" className={inputStyle+' mt-1'} value={month} onChange={e=>{setMonth(e.target.value);setPage(0);}}/></label>
-          <label className="text-xs text-zinc-400">Tipo<select className={inputStyle+' mt-1'} value={filterType} onChange={e=>{setFilterType(e.target.value);setPage(0);}}><option value="">Todos</option><option value="entrada">Entrada</option><option value="saida">Saída</option></select></label>
+          {!isStockTab&&<label className="text-xs text-zinc-400">Tipo<select className={inputStyle+' mt-1'} value={filterType} onChange={e=>{setFilterType(e.target.value);setPage(0);}}><option value="">Todos</option><option value="entrada">Entrada</option><option value="saida">Saída</option></select></label>}
           <label className="text-xs text-zinc-400">Produto<select className={inputStyle+' mt-1'} value={filterItem} onChange={e=>{setFilterItem(e.target.value);setPage(0);}}><option value="">Todos</option>{items.map(i=><option key={i.id} value={i.id}>{i.codigo} — {i.descricao}</option>)}</select></label>
           <div className="flex items-end"><button className="h-10 rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-400" onClick={()=>{setMonth('');setFilterType('');setFilterItem('');setPage(0);}}>Todo o histórico</button></div>
         </div>
