@@ -8,7 +8,7 @@ import { useApp } from '@/context/AppContext';
 
 type StockItem = {
   id: string; codigo: number; descricao: string; aplicacao: string | null;
-  unidade: string; saldo_atual: number; saldo_inicial: number;
+  unidade: string; saldo_atual: number; saldo_inicial: number; ultima_movimentacao?: string | null;
   estoque_minimo: number | null; estoque_maximo: number | null;
 };
 type Movement = {
@@ -42,6 +42,10 @@ const STOCK_PRAIA_RECIPIENTS = new Set([
   'ANTONIO CARLOS SERVILIO',
   'EDENILSON PEREIRA VITOR',
 ]);
+// A planilha antiga registra todos os produtos desde 2020; a vitrine prioriza
+// materiais com movimentação confirmada desde 2024. O resto permanece pesquisável.
+const ACTIVE_PRODUCT_SINCE = '2024-01-01';
+const CURRENT_MOVEMENTS_SINCE = '2020-01-01';
 const brQty = (n: number) => Number(n || 0).toLocaleString('pt-BR', {maximumFractionDigits:3});
 const brDate = (s: string | null) => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : 'Sem data (planilha)';
 const nowMonth = () => new Date().toLocaleDateString('en-CA', {timeZone:'America/Sao_Paulo'}).slice(0,7);
@@ -87,7 +91,10 @@ export default function EstoqueInternoPage() {
   const [unitCost, setUnitCost] = useState('');
   const [productOpen, setProductOpen] = useState(false);
   const [newItem, setNewItem] = useState({codigo:'', descricao:'', unidade:'Unidade', aplicacao:'', minimo:'', maximo:''});
-  const [month, setMonth] = useState(nowMonth());
+  const [month, setMonth] = useState('');
+  const [productScope, setProductScope] = useState<'atual' | 'arquivo' | 'todos'>('atual');
+  const [movementScope, setMovementScope] = useState<'atual' | 'arquivo' | 'todos'>('atual');
+  const [materialSearch, setMaterialSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterItem, setFilterItem] = useState('');
 
@@ -126,15 +133,21 @@ export default function EstoqueInternoPage() {
         return;
       }
     }
-    const r = await db.from('estoque_interno_itens')
-      .select('id,codigo,descricao,aplicacao,unidade,saldo_atual,saldo_inicial,estoque_minimo,estoque_maximo')
-      .order('codigo',{ascending:true});
-    if (r.error) {
+    const [r, activity] = await Promise.all([
+      db.from('estoque_interno_itens')
+        .select('id,codigo,descricao,aplicacao,unidade,saldo_atual,saldo_inicial,estoque_minimo,estoque_maximo')
+        .order('codigo',{ascending:true}),
+      db.from('estoque_interno_atividade_produtos').select('item_id,ultima_movimentacao'),
+    ]);
+    if (r.error || activity.error) {
       setAccess(null);setItems([]);setMoves([]);
-      setAccessError('Não foi possível carregar os produtos: '+r.error.message);
+      setAccessError('Não foi possível carregar os produtos: '+(r.error?.message || activity.error?.message));
     } else {
+      const dates = new Map<string, string | null>((activity.data || []).map((row: any) => [row.item_id, row.ultima_movimentacao]));
       setAccess(currentAccess);
-      setItems((r.data || []) as StockItem[]);
+      setItems(((r.data || []) as StockItem[]).map(item => ({
+        ...item, ultima_movimentacao: dates.get(item.id) || null,
+      })));
     }
     setInitializing(false);
   },[session?.user?.id,email]);
@@ -154,12 +167,23 @@ export default function EstoqueInternoPage() {
       if (!matchingIds.length) {setMoves([]);setMoveCount(0);return;}
       q=q.in('item_id',matchingIds);
     }
-    if (month) { const parts=month.split('-'); const nextMonth=new Date(Date.UTC(Number(parts[0]),Number(parts[1]),1)).toISOString().slice(0,10); q=q.gte('data_movimento',month+'-01').lt('data_movimento',nextMonth); }
+    if (month) {
+      const parts=month.split('-');
+      const nextMonth=new Date(Date.UTC(Number(parts[0]),Number(parts[1]),1)).toISOString().slice(0,10);
+      q=q.gte('data_movimento',month+'-01').lt('data_movimento',nextMonth);
+    } else if (movementScope==='atual') {
+      q=q.gte('data_movimento',CURRENT_MOVEMENTS_SINCE)
+        .lte('data_movimento',new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}))
+        .eq('data_suspeita',false);
+    } else if (movementScope==='arquivo') {
+      const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
+      q=q.or('data_movimento.lt.'+CURRENT_MOVEMENTS_SINCE+',data_movimento.is.null,data_movimento.gt.'+today+',data_suspeita.eq.true');
+    }
     const r=await q.order('data_movimento',{ascending:false,nullsFirst:false})
       .order('linha_origem',{ascending:false,nullsFirst:false}).range(page*80,page*80+79);
     if (r.error) toast.error('Erro ao carregar movimentações: '+r.error.message);
     else {setMoves((r.data||[]) as Movement[]);setMoveCount(r.count||0);}
-  },[access,filterType,filterItem,month,page,tab,movementSearch,items]);
+  },[access,filterType,filterItem,month,movementScope,page,tab,movementSearch,items]);
 
   // Mostra os colaboradores reais da TOPAC, sem CPF, telefone, salario ou dados bancarios.
   // Carrega ao abrir Saídas para que os nomes apareçam mesmo antes de digitar.
@@ -209,10 +233,26 @@ export default function EstoqueInternoPage() {
   const itemById=useMemo(()=>new Map(items.map(i=>[i.id,i])),[items]);
   const selected=items.find(i=>String(i.codigo)===code);
   const attention=items.filter(i=>i.estoque_minimo!==null && Number(i.estoque_minimo)>=0 && Number(i.saldo_atual)<=Number(i.estoque_minimo));
-  const filtered=items.filter(i=>(String(i.codigo)+' '+i.descricao+' '+(i.aplicacao||''))
-    .toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
+  const isCurrentProduct=(item:StockItem)=>!!item.ultima_movimentacao&&item.ultima_movimentacao>=ACTIVE_PRODUCT_SINCE;
+  const currentProducts=items.filter(isCurrentProduct);
+  const legacyProducts=items.filter(i=>!isCurrentProduct(i));
+  const filtered=items.filter(i=>{
+      const searching=search.trim().length>0;
+      // Busca textual e indicadores pesquisam TODO o cadastro, inclusive o arquivo.
+      if(searching || productMetric!==null || productScope==='todos')return true;
+      return productScope==='arquivo'?!isCurrentProduct(i):isCurrentProduct(i);
+    })
+    .filter(i=>(String(i.codigo)+' '+i.descricao+' '+(i.aplicacao||''))
+      .toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
     .filter(i=>productMetric==='reposicao'?attention.includes(i):productMetric==='sem_saldo'?Number(i.saldo_atual)===0:true)
     .sort((a,b)=>productMetric==='quantidade'?Number(b.saldo_atual)-Number(a.saldo_atual):a.codigo-b.codigo);
+  const selectableForMove=items.filter(i=>{
+    const needle=materialSearch.toLocaleLowerCase('pt-BR').trim();
+    const matches=(String(i.codigo)+' '+i.descricao+' '+(i.aplicacao||''))
+      .toLocaleLowerCase('pt-BR').includes(needle);
+    return matches && (tab==='entrada'||Number(i.saldo_atual)>0)
+      && (needle.length>0 || isCurrentProduct(i) || String(i.codigo)===code);
+  });
   const toggleTab=(next:Tab)=>{
     setTab(current=>current===next&&productMetric===null?null:next);
     setProductMetric(null);
@@ -371,7 +411,19 @@ export default function EstoqueInternoPage() {
           <input placeholder="Máximo" type="number" className={inputStyle} value={newItem.maximo} onChange={e=>setNewItem({...newItem,maximo:e.target.value})}/>
           <button disabled={busy} className={primaryButton}>Cadastrar produto</button>
         </form>}
-        <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
+        <div className="mb-3 flex flex-wrap items-center gap-2" aria-label="Filtrar produtos atuais e de arquivo">
+          {([
+            {key:'atual',label:'Em uso',count:currentProducts.length},
+            {key:'arquivo',label:'Arquivo / antigos',count:legacyProducts.length},
+            {key:'todos',label:'Todos',count:items.length},
+          ] as const).map(scope=><button key={scope.key} type="button" aria-pressed={productScope===scope.key}
+            onClick={()=>{setProductScope(scope.key);setProductMetric(null);setSearch('');}}
+            className={'rounded-lg border px-3 py-2 text-xs font-bold '+(productScope===scope.key?'border-violet-400 bg-violet-500/20 text-white':'border-[#44334f] text-zinc-400 hover:text-white')}>
+            {scope.label} ({scope.count})
+          </button>)}
+        </div>
+        <p className="mb-3 text-xs text-zinc-400">Em uso: última movimentação válida de 2024 em diante. Arquivo preservado sem alterar saldo ou histórico; qualquer produto pode ser localizado pela busca.</p>
+        <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Pesquisar também nos produtos antigos por código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s){productMetric==='quantidade'?' • Quantidade total: '+brQty(totalQty):''}</p>
         <div className="overflow-x-auto rounded-lg border border-[#30283a]">
           <table className="w-full min-w-[760px] text-left text-sm">
@@ -396,7 +448,16 @@ export default function EstoqueInternoPage() {
         <div className="mb-5 flex items-center gap-3">{tab==='entrada'?<ArrowUpCircle className="h-8 w-8 text-emerald-400"/>:<ArrowDownCircle className="h-8 w-8 text-amber-400"/>}<div><h2 className="text-xl font-bold">{tab==='entrada'?'Registrar entrada':'Registrar saída'}</h2><p className="text-xs text-zinc-500">Os saldos são atualizados pelo banco em uma única operação auditável.</p></div></div>
         <form onSubmit={submitMovement} className="grid gap-4">
           <label className="grid gap-1 text-xs text-zinc-400">Material
-            <select required value={code} onChange={e=>setCode(e.target.value)} className={inputStyle}><option value="">Selecione pelo código ou descrição</option>{items.map(i=><option key={i.id} value={i.codigo}>{i.codigo} — {i.descricao}</option>)}</select>
+            <input type="search" value={materialSearch} onChange={e=>setMaterialSearch(e.target.value)}
+              placeholder="Buscar produto pelo nome ou código, inclusive no arquivo" className={inputStyle+' mb-1'} />
+            <select required value={code} onChange={e=>setCode(e.target.value)} className={inputStyle}>
+              <option value="">Selecione pelo código ou descrição</option>
+              {selectableForMove.map(i=><option key={i.id} value={i.codigo}>{i.codigo} — {i.descricao} • Saldo {brQty(Number(i.saldo_atual))}{!isCurrentProduct(i)?' • Arquivo':''}</option>)}
+            </select>
+            <span className="text-[11px] text-zinc-500">
+              {selectableForMove.length} produto(s) na seleção.
+              {tab==='saida'?' Saídas mostram apenas materiais com saldo; procure pelo nome para encontrar itens antigos.':' Pesquise para localizar também materiais antigos.'}
+            </span>
           </label>
           {selected&&<div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-3 text-sm"><strong>{selected.descricao}</strong><div className="mt-1 text-zinc-300">Saldo disponível: <b className="text-[#ffc400]">{brQty(Number(selected.saldo_atual))} {selected.unidade}</b></div></div>}
           <label className="grid gap-1 text-xs text-zinc-400">Quantidade
@@ -450,11 +511,22 @@ export default function EstoqueInternoPage() {
       {(isStockTab||tab==='historico'||(!staffPortal&&tab==='relatorios'))&&<section className={wrapBox}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">{tab==='entrada'?'Lista de entradas':tab==='saida'?'Lista de saídas':tab==='historico'?'Histórico de movimentações':'Relatórios'}</h2><p className="text-xs text-zinc-500">{moveCount} registros nos filtros • 80 por página</p></div><div className="flex gap-2"><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm hover:border-violet-400" onClick={()=>downloadCSV(true)}><Download className="mr-2 inline h-4 w-4"/>CSV da página</button>{tab==='relatorios'&&<><button className="rounded-lg border border-[#44334f] px-4 py-2 text-sm" onClick={()=>downloadCSV()}>Estoque CSV</button><button className={primaryButton} onClick={downloadPDF}><FileText className="h-4 w-4"/>Estoque PDF</button></>}</div></div>
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input aria-label="Pesquisar produto nas movimentações" className={inputStyle+' pl-10'} placeholder="Pesquisar produto pelo código, nome ou aplicação..." value={movementSearch} onChange={e=>{setMovementSearch(e.target.value);setPage(0);}}/></div>
+        <div className="mb-4 flex flex-wrap gap-2" aria-label="Período das movimentações">
+          {([
+            {key:'atual',label:'Movimentos de 2020 até hoje'},
+            {key:'arquivo',label:'Arquivo / datas antigas ou suspeitas'},
+            {key:'todos',label:'Todo o histórico'},
+          ] as const).map(scope=><button key={scope.key} type="button" aria-pressed={movementScope===scope.key&&!month}
+            onClick={()=>{setMovementScope(scope.key);setMonth('');setPage(0);}}
+            className={'rounded-lg border px-3 py-2 text-xs font-bold '+(movementScope===scope.key&&!month?'border-violet-400 bg-violet-500/20 text-white':'border-[#44334f] text-zinc-400 hover:text-white')}>
+            {scope.label}
+          </button>)}
+        </div>
         <div className="mb-5 grid gap-3 md:grid-cols-4">
           <label className="text-xs text-zinc-400">Competência<input type="month" className={inputStyle+' mt-1'} value={month} onChange={e=>{setMonth(e.target.value);setPage(0);}}/></label>
           {!isStockTab&&<label className="text-xs text-zinc-400">Tipo<select className={inputStyle+' mt-1'} value={filterType} onChange={e=>{setFilterType(e.target.value);setPage(0);}}><option value="">Todos</option><option value="entrada">Entrada</option><option value="saida">Saída</option></select></label>}
           <label className="text-xs text-zinc-400">Produto<select className={inputStyle+' mt-1'} value={filterItem} onChange={e=>{setFilterItem(e.target.value);setPage(0);}}><option value="">Todos</option>{items.map(i=><option key={i.id} value={i.id}>{i.codigo} — {i.descricao}</option>)}</select></label>
-          <div className="flex items-end"><button className="h-10 rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-400" onClick={()=>{setMonth('');setFilterType('');setFilterItem('');setPage(0);}}>Todo o histórico</button></div>
+          <div className="flex items-end"><button className="h-10 rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-400" onClick={()=>{setMovementScope('todos');setMonth('');setFilterType('');setFilterItem('');setPage(0);}}>Todo o histórico</button></div>
         </div>
         <div className="overflow-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="text-xs uppercase text-zinc-500"><tr>{['Data','Tipo','Código / Produto','Qtd.','Para quem / Origem','Responsável','Observações'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead><tbody>{moves.map(m=>{const i=itemById.get(m.item_id);return <tr key={m.id} className="border-b border-[#251f2b]"><td className={'p-3 whitespace-nowrap '+(m.data_suspeita?'text-amber-400':'text-zinc-400')}>{brDate(m.data_movimento)}{m.data_suspeita&&<TriangleAlert className="ml-1 inline h-3 w-3"/>}</td><td className={'p-3 font-semibold '+(m.tipo==='entrada'?'text-emerald-400':'text-amber-400')}>{m.tipo.toUpperCase()}</td><td className="p-3"><span className="text-violet-400">{i?.codigo||'—'} </span>{i?.descricao||'Produto'}</td><td className="p-3">{brQty(Number(m.quantidade))}</td><td className="p-3">{m.destinatario||m.origem_responsavel||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.historico_importado?'Histórico Excel':m.ator_email||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.observacao||'—'}</td></tr>;})}</tbody></table></div>
         <div className="mt-4 flex items-center justify-end gap-3 text-sm"><button className="rounded-lg border border-[#44334f] px-3 py-2 disabled:opacity-30" disabled={page===0} onClick={()=>setPage(p=>p-1)}>Anterior</button><span>Página {page+1} / {Math.max(1,Math.ceil(moveCount/80))}</span><button className="rounded-lg border border-[#44334f] px-3 py-2 disabled:opacity-30" disabled={(page+1)*80>=moveCount} onClick={()=>setPage(p=>p+1)}>Próxima</button></div>
