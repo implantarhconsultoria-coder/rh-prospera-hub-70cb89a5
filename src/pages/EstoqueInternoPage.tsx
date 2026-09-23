@@ -238,10 +238,10 @@ export default function EstoqueInternoPage() {
           })}
         </nav>
         <div className="flex gap-2">
-          {TABS.filter(t=>t.key==='visao'||t.key==='relatorios').map(t=>{const Icon=t.icon;return <button key={t.key} onClick={()=>{setTab(t.key);setPage(0);}} aria-pressed={tab===t.key} className={'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold '+(tab===t.key?'border-violet-500 bg-[#312048] text-[#ffc400]':'border-[#30283a] text-zinc-400 hover:text-white')}><Icon className="h-4 w-4"/>{t.label}</button>;})}
+          {!staffPortal&&TABS.filter(t=>t.key==='visao'||t.key==='relatorios').map(t=>{const Icon=t.icon;return <button key={t.key} onClick={()=>{setTab(t.key);setPage(0);}} aria-pressed={tab===t.key} className={'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold '+(tab===t.key?'border-violet-500 bg-[#312048] text-[#ffc400]':'border-[#30283a] text-zinc-400 hover:text-white')}><Icon className="h-4 w-4"/>{t.label}</button>;})}
         </div>
       </div>
-      {tab==='visao'&&<>
+      {!staffPortal&&tab==='visao'&&<>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[['Produtos cadastrados',items.length,Package,'text-violet-400'],['Quantidade total',brQty(totalQty),Archive,'text-emerald-400'],['Precisam de reposição',attention.length,TriangleAlert,'text-amber-400'],['Sem saldo',items.filter(i=>Number(i.saldo_atual)===0).length,ArrowDownCircle,'text-red-400']].map(([title,val,Icon,color]:any)=><div key={title} className={wrapBox}><div className="text-xs text-zinc-400">{title}</div><div className="mt-3 flex items-center justify-between"><strong className="text-3xl">{val}</strong><Icon className={'h-7 w-7 '+color}/></div></div>)}
         </div>
@@ -251,7 +251,7 @@ export default function EstoqueInternoPage() {
         </div>
       </>}
       {tab==='produtos'&&<section className={wrapBox}>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Materiais do escritório</h2><div className="flex gap-2">{access.pode_gerenciar&&<button className={primaryButton} onClick={()=>setProductOpen(!productOpen)}><Plus className="h-4 w-4"/> Produto</button>}<button className="rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-500" onClick={()=>downloadCSV()}>Exportar CSV</button></div></div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Materiais do escritório</h2><div className="flex gap-2">{!staffPortal&&access.pode_gerenciar&&<button className={primaryButton} onClick={()=>setProductOpen(!productOpen)}><Plus className="h-4 w-4"/> Produto</button>}<button className="rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-500" onClick={()=>downloadCSV()}>Exportar CSV</button></div></div>
         {productOpen&&<form onSubmit={submitItem} className="mb-5 grid gap-3 rounded-xl border border-violet-500/40 p-4 md:grid-cols-3">
           <input required type="number" min="1" placeholder="Código" className={inputStyle} value={newItem.codigo} onChange={e=>setNewItem({...newItem,codigo:e.target.value})}/>
           <input required placeholder="Descrição" className={inputStyle} value={newItem.descricao} onChange={e=>setNewItem({...newItem,descricao:e.target.value})}/>
