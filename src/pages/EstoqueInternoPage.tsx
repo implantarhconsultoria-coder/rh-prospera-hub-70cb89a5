@@ -222,7 +222,7 @@ export default function EstoqueInternoPage() {
     </header>}
     <div className="mx-auto max-w-[1500px] space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><div className="text-[11px] font-bold uppercase tracking-[.18em] text-violet-400">TOPAC RH PRO • ESCRITÓRIO</div><h1 className="mt-1 text-3xl font-black">Estoque Interno</h1><p className="mt-1 text-sm text-zinc-500">Materiais administrativos • controle independente do almoxarifado operacional</p></div>
+        <div><div className="text-[11px] font-bold uppercase tracking-[.18em] text-violet-400">{staffPortal?'PAINEL DA EQUIPE • ESCRITÓRIO':'TOPAC RH PRO • ESCRITÓRIO'}</div><h1 className="mt-1 text-3xl font-black">{staffPortal?'Materiais do Escritório':'Estoque Interno'}</h1><p className="mt-1 text-sm text-zinc-500">{staffPortal?'Consulte produtos, registre entradas e saídas e acompanhe o histórico.':'Materiais administrativos • controle independente do almoxarifado operacional'}</p></div>
         <div className="flex items-center gap-3"><span className="rounded-lg border border-[#443050] px-3 py-2 text-xs text-zinc-300">{access.nome}</span><button onClick={()=>void refresh()} disabled={refreshing} className="rounded-lg border border-[#493552] p-2 hover:border-violet-400" title="Atualizar"><RefreshCw className={'h-5 w-5 '+(refreshing?'animate-spin':'')}/></button></div>
       </div>
       <div className="space-y-3">
