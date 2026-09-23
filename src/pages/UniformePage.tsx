@@ -37,6 +37,7 @@ const UniformePage:React.FC=()=>{
   const [size,setSize]=useState('M');
   const [model,setModel]=useState('MANGA CURTA');
   const [count,setCount]=useState('');
+  const [operation,setOperation]=useState<'contagem'|'entrada'>('contagem');
   const [minimum,setMinimum]=useState('0');
   const [observation,setObservation]=useState('');
   const [search,setSearch]=useState('');
@@ -76,16 +77,21 @@ const UniformePage:React.FC=()=>{
     e.preventDefault();
     if(!unit){toast.error('Escolha a unidade física antes de registrar a contagem. A ficha digitalizada não marcou a unidade.');return;}
     const quantity=Number(count),min=Number(minimum);
-    if(!Number.isSafeInteger(quantity)||quantity<0||!Number.isSafeInteger(min)||min<0){toast.error('Informe quantidades inteiras maiores ou iguais a zero.');return;}
+    if(!Number.isSafeInteger(quantity)||quantity<0||!Number.isSafeInteger(min)||min<0||(operation==='entrada'&&quantity===0)){toast.error(operation==='entrada'?'Informe uma quantidade positiva.':'Informe quantidades inteiras maiores ou iguais a zero.');return;}
     if(!type.trim()||!size.trim()||!model.trim()){toast.error('Preencha tipo, tamanho e modelo.');return;}
     setBusy(true);
-    const r=await db.rpc('uniforme_contar_estoque',{
-      p_unidade:unit,p_tipo:type.trim(),p_tamanho:size.trim(),p_modelo:model.trim(),
-      p_saldo:quantity,p_minimo:min,p_observacao:observation.trim()||null,
-    });
+    const r=operation==='contagem'
+      ? await db.rpc('uniforme_contar_estoque',{
+          p_unidade:unit,p_tipo:type.trim(),p_tamanho:size.trim(),p_modelo:model.trim(),
+          p_saldo:quantity,p_minimo:min,p_observacao:observation.trim()||null,
+        })
+      : await db.rpc('uniforme_entrar_estoque',{
+          p_unidade:unit,p_tipo:type.trim(),p_tamanho:size.trim(),p_modelo:model.trim(),
+          p_quantidade:quantity,p_observacao:observation.trim()||null,
+        });
     setBusy(false);
     if(r.error){toast.error('Contagem não registrada: '+r.error.message);return;}
-    toast.success('Estoque salvo, com histórico de ajuste.');
+    toast.success(operation==='entrada'?'Entrada registrada e saldo somado.':'Contagem salva, com histórico de ajuste.');
     setCount('');setObservation('');
     await refresh();
   };
@@ -173,8 +179,12 @@ const UniformePage:React.FC=()=>{
     </div>}
     {mode==='estoque'&&<div className="space-y-4">
       <form onSubmit={stockCount} className="card-premium p-5 space-y-4">
-        <h2 className="font-bold">Contagem física / correção de saldo</h2>
-        <p className="text-xs text-muted-foreground">Informe o saldo físico total desta variação. A alteração grava a diferença e quem a fez.</p>
+        <h2 className="font-bold">Contagem física / entrada de novas peças</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant={operation==='contagem'?'default':'outline'} onClick={()=>{setOperation('contagem');setCount('');}}>Definir saldo físico</Button>
+          <Button type="button" size="sm" variant={operation==='entrada'?'default':'outline'} onClick={()=>{setOperation('entrada');setCount('');}}>Somar peças recebidas</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">{operation==='contagem'?'Informe o saldo total que contou fisicamente, não uma entrada. A diferença ficará no histórico.':'Informe apenas as peças que chegaram. O sistema SOMA ao saldo atual e registra a entrada.'}</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-xs text-muted-foreground">Produto<select value={type} onChange={e=>setType(e.target.value)} className="w-full border rounded p-2 mt-1 bg-background text-foreground">
             {UNIFORM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
@@ -186,8 +196,8 @@ const UniformePage:React.FC=()=>{
             <Input value={size} onChange={e=>setSize(e.target.value)} list="tamanhos-uniforme" className="mt-1"/>
             <datalist id="tamanhos-uniforme">{SIZE_OPTIONS.map(s=><option key={s} value={s}/>)}</datalist>
           </label>
-          <label className="text-xs text-muted-foreground">Quantidade física atual
-            <Input required type="number" min="0" step="1" value={count} onChange={e=>setCount(e.target.value)} className="mt-1" placeholder="Quantidade conferida"/>
+          <label className="text-xs text-muted-foreground">{operation==='contagem'?'Saldo físico total':'Quantidade recebida'}
+            <Input required type="number" min={operation==='entrada'?'1':'0'} step="1" value={count} onChange={e=>setCount(e.target.value)} className="mt-1" placeholder={operation==='contagem'?'Quantidade conferida':'Quantidade que chegou'}/>
           </label>
           <label className="text-xs text-muted-foreground">Estoque mínimo
             <Input type="number" min="0" step="1" value={minimum} onChange={e=>setMinimum(e.target.value)} className="mt-1"/>
@@ -196,7 +206,7 @@ const UniformePage:React.FC=()=>{
             <Input value={observation} onChange={e=>setObservation(e.target.value)} className="mt-1" placeholder="Ex.: inventário inicial da ficha física"/>
           </label>
         </div>
-        <Button type="submit" disabled={busy||!unit||!count.trim()}><Plus className="mr-1 h-4 w-4"/>Salvar contagem</Button>
+        <Button type="submit" disabled={busy||!unit||!count.trim()}><Plus className="mr-1 h-4 w-4"/>{operation==='entrada'?'Registrar entrada':'Salvar contagem'}</Button>
       </form>
       <div className="card-premium p-5">
         <h2 className="font-bold mb-3">Saldos cadastrados • {UNIDADES.find(u=>u.value===unit)?.label||'Selecione uma unidade'}</h2>
