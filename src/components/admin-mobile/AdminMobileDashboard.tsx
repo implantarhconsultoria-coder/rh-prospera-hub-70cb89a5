@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Building2, CalendarDays, Car, ChevronRight, ClipboardCheck, FileText,
   Fuel, HardHat, Package, ReceiptText, Stethoscope, Users, WalletCards, Wrench,
+  Shirt, Archive, Tags, ShoppingCart, Radar, History, ClipboardList, UserCheck,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
@@ -105,21 +106,37 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
     { label: 'Assinaturas', value: `${signaturePct}%`, icon: ReceiptText, accent: 'text-blue-400', detail: 'concluídas' },
   ];
 
+  // Acesso mobile integrado aos MESMOS módulos e dados usados no desktop.
+  // Fechamento antigo retirado do mobile; módulos financeiros seguem na Central da Contabilidade.
+  const quickAccesses = [
+    { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes', accent: 'text-amber-300', detail: 'Estoque e entrega' },
+    { label: 'Estoque Interno', icon: Archive, path: '/admin/estoque-interno', accent: 'text-violet-300', detail: 'Gestão do escritório' },
+    { label: 'Tela da Equipe', icon: Package, path: '/estoque-interno', accent: 'text-emerald-300', detail: 'Ver como eles acessam' },
+    { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi', accent: 'text-orange-300', detail: 'Fichas e entregas' },
+    { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado', accent: 'text-fuchsia-300', detail: 'Materiais operacionais' },
+    { label: 'Funcionários', icon: Users, path: '/admin/funcionarios', accent: 'text-fuchsia-300', detail: 'Cadastro e histórico' },
+  ];
+
   const accesses = [
-    { label: 'Funcionários', icon: Users, path: '/admin/funcionarios', accent: 'text-fuchsia-300' },
-    { label: 'Fechamento', icon: ClipboardCheck, path: '/admin/fechamento', accent: 'text-fuchsia-300' },
+    { label: 'Empresas', icon: Building2, path: '/admin/empresas', accent: 'text-fuchsia-300' },
+    { label: 'Assinatura Digital', icon: ReceiptText, path: '/admin/folha-pagamento', accent: 'text-blue-400' },
+    { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade', accent: 'text-sky-300' },
     { label: 'Ponto', icon: BarChart3, path: '/admin/fechamento-ponto', accent: 'text-fuchsia-300' },
     { label: 'VR / VT', icon: WalletCards, path: '/admin/relatorio-vr', accent: 'text-blue-400' },
-    { label: 'Holerites', icon: FileText, path: '/admin/folha-pagamento', accent: 'text-fuchsia-300' },
     { label: 'Férias', icon: CalendarDays, path: '/admin/aviso-ferias', accent: 'text-fuchsia-300' },
-    { label: 'EPI', icon: HardHat, path: '/admin/epi', accent: 'text-orange-300' },
-    { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado', accent: 'text-fuchsia-300' },
-    { label: 'Frota', icon: Car, path: '/admin/documentos-ativos', accent: 'text-violet-300' },
-    { label: 'Abastecimento', icon: Fuel, path: '/admin/abastecimento-qrcode', accent: 'text-fuchsia-300' },
-    { label: 'Operacional', icon: Wrench, path: '/admin/operacional', accent: 'text-sky-400' },
-    { label: 'Relatórios', icon: BarChart3, path: '/admin/relatorio', accent: 'text-fuchsia-300' },
     { label: 'ASO', icon: Stethoscope, path: '/admin/aso', accent: 'text-emerald-300' },
-    { label: 'App Mecânicos', icon: Wrench, path: '/admin/app-mecanico', accent: 'text-fuchsia-300' },
+    { label: 'Pré-cadastro', icon: UserCheck, path: '/admin/pre-cadastro-admissional', accent: 'text-pink-300' },
+    { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos', accent: 'text-violet-300' },
+    { label: 'Abastecimento', icon: Fuel, path: '/admin/abastecimento-qrcode', accent: 'text-fuchsia-300' },
+    { label: 'Combustível', icon: Fuel, path: '/admin/galoes-combustivel', accent: 'text-amber-300' },
+    { label: 'Rastreamento da Frota', icon: Radar, path: '/admin/monitoramento', accent: 'text-emerald-300' },
+    { label: 'Operacional', icon: ClipboardList, path: '/admin/operacional', accent: 'text-sky-400' },
+    { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico', accent: 'text-fuchsia-300' },
+    { label: 'Etiquetas', icon: Tags, path: '/admin/etiquetas', accent: 'text-amber-300' },
+    { label: 'Compras', icon: ShoppingCart, path: '/admin/compras', accent: 'text-sky-300' },
+    { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores', accent: 'text-violet-300' },
+    { label: 'Relatórios', icon: BarChart3, path: '/admin/relatorio', accent: 'text-fuchsia-300' },
+    { label: 'Histórico', icon: History, path: '/admin/historico', accent: 'text-emerald-300' },
   ];
 
   return (
@@ -190,21 +207,34 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
         </div>
       </section>
 
+      <section className="rounded-[22px] border border-amber-500/25 bg-[#0a0611]/88 p-3 shadow-[0_14px_35px_rgba(0,0,0,.28)]">
+        <div className="mb-3 flex items-center gap-2 px-1 text-sm font-black uppercase tracking-[.04em]"><Shirt className="h-4 w-4 text-amber-300" />Acessos do Dia a Dia</div>
+        <div className="grid grid-cols-2 gap-2">
+          {quickAccesses.map(item => (
+            <button key={item.path} type="button" onClick={() => navigate(item.path)}
+              className="group min-h-[104px] rounded-2xl border border-white/[.09] bg-[linear-gradient(145deg,rgba(255,255,255,.045),rgba(6,3,10,.98))] p-3 text-left transition active:scale-[.98] active:border-amber-500/40">
+              <div className="flex items-start justify-between gap-2">
+                <item.icon className={`h-6 w-6 ${item.accent}`} />
+                <ChevronRight className="h-4 w-4 text-zinc-600" />
+              </div>
+              <div className="mt-3 text-[12px] font-bold text-zinc-100">{item.label}</div>
+              <div className="mt-1 text-[10px] leading-4 text-zinc-500">{item.detail}</div>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-[22px] border border-fuchsia-500/20 bg-[#0a0611]/88 p-3 shadow-[0_14px_35px_rgba(0,0,0,.28)]">
-        <div className="mb-3 flex items-center gap-2 px-1 text-sm font-black uppercase tracking-[.04em]"><Package className="h-4 w-4 text-fuchsia-400" />Principais Acessos</div>
+        <div className="mb-3 flex items-center gap-2 px-1 text-sm font-black uppercase tracking-[.04em]"><Package className="h-4 w-4 text-fuchsia-400" />Outros Módulos da Empresa</div>
         <div className="grid grid-cols-2 gap-2">
           {accesses.map(item => (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => navigate(item.path)}
-              className="group min-h-[92px] rounded-2xl border border-white/[.08] bg-[linear-gradient(145deg,rgba(255,255,255,.032),rgba(6,3,10,.98))] p-3 text-left transition active:scale-[.98] active:border-fuchsia-500/35"
-            >
+            <button key={item.path} type="button" onClick={() => navigate(item.path)}
+              className="group min-h-[86px] rounded-2xl border border-white/[.08] bg-[linear-gradient(145deg,rgba(255,255,255,.032),rgba(6,3,10,.98))] p-3 text-left transition active:scale-[.98] active:border-fuchsia-500/35">
               <div className="flex items-start justify-between gap-2">
                 <item.icon className={`h-6 w-6 ${item.accent} drop-shadow-[0_0_8px_rgba(232,121,249,.18)]`} />
                 <ChevronRight className="h-4 w-4 text-zinc-700 transition group-active:text-fuchsia-400" />
               </div>
-              <div className="mt-4 text-[12px] font-bold text-zinc-100">{item.label}</div>
+              <div className="mt-3 text-[12px] font-bold text-zinc-100">{item.label}</div>
             </button>
           ))}
         </div>
