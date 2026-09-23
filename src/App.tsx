@@ -65,6 +65,7 @@ import ConferenciaPontoPage from "@/pages/ConferenciaPontoPage";
 import AlmoxarifadoPage from "@/pages/AlmoxarifadoPage";
 import EtiquetasPage from "@/pages/EtiquetasPage";
 import EstoqueInternoPage from "@/pages/EstoqueInternoPage";
+import EstoqueInternoLoginPage from "@/pages/EstoqueInternoLoginPage";
 import FolhaPagamentoPage from "@/pages/FolhaPagamentoPage";
 import RescisaoPage from "@/pages/RescisaoPage";
 import ComprasPage from "@/pages/ComprasPage";
@@ -163,6 +164,7 @@ const AuthGate = () => {
   if (!isAuthenticated) {
     return (
       <Routes>
+        <Route path="/estoque-interno" element={<EstoqueInternoLoginPage />} />
         <Route path="/cadastro" element={<CadastroPage />} />
         <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
         <Route path="/redefinir-senha" element={<RedefinirSenhaPage />} />
