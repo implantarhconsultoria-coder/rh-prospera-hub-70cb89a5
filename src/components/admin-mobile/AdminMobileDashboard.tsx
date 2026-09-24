@@ -100,10 +100,10 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
   }), [companies, activeEmployees]);
 
   const summary = [
-    { label: 'Funcionários', value: totalFuncionarios, icon: Users, accent: 'text-fuchsia-300', detail: 'ativos' },
-    { label: 'Pendências', value: pending + counts.pendingFuel, icon: ClipboardCheck, accent: 'text-pink-400', detail: 'para conferir' },
-    { label: 'Férias (mês)', value: counts.vacationsThisMonth, icon: CalendarDays, accent: 'text-violet-300', detail: 'programadas' },
-    { label: 'Assinaturas', value: `${signaturePct}%`, icon: ReceiptText, accent: 'text-blue-400', detail: 'concluídas' },
+    { label: 'Funcionários', value: totalFuncionarios, icon: Users, accent: 'text-fuchsia-300', detail: 'ativos', path:'/admin/funcionarios' },
+    { label: 'Pendências', value: pending + counts.pendingFuel, icon: ClipboardCheck, accent: 'text-pink-400', detail: 'para conferir', path:'/admin/central-contabilidade' },
+    { label: 'Férias (mês)', value: counts.vacationsThisMonth, icon: CalendarDays, accent: 'text-violet-300', detail: 'programadas', path:'/admin/aviso-ferias' },
+    { label: 'Assinaturas', value: `${signaturePct}%`, icon: ReceiptText, accent: 'text-blue-400', detail: 'concluídas', path:'/admin/folha-pagamento' },
   ];
 
   // Acesso mobile integrado aos MESMOS módulos e dados usados no desktop.
@@ -173,12 +173,12 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
         </div>
         <div className="grid grid-cols-2 gap-2">
           {summary.map(card => (
-            <div key={card.label} className="rounded-2xl border border-white/[.08] bg-[linear-gradient(145deg,rgba(255,255,255,.035),rgba(6,3,10,.96))] p-3">
+            <button type="button" key={card.label} onClick={()=>navigate(card.path)} className="rounded-2xl border border-white/[.08] bg-[linear-gradient(145deg,rgba(255,255,255,.035),rgba(6,3,10,.96))] p-3 text-left transition active:scale-[.98] active:border-fuchsia-500/40">
               <card.icon className={`h-5 w-5 ${card.accent}`} />
               <div className="mt-2 text-[10px] text-zinc-500">{card.label}</div>
               <div className="mt-1 text-2xl font-black leading-none text-white">{loading ? '—' : typeof card.value === 'number' ? br(card.value) : card.value}</div>
-              <div className="mt-2 text-[9px] text-zinc-600">{card.detail}</div>
-            </div>
+              <div className="mt-2 text-[9px] text-zinc-600">{card.detail} • toque para consultar</div>
+            </button>
           ))}
         </div>
       </section>
