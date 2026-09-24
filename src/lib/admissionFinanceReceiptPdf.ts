@@ -9,14 +9,15 @@ export type AdmissionFinanceReceipt = {
   company: { name: string; cnpj?: string };
   person: { name: string; cpf: string; role?: string };
   plannedAdmission: string;
+  plannedPaymentDate?: string | null;
   competencia: string;
-  businessDays: number;
+  businessDays: number | null;
   banking: {
     banco: string; agencia: string; conta: string; digito?: string;
     titular: string; cpfTitular: string; chavePix: string;
   };
-  vr: { enabled: boolean; daily: number; total: number };
-  vt: { enabled: boolean; daily: number; total: number };
+  vr: { enabled: boolean; daily: number; total: number | null };
+  vt: { enabled: boolean; daily: number; total: number | null };
   admitted: boolean;
 };
 
@@ -78,7 +79,7 @@ export const buildAdmissionFinanceReceiptPdfBlob = (data: AdmissionFinanceReceip
     : 'Candidato em pré-admissão: programação antecipada, sujeita à confirmação do contrato e da admissão.',
     left, 45, { maxWidth: width });
 
-  doc.roundedRect(left, 53, width, 31, 1, 1);
+  doc.roundedRect(left, 53, width, 40, 1, 1);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('Nome:', 22, 61);
@@ -91,9 +92,15 @@ export const buildAdmissionFinanceReceiptPdfBlob = (data: AdmissionFinanceReceip
   doc.text(safe(data.person.cpf), 31, 70);
   doc.text(safe(data.person.role).slice(0, 35), 130, 61);
   doc.text(dateBr(data.plannedAdmission), 151, 70);
-  doc.text(String(data.businessDays), 53, 79);
+  doc.text(data.businessDays == null ? 'Pendente' : String(data.businessDays), 53, 79);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Data prevista para pagamento:', 22, 87);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.text(data.plannedPaymentDate ? dateBr(data.plannedPaymentDate) + ' (confirmar com RH)' : 'PENDENTE - AGUARDAR CONFIRMACAO DO RH', 76, 87);
 
-  let y = section('DADOS BANCÁRIOS — CONFERIR ANTES DO PAGAMENTO', 91);
+  let y = section('DADOS BANCÁRIOS — CONFERIR ANTES DO PAGAMENTO', 100);
   const account = safe(data.banking.conta) +
     (data.banking.digito ? '-' + data.banking.digito : '');
   const bankRows: Array<[string, string]> = [
@@ -110,8 +117,8 @@ export const buildAdmissionFinanceReceiptPdfBlob = (data: AdmissionFinanceReceip
     y += 4;
     y = section(name, y);
     labelRow('Valor diário', item.enabled ? formatCurrency(item.daily) : 'Não aplicado', y); y += 8;
-    labelRow('Dias úteis considerados', item.enabled ? String(data.businessDays) : '—', y); y += 8;
-    labelRow('VALOR PARA PROGRAMAÇÃO', item.enabled ? formatCurrency(item.total) : 'Não aplicado', y, true); y += 8;
+    labelRow('Dias úteis considerados', item.enabled ? (data.businessDays == null ? 'Pendente - confirmar com RH' : String(data.businessDays)) : '—', y); y += 8;
+    labelRow('VALOR PARA PROGRAMAÇÃO', item.enabled ? (item.total == null ? 'PENDENTE - AGUARDAR CONFIRMACAO DO RH' : formatCurrency(item.total)) : 'Não aplicado', y, true); y += 8;
   };
   benefit('VR — VALE-REFEIÇÃO', data.vr);
   benefit('VT — VALE-TRANSPORTE', data.vt);
@@ -122,6 +129,7 @@ export const buildAdmissionFinanceReceiptPdfBlob = (data: AdmissionFinanceReceip
   doc.setFont('helvetica', 'normal');
   const warning = 'VR e VT são demonstrados separadamente. Este documento apenas solicita programação financeira; ' +
     'não comprova depósito, entrega, quitação, assinatura ou autorização de admissão. ' +
+    'A data prevista para pagamento acompanha a data de início informada; sem data, permanece pendente de confirmação do RH. ' +
     'Conferir os valores, a data de início e os dados bancários antes de executar o pagamento.';
   doc.text(doc.splitTextToSize(warning, width), left, y + 19);
 
