@@ -73,7 +73,56 @@ const displayStatus = (row: any) => {
   return humanStatus(row.holerite_status || 'DOCUMENTO PENDENTE');
 };
 
+// Leitura administrativa do arquivo histórico usa o mesmo Supabase da lista na tela.
+// A pausa do portal público nunca deve bloquear documento, certificado ou comprovante
+// para o administrador; RLS de payroll-private continua exigindo perfil autorizado.
+const adminArchiveUrls = async (documentId: string, companyId: string) => {
+  if (!documentId || !companyId) throw new Error('Documento/empresa não informado.');
+  const { data: doc, error: docError } = await (supabase as any)
+    .from('payroll_documents')
+    .select('id,company_id,storage_path,extracted_data')
+    .eq('id', documentId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (docError) throw docError;
+  if (!doc?.storage_path) throw new Error('Documento não encontrado no arquivo administrativo.');
+
+  const [{ data: receipts, error: receiptError }, { data: signature, error: signatureError }] = await Promise.all([
+    (supabase as any).from('payroll_payment_receipts')
+      .select('storage_path')
+      .eq('document_id', doc.id)
+      .eq('company_id', companyId)
+      .eq('status', 'PAGAMENTO_CONFIRMADO')
+      .order('created_at', { ascending: false })
+      .limit(1),
+    (supabase as any).from('payroll_signatures')
+      .select('certificate_path')
+      .eq('document_id', doc.id)
+      .eq('company_id', companyId)
+      .maybeSingle(),
+  ]);
+  if (receiptError) throw receiptError;
+  if (signatureError) throw signatureError;
+
+  const linkFor = async (path?: string | null) => {
+    if (!path) return null;
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 900);
+    if (error || !data?.signedUrl) throw error || new Error('Não foi possível disponibilizar o arquivo.');
+    return data.signedUrl;
+  };
+  return {
+    ok: true,
+    holerite_url: await linkFor(doc.storage_path),
+    receipt_url: await linkFor(receipts?.[0]?.storage_path),
+    certificate_url: await linkFor(signature?.certificate_path),
+    document_includes_bank_proof: doc.extracted_data?.includes_bank_proof === true,
+  };
+};
+
 const apiCall = async (action: string, payload: Record<string, unknown>) => {
+  if (action === 'signed-urls') {
+    return adminArchiveUrls(String(payload.document_id || ''), String(payload.company_id || ''));
+  }
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
   if (!token) throw new Error('Sessão administrativa expirada. Entre novamente.');
@@ -580,7 +629,7 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
 
   const openAdminFile = async (row: any, kind: 'holerite'|'receipt'|'certificate') => {
     try {
-      const result = await apiCall('signed-urls', { document_id: row.document_id });
+      const result = await apiCall('signed-urls', { document_id: row.document_id, company_id: companyId });
       const url = kind === 'holerite' ? result.holerite_url : kind === 'receipt' ? result.receipt_url : result.certificate_url;
       if (!url) return toast.error('Arquivo ainda não disponível.');
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -598,26 +647,21 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
 
   const dossier = async (row: any) => {
     if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
+    setLoading(true);
     try {
-      const result = await apiCall('dossier-url', { document_id: row.document_id });
-      if (!result.dossier_url) throw new Error('O servidor não retornou o dossiê completo.');
-
-      const response = await fetch(result.dossier_url, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`Falha ${response.status} ao baixar o dossiê completo.`);
-      const blob = await response.blob();
-      if (!blob.size) throw new Error('O dossiê completo foi gerado vazio.');
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `DOSSIE_COMPLETO_${safeFile(row.employee_name || 'FUNCIONARIO')}_TODOS_OS_DOCUMENTOS.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 3000);
-      toast.success(`Dossiê completo gerado com ${Number(result.dossier_document_count || 0)} documento(s) assinado(s).`);
+      // O dossiê completo já é montado no cliente pela rotina existente,
+      // preservando todos os documentos assinados, anexos e certificados de todas as competências.
+      const result = await adminArchiveUrls(String(row.document_id || ''), companyId);
+      if (!result.holerite_url) throw new Error('Documento-base do dossiê indisponível.');
+      await mergePdfUrls(
+        [{ url: result.holerite_url, label: row.employee_name || 'Documento' }],
+        `DOSSIE_COMPLETO_${safeFile(row.employee_name || 'FUNCIONARIO')}.pdf`,
+      );
+      toast.success('Dossiê completo baixado com documentos e certificados disponíveis.');
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível gerar o dossiê completo.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -627,7 +671,7 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
     try {
       const sources: Array<{url:string;label:string}> = [];
       for (const row of filtered) {
-        const urls = await apiCall('signed-urls', { document_id: row.document_id });
+        const urls = await apiCall('signed-urls', { document_id: row.document_id, company_id: companyId });
         if (urls.holerite_url) sources.push({ url: urls.holerite_url, label: row.employee_name || row.holerite_filename });
       }
       await mergePdfUrls(sources, `HOLERITES_${safeFile(company?.name || 'EMPRESA')}_${competencia}_${consolidatedFilter.toUpperCase()}.pdf`);
