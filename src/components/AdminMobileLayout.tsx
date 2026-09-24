@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Building2, FileText, Home, Search, Wrench, Shirt, Archive,
+  ArrowLeft, Building2, ChevronDown, FileText, Home, Search, Wrench, Shirt, Archive, Package,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ type SearchItem = { label: string; path: string };
 
 const SEARCH_ITEMS: SearchItem[] = [
   { label: 'Dashboard', path: '/admin' },
+  { label: 'Funcionários', path: '/admin/funcionarios' },
+  { label: 'Empresas', path: '/admin/empresas' },
   { label: 'Empresas', path: '/admin/empresas' },
   { label: 'Central da Contabilidade', path: '/admin/central-contabilidade' },
   { label: 'Pré-cadastro', path: '/admin/central-contabilidade?modulo=pre-cadastro' },
@@ -51,6 +53,23 @@ const AdminMobileLayout: React.FC = () => {
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
+  const [moduleOpen,setModuleOpen] = useState(Boolean((location.state as any)?.openMobileModule));
+  const isNativeCardModule = ['/admin/estoque-interno','/admin/uniformes','/admin/epi']
+    .some(path=>location.pathname===path || location.pathname.startsWith(path+'/'));
+  const moduleItem = [...SEARCH_ITEMS].filter(item=>item.path.startsWith('/admin/')
+    && (location.pathname===item.path || location.pathname.startsWith(item.path+'/')))
+    .sort((a,b)=>b.path.length-a.path.length)[0];
+  const moduleLabel=moduleItem?.label||location.pathname.split('/').filter(Boolean).slice(1).join(' / ').replace(/-/g,' ')||'Módulo';
+  const moduleKey=moduleItem?.path||location.pathname;
+  const lastModule=useRef(moduleKey);
+  useEffect(()=>{
+    if(lastModule.current!==moduleKey){
+      lastModule.current=moduleKey;
+      setModuleOpen(Boolean((location.state as any)?.openMobileModule));
+    }else if((location.state as any)?.openMobileModule){
+      setModuleOpen(true);
+    }
+  },[moduleKey,location.key,location.state]);
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
   const isHome = location.pathname === '/admin';
 
@@ -108,7 +127,17 @@ const AdminMobileLayout: React.FC = () => {
       <main className={isHome ? 'pb-8' : 'px-3 pt-3 pb-32'}>
         {isHome ? (
           isDirector ? <Outlet /> : <div className="mobile-admin-home-shell"><AdminMobileDashboard onSearch={() => setSearchOpen(true)} /></div>
-        ) : <Outlet />}
+        ) : isNativeCardModule ? <Outlet /> : <div className="space-y-3">
+          <button type="button" aria-expanded={moduleOpen} aria-controls="topac-mobile-module-content"
+            onClick={()=>setModuleOpen(open=>!open)}
+            className={`flex w-full min-h-[82px] items-center gap-3 rounded-xl border p-4 text-left transition active:scale-[.99] ${moduleOpen?'border-violet-500 bg-[#241a32]':'border-[#30283a] bg-[#0d1017]'}`}>
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-violet-500/30 bg-violet-500/10"><Package className="h-5 w-5 text-violet-300"/></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black capitalize text-white">{moduleLabel}</span>
+              <span className="mt-1 block text-[11px] text-zinc-400">{moduleOpen?'Toque para fechar':'Toque para abrir as informações'}</span></span>
+            <ChevronDown className={`h-5 w-5 shrink-0 text-violet-300 transition-transform ${moduleOpen?'rotate-180':''}`}/>
+          </button>
+          {moduleOpen&&<div id="topac-mobile-module-content" className="min-w-0"><Outlet /></div>}
+        </div>}
       </main>
 
       {!isHome && (
@@ -117,7 +146,7 @@ const AdminMobileLayout: React.FC = () => {
             <button
               key={item.path}
               type="button"
-              onClick={() => nav(item.path)}
+              onClick={() => nav(item.path,{state:{openMobileModule:true}})}
               className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[9px] font-semibold transition active:scale-95 ${item.active ? 'text-fuchsia-300' : 'text-zinc-500'}`}
             >
               <item.icon className={`h-[22px] w-[22px] ${item.active ? 'drop-shadow-[0_0_8px_rgba(232,121,249,.75)]' : ''}`} />
