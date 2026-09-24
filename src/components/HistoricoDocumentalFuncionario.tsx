@@ -18,6 +18,7 @@ import {
   Clock,
   Download,
   Eye,
+  Printer,
   FileText,
   FolderLock,
   HardHat,
@@ -34,6 +35,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { useApp } from '@/context/AppContext';
 import { downloadDocument, getDocumentUrl, type DocumentSource } from '@/lib/documentUrl';
+import { buildHistoricDocumentPdf } from '@/lib/historicoDocumentalPdf';
 import { CC_OBRIGATORIO, DESTINATARIOS_CONTABILIDADE } from '@/lib/emailUtils';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
@@ -176,7 +178,8 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [viewing, setViewing] = useState<{ source: DocumentSource; titulo: string } | null>(null);
+  const [viewing, setViewing] = useState<{ source?: DocumentSource; sourceBlob?: Blob; titulo: string; filename: string } | null>(null);
+  const [documentBusyId, setDocumentBusyId] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<HistoryGroupId>('pagamentos');
   const [categoria, setCategoria] = useState('DOCUMENTACAO ADMISSIONAL');
   const [origem, setOrigem] = useState('upload_manual');
@@ -321,6 +324,86 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     storage_path: doc.storage_path || undefined,
     tipo: inferTipo(doc.categoria || doc.tipo_documento || ''),
   });
+
+  const historyDocumentFilename = (doc: any, titulo: string, reconstituted: boolean) => {
+    const name = safeFileName(doc.nome_arquivo || titulo + '.pdf');
+    const base = name.replace(/\.[^.]+$/, '') || 'documento';
+    return reconstituted
+      ? (groupsForDocument(doc).includes('epi') ? 'VIA_RECONSTITUIDA_' : 'EXTRATO_') + base + '.pdf'
+      : name;
+  };
+
+  const downloadGeneratedBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleHistoryDocument = async (doc: any, action: 'view' | 'download' | 'print') => {
+    const categoriaDoc = doc.tipo_documento || doc.categoria || 'Documento';
+    const titulo = categoriaDoc + (doc.competencia ? ' - ' + doc.competencia : '');
+    const hasOriginal = Boolean(doc.arquivo_url || doc.storage_path);
+    const filename = historyDocumentFilename(doc, titulo, !hasOriginal);
+    if (doc.origem === 'payroll_portal' && !hasOriginal) {
+      toast.error('O arquivo protegido não está disponível. Consulte o módulo de Assinatura Digital.');
+      return;
+    }
+    const printWindow = action === 'print' ? window.open('', '_blank') : null;
+    if (action === 'print' && !printWindow) {
+      toast.error('Libere pop-ups para imprimir o documento.');
+      return;
+    }
+    if (printWindow) {
+      printWindow.document.title = titulo;
+      printWindow.document.body.textContent = 'Preparando documento para impressão...';
+    }
+    setDocumentBusyId(doc.id);
+    try {
+      const source = sourceFor(doc);
+      if (hasOriginal && action === 'view') {
+        setViewing({ source, titulo, filename });
+        return;
+      }
+      if (hasOriginal && action === 'download') {
+        if (!await downloadDocument(source, filename)) throw new Error('O arquivo não pôde ser baixado.');
+        return;
+      }
+      if (!hasOriginal) {
+        const blob = await buildHistoricDocumentPdf(doc, funcionario, company);
+        if (action === 'view') {
+          setViewing({ sourceBlob: blob, titulo, filename });
+          return;
+        }
+        if (action === 'download') {
+          downloadGeneratedBlob(blob, filename);
+          return;
+        }
+        const objectUrl = URL.createObjectURL(blob);
+        printWindow!.onload = () => {
+          try { printWindow!.focus(); printWindow!.print(); } catch { /* Impressão manual disponível. */ }
+        };
+        printWindow!.location.href = objectUrl;
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
+        return;
+      }
+      const url = await getDocumentUrl(source);
+      if (!url) throw new Error('Arquivo original não localizado para impressão.');
+      printWindow!.onload = () => {
+        try { printWindow!.focus(); printWindow!.print(); } catch { /* Impressão manual disponível. */ }
+      };
+      printWindow!.location.href = url;
+    } catch (error: any) {
+      printWindow?.close();
+      toast.error(error?.message || 'Não foi possível preparar o documento.');
+    } finally {
+      setDocumentBusyId(null);
+    }
+  };
 
   const enviarParaContabilidade = async (doc: any, source: DocumentSource, titulo: string) => {
     if (!session?.user) {
@@ -572,32 +655,39 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-3 mt-2">
-                  {(doc.arquivo_url || doc.storage_path) && (
+                  {(doc.arquivo_url || doc.storage_path || !protectedPayroll) && (
                     <>
-                      <button
-                        type="button"
-                        onClick={() => setViewing({ source, titulo })}
-                        className="text-[11px] text-primary underline inline-flex items-center gap-1"
-                      >
+                      <button type="button" disabled={documentBusyId === doc.id}
+                        onClick={() => void handleHistoryDocument(doc, 'view')}
+                        className="text-[11px] text-primary underline inline-flex items-center gap-1 disabled:opacity-50">
                         <Eye className="w-3 h-3" /> Visualizar
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void downloadDocument(source, safeFileName(doc.nome_arquivo || `${titulo}.pdf`))}
-                        className="text-[11px] text-primary underline inline-flex items-center gap-1"
-                      >
+                      <button type="button" disabled={documentBusyId === doc.id}
+                        onClick={() => void handleHistoryDocument(doc, 'download')}
+                        className="text-[11px] text-primary underline inline-flex items-center gap-1 disabled:opacity-50">
                         <Download className="w-3 h-3" /> Baixar
                       </button>
-                      {isDocumentoContabilidade(doc) && (
-                        <button
-                          type="button"
+                      <button type="button" disabled={documentBusyId === doc.id}
+                        onClick={() => void handleHistoryDocument(doc, 'print')}
+                        className="text-[11px] text-primary underline inline-flex items-center gap-1 disabled:opacity-50">
+                        <Printer className="w-3 h-3" /> Imprimir
+                      </button>
+                      {(doc.arquivo_url || doc.storage_path) && isDocumentoContabilidade(doc) && (
+                        <button type="button"
                           onClick={() => void enviarParaContabilidade(doc, source, titulo)}
-                          className="text-[11px] text-primary underline inline-flex items-center gap-1"
-                        >
+                          className="text-[11px] text-primary underline inline-flex items-center gap-1">
                           <Mail className="w-3 h-3" /> Enviar para contabilidade
                         </button>
                       )}
                     </>
+                  )}
+                  {!doc.arquivo_url && !doc.storage_path && !protectedPayroll && (
+                    <span className="text-[10px] text-amber-600">
+                      Sem arquivo original: disponível via reconstruída/extrato do registro
+                    </span>
+                  )}
+                  {!doc.arquivo_url && !doc.storage_path && protectedPayroll && (
+                    <span className="text-[10px] text-amber-600">Arquivo protegido indisponível</span>
                   )}
                   {!protectedPayroll && (
                     <button
@@ -623,7 +713,9 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
           <div className="px-6 pb-6 pt-3">
             <PdfDocumentViewer
               source={viewing?.source}
+              sourceBlob={viewing?.sourceBlob}
               title={viewing?.titulo || 'Documento'}
+              filename={viewing?.filename}
             />
           </div>
         </DialogContent>
