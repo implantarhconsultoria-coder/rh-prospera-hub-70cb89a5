@@ -42,7 +42,9 @@ export const normalizeRetirada = (input: unknown): string =>
     .replace(/\s+/g, ' ');
 
 const significantWords = (value: string) =>
-  normalizeRetirada(value).split(' ').filter((word) => word && !stopWords.has(word));
+  normalizeRetirada(value).split(' ')
+    .filter((word) => word && !stopWords.has(word))
+    .map((word) => word.length > 4 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word);
 
 const normalizedMeaning = (value: string) => significantWords(value).join(' ');
 
