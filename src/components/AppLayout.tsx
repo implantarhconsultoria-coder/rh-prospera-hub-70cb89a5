@@ -24,7 +24,6 @@ import ModuleSwitcher from '@/components/ModuleSwitcher';
 import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
-import { ADMIN_MODULES } from '@/data/adminModules';
 import { toast } from 'sonner';
 
 const AppLayout: React.FC = () => {
@@ -47,11 +46,14 @@ const AppLayout: React.FC = () => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
     const moduleResults = [
-      {label:'Dashboard',path:'/admin'},
-      ...ADMIN_MODULES.map(module=>({label:module.label,path:module.path})),
+      ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionários', '/admin/funcionarios'],
+      ['Pré-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
+      ['Fechamento', '/admin/fechamento'], ['VR', '/admin/relatorio-vr'], ['VT', '/admin/relatorio-vt'], ['Uniformes', '/admin/uniformes'], ['EPI', '/admin/epi'],
+      ['Frota / Documentos', '/admin/documentos-ativos'], ['Almoxarifado', '/admin/almoxarifado'], ['Estoque Interno', '/admin/estoque-interno'],
+      ['Relatório de Abastecimento', '/admin/abastecimento-qrcode'], ['Assinatura Digital', '/admin/folha-pagamento'],
     ]
-      .filter(({label,path})=>`${label} ${path}`.toLowerCase().includes(q))
-      .map(({label,path})=>({label,subtitle:'Módulo',path,icon:FileText}));
+      .filter(([label, path]) => `${label} ${path}`.toLowerCase().includes(q))
+      .map(([label, path]) => ({ label, subtitle: 'Módulo', path, icon: FileText }));
 
     const companyResults = companies
       .filter(c => `${c.name} ${c.cnpj} ${(c as any).codigo || ''}`.toLowerCase().includes(q))
