@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import VoiceCommandFab from '@/components/admin-mobile/VoiceCommandFab';
 import AssistenteFab from '@/components/assistente/AssistenteFab';
 import GlobalSearch, { SearchModule } from '@/components/admin-mobile/GlobalSearch';
-import AdminMobileDashboard from '@/components/admin-mobile/AdminMobileDashboard';
+import AdminHomeCards from '@/components/AdminHomeCards';
 import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
@@ -126,7 +126,7 @@ const AdminMobileLayout: React.FC = () => {
 
       <main className={isHome ? 'pb-8' : 'px-3 pt-3 pb-32'}>
         {isHome ? (
-          isDirector ? <Outlet /> : <div className="mobile-admin-home-shell"><AdminMobileDashboard onSearch={() => setSearchOpen(true)} /></div>
+          isDirector ? <Outlet /> : <div className="mobile-admin-home-shell"><div className="px-3 pt-[calc(18px+env(safe-area-inset-top))]"><AdminHomeCards /></div></div>
         ) : isNativeCardModule ? <Outlet /> : <div className="space-y-3">
           <button type="button" aria-expanded={moduleOpen} aria-controls="topac-mobile-module-content"
             onClick={()=>setModuleOpen(open=>!open)}
