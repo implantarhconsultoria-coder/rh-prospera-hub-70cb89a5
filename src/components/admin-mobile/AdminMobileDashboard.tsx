@@ -149,7 +149,7 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
 
       <button
         type="button"
-        onClick={() => navigate('/admin/relatorio')}
+        onClick={() => navigate('/admin/relatorio',{state:{openMobileModule:true}})}
         className="relative w-full overflow-hidden rounded-[22px] border border-fuchsia-500/30 bg-[radial-gradient(circle_at_92%_10%,rgba(84,54,255,.38),transparent_30%),linear-gradient(120deg,#120719,#090510_62%,#0c0617)] p-5 text-left shadow-[0_22px_55px_rgba(0,0,0,.38),0_0_35px_rgba(168,85,247,.09)] active:scale-[.99]"
       >
         <div className="absolute -right-12 -top-16 h-40 w-40 rounded-full border border-violet-500/20 shadow-[0_0_70px_rgba(124,58,237,.32)]" />
@@ -173,7 +173,7 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
         </div>
         <div className="grid grid-cols-2 gap-2">
           {summary.map(card => (
-            <button type="button" key={card.label} onClick={()=>navigate(card.path)} className="rounded-2xl border border-white/[.08] bg-[linear-gradient(145deg,rgba(255,255,255,.035),rgba(6,3,10,.96))] p-3 text-left transition active:scale-[.98] active:border-fuchsia-500/40">
+            <button type="button" key={card.label} onClick={()=>navigate(card.path,{state:{openMobileModule:true}})} className="rounded-2xl border border-white/[.08] bg-[linear-gradient(145deg,rgba(255,255,255,.035),rgba(6,3,10,.96))] p-3 text-left transition active:scale-[.98] active:border-fuchsia-500/40">
               <card.icon className={`h-5 w-5 ${card.accent}`} />
               <div className="mt-2 text-[10px] text-zinc-500">{card.label}</div>
               <div className="mt-1 text-2xl font-black leading-none text-white">{loading ? '—' : typeof card.value === 'number' ? br(card.value) : card.value}</div>
@@ -186,14 +186,14 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
       <section className="rounded-[22px] border border-fuchsia-500/20 bg-[#0a0611]/88 p-3 shadow-[0_14px_35px_rgba(0,0,0,.28)]">
         <div className="mb-3 flex items-center justify-between px-1">
           <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[.04em]"><Building2 className="h-4 w-4 text-fuchsia-400" />Totais por Empresa</div>
-          <button onClick={() => navigate('/admin/empresas')} className="text-[10px] font-semibold text-fuchsia-400">Ver todas</button>
+          <button onClick={() => navigate('/admin/empresas',{state:{openMobileModule:true}})} className="text-[10px] font-semibold text-fuchsia-400">Ver todas</button>
         </div>
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {companyCards.map(company => (
             <button
               key={company.id}
               type="button"
-              onClick={() => navigate(`/admin/empresas?empresa=${company.id}`)}
+              onClick={() => navigate(`/admin/empresas?empresa=${company.id}`,{state:{openMobileModule:true}})}
               className={`min-w-[138px] rounded-2xl border p-3 text-left active:scale-[.98] ${companyAccent(company.name)}`}
             >
               <Building2 className="h-5 w-5" />
@@ -211,7 +211,7 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
         <div className="mb-3 flex items-center gap-2 px-1 text-sm font-black uppercase tracking-[.04em]"><Shirt className="h-4 w-4 text-amber-300" />Acessos do Dia a Dia</div>
         <div className="grid grid-cols-2 gap-2">
           {quickAccesses.map(item => (
-            <button key={item.path} type="button" onClick={() => navigate(item.path)}
+            <button key={item.path} type="button" onClick={() => navigate(item.path,{state:{openMobileModule:true}})}
               className="group min-h-[104px] rounded-2xl border border-white/[.09] bg-[linear-gradient(145deg,rgba(255,255,255,.045),rgba(6,3,10,.98))] p-3 text-left transition active:scale-[.98] active:border-amber-500/40">
               <div className="flex items-start justify-between gap-2">
                 <item.icon className={`h-6 w-6 ${item.accent}`} />
@@ -228,7 +228,7 @@ export default function AdminMobileDashboard({ onSearch }: { onSearch?: () => vo
         <div className="mb-3 flex items-center gap-2 px-1 text-sm font-black uppercase tracking-[.04em]"><Package className="h-4 w-4 text-fuchsia-400" />Outros Módulos da Empresa</div>
         <div className="grid grid-cols-2 gap-2">
           {accesses.map(item => (
-            <button key={item.path} type="button" onClick={() => navigate(item.path)}
+            <button key={item.path} type="button" onClick={() => navigate(item.path,{state:{openMobileModule:true}})}
               className="group min-h-[86px] rounded-2xl border border-white/[.08] bg-[linear-gradient(145deg,rgba(255,255,255,.032),rgba(6,3,10,.98))] p-3 text-left transition active:scale-[.98] active:border-fuchsia-500/35">
               <div className="flex items-start justify-between gap-2">
                 <item.icon className={`h-6 w-6 ${item.accent} drop-shadow-[0_0_8px_rgba(232,121,249,.18)]`} />
