@@ -4,6 +4,7 @@ import {Archive, Building2, ChevronDown, Search, Shirt, Users, X} from 'lucide-r
 import {useApp} from '@/context/AppContext';
 import {supabase} from '@/integrations/supabase/client';
 import {ADMIN_MODULE_GROUPS} from '@/data/adminModules';
+import FuncionariosMoneyOverview from '@/components/FuncionariosMoneyOverview';
 
 const fmt=(n:number)=>new Intl.NumberFormat('pt-BR').format(n);
 
@@ -54,6 +55,8 @@ const AdminHomeCards:React.FC=()=>{
       <h1 className="mt-2 text-2xl font-black md:text-3xl">Olá, {firstName}</h1>
       <p className="mt-2 text-sm text-zinc-400">Os mesmos acessos no computador e no celular. Selecione um card para entrar no módulo.</p>
     </header>
+    <FuncionariosMoneyOverview employees={employees} companies={companies}
+      onCompanySelect={(companyId) => go('/admin/funcionarios?empresa=' + encodeURIComponent(companyId))} />
     <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Indicadores da empresa">
       {metrics.map(card=>{
         const Icon=card.icon;
