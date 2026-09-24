@@ -8,6 +8,10 @@ import {
 } from './payrollDocumentsV2';
 
 export * from './payrollDocumentsV2';
+// Preserve the complete signed dossier behavior, including all periods and certificates.
+// Vite aliases @/lib/payrollDocuments to this module; explicitly re-export the
+// complete-dossier implementation rather than V2's simple PDF concat helper.
+export { mergePdfUrls } from './payrollDocuments';
 
 type StructuredPage = Awaited<ReturnType<typeof extractPdfPages>>[number];
 
