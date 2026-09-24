@@ -379,6 +379,7 @@ const RelatorioVRPage: React.FC = () => {
       });
 
       let synced = 0;
+      let signatureUnavailable = 0;
       for (const companyId of reportCompanyIds) {
         const generationCompany = companies.find(c => c.id === companyId);
         if (!generationCompany) continue;
@@ -389,14 +390,27 @@ const RelatorioVRPage: React.FC = () => {
         const generationRows = buildVRReportRows(generationEmployees, companyEntries, diasUteis)
           .map(row => applyGenerationCorrection(row, companyId));
         await persistVrGeneration(generationCompany, generationRows, session.user.id);
-        for (const row of generationRows) {
-          if (await syncVrPayrollDocument(generationCompany, row, session.user.id)) synced += 1;
+        // A geração operacional de VR não pode depender de assinatura digital habilitada.
+        // Preserve o bloqueio do portal; sincronize recibos somente quando autorizado.
+        const { data: payrollEnabled, error: payrollStatusError } = await (supabase as any)
+          .rpc('payroll_company_enabled', { p_company_id: companyId });
+        if (payrollStatusError) throw payrollStatusError;
+        if (payrollEnabled) {
+          for (const row of generationRows) {
+            if (await syncVrPayrollDocument(generationCompany, row, session.user.id)) synced += 1;
+          }
+        } else {
+          signatureUnavailable += generationRows.length;
         }
       }
 
       setGenerated(true);
       setSelectedEmployees(new Set());
-      toast.success(`VR gerado: relatório + recibos. ${synced} documento(s) liberado(s) automaticamente na Assinatura Digital.`);
+      if (signatureUnavailable) {
+        toast.warning(`VR gerado: relatório e recibos disponíveis. Assinatura Digital desativada para ${signatureUnavailable} recibo(s); eles não foram liberados no portal. ${synced} documento(s) sincronizado(s) nas empresas habilitadas.`);
+      } else {
+        toast.success(`VR gerado: relatório + recibos. ${synced} documento(s) liberado(s) automaticamente na Assinatura Digital.`);
+      }
     } catch (error: any) {
       console.error('[vr-generation-signature]', error);
       toast.error(`Não foi possível gerar o VR: ${error?.message || error}`);
