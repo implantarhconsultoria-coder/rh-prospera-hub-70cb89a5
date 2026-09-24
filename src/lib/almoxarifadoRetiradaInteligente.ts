@@ -117,7 +117,7 @@ export const interpretRetirada = (text: string, stock: RetiradaStockItem[]): Ret
       const words = significantWords(term);
       const safeMatch = winner && (
         (winner.score >= 1100 && (!runnerUp || runnerUp.score < winner.score))
-        || (words.length >= 2 && winner.score >= 770 && !runnerUp)
+        || (words.length >= 2 && winner.score >= 650 && !runnerUp)
         || (words.length >= 2 && winner.score >= 850 && !!runnerUp && winner.score - runnerUp.score >= 160)
       );
       return {
