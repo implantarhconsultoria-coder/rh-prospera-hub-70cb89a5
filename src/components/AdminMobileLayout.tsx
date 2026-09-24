@@ -12,13 +12,42 @@ import AdminHomeCards from '@/components/AdminHomeCards';
 import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
-import { ADMIN_MODULES } from '@/data/adminModules';
+
 
 type SearchItem = { label: string; path: string };
 
 const SEARCH_ITEMS: SearchItem[] = [
-  {label:'Dashboard',path:'/admin'},
-  ...ADMIN_MODULES.map(module=>({label:module.label,path:module.path})),
+  { label: 'Dashboard', path: '/admin' },
+  { label: 'VR', path: '/admin/relatorio-vr' },
+  { label: 'VT', path: '/admin/relatorio-vt' },
+  { label: 'Funcionários', path: '/admin/funcionarios' },
+  { label: 'Empresas', path: '/admin/empresas' },
+  { label: 'Empresas', path: '/admin/empresas' },
+  { label: 'Central da Contabilidade', path: '/admin/central-contabilidade' },
+  { label: 'Pré-cadastro', path: '/admin/central-contabilidade?modulo=pre-cadastro' },
+  { label: 'Rescisões', path: '/admin/central-contabilidade?modulo=rescisao' },
+  { label: 'Solicitar Férias', path: '/admin/central-contabilidade?modulo=ferias' },
+  { label: 'ASO', path: '/admin/central-contabilidade?modulo=aso' },
+  { label: 'Envio para Clínicas', path: '/admin/central-contabilidade?modulo=clinicas' },
+  { label: 'Ponto', path: '/admin/fechamento-ponto' },
+  { label: 'Assinatura Digital / Holerites', path: '/admin/folha-pagamento' },
+  { label: 'EPI', path: '/admin/epi' },
+  { label: 'Uniformes / Estoque de Uniformes', path: '/admin/uniformes' },
+  { label: 'Estoque Interno do Escritório', path: '/admin/estoque-interno' },
+  { label: 'Tela da Equipe do Escritório', path: '/estoque-interno' },
+  { label: 'Almoxarifado', path: '/admin/almoxarifado' },
+  { label: 'Etiquetas', path: '/admin/etiquetas' },
+  { label: 'Combustível', path: '/admin/galoes-combustivel' },
+  { label: 'Rastreamento da Frota', path: '/admin/monitoramento' },
+  { label: 'Prestadores', path: '/admin/prestadores' },
+  { label: 'Histórico de Documentos', path: '/admin/historico' },
+  { label: 'Frota / Documentos', path: '/admin/documentos-ativos' },
+  { label: 'Abastecimento', path: '/admin/abastecimento-qrcode' },
+  { label: 'App Mecânicos', path: '/admin/app-mecanico' },
+  { label: 'Operacional', path: '/admin/operacional' },
+  { label: 'Relatórios', path: '/admin/relatorio' },
+  { label: 'Compras', path: '/admin/compras' },
+  { label: 'Histórico', path: '/admin/historico' },
 ];
 
 const AdminMobileLayout: React.FC = () => {
