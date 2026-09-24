@@ -13,6 +13,8 @@ interface PdfDocumentViewerProps {
   title?: string;
   /** Nome de arquivo sugerido p/ download. */
   filename?: string;
+  /** PDF gerado a partir de registro histórico quando não existe arquivo físico. */
+  sourceBlob?: Blob | null;
 }
 
 const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
@@ -21,11 +23,13 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
   source,
   title = 'Documento PDF',
   filename,
+  sourceBlob,
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [blobMime, setBlobMime] = useState('application/pdf');
   const [savedPath, setSavedPath] = useState<string>('');
 
   const effectiveSource: DocumentSource | string | undefined = source ?? sourceUrl;
@@ -35,7 +39,7 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
     let objectUrl: string | null = null;
 
     const load = async () => {
-      if (!effectiveSource) {
+      if (!effectiveSource && !sourceBlob) {
         setError('');
         setResolvedUrl(null);
         setBlobUrl(null);
@@ -50,6 +54,12 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
       setSavedPath(typeof effectiveSource === 'string' ? effectiveSource : (effectiveSource.url || effectiveSource.path || ''));
 
       try {
+        if (sourceBlob) {
+          objectUrl = URL.createObjectURL(sourceBlob);
+          setBlobMime(sourceBlob.type || 'application/pdf');
+          if (active) { setBlobUrl(objectUrl); setResolvedUrl(objectUrl); }
+          return;
+        }
         const url = await getDocumentUrl(effectiveSource);
         if (!active) return;
         if (!url) {
@@ -72,7 +82,13 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
           throw new Error('O arquivo PDF está vazio.');
         }
 
-        objectUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+        const contentType = response.headers.get('content-type') || '';
+        const looksImage = /\.(png|jpe?g|webp|gif)(?:\?|$)/i.test(url);
+        const mime = contentType.startsWith('image/') ? contentType.split(';')[0]
+          : looksImage ? ('image/' + (url.match(/\.(png|jpe?g|webp|gif)/i)?.[1]?.toLowerCase().replace('jpg', 'jpeg') || 'png'))
+          : 'application/pdf';
+        setBlobMime(mime);
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
         if (!active) {
           URL.revokeObjectURL(objectUrl);
           objectUrl = null;
@@ -95,7 +111,7 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [JSON.stringify(effectiveSource ?? null)]);
+  }, [JSON.stringify(effectiveSource ?? null), sourceBlob]);
 
   const handleOpen = async () => {
     if (blobUrl) {
@@ -116,6 +132,17 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
 
   const handleDownload = async () => {
     const name = filename || `${title.replace(/[^\w-]+/g, '_')}.pdf`;
+    if (sourceBlob) {
+      const url = URL.createObjectURL(sourceBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return;
+    }
     const ok = await downloadDocument(effectiveSource, name);
     if (!ok) setError('Não foi possível baixar o arquivo.');
   };
@@ -147,7 +174,7 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
     }
   };
 
-  if (!effectiveSource) {
+  if (!effectiveSource && !sourceBlob) {
     return (
       <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-4 text-center text-sm text-muted-foreground">
         {emptyMessage}
@@ -185,7 +212,9 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
 
       {!loading && !error && blobUrl && (
         <div className="overflow-hidden rounded-lg border border-border bg-background">
-          <object
+          {blobMime.startsWith('image/') ? (
+            <img src={blobUrl} alt={title} className="block max-h-[70vh] w-full object-contain bg-white" />
+          ) : <object
             aria-label={title}
             className="block h-[70vh] min-h-[520px] w-full bg-white"
             data={`${blobUrl}#view=FitH`}
@@ -196,7 +225,7 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
               src={`${blobUrl}#view=FitH`}
               title={title}
             />
-          </object>
+          </object>}
         </div>
       )}
 
