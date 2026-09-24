@@ -31,7 +31,7 @@ const GlobalSearch: React.FC<Props> = ({ open, onClose, query, onQuery, modules 
   const modResults = useMemo(() => !q ? modules.slice(0, 8) : modules
     .filter(m => norm(m.label).includes(q)).slice(0, 10), [q, modules]);
 
-  const go = (path: string) => { onClose(); onQuery(''); nav(path); };
+  const go = (path: string) => { onClose(); onQuery(''); nav(path,{state:{openMobileModule:true}}); };
 
   if (!open) return null;
   return (
