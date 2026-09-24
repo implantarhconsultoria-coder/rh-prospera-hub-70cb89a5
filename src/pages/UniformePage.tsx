@@ -242,7 +242,7 @@ const UniformePage:React.FC=()=>{
         {UNIDADES.map(u=><option key={u.value} value={u.value}>{u.label}</option>)}
       </select>
       {!unit&&<p className="mt-2 text-sm text-amber-600">A ficha enviada não identifica a unidade nem informa data/responsável. Escolha a unidade correta antes de lançar o inventário.</p>}
-    </div>
+    </div>}
     {mode&&stockError&&<div className="border border-destructive rounded-lg p-4 text-sm text-destructive">{stockError}</div>}
     {mode&&unit&&<div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       {([
