@@ -11,6 +11,8 @@ import { usePersistentViewState } from '@/hooks/usePersistentViewState';
 import { formatCurrency } from '@/lib/calculations';
 import { upsertFuncionarioBase, onlyDigits } from '@/lib/funcionariosBase';
 import BankingDataEditor from '@/components/BankingDataEditor';
+import AdmissionDossierWorkspace from '@/components/AdmissionDossierWorkspace';
+import FuncionariosMoneyOverview from '@/components/FuncionariosMoneyOverview';
 import BulkBankingDataEditor from '@/components/BulkBankingDataEditor';
 import BulkEmployeeDataImporter from '@/components/BulkEmployeeDataImporter';
 import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
@@ -76,12 +78,13 @@ const mergeBankingNonEmpty = (current: BankingData, next: BankingData): BankingD
 };
 
 const FuncionariosPage: React.FC = () => {
-  const { employees, companies, refreshData } = useApp();
+  const { employees, companies, refreshData, userRoles } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const { isFilial, filialCompanyId } = useFilialFilter();
   const portalPrefix = location.pathname.startsWith('/filial') ? '/filial' : location.pathname.startsWith('/admin') ? '/admin' : '';
   const isAdminPortal = portalPrefix === '/admin';
+  const canManageAdmissionDossier = userRoles?.includes('admin') || userRoles?.includes('diretor_geral');
 
   const [listState, setListState] = usePersistentViewState(`funcionarios:list:${portalPrefix || 'root'}`, {
     search: '',
@@ -279,6 +282,9 @@ const FuncionariosPage: React.FC = () => {
           <Button onClick={() => setShowNew(true)} className="gradient-primary text-primary-foreground"><UserPlus className="mr-2 h-4 w-4" /> Novo Funcionário</Button>
         </div>
       </div>
+
+      {canManageAdmissionDossier && <AdmissionDossierWorkspace companies={companies} onApproved={refreshData} />}
+      {canManageAdmissionDossier && <FuncionariosMoneyOverview employees={employees} companies={companies} filterCompany={effectiveCompany} />}
 
       {showNew && (
         <div className="card-premium space-y-4 border-l-4 border-primary p-5">
