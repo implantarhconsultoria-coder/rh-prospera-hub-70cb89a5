@@ -266,15 +266,28 @@ const RelatorioVTPage: React.FC = () => {
 
       const blocks = buildBlocks(selectedCompanyIds, entryPool);
       let receiptCount = 0;
+      let signatureUnavailable = 0;
       for (const block of blocks) {
         await persistGeneration(block, session.user.id);
-        for (const row of block.rows) {
-          if (await syncPayrollDocument(block, row, session.user.id)) receiptCount += 1;
+        // Gerar VT independe da ativação jurídica do módulo de assinatura digital.
+        const { data: payrollEnabled, error: payrollStatusError } = await (supabase as any)
+          .rpc('payroll_company_enabled', { p_company_id: block.company.id });
+        if (payrollStatusError) throw payrollStatusError;
+        if (payrollEnabled) {
+          for (const row of block.rows) {
+            if (await syncPayrollDocument(block, row, session.user.id)) receiptCount += 1;
+          }
+        } else {
+          signatureUnavailable += block.rows.length;
         }
       }
       setGeneratedBlocks(blocks);
       setAdjustEmployeeKey('');
-      toast.success(`VT gerado e salvo internamente. ${blocks.length} empresa(s), ${blocks.reduce((n, b) => n + b.rows.length, 0)} recibo(s). ${receiptCount} documento(s) sincronizado(s) para assinatura.`);
+      if (signatureUnavailable) {
+        toast.warning(`VT gerado e salvo internamente. ${blocks.length} empresa(s), ${blocks.reduce((n, b) => n + b.rows.length, 0)} recibo(s). Assinatura Digital desativada para ${signatureUnavailable} recibo(s); ${receiptCount} documento(s) sincronizado(s) nas empresas habilitadas.`);
+      } else {
+        toast.success(`VT gerado e salvo internamente. ${blocks.length} empresa(s), ${blocks.reduce((n, b) => n + b.rows.length, 0)} recibo(s). ${receiptCount} documento(s) sincronizado(s) para assinatura.`);
+      }
     } catch (error: any) {
       console.error('[vt-unified-generation]', error);
       toast.error(`Não foi possível gerar o VT: ${error?.message || error}`);
