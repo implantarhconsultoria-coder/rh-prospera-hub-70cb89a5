@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import AlmoxarifadoFechamentoOperacional from '@/components/almoxarifado/AlmoxarifadoFechamentoOperacional';
+import RetiradaInteligentePanel from '@/components/almoxarifado/RetiradaInteligentePanel';
 
 const db = supabase as any;
 const START = '2026-09-16';
@@ -180,8 +181,9 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   const add = () => {
     const item: any = itemMap.get(itemId);
     const quantity = Number(qty);
-    if (!item || quantity <= 0) return toast.error('Selecione material e quantidade.');
-    if (quantity > Number(item.saldo || 0)) return toast.error('Quantidade maior que o saldo.');
+    if (!item || !Number.isFinite(quantity) || quantity <= 0) return toast.error('Selecione material e quantidade.');
+    if (quantity + (cart.find((row) => row.item_id === item.id)?.quantidade || 0) > Number(item.saldo || 0))
+      return toast.error('Quantidade acumulada maior que o saldo.');
 
     setCart((current) => {
       const found = current.find((cartItem) => cartItem.item_id === item.id);
@@ -201,9 +203,12 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
 
   const saveWithdrawal = async () => {
     if (!personId || !cart.length) return toast.error('Selecione funcionário e materiais.');
+    if (smart.trim()) return toast.error('Confira e adicione a descrição inteligente ou limpe o campo antes de confirmar.');
+    if (cart.some((row) => !Number.isFinite(row.quantidade) || row.quantidade <= 0 || row.quantidade > Number(itemMap.get(row.item_id)?.saldo || 0)))
+      return toast.error('Revise as quantidades e os saldos antes de confirmar.');
     setBusy(true);
     try {
-      const observations = [note, smart && `Registro inteligente: ${smart}`].filter(Boolean).join(' | ');
+      const observations = note.trim();
       const { data, error } = await db.rpc('almoxarifado_criar_carga_v2', {
         p_tipo: 'retirada',
         p_funcionario_id: personId,
@@ -571,11 +576,13 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
                   </option>
                 ))}
               </select>
-              <Textarea
-                className="almox-textarea mt-4"
+              <RetiradaInteligentePanel
                 value={smart}
-                onChange={(event) => setSmart(event.target.value)}
-                placeholder="Janela inteligente: escreva em linguagem simples o que está sendo entregue..."
+                onChange={setSmart}
+                stock={stock}
+                cart={cart}
+                onAdd={setCart}
+                busy={busy}
               />
               <Textarea
                 className="almox-textarea mt-3"
@@ -618,7 +625,7 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
                   </div>
                 ))}
               </div>
-              <Button className="mt-5 w-full" disabled={busy} onClick={saveWithdrawal}>
+              <Button className="mt-5 w-full" disabled={busy || !personId || !cart.length || !!smart.trim()} onClick={saveWithdrawal}>
                 {busy ? 'Registrando...' : 'Confirmar retirada e baixar estoque'}
               </Button>
             </div>
