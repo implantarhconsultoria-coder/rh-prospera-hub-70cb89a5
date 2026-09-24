@@ -82,6 +82,7 @@ export default function EstoqueInternoPage() {
   const [quantity, setQuantity] = useState('1');
   const [withdrawalItems, setWithdrawalItems] = useState<WithdrawalItem[]>([]);
   const [destination, setDestination] = useState('');
+  const [recipientType, setRecipientType] = useState<'pessoa' | 'escritorio'>('pessoa');
   const [employees, setEmployees] = useState<StockEmployee[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [employeesError, setEmployeesError] = useState('');
@@ -360,7 +361,7 @@ export default function EstoqueInternoPage() {
     if(busy)return;
     if(tab==='saida'){
       if(!withdrawalItems.length){toast.error('Adicione pelo menos um produto à saída');return;}
-      if(!destination.trim()){toast.error('Informe para quem foi entregue');return;}
+      if(recipientType==='pessoa'&&!destination.trim()){toast.error('Informe para quem foi entregue ou selecione Saída — Escritório');return;}
       for(const entry of withdrawalItems){
         const current=items.find(i=>i.codigo===entry.codigo);
         const requested=Number(entry.quantidade.replace(',','.'));
@@ -378,13 +379,13 @@ export default function EstoqueInternoPage() {
           p_itens:withdrawalItems.map(entry=>({
             codigo:entry.codigo, quantidade:Number(entry.quantidade.replace(',','.')),
           })),
-          p_destinatario:destination.trim(),
+          p_destinatario:recipientType==='escritorio'?'ESCRITÓRIO':destination.trim(),
           p_observacao:notes.trim()||null,
         });
         if(result.error)throw result.error;
         toast.success(withdrawalItems.length+' produto(s) entregues. Saldos atualizados numa única saída.');
         setWithdrawalItems([]);setCode('');setMaterialSearch('');setQuantity('1');
-        setDestination('');setNotes('');setPage(0);
+        setDestination('');setRecipientType('pessoa');setNotes('');setPage(0);
         await load(true);await loadMoves();
       } catch(error:any){
         toast.error('Saída não registrada: '+(error?.message||'verifique o estoque e tente novamente'));
@@ -635,8 +636,27 @@ export default function EstoqueInternoPage() {
             </div>
           </>}
           {tab==='saida'?<div className="grid gap-1 text-xs text-zinc-400">
-            <label htmlFor="estoque-interno-destinatario">Para quem foi entregue? *</label>
-            <div className="relative">
+            <label>{recipientType==='escritorio'?'Destino da saída: uso coletivo do escritório':'Para quem foi entregue? *'}</label>
+            <div className="grid gap-2 sm:grid-cols-2" aria-label="Tipo de destinatário da saída">
+              <button type="button" aria-pressed={recipientType==='pessoa'}
+                onClick={()=>{setRecipientType('pessoa');setDestination(current=>current==='ESCRITÓRIO'?'':current);setRecipientOpen(false);}}
+                className={'rounded-xl border p-4 text-left transition-colors '+(recipientType==='pessoa'?'border-violet-400 bg-violet-500/20 text-white':'border-[#44334f] bg-[#11121c] text-zinc-300 hover:border-violet-400/60')}>
+                <span className="block text-sm font-bold">Saída — Funcionário</span>
+                <span className="mt-1 block text-[11px]">Entrega para uma pessoa específica.</span>
+              </button>
+              <button type="button" aria-pressed={recipientType==='escritorio'}
+                onClick={()=>{setRecipientType('escritorio');setDestination('ESCRITÓRIO');setRecipientOpen(false);}}
+                className={'rounded-xl border p-4 text-left transition-colors '+(recipientType==='escritorio'?'border-[#ffc400] bg-[#ffc400]/15 text-white':'border-[#44334f] bg-[#11121c] text-zinc-300 hover:border-[#ffc400]/60')}>
+                <span className="block text-sm font-bold">Saída — Escritório</span>
+                <span className="mt-1 block text-[11px]">Material compartilhado por todos, como sulfite para impressoras.</span>
+              </button>
+            </div>
+            {recipientType==='escritorio'
+              ? <div className="rounded-lg border border-[#ffc400]/35 bg-[#ffc400]/10 p-3 text-sm text-zinc-200">
+                  <strong className="text-[#ffc400]">Destino: ESCRITÓRIO (uso coletivo)</strong>
+                  <p className="mt-1 text-xs text-zinc-400">A saída será lançada para o escritório, sem atribuir o consumo a um funcionário. Quem registrou a operação continua identificado no histórico.</p>
+                </div>
+              : <><div className="relative">
               <input id="estoque-interno-destinatario" required autoComplete="off" role="combobox"
                 aria-autocomplete="list" aria-expanded={recipientOpen} aria-controls="estoque-interno-funcionarios"
                 value={destination} onFocus={()=>{setRecipientOpen(true);setRecipientIndex(0);}}
@@ -666,7 +686,7 @@ export default function EstoqueInternoPage() {
                 </button>)}
               </div>}
             </div>
-            <p className="text-[11px] text-zinc-500">Selecione um funcionário da lista. Para setor ou visitante, informe o nome manualmente.</p>
+                <p className="text-[11px] text-zinc-500">Selecione um funcionário da lista. Para outro setor ou visitante, informe o nome manualmente.</p></>}
           </div>:<label className="grid gap-1 text-xs text-zinc-400">Fornecedor / origem (opcional)
             <input value={destination} onChange={e=>setDestination(e.target.value)} placeholder="Compra, transferência, fornecedor..." className={inputStyle}/>
           </label>}
