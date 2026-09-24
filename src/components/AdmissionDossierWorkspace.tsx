@@ -44,7 +44,7 @@ const CLEAN = (s: unknown) => String(s || '').trim();
 const currency = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const admissionPaymentDate = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : null;
 const dateBr = (value: string) => value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4);
-const PENDING_RH = 'PENDENTE — AGUARDAR CONFIRMAÇÃO DO RH';
+const PENDING_RH = 'PENDENTE — AGUARDAR A CONFIRMAÇÃO DO RH';
 const banks = Object.keys(emptyBankingData()) as Array<keyof BankingData>;
 const YYYY_MM = () => {
   const now = new Date();
