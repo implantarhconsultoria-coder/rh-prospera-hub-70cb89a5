@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Archive, ArrowDownCircle, ArrowUpCircle, Download, FileText, History, Loader2, LogOut, Package, Plus, RefreshCw, Search, ShieldCheck, Trash2, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
@@ -102,6 +102,7 @@ export default function EstoqueInternoPage() {
   const [fields,setFields] = useState<Record<string,string>>({});
   const [reason,setReason] = useState('');
   const [audit,setAudit] = useState<any[]>([]);
+  const stockHeaderRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async (quiet = false) => {
     if (!session?.user?.id) {
@@ -496,8 +497,8 @@ export default function EstoqueInternoPage() {
         {([
           {key:'produtos',title:'Produtos em uso',value:currentProducts.length,Icon:Package,color:'text-violet-400'},
           {key:'quantidade',title:'Quantidade em uso',value:brQty(totalQty),Icon:Archive,color:'text-emerald-400'},
-          {key:'reposicao',title:'Em uso: precisam de reposição',value:attention.length,Icon:TriangleAlert,color:'text-amber-400'},
-          {key:'sem_saldo',title:'Em uso: sem saldo',value:currentProducts.filter(i=>Number(i.saldo_atual)===0).length,Icon:ArrowDownCircle,color:'text-red-400'},
+          {key:'reposicao',title:'Em uso: precisam de reposição',value:attention.length,Icon:TriangleAlert,color:'text-red-400'},
+          {key:'sem_saldo',title:'Em uso: sem saldo',value:currentProducts.filter(i=>Number(i.saldo_atual)===0).length,Icon:ArrowDownCircle,color:'text-amber-400'},
         ] as const).map(metric=>{
           const isOpen=tab==='produtos'&&productMetric===metric.key;
           const Icon=metric.Icon;
@@ -542,10 +543,18 @@ export default function EstoqueInternoPage() {
         <p className="mb-3 text-xs text-zinc-400">Em uso: produtos movimentados desde 2024 ou cadastrados agora. Os mais antigos ficam no arquivo, sem alterar saldo ou histórico; a busca encontra todos.</p>
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Pesquisar também nos produtos antigos por código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s){productMetric==='quantidade'?' • Quantidade total: '+brQty(totalQty):''}</p>
-        <div className="max-h-[68vh] overflow-auto rounded-lg border border-[#30283a]" aria-label="Produtos com cabeçalho e coluna de ações fixos durante a rolagem">
-          <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-sm">
-            <thead className="bg-[#15121b] text-xs uppercase text-zinc-300"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th scope="col" key={h} className={'sticky top-0 z-20 border-b border-[#44334f] bg-[#15121b] p-3 '+(h==='Ações'?'right-0 z-40 min-w-[240px] whitespace-nowrap shadow-[-8px_0_12px_-8px_#000]':'')}>{h}</th>)}</tr></thead>
-            <tbody>{filtered.map(i=>{
+        <div className="relative rounded-lg border border-[#30283a]" aria-label="Produtos do estoque do escritório">
+          {/* O cabeçalho fica FORA da área que rola verticalmente, para nunca desaparecer. */}
+          <div ref={stockHeaderRef} className="sticky top-0 z-30 overflow-hidden rounded-t-lg bg-[#15121b] shadow-[0_2px_0_#44334f]">
+            <table className="w-full min-w-[1036px] table-fixed border-separate border-spacing-0 text-left text-sm">
+              <colgroup>{[76,260,90,78,78,78,116,260].map((width,index)=><col key={index} style={{width}}/>)}</colgroup>
+              <thead className="bg-[#15121b] text-xs uppercase text-zinc-300"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th scope="col" key={h} className={'border-b border-[#44334f] bg-[#15121b] p-3 '+(h==='Ações'?'sticky right-0 z-40 whitespace-nowrap shadow-[-8px_0_12px_-8px_#000]':'')}>{h}</th>)}</tr></thead>
+            </table>
+          </div>
+          <div className="max-h-[68vh] overflow-auto" onScroll={event=>{if(stockHeaderRef.current)stockHeaderRef.current.scrollLeft=event.currentTarget.scrollLeft;}}>
+            <table className="w-full min-w-[1036px] table-fixed border-separate border-spacing-0 text-left text-sm" aria-label="Lista de materiais do escritório na ordem: código, produto, unidade, saldo, mínimo, máximo, situação e ações">
+              <colgroup>{[76,260,90,78,78,78,116,260].map((width,index)=><col key={index} style={{width}}/>)}</colgroup>
+              <tbody>{filtered.map(i=>{
               const low=attention.includes(i),zero=Number(i.saldo_atual)===0;
               return <tr key={i.id} className="border-b border-[#241f29] hover:bg-white/[.03]">
                 <td className="p-3 font-bold text-violet-400">{i.codigo}</td>
@@ -553,11 +562,12 @@ export default function EstoqueInternoPage() {
                 <td className="p-3 text-zinc-400">{i.unidade}</td>
                 <td className={'p-3 font-black tabular-nums '+(zero?'text-red-400':low?'text-amber-400':'text-[#ffc400]')}>{brQty(Number(i.saldo_atual))}</td>
                 <td className="p-3 text-zinc-400">{i.estoque_minimo??'—'}</td><td className="p-3 text-zinc-400">{i.estoque_maximo??'—'}</td>
-                <td className={'p-3 font-semibold '+(zero?'text-red-400':low?'text-amber-400':'text-emerald-400')}>{zero?'SEM SALDO':low?'REPOR':'DISPONÍVEL'}</td>
+                <td className={'p-3 font-bold '+(zero?'text-amber-400':low?'text-red-400':'text-emerald-400')}>{zero?'SEM SALDO':low?'REPOR':'DISPONÍVEL'}</td>
                 <td className="sticky right-0 z-10 min-w-[240px] whitespace-nowrap bg-[#111017] p-3 shadow-[-8px_0_12px_-8px_#000]"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button>{access.pode_gerenciar&&<><button type="button" onClick={()=>openCorrection('editar_produto',i)} className="text-xs font-bold text-violet-300 hover:underline">Editar</button><button type="button" onClick={()=>openCorrection('ajustar_saldo',i)} className="text-xs font-bold text-[#ffc400] hover:underline">Ajustar saldo</button></>}</div></td>
               </tr>;
-            })}</tbody>
-          </table>
+              })}</tbody>
+            </table>
+          </div>
         </div>
         {filtered.length===0&&<p className="py-8 text-center text-sm text-zinc-500">Nenhum material corresponde à busca.</p>}
       </section>}
