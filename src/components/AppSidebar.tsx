@@ -9,13 +9,33 @@ import {
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 import { isDirectorRole } from '@/lib/directorPermissions';
-import { ADMIN_MODULE_GROUPS, ADMIN_MODULES } from '@/data/adminModules';
 
 interface MenuItem { label: string; icon: React.ElementType; path: string }
 
 const menuItems: MenuItem[] = [
-  {label:'Dashboard',icon:LayoutDashboard,path:'/admin'},
-  ...ADMIN_MODULES.map(module=>({label:module.label,icon:module.icon,path:module.path})),
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+  { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
+  { label: 'VR — Vale-refeição', icon: Receipt, path: '/admin/relatorio-vr' },
+  { label: 'VT — Vale-transporte', icon: Receipt, path: '/admin/relatorio-vt' },
+  { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
+  { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade' },
+];
+
+const operationalItems: MenuItem[] = [
+  { label: 'Operacional', icon: ClipboardList, path: '/admin/operacional' },
+  { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico' },
+  { label: 'Relatório de Abastecimento', icon: Fuel, path: '/admin/abastecimento-qrcode' },
+  { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
+  { label: 'Estoque Interno', icon: Archive, path: '/admin/estoque-interno' },
+  { label: 'Etiquetas', icon: Tags, path: '/admin/etiquetas' },
+  { label: 'Combustível', icon: Fuel, path: '/admin/galoes-combustivel' },
+  { label: 'Frota / Documentos', icon: Car, path: '/admin/documentos-ativos' },
+  { label: 'Rastreamento da Frota', icon: Radar, path: '/admin/monitoramento' },
+  { label: 'Entrega de EPI', icon: HardHat, path: '/admin/epi' },
+  { label: 'Uniformes', icon: Shirt, path: '/admin/uniformes' },
+  { label: 'Prestadores', icon: UserCheck, path: '/admin/prestadores' },
+  { label: 'Compras', icon: ShoppingCart, path: '/admin/compras' },
+  { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 
 const directorItems: MenuItem[] = [
@@ -25,7 +45,7 @@ const directorItems: MenuItem[] = [
 ];
 
 const LAST_ROUTE_PREFIX = 'topac:last-route:v1:';
-const allMenuPaths = Array.from(new Set([...menuItems, ...directorItems].map((item) => item.path)))
+const allMenuPaths = Array.from(new Set([...menuItems, ...operationalItems, ...directorItems].map((item) => item.path)))
   .sort((a, b) => b.length - a.length);
 
 const isInsideModule = (pathname: string, basePath: string) =>
@@ -47,7 +67,7 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout, userRoles } = useApp();
   const location = useLocation();
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
-  const items = isDirector ? directorItems : menuItems;
+  const items = isDirector ? directorItems : [...menuItems, ...operationalItems];
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -93,27 +113,28 @@ const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
       </button>
 
       <nav className="flex-1 overflow-y-auto px-2 py-3 [scrollbar-color:#4c1d95_transparent] [scrollbar-width:thin]">
-        <div className="space-y-3">
-          {(isDirector
-            ? [{id:'diretor',title:'Diretoria',items:directorItems}]
-            : [{id:'inicio',title:'Central administrativa',items:[menuItems[0]]},
-              ...ADMIN_MODULE_GROUPS.map(group=>({id:group.id,title:group.title,
-                items:group.items.map(item=>({label:item.label,icon:item.icon,path:item.path}))}))])
-            .map(group=><div key={group.id} className="space-y-[2px]">
-              {!collapsed&&<div className="px-3 pb-1 pt-2 text-[10px] font-black uppercase tracking-wider text-violet-400/80">{group.title}</div>}
-              {group.items.map(item=>{
-                const active=isInsideModule(location.pathname,item.path);
-                const destination=savedModuleRoute(item.path);
-                return <NavLink key={item.path} to={destination} title={collapsed?item.label:undefined}
-                  className={cn('group relative flex min-h-[38px] items-center gap-3 rounded-[4px] px-3 py-2 text-[13px] transition-all duration-150',
-                    active?'bg-gradient-to-r from-[#251548] via-[#211339] to-[#181023] text-white shadow-[inset_0_0_0_1px_rgba(147,51,234,.12)]'
-                    :'text-[#c9c6ce] hover:bg-white/[0.035] hover:text-white')}>
-                  <item.icon className={cn('h-[18px] w-[18px] shrink-0',active?'text-[#f4b400]':'text-[#9b32ff] group-hover:text-[#ba64ff]')} strokeWidth={1.8}/>
-                  {!collapsed&&<span className="truncate">{item.label}</span>}
-                  {active&&<span className="absolute bottom-0 right-0 top-0 w-[3px] rounded-l-full bg-[#ffc400] shadow-[0_0_12px_rgba(255,196,0,.8)]"/>}
-                </NavLink>;
-              })}
-            </div>)}
+        <div className="space-y-[2px]">
+          {items.map((item) => {
+            const active = isInsideModule(location.pathname, item.path);
+            const destination = savedModuleRoute(item.path);
+            return (
+              <NavLink
+                key={item.path}
+                to={destination}
+                title={collapsed ? item.label : undefined}
+                className={cn(
+                  'group relative flex h-[38px] items-center gap-3 rounded-[4px] px-3 text-[13px] transition-all duration-150',
+                  active
+                    ? 'bg-gradient-to-r from-[#251548] via-[#211339] to-[#181023] text-white shadow-[inset_0_0_0_1px_rgba(147,51,234,.12)]'
+                    : 'text-[#c9c6ce] hover:bg-white/[0.035] hover:text-white'
+                )}
+              >
+                <item.icon className={cn('h-[18px] w-[18px] shrink-0', active ? 'text-[#f4b400]' : 'text-[#9b32ff] group-hover:text-[#ba64ff]')} strokeWidth={1.8} />
+                {!collapsed && <span className="truncate">{item.label}</span>}
+                {active && <span className="absolute bottom-0 right-0 top-0 w-[3px] rounded-l-full bg-[#ffc400] shadow-[0_0_12px_rgba(255,196,0,.8)]" />}
+              </NavLink>
+            );
+          })}
         </div>
       </nav>
 
