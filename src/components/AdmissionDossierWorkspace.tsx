@@ -74,7 +74,8 @@ const AdmissionDossierWorkspace: React.FC<{
   const { datas: feriados, loading: loadingFeriados } = useFeriados(competencia,draft.empresa_id);
 
   const companiesSorted = useMemo(() => [...companies].sort((a,b) => a.name.localeCompare(b.name,'pt-BR')), [companies]);
-  const update = (patch: Partial<Draft>) => { setDraft(prev => ({...prev,...patch})); setDirty(true); };
+  const locked = !!stage?.efetivado_em;
+  const update = (patch: Partial<Draft>) => { if (locked) return; setDraft(prev => ({...prev,...patch})); setDirty(true); };
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -122,6 +123,7 @@ const AdmissionDossierWorkspace: React.FC<{
   };
 
   const applyText = (raw: string) => {
+    if (locked) return toast.error('Este dossiê já foi aprovado. Atualize o funcionário na ficha oficial.');
     if (!raw.trim()) return toast.error('Cole dados do candidato ou carregue uma ficha.');
     const read = readAdmissionDossier(raw);
     const parsed = parseBankingText(raw);
@@ -165,6 +167,7 @@ const AdmissionDossierWorkspace: React.FC<{
   });
 
   const readFiles = async (list: File[]) => {
+    if (locked) return toast.error('Após aprovação, use o histórico documental do funcionário.');
     if (!list.length) return;
     setReadBusy(true);
     setFiles(current => [...current,...list]);
@@ -218,6 +221,7 @@ const AdmissionDossierWorkspace: React.FC<{
   };
 
   const save = async () => {
+    if (locked) return toast.error('A ficha oficial já foi criada. Não regrave o pré-cadastro.');
     if(!session?.user?.id) return toast.error('Sessão expirada.');
     if(!draft.nome.trim() || !draft.empresa_id) return toast.error('Informe nome e empresa para guardar este dossiê.');
     const selected=companies.find(co=>co.id===draft.empresa_id);
@@ -266,6 +270,7 @@ const AdmissionDossierWorkspace: React.FC<{
   };
 
   const receiveContract = async (file:File | undefined) => {
+    if (locked) return toast.error('Contrato já oficializado. Use o histórico do funcionário para novos anexos.');
     if(!file) return;
     if(!draft.id) return toast.error('Salve o dossiê antes de anexar contrato.');
     if(!confirmContract) return toast.error('Marque a confirmação de recebimento do contrato primeiro.');
@@ -282,6 +287,31 @@ const AdmissionDossierWorkspace: React.FC<{
     finally{setBusy(false);}
   };
 
+  const copyOriginalsToEmployeeFolder = async (employeeId: string, folder: string) => {
+    let copied=0;
+    const failures:string[]=[];
+    for (const doc of docs) {
+      if (!doc.arquivo_url) continue;
+      try {
+        const response=await fetch(doc.arquivo_url);
+        if (!response.ok) throw new Error('Origem indisponível (HTTP '+response.status+').');
+        const blob=await response.blob();
+        const safe=doc.nome_arquivo.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_');
+        const path=folder+'/'+doc.id+'_'+safe;
+        const {error:uploadError}=await supabase.storage.from('documentos-funcionarios')
+          .upload(path,blob,{upsert:false,contentType:blob.type||'application/octet-stream'});
+        if(uploadError) throw uploadError;
+        const url=supabase.storage.from('documentos-funcionarios').getPublicUrl(path).data.publicUrl;
+        const {error:updateError}=await (supabase as any).from('documentos_funcionario').update({
+          arquivo_url:url,storage_bucket:'documentos-funcionarios',storage_path:path,
+        }).eq('funcionario_id',employeeId).eq('origem','pre_cadastro').ilike('observacao','%'+doc.id+'%');
+        if(updateError) throw updateError;
+        copied++;
+      }catch(error:any){failures.push(doc.nome_arquivo+': '+(error?.message||error));}
+    }
+    return {copied,failures};
+  };
+
   const approve = async () => {
     if(!draft.id || !stage?.contrato_documento_id) return toast.error('O OK exige o contrato recebido.');
     if(dirty || files.length) return toast.error('Salve primeiro os dados e anexos pendentes.');
@@ -290,12 +320,21 @@ const AdmissionDossierWorkspace: React.FC<{
     try{
       const {data,error}=await (supabase as any).rpc('admin_dossie_aprovar_com_contrato',{p_id:draft.id});
       if(error) throw error;
-      setStage(prev => prev ? {...prev,efetivado_em:new Date().toISOString()} : prev);
-      update({status:'cadastro_oficial'});
+      const employeeId=String(data||'');
+      const {data:official,error:stageError}=await (supabase as any).from('admission_dossier_workflow')
+        .select('*').eq('pre_cadastro_id',draft.id).single();
+      if(stageError) throw stageError;
+      const stageValue=official as Stage;
+      setStage(stageValue);
+      setDraft(prev=>({...prev,status:'cadastro_oficial'}));
       setDirty(false);
+      const folder=stageValue.pasta_funcionario || '';
+      const result=folder ? await copyOriginalsToEmployeeFolder(employeeId,folder)
+        : {copied:0,failures:['Pasta física não localizada; documentos preservados no histórico.']};
       await fetchRows();
       await onApproved?.();
-      toast.success('Admissão aprovada. Pasta do funcionário vinculada à empresa e documentos integrados ao histórico.');
+      if(result.failures.length) toast.warning('Admissão aprovada e documentos associados; '+result.copied+' cópia(s) movida(s) para a pasta da empresa. Pendências: '+result.failures.join(' | '),{duration:12000});
+      else toast.success('Admissão aprovada. '+result.copied+' documento(s) copiado(s) na pasta oficial da empresa; originais preservados.');
     }catch(error:any){toast.error('OK não executado: '+(error?.message||error));}
     finally{setBusy(false);}
   };
@@ -386,6 +425,7 @@ const AdmissionDossierWorkspace: React.FC<{
             finance_enviado_em:new Date().toISOString(),finance_enviado_por:session?.user?.id,
           }).eq('pre_cadastro_id',draft.id);
           if(sentErr) throw sentErr;
+          setStage(prev=>prev?{...prev,finance_enviado_em:new Date().toISOString()}:prev);
           await fetchRows();
         },
       });
@@ -427,7 +467,7 @@ const AdmissionDossierWorkspace: React.FC<{
             <Button type="button" disabled={!text.trim()||busy} onClick={()=>applyText(text)} className="bg-cyan-500 font-bold text-zinc-950 hover:bg-cyan-400"><Sparkles size={15} className="mr-1"/> Ler texto e preencher</Button>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-violet-300/50 px-3 py-2 text-sm text-white">
               <Upload size={15}/> {readBusy?'Lendo arquivos...':'Ficha / PDF único / outros documentos'}
-              <input type="file" multiple accept=".pdf,image/png,image/jpeg" className="hidden" disabled={readBusy||busy}
+              <input type="file" multiple accept=".pdf,image/png,image/jpeg" className="hidden" disabled={readBusy||busy||locked}
                 onChange={e=>{void readFiles(Array.from(e.target.files||[]));e.currentTarget.value='';}}/>
             </label>
           </div>
@@ -437,6 +477,7 @@ const AdmissionDossierWorkspace: React.FC<{
         </div>
         <div className="rounded-xl border border-fuchsia-400/40 bg-fuchsia-400/5 p-4">
           <strong className="text-base text-fuchsia-200">2. Dados completos do candidato</strong>
+          <fieldset disabled={locked} className="space-y-3">
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <label className="text-xs text-zinc-200">Empresa contratante
               <select value={draft.empresa_id} onChange={e=>{const co=companies.find(v=>v.id===e.target.value);update({empresa_id:co?.id||'',empresa_nome:co?.name||'',cnpj:co?.cnpj||''});}}
@@ -475,14 +516,15 @@ const AdmissionDossierWorkspace: React.FC<{
               <Input type="number" min="0" step=".01" value={vtDaily} onChange={e=>{setVtDaily(e.target.value);setDirty(true);}}
                 className="mt-1 border-amber-300/30 bg-[#0a1222] text-white"/></label>}
           </div>
+          </fieldset>
         </div>
         <div className="rounded-xl border border-emerald-400/40 bg-emerald-400/5 p-4">
           <strong className="flex items-center gap-2 text-base text-emerald-200"><Landmark size={17}/> 3. Dados bancários — mesmo cadastro</strong>
           <p className="mt-1 text-xs text-zinc-200">Nada de preencher novamente no cadastro de baixo. Após o OK, estes dados alimentam a ficha oficial do funcionário.</p>
-          <div className="mt-3 rounded-xl bg-white/95 p-3 text-zinc-900">
+          <fieldset disabled={locked} className="mt-3 rounded-xl border border-emerald-400/20 bg-[#0a1222] p-3 text-white">
             <BankingDataEditor value={bank} onChange={b=>{setBank(b);setDirty(true);}}
               defaultHolder={draft.nome} defaultCpf={draft.cpf}/>
-          </div>
+          </fieldset>
         </div>
         <div className="rounded-xl border border-amber-400/40 bg-amber-400/5 p-4">
           <strong className="flex items-center gap-2 text-base text-amber-200"><FolderLock size={18}/> 4. Pasta provisória e contrato</strong>
@@ -495,12 +537,12 @@ const AdmissionDossierWorkspace: React.FC<{
           <label className="mt-4 flex items-center gap-2 text-xs text-amber-100"><input type="checkbox" checked={confirmContract} onChange={e=>setConfirmContract(e.target.checked)}/> Confirmo que recebi o contrato de trabalho deste candidato.</label>
           <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-amber-400 bg-amber-400/20 px-3 py-2 text-sm font-semibold text-amber-100">
             <Upload size={15}/> Anexar contrato recebido
-            <input type="file" accept=".pdf,image/png,image/jpeg" className="hidden" disabled={!confirmContract||busy||!draft.id}
+            <input type="file" accept=".pdf,image/png,image/jpeg" className="hidden" disabled={!confirmContract||busy||!draft.id||locked}
               onChange={e=>{void receiveContract(e.target.files?.[0]);e.currentTarget.value='';}}/>
           </label>
           <p className="mt-2 text-xs text-zinc-300">{stage?.contrato_documento_id?'Contrato arquivado e identificado.':'Sem contrato: OK bloqueado.'}</p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button disabled={busy||readBusy||!draft.nome||!draft.empresa_id} onClick={()=>void save()} className="bg-amber-400 font-bold text-zinc-950 hover:bg-amber-300"><Save size={15} className="mr-1"/> Salvar dossiê provisório</Button>
+            <Button disabled={locked||busy||readBusy||!draft.nome||!draft.empresa_id} onClick={()=>void save()} className="bg-amber-400 font-bold text-zinc-950 hover:bg-amber-300"><Save size={15} className="mr-1"/> Salvar dossiê provisório</Button>
             <Button variant="outline" disabled={busy||!draft.nome} onClick={()=>void previewDossier()}><FileSearch size={15} className="mr-1"/> Visualizar PDF</Button>
             <Button variant="outline" disabled={busy||!draft.nome} onClick={()=>void downloadDossier()}><Download size={15} className="mr-1"/> Baixar dossiê</Button>
             <Button disabled={busy||!stage?.contrato_documento_id||!!stage?.efetivado_em||dirty||files.length>0}
