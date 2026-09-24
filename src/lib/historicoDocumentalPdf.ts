@@ -158,6 +158,23 @@ export const buildHistoricDocumentPdf = async (
     return w.finish(doc.id);
   }
 
+  if (isEpi) {
+    w.title('FICHA DE EPI - EXTRATO RECONSTITUÍDO');
+    w.paragraph('Origem desta via', 'Registro histórico de EPI sem arquivo original anexado. Os itens abaixo são reproduzidos somente na forma em que foram registrados; dados de CA, tamanho e assinatura não são presumidos.');
+    w.line('Empresa', doc.empresa_nome || company?.name);
+    w.line('CNPJ', company?.cnpj);
+    w.line('Funcionário', doc.funcionario_nome || funcionario?.name);
+    w.line('Função', funcionario?.cargo);
+    w.line('CPF', funcionario?.cpf);
+    w.line('Matrícula', funcionario?.registro);
+    w.line('Competência', doc.competencia);
+    w.line('Data do registro', date(doc.data_documento || doc.created_at));
+    w.paragraph('Materiais/descrição do lançamento', doc.descricao);
+    if (doc.observacao && doc.observacao !== doc.descricao) w.paragraph('Observação', doc.observacao);
+    w.paragraph('Comprovação de recebimento', 'Nenhuma assinatura foi recuperada deste registro. Este extrato não comprova entrega efetiva nem substitui uma ficha assinada.');
+    return w.finish(doc.id);
+  }
+
   w.title('EXTRATO DO REGISTRO DOCUMENTAL');
   w.paragraph('Natureza do arquivo', 'O histórico contém este registro, mas não possui arquivo original vinculado. Este PDF é um extrato dos metadados disponíveis, e não reprodução nem substituição do original.');
   w.line('Documento', title);
