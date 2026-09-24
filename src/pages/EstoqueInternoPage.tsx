@@ -542,9 +542,9 @@ export default function EstoqueInternoPage() {
         <p className="mb-3 text-xs text-zinc-400">Em uso: produtos movimentados desde 2024 ou cadastrados agora. Os mais antigos ficam no arquivo, sem alterar saldo ou histórico; a busca encontra todos.</p>
         <div className="relative mb-4"><Search className="absolute left-3 top-3 h-4 w-4 text-zinc-500"/><input className={inputStyle+' pl-10'} placeholder="Pesquisar também nos produtos antigos por código, material ou aplicação..." value={search} onChange={e=>setSearch(e.target.value)}/></div>
         <p className="mb-3 text-xs text-zinc-500">{filtered.length} produto(s) encontrado(s){productMetric==='quantidade'?' • Quantidade total: '+brQty(totalQty):''}</p>
-        <div className="max-h-[68vh] overflow-auto rounded-lg border border-[#30283a]" aria-label="Produtos com cabeçalho fixo durante a rolagem">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="sticky top-0 z-20 bg-[#15121b] text-xs uppercase text-zinc-300 shadow-[0_2px_0_#44334f]"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th scope="col" key={h} className="sticky top-0 bg-[#15121b] border-b border-[#44334f] p-3">{h}</th>)}</tr></thead>
+        <div className="max-h-[68vh] overflow-auto rounded-lg border border-[#30283a]" aria-label="Produtos com cabeçalho e coluna de ações fixos durante a rolagem">
+          <table className="w-full min-w-[980px] border-separate border-spacing-0 text-left text-sm">
+            <thead className="bg-[#15121b] text-xs uppercase text-zinc-300"><tr>{['Código','Produto / aplicação','Unidade','Saldo','Mínimo','Máximo','Situação','Ações'].map(h=><th scope="col" key={h} className={'sticky top-0 z-20 border-b border-[#44334f] bg-[#15121b] p-3 '+(h==='Ações'?'right-0 z-40 min-w-[240px] whitespace-nowrap shadow-[-8px_0_12px_-8px_#000]':'')}>{h}</th>)}</tr></thead>
             <tbody>{filtered.map(i=>{
               const low=attention.includes(i),zero=Number(i.saldo_atual)===0;
               return <tr key={i.id} className="border-b border-[#241f29] hover:bg-white/[.03]">
@@ -554,7 +554,7 @@ export default function EstoqueInternoPage() {
                 <td className={'p-3 font-black tabular-nums '+(zero?'text-red-400':low?'text-amber-400':'text-[#ffc400]')}>{brQty(Number(i.saldo_atual))}</td>
                 <td className="p-3 text-zinc-400">{i.estoque_minimo??'—'}</td><td className="p-3 text-zinc-400">{i.estoque_maximo??'—'}</td>
                 <td className={'p-3 font-semibold '+(zero?'text-red-400':low?'text-amber-400':'text-emerald-400')}>{zero?'SEM SALDO':low?'REPOR':'DISPONÍVEL'}</td>
-                <td className="p-3"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button>{access.pode_gerenciar&&<><button type="button" onClick={()=>openCorrection('editar_produto',i)} className="text-xs font-bold text-violet-300 hover:underline">Editar</button><button type="button" onClick={()=>openCorrection('ajustar_saldo',i)} className="text-xs font-bold text-[#ffc400] hover:underline">Ajustar saldo</button></>}</div></td>
+                <td className="sticky right-0 z-10 min-w-[240px] whitespace-nowrap bg-[#111017] p-3 shadow-[-8px_0_12px_-8px_#000]"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button>{access.pode_gerenciar&&<><button type="button" onClick={()=>openCorrection('editar_produto',i)} className="text-xs font-bold text-violet-300 hover:underline">Editar</button><button type="button" onClick={()=>openCorrection('ajustar_saldo',i)} className="text-xs font-bold text-[#ffc400] hover:underline">Ajustar saldo</button></>}</div></td>
               </tr>;
             })}</tbody>
           </table>
