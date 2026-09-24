@@ -5,12 +5,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UNIFORM_TYPES, type DeliveryItem } from '@/data/deliveries';
-import { Shirt, Plus, Trash2, FileText, Search, Package, ArrowDownCircle, RefreshCw, AlertTriangle, History } from 'lucide-react';
+import { Shirt, Plus, Trash2, FileText, Search, Package, ArrowDownCircle, RefreshCw, AlertTriangle, History, ChevronDown, ClipboardList, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const db = supabase as any;
 type Unidade = 'SAO_PAULO' | 'PRAIA_GRANDE' | 'GOIANIA';
 type Mode = 'painel' | 'estoque' | 'entregas' | 'historico';
+type StockMetric = 'variacoes' | 'quantidade' | 'reposicao' | 'sem_saldo';
 type Stock = { id:string; unidade:Unidade; tipo:string; tamanho:string; modelo:string; saldo:number; minimo:number; observacao:string|null; atualizado_em:string };
 type RecordedDelivery = { id:string; funcionario_id:string; company_id:string; unidade:Unidade; data_entrega:string; itens:DeliveryItem[]; gerado_por:string; criado_em:string };
 type Move={id:string;estoque_id:string;tipo:'entrada'|'contagem'|'saida';quantidade:number;saldo_antes:number;saldo_depois:number;funcionario_id:string|null;criado_em:string;observacao:string|null};
@@ -23,6 +24,12 @@ const UNIDADES:{value:Unidade;label:string}[]=[
 const SIZE_OPTIONS=['M','G','GG','XG','G1','G2','G3'];
 const MODELO_OPTIONS=['MANGA CURTA','MANGA LONGA','POLO','PADRAO','USADO'];
 const fmt=(n:number)=>new Intl.NumberFormat('pt-BR').format(n);
+const UNIFORM_CARDS = [
+  {key:'painel',label:'Visão geral',description:'Resumo e orientações',icon:ClipboardList},
+  {key:'estoque',label:'Estoque / contagem',description:'Conferir e receber peças',icon:Package},
+  {key:'entregas',label:'Entregar e imprimir',description:'Registrar e abater saldo',icon:Shirt},
+  {key:'historico',label:'Histórico',description:'Movimentos e reimpressão',icon:History},
+] as const;
 // Rascunho da ficha recebida em 23/09/2026: NENHUM valor é importado sem conferência.
 // A ficha não tem unidade assinalada; alguns números e modelos manuscritos são incertos.
 type DraftRow={id:string;tipo:string;modelo:string;tamanho:string;saldo:string;duvidoso:boolean;marcado:boolean};
@@ -49,7 +56,8 @@ const INITIAL_SHEET_DRAFT:DraftRow[]=[
 const UniformePage:React.FC=()=>{
   const {companies,employees,session}=useApp();
   const navigate=useNavigate();
-  const [mode,setMode]=useState<Mode>('painel');
+  const [mode,setMode]=useState<Mode|null>(null);
+  const [metric,setMetric]=useState<StockMetric|null>(null);
   const [draft,setDraft]=useState<DraftRow[]>(INITIAL_SHEET_DRAFT);
   const [draftOpen,setDraftOpen]=useState(false);
   const [draftConfirmed,setDraftConfirmed]=useState(false);
@@ -94,6 +102,16 @@ const UniformePage:React.FC=()=>{
   const total=unitStock.reduce((sum,s)=>sum+Number(s.saldo),0);
   const low=unitStock.filter(s=>s.saldo<=s.minimo);
   const soldOut=unitStock.filter(s=>s.saldo===0);
+  const visibleStock=unitStock.filter(s=>metric==='reposicao'?low.includes(s):metric==='sem_saldo'?s.saldo===0:true)
+    .sort((a,b)=>metric==='quantidade'?Number(b.saldo)-Number(a.saldo):a.tipo.localeCompare(b.tipo,'pt-BR'));
+  const toggleMode=(next:Mode)=>{
+    setMode(current=>current===next&&metric===null?null:next);
+    setMetric(null);
+  };
+  const toggleMetric=(next:StockMetric)=>{
+    if(mode==='estoque'&&metric===next){setMode(null);setMetric(null);}
+    else {setMode('estoque');setMetric(next);}
+  };
   const emp=employees.find(e=>e.id===selectedEmpId);
   const company=emp?companies.find(c=>c.id===emp.companyId):null;
   const filteredEmps=employees.filter(e=>e.status==='ativo'&&e.categoria==='operacional'&&
@@ -203,14 +221,20 @@ const UniformePage:React.FC=()=>{
       <div><h1 className="text-2xl font-bold font-display">Uniformes • Entregas e Estoque</h1>
         <p className="text-sm text-primary-foreground/75">Saldos por unidade, tamanho e modelo, com baixa vinculada à ficha.</p></div>
     </div>
-    <div className="card-premium p-4 flex flex-wrap items-center justify-between gap-3">
-      <div className="flex flex-wrap gap-2">
-        {([['painel','Visão geral'],['estoque','Estoque / contagem'],['entregas','Entregar e imprimir'],['historico','Histórico / reimprimir']] as [Mode,string][]).map(([key,label])=>
-          <Button key={key} size="sm" variant={mode===key?'default':'outline'} onClick={()=>setMode(key)}>{label}</Button>)}
-      </div>
-      <Button variant="outline" size="sm" onClick={()=>void refresh()} disabled={loading}><RefreshCw className="mr-1 h-4 w-4"/>Atualizar</Button>
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Seções de Uniformes — clique para abrir ou fechar">
+      {UNIFORM_CARDS.map(item=>{
+        const Icon=item.icon;
+        const active=mode===item.key&&metric===null;
+        return <button type="button" key={item.key} aria-expanded={active} aria-pressed={active}
+          onClick={()=>toggleMode(item.key)}
+          className={`flex min-h-[108px] flex-col items-start justify-between rounded-xl border p-4 text-left transition hover:border-violet-400 ${active?'border-violet-500 bg-[#241a32]':'border-[#30283a] bg-[#0d1017]'}`}>
+          <div className="flex w-full items-center justify-between"><Icon className={`h-5 w-5 ${active?'text-[#ffc400]':'text-violet-400'}`}/><ChevronDown className={`h-4 w-4 text-zinc-500 transition-transform ${active?'rotate-180':''}`}/></div>
+          <div><div className="text-sm font-bold text-white">{item.label}</div><div className="mt-1 text-[11px] text-zinc-400">{item.description}</div></div>
+        </button>;
+      })}
     </div>
-    <div className="card-premium p-4">
+    <div className="flex justify-end"><Button variant="outline" size="sm" onClick={()=>void refresh()} disabled={loading}><RefreshCw className="mr-1 h-4 w-4"/>Atualizar dados</Button></div>
+    {mode&&<div className="card-premium p-4">
       <label className="block text-xs font-bold text-muted-foreground mb-2">UNIDADE QUE GUARDA O ESTOQUE</label>
       <select className="w-full sm:w-80 rounded-md border p-2 bg-background text-foreground"
         value={unit} onChange={e=>{setUnit(e.target.value as Unidade|'');setLines([]);changed();}}>
@@ -219,12 +243,23 @@ const UniformePage:React.FC=()=>{
       </select>
       {!unit&&<p className="mt-2 text-sm text-amber-600">A ficha enviada não identifica a unidade nem informa data/responsável. Escolha a unidade correta antes de lançar o inventário.</p>}
     </div>
-    {stockError&&<div className="border border-destructive rounded-lg p-4 text-sm text-destructive">{stockError}</div>}
-    {unit&&<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {[[ 'Variações cadastradas',unitStock.length,Package],['Peças disponíveis',fmt(total),Shirt],
-      ['Precisam de reposição',low.length,AlertTriangle],['Sem saldo',soldOut.length,ArrowDownCircle]].map(([label,value,Icon]:any)=>
-        <div key={label} className="card-premium p-4"><p className="text-xs text-muted-foreground">{label}</p>
-          <div className="flex justify-between items-center mt-2"><strong className="text-2xl">{value}</strong><Icon className="w-5 h-5 text-primary"/></div></div>)}
+    {mode&&stockError&&<div className="border border-destructive rounded-lg p-4 text-sm text-destructive">{stockError}</div>}
+    {mode&&unit&&<div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {([
+        {key:'variacoes',label:'Variações cadastradas',value:unitStock.length,icon:Package},
+        {key:'quantidade',label:'Peças disponíveis',value:fmt(total),icon:Shirt},
+        {key:'reposicao',label:'Precisam de reposição',value:low.length,icon:AlertTriangle},
+        {key:'sem_saldo',label:'Sem saldo',value:soldOut.length,icon:ArrowDownCircle},
+      ] as const).map(item=>{
+        const Icon=item.icon,active=mode==='estoque'&&metric===item.key;
+        return <button key={item.key} type="button" aria-expanded={active} aria-pressed={active}
+          onClick={()=>toggleMetric(item.key)}
+          className={`card-premium min-h-[104px] p-4 text-left transition hover:border-violet-400 ${active?'border-violet-500 bg-[#241a32]':''}`}>
+          <div className="text-xs text-muted-foreground">{item.label}</div>
+          <div className="mt-2 flex items-center justify-between gap-2"><strong className="text-2xl">{item.value}</strong><Icon className={`h-5 w-5 ${active?'text-[#ffc400]':'text-violet-400'}`}/></div>
+          <div className="mt-2 text-[10px] text-zinc-500">{active?'Clique para fechar':'Clique para consultar'}</div>
+        </button>;
+      })}
     </div>}
     {mode==='painel'&&<div className="card-premium p-5 space-y-3">
       <h2 className="font-bold">Controle do estoque</h2>
@@ -298,11 +333,11 @@ const UniformePage:React.FC=()=>{
         <Button type="submit" disabled={busy||!unit||!count.trim()}><Plus className="mr-1 h-4 w-4"/>{operation==='entrada'?'Registrar entrada':'Salvar contagem'}</Button>
       </form>
       <div className="card-premium p-5">
-        <h2 className="font-bold mb-3">Saldos cadastrados • {UNIDADES.find(u=>u.value===unit)?.label||'Selecione uma unidade'}</h2>
-        {loading?<p className="text-sm">Carregando...</p>:!unitStock.length?<p className="text-sm text-muted-foreground">Nenhuma variação cadastrada nessa unidade.</p>:
+        <h2 className="font-bold mb-3">{metric==='reposicao'?'Uniformes que precisam de reposição':metric==='sem_saldo'?'Uniformes sem saldo':metric==='quantidade'?'Quantidades por uniforme':'Saldos cadastrados'} • {UNIDADES.find(u=>u.value===unit)?.label||'Selecione uma unidade'}</h2>
+        {loading?<p className="text-sm">Carregando...</p>:!visibleStock.length?<p className="text-sm text-muted-foreground">Nenhuma variação encontrada para este filtro.</p>:
           <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-xs text-muted-foreground">
             {['Uniforme','Modelo','Tamanho','Saldo','Mínimo','Ação'].map(v=><th key={v} className="p-2">{v}</th>)}</tr></thead>
-            <tbody>{unitStock.map(s=><tr key={s.id} className="border-b">
+            <tbody>{visibleStock.map(s=><tr key={s.id} className="border-b">
               <td className="p-2">{s.tipo}</td><td className="p-2">{s.modelo}</td><td className="p-2">{s.tamanho}</td>
               <td className={'p-2 font-bold '+(s.saldo<=s.minimo?'text-amber-600':'')}>{s.saldo}</td><td className="p-2">{s.minimo}</td>
               <td className="p-2"><Button size="sm" variant="outline" onClick={()=>chooseStock(s)}>Conferir / editar</Button></td>
