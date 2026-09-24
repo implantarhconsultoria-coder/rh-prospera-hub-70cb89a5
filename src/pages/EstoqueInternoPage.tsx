@@ -217,14 +217,14 @@ export default function EstoqueInternoPage() {
     let dados:Record<string,unknown>={};
     if(correction.kind==='ajustar_saldo'){
       dados={saldo_atual:number('saldo_atual')};
-      if(dados.saldo_atual===null||!Number.isFinite(dados.saldo_atual)||Number(dados.saldo_atual)<0){toast.error('Saldo inválido');return;}
+      if(dados.saldo_atual===null||!Number.isFinite(Number(dados.saldo_atual))||Number(dados.saldo_atual)<0){toast.error('Saldo inválido');return;}
     }else if(correction.kind==='editar_produto'){
       dados={codigo:Number(fields.codigo),descricao:fields.descricao,unidade:fields.unidade,
         aplicacao:fields.aplicacao,estoque_minimo:number('estoque_minimo'),estoque_maximo:number('estoque_maximo')};
     }else if(correction.kind==='editar_movimento'){
       dados={tipo:fields.tipo,quantidade:number('quantidade'),data_movimento:fields.data_movimento,
         destinatario:fields.destinatario,observacao:fields.observacao,preco_unitario:number('preco_unitario')};
-      if(!dados.quantidade||!Number.isFinite(dados.quantidade)){toast.error('Quantidade inválida');return;}
+      if(!dados.quantidade||!Number.isFinite(Number(dados.quantidade))){toast.error('Quantidade inválida');return;}
     }
     setBusy(true);
     try{
