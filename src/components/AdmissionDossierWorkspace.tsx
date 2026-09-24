@@ -429,7 +429,14 @@ const AdmissionDossierWorkspace: React.FC<{
       }).eq('pre_cadastro_id',draft.id);
       if(error) throw error;
       setEmailDraft({
-        to:['financeiro@topac.com.br'],cc:[],
+        to:['financeiro@topac.com.br'],
+        cc:[
+          'robson@topac.com.br',
+          'adm.matriz@topac.com.br',
+          ...(String(draft.cnpj || '').replace(/\D/g, '') === '07291648000294'
+            ? ['antonio.carlos@topac.com.br']
+            : []),
+        ],
         subject:(stage?.efetivado_em?'Programação de pagamento':'Programação antecipada')+' VR e VT admissional - '+draft.nome+' - '+draft.empresa_nome,
         body,attachmentBlob:blob,attachmentName:'PROGRAMACAO_VR_VT_'+draft.nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_')+'_'+competencia+'.pdf',
         senderUserId:session?.user?.id,senderEmail:session?.user?.email,
