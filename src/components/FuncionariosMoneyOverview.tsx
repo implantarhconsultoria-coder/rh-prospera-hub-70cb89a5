@@ -18,8 +18,9 @@ const FuncionariosMoneyOverview: React.FC<{
   employees: EmployeeSummary[];
   companies: CompanySummary[];
   filterCompany?: string;
-}> = ({ employees, companies, filterCompany }) => {
-  const [expanded, setExpanded] = useState(false);
+  onCompanySelect?: (companyId: string) => void;
+}> = ({ employees, companies, filterCompany, onCompanySelect }) => {
+  const [expanded, setExpanded] = useState(true);
   const [closed, setClosed] = useState<Close[]>([]);
   const [historyError, setHistoryError] = useState('');
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -96,11 +97,14 @@ const FuncionariosMoneyOverview: React.FC<{
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         {grouped.map(co => (
-          <div key={co.id} className="rounded-xl border bg-zinc-950/80 p-4" style={{ borderColor: co.color + '80', boxShadow: 'inset 0 1px 0 ' + co.color + '33' }}>
+          <button key={co.id} type="button" disabled={!onCompanySelect} onClick={() => onCompanySelect?.(co.id)}
+            aria-label={'Abrir funcionários de ' + co.name}
+            className="rounded-xl border bg-zinc-950/80 p-4 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-zinc-900/90 enabled:focus-visible:outline enabled:focus-visible:outline-2 enabled:focus-visible:outline-amber-400"
+            style={{ borderColor: co.color + '80', boxShadow: 'inset 0 1px 0 ' + co.color + '33' }}>
             <p className="truncate text-xs font-semibold" style={{ color: co.color }} title={co.name}>{co.name}</p>
             <p className="mt-2 text-xl font-black text-white">{MONEY(co.total)}</p>
             <p className="mt-1 text-xs text-zinc-300">{co.count} ativo(s) • salário-base</p>
-          </div>
+          </button>
         ))}
       </div>
       <p className="text-xs text-amber-300/90">
