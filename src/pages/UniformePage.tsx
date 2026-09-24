@@ -14,7 +14,7 @@ type Mode = 'painel' | 'estoque' | 'entregas' | 'historico';
 type StockMetric = 'variacoes' | 'quantidade' | 'reposicao' | 'sem_saldo';
 type Stock = { id:string; unidade:Unidade; tipo:string; tamanho:string; modelo:string; saldo:number; minimo:number; observacao:string|null; atualizado_em:string };
 type RecordedDelivery = { id:string; funcionario_id:string; company_id:string; unidade:Unidade; data_entrega:string; itens:DeliveryItem[]; gerado_por:string; criado_em:string };
-type Move={id:string;estoque_id:string;tipo:'entrada'|'contagem'|'saida';quantidade:number;saldo_antes:number;saldo_depois:number;funcionario_id:string|null;criado_em:string;observacao:string|null};
+type Move={id:string;estoque_id:string;tipo:'entrada'|'contagem'|'saida';quantidade:number;saldo_antes:number;saldo_depois:number;funcionario_id:string|null;criado_em:string;observacao:string|null;cancelado_em:string|null};
 type Line = { key:string; estoqueId:string; quantidade:number };
 const UNIDADES:{value:Unidade;label:string}[]=[
   {value:'SAO_PAULO',label:'São Paulo'},
@@ -54,7 +54,8 @@ const INITIAL_SHEET_DRAFT:DraftRow[]=[
 ];
 
 const UniformePage:React.FC=()=>{
-  const {companies,employees,session}=useApp();
+  const {companies,employees,session,userRoles}=useApp();
+  const manager=userRoles.includes('admin')||userRoles.includes('diretor_geral');
   const navigate=useNavigate();
   const [mode,setMode]=useState<Mode|null>(null);
   const [metric,setMetric]=useState<StockMetric|null>(null);
@@ -75,6 +76,10 @@ const UniformePage:React.FC=()=>{
   const [operation,setOperation]=useState<'contagem'|'entrada'>('contagem');
   const [minimum,setMinimum]=useState('0');
   const [observation,setObservation]=useState('');
+  const [editingMove,setEditingMove]=useState<Move|null>(null);
+  const [editingQuantity,setEditingQuantity]=useState('');
+  const [editingReason,setEditingReason]=useState('');
+  const [audit,setAudit]=useState<any[]>([]);
   const [search,setSearch]=useState('');
   const [selectedEmpId,setSelectedEmpId]=useState('');
   const [lines,setLines]=useState<Line[]>([]);
@@ -86,7 +91,7 @@ const UniformePage:React.FC=()=>{
     const [s,h,m]=await Promise.all([
       db.from('uniforme_estoque').select('id,unidade,tipo,tamanho,modelo,saldo,minimo,observacao,atualizado_em').order('tipo').order('tamanho').order('modelo'),
       db.from('uniforme_entregas').select('id,funcionario_id,company_id,unidade,data_entrega,itens,gerado_por,criado_em').order('criado_em',{ascending:false}).limit(80),
-      db.from('uniforme_movimentos').select('id,estoque_id,tipo,quantidade,saldo_antes,saldo_depois,funcionario_id,criado_em,observacao').order('criado_em',{ascending:false}).limit(200),
+      db.from('uniforme_movimentos').select('id,estoque_id,tipo,quantidade,saldo_antes,saldo_depois,funcionario_id,criado_em,observacao,cancelado_em').order('criado_em',{ascending:false}).limit(200),
     ]);
     if(s.error){setStockError('Não foi possível carregar o estoque: '+s.error.message);setStock([]);}
     else setStock((s.data||[]) as Stock[]);
@@ -97,6 +102,7 @@ const UniformePage:React.FC=()=>{
     setLoading(false);
   },[]);
   useEffect(()=>{void refresh();},[refresh]);
+  useEffect(()=>{if(mode==='historico'&&manager)void db.from('uniforme_auditoria').select('*').order('criado_em',{ascending:false}).limit(100).then(({data,error}:any)=>{if(error)toast.error(error.message);else setAudit(data||[]);});},[mode,manager]);
 
   const unitStock=useMemo(()=>unit?stock.filter(s=>s.unidade===unit):[],[stock,unit]);
   const total=unitStock.reduce((sum,s)=>sum+Number(s.saldo),0);
@@ -155,6 +161,7 @@ const UniformePage:React.FC=()=>{
     const quantity=Number(count),min=Number(minimum);
     if(!Number.isSafeInteger(quantity)||quantity<0||!Number.isSafeInteger(min)||min<0||(operation==='entrada'&&quantity===0)){toast.error(operation==='entrada'?'Informe uma quantidade positiva.':'Informe quantidades inteiras maiores ou iguais a zero.');return;}
     if(!type.trim()||!size.trim()||!model.trim()){toast.error('Preencha tipo, tamanho e modelo.');return;}
+    if(operation==='contagem'&&observation.trim().length<5){toast.error('Explique o motivo da contagem ou ajuste de saldo.');return;}
     setBusy(true);
     const r=operation==='contagem'
       ? await db.rpc('uniforme_contar_estoque',{
@@ -173,7 +180,7 @@ const UniformePage:React.FC=()=>{
   };
   const chooseStock=(s:Stock)=>{
     setUnit(s.unidade);setType(s.tipo);setSize(s.tamanho);setModel(s.modelo);
-    setCount(String(s.saldo));setMinimum(String(s.minimo));setObservation(s.observacao||'');
+    setCount(String(s.saldo));setMinimum(String(s.minimo));setObservation('');
   };
   const saveAndPrint=async()=>{
     if(busy)return;
@@ -326,8 +333,8 @@ const UniformePage:React.FC=()=>{
           <label className="text-xs text-muted-foreground">Estoque mínimo
             <Input type="number" min="0" step="1" value={minimum} onChange={e=>setMinimum(e.target.value)} className="mt-1"/>
           </label>
-          <label className="text-xs text-muted-foreground sm:col-span-2">Observação da contagem
-            <Input value={observation} onChange={e=>setObservation(e.target.value)} className="mt-1" placeholder="Ex.: inventário inicial da ficha física"/>
+          <label className="text-xs text-muted-foreground sm:col-span-2">{operation==='contagem'?'Motivo da contagem / alteração (obrigatório)':'Observação da entrada'}
+            <Input required={operation==='contagem'} minLength={operation==='contagem'?5:undefined} value={observation} onChange={e=>setObservation(e.target.value)} className="mt-1" placeholder="Ex.: inventário inicial da ficha física"/>
           </label>
         </div>
         <Button type="submit" disabled={busy||!unit||!count.trim()}><Plus className="mr-1 h-4 w-4"/>{operation==='entrada'?'Registrar entrada':'Salvar contagem'}</Button>
@@ -406,8 +413,37 @@ const UniformePage:React.FC=()=>{
             {m.funcionario_id?' • '+(employees.find(e=>e.id===m.funcionario_id)?.name||'Colaborador'):''}</span>
           <span className="font-semibold">{m.saldo_antes} → {m.saldo_depois} ({m.tipo==='saida'?'-':'+'}{m.quantidade})</span>
           {m.observacao&&<p className="basis-full text-xs text-muted-foreground">{m.observacao}</p>}
+          {m.cancelado_em&&<p className="basis-full text-xs font-bold text-destructive">CANCELADO · {new Date(m.cancelado_em).toLocaleString('pt-BR')}</p>}
+          {manager&&m.tipo==='entrada'&&!m.cancelado_em&&<div className="basis-full flex gap-2"><Button type="button" size="sm" variant="outline" onClick={()=>{setEditingMove(m);setEditingQuantity(String(m.quantidade));setEditingReason('');}}>Editar entrada</Button><Button type="button" size="sm" variant="destructive" onClick={()=>{setEditingMove(m);setEditingQuantity('0');setEditingReason('');}}>Excluir entrada</Button></div>}
         </div>;
       })}
+      {manager&&<div className="rounded-lg border p-4"><h3 className="font-bold">Auditoria das correções de uniformes</h3>
+        {audit.length===0&&<p className="text-sm text-muted-foreground">Nenhuma correção de entrada registrada.</p>}
+        {audit.map(a=><details key={a.id} className="border-b py-2 text-sm"><summary className="cursor-pointer font-semibold">{a.operacao.replaceAll('_',' ')} · {a.responsavel_nome} · {new Date(a.criado_em).toLocaleString('pt-BR')}</summary>
+          <p className="mt-1">Motivo: {a.motivo}</p><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(a.anterior,null,2)}{'\n'}DEPOIS: {JSON.stringify(a.posterior,null,2)}</pre>
+        </details>)}
+      </div>}
+    </div>}
+    {editingMove&&manager&&<div role="dialog" aria-modal="true" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4">
+      <form className="card-premium w-full max-w-md space-y-4 p-5" onSubmit={async e=>{
+        e.preventDefault();if(busy)return;
+        const qty=Number(editingQuantity);
+        if(!Number.isSafeInteger(qty)||qty<0||editingReason.trim().length<5){toast.error('Informe quantidade inteira e motivo da alteração.');return;}
+        setBusy(true);
+        const r=await db.rpc('uniforme_corrigir_entrada',{p_movimento_id:editingMove.id,p_quantidade:qty,p_motivo:editingReason.trim()});
+        setBusy(false);
+        if(r.error){toast.error(r.error.message);return;}
+        toast.success('Entrada corrigida com auditoria.');
+        setEditingMove(null);await refresh();
+        const a=await db.from('uniforme_auditoria').select('*').order('criado_em',{ascending:false}).limit(100);
+        if(!a.error)setAudit(a.data||[]);
+      }}>
+        <h3 className="text-xl font-bold">Corrigir entrada de uniforme</h3>
+        <p className="text-sm text-muted-foreground">Quantidade registrada: {editingMove.quantidade}. Para cancelar, mantenha zero. Entregas e fichas dos funcionários permanecem preservadas.</p>
+        <label className="block text-sm">Quantidade correta<Input required type="number" min="0" step="1" value={editingQuantity} onChange={e=>setEditingQuantity(e.target.value)}/></label>
+        <label className="block text-sm font-bold">Motivo da alteração (obrigatório)<Input required minLength={5} value={editingReason} onChange={e=>setEditingReason(e.target.value)} placeholder="Explique o erro do lançamento"/></label>
+        <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={()=>setEditingMove(null)}>Cancelar</Button><Button disabled={busy||editingReason.trim().length<5}>Confirmar e registrar</Button></div>
+      </form>
     </div>}
   </div>;
 };
