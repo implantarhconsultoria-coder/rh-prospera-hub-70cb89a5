@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
 import { buscarHistoricoFuncionario, marcarComoEnviado, registrarDocumento, uploadDocumentoArquivo } from '@/lib/documentoHistorico';
 import { getDocumentUrl } from '@/lib/documentUrl';
+import { buildHistoricDocumentPdf } from '@/lib/historicoDocumentalPdf';
 
 vi.mock('@/lib/documentoHistorico', () => ({
   DOCUMENTO_CATEGORIAS_PADRAO: ['OUTROS', 'ATESTADO'],
@@ -22,7 +23,10 @@ vi.mock('@/context/AppContext', () => ({
   }),
 }));
 
-vi.mock('@/components/PdfDocumentViewer', () => ({ default: () => null }));
+vi.mock('@/components/PdfDocumentViewer', () => ({ default: ({ sourceBlob }: any) => <div data-testid="documento-preview">{sourceBlob ? 'Via reconstruída disponível' : 'Arquivo original'}</div> }));
+vi.mock('@/lib/historicoDocumentalPdf', () => ({
+  buildHistoricDocumentPdf: vi.fn().mockResolvedValue(new Blob(['PDF'], { type: 'application/pdf' })),
+}));
 vi.mock('@/components/EmailPdfModal', () => ({
   default: ({ open, draft }: any) => open && draft ? (
     <div data-testid="email-draft">
@@ -165,4 +169,33 @@ describe('HistoricoDocumentalFuncionario', () => {
     ));
   });
 
+  it('mostra visualizar baixar e imprimir nos registros EPI que não têm arquivo original', async () => {
+    vi.mocked(buscarHistoricoFuncionario).mockResolvedValue([{
+      id: 'documento-epi-1',
+      funcionario_id: 'funcionario-1',
+      funcionario_nome: 'Ilma Mendes',
+      company_id: 'empresa-1',
+      empresa_nome: 'TOPAC Goiânia',
+      categoria: 'EPI',
+      tipo_documento: 'Ficha de Entrega - EPI Semestral',
+      descricao: 'Entrega de EPI',
+      origem: 'gerado_sistema',
+      arquivo_url: '',
+      storage_path: '',
+      data_documento: '2026-09-18T11:00:00.000Z',
+    }] as any);
+
+    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    fireEvent.click(await screen.findByRole('button', { name: /^EPI\b/ }));
+    expect(await screen.findByRole('button', { name: 'Visualizar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Baixar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Imprimir' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Visualizar' }));
+    await waitFor(() => expect(buildHistoricDocumentPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'documento-epi-1' }),
+      expect.any(Object),
+      expect.any(Object),
+    ));
+    expect(await screen.findByTestId('documento-preview')).toHaveTextContent('Via reconstruída disponível');
+  });
 });
