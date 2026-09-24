@@ -98,7 +98,7 @@ export const buildAdmissionFinanceReceiptPdfBlob = (data: AdmissionFinanceReceip
   doc.text('Data prevista para pagamento:', 22, 87);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  doc.text(data.plannedPaymentDate ? dateBr(data.plannedPaymentDate) + ' (confirmar com RH)' : 'PENDENTE - AGUARDAR CONFIRMACAO DO RH', 76, 87);
+  doc.text(data.plannedPaymentDate ? dateBr(data.plannedPaymentDate) + ' (confirmar com RH)' : 'PENDENTE - AGUARDAR A CONFIRMACAO DO RH', 76, 87);
 
   let y = section('DADOS BANCÁRIOS — CONFERIR ANTES DO PAGAMENTO', 100);
   const account = safe(data.banking.conta) +
@@ -118,7 +118,7 @@ export const buildAdmissionFinanceReceiptPdfBlob = (data: AdmissionFinanceReceip
     y = section(name, y);
     labelRow('Valor diário', item.enabled ? formatCurrency(item.daily) : 'Não aplicado', y); y += 8;
     labelRow('Dias úteis considerados', item.enabled ? (data.businessDays == null ? 'Pendente - confirmar com RH' : String(data.businessDays)) : '—', y); y += 8;
-    labelRow('VALOR PARA PROGRAMAÇÃO', item.enabled ? (item.total == null ? 'PENDENTE - AGUARDAR CONFIRMACAO DO RH' : formatCurrency(item.total)) : 'Não aplicado', y, true); y += 8;
+    labelRow('VALOR PARA PROGRAMAÇÃO', item.enabled ? (item.total == null ? 'PENDENTE - AGUARDAR A CONFIRMACAO DO RH' : formatCurrency(item.total)) : 'Não aplicado', y, true); y += 8;
   };
   benefit('VR — VALE-REFEIÇÃO', data.vr);
   benefit('VT — VALE-TRANSPORTE', data.vt);
