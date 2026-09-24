@@ -326,7 +326,8 @@ const DashboardPage: React.FC = () => {
       )}
 
       {(isAdmin || (isDirector && rhVisivel)) && (
-        <FuncionariosMoneyOverview employees={employees} companies={companies} />
+        <FuncionariosMoneyOverview employees={employees} companies={companies}
+          onCompanySelect={(companyId) => navigate('/admin/funcionarios?empresa=' + encodeURIComponent(companyId))} />
       )}
 
       <section className="grid grid-cols-1 gap-[10px] md:grid-cols-2 xl:grid-cols-4">
