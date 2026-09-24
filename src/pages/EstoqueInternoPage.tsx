@@ -193,15 +193,15 @@ export default function EstoqueInternoPage() {
   },[access,filterType,filterItem,month,movementScope,page,tab,movementSearch,items]);
 
   const loadAudit=useCallback(async()=>{
-    if(!access?.pode_gerenciar)return;
+    if(!access?.pode_movimentar)return;
     const r=await db.from('estoque_interno_auditoria')
       .select('id,operacao,item_id,ator_nome,ator_email,motivo,dados_anteriores,dados_novos,criado_em')
       .order('criado_em',{ascending:false}).limit(100);
     if(r.error)toast.error('Histórico de correções: '+r.error.message);
     else setAudit(r.data||[]);
-  },[access?.pode_gerenciar]);
+  },[access?.pode_movimentar]);
   const openCorrection=(kind:'editar_produto'|'ajustar_saldo'|'editar_movimento'|'cancelar_movimento',item?:StockItem,move?:Movement)=>{
-    if(!access?.pode_gerenciar)return;
+    if(!access?.pode_movimentar)return;
     setCorrection({kind,item,move});setReason('');
     setFields(move?{tipo:move.tipo,quantidade:String(move.quantidade),data_movimento:move.data_movimento||'',
       destinatario:move.destinatario||'',observacao:move.observacao||'',
@@ -213,7 +213,7 @@ export default function EstoqueInternoPage() {
   };
   const submitCorrection=async(e:React.FormEvent)=>{
     e.preventDefault();
-    if(!correction||busy||!access?.pode_gerenciar)return;
+    if(!correction||busy||!access?.pode_movimentar)return;
     if(reason.trim().length<5){toast.error('Informe o motivo da correção (mínimo 5 caracteres)');return;}
     const number=(key:string)=>fields[key]===''?null:Number((fields[key]||'').replace(',','.'));
     let dados:Record<string,unknown>={};
@@ -284,7 +284,7 @@ export default function EstoqueInternoPage() {
 
   useEffect(()=>{void load();},[load]);
   useEffect(()=>{void loadMoves();},[loadMoves]);
-  useEffect(()=>{if(tab==='historico'&&access?.pode_gerenciar)void loadAudit();},[tab,loadAudit,access?.pode_gerenciar]);
+  useEffect(()=>{if(tab==='historico'&&access?.pode_movimentar)void loadAudit();},[tab,loadAudit,access?.pode_movimentar]);
 
   const itemById=useMemo(()=>new Map(items.map(i=>[i.id,i])),[items]);
   const selected=items.find(i=>String(i.codigo)===code);
@@ -564,7 +564,7 @@ export default function EstoqueInternoPage() {
                 <td className={'p-3 font-black tabular-nums '+(zero?'text-red-400':low?'text-amber-400':'text-[#ffc400]')}>{brQty(Number(i.saldo_atual))}</td>
                 <td className="p-3 text-zinc-400">{i.estoque_minimo??'—'}</td><td className="p-3 text-zinc-400">{i.estoque_maximo??'—'}</td>
                 <td className={'p-3 font-bold '+(zero?'text-amber-400':low?'text-red-400':'text-emerald-400')}>{zero?'SEM SALDO':low?'REPOR':'DISPONÍVEL'}</td>
-                <td className="sticky right-0 z-10 min-w-[240px] whitespace-nowrap bg-[#111017] p-3 shadow-[-8px_0_12px_-8px_#000]"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button>{access.pode_gerenciar&&<><button type="button" onClick={()=>openCorrection('editar_produto',i)} className="text-xs font-bold text-violet-300 hover:underline">Editar</button><button type="button" onClick={()=>openCorrection('ajustar_saldo',i)} className="text-xs font-bold text-[#ffc400] hover:underline">Ajustar saldo</button></>}</div></td>
+                <td className="sticky right-0 z-10 min-w-[240px] whitespace-nowrap bg-[#111017] p-3 shadow-[-8px_0_12px_-8px_#000]"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button>{access.pode_movimentar&&<><button type="button" onClick={()=>openCorrection('editar_produto',i)} className="text-xs font-bold text-violet-300 hover:underline">Editar</button><button type="button" onClick={()=>openCorrection('ajustar_saldo',i)} className="text-xs font-bold text-[#ffc400] hover:underline">Ajustar saldo</button></>}</div></td>
               </tr>;
               })}</tbody>
             </table>
@@ -719,11 +719,11 @@ export default function EstoqueInternoPage() {
           <label className="text-xs text-zinc-400">Produto<select className={inputStyle+' mt-1'} value={filterItem} onChange={e=>{setFilterItem(e.target.value);setPage(0);}}><option value="">Todos</option>{items.map(i=><option key={i.id} value={i.id}>{i.codigo} — {i.descricao}</option>)}</select></label>
           <div className="flex items-end"><button className="h-10 rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-400" onClick={()=>{setMovementScope('todos');setMonth('');setFilterType('');setFilterItem('');setPage(0);}}>Todo o histórico</button></div>
         </div>
-        <div className="overflow-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="text-xs uppercase text-zinc-500"><tr>{['Data','Tipo','Código / Produto','Qtd.','Para quem / Origem','Responsável','Observações','Correção'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead><tbody>{moves.map(m=>{const i=itemById.get(m.item_id);return <tr key={m.id} className="border-b border-[#251f2b]"><td className={'p-3 whitespace-nowrap '+(m.data_suspeita?'text-amber-400':'text-zinc-400')}>{brDate(m.data_movimento)}{m.data_suspeita&&<TriangleAlert className="ml-1 inline h-3 w-3"/>}</td><td className={'p-3 font-semibold '+(m.tipo==='entrada'?'text-emerald-400':'text-amber-400')}>{m.tipo.toUpperCase()}</td><td className="p-3"><span className="text-violet-400">{i?.codigo||'—'} </span>{i?.descricao||'Produto'}</td><td className="p-3">{brQty(Number(m.quantidade))}</td><td className="p-3">{m.destinatario||m.origem_responsavel||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.historico_importado?'Histórico Excel':m.ator_email||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.observacao||'—'}{m.cancelado_em&&<strong className="block text-red-400">CANCELADO</strong>}</td><td className="p-3">{access.pode_gerenciar&&!m.historico_importado&&!m.cancelado_em&&<div className="flex gap-3"><button type="button" onClick={()=>openCorrection('editar_movimento',undefined,m)} className="text-xs font-bold text-violet-300">Editar</button><button type="button" onClick={()=>openCorrection('cancelar_movimento',undefined,m)} className="text-xs font-bold text-red-400">Excluir</button></div>}</td></tr>;})}</tbody></table></div>
+        <div className="overflow-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="text-xs uppercase text-zinc-500"><tr>{['Data','Tipo','Código / Produto','Qtd.','Para quem / Origem','Responsável','Observações','Correção'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead><tbody>{moves.map(m=>{const i=itemById.get(m.item_id);return <tr key={m.id} className="border-b border-[#251f2b]"><td className={'p-3 whitespace-nowrap '+(m.data_suspeita?'text-amber-400':'text-zinc-400')}>{brDate(m.data_movimento)}{m.data_suspeita&&<TriangleAlert className="ml-1 inline h-3 w-3"/>}</td><td className={'p-3 font-semibold '+(m.tipo==='entrada'?'text-emerald-400':'text-amber-400')}>{m.tipo.toUpperCase()}</td><td className="p-3"><span className="text-violet-400">{i?.codigo||'—'} </span>{i?.descricao||'Produto'}</td><td className="p-3">{brQty(Number(m.quantidade))}</td><td className="p-3">{m.destinatario||m.origem_responsavel||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.historico_importado?'Histórico Excel':m.ator_email||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.observacao||'—'}{m.cancelado_em&&<strong className="block text-red-400">CANCELADO</strong>}</td><td className="p-3">{access.pode_movimentar&&!m.historico_importado&&!m.cancelado_em&&<div className="flex gap-3"><button type="button" onClick={()=>openCorrection('editar_movimento',undefined,m)} className="text-xs font-bold text-violet-300">Editar</button><button type="button" onClick={()=>openCorrection('cancelar_movimento',undefined,m)} className="text-xs font-bold text-red-400">Excluir</button></div>}</td></tr>;})}</tbody></table></div>
         <div className="mt-4 flex items-center justify-end gap-3 text-sm"><button className="rounded-lg border border-[#44334f] px-3 py-2 disabled:opacity-30" disabled={page===0} onClick={()=>setPage(p=>p-1)}>Anterior</button><span>Página {page+1} / {Math.max(1,Math.ceil(moveCount/80))}</span><button className="rounded-lg border border-[#44334f] px-3 py-2 disabled:opacity-30" disabled={(page+1)*80>=moveCount} onClick={()=>setPage(p=>p+1)}>Próxima</button></div>
         {tab==='relatorios'&&<p className="mt-3 text-xs text-zinc-500">CSV de movimentações exporta os registros da página exibida. PDF e CSV de estoque exportam a posição atual dos materiais.</p>}
       </section>}
-      {tab==='historico'&&access.pode_gerenciar&&<section className={wrapBox}>
+      {tab==='historico'&&access.pode_movimentar&&<section className={wrapBox}>
         <h2 className="mb-2 text-xl font-bold">Auditoria de correções</h2>
         <p className="mb-4 text-xs text-zinc-400">Responsável, motivo, data e valores anteriores e novos de cada correção.</p>
         <div className="max-h-[400px] space-y-2 overflow-y-auto">
