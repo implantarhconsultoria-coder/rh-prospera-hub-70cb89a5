@@ -41,7 +41,7 @@ const isContabilidadePublicPortal = /^\/(?:acesso-contabilidade(?:-goiania)?|con
 // Nova versão do app administrativo instalado, sem alterar a versão estável do app dos mecânicos.
 const MOBILE_BUILD_TAG = isMecanicoPublicPortal
   ? "20260908-mecanicos-oficial-v2"
-  : "20260923-mobile-admin-uniformes-estoque-v1";
+  : "20260923-mobile-admin-cards-unificados-v2";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 
 async function clearLegacyMobileCache() {
