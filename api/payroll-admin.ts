@@ -9,24 +9,45 @@ import {
   signedUrl,
 } from '../src/server/payrollServer.js';
 
-const loadDocument = async (service: any, documentId: string) => {
+// The employee portal remains paused via payroll_company_enabled.
+// Admin archive access must not depend on the employee portal switch.
+const ADMIN_COMPANY_CNPJS: Record<string, string> = {
+  'topac-matriz': '07291648000103',
+  'topac-pg': '07291648000294',
+  'topac-gyn': '07291648000375',
+  'alqui': '14464586000150',
+  'lmt': '21967711000100',
+};
+
+const assertAdminArchiveAccess = async (service: any, companyId: string, isAdmin: boolean) => {
+  if (!isAdmin) return assertCompanyEnabled(service, companyId);
+  const { data: company, error } = await service.from('empresas').select('codigo,cnpj').eq('id', companyId).maybeSingle();
+  if (error) throw error;
+  const code = String(company?.codigo || '').trim().toLowerCase();
+  const cnpj = String(company?.cnpj || '').replace(/\D/g, '');
+  if (!ADMIN_COMPANY_CNPJS[code] || ADMIN_COMPANY_CNPJS[code] !== cnpj) {
+    throw Object.assign(new Error('invalid_company_scope'), { status: 403 });
+  }
+};
+
+const loadDocument = async (service: any, isAdmin: boolean, documentId: string) => {
   const { data, error } = await service.from('payroll_documents').select('*').eq('id', documentId).single();
   if (error || !data) throw Object.assign(new Error('document_not_found'), { status: 404 });
-  await assertCompanyEnabled(service, data.company_id);
+  await assertAdminArchiveAccess(service, data.company_id, isAdmin);
   return data;
 };
 
-const loadReceipt = async (service: any, receiptId: string) => {
+const loadReceipt = async (service: any, isAdmin: boolean, receiptId: string) => {
   const { data, error } = await service.from('payroll_payment_receipts').select('*').eq('id', receiptId).single();
   if (error || !data) throw Object.assign(new Error('receipt_not_found'), { status: 404 });
-  await assertCompanyEnabled(service, data.company_id);
+  await assertAdminArchiveAccess(service, data.company_id, isAdmin);
   return data;
 };
 
-const loadRequest = async (service: any, requestId: string) => {
+const loadRequest = async (service: any, isAdmin: boolean, requestId: string) => {
   const { data, error } = await service.from('payroll_signature_requests').select('*').eq('id', requestId).single();
   if (error || !data) throw Object.assign(new Error('request_not_found'), { status: 404 });
-  await assertCompanyEnabled(service, data.company_id);
+  await assertAdminArchiveAccess(service, data.company_id, isAdmin);
   return data;
 };
 
@@ -171,7 +192,8 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
 export default async function handler(req: any, res?: any) {
   const method = req?.method || 'GET';
   try {
-    const { service, user } = await requireAdmin(req);
+    const { service, user, roles } = await requireAdmin(req);
+    const isAdmin = roles.includes('admin');
 
     if (method === 'GET') {
       return sendJson(res, {
@@ -192,7 +214,7 @@ export default async function handler(req: any, res?: any) {
     }
 
     if (action === 'confirm-document') {
-      const doc = await loadDocument(service, String(body.document_id || ''));
+      const doc = await loadDocument(service, isAdmin, String(body.document_id || ''));
       if (!doc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
       const { data, error } = await service.from('payroll_documents').update({
         confirmed: true,
@@ -214,9 +236,9 @@ export default async function handler(req: any, res?: any) {
     }
 
     if (action === 'confirm-payment') {
-      const receipt = await loadReceipt(service, String(body.receipt_id || ''));
+      const receipt = await loadReceipt(service, isAdmin, String(body.receipt_id || ''));
       if (!receipt.employee_id || !receipt.document_id) return sendJson(res, { ok: false, error: 'payment_not_identified' }, 409);
-      const doc = await loadDocument(service, receipt.document_id);
+      const doc = await loadDocument(service, isAdmin, receipt.document_id);
       if (!doc.confirmed) return sendJson(res, { ok: false, error: 'document_not_ready' }, 409);
       if (doc.employee_id !== receipt.employee_id || doc.company_id !== receipt.company_id || doc.competencia !== receipt.competencia) {
         return sendJson(res, { ok: false, error: 'payment_scope_mismatch' }, 409);
@@ -256,7 +278,7 @@ export default async function handler(req: any, res?: any) {
     }
 
     if (action === 'signed-urls') {
-      const doc = await loadDocument(service, String(body.document_id || ''));
+      const doc = await loadDocument(service, isAdmin, String(body.document_id || ''));
       const { data: receipt } = await service.from('payroll_payment_receipts').select('*').eq('document_id', doc.id).eq('status', 'PAGAMENTO_CONFIRMADO').maybeSingle();
       const { data: requestRow } = await service.from('payroll_signature_requests').select('id').eq('document_id', doc.id).maybeSingle();
       const { data: signature } = requestRow
@@ -272,7 +294,7 @@ export default async function handler(req: any, res?: any) {
     }
 
     if (action === 'dossier-url') {
-      const doc = await loadDocument(service, String(body.document_id || ''));
+      const doc = await loadDocument(service, isAdmin, String(body.document_id || ''));
       if (!doc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
       const complete = await buildCompleteDossier(service, doc);
       return sendJson(res, {
@@ -284,7 +306,7 @@ export default async function handler(req: any, res?: any) {
     }
 
     if (action === 'delete-payroll-entry') {
-      const doc = await loadDocument(service, String(body.document_id || ''));
+      const doc = await loadDocument(service, isAdmin, String(body.document_id || ''));
       const { data: requestRows, error: requestError } = await service
         .from('payroll_signature_requests')
         .select('id')
@@ -342,7 +364,7 @@ export default async function handler(req: any, res?: any) {
     }
 
     if (action === 'timeline') {
-      const requestRow = await loadRequest(service, String(body.request_id || ''));
+      const requestRow = await loadRequest(service, isAdmin, String(body.request_id || ''));
       const [{ data: events, error: eventError }, { data: messages, error: messageError }] = await Promise.all([
         service.from('payroll_signature_events').select('*').eq('request_id', requestRow.id).order('created_at', { ascending: true }),
         service.from('payroll_message_logs').select('*').eq('request_id', requestRow.id).order('created_at', { ascending: true }),
