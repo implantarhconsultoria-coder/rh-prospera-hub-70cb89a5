@@ -129,10 +129,11 @@ const FuncionariosPage: React.FC = () => {
   const accessCompany = accessEmployee ? companies.find((company) => company.id === accessEmployee.companyId) : null;
 
   useEffect(() => {
-    if (filterCompany && !companies.some((company) => company.id === filterCompany)) {
-      setFilterCompany('');
-    }
-  }, [companies, filterCompany]);
+    if (isFilial) return;
+    const requestedCompany = new URLSearchParams(location.search).get('empresa') || '';
+    if (requestedCompany && !companies.some((company) => company.id === requestedCompany)) return;
+    if (requestedCompany !== filterCompany) setFilterCompany(requestedCompany);
+  }, [location.search, companies, filterCompany, isFilial]);
 
   const filtered = useMemo(() => employees.filter((employee) => {
     const query = search.trim().toLowerCase();
@@ -322,52 +323,44 @@ const FuncionariosPage: React.FC = () => {
         </div>
       )}
 
-      {!effectiveCompany && !isFilial ? (
-        <section className="space-y-3" aria-label="Funcionários organizados por empresa">
-          <div className="flex items-center gap-2 text-lg font-bold text-foreground">
-            <Building2 className="h-5 w-5 text-amber-400" /> Funcionários por empresa
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Escolha uma empresa para abrir os funcionários dela. A lista geral não é exibida nesta tela.
-          </p>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {companyDirectory.map(({ company, active, total, payroll }, index) => {
-              const accents = [
-                'border-amber-400/50 bg-gradient-to-br from-amber-500/15 to-background hover:border-amber-400',
-                'border-violet-400/50 bg-gradient-to-br from-violet-500/15 to-background hover:border-violet-400',
-                'border-cyan-400/50 bg-gradient-to-br from-cyan-500/15 to-background hover:border-cyan-400',
-                'border-emerald-400/50 bg-gradient-to-br from-emerald-500/15 to-background hover:border-emerald-400',
-                'border-rose-400/50 bg-gradient-to-br from-rose-500/15 to-background hover:border-rose-400',
-              ];
-              return (
-                <button key={company.id} type="button"
-                  className={'rounded-xl border p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ' + accents[index % accents.length]}
-                  onClick={() => { setFilterCompany(company.id); setSearch(''); }}
-                  aria-label={'Abrir funcionários de ' + company.name}>
-                  <div className="flex items-center justify-between gap-2">
-                    <Building2 className="h-6 w-6 text-amber-300" />
-                    <span className="rounded-full border border-amber-400/30 px-2 py-1 text-xs font-semibold text-amber-200">
-                      Abrir empresa →
-                    </span>
-                  </div>
-                  <h3 className="mt-3 text-base font-bold text-foreground">{company.name}</h3>
-                  <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                    <Users className="h-4 w-4" /> {active} ativo(s) • {total} cadastrado(s)
-                  </p>
-                  <p className="mt-2 text-lg font-black text-foreground">{formatCurrency(payroll)}</p>
-                  <p className="text-xs text-muted-foreground">Salários-base dos ativos</p>
-                </button>
-              );
-            })}
-          </div>
-          {!companyDirectory.length && (
-            <div className="card-premium p-8 text-center text-sm text-muted-foreground">Nenhuma empresa disponível.</div>
-          )}
-        </section>
-      ) : (
+      <section className="space-y-3" aria-label="Funcionários organizados por empresa">
+        <div className="flex items-center gap-2 text-lg font-bold text-foreground">
+          <Building2 className="h-5 w-5 text-amber-400" /> Funcionários por empresa
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {companyDirectory.map(({ company, active, payroll }, index) => {
+            const palette = ['#fbbf24', '#a78bfa', '#22d3ee', '#34d399', '#fb7185'];
+            const color = palette[index % palette.length];
+            return (
+              <button key={company.id} type="button"
+                aria-label={'Abrir funcionários de ' + company.name}
+                aria-pressed={effectiveCompany === company.id}
+                onClick={() => {
+                  if (isFilial) return;
+                  setSearch('');
+                  navigate(location.pathname + '?empresa=' + encodeURIComponent(company.id), { replace: true });
+                }}
+                className="rounded-xl border bg-zinc-950/80 p-4 text-left transition-colors hover:bg-zinc-900/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+                style={{ borderColor: color + '80', boxShadow: 'inset 0 1px 0 ' + color + '33' }}>
+                <p className="truncate text-xs font-semibold" style={{ color }} title={company.name}>{company.name}</p>
+                <p className="mt-2 text-xl font-black text-white">{formatCurrency(payroll)}</p>
+                <p className="mt-1 text-xs text-zinc-300">{active} ativo(s) • salário-base</p>
+              </button>
+            );
+          })}
+        </div>
+        {!companyDirectory.length && (
+          <div className="card-premium p-8 text-center text-sm text-muted-foreground">Nenhuma empresa disponível.</div>
+        )}
+        {!effectiveCompany && !isFilial && (
+          <p className="text-sm text-muted-foreground">Clique em uma empresa para consultar somente os funcionários deste CNPJ.</p>
+        )}
+      </section>
+
+      {(effectiveCompany || isFilial) && (
         <section className="space-y-4" aria-label={'Funcionários de ' + (selectedCompany?.name || 'sua empresa')}>
           {!isFilial && (
-            <Button type="button" variant="outline" onClick={() => { setFilterCompany(''); setSearch(''); }}>
+            <Button type="button" variant="outline" onClick={() => { setSearch(''); navigate(location.pathname, { replace: true }); }}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Voltar às empresas
             </Button>
           )}
