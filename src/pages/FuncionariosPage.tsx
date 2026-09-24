@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Check, KeyRound, Landmark, Save, Search, ShieldCheck, Upload, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, Building2, Check, KeyRound, Landmark, Save, Search, ShieldCheck, Upload, UserPlus, Users, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -137,12 +137,28 @@ const FuncionariosPage: React.FC = () => {
   const filtered = useMemo(() => employees.filter((employee) => {
     const query = search.trim().toLowerCase();
     if (query && !`${employee.name} ${employee.cpf} ${employee.cargo}`.toLowerCase().includes(query)) return false;
-    if (filterCompany && employee.companyId !== filterCompany) return false;
+    if (effectiveCompany && employee.companyId !== effectiveCompany) return false;
     const inactive = ['desligado', 'demitido', 'excluido', 'inativo'].includes(String(employee.status || '').toLowerCase());
     if (filterStatus === 'ativos' && inactive) return false;
     if (filterStatus === 'inativos' && !inactive) return false;
     return true;
-  }), [employees, search, filterCompany, filterStatus]);
+  }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [employees, search, effectiveCompany, filterStatus]);
+
+  const companyDirectory = useMemo(() => companies
+    .filter((company) => !isFilial || company.id === filialCompanyId)
+    .map((company) => {
+      const members = employees.filter((employee) => employee.companyId === company.id);
+      const active = members.filter((employee) => !['desligado', 'demitido', 'excluido', 'inativo'].includes(String(employee.status || '').toLowerCase()));
+      return {
+        company,
+        total: members.length,
+        active: active.length,
+        payroll: active.reduce((sum, employee) => sum + (Number(employee.salarioBase) || 0), 0),
+      };
+    })
+    .sort((a, b) => a.company.name.localeCompare(b.company.name, 'pt-BR')),
+    [companies, employees, isFilial, filialCompanyId]);
+  const selectedCompany = companies.find((company) => company.id === effectiveCompany);
 
   useEffect(() => {
     if (!accessEmployee) return;
@@ -306,23 +322,95 @@ const FuncionariosPage: React.FC = () => {
         </div>
       )}
 
-      <div className="card-premium flex flex-wrap gap-3 p-4">
-        <div className="relative min-w-[220px] flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Buscar funcionário, CPF ou cargo" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-        {!isFilial && <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className="rounded-lg border bg-background px-3 py-2 text-sm"><option value="">Todas as empresas</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select>}
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as FilterStatus)} className="rounded-lg border bg-background px-3 py-2 text-sm"><option value="ativos">Ativos</option><option value="inativos">Inativos</option><option value="todos">Todos</option></select>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filtered.map((employee) => {
-          const company = companies.find((item) => item.id === employee.companyId);
-          return <div key={employee.id} className="card-premium cursor-pointer p-5 transition-shadow hover:shadow-premium" onClick={() => navigate(`${portalPrefix}/funcionarios/${employee.id}`)}>
-            <div className="mb-3 flex items-start gap-3"><div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground">{employee.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{employee.name}</h3><p className="truncate text-xs text-muted-foreground">{employee.cargo}</p></div><div className="flex gap-1"><Button type="button" variant="outline" size="icon" onClick={(event) => void openBanking(event, employee.id)} title="Editar dados bancários"><Landmark className="h-4 w-4" /></Button>{isAdminPortal && <Button type="button" variant="outline" size="icon" onClick={(event) => { event.stopPropagation(); setActiveModules([]); setAccessEmployeeId(employee.id); }} title="Liberar módulos"><KeyRound className="h-4 w-4" /></Button>}</div></div>
-            <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{company?.name}</span><span className="font-semibold">{formatCurrency(employee.salarioBase)}</span></div>
-            <div className="mt-2"><Badge className={employee.status === 'ativo' ? 'bg-success text-success-foreground' : ''}>{employee.status}</Badge></div>
-          </div>;
-        })}
-      </div>
-      {!filtered.length && <div className="card-premium p-10 text-center text-sm text-muted-foreground">Nenhum funcionário encontrado.</div>}
+      {!effectiveCompany && !isFilial ? (
+        <section className="space-y-3" aria-label="Funcionários organizados por empresa">
+          <div className="flex items-center gap-2 text-lg font-bold text-foreground">
+            <Building2 className="h-5 w-5 text-amber-400" /> Funcionários por empresa
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Escolha uma empresa para abrir os funcionários dela. A lista geral não é exibida nesta tela.
+          </p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {companyDirectory.map(({ company, active, total, payroll }, index) => {
+              const accents = [
+                'border-amber-400/50 bg-gradient-to-br from-amber-500/15 to-background hover:border-amber-400',
+                'border-violet-400/50 bg-gradient-to-br from-violet-500/15 to-background hover:border-violet-400',
+                'border-cyan-400/50 bg-gradient-to-br from-cyan-500/15 to-background hover:border-cyan-400',
+                'border-emerald-400/50 bg-gradient-to-br from-emerald-500/15 to-background hover:border-emerald-400',
+                'border-rose-400/50 bg-gradient-to-br from-rose-500/15 to-background hover:border-rose-400',
+              ];
+              return (
+                <button key={company.id} type="button"
+                  className={'rounded-xl border p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ' + accents[index % accents.length]}
+                  onClick={() => { setFilterCompany(company.id); setSearch(''); }}
+                  aria-label={'Abrir funcionários de ' + company.name}>
+                  <div className="flex items-center justify-between gap-2">
+                    <Building2 className="h-6 w-6 text-amber-300" />
+                    <span className="rounded-full border border-amber-400/30 px-2 py-1 text-xs font-semibold text-amber-200">
+                      Abrir empresa →
+                    </span>
+                  </div>
+                  <h3 className="mt-3 text-base font-bold text-foreground">{company.name}</h3>
+                  <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Users className="h-4 w-4" /> {active} ativo(s) • {total} cadastrado(s)
+                  </p>
+                  <p className="mt-2 text-lg font-black text-foreground">{formatCurrency(payroll)}</p>
+                  <p className="text-xs text-muted-foreground">Salários-base dos ativos</p>
+                </button>
+              );
+            })}
+          </div>
+          {!companyDirectory.length && (
+            <div className="card-premium p-8 text-center text-sm text-muted-foreground">Nenhuma empresa disponível.</div>
+          )}
+        </section>
+      ) : (
+        <section className="space-y-4" aria-label={'Funcionários de ' + (selectedCompany?.name || 'sua empresa')}>
+          {!isFilial && (
+            <Button type="button" variant="outline" onClick={() => { setFilterCompany(''); setSearch(''); }}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Voltar às empresas
+            </Button>
+          )}
+          <div className="card-premium flex flex-wrap items-center justify-between gap-2 border-l-4 border-amber-400 p-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-bold text-foreground">
+                <Building2 className="h-5 w-5 text-amber-400" /> {selectedCompany?.name || 'Funcionários da filial'}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {filtered.length} funcionário(s) na seleção • nomes em ordem alfabética
+              </p>
+            </div>
+          </div>
+          <div className="card-premium flex flex-wrap gap-3 p-4">
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input className="pl-9" placeholder="Buscar funcionário, CPF ou cargo nesta empresa"
+                value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as FilterStatus)}
+              className="rounded-lg border bg-background px-3 py-2 text-sm">
+              <option value="ativos">Ativos</option>
+              <option value="inativos">Inativos</option>
+              <option value="todos">Todos desta empresa</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((employee) => {
+              const company = companies.find((item) => item.id === employee.companyId);
+              return <div key={employee.id} className="card-premium cursor-pointer p-5 transition-shadow hover:shadow-premium" onClick={() => navigate(portalPrefix + '/funcionarios/' + employee.id)}>
+                <div className="mb-3 flex items-start gap-3"><div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground">{employee.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{employee.name}</h3><p className="truncate text-xs text-muted-foreground">{employee.cargo}</p></div><div className="flex gap-1"><Button type="button" variant="outline" size="icon" onClick={(event) => void openBanking(event, employee.id)} title="Editar dados bancários"><Landmark className="h-4 w-4" /></Button>{isAdminPortal && <Button type="button" variant="outline" size="icon" onClick={(event) => { event.stopPropagation(); setActiveModules([]); setAccessEmployeeId(employee.id); }} title="Liberar módulos"><KeyRound className="h-4 w-4" /></Button>}</div></div>
+                <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{company?.name}</span><span className="font-semibold">{formatCurrency(employee.salarioBase)}</span></div>
+                <div className="mt-2"><Badge className={employee.status === 'ativo' ? 'bg-success text-success-foreground' : ''}>{employee.status}</Badge></div>
+              </div>;
+            })}
+          </div>
+          {!filtered.length && (
+            <div className="card-premium p-10 text-center text-sm text-muted-foreground">
+              Nenhum funcionário encontrado nesta empresa com os filtros selecionados.
+            </div>
+          )}
+        </section>
+      )}
 
       <BulkEmployeeDataImporter open={bulkEmployeeOpen} onOpenChange={setBulkEmployeeOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
       <BulkBankingDataEditor open={bulkBankOpen} onOpenChange={setBulkBankOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
