@@ -5,6 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { useFeriados } from '@/hooks/useFeriados';
 import { extractPdfTextByLines, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { readAdmissionDossier, businessDaysForAdmission, benefitAmount, buildAdmissionDossierPdf } from '@/lib/admissionDossierHelpers';
+import { buildAdmissionFinanceReceiptPdfBlob } from '@/lib/admissionFinanceReceiptPdf';
 import { emptyBankingData, parseBankingText, type BankingData } from '@/lib/bankingParser';
 import BankingDataEditor from '@/components/BankingDataEditor';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
@@ -411,7 +412,15 @@ const AdmissionDossierWorkspace: React.FC<{
           ? 'Favor confirmar o processamento e o comprovante, mantendo o fluxo interno usual.'
           : 'Envio antecipado exclusivamente para planejamento financeiro. O contrato ainda não foi recebido/aprovado, a admissão NÃO foi autorizada por este e-mail e os dados/valores devem ser reconfirmados antes de qualquer pagamento.',
       ].join('\n');
-      const blob=await buildPdf(false);
+      const blob=buildAdmissionFinanceReceiptPdfBlob({
+        company:{name:draft.empresa_nome,cnpj:draft.cnpj},
+        person:{name:draft.nome,cpf:draft.cpf,role:draft.funcao},
+        plannedAdmission:draft.data_admissao,
+        competencia,businessDays:days,banking:bank,
+        vr:{enabled:draft.vale_refeicao,daily:Number(vrDaily)||0,total:totalVr},
+        vt:{enabled:draft.vale_transporte,daily:Number(vtDaily)||0,total:totalVt},
+        admitted:!!stage?.efetivado_em,
+      });
       const snapshot={competencia,dias_uteis:days,vr_diario:Number(vrDaily)||0,vt_diario:Number(vtDaily)||0,
         valor_vr:totalVr,valor_vt:totalVt,empresa_id:draft.empresa_id,funcionario_nome:draft.nome,
         dados_bancarios:bank,programacao_antecipada:!stage?.efetivado_em};
@@ -420,11 +429,11 @@ const AdmissionDossierWorkspace: React.FC<{
       }).eq('pre_cadastro_id',draft.id);
       if(error) throw error;
       setEmailDraft({
-        to:['marisa@aatconsultoria.com.br','dp@aatconsultoria.com.br'],cc:[],
-        subject:(stage?.efetivado_em?'Pagamento':'Programação antecipada')+' VR e VT admissional - '+draft.nome+' - '+draft.empresa_nome,
-        body,attachmentBlob:blob,attachmentName:'DOSSIE_FINANCEIRO_'+draft.id+'.pdf',
+        to:['financeiro@topac.com.br'],cc:[],
+        subject:(stage?.efetivado_em?'Programação de pagamento':'Programação antecipada')+' VR e VT admissional - '+draft.nome+' - '+draft.empresa_nome,
+        body,attachmentBlob:blob,attachmentName:'PROGRAMACAO_VR_VT_'+draft.nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_')+'_'+competencia+'.pdf',
         senderUserId:session?.user?.id,senderEmail:session?.user?.email,
-        moduleOrigin:'dossie_admissional_contabilidade',documentName:'Programação de benefícios admissionais de '+draft.nome,
+        moduleOrigin:'dossie_admissional_financeiro',documentName:'Programação de VR e VT admissionais de '+draft.nome,
         afterSend:async()=>{
           const {error:sentErr}=await (supabase as any).from('admission_dossier_workflow').update({
             finance_enviado_em:new Date().toISOString(),finance_enviado_por:session?.user?.id,
@@ -434,7 +443,7 @@ const AdmissionDossierWorkspace: React.FC<{
           await fetchRows();
         },
       });
-    }catch(error:any){toast.error('Envio para a contabilidade não preparado: '+(error?.message||error));}
+    }catch(error:any){toast.error('Envio para o financeiro não preparado: '+(error?.message||error));}
     finally{setBusy(false);}
   };
 
@@ -557,8 +566,8 @@ const AdmissionDossierWorkspace: React.FC<{
           </div>
         </div>
         <div className="rounded-xl border border-cyan-400/40 bg-cyan-400/5 p-4">
-          <strong className="flex items-center gap-2 text-base text-cyan-200"><Mail size={18}/> 5. Programar VR e VT com a Contabilidade</strong>
-          <p className="mt-1 text-xs text-zinc-200">Pode enviar antes do contrato para permitir a programação. Salve primeiro o dossiê com banco, data prevista e valores; VR e VT seguem separados pelos dias úteis elegíveis da competência, descontando feriados cadastrados.</p>
+          <strong className="flex items-center gap-2 text-base text-cyan-200"><Mail size={18}/> 5. Programar VR e VT com o Financeiro</strong>
+          <p className="mt-1 text-xs text-zinc-200">Envio para financeiro@topac.com.br. O anexo segue o padrão dos recibos TOPAC, identificado como programação — não comprova pagamento. Pode encaminhar antes do contrato, com banco, data prevista, valores de VR e VT separados e dias úteis conferidos.</p>
           <div className="mt-3 flex flex-wrap items-center gap-3"><label className="text-xs text-zinc-200">Competência
             <Input type="month" value={competencia} onChange={e=>setCompetencia(e.target.value)} className="mt-1 border-cyan-300/30 bg-[#0a1222] text-white"/></label>
             <span className="text-sm text-white">Dias úteis elegíveis: <strong className="text-amber-300">{loadingFeriados?'Conferindo...':days}</strong></span>
@@ -576,9 +585,9 @@ const AdmissionDossierWorkspace: React.FC<{
             </div>
           </div>
           <Button className="mt-3 bg-cyan-400 font-bold text-zinc-950 hover:bg-cyan-300" disabled={!canFinance||busy}
-            onClick={()=>void prepareFinance()}><ArrowRight size={16} className="mr-1"/> {stage?.efetivado_em?'Enviar benefícios à Contabilidade':'Enviar programação à Contabilidade'}</Button>
+            onClick={()=>void prepareFinance()}><ArrowRight size={16} className="mr-1"/> Enviar programação ao Financeiro</Button>
           {!stage?.efetivado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-amber-200"><ShieldAlert size={13}/> Programação não libera admissão, contrato, pasta oficial ou pagamento automático. O OK da admissão continua bloqueado até você anexar e confirmar o contrato.</p>}
-          {!!stage?.finance_enviado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-emerald-200"><CheckCircle2 size={13}/> Encaminhado à contabilidade em {new Date(stage.finance_enviado_em).toLocaleString('pt-BR')}</p>}
+          {!!stage?.finance_enviado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-emerald-200"><CheckCircle2 size={13}/> Encaminhado ao financeiro em {new Date(stage.finance_enviado_em).toLocaleString('pt-BR')}</p>}
         </div>
       </div>}
       <Dialog open={!!preview} onOpenChange={v=>{if(!v)setPreview(null);}}>
