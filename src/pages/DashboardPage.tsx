@@ -10,6 +10,7 @@ import { useApp } from '@/context/AppContext';
 import { feriasStatus } from '@/lib/calculations';
 import { supabase } from '@/integrations/supabase/client';
 import { isDirectorRole } from '@/lib/directorPermissions';
+import FuncionariosMoneyOverview from '@/components/FuncionariosMoneyOverview';
 
 interface DashboardCounts {
   documents: number;
@@ -322,6 +323,10 @@ const DashboardPage: React.FC = () => {
         <div className="rounded-[8px] border border-[#6a4720] bg-[#1c1308] px-4 py-2 text-[12px] text-[#ffd879]">
           Dados operacionais de RH estão ocultos para o perfil Diretor Geral. A liberação depende do administrador.
         </div>
+      )}
+
+      {(isAdmin || (isDirector && rhVisivel)) && (
+        <FuncionariosMoneyOverview employees={employees} companies={companies} />
       )}
 
       <section className="grid grid-cols-1 gap-[10px] md:grid-cols-2 xl:grid-cols-4">
