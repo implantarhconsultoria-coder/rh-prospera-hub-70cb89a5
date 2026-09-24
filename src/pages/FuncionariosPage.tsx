@@ -12,7 +12,6 @@ import { formatCurrency } from '@/lib/calculations';
 import { upsertFuncionarioBase, onlyDigits } from '@/lib/funcionariosBase';
 import BankingDataEditor from '@/components/BankingDataEditor';
 import AdmissionDossierWorkspace from '@/components/AdmissionDossierWorkspace';
-import FuncionariosMoneyOverview from '@/components/FuncionariosMoneyOverview';
 import BulkBankingDataEditor from '@/components/BulkBankingDataEditor';
 import BulkEmployeeDataImporter from '@/components/BulkEmployeeDataImporter';
 import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
@@ -284,7 +283,6 @@ const FuncionariosPage: React.FC = () => {
       </div>
 
       {canManageAdmissionDossier && <AdmissionDossierWorkspace companies={companies} onApproved={refreshData} />}
-      {canManageAdmissionDossier && <FuncionariosMoneyOverview employees={employees} companies={companies} filterCompany={effectiveCompany} />}
 
       {showNew && (
         <div className="card-premium space-y-4 border-l-4 border-primary p-5">
