@@ -22,7 +22,7 @@ import LoginPage from "@/pages/LoginPage";
 import CadastroPage from "@/pages/CadastroPage";
 import RecuperarSenhaPage from "@/pages/RecuperarSenhaPage";
 import RedefinirSenhaPage from "@/pages/RedefinirSenhaPage";
-import DashboardPage from "@/pages/DashboardPage";
+import AdminHomeCards from "@/components/AdminHomeCards";
 import DirectorDashboardPage from "@/pages/DirectorDashboardPage";
 import FilialDashboardPage from "@/pages/filial/FilialDashboardPage";
 import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
@@ -148,7 +148,7 @@ const RoleRedirect = () => {
 const AdminHomeRoute = () => {
   const { userRoles } = useApp();
   if (isDirectorRole(userRoles) && !userRoles.includes('admin')) return <DirectorDashboardPage />;
-  return <DashboardPage />;
+  return <AdminHomeCards />;
 };
 
 const MecanicoRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
