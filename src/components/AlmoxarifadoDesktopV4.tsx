@@ -30,7 +30,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const br = (value: any) =>
   value ? new Date(String(value).slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR') : '—';
 
-type Mode = 'home' | 'entrada' | 'retirada' | 'estoque' | 'dia' | 'relatorios' | 'historico' | 'correcoes';
+type Mode = 'home' | 'entrada' | 'retirada' | 'estoque' | 'dia' | 'relatorios' | 'historico';
 type Cart = { item_id: string; quantidade: number; nome: string; codigo: string };
 type Props = { isAdmin?: boolean };
 
@@ -89,14 +89,6 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   const [entFile, setEntFile] = useState<File | null>(null);
   const [from, setFrom] = useState(START);
   const [to, setTo] = useState(today());
-  const [correctionTab,setCorrectionTab]=useState<'produtos'|'movimentos'|'auditoria'>('produtos');
-  const [correctionSearch,setCorrectionSearch]=useState('');
-  const [outgoing,setOutgoing]=useState<any[]>([]);
-  const [audit,setAudit]=useState<any[]>([]);
-  const [correctionBusy,setCorrectionBusy]=useState(false);
-  const [correction,setCorrection]=useState<{kind:string;item?:any;movement?:any}|null>(null);
-  const [correctionFields,setCorrectionFields]=useState<Record<string,string>>({});
-  const [correctionReason,setCorrectionReason]=useState('');
 
   const company = (employee: any) =>
     companies.find((companyItem: any) => companyItem.id === (employee.companyId || employee.company_id || employee.empresa_id));
@@ -170,67 +162,6 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   }, []);
 
   const itemMap = useMemo(() => new Map(stock.map((item: any) => [item.id, item])), [stock]);
-  const fetchCorrections=async()=>{
-    if(!isAdmin)return;
-    const [saidaResult,auditResult]=await Promise.all([
-      db.from('almoxarifado_saidas').select('id,item_id,quantidade,funcionario_nome,motivo,observacao,data_saida,origem_importacao,cancelado_em')
-        .gte('data_saida',START).order('data_saida',{ascending:false}).limit(500),
-      db.from('almoxarifado_auditoria').select('id,entidade,entidade_id,acao,usuario_nome,motivo,valor_anterior,valor_posterior,created_at')
-        .order('created_at',{ascending:false}).limit(100)
-    ]);
-    if(saidaResult.error)toast.error('Saídas: '+saidaResult.error.message);
-    else setOutgoing(saidaResult.data||[]);
-    if(auditResult.error)toast.error('Auditoria: '+auditResult.error.message);
-    else setAudit(auditResult.data||[]);
-  };
-  useEffect(()=>{if(mode==='correcoes'&&isAdmin)void fetchCorrections();},[mode,isAdmin]);
-  const openCorrection=(kind:string,item?:any,movement?:any)=>{
-    if(!isAdmin)return;
-    setCorrection({kind,item,movement});setCorrectionReason('');
-    setCorrectionFields(item?{
-      saldo:String(item.saldo??0),nome:item.nome||'',unidade:item.unidade||'',
-      codigo_topac:item.codigo_topac||'',categoria:item.categoria||'',aplicacao:item.aplicacao||'',
-      codigo_barras:item.codigo_barras||'',
-      estoque_minimo:item.estoque_minimo===null?'':String(item.estoque_minimo)
-    }:movement?{
-      quantidade:String(movement.quantidade),data:movement.data_entrada||movement.data_saida||'',
-      fornecedor:movement.fornecedor||'',observacao:movement.observacao||'',
-      valor_unitario:movement.valor_unitario===null?'':String(movement.valor_unitario)
-    }:{});
-  };
-  const submitCorrection=async(e:React.FormEvent)=>{
-    e.preventDefault();
-    if(!correction||correctionBusy||!isAdmin)return;
-    if(correctionReason.trim().length<5){toast.error('Informe o motivo da correção');return;}
-    const number=(key:string)=>correctionFields[key]===''?null:Number(String(correctionFields[key]||'').replace(',','.'));
-    const d:Record<string,unknown>={};
-    if(correction.kind==='ajustar_saldo')d.saldo=number('saldo');
-    if(correction.kind==='editar_produto')Object.assign(d,{
-      nome:correctionFields.nome,unidade:correctionFields.unidade,
-      codigo_topac:correctionFields.codigo_topac,categoria:correctionFields.categoria,
-      aplicacao:correctionFields.aplicacao,codigo_barras:correctionFields.codigo_barras,
-      estoque_minimo:number('estoque_minimo')
-    });
-    if(correction.kind==='editar_entrada'||correction.kind==='editar_saida'){
-      d.quantidade=number('quantidade');
-      d[correction.kind==='editar_entrada'?'data_entrada':'data_saida']=correctionFields.data;
-      d.observacao=correctionFields.observacao;
-      if(correction.kind==='editar_entrada'){d.fornecedor=correctionFields.fornecedor;d.valor_unitario=number('valor_unitario');}
-    }
-    if(d.quantidade!==undefined&&(!Number.isFinite(Number(d.quantidade))||Number(d.quantidade)<=0)){toast.error('Quantidade inválida');return;}
-    if(d.saldo!==undefined&&(!Number.isFinite(Number(d.saldo))||Number(d.saldo)<0)){toast.error('Saldo inválido');return;}
-    setCorrectionBusy(true);
-    try{
-      const r=await db.rpc('almoxarifado_corrigir',{
-        p_operacao:correction.kind,p_item_id:correction.item?.id||correction.movement?.item_id||null,
-        p_movimento_id:correction.movement?.id||null,p_dados:d,p_motivo:correctionReason.trim()
-      });
-      if(r.error)throw r.error;
-      toast.success('Correção aplicada com responsável, motivo e histórico.');
-      setCorrection(null);await fetchData();await fetchCorrections();
-    }catch(err:any){toast.error('Correção não realizada: '+(err?.message||'erro desconhecido'));}
-    finally{setCorrectionBusy(false);}
-  };
   const filtered = stock.filter(
     (item: any) =>
       !search ||
@@ -575,7 +506,6 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
         <ActionCard icon={ClipboardList} title="Fechamento do dia" subtitle="Conferir e finalizar movimentações" target="dia" />
         <ActionCard icon={FileText} title="Relatórios" subtitle="Emissão de relatórios e controles" target="relatorios" />
         <ActionCard icon={History} title="Histórico" subtitle="Visualizar todas as movimentações" target="historico" />
-        <ActionCard icon={ClipboardList} title="Correções e auditoria" subtitle="Editar, excluir e corrigir saldos com motivo" target="correcoes" />
       </div>
 
       <AlmoxarifadoFechamentoOperacional />
@@ -796,75 +726,6 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
         </>
       )}
 
-
-      {mode==='correcoes'&&isAdmin&&<>
-        {back}
-        <h2 className="mb-1 text-2xl font-black text-white">Correções e auditoria</h2>
-        <p className="mb-4 text-sm text-slate-400">Exclusões são cancelamentos históricos. O usuário e o motivo ficam registrados em cada alteração.</p>
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          {([
-            {key:'produtos',title:'Produtos e saldo',hint:'Editar cadastro ou conferir estoque'},
-            {key:'movimentos',title:'Entradas e saídas',hint:'Corrigir ou cancelar lançamento'},
-            {key:'auditoria',title:'Auditoria',hint:'Consultar responsável e motivo'}
-          ] as const).map(card=><button key={card.key} type="button" onClick={()=>setCorrectionTab(card.key)}
-            className={'almox-panel p-5 text-left text-white '+(correctionTab===card.key?'ring-2 ring-violet-500':'')}>
-            <strong className="block text-base">{card.title}</strong><span className="mt-2 block text-xs text-slate-400">{card.hint}</span>
-          </button>)}
-        </div>
-        {correctionTab!=='auditoria'&&<Input className="mb-4" placeholder="Buscar código, produto, funcionário ou protocolo..." value={correctionSearch} onChange={e=>setCorrectionSearch(e.target.value)}/>}
-        {correctionTab==='produtos'&&<div className="almox-panel max-h-[65vh] space-y-2 overflow-y-auto p-4">
-          {stock.filter((item:any)=>(String(item.codigo_topac||'')+' '+String(item.nome||'')).toLocaleLowerCase('pt-BR').includes(correctionSearch.toLocaleLowerCase('pt-BR'))).slice(0,250).map((item:any)=><div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 p-3 text-white">
-            <div><strong>{item.codigo_topac||'—'} · {item.nome}</strong><p className="text-xs text-slate-400">Saldo: {item.saldo} {item.unidade||''}</p></div>
-            <div className="flex gap-2"><Button type="button" variant="outline" onClick={()=>openCorrection('editar_produto',item)}>Editar</Button><Button type="button" onClick={()=>openCorrection('ajustar_saldo',item)}>Ajustar saldo</Button></div>
-          </div>)}
-        </div>}
-        {correctionTab==='movimentos'&&<div className="almox-panel max-h-[65vh] space-y-2 overflow-y-auto p-4">
-          {([
-            ...entries.map((m:any)=>({...m,registroTipo:'entrada'})),
-            ...outgoing.map((m:any)=>({...m,registroTipo:'saida'}))
-          ] as any[]).filter((m:any)=>{
-            const product=itemMap.get(m.item_id);
-            return (String(product?.nome||'')+' '+String(product?.codigo_topac||'')+' '+String(m.fornecedor||'')+' '+String(m.funcionario_nome||'')+' '+String(m.motivo||'')).toLocaleLowerCase('pt-BR').includes(correctionSearch.toLocaleLowerCase('pt-BR'));
-          }).slice(0,350).map((m:any)=>{
-            const product=itemMap.get(m.item_id);const imported=!!String(m.origem_importacao||'').trim();
-            return <div key={m.registroTipo+'-'+m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-700 p-3 text-white">
-              <div><strong className={m.registroTipo==='entrada'?'text-emerald-300':'text-amber-300'}>{m.registroTipo.toUpperCase()} · {product?.nome||m.item_id}</strong><p className="text-xs text-slate-400">{m.quantidade} {product?.unidade||''} · {br(m.data_entrada||m.data_saida)} · {m.fornecedor||m.funcionario_nome||'—'}</p>
-                {m.cancelado_em&&<p className="text-xs font-bold text-red-300">CANCELADO</p>}
-                {imported&&<p className="text-xs text-amber-300">Registro importado: preserve a planilha e ajuste o saldo</p>}
-              </div>
-              {!imported&&!m.cancelado_em&&<div className="flex gap-2"><Button type="button" variant="outline" onClick={()=>openCorrection('editar_'+m.registroTipo,undefined,m)}>Editar</Button><Button type="button" variant="destructive" onClick={()=>openCorrection('cancelar_'+m.registroTipo,undefined,m)}>Excluir</Button></div>}
-            </div>;
-          })}
-        </div>}
-        {correctionTab==='auditoria'&&<div className="almox-panel max-h-[65vh] space-y-3 overflow-y-auto p-4 text-white">
-          {audit.length===0&&<p className="text-slate-400">Nenhuma correção encontrada.</p>}
-          {audit.map((a:any)=><article key={a.id} className="rounded-lg border border-slate-700 p-3">
-            <div className="flex flex-wrap justify-between gap-2"><strong>{String(a.acao||'').replaceAll('_',' ').toUpperCase()}</strong><span className="text-xs text-slate-400">{movementDate(a.created_at)}</span></div>
-            <p className="text-sm">Responsável: {a.usuario_nome||'Usuário autenticado'}</p><p className="text-sm text-amber-300">Motivo: {a.motivo||'—'}</p>
-            <details className="mt-2 text-xs text-slate-400"><summary className="cursor-pointer">Conferir antes e depois</summary><pre className="mt-2 whitespace-pre-wrap break-all">{JSON.stringify(a.valor_anterior,null,2)}{'\n'}DEPOIS: {JSON.stringify(a.valor_posterior,null,2)}</pre></details>
-          </article>)}
-        </div>}
-      </>}
-
-      {correction&&isAdmin&&<div role="dialog" aria-modal="true" aria-label="Correção auditável" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/80 p-4">
-        <form onSubmit={submitCorrection} className="w-full max-w-xl space-y-4 rounded-xl border border-violet-500 bg-[#101019] p-5 text-white">
-          <div className="flex justify-between gap-2"><h3 className="text-xl font-black">{correction.kind.replaceAll('_',' ').toUpperCase()}</h3><Button type="button" variant="outline" onClick={()=>setCorrection(null)}>Fechar</Button></div>
-          <p className="text-sm text-slate-400">{correction.item?.nome||itemMap.get(correction.movement?.item_id)?.nome||'Movimentação'}</p>
-          {correction.kind.startsWith('cancelar')&&<p className="rounded-lg border border-red-500/40 p-3 text-sm text-red-200">O lançamento permanece no histórico como cancelado, e o saldo é recalculado. Retiradas já assinadas não podem ser alteradas.</p>}
-          {correction.kind==='ajustar_saldo'&&<label className="block text-sm">Saldo físico correto<Input required type="number" min="0" step="any" value={correctionFields.saldo||''} onChange={e=>setCorrectionFields(f=>({...f,saldo:e.target.value}))}/><small>Saldo anterior: {correction.item?.saldo}</small></label>}
-          {correction.kind==='editar_produto'&&<div className="grid gap-3 sm:grid-cols-2">{([
-            ['nome','Produto'],['codigo_topac','Código'],['unidade','Unidade'],['categoria','Categoria'],['aplicacao','Aplicação'],['codigo_barras','Código de barras'],['estoque_minimo','Estoque mínimo']
-          ] as const).map(([key,label])=><label key={key} className="text-sm">{label}<Input required={key==='nome'||key==='unidade'} type={key==='estoque_minimo'?'number':'text'} min={key==='estoque_minimo'?'0':undefined} value={correctionFields[key]||''} onChange={e=>setCorrectionFields(f=>({...f,[key]:e.target.value}))}/></label>)}</div>}
-          {correction.kind.startsWith('editar_')&&correction.kind!=='editar_produto'&&<div className="grid gap-3 sm:grid-cols-2">
-            {([
-              ['quantidade','Quantidade','number'],['data','Data','date'],['observacao','Observação','text'],
-              ...(correction.kind==='editar_entrada'?[['fornecedor','Fornecedor','text'],['valor_unitario','Valor unitário','number']]:[])
-            ] as string[][]).map(([key,label,type])=><label key={key} className="text-sm">{label}<Input required={key==='quantidade'} type={type} min={type==='number'?'0':undefined} step={type==='number'?'any':undefined} value={correctionFields[key]||''} onChange={e=>setCorrectionFields(f=>({...f,[key]:e.target.value}))}/></label>)}
-          </div>}
-          <label className="block text-sm font-bold text-amber-300">Motivo da alteração (obrigatório)<Textarea required minLength={5} rows={3} placeholder="Explique o que estava errado e a correção realizada" value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}/></label>
-          <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={()=>setCorrection(null)}>Cancelar</Button><Button disabled={correctionBusy||correctionReason.trim().length<5}>{correctionBusy?'Salvando...':'Confirmar e registrar'}</Button></div>
-        </form>
-      </div>}
       {mode === 'historico' && (
         <>
           {back}
