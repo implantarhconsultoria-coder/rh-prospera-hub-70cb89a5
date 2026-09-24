@@ -380,22 +380,25 @@ const AdmissionDossierWorkspace: React.FC<{
   const days=businessDaysForAdmission(competencia,draft.data_admissao,feriados);
   const totalVr=draft.vale_refeicao?benefitAmount(Number(vrDaily),days):0;
   const totalVt=draft.vale_transporte?benefitAmount(Number(vtDaily),days):0;
-  const canFinance=!!stage?.efetivado_em && !dirty && files.length===0 &&
+  const canFinance=!!stage && !!draft.id && !dirty && files.length===0 &&
+    (draft.vale_refeicao || draft.vale_transporte) &&
     !!draft.empresa_id && !!bank.banco && !!bank.agencia && !!bank.conta &&
     !!bank.titular && !!bank.cpfTitular && !!draft.data_admissao && days>0 &&
     (!draft.vale_refeicao || Number(vrDaily)>0) &&
     (!draft.vale_transporte || Number(vtDaily)>0) && !loadingFeriados;
 
   const prepareFinance = async () => {
-    if(!canFinance || !draft.id) return toast.error('Confira contrato, admissão, dados bancários e valores diários antes de enviar.');
+    if(!canFinance || !draft.id) return toast.error('Salve o dossiê e confira empresa, admissão prevista, conta bancária, dias úteis e valores diários de VR/VT. Não é necessário aguardar o contrato.');
     setBusy(true);
     try{
       const body=[
         'Prezados, boa tarde.','',
-        'Solicitação de pagamento de benefícios admissionais:',
-        'Funcionário: '+draft.nome,'CPF: '+draft.cpf,
+        stage?.efetivado_em
+          ? 'Solicitação de pagamento de benefícios admissionais:'
+          : 'PROGRAMAÇÃO ANTECIPADA DE BENEFÍCIOS — CANDIDATO AINDA NÃO ADMITIDO:',
+        (stage?.efetivado_em ? 'Funcionário: ' : 'Candidato: ')+draft.nome,'CPF: '+draft.cpf,
         'Empresa contratante: '+draft.empresa_nome,'CNPJ: '+draft.cnpj,
-        'Data de admissão: '+draft.data_admissao,'Competência: '+competencia,
+        (stage?.efetivado_em ? 'Data de admissão: ' : 'Admissão prevista: ')+draft.data_admissao,'Competência: '+competencia,
         'Dias úteis elegíveis: '+days+' (desde a admissão; feriados cadastrados descontados)','',
         'DADOS BANCÁRIOS',
         'Banco: '+bank.banco,'Agência: '+bank.agencia,'Conta: '+bank.conta+(bank.digito?'-'+bank.digito:''),
@@ -404,22 +407,24 @@ const AdmissionDossierWorkspace: React.FC<{
         'VT — Vale-Transporte: '+(draft.vale_transporte ? currency(Number(vtDaily))+' ao dia x '+days+' = '+currency(totalVt) : 'Não aplicado'),
         '',
         'Os valores de VR e VT estão separados para pagamento e conferência.',
-        'Favor confirmar o processamento e o comprovante, mantendo o fluxo interno usual.',
+        stage?.efetivado_em
+          ? 'Favor confirmar o processamento e o comprovante, mantendo o fluxo interno usual.'
+          : 'Envio antecipado exclusivamente para planejamento financeiro. O contrato ainda não foi recebido/aprovado, a admissão NÃO foi autorizada por este e-mail e os dados/valores devem ser reconfirmados antes de qualquer pagamento.',
       ].join('\n');
       const blob=await buildPdf(false);
       const snapshot={competencia,dias_uteis:days,vr_diario:Number(vrDaily)||0,vt_diario:Number(vtDaily)||0,
         valor_vr:totalVr,valor_vt:totalVt,empresa_id:draft.empresa_id,funcionario_nome:draft.nome,
-        dados_bancarios:bank};
+        dados_bancarios:bank,programacao_antecipada:!stage?.efetivado_em};
       const {error}=await (supabase as any).from('admission_dossier_workflow').update({
         finance_snapshot:snapshot,finance_preparado_em:new Date().toISOString(),
       }).eq('pre_cadastro_id',draft.id);
       if(error) throw error;
       setEmailDraft({
-        to:['financeiro@topac.com.br'],cc:[],
-        subject:'Pagamento VR e VT admissional - '+draft.nome+' - '+draft.empresa_nome,
+        to:['marisa@aatconsultoria.com.br','dp@aatconsultoria.com.br'],cc:[],
+        subject:(stage?.efetivado_em?'Pagamento':'Programação antecipada')+' VR e VT admissional - '+draft.nome+' - '+draft.empresa_nome,
         body,attachmentBlob:blob,attachmentName:'DOSSIE_FINANCEIRO_'+draft.id+'.pdf',
         senderUserId:session?.user?.id,senderEmail:session?.user?.email,
-        moduleOrigin:'dossie_admissional_financeiro',documentName:'Benefícios admissionais de '+draft.nome,
+        moduleOrigin:'dossie_admissional_contabilidade',documentName:'Programação de benefícios admissionais de '+draft.nome,
         afterSend:async()=>{
           const {error:sentErr}=await (supabase as any).from('admission_dossier_workflow').update({
             finance_enviado_em:new Date().toISOString(),finance_enviado_por:session?.user?.id,
@@ -429,7 +434,7 @@ const AdmissionDossierWorkspace: React.FC<{
           await fetchRows();
         },
       });
-    }catch(error:any){toast.error('Financeiro não preparado: '+(error?.message||error));}
+    }catch(error:any){toast.error('Envio para a contabilidade não preparado: '+(error?.message||error));}
     finally{setBusy(false);}
   };
 
@@ -552,8 +557,8 @@ const AdmissionDossierWorkspace: React.FC<{
           </div>
         </div>
         <div className="rounded-xl border border-cyan-400/40 bg-cyan-400/5 p-4">
-          <strong className="flex items-center gap-2 text-base text-cyan-200"><Mail size={18}/> 5. Enviar VR e VT ao Financeiro</strong>
-          <p className="mt-1 text-xs text-zinc-200">Valor de cada benefício em separado, pelo número real de dias úteis elegíveis desde a admissão, descontando feriados cadastrados para a empresa.</p>
+          <strong className="flex items-center gap-2 text-base text-cyan-200"><Mail size={18}/> 5. Programar VR e VT com a Contabilidade</strong>
+          <p className="mt-1 text-xs text-zinc-200">Pode enviar antes do contrato para permitir a programação. Salve primeiro o dossiê com banco, data prevista e valores; VR e VT seguem separados pelos dias úteis elegíveis da competência, descontando feriados cadastrados.</p>
           <div className="mt-3 flex flex-wrap items-center gap-3"><label className="text-xs text-zinc-200">Competência
             <Input type="month" value={competencia} onChange={e=>setCompetencia(e.target.value)} className="mt-1 border-cyan-300/30 bg-[#0a1222] text-white"/></label>
             <span className="text-sm text-white">Dias úteis elegíveis: <strong className="text-amber-300">{loadingFeriados?'Conferindo...':days}</strong></span>
@@ -571,9 +576,9 @@ const AdmissionDossierWorkspace: React.FC<{
             </div>
           </div>
           <Button className="mt-3 bg-cyan-400 font-bold text-zinc-950 hover:bg-cyan-300" disabled={!canFinance||busy}
-            onClick={()=>void prepareFinance()}><ArrowRight size={16} className="mr-1"/> Preparar e enviar ao Financeiro</Button>
-          {!stage?.efetivado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-amber-200"><ShieldAlert size={13}/> Envio habilitado após contrato e OK da admissão.</p>}
-          {!!stage?.finance_enviado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-emerald-200"><CheckCircle2 size={13}/> Enviado em {new Date(stage.finance_enviado_em).toLocaleString('pt-BR')}</p>}
+            onClick={()=>void prepareFinance()}><ArrowRight size={16} className="mr-1"/> {stage?.efetivado_em?'Enviar benefícios à Contabilidade':'Enviar programação à Contabilidade'}</Button>
+          {!stage?.efetivado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-amber-200"><ShieldAlert size={13}/> Programação não libera admissão, contrato, pasta oficial ou pagamento automático. O OK da admissão continua bloqueado até você anexar e confirmar o contrato.</p>}
+          {!!stage?.finance_enviado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-emerald-200"><CheckCircle2 size={13}/> Encaminhado à contabilidade em {new Date(stage.finance_enviado_em).toLocaleString('pt-BR')}</p>}
         </div>
       </div>}
       <Dialog open={!!preview} onOpenChange={v=>{if(!v)setPreview(null);}}>
