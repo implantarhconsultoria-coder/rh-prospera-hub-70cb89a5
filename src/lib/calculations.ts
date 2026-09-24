@@ -231,9 +231,13 @@ export const calcPayrollBreakdown = (
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  const comissaoPct = opts.comissaoPct === 0.02
-    ? (nomeNormalizado.includes('aldenei') ? 0.02 : 0.01)
-    : (opts.comissaoPct || 0);
+  // Jerri: 1,5% a partir de setembro/2026; competências anteriores permanecem com a regra original.
+  const isJerri = emp.id === 'f93bd3f5-dfef-4a62-820d-bf553e7c63a0';
+  const comissaoPct = isJerri && entry.competencia >= '2026-09'
+    ? 0.015
+    : opts.comissaoPct === 0.02
+      ? (nomeNormalizado.includes('aldenei') ? 0.02 : 0.01)
+      : (opts.comissaoPct || 0);
   const comissaoVal = round2(comissaoBase * comissaoPct);
   const dsrComissao = diasUteis > 0 && comissaoVal > 0
     ? round2((comissaoVal / diasUteis) * domingosFeriados)
