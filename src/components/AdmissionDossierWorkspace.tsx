@@ -42,6 +42,9 @@ const emptyDraft = (): Draft => ({
 });
 const CLEAN = (s: unknown) => String(s || '').trim();
 const currency = (n: number) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const admissionPaymentDate = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : null;
+const dateBr = (value: string) => value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4);
+const PENDING_RH = 'PENDENTE — AGUARDAR CONFIRMAÇÃO DO RH';
 const banks = Object.keys(emptyBankingData()) as Array<keyof BankingData>;
 const YYYY_MM = () => {
   const now = new Date();
@@ -378,18 +381,19 @@ const AdmissionDossierWorkspace: React.FC<{
     finally{setBusy(false);}
   };
 
-  const days=businessDaysForAdmission(competencia,draft.data_admissao,feriados);
+  const paymentDate = admissionPaymentDate(draft.data_admissao);
+  const days=paymentDate ? businessDaysForAdmission(competencia,paymentDate,feriados) : 0;
   const totalVr=draft.vale_refeicao?benefitAmount(Number(vrDaily),days):0;
   const totalVt=draft.vale_transporte?benefitAmount(Number(vtDaily),days):0;
   const canFinance=!!stage && !!draft.id && !dirty && files.length===0 &&
     (draft.vale_refeicao || draft.vale_transporte) &&
     !!draft.empresa_id && !!bank.banco && !!bank.agencia && !!bank.conta &&
-    !!bank.titular && !!bank.cpfTitular && !!draft.data_admissao && days>0 &&
+    !!bank.titular && !!bank.cpfTitular && (!paymentDate || days>0) &&
     (!draft.vale_refeicao || Number(vrDaily)>0) &&
     (!draft.vale_transporte || Number(vtDaily)>0) && !loadingFeriados;
 
   const prepareFinance = async () => {
-    if(!canFinance || !draft.id) return toast.error('Salve o dossiê e confira empresa, admissão prevista, conta bancária, dias úteis e valores diários de VR/VT. Não é necessário aguardar o contrato.');
+    if(!canFinance || !draft.id) return toast.error('Salve o dossiê e confira empresa, dados bancários e valores de VR/VT. Sem data de início, a programação segue pendente de confirmação do RH.');
     setBusy(true);
     try{
       const body=[
@@ -399,13 +403,14 @@ const AdmissionDossierWorkspace: React.FC<{
           : 'PROGRAMAÇÃO ANTECIPADA DE BENEFÍCIOS — CANDIDATO AINDA NÃO ADMITIDO:',
         (stage?.efetivado_em ? 'Funcionário: ' : 'Candidato: ')+draft.nome,'CPF: '+draft.cpf,
         'Empresa contratante: '+draft.empresa_nome,'CNPJ: '+draft.cnpj,
-        (stage?.efetivado_em ? 'Data de admissão: ' : 'Admissão prevista: ')+draft.data_admissao,'Competência: '+competencia,
-        'Dias úteis elegíveis: '+days+' (desde a admissão; feriados cadastrados descontados)','',
+        (stage?.efetivado_em ? 'Data de admissão: ' : 'Admissão prevista: ')+(paymentDate ? dateBr(paymentDate) : PENDING_RH),'Competência: '+competencia,
+        'Data prevista para pagamento: '+(paymentDate ? dateBr(paymentDate)+' (data de início; confirmar com RH)' : PENDING_RH),
+        'Dias úteis elegíveis: '+(paymentDate ? days+' (desde a admissão; feriados cadastrados descontados)' : PENDING_RH),'',
         'DADOS BANCÁRIOS',
         'Banco: '+bank.banco,'Agência: '+bank.agencia,'Conta: '+bank.conta+(bank.digito?'-'+bank.digito:''),
         'Titular: '+bank.titular,'CPF titular: '+bank.cpfTitular,'Chave PIX: '+bank.chavePix,'',
-        'VR — Vale-Refeição: '+(draft.vale_refeicao ? currency(Number(vrDaily))+' ao dia x '+days+' = '+currency(totalVr) : 'Não aplicado'),
-        'VT — Vale-Transporte: '+(draft.vale_transporte ? currency(Number(vtDaily))+' ao dia x '+days+' = '+currency(totalVt) : 'Não aplicado'),
+        'VR — Vale-Refeição: '+(draft.vale_refeicao ? (paymentDate ? currency(Number(vrDaily))+' ao dia x '+days+' = '+currency(totalVr) : currency(Number(vrDaily))+' ao dia; total '+PENDING_RH) : 'Não aplicado'),
+        'VT — Vale-Transporte: '+(draft.vale_transporte ? (paymentDate ? currency(Number(vtDaily))+' ao dia x '+days+' = '+currency(totalVt) : currency(Number(vtDaily))+' ao dia; total '+PENDING_RH) : 'Não aplicado'),
         '',
         'Os valores de VR e VT estão separados para pagamento e conferência.',
         stage?.efetivado_em
@@ -416,13 +421,15 @@ const AdmissionDossierWorkspace: React.FC<{
         company:{name:draft.empresa_nome,cnpj:draft.cnpj},
         person:{name:draft.nome,cpf:draft.cpf,role:draft.funcao},
         plannedAdmission:draft.data_admissao,
-        competencia,businessDays:days,banking:bank,
-        vr:{enabled:draft.vale_refeicao,daily:Number(vrDaily)||0,total:totalVr},
-        vt:{enabled:draft.vale_transporte,daily:Number(vtDaily)||0,total:totalVt},
+        plannedPaymentDate:paymentDate,
+        competencia,businessDays:paymentDate?days:null,banking:bank,
+        vr:{enabled:draft.vale_refeicao,daily:Number(vrDaily)||0,total:paymentDate?totalVr:null},
+        vt:{enabled:draft.vale_transporte,daily:Number(vtDaily)||0,total:paymentDate?totalVt:null},
         admitted:!!stage?.efetivado_em,
       });
-      const snapshot={competencia,dias_uteis:days,vr_diario:Number(vrDaily)||0,vt_diario:Number(vtDaily)||0,
-        valor_vr:totalVr,valor_vt:totalVt,empresa_id:draft.empresa_id,funcionario_nome:draft.nome,
+      const snapshot={competencia,dias_uteis:paymentDate?days:null,vr_diario:Number(vrDaily)||0,vt_diario:Number(vtDaily)||0,
+        valor_vr:paymentDate?totalVr:null,valor_vt:paymentDate?totalVt:null,empresa_id:draft.empresa_id,funcionario_nome:draft.nome,
+        data_pagamento_prevista:paymentDate,pagamento_status:paymentDate?'PREVISTO_AGUARDANDO_RH':'PENDENTE_CONFIRMACAO_RH',
         dados_bancarios:bank,programacao_antecipada:!stage?.efetivado_em};
       const {error}=await (supabase as any).from('admission_dossier_workflow').update({
         finance_snapshot:snapshot,finance_preparado_em:new Date().toISOString(),
@@ -577,24 +584,25 @@ const AdmissionDossierWorkspace: React.FC<{
           <p className="mt-1 text-xs text-zinc-200">Envio para financeiro@topac.com.br. O anexo segue o padrão dos recibos TOPAC, identificado como programação — não comprova pagamento. Pode encaminhar antes do contrato, com banco, data prevista, valores de VR e VT separados e dias úteis conferidos.</p>
           <div className="mt-3 flex flex-wrap items-center gap-3"><label className="text-xs text-zinc-200">Competência
             <Input type="month" value={competencia} onChange={e=>setCompetencia(e.target.value)} className="mt-1 border-cyan-300/30 bg-[#0a1222] text-white"/></label>
-            <span className="text-sm text-white">Dias úteis elegíveis: <strong className="text-amber-300">{loadingFeriados?'Conferindo...':days}</strong></span>
+            <span className="text-sm text-white">Dias úteis elegíveis: <strong className="text-amber-300">{!paymentDate?'Pendente / RH':loadingFeriados?'Conferindo...':days}</strong></span>
+            <span className="text-sm text-white">Data prevista para pagamento: <strong className="text-amber-300">{paymentDate ? dateBr(paymentDate)+' (confirmar RH)' : PENDING_RH}</strong></span>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-fuchsia-400/50 bg-fuchsia-500/15 p-4">
               <p className="text-sm font-semibold text-fuchsia-200">VR — Vale-Refeição</p>
-              <p className="mt-2 text-2xl font-black text-white">{currency(totalVr)}</p>
-              <p className="text-xs text-zinc-200">{draft.vale_refeicao?currency(Number(vrDaily))+' por dia × '+days:'Não aplicado'}</p>
+              <p className="mt-2 text-2xl font-black text-white">{paymentDate?currency(totalVr):'Pendente / RH'}</p>
+              <p className="text-xs text-zinc-200">{draft.vale_refeicao?currency(Number(vrDaily))+' por dia × '+(paymentDate?days:'dias pendentes'):'Não aplicado'}</p>
             </div>
             <div className="rounded-xl border border-cyan-400/50 bg-cyan-500/15 p-4">
               <p className="text-sm font-semibold text-cyan-200">VT — Vale-Transporte</p>
-              <p className="mt-2 text-2xl font-black text-white">{currency(totalVt)}</p>
-              <p className="text-xs text-zinc-200">{draft.vale_transporte?currency(Number(vtDaily))+' por dia × '+days:'Não aplicado'}</p>
+              <p className="mt-2 text-2xl font-black text-white">{paymentDate?currency(totalVt):'Pendente / RH'}</p>
+              <p className="text-xs text-zinc-200">{draft.vale_transporte?currency(Number(vtDaily))+' por dia × '+(paymentDate?days:'dias pendentes'):'Não aplicado'}</p>
             </div>
           </div>
           <Button className="mt-3 bg-cyan-400 font-bold text-zinc-950 hover:bg-cyan-300" disabled={!canFinance||busy}
-            onClick={()=>void prepareFinance()}><ArrowRight size={16} className="mr-1"/> Enviar programação ao Financeiro</Button>
+            onClick={()=>void prepareFinance()}><ArrowRight size={16} className="mr-1"/> {stage?.finance_enviado_em?'Reenviar programação ao Financeiro':'Enviar programação ao Financeiro'}</Button>
           {!stage?.efetivado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-amber-200"><ShieldAlert size={13}/> Programação não libera admissão, contrato, pasta oficial ou pagamento automático. O OK da admissão continua bloqueado até você anexar e confirmar o contrato.</p>}
-          {!!stage?.finance_enviado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-emerald-200"><CheckCircle2 size={13}/> Encaminhado ao financeiro em {new Date(stage.finance_enviado_em).toLocaleString('pt-BR')}</p>}
+          {!!stage?.finance_enviado_em&&<p className="mt-2 flex items-center gap-1 text-xs text-amber-200"><CheckCircle2 size={13}/> Envio aceito pelo provedor em {new Date(stage.finance_enviado_em).toLocaleString('pt-BR')}. A entrega na caixa de e-mail ainda precisa ser confirmada; reenviar apenas se necessário.</p>}
         </div>
       </div>}
       <Dialog open={!!preview} onOpenChange={v=>{if(!v)setPreview(null);}}>
