@@ -16,7 +16,7 @@ type Movement = {
   id: string; item_id: string; tipo: 'entrada' | 'saida'; quantidade: number;
   data_movimento: string | null; destinatario: string | null; origem_responsavel: string | null;
   preco_unitario: number | null; observacao: string | null; ator_email: string | null;
-  historico_importado: boolean; data_suspeita: boolean; linha_origem: number | null;
+  historico_importado: boolean; data_suspeita: boolean; linha_origem: number | null; cancelado_em: string | null;
 };
 type Access = { nome: string; email: string; ativo: boolean; pode_movimentar: boolean; pode_gerenciar: boolean; };
 type StockEmployee = { id: string; nome: string; cargo: string | null; status: string | null; company_id: string | null; };
@@ -98,6 +98,10 @@ export default function EstoqueInternoPage() {
   const [materialSearch, setMaterialSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterItem, setFilterItem] = useState('');
+  const [correction, setCorrection] = useState<{kind:'editar_produto'|'ajustar_saldo'|'editar_movimento'|'cancelar_movimento';item?:StockItem;move?:Movement}|null>(null);
+  const [fields,setFields] = useState<Record<string,string>>({});
+  const [reason,setReason] = useState('');
+  const [audit,setAudit] = useState<any[]>([]);
 
   const load = useCallback(async (quiet = false) => {
     if (!session?.user?.id) {
@@ -155,7 +159,7 @@ export default function EstoqueInternoPage() {
   const loadMoves = useCallback(async () => {
     if (!access) return;
     let q = db.from('estoque_interno_movimentos').select(
-      'id,item_id,tipo,quantidade,data_movimento,destinatario,origem_responsavel,preco_unitario,observacao,ator_email,historico_importado,data_suspeita,linha_origem',
+      'id,item_id,tipo,quantidade,data_movimento,destinatario,origem_responsavel,preco_unitario,observacao,ator_email,historico_importado,data_suspeita,linha_origem,cancelado_em',
       {count:'exact'}
     );
     const activeType = tab === 'entrada' || tab === 'saida' ? tab : filterType;
@@ -186,6 +190,54 @@ export default function EstoqueInternoPage() {
     else {setMoves((r.data||[]) as Movement[]);setMoveCount(r.count||0);}
   },[access,filterType,filterItem,month,movementScope,page,tab,movementSearch,items]);
 
+  const loadAudit=useCallback(async()=>{
+    if(!access?.pode_gerenciar)return;
+    const r=await db.from('estoque_interno_auditoria')
+      .select('id,operacao,item_id,ator_nome,ator_email,motivo,dados_anteriores,dados_novos,criado_em')
+      .order('criado_em',{ascending:false}).limit(100);
+    if(r.error)toast.error('Histórico de correções: '+r.error.message);
+    else setAudit(r.data||[]);
+  },[access?.pode_gerenciar]);
+  const openCorrection=(kind:'editar_produto'|'ajustar_saldo'|'editar_movimento'|'cancelar_movimento',item?:StockItem,move?:Movement)=>{
+    if(!access?.pode_gerenciar)return;
+    setCorrection({kind,item,move});setReason('');
+    setFields(move?{tipo:move.tipo,quantidade:String(move.quantidade),data_movimento:move.data_movimento||'',
+      destinatario:move.destinatario||'',observacao:move.observacao||'',
+      preco_unitario:move.preco_unitario===null?'':String(move.preco_unitario)}
+      :item?{codigo:String(item.codigo),descricao:item.descricao,unidade:item.unidade,
+        aplicacao:item.aplicacao||'',estoque_minimo:item.estoque_minimo===null?'':String(item.estoque_minimo),
+        estoque_maximo:item.estoque_maximo===null?'':String(item.estoque_maximo),
+        saldo_atual:String(item.saldo_atual)}:{});
+  };
+  const submitCorrection=async(e:React.FormEvent)=>{
+    e.preventDefault();
+    if(!correction||busy||!access?.pode_gerenciar)return;
+    if(reason.trim().length<5){toast.error('Informe o motivo da correção (mínimo 5 caracteres)');return;}
+    const number=(key:string)=>fields[key]===''?null:Number((fields[key]||'').replace(',','.'));
+    let dados:Record<string,unknown>={};
+    if(correction.kind==='ajustar_saldo'){
+      dados={saldo_atual:number('saldo_atual')};
+      if(dados.saldo_atual===null||!Number.isFinite(dados.saldo_atual)||Number(dados.saldo_atual)<0){toast.error('Saldo inválido');return;}
+    }else if(correction.kind==='editar_produto'){
+      dados={codigo:Number(fields.codigo),descricao:fields.descricao,unidade:fields.unidade,
+        aplicacao:fields.aplicacao,estoque_minimo:number('estoque_minimo'),estoque_maximo:number('estoque_maximo')};
+    }else if(correction.kind==='editar_movimento'){
+      dados={tipo:fields.tipo,quantidade:number('quantidade'),data_movimento:fields.data_movimento,
+        destinatario:fields.destinatario,observacao:fields.observacao,preco_unitario:number('preco_unitario')};
+      if(!dados.quantidade||!Number.isFinite(dados.quantidade)){toast.error('Quantidade inválida');return;}
+    }
+    setBusy(true);
+    try{
+      const r=await db.rpc('estoque_interno_corrigir',{
+        p_operacao:correction.kind,p_item_id:correction.item?.id||correction.move?.item_id||null,
+        p_movimento_id:correction.move?.id||null,p_dados:dados,p_motivo:reason.trim()
+      });
+      if(r.error)throw r.error;
+      toast.success('Correção salva com motivo, responsável e histórico.');
+      setCorrection(null);await load(true);await loadMoves();await loadAudit();
+    }catch(error:any){toast.error('Correção não realizada: '+(error?.message||'erro desconhecido'));}
+    finally{setBusy(false);}
+  };
   // Mostra os colaboradores reais da TOPAC, sem CPF, telefone, salario ou dados bancarios.
   // Carrega ao abrir Saídas para que os nomes apareçam mesmo antes de digitar.
   useEffect(()=>{
@@ -230,6 +282,7 @@ export default function EstoqueInternoPage() {
 
   useEffect(()=>{void load();},[load]);
   useEffect(()=>{void loadMoves();},[loadMoves]);
+  useEffect(()=>{if(tab==='historico'&&access?.pode_gerenciar)void loadAudit();},[tab,loadAudit,access?.pode_gerenciar]);
 
   const itemById=useMemo(()=>new Map(items.map(i=>[i.id,i])),[items]);
   const selected=items.find(i=>String(i.codigo)===code);
@@ -501,7 +554,7 @@ export default function EstoqueInternoPage() {
                 <td className={'p-3 font-black tabular-nums '+(zero?'text-red-400':low?'text-amber-400':'text-[#ffc400]')}>{brQty(Number(i.saldo_atual))}</td>
                 <td className="p-3 text-zinc-400">{i.estoque_minimo??'—'}</td><td className="p-3 text-zinc-400">{i.estoque_maximo??'—'}</td>
                 <td className={'p-3 font-semibold '+(zero?'text-red-400':low?'text-amber-400':'text-emerald-400')}>{zero?'SEM SALDO':low?'REPOR':'DISPONÍVEL'}</td>
-                <td className="p-3"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button></div></td>
+                <td className="p-3"><div className="flex gap-3"><button onClick={()=>{setCode(String(i.codigo));setTab('entrada');}} className="text-xs font-bold text-emerald-400 hover:underline">Entrada</button><button disabled={zero} onClick={()=>{setCode(String(i.codigo));setTab('saida');}} className="text-xs font-bold text-amber-400 hover:underline disabled:opacity-30">Saída</button>{access.pode_gerenciar&&<><button type="button" onClick={()=>openCorrection('editar_produto',i)} className="text-xs font-bold text-violet-300 hover:underline">Editar</button><button type="button" onClick={()=>openCorrection('ajustar_saldo',i)} className="text-xs font-bold text-[#ffc400] hover:underline">Ajustar saldo</button></>}</div></td>
               </tr>;
             })}</tbody>
           </table>
@@ -636,10 +689,49 @@ export default function EstoqueInternoPage() {
           <label className="text-xs text-zinc-400">Produto<select className={inputStyle+' mt-1'} value={filterItem} onChange={e=>{setFilterItem(e.target.value);setPage(0);}}><option value="">Todos</option>{items.map(i=><option key={i.id} value={i.id}>{i.codigo} — {i.descricao}</option>)}</select></label>
           <div className="flex items-end"><button className="h-10 rounded-lg border border-[#44334f] px-4 text-sm hover:border-violet-400" onClick={()=>{setMovementScope('todos');setMonth('');setFilterType('');setFilterItem('');setPage(0);}}>Todo o histórico</button></div>
         </div>
-        <div className="overflow-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="text-xs uppercase text-zinc-500"><tr>{['Data','Tipo','Código / Produto','Qtd.','Para quem / Origem','Responsável','Observações'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead><tbody>{moves.map(m=>{const i=itemById.get(m.item_id);return <tr key={m.id} className="border-b border-[#251f2b]"><td className={'p-3 whitespace-nowrap '+(m.data_suspeita?'text-amber-400':'text-zinc-400')}>{brDate(m.data_movimento)}{m.data_suspeita&&<TriangleAlert className="ml-1 inline h-3 w-3"/>}</td><td className={'p-3 font-semibold '+(m.tipo==='entrada'?'text-emerald-400':'text-amber-400')}>{m.tipo.toUpperCase()}</td><td className="p-3"><span className="text-violet-400">{i?.codigo||'—'} </span>{i?.descricao||'Produto'}</td><td className="p-3">{brQty(Number(m.quantidade))}</td><td className="p-3">{m.destinatario||m.origem_responsavel||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.historico_importado?'Histórico Excel':m.ator_email||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.observacao||'—'}</td></tr>;})}</tbody></table></div>
+        <div className="overflow-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="text-xs uppercase text-zinc-500"><tr>{['Data','Tipo','Código / Produto','Qtd.','Para quem / Origem','Responsável','Observações','Correção'].map(h=><th key={h} className="border-b border-[#352d3d] p-3">{h}</th>)}</tr></thead><tbody>{moves.map(m=>{const i=itemById.get(m.item_id);return <tr key={m.id} className="border-b border-[#251f2b]"><td className={'p-3 whitespace-nowrap '+(m.data_suspeita?'text-amber-400':'text-zinc-400')}>{brDate(m.data_movimento)}{m.data_suspeita&&<TriangleAlert className="ml-1 inline h-3 w-3"/>}</td><td className={'p-3 font-semibold '+(m.tipo==='entrada'?'text-emerald-400':'text-amber-400')}>{m.tipo.toUpperCase()}</td><td className="p-3"><span className="text-violet-400">{i?.codigo||'—'} </span>{i?.descricao||'Produto'}</td><td className="p-3">{brQty(Number(m.quantidade))}</td><td className="p-3">{m.destinatario||m.origem_responsavel||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.historico_importado?'Histórico Excel':m.ator_email||'—'}</td><td className="p-3 text-xs text-zinc-400">{m.observacao||'—'}{m.cancelado_em&&<strong className="block text-red-400">CANCELADO</strong>}</td><td className="p-3">{access.pode_gerenciar&&!m.historico_importado&&!m.cancelado_em&&<div className="flex gap-3"><button type="button" onClick={()=>openCorrection('editar_movimento',undefined,m)} className="text-xs font-bold text-violet-300">Editar</button><button type="button" onClick={()=>openCorrection('cancelar_movimento',undefined,m)} className="text-xs font-bold text-red-400">Excluir</button></div>}</td></tr>;})}</tbody></table></div>
         <div className="mt-4 flex items-center justify-end gap-3 text-sm"><button className="rounded-lg border border-[#44334f] px-3 py-2 disabled:opacity-30" disabled={page===0} onClick={()=>setPage(p=>p-1)}>Anterior</button><span>Página {page+1} / {Math.max(1,Math.ceil(moveCount/80))}</span><button className="rounded-lg border border-[#44334f] px-3 py-2 disabled:opacity-30" disabled={(page+1)*80>=moveCount} onClick={()=>setPage(p=>p+1)}>Próxima</button></div>
         {tab==='relatorios'&&<p className="mt-3 text-xs text-zinc-500">CSV de movimentações exporta os registros da página exibida. PDF e CSV de estoque exportam a posição atual dos materiais.</p>}
       </section>}
+      {tab==='historico'&&access.pode_gerenciar&&<section className={wrapBox}>
+        <h2 className="mb-2 text-xl font-bold">Auditoria de correções</h2>
+        <p className="mb-4 text-xs text-zinc-400">Responsável, motivo, data e valores anteriores e novos de cada correção.</p>
+        <div className="max-h-[400px] space-y-2 overflow-y-auto">
+          {audit.length===0&&<p className="text-sm text-zinc-500">Nenhuma correção registrada.</p>}
+          {audit.map(a=><article key={a.id} className="rounded-lg border border-[#44334f] p-3 text-sm">
+            <div className="flex flex-wrap justify-between gap-2"><strong className="text-violet-300">{a.operacao.replaceAll('_',' ').toUpperCase()}</strong><span className="text-xs text-zinc-400">{new Date(a.criado_em).toLocaleString('pt-BR')}</span></div>
+            <p>{a.ator_nome} · {a.ator_email}</p><p className="mt-1 text-[#ffc400]">Motivo: {a.motivo}</p>
+            <details className="mt-2 text-xs text-zinc-400"><summary className="cursor-pointer">Ver dados anteriores e novos</summary>
+              <pre className="overflow-auto whitespace-pre-wrap break-all">{JSON.stringify(a.dados_anteriores,null,2)}{'\n'}DEPOIS: {JSON.stringify(a.dados_novos,null,2)}</pre>
+            </details>
+          </article>)}
+        </div>
+      </section>}
     </div>
+    {correction&&<div role="dialog" aria-modal="true" aria-label="Correção de estoque" className="fixed inset-0 z-[100] flex items-center justify-center overflow-auto bg-black/80 p-4">
+      <form onSubmit={submitCorrection} className="w-full max-w-xl space-y-4 rounded-xl border border-violet-500 bg-[#101019] p-5 text-white shadow-2xl">
+        <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold">{
+          correction.kind==='ajustar_saldo'?'Ajustar saldo manualmente':
+          correction.kind==='editar_produto'?'Editar produto':
+          correction.kind==='cancelar_movimento'?'Excluir lançamento':'Editar entrada / saída'
+        }</h2><button type="button" onClick={()=>setCorrection(null)} className="rounded-lg border px-3 py-1">Fechar</button></div>
+        <p className="text-sm text-zinc-400">{correction.item?.descricao||itemById.get(correction.move?.item_id||'')?.descricao||'Movimentação'}</p>
+        {correction.kind==='cancelar_movimento'&&<p className="rounded-lg border border-red-500/40 p-3 text-sm text-red-200">O lançamento será cancelado, preservado no histórico e o saldo recalculado.</p>}
+        {correction.kind==='ajustar_saldo'&&<label className="block text-sm">Novo saldo físico<input required type="number" min="0" step="0.001" className={inputStyle+' mt-1'} value={fields.saldo_atual||''} onChange={e=>setFields(f=>({...f,saldo_atual:e.target.value}))}/><small className="mt-1 block text-zinc-400">Saldo anterior: {brQty(Number(correction.item?.saldo_atual||0))}</small></label>}
+        {correction.kind==='editar_produto'&&<div className="grid gap-3 sm:grid-cols-2">{([
+          ['codigo','Código','number'],['descricao','Descrição','text'],['unidade','Unidade','text'],['aplicacao','Aplicação','text'],['estoque_minimo','Mínimo','number'],['estoque_maximo','Máximo','number']
+        ] as const).map(([key,label,type])=><label key={key} className="text-sm">{label}<input type={type} required={['codigo','descricao','unidade'].includes(key)} min={type==='number'?'0':undefined} step={type==='number'?'any':undefined} className={inputStyle+' mt-1'} value={fields[key]||''} onChange={e=>setFields(f=>({...f,[key]:e.target.value}))}/></label>)}</div>}
+        {correction.kind==='editar_movimento'&&<div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm">Tipo<select className={inputStyle+' mt-1'} value={fields.tipo||'entrada'} onChange={e=>setFields(f=>({...f,tipo:e.target.value}))}><option value="entrada">Entrada</option><option value="saida">Saída</option></select></label>
+          {([
+            ['quantidade','Quantidade','number'],['data_movimento','Data','date'],['destinatario','Destinatário / origem','text'],['preco_unitario','Valor unitário','number'],['observacao','Observação','text']
+          ] as const).map(([key,label,type])=><label key={key} className="text-sm">{label}<input type={type} required={key==='quantidade'} min={type==='number'?'0':undefined} step={type==='number'?'any':undefined} className={inputStyle+' mt-1'} value={fields[key]||''} onChange={e=>setFields(f=>({...f,[key]:e.target.value}))}/></label>)}
+        </div>}
+        <label className="block text-sm font-bold text-[#ffc400]">Motivo obrigatório<textarea required minLength={5} rows={3} className={inputStyle+' mt-1 h-auto py-2'} placeholder="O que estava errado e por que está corrigindo?" value={reason} onChange={e=>setReason(e.target.value)}/></label>
+        <div className="flex justify-end gap-2"><button type="button" onClick={()=>setCorrection(null)} className="rounded-lg border px-4 py-2">Cancelar</button>
+          <button disabled={busy||reason.trim().length<5} className={primaryButton}>{busy?'Salvando...':'Confirmar e registrar auditoria'}</button>
+        </div>
+      </form>
+    </div>}
   </main>;
 }
