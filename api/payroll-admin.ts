@@ -233,7 +233,7 @@ export default async function handler(req: any, res?: any) {
   const method = req?.method || 'GET';
   try {
     const { service, user, roles } = await requireAdmin(req);
-    const isAdmin = roles.includes('admin');
+    const isAdmin = roles.includes('admin') || roles.includes('diretor_geral');
 
     if (method === 'GET') {
       return sendJson(res, {
