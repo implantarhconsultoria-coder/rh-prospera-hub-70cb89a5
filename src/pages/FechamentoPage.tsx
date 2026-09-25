@@ -27,7 +27,7 @@ const defaultCalendarState = (competencia: string) => {
   };
 };
 
-const FechamentoPage: React.FC = () => {
+const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirInteligente = false }) => {
   const { companies, employees, entries, setEntries, getOrCreateEntries, refreshEntries, getFechamento, updateFechamento, userRoles, session } = useApp();
   const navigate = useNavigate();
   const initialCompetencia = currentCompetencia();
@@ -243,6 +243,7 @@ const FechamentoPage: React.FC = () => {
       </div>
 
       <ApontamentoInteligente
+        autoOpen={abrirInteligente}
         companyId={selectedCompany}
         companyName={selectedCompanyData?.name || ''}
         competencia={competencia}
