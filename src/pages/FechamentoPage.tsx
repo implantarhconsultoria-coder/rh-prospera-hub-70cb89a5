@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Bus, FileText, Lock, RefreshCw, Save, Table, UtensilsCrossed } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
@@ -30,6 +30,8 @@ const defaultCalendarState = (competencia: string) => {
 const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirInteligente = false }) => {
   const { companies, employees, entries, setEntries, getOrCreateEntries, refreshEntries, getFechamento, updateFechamento, userRoles, session } = useApp();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [empresaDoLinkAplicada, setEmpresaDoLinkAplicada] = useState(false);
   const initialCompetencia = currentCompetencia();
   const [viewState, setViewState] = usePersistentViewState('fechamento:principal', {
     selectedCompany: '',
@@ -53,6 +55,14 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
       setSelectedCompany(companies[0].id);
     }
   }, [companies, selectedCompany]);
+
+  useEffect(() => {
+    const empresaDoLink = searchParams.get('empresa');
+    if (!empresaDoLinkAplicada && empresaDoLink && companies.some(company => company.id === empresaDoLink)) {
+      setSelectedCompany(empresaDoLink);
+      setEmpresaDoLinkAplicada(true);
+    }
+  }, [companies, empresaDoLinkAplicada, searchParams]);
 
   useEffect(() => {
     if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
