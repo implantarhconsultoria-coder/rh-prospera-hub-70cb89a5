@@ -29,7 +29,6 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
   const [modoAplicacao, setModoAplicacao] = useState<'substituir' | 'adicionar'>('substituir');
   const [enviando, setEnviando] = useState(false);
   const entradas = useMemo(() => new Map(props.entries.map(entry => [entry.employeeId, entry])), [props.entries]);
-  if (!props.isAdmin) return null;
 
   const analisar = () => {
     setLinhas(interpretarApontamentos(texto, props.funcionarios, props.percentualSemanal));
@@ -170,6 +169,7 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
     } finally { setEnviando(false); }
   };
 
+  if (!props.isAdmin) return null;
   return <section className="card-premium space-y-3 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="flex items-center gap-2 text-base font-bold"><ClipboardPaste className="h-5 w-5 text-violet-400" /> Apontamento Inteligente</h2>
