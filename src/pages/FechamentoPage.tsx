@@ -205,7 +205,7 @@ const FechamentoPage: React.FC = () => {
     document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
   };
 
-  const openPdf = () => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}`);
+  const openPdf = () => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}&diasUteis=${diasUteis}&domingosFeriados=${domingosFeriados}`);
   const statusColor = fechamento.status === 'fechado' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : fechamento.status === 'em_conferencia' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : 'border-violet-400/30 bg-violet-500/10 text-violet-300';
   const inputClass = 'h-7 w-full min-w-0 border-violet-400/20 bg-black/20 px-1 text-[10px] focus:border-violet-400/60';
 
@@ -248,6 +248,9 @@ const FechamentoPage: React.FC = () => {
         competencia={competencia}
         percentualSemanal={heSemanalPct}
         funcionarios={compEmps}
+        companies={companies}
+        onCompanyChange={setSelectedCompany}
+        calcPayroll={calcPayroll}
         entries={compEntries}
         fechado={fechamento.status === 'fechado'}
         isAdmin={userRoles.includes('admin')}
