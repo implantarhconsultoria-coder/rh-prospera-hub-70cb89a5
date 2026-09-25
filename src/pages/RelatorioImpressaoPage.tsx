@@ -7,27 +7,29 @@ import { getWorkingDays } from '@/lib/workingDays';
 import type { Employee, MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
 import { buildTopacRhPdfFileName, printDocumentAsPdf } from '@/lib/savePdf';
+import { horasLegiveis } from '@/lib/apontamentoInteligente';
 
 const ALL_COMPANIES = 'todas';
 const money = (value: unknown) => formatCurrency(Number(value) || 0);
-const hours = (value: unknown) =>
-  `${(Number(value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}h`;
+const hours = (value: unknown) => horasLegiveis(Number(value) || 0);
 
 const columns = [
-  { label: 'Nome', width: '12%', numeric: false },
-  { label: 'Cargo', width: '10%', numeric: false },
-  { label: 'Salário/Base', width: '8%', numeric: true },
-  { label: 'HE50 qtd', width: '5%', numeric: true },
-  { label: 'HE50 valor', width: '7%', numeric: true },
-  { label: 'HE100 qtd', width: '5%', numeric: true },
-  { label: 'HE100 valor', width: '7%', numeric: true },
-  { label: 'Insal.', width: '6%', numeric: true },
-  { label: 'Peric.', width: '6%', numeric: true },
-  { label: 'Adiant.', width: '7%', numeric: true },
-  { label: 'Faltas/Desc.', width: '8%', numeric: true },
-  { label: 'Desc. extra', width: '6%', numeric: true },
-  { label: 'FGTS info', width: '6%', numeric: true },
-  { label: 'Líquido', width: '7%', numeric: true },
+  { label: 'Nome', width: '11%', numeric: false },
+  { label: 'Cargo', width: '7%', numeric: false },
+  { label: 'Salário/Base', width: '7%', numeric: true },
+  { label: 'HE50 qtd', width: '4%', numeric: true },
+  { label: 'HE50 valor', width: '6%', numeric: true },
+  { label: 'HE100 qtd', width: '4%', numeric: true },
+  { label: 'HE100 valor', width: '6%', numeric: true },
+  { label: 'Base comissão', width: '7%', numeric: true },
+  { label: 'Comissão', width: '7%', numeric: true },
+  { label: 'Insal.', width: '5%', numeric: true },
+  { label: 'Peric.', width: '5%', numeric: true },
+  { label: 'Adiant.', width: '6%', numeric: true },
+  { label: 'Faltas/Desc.', width: '7%', numeric: true },
+  { label: 'Desc. extra', width: '5%', numeric: true },
+  { label: 'FGTS info', width: '5%', numeric: true },
+  { label: 'Líquido', width: '8%', numeric: true },
 ] as const;
 
 const defaultEntry = (emp: Employee, competencia: string, diasUteis: number): MonthlyEntry => ({
@@ -63,6 +65,13 @@ const emptyTotals = () => ({
   he50Valor: 0,
   he100Horas: 0,
   he100Valor: 0,
+  comissaoBase: 0,
+  comissaoVal: 0,
+  dsrComissao: 0,
+  dsrHE: 0,
+  adicionais: 0,
+  inss: 0,
+  irrf: 0,
   adiantamentos: 0,
   faltasDias: 0,
   faltasDescontos: 0,
@@ -88,9 +97,14 @@ const RelatorioImpressaoPage: React.FC = () => {
     return companies.filter(c => c.id === companyId);
   }, [allCompanies, companies, companyId]);
 
-  const diasUteis = getWorkingDays(competencia);
+  const manualDiasUteis = Number(searchParams.get('diasUteis'));
+  const diasUteis = Number.isInteger(manualDiasUteis) && manualDiasUteis > 0 && manualDiasUteis <= 31
+    ? manualDiasUteis : getWorkingDays(competencia);
   const [year, month] = competencia.split('-').map(Number);
-  const domingosFeriados = year && month ? Math.max(0, new Date(year, month, 0).getDate() - diasUteis) : 0;
+  const manualDomingos = Number(searchParams.get('domingosFeriados'));
+  const domingosFeriados = searchParams.has('domingosFeriados') &&
+    Number.isInteger(manualDomingos) && manualDomingos >= 0 && manualDomingos <= 31
+    ? manualDomingos : year && month ? Math.max(0, new Date(year, month, 0).getDate() - diasUteis) : 0;
   const competenciaLabel = competenciaLabelFrom(competencia);
 
   useEffect(() => {
@@ -122,6 +136,13 @@ const RelatorioImpressaoPage: React.FC = () => {
       totals.he50Valor += calc.he50Val;
       totals.he100Horas += Number(entry.he100 || 0);
       totals.he100Valor += calc.he100Val;
+      totals.comissaoBase += calc.comissaoBase;
+      totals.comissaoVal += calc.comissaoVal;
+      totals.dsrComissao += calc.dsrComissao;
+      totals.dsrHE += calc.dsrHE;
+      totals.adicionais += calc.adicionais;
+      totals.inss += calc.inss;
+      totals.irrf += calc.irrf;
       totals.adiantamentos += calc.adiantamento;
       totals.faltasDias += Number(entry.faltasDias || 0);
       totals.faltasDescontos += calc.descontosOperacionais;
@@ -165,7 +186,7 @@ const RelatorioImpressaoPage: React.FC = () => {
     <>
       <style>{`
         @page { size: A4 landscape; margin: 7mm; }
-        .fechamento-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8px; }
+        .fechamento-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 7px; }
         .fechamento-table thead { display: table-header-group; }
         .fechamento-table tfoot { display: table-row-group; }
         .fechamento-table tr { break-inside: avoid; page-break-inside: avoid; }
@@ -224,7 +245,7 @@ const RelatorioImpressaoPage: React.FC = () => {
                 </colgroup>
                 <thead>
                   <tr>
-                    <th colSpan={14} className="company-print-heading">
+                    <th colSpan={columns.length} className="company-print-heading">
                       <div className="company-name">{company.name}</div>
                       <div className="company-meta">CNPJ: {company.cnpj || '-'} · Competência: {competenciaLabel} · Dias úteis: {diasUteis}</div>
                       <div className="report-title">RELATÓRIO DE FECHAMENTO</div>
@@ -250,7 +271,8 @@ const RelatorioImpressaoPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.emp.id} className="even:bg-gray-50">
+                    <React.Fragment key={r.emp.id}>
+                    <tr className="even:bg-gray-50">
                       <td className="border border-gray-300 px-1 py-1 font-medium">{r.emp.name || '-'}</td>
                       <td className="border border-gray-300 px-1 py-1">{r.emp.cargo || '-'}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.emp.salarioBase)}</td>
@@ -258,6 +280,8 @@ const RelatorioImpressaoPage: React.FC = () => {
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.he50Val)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{hours(r.entry.he100)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.he100Val)}</td>
+                      <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.comissaoBase)}</td>
+                      <td className="border border-gray-300 px-1 py-1 numeric font-bold">{money(r.calc.comissaoVal)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.insVal)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.periculosidadeVal)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.adiantamento)}</td>
@@ -266,9 +290,19 @@ const RelatorioImpressaoPage: React.FC = () => {
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.fgtsInformativo)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric font-bold">{money(r.calc.liquido)}</td>
                     </tr>
+                    <tr className="bg-gray-50 text-gray-600">
+                      <td colSpan={columns.length} className="border border-gray-300 px-2 py-1">
+                        <strong>Detalhamento:</strong> DSR HE {money(r.calc.dsrHE)} · DSR comissão {money(r.calc.dsrComissao)}
+                        · Comissão {(r.calc.comissaoPct * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%
+                        · Adicionais {money(r.calc.adicionais)} · INSS {money(r.calc.inss)} · IRRF {money(r.calc.irrf)}
+                        · Bruto {money(r.calc.bruto)} · Proventos {money(r.calc.proventos)}
+                        · <strong>Líquido a receber {money(r.calc.liquido)}</strong>
+                      </td>
+                    </tr>
+                    </React.Fragment>
                   ))}
                   {rows.length === 0 && (
-                    <tr><td colSpan={14} className="border border-gray-300 px-2 py-4 text-center text-gray-500">Sem funcionários ativos para esta competência.</td></tr>
+                    <tr><td colSpan={columns.length} className="border border-gray-300 px-2 py-4 text-center text-gray-500">Sem funcionários ativos para esta competência.</td></tr>
                   )}
                 </tbody>
                 <tfoot>
@@ -279,6 +313,8 @@ const RelatorioImpressaoPage: React.FC = () => {
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.he50Valor)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{hours(totals.he100Horas)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.he100Valor)}</td>
+                    <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.comissaoBase)}</td>
+                    <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.comissaoVal)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.insalubridade)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.periculosidade)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.adiantamentos)}</td>
@@ -296,7 +332,14 @@ const RelatorioImpressaoPage: React.FC = () => {
                   { l: 'Salário base', v: money(totals.salarios) },
                   { l: 'Proventos', v: money(totals.proventos) },
                   { l: 'Descontos', v: money(totals.descontos) },
-                  { l: 'Líquido', v: money(totals.liquido) },
+                  { l: 'Líquido a receber', v: money(totals.liquido) },
+                  { l: 'Base de comissão', v: money(totals.comissaoBase) },
+                  { l: 'Comissões', v: money(totals.comissaoVal) },
+                  { l: 'DSR de comissão', v: money(totals.dsrComissao) },
+                  { l: 'DSR de horas extras', v: money(totals.dsrHE) },
+                  { l: 'Adicionais', v: money(totals.adicionais) },
+                  { l: 'INSS', v: money(totals.inss) },
+                  { l: 'IRRF', v: money(totals.irrf) },
                   { l: 'Insalubridade', v: money(totals.insalubridade) },
                   { l: 'Periculosidade', v: money(totals.periculosidade) },
                   { l: 'Adiantamentos', v: money(totals.adiantamentos) },

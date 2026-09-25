@@ -34,6 +34,7 @@ export const ADMIN_MODULE_GROUPS = [
       {label:'Atestados',description:'Conferência de justificativas',path:'/admin/atestados',icon:Stethoscope},
       {label:'ASO',description:'Exames ocupacionais',path:'/admin/aso',icon:Stethoscope},
       {label:'Central da Contabilidade',description:'Rotinas e solicitações contábeis',path:'/admin/central-contabilidade',icon:ClipboardList},
+      {label:'Apontamento Inteligente',description:'Colar horas extras e comissões e lançar no fechamento',path:'/admin/apontamento-inteligente',icon:ClipboardPenLine},
       {label:'Fechamento',description:'Conferência de pagamentos',path:'/admin/fechamento',icon:ClipboardCheck},
       {label:'Fechamentos das filiais',description:'Acompanhamento por unidade',path:'/admin/fechamentos-filiais',icon:FileCheck2},
       {label:'Rescisões',description:'Controle de desligamentos',path:'/admin/rescisoes',icon:ClipboardPenLine},
