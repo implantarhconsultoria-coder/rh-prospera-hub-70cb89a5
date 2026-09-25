@@ -32,8 +32,7 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
   const entradas = useMemo(() => new Map(props.entries.map(entry => [entry.employeeId, entry])), [props.entries]);
   // Prévia compartilha o banco real: proibir gravação em deployments de teste mesmo se alguém clicar.
   const gravacaoHabilitada = typeof window !== 'undefined' &&
-    ['topacrh.pro', 'www.topacrh.pro'].includes(window.location.hostname) &&
-    import.meta.env.VITE_APONTAMENTO_INTELIGENTE_WRITE_ENABLED === 'true';
+    ['topacrh.pro', 'www.topacrh.pro'].includes(window.location.hostname);
 
   const analisar = () => {
     setLinhas(interpretarApontamentos(texto, props.funcionarios, props.percentualSemanal));
@@ -242,7 +241,24 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
           <p className="text-sm font-bold text-emerald-200">Simulação do valor a receber — por funcionário</p>
           <p className="text-xs text-muted-foreground">Cálculo completo com salário, adicionais, horas extras, DSR, comissão, INSS, IRRF, adiantamento e descontos. Apenas prévia; ainda não foi lançado.</p>
           {simulacoes.length === 0 && <p className="text-xs text-amber-300">Nenhum funcionário validado nesta empresa. Se os nomes são de Goiânia, selecione TOPAC Goiânia acima.</p>}
-          <div className="overflow-x-auto"><table className="w-full min-w-[830px] text-xs">
+          <div className="space-y-2 md:hidden">
+            {simulacoes.map(item => <div key={item.employee.id} className="rounded-lg border border-emerald-400/25 bg-[#080f13] p-3">
+              <p className="font-bold text-sm">{item.employee.name}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                <p>HE {props.percentualSemanal}%<br/><strong>{horasLegiveis(item.previsto.he50)} — {dinheiroLegivel(item.calculado.he50Val)}</strong></p>
+                <p>HE 100%<br/><strong>{horasLegiveis(item.previsto.he100)} — {dinheiroLegivel(item.calculado.he100Val)}</strong></p>
+                <p>Comissão<br/><strong>{dinheiroLegivel(item.calculado.comissaoVal)}</strong></p>
+                <p>DSR<br/><strong>{dinheiroLegivel(item.calculado.dsrHE + item.calculado.dsrComissao)}</strong></p>
+                <p>Bruto<br/><strong>{dinheiroLegivel(item.calculado.bruto)}</strong></p>
+                <p>Anterior<br/><strong>{dinheiroLegivel(item.anterior.liquido)}</strong></p>
+              </div>
+              <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                <p className="text-xs text-emerald-200">Valor previsto a receber</p>
+                <p className="text-xl font-black text-emerald-300">{dinheiroLegivel(item.calculado.liquido)}</p>
+              </div>
+            </div>)}
+          </div>
+          <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[830px] text-xs">
             <thead className="border-b border-emerald-400/20 text-left"><tr>
               <th className="p-2">Funcionário</th><th className="p-2">HE semanal</th><th className="p-2">HE 100%</th>
               <th className="p-2">Comissão</th><th className="p-2">DSR total</th><th className="p-2">Bruto</th>
