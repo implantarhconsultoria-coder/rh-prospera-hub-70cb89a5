@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import {
   addEvent,
   assertCompanyEnabled,
   PAYROLL_BUCKET,
   readBody,
+  sha256,
   requireAdmin,
   sendJson,
   signedUrl,
@@ -75,7 +77,7 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
 
   const { data: signatures, error: signatureError } = await service
     .from('payroll_signatures')
-    .select('id,request_id,document_id,certificate_path,signed_at')
+    .select('id,request_id,document_id,certificate_path,certificate_sha256,signed_at,authentication_method,document_sha256_final,evidence')
     .in('request_id', requestIds)
     .order('signed_at', { ascending: true });
   if (signatureError) throw signatureError;
@@ -103,21 +105,28 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
   const signedDocumentIds = Array.from(new Set(signedEntries.map((entry: any) => entry.doc.id)));
   const { data: receipts, error: receiptError } = await service
     .from('payroll_payment_receipts')
-    .select('document_id,storage_path,status,confirmed,created_at')
+    .select('id,document_id,storage_path,receipt_sha256,amount,paid_at,status,confirmed,created_at')
     .in('document_id', signedDocumentIds)
-    .eq('status', 'PAGAMENTO_CONFIRMADO')
     .order('created_at', { ascending: true });
   if (receiptError) throw receiptError;
-  const receiptByDoc = new Map<string, any>();
-  for (const receipt of receipts || []) receiptByDoc.set(receipt.document_id, receipt);
+  const receiptsByDoc = new Map<string, any[]>();
+  for (const receipt of receipts || []) {
+    const list = receiptsByDoc.get(receipt.document_id) || [];
+    list.push(receipt);
+    receiptsByDoc.set(receipt.document_id, list);
+  }
 
   const output = await PDFDocument.create();
   const appended = new Set<string>();
-  const appendPdf = async (storagePath: string | null | undefined, label: string) => {
+  const fileChecks: Array<{ path: string; kind: string; sha256: string; expected_sha256: string | null; intact: boolean | null }> = [];
+  const appendPdf = async (storagePath: string | null | undefined, label: string, expected?: string | null) => {
     if (!storagePath || appended.has(storagePath)) return;
     const { data, error } = await service.storage.from(PAYROLL_BUCKET).download(storagePath);
     if (error || !data) throw new Error(`dossier_file_download_failed:${label}`);
     const bytes = new Uint8Array(await data.arrayBuffer());
+    const actual = sha256(bytes);
+    fileChecks.push({ path: storagePath, kind: label, sha256: actual, expected_sha256: expected || null,
+      intact: expected ? actual.toLowerCase() === String(expected).toLowerCase() : null });
     try {
       const source = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
       const pages = await output.copyPages(source, source.getPageIndices());
@@ -129,13 +138,12 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
   };
 
   for (const { signature, doc } of signedEntries) {
-    await appendPdf(doc.storage_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:documento`);
-    const receipt = receiptByDoc.get(doc.id);
-    if (doc?.extracted_data?.includes_bank_proof !== true && receipt?.storage_path) {
-      await appendPdf(receipt.storage_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:comprovante`);
+    await appendPdf(doc.storage_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:documento`, signature.document_sha256_final);
+    for (const receipt of receiptsByDoc.get(doc.id) || []) {
+      await appendPdf(receipt.storage_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:comprovante:${receipt.status}`, receipt.receipt_sha256);
     }
     if (signature.certificate_path) {
-      await appendPdf(signature.certificate_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:certificado`);
+      await appendPdf(signature.certificate_path, `${doc.document_type || 'DOCUMENTO'}:${doc.competencia || ''}:certificado`, signature.certificate_sha256);
     }
   }
 
@@ -144,18 +152,20 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
   output.setSubject('Todos os documentos assinados do funcionario, sem filtro de competencia.');
   output.setCreator('TOPAC RH PRO');
   const dossierBytes = await output.save({ addDefaultPage: false, useObjectStreams: false });
+  const dossierHash = sha256(dossierBytes);
 
   const { data: employee } = await service.from('funcionarios').select('nome').eq('id', sourceDoc.employee_id).maybeSingle();
   const employeeName = String(employee?.nome || 'FUNCIONARIO');
   const safeEmployee = employeeName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
   const basePath = `${sourceDoc.company_id}/dossies/${sourceDoc.employee_id}`;
-  const dossierPath = `${basePath}/DOSSIE_COMPLETO_${safeEmployee}.pdf`;
-  const indexPath = `${basePath}/INDICE_DOSSIE_COMPLETO_${safeEmployee}.pdf`;
+  const exportId = randomUUID();
+  const dossierPath = `${basePath}/DOSSIE_COMPLETO_${safeEmployee}_${exportId}.pdf`;
+  const indexPath = `${basePath}/INDICE_DOSSIE_COMPLETO_${safeEmployee}_${exportId}.pdf`;
 
   const dossierUpload = await service.storage.from(PAYROLL_BUCKET).upload(
     dossierPath,
     new Blob([dossierBytes as any], { type: 'application/pdf' }),
-    { contentType: 'application/pdf', upsert: true },
+    { contentType: 'application/pdf', upsert: false },
   );
   if (dossierUpload.error) throw dossierUpload.error;
 
@@ -178,7 +188,7 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
   const indexUpload = await service.storage.from(PAYROLL_BUCKET).upload(
     indexPath,
     new Blob([indexBytes as any], { type: 'application/pdf' }),
-    { contentType: 'application/pdf', upsert: true },
+    { contentType: 'application/pdf', upsert: false },
   );
   if (indexUpload.error) throw indexUpload.error;
 
@@ -186,6 +196,27 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
     dossierPath,
     indexPath,
     documentCount: signedEntries.length,
+    dossierHash,
+    manifest: {
+      schema: 'topac-payroll-evidence-v1', export_id: exportId,
+      generated_at: new Date().toISOString(),
+      company_id: sourceDoc.company_id, employee_id: sourceDoc.employee_id,
+      dossier_sha256: dossierHash, files: fileChecks,
+      documents: signedEntries.map(({ doc, signature }: any) => ({
+        document_id: doc.id, document_type: doc.document_type, competencia: doc.competencia,
+        signature_id: signature.id, signed_at: signature.signed_at,
+        authentication_method: signature.authentication_method,
+        face_event_id: signature.evidence?.face_event_id || null,
+        document_sha256: signature.document_sha256_final,
+        certificate_sha256: signature.certificate_sha256 || null,
+        receipts: (receiptsByDoc.get(doc.id) || []).map((receipt: any) => ({
+          receipt_id: receipt.id, receipt_sha256: receipt.receipt_sha256,
+          status: receipt.status, confirmed: receipt.confirmed === true,
+          amount: receipt.amount, paid_at: receipt.paid_at,
+        })),
+      })),
+      note: 'Comprovantes nao confirmados sao anexos, nao provas de pagamento confirmado.',
+    },
   };
 };
 
@@ -302,6 +333,9 @@ export default async function handler(req: any, res?: any) {
         dossier_url: await signedUrl(service, complete.dossierPath, 900),
         dossier_scope: 'ALL_SIGNED_DOCUMENTS_ALL_COMPETENCIAS',
         dossier_document_count: complete.documentCount,
+        dossier_sha256: complete.dossierHash,
+        index_url: await signedUrl(service, complete.indexPath, 900),
+        manifest: complete.manifest,
       });
     }
 
