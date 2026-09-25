@@ -86,6 +86,7 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/server/__tests__/payrollSigningEvidence.test.ts
 
       - name: Build
         run: npm run build
