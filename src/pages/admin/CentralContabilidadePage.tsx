@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, Building2, CalendarCheck, CheckCircle2, ChevronLeft, Clock3, Eye,
   FileCheck2, FileSearch, FileText, FileX, Loader2, RefreshCw, Send, Stethoscope,
@@ -52,7 +52,9 @@ const reviewHasDocument = (r:Revisao) => ['atestado_doc','atestado','admissao','
 const CentralContabilidadePage: React.FC = () => {
   const { companies } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<TabKey>('visao');
+  const location = useLocation();
+  const abrirInteligente = location.pathname === '/admin/apontamento-inteligente' || searchParams.get('inteligente') === '1';
+  const [tab, setTab] = useState<TabKey>(() => abrirInteligente ? 'fechamento' : 'visao');
   const [revisoes, setRevisoes] = useState<Revisao[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
@@ -269,7 +271,7 @@ const CentralContabilidadePage: React.FC = () => {
       ) : loading ? (
         <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-[#27222e] bg-[#05070b]"><Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" /></div>
       ) : tab === 'fechamento' ? (
-        <FechamentoPage />
+        <FechamentoPage abrirInteligente={abrirInteligente} />
       ) : tab === 'visao' ? (
         <div className="grid gap-4 xl:grid-cols-2">
           <Panel title="Últimas conferências" icon={FileCheck2}>
