@@ -205,6 +205,8 @@ const CentralContabilidadePage: React.FC = () => {
 
   const activeTitle = processCards.find(item => item.key === activeModule)?.title || '';
 
+  if (location.pathname === '/admin/apontamento-inteligente') return <FechamentoPage abrirInteligente />;
+
   return (
     <div className="space-y-5 animate-fade-in">
       <section className="overflow-hidden rounded-xl border border-[#2b2335] bg-[#05070b] shadow-[0_18px_50px_rgba(0,0,0,.24)]">
