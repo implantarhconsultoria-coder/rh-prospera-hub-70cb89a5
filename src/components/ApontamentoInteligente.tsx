@@ -30,6 +30,10 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
   const [modoAplicacao, setModoAplicacao] = useState<'substituir' | 'adicionar'>('substituir');
   const [enviando, setEnviando] = useState(false);
   const entradas = useMemo(() => new Map(props.entries.map(entry => [entry.employeeId, entry])), [props.entries]);
+  // Prévia compartilha o banco real: proibir gravação em deployments de teste mesmo se alguém clicar.
+  const gravacaoHabilitada = typeof window !== 'undefined' &&
+    ['topacrh.pro', 'www.topacrh.pro'].includes(window.location.hostname) &&
+    import.meta.env.VITE_APONTAMENTO_INTELIGENTE_WRITE_ENABLED === 'true';
 
   const analisar = () => {
     setLinhas(interpretarApontamentos(texto, props.funcionarios, props.percentualSemanal));
@@ -89,6 +93,7 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
     other.modo === row.modo) !== index) : [];
 
   const confirmar = async () => {
+    if (!gravacaoHabilitada) { toast.error('Modo de testes: lançamento real desativado até a publicação autorizada.'); return; }
     if (enviando || !props.userId || !props.companyId || !props.competencia) return;
     if (props.fechado || props.hasPendingWrites()) {
       toast.error(props.fechado ? 'Competência fechada: reabra antes de lançar.' : 'Aguarde as edições da grade terminarem de salvar.');
@@ -257,8 +262,9 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
           </table></div>
           <p className="text-sm font-bold text-emerald-200">Total líquido previsto destes funcionários: {dinheiroLegivel(simulacoes.reduce((sum, item) => sum + item.calculado.liquido, 0))}</p>
         </div>
+        {!gravacaoHabilitada && <p className="text-sm font-semibold text-amber-300">Modo de testes: simulação liberada; gravação no banco real desativada. Nenhum apontamento será alterado.</p>}
         {props.fechado && <p className="text-sm text-amber-400">Competência fechada: lançamento bloqueado até reabertura autorizada.</p>}
-        <Button disabled={enviando || props.fechado || !!falhas.length || !!repetidas.length || !linhas.length}
+        <Button disabled={!gravacaoHabilitada || enviando || props.fechado || !!falhas.length || !!repetidas.length || !linhas.length}
           onClick={confirmar}><ShieldCheck className="mr-2 h-4 w-4" />{enviando ? 'Salvando e auditando...' : 'Confirmar e lançar no fechamento'}</Button>
       </div>}
     </div>}
