@@ -24,6 +24,8 @@ const SEARCH_ITEMS: SearchItem[] = [
   { label: 'Empresas', path: '/admin/empresas' },
   { label: 'Empresas', path: '/admin/empresas' },
   { label: 'Central da Contabilidade', path: '/admin/central-contabilidade' },
+  { label: 'Apontamento Inteligente', path: '/admin/apontamento-inteligente' },
+  { label: 'Fechamento', path: '/admin/fechamento' },
   { label: 'Pré-cadastro', path: '/admin/central-contabilidade?modulo=pre-cadastro' },
   { label: 'Rescisões', path: '/admin/central-contabilidade?modulo=rescisao' },
   { label: 'Solicitar Férias', path: '/admin/central-contabilidade?modulo=ferias' },
@@ -56,7 +58,7 @@ const AdminMobileLayout: React.FC = () => {
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
-  const [moduleOpen,setModuleOpen] = useState(Boolean((location.state as any)?.openMobileModule));
+  const [moduleOpen,setModuleOpen] = useState(Boolean((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'));
   const isNativeCardModule = ['/admin/estoque-interno','/admin/uniformes','/admin/epi']
     .some(path=>location.pathname===path || location.pathname.startsWith(path+'/'));
   const moduleItem = [...SEARCH_ITEMS].filter(item=>item.path.startsWith('/admin/')
@@ -68,8 +70,8 @@ const AdminMobileLayout: React.FC = () => {
   useEffect(()=>{
     if(lastModule.current!==moduleKey){
       lastModule.current=moduleKey;
-      setModuleOpen(Boolean((location.state as any)?.openMobileModule));
-    }else if((location.state as any)?.openMobileModule){
+      setModuleOpen(Boolean((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'));
+    }else if((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'){
       setModuleOpen(true);
     }
   },[moduleKey,location.key,location.state]);
