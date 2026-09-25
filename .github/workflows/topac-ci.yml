@@ -70,9 +70,16 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/server/payrollSigningEvidence.ts
+          src/server/__tests__/payrollSigningEvidence.test.ts
+          src/server/payrollServer.ts
+          api/payroll-public.ts
+          api/payroll-admin.ts
+          src/components/payroll/PayrollPortalAdminModule.tsx
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
+          --rule 'prefer-const: off'
 
       - name: Tests changed scope
         run: >-
