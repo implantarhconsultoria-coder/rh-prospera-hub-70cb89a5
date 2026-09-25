@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { resolveSigningFaceEvidence } from '../src/server/payrollSigningEvidence.js';
 import {
   addEvent,
   buildCertificatePdf,
@@ -454,6 +455,14 @@ export default async function handler(req: any, res?: any) {
       if (!requestRow.viewed_at) return sendJson(res, { ok: false, error: 'document_not_acknowledged' }, 409);
       if (body.confirm !== true) return sendJson(res, { ok: false, error: 'signature_confirmation_required' }, 400);
 
+      const identityProof = await resolveSigningFaceEvidence(service, {
+        companyId: sessionRow.company_id,
+        employeeId: sessionRow.employee_id,
+        documentId: doc.id,
+        sessionHash: sessionRow.session_hash,
+        viewedAt: requestRow.viewed_at,
+      });
+
       const { data: company, error: companyError } = await service.from('empresas').select('id,nome,cnpj').eq('id', sessionRow.company_id).single();
       if (companyError || !company) throw new Error('company_not_found');
 
@@ -493,7 +502,7 @@ export default async function handler(req: any, res?: any) {
         receipt_id: receipt?.id || null,
         net_amount: doc.net_amount,
         payment_at: receipt?.paid_at || null,
-        identity_validated_at: requestRow.identity_validated_at,
+        identity_validated_at: identityProof.faceVerifiedAt || requestRow.identity_validated_at,
         opened_at: requestRow.opened_at,
         viewed_at: requestRow.viewed_at,
         signed_at: signedAt,
@@ -502,7 +511,10 @@ export default async function handler(req: any, res?: any) {
         user_agent: ua,
         browser: parsed.browser,
         device: parsed.device,
-        authentication_method: AUTH_METHOD,
+        authentication_method: identityProof.authenticationMethod,
+        face_event_id: identityProof.faceEventId,
+        face_verified_at: identityProof.faceVerifiedAt,
+        face_snapshot_sha256: identityProof.faceSnapshotSha256,
         document_sha256_before: doc.document_sha256,
         document_sha256_final: recomputedHash,
         document_version: doc.document_version,
@@ -538,7 +550,7 @@ export default async function handler(req: any, res?: any) {
         user_agent: ua,
         browser: parsed.browser,
         device: parsed.device,
-        authentication_method: AUTH_METHOD,
+        authentication_method: identityProof.authenticationMethod,
         session_fingerprint: sessionRow.session_hash,
         document_sha256_before: doc.document_sha256,
         document_sha256_final: recomputedHash,
@@ -562,13 +574,15 @@ export default async function handler(req: any, res?: any) {
         employee_id: sessionRow.employee_id,
         term_version: doc.document_type === AVISO_FERIAS ? 'vacation-notice-signature-v1' : BENEFIT_TYPES.has(doc.document_type) ? 'benefit-signature-v1' : 'payroll-signature-v1',
         accepted: true,
-        authentication_method: AUTH_METHOD,
+        authentication_method: identityProof.authenticationMethod,
         accepted_at: signedAt,
         request_id: requestRow.id,
       });
       const { error: updateError } = await service.from('payroll_signature_requests').update({
         status: 'ASSINADO',
         signed_at: signedAt,
+        identity_validated_at: identityProof.faceVerifiedAt || requestRow.identity_validated_at,
+        identity_method: identityProof.authenticationMethod,
         next_reminder_at: null,
         updated_at: signedAt,
       }).eq('id', requestRow.id);
@@ -581,7 +595,7 @@ export default async function handler(req: any, res?: any) {
         employeeId: sessionRow.employee_id,
         requestId: requestRow.id,
         eventType: 'ASSINATURA_CONCLUIDA',
-        payload: { signature_id: signatureId, document_type: doc.document_type, authentication_method: AUTH_METHOD, certificate_sha256: certificateHash, document_sha256: recomputedHash },
+        payload: { signature_id: signatureId, document_type: doc.document_type, authentication_method: identityProof.authenticationMethod, face_event_id: identityProof.faceEventId, certificate_sha256: certificateHash, document_sha256: recomputedHash },
       });
       await addEvent(service, {
         request_id: requestRow.id,
@@ -603,7 +617,7 @@ export default async function handler(req: any, res?: any) {
   } catch (error: any) {
     const message = String(error?.message || error);
     const status = Number(error?.status || 500);
-    const safeMessage = ['invalid_session','session_required','session_expired','document_not_available','payment_not_confirmed','document_not_acknowledged','signature_confirmation_required','document_integrity_failed','company_not_enabled','invalid_company_scope'].includes(message)
+    const safeMessage = ['invalid_session','session_required','session_expired','document_not_available','payment_not_confirmed','document_not_acknowledged','signature_confirmation_required','signature_face_verification_required','document_integrity_failed','company_not_enabled','invalid_company_scope'].includes(message)
       ? message
       : 'request_failed';
     return sendJson(res, { ok: false, error: safeMessage }, status);
