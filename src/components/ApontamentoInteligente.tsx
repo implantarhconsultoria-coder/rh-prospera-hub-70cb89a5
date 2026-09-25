@@ -9,6 +9,7 @@ import type { calcPayrollBreakdown } from '@/lib/calculations';
 import { dinheiroLegivel, horasLegiveis, interpretarApontamentos, type ApontamentoLido, type ComissaoModo } from '@/lib/apontamentoInteligente';
 
 type Props = {
+  autoOpen?: boolean;
   companyId: string; companyName: string; competencia: string; percentualSemanal: number;
   funcionarios: Employee[]; entries: MonthlyEntry[]; fechado: boolean; isAdmin: boolean;
   companies: Company[]; onCompanyChange: (companyId: string) => void;
@@ -22,7 +23,7 @@ const formatPercent = (percent: number) => percent.toLocaleString('pt-BR', { max
 
 const ApontamentoInteligente: React.FC<Props> = (props) => {
   const [searchParams] = useSearchParams();
-  const [aberto, setAberto] = useState(() => searchParams.get('inteligente') === '1');
+  const [aberto, setAberto] = useState(() => props.autoOpen || searchParams.get('inteligente') === '1');
   const [texto, setTexto] = useState('');
   const [linhas, setLinhas] = useState<ApontamentoLido[]>([]);
   const [analisado, setAnalisado] = useState(false);
