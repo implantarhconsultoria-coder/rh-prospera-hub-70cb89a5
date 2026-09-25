@@ -460,6 +460,7 @@ export default async function handler(req: any, res?: any) {
         employeeId: sessionRow.employee_id,
         documentId: doc.id,
         sessionHash: sessionRow.session_hash,
+        accessAuthMethod: sessionRow.auth_method,
         viewedAt: requestRow.viewed_at,
       });
 
