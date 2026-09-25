@@ -16,6 +16,7 @@ export const resolveSigningFaceEvidence = async (
     employeeId: string;
     documentId: string;
     sessionHash: string;
+    accessAuthMethod?: string;
     viewedAt: string | null;
     now?: Date;
   },
@@ -30,7 +31,7 @@ export const resolveSigningFaceEvidence = async (
   // Cadastro facial não é obrigatório por lei para todos os recibos trabalhistas.
   // Sem perfil ativo, o certificado identifica precisamente o método manual empregado.
   if (!profile?.active) return {
-    authenticationMethod: 'CPF_NASCIMENTO_CELULAR4',
+    authenticationMethod: input.accessAuthMethod || 'CPF_NASCIMENTO_CELULAR4',
     faceEventId: null,
     faceVerifiedAt: null,
     faceSnapshotSha256: null,
@@ -60,7 +61,7 @@ export const resolveSigningFaceEvidence = async (
     throw Object.assign(new Error('signature_face_verification_required'), { status: 409 });
   }
   return {
-    authenticationMethod: 'CPF_NASCIMENTO_CELULAR4+FACE_RECOGNITION',
+    authenticationMethod: `${input.accessAuthMethod || 'CPF_NASCIMENTO_CELULAR4'}+SIGNATURE_FACE_RECOGNITION`,
     faceEventId: faceEvent.id,
     faceVerifiedAt: faceEvent.created_at,
     faceSnapshotSha256: faceEvent.evidence_sha256,
