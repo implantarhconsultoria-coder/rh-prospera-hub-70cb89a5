@@ -56,6 +56,13 @@ describe('payroll — comprovação de autoria por documento', () => {
     expect(proof.faceSnapshotSha256).toBe(SHA);
   });
 
+  it('não atribui login por CPF ao empregado que entrou por reconhecimento facial', async () => {
+    const proof = await resolveSigningFaceEvidence(mockService(true, validEvent), {
+      ...input, accessAuthMethod: 'FACE_RECOGNITION',
+    });
+    expect(proof.authenticationMethod).toBe('FACE_RECOGNITION+SIGNATURE_FACE_RECOGNITION');
+  });
+
   it('não aceita evento de outro documento ou sessão', async () => {
     await expect(resolveSigningFaceEvidence(mockService(true, validEvent),
       { ...input, documentId: 'document-2' })).rejects.toThrow('signature_face_verification_required');
