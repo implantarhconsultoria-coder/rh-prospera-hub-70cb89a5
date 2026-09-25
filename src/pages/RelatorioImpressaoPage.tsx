@@ -271,7 +271,8 @@ const RelatorioImpressaoPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.emp.id} className="even:bg-gray-50">
+                    <React.Fragment key={r.emp.id}>
+                    <tr className="even:bg-gray-50">
                       <td className="border border-gray-300 px-1 py-1 font-medium">{r.emp.name || '-'}</td>
                       <td className="border border-gray-300 px-1 py-1">{r.emp.cargo || '-'}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.emp.salarioBase)}</td>
@@ -298,6 +299,7 @@ const RelatorioImpressaoPage: React.FC = () => {
                         · <strong>Líquido a receber {money(r.calc.liquido)}</strong>
                       </td>
                     </tr>
+                    </React.Fragment>
                   ))}
                   {rows.length === 0 && (
                     <tr><td colSpan={columns.length} className="border border-gray-300 px-2 py-4 text-center text-gray-500">Sem funcionários ativos para esta competência.</td></tr>
