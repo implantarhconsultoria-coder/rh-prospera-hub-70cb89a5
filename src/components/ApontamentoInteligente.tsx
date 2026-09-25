@@ -18,7 +18,8 @@ type Props = {
 const formatPercent = (percent: number) => percent.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
 
 const ApontamentoInteligente: React.FC<Props> = (props) => {
-  const [aberto, setAberto] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [aberto, setAberto] = useState(() => searchParams.get('inteligente') === '1');
   const [texto, setTexto] = useState('');
   const [linhas, setLinhas] = useState<ApontamentoLido[]>([]);
   const [analisado, setAnalisado] = useState(false);
