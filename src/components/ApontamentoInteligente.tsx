@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ClipboardPaste, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
