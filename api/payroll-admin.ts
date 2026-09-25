@@ -170,19 +170,28 @@ const buildCompleteDossier = async (service: any, sourceDoc: any) => {
   if (dossierUpload.error) throw dossierUpload.error;
 
   const indexPdf = await PDFDocument.create();
-  const page = indexPdf.addPage([595.28, 841.89]);
   const font = await indexPdf.embedFont(StandardFonts.Helvetica);
   const bold = await indexPdf.embedFont(StandardFonts.HelveticaBold);
-  page.drawText('TOPAC RH PRO - DOSSIE COMPLETO', { x: 48, y: 790, size: 16, font: bold });
-  page.drawText(`Funcionario: ${employeeName}`, { x: 48, y: 760, size: 11, font });
-  page.drawText(`Documentos assinados incluidos: ${signedEntries.length}`, { x: 48, y: 740, size: 11, font });
-  page.drawText('Regra: historico completo, sem filtro de mes/competencia.', { x: 48, y: 720, size: 11, font });
+  let page = indexPdf.addPage([595.28, 841.89]);
+  let pageNumber = 1;
+  const drawIndexHeader = () => {
+    page.drawText('TOPAC RH PRO - DOSSIE COMPLETO', { x: 48, y: 790, size: 16, font: bold });
+    page.drawText(`Funcionario: ${employeeName}`, { x: 48, y: 760, size: 11, font });
+    page.drawText(`Documentos assinados incluidos: ${signedEntries.length}`, { x: 48, y: 740, size: 11, font });
+    page.drawText(`Indice de documentos - pagina ${pageNumber}`, { x: 48, y: 720, size: 11, font });
+  };
+  drawIndexHeader();
   let y = 690;
-  for (const { doc } of signedEntries.slice(0, 32)) {
-    const line = `${String(doc.competencia || 'SEM COMPETENCIA')} - ${String(doc.document_type || 'DOCUMENTO')}`;
+  for (const { doc, signature } of signedEntries) {
+    if (y < 60) {
+      page = indexPdf.addPage([595.28, 841.89]);
+      pageNumber += 1;
+      drawIndexHeader();
+      y = 690;
+    }
+    const line = `${String(doc.competencia || 'SEM COMPETENCIA')} - ${String(doc.document_type || 'DOCUMENTO')} - ${String(signature.id).slice(0, 8)}`;
     page.drawText(line.slice(0, 90), { x: 58, y, size: 9, font });
     y -= 17;
-    if (y < 60) break;
   }
   const indexBytes = await indexPdf.save({ addDefaultPage: false, useObjectStreams: false });
   const indexUpload = await service.storage.from(PAYROLL_BUCKET).upload(
