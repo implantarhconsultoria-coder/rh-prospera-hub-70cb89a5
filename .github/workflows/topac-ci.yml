@@ -27,7 +27,9 @@ jobs:
           cache: npm
 
       - name: Install
-        run: npm ci
+        # A package-lock.json da main ja esta fora de sincronia com package.json.
+        # Executar os testes sem alterar o lock versionado nesta branch de assinatura.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Lint changed scope
         run: >-
