@@ -649,15 +649,41 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
     if (row.signature_status !== 'ASSINADO') return toast.error('O dossiê final exige assinatura concluída.');
     setLoading(true);
     try {
-      // O dossiê completo já é montado no cliente pela rotina existente,
-      // preservando todos os documentos assinados, anexos e certificados de todas as competências.
-      const result = await adminArchiveUrls(String(row.document_id || ''), companyId);
-      if (!result.holerite_url) throw new Error('Documento-base do dossiê indisponível.');
-      await mergePdfUrls(
-        [{ url: result.holerite_url, label: row.employee_name || 'Documento' }],
-        `DOSSIE_COMPLETO_${safeFile(row.employee_name || 'FUNCIONARIO')}.pdf`,
-      );
-      toast.success('Dossiê completo baixado com documentos e certificados disponíveis.');
+      // Sempre usar o servidor: o antigo fluxo local exportava somente um holerite e o rotulava como dossiê completo.
+      const result = await apiCall('dossier-url', { document_id: row.document_id });
+      if (!result.dossier_url || !result.dossier_sha256 || !result.manifest) {
+        throw new Error('Dossiê sem evidências ou arquivo de integridade.');
+      }
+      const response = await fetch(result.dossier_url, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Não foi possível baixar o dossiê completo.');
+      const pdfBytes = new Uint8Array(await response.arrayBuffer());
+      const actualHash = await sha256Browser(pdfBytes);
+      if (actualHash.toLowerCase() !== String(result.dossier_sha256).toLowerCase()) {
+        throw new Error('Integridade do dossiê divergente. Nenhum arquivo foi apresentado como conferido.');
+      }
+
+      const saveFile = (blob: Blob, filename: string) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      };
+      const base = safeFile(row.employee_name || 'FUNCIONARIO');
+      saveFile(new Blob([pdfBytes as any], { type: 'application/pdf' }), `DOSSIE_COMPLETO_${base}.pdf`);
+      saveFile(new Blob([JSON.stringify(result.manifest, null, 2)], { type: 'application/json;charset=utf-8' }),
+        `EVIDENCIAS_DOSSIE_${base}.json`);
+      if (result.index_url) {
+        const indexResponse = await fetch(result.index_url, { cache: 'no-store' });
+        if (!indexResponse.ok) throw new Error('O índice documental não foi baixado.');
+        saveFile(await indexResponse.blob(), `INDICE_DOSSIE_${base}.pdf`);
+      }
+      const divergencias = (result.manifest.files || []).filter((file: any) => file.intact === false).length;
+      if (divergencias) toast.warning(`Dossiê exportado com ${divergencias} divergência(s) de integridade identificada(s) no manifesto.`);
+      else toast.success(`Dossiê completo, índice e manifesto baixados: ${result.dossier_document_count} documento(s) assinado(s).`);
     } catch (error: any) {
       toast.error(error?.message || 'Não foi possível gerar o dossiê completo.');
     } finally {
