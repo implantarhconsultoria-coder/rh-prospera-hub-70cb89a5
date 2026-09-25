@@ -13,6 +13,7 @@ import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
 import { supabase } from '@/integrations/supabase/client';
 import { entryToRow, type MonthlyEntry } from '@/types/database';
 import FechamentoLabelsPanel from '@/components/FechamentoLabelsPanel';
+import ApontamentoInteligente from '@/components/ApontamentoInteligente';
 
 const HOURS_DOC_RE = /DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/gi;
 const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
@@ -27,7 +28,7 @@ const defaultCalendarState = (competencia: string) => {
 };
 
 const FechamentoPage: React.FC = () => {
-  const { companies, employees, entries, setEntries, getOrCreateEntries, refreshEntries, getFechamento, updateFechamento } = useApp();
+  const { companies, employees, entries, setEntries, getOrCreateEntries, refreshEntries, getFechamento, updateFechamento, userRoles, session } = useApp();
   const navigate = useNavigate();
   const initialCompetencia = currentCompetencia();
   const [viewState, setViewState] = usePersistentViewState('fechamento:principal', {
@@ -240,6 +241,22 @@ const FechamentoPage: React.FC = () => {
           <div><p className="text-sm font-bold text-foreground">VT — Vale Transporte</p><p className="text-xs text-muted-foreground">Abrir cálculo, conferência, relatórios e recibos de VT desta competência.</p></div>
         </button>
       </div>
+
+      <ApontamentoInteligente
+        companyId={selectedCompany}
+        companyName={selectedCompanyData?.name || ''}
+        competencia={competencia}
+        percentualSemanal={heSemanalPct}
+        funcionarios={compEmps}
+        entries={compEntries}
+        fechado={fechamento.status === 'fechado'}
+        isAdmin={userRoles.includes('admin')}
+        userId={session?.user?.id}
+        userEmail={session?.user?.email}
+        commissionPct={(employee, entry) => calcPayroll(employee, entry).comissaoPct}
+        hasPendingWrites={() => saving || saveQueueRef.current.size > 0}
+        onApplied={refreshEntries}
+      />
 
       <section className="card-premium overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-violet-400/20 p-4 md:flex-row md:items-center md:justify-between">
