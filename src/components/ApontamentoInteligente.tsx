@@ -4,12 +4,15 @@ import { toast } from 'sonner';
 import { ClipboardPaste, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import type { Employee, MonthlyEntry } from '@/types/database';
+import type { Company, Employee, MonthlyEntry } from '@/types/database';
+import type { calcPayrollBreakdown } from '@/lib/calculations';
 import { dinheiroLegivel, horasLegiveis, interpretarApontamentos, type ApontamentoLido, type ComissaoModo } from '@/lib/apontamentoInteligente';
 
 type Props = {
   companyId: string; companyName: string; competencia: string; percentualSemanal: number;
   funcionarios: Employee[]; entries: MonthlyEntry[]; fechado: boolean; isAdmin: boolean;
+  companies: Company[]; onCompanyChange: (companyId: string) => void;
+  calcPayroll: (employee: Employee, entry: MonthlyEntry) => ReturnType<typeof calcPayrollBreakdown>;
   userId?: string; userEmail?: string;
   commissionPct: (employee: Employee, entry: MonthlyEntry) => number;
   onApplied: () => Promise<unknown>; hasPendingWrites: () => boolean;
@@ -55,6 +58,30 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
     }
     return '';
   };
+  const simulacoes = useMemo(() => {
+    if (!analisado) return [];
+    const agrupados = new Map<string, { employee: Employee; atual: MonthlyEntry; previsto: MonthlyEntry }>();
+    for (const row of linhas) {
+      if (!row.funcionario || !row.tipo || erroDaLinha(row)) continue;
+      const atual = entradas.get(row.funcionario.id);
+      if (!atual) continue;
+      let grupo = agrupados.get(row.funcionario.id);
+      if (!grupo) {
+        grupo = { employee: row.funcionario, atual, previsto: { ...atual } };
+        agrupados.set(row.funcionario.id, grupo);
+      }
+      const campo = row.tipo === 'comissao' ? 'comissaoBase' : row.tipo;
+      const valor = row.tipo === 'comissao' ? valorBase(row) : row.horas;
+      if (valor === null || valor === undefined) continue;
+      grupo.previsto = { ...grupo.previsto,
+        [campo]: Math.round(((modoAplicacao === 'adicionar' ? Number(grupo.previsto[campo] || 0) + valor : valor)) * 1000000) / 1000000,
+      };
+    }
+    return [...agrupados.values()].sort((a, b) => a.employee.name.localeCompare(b.employee.name, 'pt-BR')).map(grupo => ({
+      ...grupo, anterior: props.calcPayroll(grupo.employee, grupo.atual),
+      calculado: props.calcPayroll(grupo.employee, grupo.previsto),
+    }));
+  }, [analisado, linhas, entradas, modoAplicacao, props.calcPayroll]);
   const falhas = analisado ? linhas.filter(row => erroDaLinha(row)) : [];
   const repetidas = analisado ? linhas.filter((row, index) => linhas.findIndex(other =>
     other.funcionario?.id === row.funcionario?.id && other.tipo === row.tipo &&
@@ -150,8 +177,16 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
       <Button type="button" variant="outline" onClick={() => setAberto(!aberto)}>{aberto ? 'Fechar janela' : 'Abrir janela inteligente'}</Button>
     </div>
     {aberto && <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">Empresa: <strong>{props.companyName}</strong> • Competência: <strong>{props.competencia}</strong>.
-        Cole uma linha por lançamento. Percentual semanal desta empresa: {formatPercent(props.percentualSemanal)}.</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex min-w-[260px] flex-col gap-1 text-xs font-semibold text-violet-200">Empresa / filial
+          <select className="h-10 rounded border border-violet-400/30 bg-background p-2 text-sm"
+            value={props.companyId} disabled={enviando}
+            onChange={event => { props.onCompanyChange(event.target.value); setAnalisado(false); setLinhas([]); }}>
+            {props.companies.map(company => <option value={company.id} key={company.id}>{company.name}</option>)}
+          </select>
+        </label>
+        <p className="text-xs text-muted-foreground">Competência: <strong>{props.competencia}</strong> • Extra semanal: {formatPercent(props.percentualSemanal)}.</p>
+      </div>
       <textarea value={texto} onChange={event => { setTexto(event.target.value); setAnalisado(false); }}
         disabled={enviando} className="min-h-[135px] w-full rounded-lg border border-violet-400/30 bg-background p-3 text-sm outline-none focus:border-violet-400"
         placeholder={'Ana Clara 2.00 ' + props.percentualSemanal + '%\nFrancinaldo 2:55 100%\nAbinadab 369,50 comissão final 1%\nAldenei 5283,40 comissão final 2%'} />
@@ -197,6 +232,30 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
             </tr>;
           })}</tbody>
         </table></div>
+        <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/[.06] p-3 space-y-2">
+          <p className="text-sm font-bold text-emerald-200">Simulação do valor a receber — por funcionário</p>
+          <p className="text-xs text-muted-foreground">Cálculo completo com salário, adicionais, horas extras, DSR, comissão, INSS, IRRF, adiantamento e descontos. Apenas prévia; ainda não foi lançado.</p>
+          {simulacoes.length === 0 && <p className="text-xs text-amber-300">Nenhum funcionário validado nesta empresa. Se os nomes são de Goiânia, selecione TOPAC Goiânia acima.</p>}
+          <div className="overflow-x-auto"><table className="w-full min-w-[830px] text-xs">
+            <thead className="border-b border-emerald-400/20 text-left"><tr>
+              <th className="p-2">Funcionário</th><th className="p-2">HE semanal</th><th className="p-2">HE 100%</th>
+              <th className="p-2">Comissão</th><th className="p-2">DSR total</th><th className="p-2">Bruto</th>
+              <th className="p-2">Líquido anterior</th><th className="p-2">Valor a receber (previsto)</th>
+            </tr></thead>
+            <tbody>{simulacoes.map(item => <tr key={item.employee.id} className="border-b border-emerald-400/10">
+              <td className="p-2 font-bold">{item.employee.name}</td>
+              <td className="p-2">{horasLegiveis(item.previsto.he50)}<br />{dinheiroLegivel(item.calculado.he50Val)}</td>
+              <td className="p-2">{horasLegiveis(item.previsto.he100)}<br />{dinheiroLegivel(item.calculado.he100Val)}</td>
+              <td className="p-2">{dinheiroLegivel(item.calculado.comissaoVal)}
+                <br /><span className="text-muted-foreground">Base {dinheiroLegivel(item.previsto.comissaoBase)}</span></td>
+              <td className="p-2">{dinheiroLegivel(item.calculado.dsrHE + item.calculado.dsrComissao)}</td>
+              <td className="p-2">{dinheiroLegivel(item.calculado.bruto)}</td>
+              <td className="p-2">{dinheiroLegivel(item.anterior.liquido)}</td>
+              <td className="p-2 text-base font-bold text-emerald-300">{dinheiroLegivel(item.calculado.liquido)}</td>
+            </tr>)}</tbody>
+          </table></div>
+          <p className="text-sm font-bold text-emerald-200">Total líquido previsto destes funcionários: {dinheiroLegivel(simulacoes.reduce((sum, item) => sum + item.calculado.liquido, 0))}</p>
+        </div>
         {props.fechado && <p className="text-sm text-amber-400">Competência fechada: lançamento bloqueado até reabertura autorizada.</p>}
         <Button disabled={enviando || props.fechado || !!falhas.length || !!repetidas.length || !linhas.length}
           onClick={confirmar}><ShieldCheck className="mr-2 h-4 w-4" />{enviando ? 'Salvando e auditando...' : 'Confirmar e lançar no fechamento'}</Button>
