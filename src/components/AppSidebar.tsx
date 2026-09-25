@@ -19,7 +19,7 @@ const menuItems: MenuItem[] = [
   { label: 'VT — Vale-transporte', icon: Receipt, path: '/admin/relatorio-vt' },
   { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
   { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade' },
-  { label: 'Apontamento Inteligente', icon: ClipboardCheck, path: '/admin/fechamento?inteligente=1' },
+  { label: 'Apontamento Inteligente', icon: ClipboardCheck, path: '/admin/apontamento-inteligente' },
 ];
 
 const operationalItems: MenuItem[] = [
