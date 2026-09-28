@@ -201,10 +201,11 @@ export const parseVehiclePdfText = (text: string, fileName = 'documento.pdf') =>
     all.match(/\bMODELO\s*\/?\s*VERSAO\b\s*[:\-]?\s*([A-Z0-9][A-Z0-9 .\/-]{1,70}?)(?=\s+\b(?:PLACA|RENAVAM|CHASSI|ANO|COR|CATEGORIA|PATRIMONIO)\b|$)/i)?.[1],
   ).trim();
 
-  const equipment = /\b(COMPRESSOR|GERADOR|EQUIPAMENTO|PLATAFORMA|BOMBA|TORRE\s+DE\s+ILUMINACAO|MOTOCOMPRESSOR)\b/.test(all);
+  const compressor = /\b(COMPRESSOR|MOTOCOMPRESSOR)\b/.test(all);
+  const equipment = /\b(GERADOR|EQUIPAMENTO|PLATAFORMA|BOMBA|TORRE\s+DE\s+ILUMINACAO)\b/.test(all);
   const bodyType = /\b(SEMI\s*-?\s*REBOQUE|REBOQUE|CARRETA|DOLLY)\b/.test(all);
-  const tipo = equipment ? 'equipamento' : 'veiculo';
-  const prefix = equipment ? 'EQUIPAMENTO' : bodyType ? 'CARROCERIA' : 'CARRO';
+  const tipo = compressor ? 'compressor' : equipment ? 'equipamento' : 'veiculo';
+  const prefix = compressor ? 'COMPRESSOR' : equipment ? 'EQUIPAMENTO' : bodyType ? 'CARROCERIA' : 'CARRO';
   const descricao = model ? `${prefix} - ${model}` : prefix;
 
   return {
@@ -222,7 +223,7 @@ export const parseVehiclePdfText = (text: string, fileName = 'documento.pdf') =>
     modelo: model,
     cor: '',
     categoria_veiculo: '',
-    tipo_veiculo: equipment ? 'equipamento' : bodyType ? 'carroceria' : 'carro',
+    tipo_veiculo: compressor ? 'compressor_locacao' : equipment ? 'equipamento' : bodyType ? 'carroceria' : 'carro',
     observacao: '',
     tipo,
   };
@@ -244,10 +245,12 @@ const mergeExtraction = (localData: any, aiData: any, clientData: any) => {
 
   const descricao = first(clientData?.descricao, aiData?.descricao, localData?.descricao, clientData?.modelo, aiData?.modelo, 'ATIVO');
   const context = normalizeText(`${descricao} ${clientData?.tipo_veiculo || ''} ${aiData?.tipo_veiculo || ''} ${localData?.tipo_veiculo || ''}`);
-  const inferredEquipment = /\b(COMPRESSOR|GERADOR|EQUIPAMENTO|PLATAFORMA|BOMBA|TORRE|MOTOCOMPRESSOR)\b/.test(context);
-  const tipo = inferredEquipment || localData?.tipo === 'equipamento' || clientData?.tipo === 'equipamento' || aiData?.tipo === 'equipamento'
-    ? 'equipamento'
-    : 'veiculo';
+  const inferredCompressor = /\b(COMPRESSOR|MOTOCOMPRESSOR)\b/.test(context)
+    || localData?.tipo === 'compressor' || clientData?.tipo === 'compressor' || aiData?.tipo === 'compressor'
+    || clientData?.tipo_veiculo === 'compressor_locacao' || aiData?.tipo_veiculo === 'compressor_locacao';
+  const inferredEquipment = /\b(GERADOR|EQUIPAMENTO|PLATAFORMA|BOMBA|TORRE)\b/.test(context)
+    || localData?.tipo === 'equipamento' || clientData?.tipo === 'equipamento' || aiData?.tipo === 'equipamento';
+  const tipo = inferredCompressor ? 'compressor' : inferredEquipment ? 'equipamento' : 'veiculo';
 
   return {
     placa,
@@ -264,7 +267,7 @@ const mergeExtraction = (localData: any, aiData: any, clientData: any) => {
     modelo: first(clientData?.modelo, clientData?.marca_modelo, aiData?.modelo, aiData?.marca_modelo, localData?.modelo),
     cor: first(clientData?.cor, aiData?.cor, localData?.cor),
     categoria_veiculo: first(clientData?.categoria_veiculo, aiData?.categoria_veiculo, localData?.categoria_veiculo),
-    tipo_veiculo: first(clientData?.tipo_veiculo, aiData?.tipo_veiculo, localData?.tipo_veiculo, tipo === 'equipamento' ? 'equipamento' : 'carro'),
+    tipo_veiculo: first(clientData?.tipo_veiculo, aiData?.tipo_veiculo, localData?.tipo_veiculo, tipo === 'compressor' ? 'compressor_locacao' : tipo === 'equipamento' ? 'equipamento' : 'carro'),
     observacao: first(clientData?.observacao, aiData?.observacao, localData?.observacao),
     tipo,
   };
@@ -445,7 +448,7 @@ export default async function handler(req: any, res: any) {
       modelo: extracted.modelo || '',
       cor: extracted.cor || '',
       categoria_veiculo: extracted.categoria_veiculo || '',
-      tipo_veiculo: extracted.tipo_veiculo || (extracted.tipo === 'equipamento' ? 'equipamento' : 'carro'),
+      tipo_veiculo: extracted.tipo_veiculo || (extracted.tipo === 'compressor' ? 'compressor_locacao' : extracted.tipo === 'equipamento' ? 'equipamento' : 'carro'),
       documento_url: pdfUrl,
       documento_nome: file.filename,
       documento_atualizado_em: now,
