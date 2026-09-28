@@ -5,6 +5,7 @@ const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
 const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
 const ADM_EMAIL = 'adm.matriz@topac.com.br';
 const ROBSON_EMAIL = 'robson@topac.com.br';
+const ANTONIO_CARLOS_PRAIA_EMAIL = 'antonio.carlos@topac.com.br';
 
 const getHeader = (req:any, name:string) => typeof req?.headers?.get === 'function' ? req.headers.get(name) : req?.headers?.[name] || req?.headers?.[name.toLowerCase()] || '';
 const getBearer = (req:any) => String(getHeader(req, 'authorization') || '').match(/^Bearer\s+(.+)$/i)?.[1] || '';
@@ -42,7 +43,13 @@ const retryEmail = async (service:any, uploadId:string) => {
 
   const counterpart = user.portal === 'principal' ? counterpartFor(String(user.email || '')) : '';
   const to = [ADM_EMAIL];
-  const cc = unique([ROBSON_EMAIL, ...(counterpart ? [counterpart] : [])]);
+  const isPraiaGrande = /praia/i.test(String(company.nome || company.codigo || ''));
+  const isFolhaFinal = upload.tipo_documento === 'folha_processada';
+  const cc = unique([
+    ROBSON_EMAIL,
+    ...(counterpart ? [counterpart] : []),
+    ...(isPraiaGrande && isFolhaFinal ? [ANTONIO_CARLOS_PRAIA_EMAIL] : []),
+  ]);
   const resendKey = clean(process.env.RESEND_API_KEY);
   const from = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>');
   const replyTo = clean(user.email || process.env.EMAIL_REPLY_TO || ADM_EMAIL);
