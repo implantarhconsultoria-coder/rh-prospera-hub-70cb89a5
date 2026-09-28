@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { getServiceClient, readBody, requireAdmin, sendJson } from '../src/server/payrollServer.js';
+import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const INBOX_BUCKET = 'contabilidade-inbox';
 const clean = (value: unknown) => String(value ?? '').trim();
@@ -160,19 +161,22 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
   return { bytes, filename, company };
 }
 
-async function sendAccountingEmail(input: { emails: string[]; companyName: string; competencia: string; filename: string; bytes: Uint8Array }) {
+async function sendAccountingEmail(service: any, input: { emails: string[]; empresaId: string; companyName: string; competencia: string; filename: string; bytes: Uint8Array }) {
   const key = clean(process.env.RESEND_API_KEY);
   if (!key || !input.emails.length) return { status: 'pendente', error: key ? 'destinatario_ausente' : 'RESEND_API_KEY ausente' };
   const configured = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM);
   const from = configured && !/@resend\.dev/i.test(configured) ? configured : 'TOPAC RH PRO <no-reply@topacrh.pro>';
-  const subject = `Apontamento liberado - ${input.companyName} - ${competenceLabel(input.competencia)}`;
+  const threadKey = buildAccountingThreadKey(input.empresaId, input.competencia);
+  const baseSubject = `[TOPAC RH PRO] FECHAMENTO DA FOLHA - ${input.companyName} - ${competenceLabel(input.competencia)}`;
+  const thread = await prepareAccountingThread(service, { threadKey, subject: baseSubject });
   const text = [
     'Prezadas,', '',
-    'O fechamento do RH foi concluido e o apontamento de Pagamento esta liberado para processamento.', '',
+    'Fica formalizado o início do processo de fechamento da folha desta competência.', '',
     `Empresa: ${input.companyName}`,
-    `Competencia: ${competenceLabel(input.competencia)}`, '',
-    'O PDF do apontamento segue anexo e o processo tambem ja esta liberado no Portal da Contabilidade.', '',
-    'Apos receber, confirme o recebimento no portal e siga com o envio dos PDFs do Pagamento.', '',
+    `Competência: ${competenceLabel(input.competencia)}`, '',
+    'O PDF do apontamento segue anexo e o processo já está liberado no Portal da Contabilidade.', '',
+    'A partir deste e-mail, toda pendência, correção, confirmação e o retorno da folha fechada deverão permanecer nesta mesma conversa.', '',
+    'Após receber, confirmem o recebimento no portal e sigam com o processamento.', '',
     'TOPAC RH PRO',
   ].join('\n');
   const response = await fetch('https://api.resend.com/emails', {
@@ -182,15 +186,27 @@ async function sendAccountingEmail(input: { emails: string[]; companyName: strin
       from,
       to: input.emails,
       reply_to: 'adm.matriz@topac.com.br',
-      subject,
+      subject: thread.subject,
       text,
-      html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827"><p>Prezadas,</p><p>O fechamento do RH foi concluído e o apontamento de <strong>Pagamento</strong> está liberado para processamento.</p><p><strong>Empresa:</strong> ${safePdfText(input.companyName)}<br><strong>Competência:</strong> ${competenceLabel(input.competencia)}</p><p>O PDF do apontamento segue anexo e o processo também já está liberado no Portal da Contabilidade.</p><p>Após receber, confirmem o recebimento no portal e sigam com o envio dos PDFs do Pagamento.</p><p>TOPAC RH PRO</p></div>`,
+      html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827"><p>Prezadas,</p><p><strong>Fica formalizado o início do processo de fechamento da folha desta competência.</strong></p><p><strong>Empresa:</strong> ${safePdfText(input.companyName)}<br><strong>Competência:</strong> ${competenceLabel(input.competencia)}</p><p>O PDF do apontamento segue anexo e o processo já está liberado no Portal da Contabilidade.</p><p>A partir deste e-mail, toda pendência, correção, confirmação e o retorno da folha fechada deverão permanecer nesta mesma conversa.</p><p>TOPAC RH PRO</p></div>`,
+      ...(Object.keys(thread.headers).length ? { headers: thread.headers } : {}),
       attachments: [{ filename: input.filename, content: Buffer.from(input.bytes).toString('base64') }],
     }),
   });
   const detail = await response.text().catch(() => '');
   if (!response.ok) return { status: 'erro', error: detail.slice(0, 800) || `HTTP ${response.status}` };
-  return { status: 'enviado', error: null };
+  const provider = detail ? JSON.parse(detail) : {};
+  const providerEmailId = provider?.id || null;
+  const messageId = await fetchResendMessageId(key, providerEmailId);
+  await saveAccountingThread(service, {
+    threadKey,
+    empresaId: input.empresaId,
+    competencia: input.competencia,
+    subject: thread.subject,
+    providerEmailId,
+    messageId,
+  });
+  return { status: 'enviado', error: null, thread_key: threadKey, provider_id: providerEmailId, message_id: messageId || null };
 }
 
 export default async function handler(req: any, res?: any) {
@@ -239,7 +255,7 @@ export default async function handler(req: any, res?: any) {
     if (storageError) throw storageError;
 
     const now = new Date().toISOString();
-    const email = await sendAccountingEmail({ emails, companyName: company.nome, competencia, filename, bytes });
+    const email = await sendAccountingEmail(service, { emails, empresaId: companyId, companyName: company.nome, competencia, filename, bytes });
     const { data: upload, error: uploadError } = await service.from('contabilidade_portal_uploads').insert({
       portal_user_id: owner.id,
       empresa_id: companyId,
