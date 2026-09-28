@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, CheckCircle2, ChevronRight, Clock3, Eye, FileCheck2,
@@ -53,6 +53,7 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
   const [selectedType, setSelectedType] = useState<ProcessType | null>(null);
   const [issueCycle, setIssueCycle] = useState<string | null>(null);
   const [issueText, setIssueText] = useState('');
+  const repairTriedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const mount = () => {
@@ -98,13 +99,41 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     if (!silent) setLoading(true);
     try {
       const result = await api('admin_state');
-      setState({
+      const nextState: AdminState = {
         competence:String(result.competence||''),
         companies:result.companies||[],
         cycles:result.cycles||[],
         documents:result.documents||[],
         uploads:result.uploads||[],
-      });
+      };
+      setState(nextState);
+
+      // Autocura segura: ciclo de Pagamento já liberado, mas sem o apontamento
+      // automático gravado. Isso cobre fechamentos que ficaram pela metade em
+      // versões antigas sem bloquear a Contabilidade.
+      const missingGenerated = nextState.cycles.filter((cycle) =>
+        cycle.tipo === 'pagamento'
+        && Boolean(cycle.apontamento_liberado_em)
+        && !nextState.uploads.some((upload) => upload.ciclo_id === cycle.id && upload.origem_tipo === 'rh_apontamento')
+        && !repairTriedRef.current.has(cycle.id),
+      );
+      for (const cycle of missingGenerated) {
+        repairTriedRef.current.add(cycle.id);
+        try {
+          const token = await authToken();
+          const response = await fetch('/api/accounting-closing-flow', {
+            method:'POST',
+            headers:{ 'content-type':'application/json', authorization:`Bearer ${token}` },
+            body:JSON.stringify({ action:'finalize', empresa_id:cycle.empresa_id, competencia:cycle.competencia }),
+          });
+          const repaired = await response.json().catch(() => ({}));
+          if (response.ok && repaired?.ok) {
+            window.setTimeout(() => void load(true), 500);
+          }
+        } catch (repairError) {
+          console.warn('[contabilidade][repair-closing]', repairError);
+        }
+      }
     } catch (error:any) {
       if (!silent) toast.error(error?.message || 'Não foi possível carregar o fluxo da folha.');
     } finally {
