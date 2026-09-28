@@ -84,11 +84,17 @@ export default async function handler(req: any, res?: any) {
   try {
     await enviarEmail(email, String(data.nome || 'Operador'), String(data.codigo || ''));
   } catch (mailError: any) {
+    // Se o e-mail falhar, invalida o código recém-gerado para não deixar
+    // o operador com um código ativo que ele nunca recebeu.
+    try {
+      await client.rpc('operador_operacao_invalidar_codigo', { p_operador_id: body.operador_id });
+    } catch (rollbackError) {
+      console.error('[operator-code] falha ao invalidar código após erro de e-mail', rollbackError);
+    }
     return send(res, {
       ok: false,
       error: mailError?.message || 'falha_envio_email',
-      codigo_gerado: true,
-      codigo_hint: data.codigo_hint || null,
+      codigo_gerado: false,
     }, 502);
   }
 
