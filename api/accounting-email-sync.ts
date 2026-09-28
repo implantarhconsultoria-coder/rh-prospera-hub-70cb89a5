@@ -1,5 +1,13 @@
 import { getServiceClient, requireAdmin, sendJson, sha256 } from '../src/server/payrollServer.js';
 import { accountingEmailProviderStatus, readAccountingMailbox } from '../src/server/accountingEmailProviders.js';
+import {
+  extractCnpj,
+  extractCompetence,
+  extractCpf,
+  matchCompanySafely,
+  matchPersonSafely,
+  normalizeAccountingText,
+} from '../src/server/accountingCentralRules.js';
 
 const INBOX_BUCKET = 'contabilidade-inbox';
 
@@ -24,6 +32,28 @@ const logEvent = async (service: any, mensagemId: string, documentoId: string | 
   if (error) console.warn('[accounting-email-sync][event]', error.message);
 };
 
+type EmailCategory = 'FOLHA' | 'RESCISAO' | 'ADMISSAO' | 'FERIAS' | 'PONTO_HE' | 'ATESTADO' | 'BENEFICIOS' | 'CONTABILIDADE' | 'GUIAS_ENCARGOS' | 'OUTRO';
+
+const classifyEmail = (value: string): { category: EmailCategory; relevant: boolean; confidence: number } => {
+  const text = normalizeAccountingText(value);
+  const has = (...terms: string[]) => terms.some((term) => text.includes(normalizeAccountingText(term)));
+
+  if (has('GUIA FGTS','GUIA DO FGTS','DARF','DCTFWEB','GRRF','GPS PREVIDENCIA','ENCARGOS SOCIAIS','GUIA DE RECOLHIMENTO')) {
+    return { category:'GUIAS_ENCARGOS', relevant:false, confidence:0.99 };
+  }
+  if (has('RESCISAO','DESLIGAMENTO','DEMISSAO','AVISO PREVIO','TRCT')) return { category:'RESCISAO', relevant:true, confidence:0.97 };
+  if (has('ADMISSAO','CONTRATACAO','CONTRATO DE TRABALHO','FICHA DE REGISTRO','REGISTRO DE EMPREGADO')) return { category:'ADMISSAO', relevant:true, confidence:0.96 };
+  if (has('FERIAS','AVISO DE FERIAS','RECIBO DE FERIAS')) return { category:'FERIAS', relevant:true, confidence:0.96 };
+  if (has('ATESTADO','AFASTAMENTO','ATESTADO MEDICO','INSS','CID')) return { category:'ATESTADO', relevant:true, confidence:0.94 };
+  if (has('HORAS EXTRAS','HORA EXTRA','BANCO DE HORAS','REGISTRO DE PONTO','ESPELHO DE PONTO','JORNADA')) return { category:'PONTO_HE', relevant:true, confidence:0.93 };
+  if (has('VALE TRANSPORTE','VALE REFEICAO','VALE ALIMENTACAO','VR','VT','BENEFICIO')) return { category:'BENEFICIOS', relevant:true, confidence:0.90 };
+  if (has('FOLHA DE PAGAMENTO','FECHAMENTO DA FOLHA','FOLHA PROCESSADA','HOLERITE','CONTRACHEQUE','RECIBO DE PAGAMENTO','DEMONSTRATIVO DE PAGAMENTO')) {
+    return { category:'FOLHA', relevant:true, confidence:0.98 };
+  }
+  if (has('CONTABILIDADE','ESOCIAL','DEPARTAMENTO PESSOAL','DP ')) return { category:'CONTABILIDADE', relevant:true, confidence:0.76 };
+  return { category:'OUTRO', relevant:false, confidence:0.25 };
+};
+
 export default async function handler(req: any, res?: any) {
   if (!['GET', 'POST'].includes(String(req?.method || 'GET').toUpperCase())) return sendJson(res, { ok: false, error: 'method_not_allowed' }, 405);
   try {
@@ -33,8 +63,23 @@ export default async function handler(req: any, res?: any) {
       return sendJson(res, { ok: false, error: 'accounting_email_not_configured', provider: providerStatus }, 409);
     }
 
+    const [{ data: companies, error: companiesError }, { data: employees, error: employeesError }] = await Promise.all([
+      service.from('empresas').select('id,nome,razao_social,cnpj'),
+      service.from('funcionarios').select('id,nome,cpf,empresa_id,company_id,data_admissao,status,ativo'),
+    ]);
+    if (companiesError) throw companiesError;
+    if (employeesError) throw employeesError;
+
     const messages = await readAccountingMailbox();
-    const result = { scanned: messages.length, created_messages: 0, created_pdfs: 0, duplicate_pdfs: 0, ignored_attachments: 0, errors: [] as string[] };
+    const result = {
+      scanned: messages.length,
+      created_messages: 0,
+      relevant_messages: 0,
+      created_pdfs: 0,
+      duplicate_pdfs: 0,
+      ignored_attachments: 0,
+      errors: [] as string[],
+    };
 
     for (const email of messages) {
       try {
@@ -43,7 +88,51 @@ export default async function handler(req: any, res?: any) {
         if (existingError) throw existingError;
         if (existingMessage) continue;
 
+        const attachmentNames = email.attachments.map((attachment) => attachment.name).join(' ');
+        const intelligenceText = [email.subject, email.bodyPreview, attachmentNames].filter(Boolean).join('\n');
+        const classification = classifyEmail(intelligenceText);
+        const companyMatch = matchCompanySafely(intelligenceText, email.subject, (companies || []) as any[]);
+        const companyId = companyMatch.row && companyMatch.confidence >= 0.90 ? companyMatch.row.id : null;
+        const employeeMatch = matchPersonSafely(intelligenceText, companyId, (employees || []) as any[]);
+        const employeeAccepted = !!employeeMatch.row && (
+          employeeMatch.method === 'CPF'
+          || (companyId && employeeMatch.confidence >= 0.93)
+        );
+        const employee = employeeAccepted ? employeeMatch.row : null;
+        const competence = extractCompetence(intelligenceText);
+        const cpf = extractCpf(intelligenceText);
+        const cnpj = extractCnpj(intelligenceText);
         const pdfParts = email.attachments.filter((attachment) => isPdf(attachment.name, attachment.contentType));
+
+        const metadata = {
+          ...(email.metadata || {}),
+          integration_mode: mode,
+          central_mode: 'INTELLIGENT_EMAIL_CENTER_V1',
+          read_only: true,
+          body_preview: String(email.bodyPreview || '').slice(0, 1500),
+          categoria: classification.category,
+          categoria_confianca: classification.confidence,
+          relevante: classification.relevant,
+          attention_status: classification.relevant ? 'PENDENTE' : 'IGNORADO',
+          competencia: competence,
+          empresa_id: companyId,
+          empresa_nome: companyId ? (companyMatch.row as any)?.nome || (companyMatch.row as any)?.razao_social || null : null,
+          empresa_match: { method: companyMatch.method, confidence: companyMatch.confidence, reason: companyMatch.reason },
+          funcionario_id: employee?.id || null,
+          funcionario_nome: employee?.nome || null,
+          funcionario_match: { method: employeeMatch.method, confidence: employeeMatch.confidence, reason: employeeMatch.reason },
+          cpf_detectado: cpf,
+          cnpj_detectado: cnpj,
+          automatic_context_linking: !!companyId || !!employee,
+          automatic_downstream_import: false,
+          attachments: email.attachments.map((attachment) => ({
+            name: attachment.name,
+            content_type: attachment.contentType,
+            size: attachment.size,
+            pdf: isPdf(attachment.name, attachment.contentType),
+          })),
+        };
+
         const { data: messageRow, error: messageError } = await service.from('contabilidade_email_mensagens').insert({
           provider: email.provider,
           provider_message_id: email.providerMessageId,
@@ -51,27 +140,30 @@ export default async function handler(req: any, res?: any) {
           remetente: email.sender,
           assunto: email.subject,
           recebido_em: email.receivedAt,
-          status: pdfParts.length ? 'RECEBIDO' : 'IGNORADO',
+          status: 'RECEBIDO',
           total_anexos: email.attachments.length,
           total_pdfs: pdfParts.length,
-          metadata: {
-            ...(email.metadata || {}),
-            integration_mode: mode,
-            central_mode: 'PDF_COLLECTOR_ONLY',
-            automatic_employee_linking: false,
-            attachments: email.attachments.map((attachment) => ({ name: attachment.name, content_type: attachment.contentType, size: attachment.size, pdf: isPdf(attachment.name, attachment.contentType) })),
-          },
-          processado_em: pdfParts.length ? null : new Date().toISOString(),
+          metadata,
+          processado_em: null,
         }).select('*').single();
         if (messageError) throw messageError;
-        result.created_messages += 1;
-        result.ignored_attachments += email.attachments.length - pdfParts.length;
-        await logEvent(service, messageRow.id, null, 'EMAIL_RECEBIDO', { remetente: email.sender, assunto: email.subject, anexos: email.attachments.length, pdfs: pdfParts.length, mode: 'PDF_COLLECTOR_ONLY' });
 
-        if (!pdfParts.length) {
-          await logEvent(service, messageRow.id, null, 'EMAIL_IGNORADO_SEM_PDF', { reason: 'Nenhum anexo PDF encontrado.' });
-          continue;
-        }
+        result.created_messages += 1;
+        if (classification.relevant) result.relevant_messages += 1;
+        result.ignored_attachments += email.attachments.length - pdfParts.length;
+
+        await logEvent(service, messageRow.id, null, 'EMAIL_RECEBIDO', {
+          remetente: email.sender,
+          assunto: email.subject,
+          categoria: classification.category,
+          relevante: classification.relevant,
+          empresa_id: companyId,
+          funcionario_id: employee?.id || null,
+          competencia: competence,
+          anexos: email.attachments.length,
+          pdfs: pdfParts.length,
+          mode: 'INTELLIGENT_EMAIL_CENTER_V1',
+        });
 
         let emailHadError = false;
 
@@ -97,7 +189,7 @@ export default async function handler(req: any, res?: any) {
           let storagePath = '';
           let duplicateOf: string | null = null;
           let status = 'PROCESSADO';
-          let reason = 'PDF coletado do e-mail e disponibilizado na Central. Nenhum vínculo automático com funcionário ou módulo de RH foi realizado.';
+          let reason = 'PDF coletado do e-mail e armazenado na Central. Nenhum lançamento em módulos de RH foi realizado.';
 
           if (prior) {
             storageBucket = prior.storage_bucket;
@@ -123,12 +215,27 @@ export default async function handler(req: any, res?: any) {
             tamanho_bytes: attachment.bytes.byteLength,
             status,
             duplicado_de: duplicateOf,
+            empresa_id: companyId,
+            funcionario_id: employee?.id || null,
+            cpf_detectado: cpf,
+            nome_detectado: employee?.nome || null,
+            cnpj_detectado: cnpj,
+            competencia: competence,
+            confianca: employee ? Math.max(companyMatch.confidence, employeeMatch.confidence) : companyMatch.confidence || classification.confidence,
+            metodo_vinculo: employee ? employeeMatch.method : companyId ? companyMatch.method : 'NAO_IDENTIFICADO',
             motivo_decisao: reason,
             decisao: 'AUTOMATICA',
           }).select('*').single();
           if (docError) throw docError;
           result.created_pdfs += 1;
-          await logEvent(service, messageRow.id, doc.id, status === 'DUPLICADO' ? 'ANEXO_DUPLICADO' : 'PDF_COLETADO', { arquivo: attachment.name, sha256: sourceHash, duplicate_of: duplicateOf, mode: 'PDF_COLLECTOR_ONLY' });
+          await logEvent(service, messageRow.id, doc.id, status === 'DUPLICADO' ? 'ANEXO_DUPLICADO' : 'PDF_COLETADO', {
+            arquivo: attachment.name,
+            sha256: sourceHash,
+            duplicate_of: duplicateOf,
+            empresa_id: companyId,
+            funcionario_id: employee?.id || null,
+            mode: 'INTELLIGENT_EMAIL_CENTER_V1',
+          });
         }
 
         await service.from('contabilidade_email_mensagens').update({
@@ -141,7 +248,7 @@ export default async function handler(req: any, res?: any) {
       }
     }
 
-    return sendJson(res, { ok: true, provider: providerStatus, mode: 'PDF_COLLECTOR_ONLY', result });
+    return sendJson(res, { ok: true, provider: providerStatus, mode: 'INTELLIGENT_EMAIL_CENTER_V1', read_only: true, result });
   } catch (error: any) {
     console.error('[accounting-email-sync]', error);
     return sendJson(res, { ok: false, error: String(error?.message || error), details: error?.details || null }, Number(error?.status || 500));

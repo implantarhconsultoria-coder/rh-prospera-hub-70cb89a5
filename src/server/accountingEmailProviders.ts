@@ -13,6 +13,7 @@ export type AccountingEmailMessage = {
   sender: string;
   subject: string;
   receivedAt: string;
+  bodyPreview?: string;
   attachments: AccountingEmailAttachment[];
   metadata?: Record<string, unknown>;
 };
@@ -69,7 +70,7 @@ const readGmail = async (): Promise<AccountingEmailMessage[]> => {
   const mailbox = env('ACCOUNTING_GMAIL_MAILBOX') || 'me';
   const userId = encodeURIComponent(mailbox);
   const auth = { authorization: `Bearer ${token}` };
-  const query = encodeURIComponent(`has:attachment newer_than:${daysLookback()}d`);
+  const query = encodeURIComponent(`newer_than:${daysLookback()}d`);
   const list = await fetchJson(`https://gmail.googleapis.com/gmail/v1/users/${userId}/messages?q=${query}&maxResults=${maxMessages()}`, { headers: auth });
   const output: AccountingEmailMessage[] = [];
 
@@ -95,6 +96,7 @@ const readGmail = async (): Promise<AccountingEmailMessage[]> => {
     output.push({
       provider: 'GMAIL', providerMessageId: id, mailbox, sender: headers.from || '', subject: headers.subject || '',
       receivedAt: headers.date ? new Date(headers.date).toISOString() : new Date(Number(full.internalDate || Date.now())).toISOString(),
+      bodyPreview: String(full.snippet || ''),
       attachments,
       metadata: { thread_id: full.threadId || null, history_id: full.historyId || null },
     });
@@ -122,8 +124,8 @@ const readMicrosoft = async (): Promise<AccountingEmailMessage[]> => {
   const auth = { authorization: `Bearer ${token}` };
   const since = new Date(Date.now() - daysLookback() * 86400000).toISOString();
   const params = new URLSearchParams({
-    '$filter': `hasAttachments eq true and receivedDateTime ge ${since}`,
-    '$select': 'id,subject,from,receivedDateTime,hasAttachments,internetMessageId',
+    '$filter': `receivedDateTime ge ${since}`,
+    '$select': 'id,subject,from,receivedDateTime,hasAttachments,internetMessageId,bodyPreview',
     '$orderby': 'receivedDateTime desc',
     '$top': String(maxMessages()),
   });
@@ -149,7 +151,9 @@ const readMicrosoft = async (): Promise<AccountingEmailMessage[]> => {
     output.push({
       provider: 'MICROSOFT', providerMessageId: id, mailbox,
       sender: String(message?.from?.emailAddress?.address || message?.from?.emailAddress?.name || ''),
-      subject: String(message.subject || ''), receivedAt: String(message.receivedDateTime || new Date().toISOString()), attachments,
+      subject: String(message.subject || ''), receivedAt: String(message.receivedDateTime || new Date().toISOString()),
+      bodyPreview: String(message.bodyPreview || ''),
+      attachments,
       metadata: { internet_message_id: message.internetMessageId || null },
     });
   }
