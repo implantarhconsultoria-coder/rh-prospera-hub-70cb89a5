@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bus, CheckCircle2, Eye, Pencil, Printer, Save, Settings2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ const safeFile = (value: string) => value
 const RelatorioVTPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, session } = useApp();
   const correcoes = useRecibosCorrecoes({ tipo: 'vt' });
+  const navigate = useNavigate();
 
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [diasPagos, setDiasPagos] = useState(String(getWorkingDays(new Date().toISOString().slice(0, 7))));
@@ -332,6 +334,30 @@ const RelatorioVTPage: React.FC = () => {
     downloadPdfBlob(getPackageBlob(), buildPdfFileName('VT', 'Relatorio e Recibos', competenciaPdfPart(competencia)));
   };
 
+  const handlePrintReportOnly = () => {
+    if (!generatedBlocks.length) return toast.error('Gere o VT primeiro.');
+    const ids = generatedBlocks.map(block => block.company.id);
+    const params = new URLSearchParams({
+      empresas: ids.join(','),
+      competencia,
+      diasUteis: String(Math.max(0, Number(diasPagos || 0))),
+    });
+    navigate(`/relatorio-vt-impressao?${params.toString()}`);
+  };
+
+  const handlePrintReceiptsOnly = () => {
+    if (!generatedBlocks.length) return toast.error('Gere o VT primeiro.');
+    const ids = generatedBlocks.map(block => block.company.id);
+    const params = new URLSearchParams({
+      formato: 'vt',
+      competencia,
+      empresas: ids.join(','),
+      diasUteis: String(Math.max(0, Number(diasPagos || 0))),
+    });
+    if (dataPagamento) params.set('dataPagamento', dataPagamento);
+    window.open(`/recibos-beneficio?${params.toString()}`, '_blank');
+  };
+
   const handleCorrectionSave = async (payload: any) => {
     await correcoes.upsert(payload);
     if (!editing || !session?.user?.id) return;
@@ -426,9 +452,11 @@ const RelatorioVTPage: React.FC = () => {
               <p className="text-xs text-muted-foreground mt-1">Relatório e recibos estão prontos. Os recibos já foram enviados ao fluxo de Assinatura Digital; o Histórico só recebe depois da assinatura.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={handlePreview}><Eye className="w-4 h-4 mr-2" />Visualizar</Button>
-              <Button variant="outline" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" />Imprimir</Button>
-              <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" />Salvar PDF</Button>
+              <Button variant="outline" onClick={handlePreview}><Eye className="w-4 h-4 mr-2" />Visualizar tudo</Button>
+              <Button variant="outline" onClick={handlePrintReportOnly}><Printer className="w-4 h-4 mr-2" />Só relatório</Button>
+              <Button variant="outline" onClick={handlePrintReceiptsOnly}><Printer className="w-4 h-4 mr-2" />Só recibos</Button>
+              <Button variant="outline" onClick={handlePrint}><Printer className="w-4 h-4 mr-2" />Imprimir tudo</Button>
+              <Button onClick={handleSave}><Save className="w-4 h-4 mr-2" />Salvar PDF completo</Button>
             </div>
           </div>
 
