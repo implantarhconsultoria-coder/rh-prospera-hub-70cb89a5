@@ -1,5 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
 import { assertCompanyEnabled, readBody, requireAdmin, sendJson } from '../src/server/payrollServer.js';
+import { loadPdfJsNode } from '../src/server/pdfJsNode.js';
 
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 
@@ -54,7 +55,7 @@ export default async function handler(req: any, res?: any) {
 
     const bytes = new Uint8Array(raw);
     const sourceDoc = await PDFDocument.load(new Uint8Array(bytes), { ignoreEncryption: true });
-    const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjs: any = await loadPdfJsNode();
     const loading = pdfjs.getDocument({
       data: new Uint8Array(bytes),
       isEvalSupported: false,
