@@ -12,11 +12,23 @@ const installCanvasGlobals = async () => {
   if (typeof scope.Path2D === 'undefined' && canvas.Path2D) scope.Path2D = canvas.Path2D;
 };
 
+const installPdfWorker = async () => {
+  const scope = globalThis as any;
+  if (scope.pdfjsWorker?.WorkerMessageHandler) return;
+
+  // Import explícito: força a Vercel a incluir o worker no bundle da Function.
+  // PDF.js em Node usa esse módulo como "fake worker".
+  const workerModule: any = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs');
+  scope.pdfjsWorker = workerModule;
+};
+
 export const loadPdfJsNode = async () => {
   if (!pdfJsPromise) {
     pdfJsPromise = (async () => {
       await installCanvasGlobals();
-      return import('pdfjs-dist/legacy/build/pdf.mjs');
+      await installPdfWorker();
+      const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      return pdfjs;
     })();
   }
   return pdfJsPromise;
