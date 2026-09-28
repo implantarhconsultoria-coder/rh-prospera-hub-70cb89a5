@@ -33,6 +33,8 @@ export type EmailPdfDraft = {
   moduleOrigin?: string;
   documentId?: string;
   documentName?: string;
+  threadKey?: string;
+  closeThread?: boolean;
   afterSend?: () => Promise<void> | void;
 };
 
@@ -226,6 +228,8 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
         moduleOrigin: draft.moduleOrigin || 'documentos',
         documentId: draft.documentId,
         documentName: draft.documentName || draft.attachmentName || attachments.map((item) => item.documentName || item.attachmentName).join('; '),
+        threadKey: draft.threadKey,
+        closeThread: draft.closeThread,
         authToken: session?.access_token,
       });
       try { await draft.afterSend?.(); } catch (historyError) {
