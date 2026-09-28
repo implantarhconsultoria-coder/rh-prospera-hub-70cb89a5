@@ -1186,7 +1186,9 @@ const ApontamentoContabilidadePage: React.FC = () => {
     setEmailPdfDraft({
       to: para,
       cc,
-      subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
+      subject: `[TOPAC RH PRO] FECHAMENTO DA FOLHA - ${company.name} - ${formatCompetencia(competencia)}`,
+      threadKey: `folha:${company.id}:${competencia}`,
+      moduleOrigin: 'contabilidade_folha',
       body:
         `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n` +
