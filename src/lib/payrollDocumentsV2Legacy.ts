@@ -1,9 +1,8 @@
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfWorkerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { jsPDF } from 'jspdf';
 
-// PDF.js 5 usa Promise.withResolvers em partes do runtime. Alguns WebViews/Safari
-// ainda não expõem a função mesmo quando o restante da aplicação funciona.
+// PDF.js só é carregado quando realmente necessário. Isso evita que ambientes
+// que não expõem DOMMatrix durante a avaliação inicial quebrem a tela inteira.
 const PromiseCtor = Promise as any;
 if (typeof PromiseCtor.withResolvers !== 'function') {
   PromiseCtor.withResolvers = () => {
@@ -17,9 +16,24 @@ if (typeof PromiseCtor.withResolvers !== 'function') {
   };
 }
 
-// Vite resolve o worker como asset real no build. Evita montar URL a partir de
-// um bare specifier em runtime, comportamento que varia entre WebKit/WebView.
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+let pdfJsBrowserPromise: Promise<any> | null = null;
+const getPdfJsBrowser = async () => {
+  if (!pdfJsBrowserPromise) {
+    pdfJsBrowserPromise = (async () => {
+      const scope = globalThis as any;
+      if (typeof scope.DOMMatrix === 'undefined' && typeof scope.WebKitCSSMatrix !== 'undefined') {
+        scope.DOMMatrix = scope.WebKitCSSMatrix;
+      }
+      if (typeof scope.DOMMatrix === 'undefined') {
+        throw new Error('Leitor de PDF indisponível neste navegador. Atualize a página e tente novamente.');
+      }
+      const lib: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      lib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+      return lib;
+    })();
+  }
+  return pdfJsBrowserPromise;
+};
 
 type PdfTextItem = {
   str?: string;
@@ -451,6 +465,7 @@ export const extractPdfPages = async (bytes: Uint8Array): Promise<StructuredPdfP
   let loading: any;
   let pdf: any;
   try {
+    const pdfjsLib = await getPdfJsBrowser();
     loading = pdfjsLib.getDocument({ data: new Uint8Array(bytes) });
     pdf = await loading.promise;
     const pages: StructuredPdfPage[] = [];
@@ -533,6 +548,7 @@ const findEmployee = (
 };
 
 const pagesToPdfBytes = async (source: Uint8Array, pageNumbers: number[]) => {
+  const pdfjsLib = await getPdfJsBrowser();
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(source) }).promise;
   let out: jsPDF | null = null;
   for (const pageNumber of pageNumbers) {
@@ -746,6 +762,7 @@ export const extractPdfFilesFromZip = async (file: File): Promise<File[]> => {
 };
 
 export const mergePdfUrls = async (sources: Array<{ url: string; label?: string }>, filename: string) => {
+  const pdfjsLib = await getPdfJsBrowser();
   let out: jsPDF | null = null;
   for (const source of sources) {
     const response = await fetch(source.url, { cache: 'no-store' });
