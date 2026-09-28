@@ -1,3 +1,4 @@
+import { loadPdfJsNode } from './pdfJsNode.js';
 const clean = (value: unknown) => String(value || '').trim();
 const digits = (value: unknown) => clean(value).replace(/\D/g, '');
 const normalize = (value: unknown) => ` ${clean(value)
@@ -74,7 +75,7 @@ export async function validateAccountingPdfCompany(
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!bytes.length) throw new Error('pdf_vazio');
 
-  const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfjs: any = await loadPdfJsNode();
   const loading = pdfjs.getDocument({
     data: new Uint8Array(bytes),
     isEvalSupported: false,
