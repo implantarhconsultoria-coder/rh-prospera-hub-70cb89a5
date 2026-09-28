@@ -273,6 +273,29 @@ export default async function handler(req: any, res?: any) {
 
     const now = new Date().toISOString();
     const email = await sendAccountingEmail(service, { emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes });
+
+    try {
+      await service.from('email_envios_log').insert({
+        user_id: user.id,
+        usuario_nome: user.email || 'Administrador',
+        email_corporativo_usado: 'adm.matriz@topac.com.br',
+        email_remetente: clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>'),
+        reply_to: 'adm.matriz@topac.com.br',
+        provider: 'resend',
+        modulo_origem: 'contabilidade_fechamento',
+        documento_id: null,
+        documento_nome: filename,
+        destinatarios: emails.join('; '),
+        cc: cc.join('; '),
+        assunto: `[TOPAC RH PRO] FECHAMENTO DA FOLHA - ${company.nome} - ${competenceLabel(competencia)}`,
+        status: email.status === 'enviado' ? 'enviado' : 'erro',
+        erro: email.status === 'enviado' ? null : ('error' in email ? email.error || null : null),
+        enviado_em: new Date().toISOString(),
+      });
+    } catch (logError) {
+      console.warn('[accounting-closing-flow] email log failed', logError);
+    }
+
     const { data: upload, error: uploadError } = await service.from('contabilidade_portal_uploads').insert({
       portal_user_id: owner.id,
       empresa_id: companyId,
