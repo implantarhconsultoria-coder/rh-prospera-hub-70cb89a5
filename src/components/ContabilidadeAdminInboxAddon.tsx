@@ -42,7 +42,7 @@ export default function ContabilidadeAdminInboxAddon() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [emails, setEmails] = useState<EmailRow[]>([]);
-  const [provider, setProvider] = useState<Provider>({ configured: false, mailbox: 'adm.matriz@topac.com.br' });
+  const [provider, setProvider] = useState<Provider>({ configured: false, mailbox: 'centralrh@mleurob.resend.app' });
 
   const api = useCallback(async (payload: Record<string, unknown>, path = '/api/accounting-email-admin') => {
     const session = await supabase.auth.getSession();
@@ -158,7 +158,7 @@ export default function ContabilidadeAdminInboxAddon() {
                     : (provider.configured ? 'Microsoft 365 conectado' : 'Microsoft 365 aguardando autorização')}
                 </div>
                 <div className="text-xs text-zinc-500">
-                  {provider.mailbox || 'centralrh@topacrh.pro'} · somente leitura
+                  {provider.mailbox || 'centralrh@mleurob.resend.app'} · somente leitura
                 </div>
               </div>
               <span className="text-xs font-bold">{provider.configured ? 'ATIVO' : 'PENDENTE'}</span>
