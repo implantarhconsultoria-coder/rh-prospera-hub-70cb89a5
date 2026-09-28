@@ -27,6 +27,7 @@ interface Ativo {
   ano_modelo: string;
   vencimento_ipva: string | null;
   vencimento_licenciamento: string | null;
+  tipo_veiculo?: string;
 }
 
 interface Manutencao {
@@ -47,6 +48,30 @@ interface Manutencao {
 }
 
 type FilterType = 'todos' | 'ipva_vencer' | 'ipva_vencido' | 'lic_vencer' | 'lic_vencido';
+type AssetGroup = 'frota' | 'compressores' | 'outros';
+type UnitFilter = 'todas' | 'matriz' | 'praia' | 'goiania';
+type ReportType = 'geral' | 'ipva' | 'licenciamento';
+
+const getAssetGroup = (a: Partial<Ativo>): AssetGroup => {
+  const context = normalizePlainText(`${a.tipo || ''} ${a.tipo_veiculo || ''} ${a.descricao || ''}`);
+  if (/COMPRESSOR|MOTOCOMPRESSOR|COMPRESSOR_LOCACAO/.test(context) || a.tipo === 'compressor') return 'compressores';
+  if (a.tipo === 'veiculo') return 'frota';
+  return 'outros';
+};
+
+const getUnit = (empresa: string): UnitFilter => {
+  const value = normalizePlainText(empresa);
+  if (/PRAIA/.test(value)) return 'praia';
+  if (/GOIAN|GYN/.test(value)) return 'goiania';
+  return 'matriz';
+};
+
+const unitLabel = (unit: UnitFilter, empresa?: string) =>
+  unit === 'praia' ? 'PRAIA GRANDE'
+    : unit === 'goiania' ? 'GOIÂNIA'
+      : empresa && normalizePlainText(empresa) && !/TOPAC MATRIZ/.test(normalizePlainText(empresa))
+        ? normalizePlainText(empresa)
+        : 'MATRIZ';
 
 const getAlertStatus = (dateStr: string | null): 'em_dia' | 'a_vencer' | 'vencido' | 'sem_data' => {
   if (!dateStr) return 'sem_data';
@@ -230,6 +255,10 @@ const DocumentosVeiculosPage: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<{ url: string; descricao: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>('todos');
+  const [assetGroup, setAssetGroup] = useState<AssetGroup>('frota');
+  const [unitFilter, setUnitFilter] = useState<UnitFilter>('todas');
+  const [reportType, setReportType] = useState<ReportType>('geral');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Ativo>>({});
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([]);
@@ -248,7 +277,7 @@ const DocumentosVeiculosPage: React.FC = () => {
   });
 
   const fetchAtivos = async () => {
-    const { data, error } = await supabase.from('ativos').select('*').in('tipo', ['veiculo', 'equipamento']).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('ativos').select('*').in('tipo', ['veiculo', 'compressor', 'equipamento']).order('created_at', { ascending: false });
     if (error) {
       if (isMissingSchema(error)) {
         setAtivosErro('A base da Frota não está disponível no Supabase. Nenhum documento será persistido localmente.');
@@ -545,7 +574,8 @@ const handleMultiUpload = async (files: FileList) => {
   }, [manutencoes, search]);
 
   const filtered = useMemo(() => {
-    let list = ativos;
+    let list = ativos.filter(a => getAssetGroup(a) === assetGroup);
+    if (unitFilter !== 'todas') list = list.filter(a => getUnit(a.empresa) === unitFilter);
     if (search) {
       const q = search.toLowerCase();
         list = list.filter(a =>
@@ -561,7 +591,7 @@ const handleMultiUpload = async (files: FileList) => {
     if (filterType === 'lic_vencer') list = list.filter(a => getAlertStatus(a.vencimento_licenciamento) === 'a_vencer');
     if (filterType === 'lic_vencido') list = list.filter(a => getAlertStatus(a.vencimento_licenciamento) === 'vencido');
     return list;
-  }, [ativos, search, filterType]);
+  }, [ativos, search, filterType, assetGroup, unitFilter]);
 
   const alertCounts = useMemo(() => ({
     ipvaVencer: ativos.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer').length,
@@ -571,8 +601,22 @@ const handleMultiUpload = async (files: FileList) => {
   }), [ativos]);
 
   const handlePrintBatch = () => {
-    if (filtered.length === 0) { toast.error('Nenhum veiculo para imprimir'); return; }
-    const rows = filtered.map(a => `<tr>
+    if (assetGroup !== 'frota') { toast.error('Relatórios de IPVA/Licenciamento são exclusivos da Frota de Veículos.'); return; }
+    const selected = selectedIds.size > 0 ? filtered.filter(a => selectedIds.has(a.id)) : filtered;
+    if (selected.length === 0) { toast.error('Nenhum veículo para imprimir'); return; }
+    const reportItems = reportType === 'ipva'
+      ? selected
+      : reportType === 'licenciamento'
+        ? selected
+        : selected;
+    const grouped = reportItems.reduce<Record<string, Ativo[]>>((acc, ativo) => {
+      const unit = getUnit(ativo.empresa);
+      const key = unitLabel(unit, ativo.empresa);
+      (acc[key] ||= []).push(ativo);
+      return acc;
+    }, {});
+    const sections = Object.entries(grouped).map(([groupName, items], groupIndex) => {
+      const rows = items.map(a => `<tr>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.descricao}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '-'}</td>
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.patrimonio || '-'}</td>
@@ -584,21 +628,39 @@ const handleMultiUpload = async (files: FileList) => {
       <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.empresa}</td>
     </tr>`).join('');
 
-    const filterLabel = filterType === 'todos' ? 'Todos os Veiculos' :
-      filterType === 'ipva_vencer' ? 'IPVA a Vencer' :
-      filterType === 'ipva_vencido' ? 'IPVA Vencido' :
-      filterType === 'lic_vencer' ? 'Licenciamento a Vencer' : 'Licenciamento Vencido';
+      const columns = reportType === 'ipva'
+        ? '<th>Descrição</th><th>Placa</th><th>RENAVAM</th><th>Final</th><th>Venc. IPVA</th><th>Empresa</th>'
+        : reportType === 'licenciamento'
+          ? '<th>Descrição</th><th>Placa</th><th>RENAVAM</th><th>Final</th><th>Venc. Licenciamento</th><th>Empresa</th>'
+          : '<th>Descrição</th><th>Placa</th><th>Patrimônio</th><th>RENAVAM</th><th>Chassi</th><th>Ano</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th>';
 
-    const html = `<!DOCTYPE html><html><head><title>Documentos de Veiculos</title>
+      const bodyRows = reportType === 'geral' ? rows : items.map(a => {
+        const final = (a.placa || '').replace(/\D/g, '').slice(-1) || '-';
+        const venc = reportType === 'ipva' ? a.vencimento_ipva : a.vencimento_licenciamento;
+        return `<tr>
+          <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.descricao}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.placa || '-'}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.renavam || '-'}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px;text-align:center">${final}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${venc ? new Date(venc).toLocaleDateString('pt-BR') : '-'}</td>
+          <td style="padding:6px 8px;border:1px solid #ccc;font-size:11px">${a.empresa || '-'}</td>
+        </tr>`;
+      }).join('');
+
+      return `<section class="unit-section ${groupIndex > 0 ? 'new-page' : ''}">
+        <h1>FROTA DE VEÍCULOS — ${groupName}</h1>
+        <h2>${reportType === 'ipva' ? 'RELATÓRIO PARA PAGAMENTO DE IPVA' : reportType === 'licenciamento' ? 'RELATÓRIO PARA PAGAMENTO DE LICENCIAMENTO' : 'RELATÓRIO GERAL DA FROTA'}</h2>
+        <p>${items.length} veículo(s) · Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+        <table><thead><tr>${columns}</tr></thead><tbody>${bodyRows}</tbody></table>
+      </section>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html><head><title>Relatório da Frota</title>
     <style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;font-size:12px;color:#000}
-    h1{font-size:16px;margin-bottom:4px}h2{font-size:12px;color:#666;margin-bottom:12px}
+    h1{font-size:17px;margin:0 0 4px}h2{font-size:12px;margin:0 0 4px}p{font-size:10px;color:#666;margin:0 0 12px}
     table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:6px 8px;border:1px solid #ccc;font-size:10px;text-transform:uppercase;text-align:left}
-    </style></head><body>
-    <h1>Documentos de Veiculos - ${filterLabel}</h1>
-    <h2>${filtered.length} veiculo(s) - Gerado em ${new Date().toLocaleDateString('pt-BR')}</h2>
-    <table><thead><tr><th>Descricao</th><th>Placa</th><th>Patrimonio</th><th>Renavam</th><th>Chassi</th><th>Ano</th><th>Venc. IPVA</th><th>Venc. Licenciamento</th><th>Empresa</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    </body></html>`;
+    .unit-section{margin-bottom:18px}.new-page{page-break-before:always}
+    </style></head><body>${sections}</body></html>`;
     printDocumentInPage(html);
   };
 
@@ -657,6 +719,19 @@ const handleMultiUpload = async (files: FileList) => {
           <Search className="w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar por descricao, placa, RENAVAM ou chassi..." value={search}
             onChange={e => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
+          <select value={assetGroup} onChange={e => { setAssetGroup(e.target.value as AssetGroup); setSelectedIds(new Set()); setFilterType('todos'); }}
+            className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+            <option value="frota">Frota de Veículos</option>
+            <option value="compressores">Compressores de Locação</option>
+            <option value="outros">Outros Equipamentos</option>
+          </select>
+          <select value={unitFilter} onChange={e => { setUnitFilter(e.target.value as UnitFilter); setSelectedIds(new Set()); }}
+            className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+            <option value="todas">Todas as unidades</option>
+            <option value="matriz">Matriz</option>
+            <option value="praia">Praia Grande</option>
+            <option value="goiania">Goiânia</option>
+          </select>
           <select value={filterType} onChange={e => setFilterType(e.target.value as FilterType)}
             className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
             <option value="todos">Todos</option>
@@ -675,9 +750,25 @@ const handleMultiUpload = async (files: FileList) => {
             <input type="file" accept=".pdf" multiple className="hidden"
               onChange={e => e.target.files && e.target.files.length > 0 && handleMultiUpload(e.target.files)} />
           </label>
-          <Button size="sm" variant="outline" onClick={handlePrintBatch}>
-            <Printer className="w-4 h-4 mr-1" /> Imprimir Lote
-          </Button>
+          {assetGroup === 'frota' && (
+            <>
+              <select value={reportType} onChange={e => setReportType(e.target.value as ReportType)}
+                className="border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+                <option value="geral">Relatório geral</option>
+                <option value="ipva">Pagamento IPVA</option>
+                <option value="licenciamento">Pagamento Licenciamento</option>
+              </select>
+              <Button size="sm" variant="outline" onClick={() => {
+                if (selectedIds.size === filtered.length && filtered.length > 0) setSelectedIds(new Set());
+                else setSelectedIds(new Set(filtered.map(a => a.id)));
+              }}>
+                {selectedIds.size === filtered.length && filtered.length > 0 ? 'Limpar seleção' : 'Selecionar visíveis'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={handlePrintBatch}>
+                <Printer className="w-4 h-4 mr-1" /> {selectedIds.size === 1 ? 'Imprimir 1 veículo' : selectedIds.size > 1 ? `Imprimir ${selectedIds.size} veículos` : 'Imprimir visíveis'}
+              </Button>
+            </>
+          )}
         </div>
         <p className="text-xs text-muted-foreground flex items-center gap-1">
           <Sparkles className="w-3 h-3" /> PDFs são processados por buffer em memória e persistidos somente no Supabase. Arquivos maiores seguem direto ao Storage para respeitar o limite do Vercel.
@@ -792,6 +883,8 @@ const handleMultiUpload = async (files: FileList) => {
       <div className="card-premium overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="border-b bg-muted/50 sticky top-0 z-10">
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Sel.</th>
+            <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Grupo</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Descricao</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Placa</th>
             <th className="px-3 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Patrimonio</th>
@@ -807,6 +900,8 @@ const handleMultiUpload = async (files: FileList) => {
           <tbody>
             {filtered.map(a => (
               <tr key={a.id} className="border-b hover:bg-muted/20">
+                <td className="px-3 py-2 text-xs"><input type="checkbox" checked={selectedIds.has(a.id)} onChange={() => setSelectedIds(current => { const next = new Set(current); next.has(a.id) ? next.delete(a.id) : next.add(a.id); return next; })} /></td>
+                <td className="px-3 py-2 text-xs font-semibold">{getAssetGroup(a) === 'frota' ? 'Frota' : getAssetGroup(a) === 'compressores' ? 'Compressor / Locação' : 'Equipamento'}</td>
                 <td className="px-3 py-2 text-xs font-medium">{a.descricao}</td>
                 <td className="px-3 py-2 text-xs">{a.placa || '-'}</td>
                 <td className="px-3 py-2 text-xs">{a.patrimonio || '-'}</td>
@@ -829,7 +924,7 @@ const handleMultiUpload = async (files: FileList) => {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={11} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={13} className="text-center py-8 text-muted-foreground text-sm">Nenhum documento encontrado</td></tr>}
           </tbody>
         </table>
         <div className="p-3 text-xs text-muted-foreground border-t">{filtered.length} documento(s)</div>
