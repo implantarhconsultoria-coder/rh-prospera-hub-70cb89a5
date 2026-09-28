@@ -186,10 +186,45 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
     setSaving(true);
     try {
       await persistAllEntries();
-      const result = await updateFechamento(selectedCompany, competencia, { status: 'fechado', observacoes: fechamento.observacoes, dataFechamento: new Date().toISOString(), ...fechamentoTotals });
+      const result = await updateFechamento(selectedCompany, competencia, {
+        status: 'fechado',
+        observacoes: fechamento.observacoes,
+        dataFechamento: new Date().toISOString(),
+        ...fechamentoTotals,
+      });
       if (!result.ok) throw result.error || new Error('Falha ao fechar competência.');
+
+      // O fechamento é a operação principal. A integração contábil roda depois,
+      // sem poder desfazer, bloquear ou invalidar o fechamento já salvo.
+      const canFinalizeAccounting = userRoles.includes('admin') || userRoles.includes('diretor_geral');
+      if (canFinalizeAccounting) {
+        try {
+          const token = session?.access_token || (await supabase.auth.getSession()).data.session?.access_token;
+          if (!token) throw new Error('Sessão administrativa indisponível para formalização.');
+          const response = await fetch('/api/accounting-closing-flow', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action: 'finalize', empresa_id: selectedCompany, competencia }),
+          });
+          const accounting = await response.json().catch(() => ({}));
+          if (!response.ok || !accounting?.ok) {
+            throw new Error(accounting?.message || accounting?.error || 'Falha na integração com a Contabilidade.');
+          }
+
+          if (accounting.email_status === 'enviado') {
+            toast.success('Fechamento concluído. Apontamento liberado e formalizado para a Contabilidade.');
+          } else {
+            toast.warning('Fechamento concluído e apontamento liberado. O e-mail ficou pendente, sem bloquear a operação.');
+          }
+        } catch (accountingError) {
+          console.error('Fechamento salvo; integração contábil pendente:', accountingError);
+          toast.warning('Fechamento concluído. A integração com a Contabilidade ficou pendente, sem bloquear o fechamento.');
+        }
+      } else {
+        toast.success('Fechamento marcado como fechado.');
+      }
+
       await refreshEntries();
-      toast.success('Fechamento marcado como fechado.');
     } catch (error) {
       console.error('Erro ao marcar fechamento como fechado:', error);
       toast.error('Erro ao marcar fechamento como fechado.');
