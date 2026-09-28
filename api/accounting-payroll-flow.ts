@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { addEvent, getServiceClient, PAYROLL_BUCKET, readBody, requireAdmin, sendJson, sha256 } from '../src/server/payrollServer.js';
+import { loadPdfJsNode } from '../src/server/pdfJsNode.js';
 
 const INBOX_BUCKET = 'contabilidade-inbox';
 const MAX_ORIGINAL_BYTES = 50 * 1024 * 1024;
@@ -35,6 +36,27 @@ const counterpartFor = (email: unknown) => {
 const competenceLabel = (value: unknown) => {
   const [year, month] = clean(value).split('-');
   return year && month ? `${month}/${year}` : clean(value);
+};
+
+const structuredPdfLines = (items: Array<{ str?: string; transform?: number[] }>) => {
+  const positioned = (items || [])
+    .filter(item => clean(item?.str))
+    .map((item, index) => ({
+      str: clean(item.str),
+      x: Number(item.transform?.[4] ?? index),
+      y: Number(item.transform?.[5] ?? 0),
+      index,
+    }));
+  const rows: Array<{ y:number; parts:Array<{ x:number; str:string; index:number }> }> = [];
+  for (const item of positioned) {
+    const row = rows.find(current => Math.abs(current.y - item.y) <= 2.5);
+    if (row) row.parts.push({ x:item.x, str:item.str, index:item.index });
+    else rows.push({ y:item.y, parts:[{ x:item.x, str:item.str, index:item.index }] });
+  }
+  return rows
+    .sort((a,b) => b.y - a.y)
+    .map(row => row.parts.sort((a,b) => a.x - b.x || a.index - b.index).map(part => part.str).join(' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
 };
 
 const competenceNow = () => {
@@ -469,6 +491,56 @@ export default async function handler(req: any, res?: any) {
       if (error) throw error;
       await service.from('contabilidade_folha_ciclos').update({ status: 'processando', enviado_por_portal_user_id: user.id, email_envio_status: 'pendente', updated_at: now }).eq('id', cycle.id);
       return sendJson(res, { ok: true, upload: data });
+    }
+
+    if (action === 'analyze_original') {
+      const uploadId = clean(body.upload_id);
+      if (!uploadId) return sendJson(res, { ok: false, error: 'upload_id_obrigatorio' }, 400);
+      const { data: upload, error: uploadError } = await service.from('contabilidade_portal_uploads')
+        .select('id,ciclo_id,empresa_id,storage_bucket,storage_path,arquivo_nome')
+        .eq('id', uploadId)
+        .eq('ciclo_id', cycle.id)
+        .eq('empresa_id', companyId)
+        .maybeSingle();
+      if (uploadError || !upload) return sendJson(res, { ok: false, error: 'upload_original_invalido' }, 404);
+
+      const { data: stored, error: downloadError } = await service.storage
+        .from(upload.storage_bucket || INBOX_BUCKET)
+        .download(upload.storage_path);
+      if (downloadError || !stored) throw downloadError || new Error('pdf_nao_encontrado');
+      const bytes = new Uint8Array(await stored.arrayBuffer());
+      if (!bytes.length) throw new Error('pdf_vazio');
+
+      const pdfjs: any = await loadPdfJsNode();
+      const loading = pdfjs.getDocument({
+        data: new Uint8Array(bytes),
+        isEvalSupported: false,
+        disableFontFace: true,
+        useSystemFonts: true,
+      });
+      let pdf: any = null;
+      try {
+        pdf = await loading.promise;
+        const pages: Array<{ page:number; text:string; lines:string[] }> = [];
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+          const page = await pdf.getPage(pageNumber);
+          const content = await page.getTextContent({ disableNormalization:false });
+          const lines = structuredPdfLines((content.items || []) as any[]);
+          pages.push({ page:pageNumber, text:lines.join('\n').trim(), lines });
+          try { page.cleanup?.(); } catch { /* noop */ }
+        }
+        return sendJson(res, {
+          ok: true,
+          upload_id: upload.id,
+          arquivo_nome: upload.arquivo_nome,
+          total_pages: pages.length,
+          pages,
+          engine: 'server-pdfjs-dommatrix-safe',
+        });
+      } finally {
+        try { await loading.destroy?.(); } catch { /* noop */ }
+        try { await pdf?.destroy?.(); } catch { /* noop */ }
+      }
     }
 
     if (action === 'register_page') {
