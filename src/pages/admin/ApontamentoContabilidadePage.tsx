@@ -1109,6 +1109,51 @@ const ApontamentoContabilidadePage: React.FC = () => {
     return data.publicUrl;
   };
 
+  const carregarAlteracoesSalariais = async (empresaIds: string[]) => {
+    if (!empresaIds.length) return [] as any[];
+    const { data, error } = await (supabase as any)
+      .from('alteracoes_salariais')
+      .select('id,funcionario_id,empresa_id,competencia,salario_atual,percentual,salario_solicitado,observacao,email_corpo,status,funcionarios(nome)')
+      .in('empresa_id', empresaIds)
+      .eq('competencia', competencia)
+      .eq('status', 'aguardando_folha')
+      .order('solicitado_em', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  };
+
+  const montarBlocoAlteracoesSalariais = (alteracoes: any[]) => {
+    if (!alteracoes.length) return '';
+    const linhas = alteracoes.flatMap((alt) => {
+      const nome = alt.funcionarios?.nome || 'Funcionário';
+      const base = [
+        `• ${nome}`,
+        `  Salário atual: ${formatBRL(Number(alt.salario_atual || 0))}`,
+        `  Reajuste: ${Number(alt.percentual || 0).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`,
+        `  Novo salário: ${formatBRL(Number(alt.salario_solicitado || 0))}`,
+      ];
+      if (String(alt.observacao || '').trim()) base.push(`  Observação: ${String(alt.observacao).trim()}`);
+      const corpo = String(alt.email_corpo || '');
+      if (/COMISSIONAMENTO DO VENDEDOR JERRI/i.test(corpo)) {
+        base.push(
+          '  Comissionamento Jerri:',
+          '  - Até R$ 500.000,00: 1%',
+          '  - De R$ 501.000,00 até R$ 649.999,99: 1,5%',
+          '  - A partir de R$ 650.000,00: 1,8%',
+        );
+      }
+      return base;
+    });
+    return [
+      '',
+      'ALTERAÇÕES SALARIAIS PARA PROCESSAMENTO NESTA FOLHA:',
+      ...linhas,
+      '',
+      'Observação: os salários permanecem inalterados no TOPAC RH PRO até o retorno e conferência da folha processada pela contabilidade.',
+      '',
+    ].join('\n');
+  };
+
   const enviarParaContabilidade = async () => {
     if (!company) { toast.error('Selecione uma empresa'); return; }
     if (items.length === 0) { toast.error('Sem itens para enviar'); return; }
@@ -1135,14 +1180,18 @@ const ApontamentoContabilidadePage: React.FC = () => {
       toast.error(`PDF nao foi salvo na plataforma: ${e.message || 'erro desconhecido'}`);
       return;
     }
+    const alteracoesSalariais = await carregarAlteracoesSalariais([company.id]);
+    const blocoAlteracoes = montarBlocoAlteracoesSalariais(alteracoesSalariais);
+
     setEmailPdfDraft({
       to: para,
       cc,
       subject: `Apontamento Contabilidade - ${company.name} - ${formatCompetencia(competencia)}`,
       body:
         `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} da empresa ${company.name}.\n\n` +
-        `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n\n` +
-        `Atenciosamente,\nRodrigo De Souza Sabino`,
+        `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n` +
+        blocoAlteracoes +
+        `\nAtenciosamente,\nRodrigo De Souza Sabino`,
       attachmentBlob: pdfBlob,
       attachmentName: buildApontamentoPdfName(company.name, competencia),
       afterSend: async () => {
@@ -1188,14 +1237,18 @@ const ApontamentoContabilidadePage: React.FC = () => {
       const totalLote = round2(grupos.reduce((s, g) => s + g.items.reduce((t, r) => t + Number(r.total || 0), 0), 0));
       const qtdFuncionarios = grupos.reduce((s, g) => s + g.items.length, 0);
 
+      const alteracoesSalariais = await carregarAlteracoesSalariais(grupos.map((g) => g.company.id));
+      const blocoAlteracoes = montarBlocoAlteracoesSalariais(alteracoesSalariais);
+
       setEmailPdfDraft({
         to: para,
         cc,
         subject: `Apontamento Contabilidade - ${formatCompetencia(competencia)} - Matriz/Praia/LMT/ALQUI`,
         body:
           `Prezados,\n\nSegue em anexo o apontamento da folha referente a ${formatCompetencia(competencia)} das empresas: ${nomes}.\n\n` +
-          `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n\n` +
-          `Atenciosamente,\nRodrigo De Souza Sabino`,
+          `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n` +
+          blocoAlteracoes +
+          `\nAtenciosamente,\nRodrigo De Souza Sabino`,
         attachmentBlob: blob,
         attachmentName: buildApontamentoLotePdfName(grupos.map((g) => g.company.name), competencia),
         afterSend: async () => {
