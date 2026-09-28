@@ -45,24 +45,40 @@ async function getOrCreatePaymentCycle(service: any, companyId: string, competen
   return data;
 }
 
-async function accountingRecipients(service: any, companyId: string): Promise<{ owner:any; emails:string[] }> {
-  const { data: access, error: accessError } = await service.from('contabilidade_portal_acesso_empresas')
-    .select('portal_user_id')
-    .eq('empresa_id', companyId);
+async function accountingRecipients(service: any, companyId: string): Promise<{ owner:any; emails:string[]; cc:string[] }> {
+  const [{ data: access, error: accessError }, { data: company, error: companyError }] = await Promise.all([
+    service.from('contabilidade_portal_acesso_empresas').select('portal_user_id').eq('empresa_id', companyId),
+    service.from('empresas').select('id,nome,codigo').eq('id', companyId).maybeSingle(),
+  ]);
   if (accessError) throw accessError;
+  if (companyError || !company) throw companyError || new Error('empresa_nao_encontrada');
+
   const ids = Array.from(new Set<string>((access || []).map((row: any) => clean(row.portal_user_id)).filter(Boolean) as string[]));
   if (!ids.length) throw new Error('contabilidade_sem_acesso_empresa');
+
   const { data: users, error: usersError } = await service.from('contabilidade_portal_usuarios')
     .select('id,nome,email,portal,ativo')
     .in('id', ids)
-    .eq('portal', 'principal')
     .eq('ativo', true);
   if (usersError) throw usersError;
   const rows = users || [];
   if (!rows.length) throw new Error('contabilidade_sem_usuario_ativo');
-  const owner = rows.find((row: any) => clean(row.email).toLowerCase() === 'dp@aatconsultoria.com.br') || rows[0];
-  const emails = Array.from(new Set<string>((rows.map((row: any) => clean(row.email).toLowerCase()).filter(Boolean)) as string[]));
-  return { owner, emails };
+
+  const isGoiania = /goi[âa]nia|gyn/i.test(clean(company.nome || company.codigo));
+  const wantedTo = isGoiania
+    ? ['requisicao@incocontabilidade.com.br']
+    : ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br'];
+  const emails = wantedTo.filter((email) => rows.some((row: any) => clean(row.email).toLowerCase() === email));
+  if (!emails.length) throw new Error('contabilidade_sem_destinatario_oficial');
+
+  const owner = rows.find((row: any) => clean(row.email).toLowerCase() === emails[0]) || rows[0];
+  const cc = Array.from(new Set([
+    'adm.matriz@topac.com.br',
+    'robson@topac.com.br',
+    ...(isGoiania ? ['adm.gyn@topac.com.br'] : []),
+  ])).filter((email) => !emails.includes(email));
+
+  return { owner, emails, cc };
 }
 
 async function buildClosingPdf(service: any, companyId: string, competencia: string) {
@@ -161,7 +177,7 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
   return { bytes, filename, company };
 }
 
-async function sendAccountingEmail(service: any, input: { emails: string[]; empresaId: string; companyName: string; competencia: string; filename: string; bytes: Uint8Array }) {
+async function sendAccountingEmail(service: any, input: { emails: string[]; cc: string[]; empresaId: string; companyName: string; competencia: string; filename: string; bytes: Uint8Array }) {
   const key = clean(process.env.RESEND_API_KEY);
   if (!key || !input.emails.length) return { status: 'pendente', error: key ? 'destinatario_ausente' : 'RESEND_API_KEY ausente' };
   const configured = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM);
@@ -185,6 +201,7 @@ async function sendAccountingEmail(service: any, input: { emails: string[]; empr
     body: JSON.stringify({
       from,
       to: input.emails,
+      cc: input.cc,
       reply_to: 'adm.matriz@topac.com.br',
       subject: thread.subject,
       text,
@@ -233,7 +250,7 @@ export default async function handler(req: any, res?: any) {
     }
 
     const cycle = await getOrCreatePaymentCycle(service, companyId, competencia);
-    const { owner, emails } = await accountingRecipients(service, companyId);
+    const { owner, emails, cc } = await accountingRecipients(service, companyId);
     const { bytes, filename, company } = await buildClosingPdf(service, companyId, competencia);
 
     const { data: prior, error: priorError } = await service.from('contabilidade_portal_uploads')
@@ -255,7 +272,7 @@ export default async function handler(req: any, res?: any) {
     if (storageError) throw storageError;
 
     const now = new Date().toISOString();
-    const email = await sendAccountingEmail(service, { emails, empresaId: companyId, companyName: company.nome, competencia, filename, bytes });
+    const email = await sendAccountingEmail(service, { emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes });
     const { data: upload, error: uploadError } = await service.from('contabilidade_portal_uploads').insert({
       portal_user_id: owner.id,
       empresa_id: companyId,
@@ -270,7 +287,7 @@ export default async function handler(req: any, res?: any) {
       status: 'recebido',
       formalizacao_email_status: email.status,
       formalizacao_email_em: email.status === 'enviado' ? now : null,
-      formalizacao_destinos: emails,
+      formalizacao_destinos: Array.from(new Set([...emails, ...cc])),
       processamento_status: 'processado',
       processamento_detalhes: { origem: 'fechamento_rh', fechamento_id: fechamento.id, gerado_automaticamente: true },
       origem_tipo: 'rh_apontamento',
