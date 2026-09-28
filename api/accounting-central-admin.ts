@@ -1,4 +1,5 @@
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
+import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
 const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
@@ -48,7 +49,12 @@ const retryEmail = async (service:any, uploadId:string) => {
   const createdAt = new Date(upload.created_at || Date.now()).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo' });
   const typeLabels:Record<string,string> = { recibos_holerites:'Recibos / Holerites', folha_processada:'Folha processada', contrato:'Contrato de trabalho', rescisao:'Documentos de rescisão', ferias:'Documentos de férias', retorno_folha:'Retorno da contabilidade', outro:'Outro documento' };
   const typeLabel = typeLabels[upload.tipo_documento] || upload.tipo_documento || 'Documento';
-  const subject = `[TOPAC RH PRO] Documento recebido da Contabilidade · ${company.nome}${upload.competencia ? ` · Competência ${upload.competencia}` : ''}`;
+  const requestedSubject = `[TOPAC RH PRO] Documento recebido da Contabilidade · ${company.nome}${upload.competencia ? ` · Competência ${upload.competencia}` : ''}`;
+  const threadKey = upload.competencia ? buildAccountingThreadKey(company.id, upload.competencia) : '';
+  const thread = threadKey
+    ? await prepareAccountingThread(service, { threadKey, subject: requestedSubject })
+    : { subject: requestedSubject, headers: {}, current: null as any };
+  const subject = thread.subject;
   const text = [
     'Prezados,','',
     'Fica formalizado o recebimento do documento enviado diretamente pelo Portal da Contabilidade do TOPAC RH PRO.','',
@@ -69,9 +75,23 @@ const retryEmail = async (service:any, uploadId:string) => {
   let detail = '';
   if (resendKey) {
     try {
-      const response = await fetch('https://api.resend.com/emails', { method:'POST', headers:{ Authorization:`Bearer ${resendKey}`, 'Content-Type':'application/json' }, body:JSON.stringify({ from, to, cc, reply_to:replyTo, subject, text, html }) });
+      const response = await fetch('https://api.resend.com/emails', { method:'POST', headers:{ Authorization:`Bearer ${resendKey}`, 'Content-Type':'application/json' }, body:JSON.stringify({ from, to, cc, reply_to:replyTo, subject, text, html, ...(Object.keys(thread.headers).length ? { headers: thread.headers } : {}) }) });
       detail = await response.text().catch(() => '');
       emailStatus = response.ok ? 'enviado' : 'erro_envio_email';
+      if (response.ok && threadKey) {
+        const provider = detail ? JSON.parse(detail) : {};
+        const providerEmailId = provider?.id || null;
+        const messageId = await fetchResendMessageId(resendKey, providerEmailId);
+        await saveAccountingThread(service, {
+          threadKey,
+          empresaId: company.id,
+          competencia: upload.competencia,
+          subject,
+          providerEmailId,
+          messageId,
+          close: upload.tipo_documento === 'folha_processada',
+        });
+      }
     } catch (e:any) { detail = String(e?.message || e); emailStatus = 'erro_envio_email'; }
   }
 
