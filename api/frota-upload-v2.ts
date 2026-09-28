@@ -287,7 +287,7 @@ export default async function handler(req: any, res: any) {
   const publicUrl = String(publicData?.publicUrl || '').trim();
   let existing: any = null;
   if (extracted.placa) {
-    const result = await supabase.from('ativos').select('id,arquivo_url,documento_url').eq('placa', extracted.placa).in('tipo', ['veiculo', 'equipamento']).maybeSingle();
+    const result = await supabase.from('ativos').select('id,arquivo_url,documento_url').eq('placa', extracted.placa).in('tipo', ['veiculo', 'compressor', 'equipamento']).maybeSingle();
     if (!result.error) existing = result.data;
   }
   if (!existing && extracted.patrimonio) {
