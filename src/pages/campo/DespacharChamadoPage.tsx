@@ -124,7 +124,11 @@ const DespacharChamadoPage: React.FC = () => {
     setAdicionaisPendentes(ad.error ? [] : ((ad.data as any[]) || []));
   };
 
-  useEffect(() => { void carregar(); }, []);
+  useEffect(() => {
+    void carregar();
+    const timer = window.setInterval(() => void carregar(), 10000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const baseClientes = useMemo(() => {
     const q = busca.toLowerCase().trim();
