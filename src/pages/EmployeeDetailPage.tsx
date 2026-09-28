@@ -20,6 +20,7 @@ import BenefitValuePaymentEditor from '@/components/BenefitValuePaymentEditor';
 import { clearPersistentViewState, usePersistentViewState } from '@/hooks/usePersistentViewState';
 import { supabase } from '@/integrations/supabase/client';
 import type { Employee } from '@/types/database';
+import SalaryChangeRequestPanel from '@/components/SalaryChangeRequestPanel';
 
 const tabs = ['Dados Cadastrais', 'Dados Funcionais', 'Benefícios', 'Férias e ASO', 'Lançamentos', 'Histórico Documental'];
 
@@ -139,6 +140,14 @@ const EmployeeDetailPage: React.FC = () => {
         !Object.is((original as unknown as Record<string, unknown>)[key], value),
       ),
     ) as Partial<Employee>;
+
+    // Salário não pode ser alterado pela edição comum da ficha.
+    // Toda alteração salarial precisa passar pelo fluxo de solicitação à contabilidade
+    // e só é aplicada após o retorno da folha processada.
+    if (Object.prototype.hasOwnProperty.call(changes, 'salarioBase')) {
+      delete (changes as any).salarioBase;
+      toast.info('Alteração de salário removida da edição comum. Use o bloco "Alteração salarial".');
+    }
 
     if (Object.keys(changes).length === 0) {
       cancelEditing();
@@ -407,7 +416,7 @@ const EmployeeDetailPage: React.FC = () => {
               <Field label="Nº Registro" {...fieldFor('registro')} />
               <Field label="Matrícula eSocial" {...fieldFor('matriculaEsocial')} />
               <Field label="Cargo / Função" {...fieldFor('cargo')} />
-              <Field label="Salário Base" {...fieldFor('salarioBase', 'number')} />
+              <Field label="Salário Base" value={formatCurrency(Number(emp.salarioBase || 0))} />
               <Field label="Data Admissão" {...fieldFor('dataAdmissao', 'date')} />
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Status</label>
@@ -422,6 +431,18 @@ const EmployeeDetailPage: React.FC = () => {
                 ) : <p className="text-sm font-medium text-foreground bg-muted/50 px-3 py-2 rounded-md min-h-10">{emp.status}</p>}
               </div>
             </div>
+
+            {isAdmin && (
+              <SalaryChangeRequestPanel
+                employee={emp}
+                company={company}
+                sessionUserId={session?.user?.id}
+                onEmailDraft={setEmailPdfDraft}
+                updateEmployee={updateEmployee}
+                refreshData={refreshData}
+              />
+            )}
+
             {funcionarioDesligado && (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
