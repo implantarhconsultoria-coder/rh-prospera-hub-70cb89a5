@@ -22,7 +22,7 @@ type EmailRow = {
   } | null;
   documentos?: EmailDoc[];
 };
-type Provider = { configured: boolean; mailbox?: string; provider?: string };
+type Provider = { configured: boolean; mailbox?: string; provider?: string; mode?: string };
 
 const labels: Record<string, string> = {
   FOLHA: 'Folha',
@@ -134,10 +134,12 @@ export default function ContabilidadeAdminInboxAddon() {
                 <p className="mt-1 text-xs text-zinc-500">Folha, admissões, rescisões, férias, ponto, atestados e benefícios.</p>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={!provider.configured || syncing} onClick={() => void sync()}>
-                  {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                  Sincronizar
-                </Button>
+                {provider.provider !== 'RESEND' && (
+                  <Button size="sm" variant="outline" disabled={!provider.configured || syncing} onClick={() => void sync()}>
+                    {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                    Sincronizar
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" disabled={loading} onClick={() => void load()}>
                   <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                   Atualizar
@@ -150,8 +152,14 @@ export default function ContabilidadeAdminInboxAddon() {
             <div className={`mb-4 flex items-center gap-3 rounded-xl border p-3 ${provider.configured ? 'border-emerald-500/25' : 'border-amber-500/25'}`}>
               <ShieldCheck className={`h-5 w-5 ${provider.configured ? 'text-emerald-300' : 'text-amber-300'}`} />
               <div className="flex-1">
-                <div className="text-sm font-bold">{provider.configured ? 'Microsoft 365 conectado' : 'Microsoft 365 aguardando autorização'}</div>
-                <div className="text-xs text-zinc-500">{provider.mailbox || 'adm.matriz@topac.com.br'} · somente leitura</div>
+                <div className="text-sm font-bold">
+                  {provider.provider === 'RESEND'
+                    ? (provider.configured ? 'Encaminhamento de e-mail conectado' : 'Encaminhamento aguardando configuração')
+                    : (provider.configured ? 'Microsoft 365 conectado' : 'Microsoft 365 aguardando autorização')}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {provider.mailbox || 'centralrh@topacrh.pro'} · somente leitura
+                </div>
               </div>
               <span className="text-xs font-bold">{provider.configured ? 'ATIVO' : 'PENDENTE'}</span>
             </div>
