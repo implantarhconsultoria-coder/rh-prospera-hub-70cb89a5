@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Relatório de Análise da Conferência de Parecer — TOPAC RH PRO — 25/09/2026</title>
+<style>
+  :root{--bg:#0b1220;--panel:#111a2d;--panel2:#16223b;--text:#eef4ff;--muted:#a8b3c7;--cyan:#34d6e9;--line:#263654;--ok:#38d39f;--warn:#ffcf5c;--red:#ff7a8a}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#09111f,#0d1627 40%,#0a1220);color:var(--text);line-height:1.55}
+  .wrap{max-width:1080px;margin:0 auto;padding:36px 20px 64px}.hero{padding:34px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(135deg,#121d32,#0d1728);box-shadow:0 18px 60px rgba(0,0,0,.28)}
+  .eyebrow{font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan)} h1{font-size:34px;line-height:1.15;margin:10px 0 10px}.sub{color:var(--muted);font-size:16px}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.tag{padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:#0b1425;color:#c9d5e9;font-size:13px}
+  section{margin-top:24px;padding:26px;border:1px solid var(--line);border-radius:18px;background:rgba(17,26,45,.92)} h2{font-size:20px;margin:0 0 14px} h3{font-size:16px;margin:22px 0 8px;color:#dfeaff}
+  p{margin:8px 0;color:#d5deed}.lead{font-size:17px;color:#eaf3ff}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .card{padding:18px;border:1px solid var(--line);border-radius:14px;background:#0d1728}.card b{display:block;margin-bottom:7px;color:#fff}.card p{font-size:14px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px} th,td{padding:12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left} th{color:#cfe4ff;background:#0d1728} td{color:#d7e0ee}
+  ul{padding-left:20px;margin:10px 0} li{margin:7px 0;color:#d7e0ee}.status{display:inline-block;font-weight:800;font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:999px}
+  .done{background:rgba(56,211,159,.13);color:var(--ok);border:1px solid rgba(56,211,159,.3)} .pending{background:rgba(255,207,92,.13);color:var(--warn);border:1px solid rgba(255,207,92,.3)}
+  .note{padding:16px 18px;border-left:4px solid var(--cyan);background:#0b1425;border-radius:10px;color:#dbe7f6}.footer{margin-top:26px;text-align:center;color:#7f8ba0;font-size:12px}
+  @media(max-width:760px){h1{font-size:27px}.hero,section{padding:20px}.grid{grid-template-columns:1fr} table{font-size:12px} th,td{padding:9px}}
+  @media print{body{background:white;color:#111}.wrap{max-width:none}.hero,section,.card{background:white;color:#111;border-color:#ddd;box-shadow:none}.sub,p,td,li,.card p{color:#333}.eyebrow,h2,h3,.card b,th{color:#111}.tag{background:white;color:#222;border-color:#ddd}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">TOPAC RH PRO • Relatório de análise</div>
+    <h1>Conferência do Parecer Jurídico do Projeto TOPAC RH PRO</h1>
+    <div class="sub">Consolidação da análise realizada na sexta-feira, 25 de setembro de 2026, com foco nos questionamentos apresentados pelo Dr. Marcelo sobre assinatura eletrônica, guarda documental, identificação do trabalhador e controle de jornada.</div>
+    <div class="meta">
+      <span class="tag">Data da conferência: 25/09/2026</span>
+      <span class="tag">Projeto: TOPAC RH PRO</span>
+      <span class="tag">Escopo: parecer jurídico + análise técnica</span>
+      <span class="tag">Uso: interno / jurídico / diretoria</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>1. Objetivo da conferência</h2>
+    <p class="lead">Revisar os pontos levantados pelo advogado e confrontá-los com o funcionamento real da plataforma, separando o que já existe, o que precisa ser fortalecido tecnicamente e o que depende de definição jurídica ou administrativa.</p>
+    <div class="note"><b>Diretriz adotada:</b> não ampliar o escopo além do que foi questionado. Cada resposta deve demonstrar o funcionamento real do sistema, a evidência técnica disponível e o fundamento jurídico aplicável.</div>
+  </section>
+
+  <section>
+    <h2>2. Pontos centrais do parecer analisados</h2>
+    <table>
+      <thead><tr><th>Tema</th><th>Questionamento</th><th>Direcionamento definido</th></tr></thead>
+      <tbody>
+        <tr><td>Identificação do sistema</td><td>Nome, segurança, autoria e integridade.</td><td>Documentar a TOPAC RH PRO, o método de autenticação, o vínculo da assinatura com o documento e a integridade por hash.</td></tr>
+        <tr><td>Armazenamento</td><td>Onde ficam os dados e como a empresa os recupera.</td><td>Organizar armazenamento, dossiê individual e exportação independente dos documentos e evidências.</td></tr>
+        <tr><td>Comprovantes</td><td>Guarda de comprovantes de pagamento e capacidade de armazenamento.</td><td>Vincular o comprovante ao documento/funcionário e separar “arquivo anexado” de “pagamento confirmado”.</td></tr>
+        <tr><td>VR / VT</td><td>Origem dos recibos apresentados.</td><td>Demonstrar o fluxo real de geração e armazenamento dos recibos dentro da plataforma.</td></tr>
+        <tr><td>Fechamento mensal</td><td>Integração entre fechamento, recibo e assinatura.</td><td>Demonstrar o fluxo documento → conferência → disponibilização → assinatura → histórico.</td></tr>
+        <tr><td>Multiempresas</td><td>Como o sistema distingue os CNPJs.</td><td>Manter funcionário, documento, assinatura, certificado e histórico vinculados à empresa correta.</td></tr>
+        <tr><td>Autoria</td><td>Como comprovar que o próprio trabalhador realizou o ato.</td><td>Fortalecer a autenticação e impedir que uma validação de identidade seja reutilizada em documento ou sessão diferente.</td></tr>
+        <tr><td>Celular pessoal</td><td>Uso do aparelho particular e eventual custeio.</td><td>Tratar como decisão administrativa/jurídica, não apenas como funcionalidade técnica.</td></tr>
+        <tr><td>Controle de jornada</td><td>Modalidade, autoria, ajustes e envio à contabilidade.</td><td>Tratar em projeto próprio após definição formal do modelo de ponto adotado pela empresa.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. Constatações técnicas da análise</h2>
+    <div class="grid">
+      <div class="card"><b>Documento e assinatura</b><p>A plataforma registra documento, funcionário, empresa, competência, leitura, aceite, data/hora, IP, dispositivo, versão e hashes de integridade.</p></div>
+      <div class="card"><b>Autoria reforçada</b><p>A correção proposta exige, quando houver perfil facial ativo, evento de verificação vinculado ao mesmo funcionário, empresa, documento e sessão.</p></div>
+      <div class="card"><b>Certificado de evidências</b><p>O certificado interno passa a apresentar horário de Brasília e UTC corretamente e o método efetivamente utilizado. Ele não é apresentado como certificado ICP-Brasil.</p></div>
+      <div class="card"><b>Dossiê individual</b><p>Foi preparado fluxo para exportar o histórico completo do funcionário, com documentos, certificados, comprovantes disponíveis e manifesto de integridade.</p></div>
+      <div class="card"><b>Imutabilidade</b><p>Assinaturas e eventos possuem mecanismos de proteção contra alteração e o documento assinado deve ser tratado como selado.</p></div>
+      <div class="card"><b>Separação por empresa</b><p>O sistema trabalha com escopo por empresa/CNPJ e o objetivo é impedir cruzamento de funcionário, documento e histórico entre empresas.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Situação ao final da conferência</h2>
+    <h3><span class="status done">Preparado</span> Itens técnicos trabalhados</h3>
+    <ul>
+      <li>Vínculo de evidência de identidade ao documento e à sessão.</li>
+      <li>Correção da apresentação de data/hora no certificado de evidências.</li>
+      <li>Estrutura de dossiê completo por funcionário.</li>
+      <li>Manifesto de integridade com hashes dos arquivos exportados.</li>
+      <li>Separação entre comprovante anexado e pagamento efetivamente confirmado.</li>
+      <li>Preservação do acesso administrativo aos documentos mesmo com o portal público pausado.</li>
+      <li>Testes automatizados específicos de autoria, reutilização indevida de evidências e certificado.</li>
+    </ul>
+
+    <h3><span class="status pending">Pendente</span> Pontos que não devem ser considerados encerrados</h3>
+    <ul>
+      <li>Definição do método definitivo de comprovação de posse do telefone/identidade inicial.</li>
+      <li>Política jurídica sobre utilização de aparelho pessoal.</li>
+      <li>Política e base legal para uso e guarda de biometria.</li>
+      <li>Criação e teste de uma cópia independente fora do ambiente principal da plataforma.</li>
+      <li>Definição formal do modelo de controle de jornada e requisitos aplicáveis.</li>
+      <li>Validação jurídica final pelo Dr. Marcelo após apresentação das evidências do fluxo corrigido.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>5. Critério de resposta ao jurídico</h2>
+    <p>Para cada ponto levantado, a TOPAC RH PRO deverá ser capaz de apresentar:</p>
+    <div class="grid">
+      <div class="card"><b>1. Funcionamento real</b><p>Como a operação acontece de fato na plataforma.</p></div>
+      <div class="card"><b>2. Evidência técnica</b><p>Qual registro, documento, evento ou histórico comprova aquele funcionamento.</p></div>
+      <div class="card"><b>3. Fundamento aplicável</b><p>Qual legislação, regra interna ou procedimento dá suporte ao fluxo.</p></div>
+      <div class="card"><b>4. Limite da afirmação</b><p>Não declarar certificação, garantia ou conformidade além do que realmente possa ser demonstrado.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Regra de publicação definida</h2>
+    <p>As correções da assinatura foram preparadas em ambiente separado. Nenhuma alteração deve ser liberada para uso real apenas por estar desenvolvida ou testada.</p>
+    <div class="note"><b>Fluxo obrigatório:</b> analisar → desenvolver fora da produção → testar → revisar impactos → apresentar resultado → aguardar autorização expressa → somente então publicar.</div>
+  </section>
+
+  <section>
+    <h2>7. Conclusão da conferência de 25/09/2026</h2>
+    <p class="lead">A análise demonstrou que a TOPAC RH PRO já possui uma base técnica relevante para organizar documentos, registrar operações e produzir evidências, porém a resposta ao parecer não deve se limitar a dizer que “o sistema faz”. O ponto central é conseguir demonstrar autoria, integridade, recuperação, separação por empresa e histórico de cada operação, além de tratar separadamente os temas que dependem de decisão jurídica.</p>
+  </section>
+
+  <div class="footer">TOPAC RH PRO • Relatório de Análise da Conferência de Parecer • 25/09/2026</div>
+</div>
+</body>
+</html>
