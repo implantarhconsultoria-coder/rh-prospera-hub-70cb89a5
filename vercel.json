@@ -111,10 +111,6 @@
     {
       "path": "/api/cleanup-email-attachments",
       "schedule": "17 3 * * *"
-    },
-    {
-      "path": "/api/accounting-email-sync",
-      "schedule": "*/15 * * * *"
     }
   ]
 }
