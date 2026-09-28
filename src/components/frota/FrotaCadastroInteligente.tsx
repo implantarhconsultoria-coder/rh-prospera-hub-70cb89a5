@@ -40,10 +40,34 @@ const EMPTY: FormState = {
 const plain = (v: unknown) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
 const plate = (v: unknown) => plain(v).replace(/[^A-Z0-9]/g, '').match(/[A-Z]{3}[0-9][A-Z0-9][0-9]{2}/)?.[0] || '';
 const renavam = (v: unknown) => String(v || '').replace(/\D/g, '').match(/\d{9,11}/)?.[0] || '';
-const chassis = (v: unknown) => plain(v).replace(/[^A-Z0-9]/g, '').match(/[A-HJ-NPR-Z0-9]{17}/)?.[0] || '';
+const chassis = (v: unknown) => {
+  const raw = plain(v).replace(/[^A-Z0-9]/g, '');
+  const hit = raw.match(/[A-HJ-NPR-Z0-9]{17}/)?.[0] || '';
+  if (!hit) return '';
+  if (!/[0-9]/.test(hit) || !/[A-Z]/.test(hit)) return '';
+  if (/(VERSAO|MODELO|VEICULO|RENAVAM|PLACA)/.test(hit)) return '';
+  return hit;
+};
 const year = (v: unknown) => String(v || '').match(/(?:19|20)\d{2}/)?.[0] || '';
 const patrimonio = (v: unknown) => plain(v).match(/\b[A-Z]\d{1,3}\.\d{1,5}\b/)?.[0] || '';
 const first = (...v: unknown[]) => v.map(x => String(x || '').trim()).find(Boolean) || '';
+const cleanModel = (v: unknown) => {
+  const value = plain(v)
+    .replace(/^(MARCA\s*\/\s*MODELO|MARCA\s+MODELO|MODELO\s*\/\s*VERSAO|MODELO|VERSAO)\s*[:\-]?\s*/i, '')
+    .replace(/^[\s/\-:|.]+|[\s/\-:|.]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!value) return '';
+  if (/^(VERSAO|MODELO|MARCA|VEICULO|CARRO|\/|-)$/i.test(value)) return '';
+  if (value.length < 3) return '';
+  return value;
+};
+const cleanDescription = (v: unknown) => {
+  const value = String(v || '').trim().replace(/\s+/g, ' ');
+  const normalized = plain(value);
+  if (!normalized || /^(\/\s*)?VERSAO$|^MODELO$|^MARCA$|^VEICULO$/i.test(normalized)) return '';
+  return value;
+};
 
 const inferTipo = (text: string): TipoAtivo => {
   const n = plain(text);
@@ -56,10 +80,11 @@ const parseLocal = (text: string) => {
   const n = plain(text);
   const tipo = inferTipo(n);
   const years = n.match(/\b((?:19|20)\d{2})\s*\/\s*((?:19|20)\d{2})\b/);
-  const model = first(
-    n.match(/\bMARCA\s*\/?\s*MODELO\b\s*[:\-]?\s*([A-Z0-9][A-Z0-9 .\/-]{1,70}?)(?=\s+\b(?:PLACA|RENAVAM|CHASSI|ANO|COR|PATRIMONIO)\b|$)/i)?.[1],
-    n.match(/\bMODELO\b\s*[:\-]?\s*([A-Z0-9][A-Z0-9 .\/-]{1,70}?)(?=\s+\b(?:PLACA|RENAVAM|CHASSI|ANO|COR|PATRIMONIO)\b|$)/i)?.[1],
-  );
+  const model = cleanModel(first(
+    n.match(/\bMARCA\s*\/?\s*MODELO\b\s*[:\-]?\s*([A-Z0-9][A-Z0-9 .\/-]{1,70}?)(?=\s+\b(?:PLACA|RENAVAM|CHASSI|ANO|COR|PATRIMONIO|CAPACIDADE|POTENCIA)\b|$)/i)?.[1],
+    n.match(/\bMODELO\s*\/?\s*VERSAO\b\s*[:\-]?\s*([A-Z0-9][A-Z0-9 .\/-]{1,70}?)(?=\s+\b(?:PLACA|RENAVAM|CHASSI|ANO|COR|PATRIMONIO|CAPACIDADE|POTENCIA)\b|$)/i)?.[1],
+    n.match(/\bMODELO\b\s*[:\-]?\s*([A-Z0-9][A-Z0-9 .\/-]{2,70}?)(?=\s+\b(?:PLACA|RENAVAM|CHASSI|ANO|COR|PATRIMONIO|VERSAO|CAPACIDADE|POTENCIA)\b|$)/i)?.[1],
+  ));
   return {
     tipo,
     descricao: model ? `${tipo === 'compressor' ? 'COMPRESSOR' : tipo === 'equipamento' ? 'EQUIPAMENTO' : 'CARRO'} - ${model}`
@@ -67,7 +92,7 @@ const parseLocal = (text: string) => {
     placa: plate(n.match(/\bPLACA\b[^A-Z0-9]{0,20}([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})/i)?.[1] || n),
     patrimonio: patrimonio(n),
     renavam: renavam(n.match(/\bRENAVAM\b[^0-9]{0,30}(\d[\d.\s-]{7,16})/i)?.[1] || ''),
-    chassi: chassis(n.match(/\b(?:CHASSI|VIN)\b[^A-Z0-9]{0,30}([A-HJ-NPR-Z0-9]{17})/i)?.[1] || ''),
+    chassi: chassis(n.match(/\b(?:CHASSI|VIN)\b[^A-Z0-9]{0,12}([A-HJ-NPR-Z0-9]{17})\b/i)?.[1] || ''),
     ano_fabricacao: years?.[1] || '',
     ano_modelo: years?.[2] || years?.[1] || '',
     modelo: model,
@@ -97,9 +122,9 @@ export default function FrotaCadastroInteligente({ onSaved }: { onSaved: () => v
         const bytes = new Uint8Array(await file.arrayBuffer());
         const pdfText = await extractPdfTextByLines(bytes).catch(() => extractPdfText(bytes)).catch(() => '');
         extractedText = [extractedText, pdfText].filter(Boolean).join('\n');
-        if (pdfText.length < 180) {
-          images = (await renderPdfPagesToDataUrls(bytes, 1.25, 3)).pageUrls;
-        }
+        // Sempre envia as primeiras páginas como imagem também. Em CRLV/documentos digitalizados,
+        // a camada de texto pode existir, mas vir fora de ordem e montar campos incorretos.
+        images = (await renderPdfPagesToDataUrls(bytes, 1.3, 3)).pageUrls;
       }
 
       const local = parseLocal(`${file?.name || ''}\n${extractedText}`);
@@ -117,21 +142,21 @@ export default function FrotaCadastroInteligente({ onSaved }: { onSaved: () => v
 
       const context = `${extractedText} ${ai.descricao || ''} ${ai.tipo_veiculo || ''} ${ai.modelo || ''}`;
       const tipo = inferTipo(context || String(local.tipo));
-      const modelo = first(ai.modelo, ai.marca_modelo, local.modelo);
+      const modelo = cleanModel(first(ai.modelo, ai.marca_modelo, local.modelo));
       const empresaLida = first(ai.empresa, empresaPadrao);
       setForm({
         ...EMPTY,
         tipo,
         descricao: first(
-          ai.descricao,
-          local.descricao,
+          cleanDescription(ai.descricao),
+          cleanDescription(local.descricao),
           modelo ? `${tipo === 'compressor' ? 'COMPRESSOR' : tipo === 'equipamento' ? 'EQUIPAMENTO' : 'CARRO'} - ${modelo}` : '',
           tipo === 'compressor' ? 'COMPRESSOR' : tipo === 'equipamento' ? 'EQUIPAMENTO' : 'CARRO',
         ),
-        placa: plate(first(local.placa, ai.placa)),
-        patrimonio: first(local.patrimonio, ai.patrimonio),
-        renavam: renavam(first(local.renavam, ai.renavam)),
-        chassi: chassis(first(local.chassi, ai.chassi)),
+        placa: plate(first(ai.placa, local.placa)),
+        patrimonio: first(ai.patrimonio, local.patrimonio),
+        renavam: renavam(first(ai.renavam, local.renavam)),
+        chassi: chassis(first(ai.chassi, local.chassi)),
         ano_fabricacao: year(first(local.ano_fabricacao, ai.ano_fabricacao, ai.ano)),
         ano_modelo: year(first(local.ano_modelo, ai.ano_modelo, ai.ano)),
         empresa: empresaLida,
