@@ -162,19 +162,39 @@ const readMicrosoft = async (): Promise<AccountingEmailMessage[]> => {
 
 export const accountingEmailProviderStatus = () => {
   const provider = env('ACCOUNTING_EMAIL_PROVIDER').toLowerCase();
+  const resendAvailable = !!env('RESEND_API_KEY');
+
   if (provider === 'gmail') {
     const missing = ['ACCOUNTING_GMAIL_CLIENT_ID', 'ACCOUNTING_GMAIL_CLIENT_SECRET', 'ACCOUNTING_GMAIL_REFRESH_TOKEN'].filter((key) => !env(key));
-    return { provider: 'GMAIL', configured: missing.length === 0, mailbox: env('ACCOUNTING_GMAIL_MAILBOX') || 'me', missing };
+    if (!missing.length) return { provider: 'GMAIL', configured: true, mailbox: env('ACCOUNTING_GMAIL_MAILBOX') || 'me', missing, mode: 'PULL' };
+    if (!resendAvailable) return { provider: 'GMAIL', configured: false, mailbox: env('ACCOUNTING_GMAIL_MAILBOX') || 'me', missing, mode: 'PULL' };
   }
+
   if (provider === 'microsoft' || provider === 'outlook' || provider === 'm365') {
     const missing = ['ACCOUNTING_MS_TENANT_ID', 'ACCOUNTING_MS_CLIENT_ID', 'ACCOUNTING_MS_CLIENT_SECRET', 'ACCOUNTING_MS_MAILBOX'].filter((key) => !env(key));
-    return { provider: 'MICROSOFT', configured: missing.length === 0, mailbox: env('ACCOUNTING_MS_MAILBOX'), missing };
+    if (!missing.length) return { provider: 'MICROSOFT', configured: true, mailbox: env('ACCOUNTING_MS_MAILBOX'), missing, mode: 'PULL' };
+    if (!resendAvailable) return { provider: 'MICROSOFT', configured: false, mailbox: env('ACCOUNTING_MS_MAILBOX'), missing, mode: 'PULL' };
   }
-  return { provider: provider ? provider.toUpperCase() : 'NAO_CONFIGURADO', configured: false, mailbox: '', missing: ['ACCOUNTING_EMAIL_PROVIDER'] };
+
+  if (provider === 'resend' || resendAvailable) {
+    const missing = ['RESEND_API_KEY'].filter((key) => !env(key));
+    return {
+      provider: 'RESEND',
+      configured: missing.length === 0,
+      mailbox: env('ACCOUNTING_RESEND_MAILBOX') || 'centralrh@topacrh.pro',
+      missing,
+      mode: 'WEBHOOK',
+    };
+  }
+
+  return { provider: provider ? provider.toUpperCase() : 'NAO_CONFIGURADO', configured: false, mailbox: '', missing: ['ACCOUNTING_EMAIL_PROVIDER'], mode: 'NONE' };
 };
 
 export const readAccountingMailbox = async () => {
   const status = accountingEmailProviderStatus();
   if (!status.configured) throw Object.assign(new Error('accounting_email_not_configured'), { details: status });
+  if (status.provider === 'RESEND') {
+    throw Object.assign(new Error('accounting_email_webhook_mode'), { details: status });
+  }
   return status.provider === 'GMAIL' ? readGmail() : readMicrosoft();
 };
