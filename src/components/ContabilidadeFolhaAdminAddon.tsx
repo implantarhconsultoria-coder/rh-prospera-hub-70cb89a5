@@ -128,7 +128,7 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
           });
           const repaired = await response.json().catch(() => ({}));
           if (response.ok && repaired?.ok) {
-            window.setTimeout(() => void load(true), 500);
+            console.info('[contabilidade][repair-closing] apontamento recuperado', cycle.id);
           }
         } catch (repairError) {
           console.warn('[contabilidade][repair-closing]', repairError);
@@ -139,7 +139,7 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [api]);
+  }, [api, authToken]);
 
   useEffect(() => { if (host) void load(); }, [host, load]);
   useEffect(() => {
