@@ -437,7 +437,6 @@ const EmployeeDetailPage: React.FC = () => {
                 employee={emp}
                 company={company}
                 sessionUserId={session?.user?.id}
-                onEmailDraft={setEmailPdfDraft}
                 updateEmployee={updateEmployee}
                 refreshData={refreshData}
               />
