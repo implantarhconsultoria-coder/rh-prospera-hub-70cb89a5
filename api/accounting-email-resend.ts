@@ -8,7 +8,10 @@ import {
   normalizeAccountingText,
 } from '../src/server/accountingCentralRules.js';
 
-const TARGET_MAILBOX = String(process.env.ACCOUNTING_RESEND_MAILBOX || 'centralrh@topacrh.pro').trim().toLowerCase();
+const PRIMARY_MAILBOX = 'centralrh@mleurob.resend.app';
+const LEGACY_MAILBOX = 'centralrh@topacrh.pro';
+const TARGET_MAILBOX = String(process.env.ACCOUNTING_RESEND_MAILBOX || PRIMARY_MAILBOX).trim().toLowerCase();
+const ACCEPTED_MAILBOXES = new Set([TARGET_MAILBOX, PRIMARY_MAILBOX, LEGACY_MAILBOX]);
 const INBOX_BUCKET = 'contabilidade-inbox';
 
 const safeFile = (value: string) => String(value || 'anexo.pdf')
@@ -94,7 +97,8 @@ export default async function handler(req: any, res?: any) {
     const recipients = Array.isArray(email?.to)
       ? email.to.map((item: any) => String(item).trim().toLowerCase())
       : [];
-    if (!recipients.includes(TARGET_MAILBOX)) {
+    const matchedMailbox = recipients.find((address: string) => ACCEPTED_MAILBOXES.has(address));
+    if (!matchedMailbox) {
       return sendJson(res, { ok: true, ignored: true, reason: 'different_mailbox' });
     }
 
@@ -171,7 +175,7 @@ export default async function handler(req: any, res?: any) {
     const { data: messageRow, error: messageError } = await service.from('contabilidade_email_mensagens').insert({
       provider: 'RESEND',
       provider_message_id: emailId,
-      mailbox: TARGET_MAILBOX,
+      mailbox: matchedMailbox,
       remetente: String(email?.from || event?.data?.from || ''),
       assunto: String(email?.subject || event?.data?.subject || ''),
       recebido_em: receivedAt,
@@ -228,7 +232,7 @@ export default async function handler(req: any, res?: any) {
         let storagePath = '';
         let status = 'RECEBIDO';
         let duplicateOf: string | null = null;
-        let reason = `PDF recebido via ${TARGET_MAILBOX}; Central de E-mails em modo somente leitura.`;
+        let reason = `PDF recebido via ${matchedMailbox}; Central de E-mails em modo somente leitura.`;
 
         if (prior) {
           storageBucket = prior.storage_bucket;
@@ -296,7 +300,7 @@ export default async function handler(req: any, res?: any) {
 
     return sendJson(res, {
       ok: true,
-      mailbox: TARGET_MAILBOX,
+      mailbox: matchedMailbox,
       email_id: emailId,
       category: classification.category,
       relevant: classification.relevant,
