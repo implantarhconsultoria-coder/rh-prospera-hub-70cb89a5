@@ -231,10 +231,16 @@ export const calcPayrollBreakdown = (
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-  // Jerri: 1,5% a partir de setembro/2026; competências anteriores permanecem com a regra original.
+  // Jerri (SP Matriz): comissão por faixa de faturamento/base da competência a partir de setembro/2026.
+  // Até 500.000 = 1%; de 501.000 a 649.000 = 1,5%; a partir de 650.000 = 1,8%.
   const isJerri = emp.id === 'f93bd3f5-dfef-4a62-820d-bf553e7c63a0';
+  const jerriComissaoPct = comissaoBase >= 650000
+    ? 0.018
+    : comissaoBase >= 501000
+      ? 0.015
+      : 0.01;
   const comissaoPct = isJerri && entry.competencia >= '2026-09'
-    ? 0.015
+    ? jerriComissaoPct
     : opts.comissaoPct === 0.02
       ? (nomeNormalizado.includes('aldenei') ? 0.02 : 0.01)
       : (opts.comissaoPct || 0);
