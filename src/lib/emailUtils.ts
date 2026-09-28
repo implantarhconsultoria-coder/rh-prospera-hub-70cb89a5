@@ -16,6 +16,8 @@ export interface EmailParams {
   authToken?: string;
   attachmentNames?: readonly string[];
   attachmentContentTypes?: readonly string[];
+  threadKey?: string;
+  closeThread?: boolean;
 }
 
 export interface EmailAttachmentInput {
@@ -190,7 +192,7 @@ const uploadEmailAttachments = async (
 
 export const sendEmailWithPdfAttachment = async ({
   to, cc, subject, body, attachmentBlob, attachmentName, attachments,
-  senderUserId, senderName, senderEmail, moduleOrigin, documentId, documentName, authToken,
+  senderUserId, senderName, senderEmail, moduleOrigin, documentId, documentName, authToken, threadKey, closeThread,
 }: EmailParams & {
   attachmentBlob?: Blob;
   attachmentName?: string;
@@ -245,6 +247,8 @@ export const sendEmailWithPdfAttachment = async ({
         moduleOrigin,
         documentId: documentId || storedAttachments[0]?.documentId,
         documentName: documentName || documentNames,
+        threadKey,
+        closeThread,
       }),
     });
   } catch (error) {
