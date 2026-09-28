@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, ArrowRightLeft, BellRing, Building2, ClipboardList, Edit2, Eye,
-  EyeOff, FileText, KeyRound, Loader2, Package, Search, Send, ShieldCheck,
-  User, Wrench, XCircle,
+  FileText, KeyRound, Loader2, Send, ShieldCheck, User, Wrench, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +16,7 @@ import OperadorCodeDialog from '@/components/OperadorCodeDialog';
 import OperadoresOperacaoPanel from '@/components/OperadoresOperacaoPanel';
 import OperacionalChamadoDetailDialog from '@/components/operacional/OperacionalChamadoDetailDialog';
 import OperacionalMovimentacoesPanel from '@/components/operacional/OperacionalMovimentacoesPanel';
+import OperacionalClientesPanel from '@/components/operacional/OperacionalClientesPanel';
 import { toast } from 'sonner';
 
 const rpc = supabase as unknown as {
@@ -50,6 +50,7 @@ const emptyChamadoForm = {
   cliente_id: '',
   contrato_id: '',
   equipamento_id: '',
+  alocacao_id: '',
   cliente: '',
   local_servico: '',
   tipo_servico: '',
@@ -76,6 +77,8 @@ const DespacharChamadoPage: React.FC = () => {
   const [clientes, setClientes] = useState<any[]>([]);
   const [contratos, setContratos] = useState<any[]>([]);
   const [equipamentos, setEquipamentos] = useState<any[]>([]);
+  const [locais, setLocais] = useState<any[]>([]);
+  const [alocacoes, setAlocacoes] = useState<any[]>([]);
   const [chamados, setChamados] = useState<any[]>([]);
   const [adicionaisPendentes, setAdicionaisPendentes] = useState<any[]>([]);
   const [form, setForm] = useState(emptyChamadoForm);
@@ -90,7 +93,7 @@ const DespacharChamadoPage: React.FC = () => {
   const [pendingAction, setPendingAction] = useState<((codigo: string) => Promise<void>) | null>(null);
 
   const carregar = async () => {
-    const [tec, cl, ct, eq, ch, ad] = await Promise.all([
+    const [tec, cl, ct, eq, ch, ad, lo, al] = await Promise.all([
       supabase
         .from('acessos_externos' as any)
         .select('id,nome,email,email_corporativo,empresa,filial,funcao,funcionario_id,status,acesso_liberado')
@@ -105,6 +108,8 @@ const DespacharChamadoPage: React.FC = () => {
       supabase.from('contrato_equipamentos').select('id, contrato_id, ativo_id, descricao_livre, patrimonio, placa, status, observacao, ativos(descricao, placa, patrimonio, tipo)').eq('status', 'ativo').order('created_at', { ascending: false }),
       supabase.from('chamados').select('*').order('created_at', { ascending: false }).limit(150),
       supabase.from('chamado_adicionais' as any).select('id,chamado_id,status,visualizado_em,created_at').is('visualizado_em', null).order('created_at', { ascending: false }).limit(100),
+      supabase.from('cliente_locais_operacionais' as any).select('id,cliente_id,nome,cidade,uf,ativo').eq('ativo', true).order('nome'),
+      supabase.from('operacional_alocacoes' as any).select('id,cliente_id,cliente_local_id,ativo_id,placa,patrimonio,fonte,fonte_arquivo,fonte_pagina,data_base,observacao,alerta_conferencia,ativo').eq('ativo', true).order('patrimonio'),
     ]);
 
     if (tec.error) toast.error(tec.error.message || 'Erro ao carregar mecânicos.');
@@ -120,6 +125,8 @@ const DespacharChamadoPage: React.FC = () => {
     setClientes((cl.data as any[]) || []);
     setContratos((ct.data as any[]) || []);
     setEquipamentos((eq.data as any[]) || []);
+    setLocais(lo.error ? [] : ((lo.data as any[]) || []));
+    setAlocacoes(al.error ? [] : ((al.data as any[]) || []));
     setChamados((ch.data as any[]) || []);
     setAdicionaisPendentes(ad.error ? [] : ((ad.data as any[]) || []));
   };
@@ -130,14 +137,9 @@ const DespacharChamadoPage: React.FC = () => {
     return () => window.clearInterval(timer);
   }, []);
 
-  const baseClientes = useMemo(() => {
-    const q = busca.toLowerCase().trim();
-    return clientes.map((cliente) => {
-      const cts = contratos.filter((c) => c.cliente_id === cliente.id);
-      const eqs = equipamentos.filter((e) => cts.some((c) => c.id === e.contrato_id));
-      return { cliente, contratos: cts, equipamentos: eqs };
-    }).filter((r) => !q || `${r.cliente.razao_social} ${r.cliente.nome_fantasia || ''} ${r.cliente.cnpj_cpf || ''}`.toLowerCase().includes(q));
-  }, [clientes, contratos, equipamentos, busca]);
+  const alocacoesCliente = alocacoes.filter((a) => a.cliente_id === form.cliente_id && a.ativo !== false);
+  const alocacaoSelecionada = alocacoes.find((a) => a.id === form.alocacao_id);
+
 
   const contratosCliente = contratos.filter((c) => c.cliente_id === form.cliente_id);
   const equipamentosContrato = equipamentos.filter((e) => e.contrato_id === form.contrato_id);
@@ -156,13 +158,24 @@ const DespacharChamadoPage: React.FC = () => {
       cliente_id: clienteId,
       contrato_id: '',
       equipamento_id: '',
+      alocacao_id: '',
       cliente: c?.razao_social || '',
       local_servico: [c?.endereco, c?.cidade, c?.uf].filter(Boolean).join(' - '),
     }));
   };
 
-  const abrirChamado = (clienteId: string) => {
-    selecionarCliente(clienteId);
+  const abrirChamado = (clienteId: string, alocacaoId?: string) => {
+    const cliente = clientes.find((item) => item.id === clienteId);
+    const alocacao = alocacaoId ? alocacoes.find((item) => item.id === alocacaoId) : null;
+    const local = alocacao?.cliente_local_id ? locais.find((item) => item.id === alocacao.cliente_local_id) : null;
+
+    setForm({
+      ...emptyChamadoForm,
+      cliente_id: clienteId,
+      alocacao_id: alocacao?.id || '',
+      cliente: cliente?.razao_social || '',
+      local_servico: local?.nome || [cliente?.endereco, cliente?.cidade, cliente?.uf].filter(Boolean).join(' - '),
+    });
     setTab('novo');
   };
 
@@ -219,7 +232,7 @@ const DespacharChamadoPage: React.FC = () => {
 
     exigirOperador(async (codigo) => {
       setLoading(true);
-      const { data, error } = await rpc.rpc('operacional_criar_chamado', {
+      const { data, error } = await rpc.rpc('operacional_criar_chamado_v2', {
         p_codigo_operador: codigo,
         p_colaborador_id: form.colaborador_id,
         p_cliente: form.cliente.trim(),
@@ -231,6 +244,7 @@ const DespacharChamadoPage: React.FC = () => {
         p_cliente_local_id: null,
         p_contrato_id: form.contrato_id || null,
         p_equipamento_id: form.equipamento_id || null,
+        p_alocacao_id: form.alocacao_id || null,
         p_itens_previstos: form.itens_previstos.trim() || null,
         p_observacoes: form.observacoes.trim() || null,
       });
@@ -258,6 +272,7 @@ const DespacharChamadoPage: React.FC = () => {
       cliente_id: chamado.cliente_id || '',
       contrato_id: chamado.contrato_id || '',
       equipamento_id: chamado.equipamento_id || '',
+      alocacao_id: chamado.alocacao_id || '',
       cliente: chamado.cliente || '',
       local_servico: chamado.local_servico || '',
       tipo_servico: chamado.tipo_servico || '',
@@ -376,42 +391,14 @@ const DespacharChamadoPage: React.FC = () => {
       </div>
 
       {tab === 'clientes' && (
-        <div className="space-y-4">
-          <div className="card-premium flex items-center gap-2 p-3">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente..." className="flex-1 bg-transparent text-sm outline-none" />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {baseClientes.map((row) => (
-              <div key={row.cliente.id} className="card-premium space-y-4 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="flex items-center gap-2 text-lg font-bold"><Building2 className="h-5 w-5 text-primary" />{row.cliente.razao_social}</h2>
-                    <p className="text-xs text-muted-foreground">{row.cliente.cnpj_cpf || 'Sem CNPJ'} {row.cliente.cidade ? `- ${row.cliente.cidade}/${row.cliente.uf || ''}` : ''}</p>
-                  </div>
-                  <Button size="sm" onClick={() => abrirChamado(row.cliente.id)}>Abrir chamado</Button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="admin-metric-cell"><p>Contratos</p><strong>{row.contratos.length}</strong></div>
-                  <div className="admin-metric-cell"><p>Equipamentos</p><strong>{row.equipamentos.length}</strong></div>
-                  <div className="admin-metric-cell"><p>Valores</p><strong className="inline-flex items-center justify-center gap-1"><EyeOff className="h-3 w-3" />Oculto</strong></div>
-                </div>
-
-                <div className="space-y-2">
-                  {row.equipamentos.slice(0, 6).map((eq) => (
-                    <div key={eq.id} className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-                      <div className="flex items-center gap-2 font-medium"><Package className="h-4 w-4 text-primary" />{eq.ativos?.descricao || eq.descricao_livre || 'Equipamento'}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{[eq.ativos?.tipo, eq.patrimonio || eq.ativos?.patrimonio, eq.placa || eq.ativos?.placa].filter(Boolean).join(' - ') || 'Sem detalhes'}</div>
-                    </div>
-                  ))}
-                  {row.equipamentos.length === 0 && <p className="text-sm text-muted-foreground">Sem equipamento vinculado.</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <OperacionalClientesPanel
+          clientes={clientes}
+          locais={locais}
+          alocacoes={alocacoes}
+          busca={busca}
+          onBuscaChange={setBusca}
+          onAbrirChamado={abrirChamado}
+        />
       )}
 
       {tab === 'novo' && (
@@ -427,6 +414,32 @@ const DespacharChamadoPage: React.FC = () => {
               <SelectContent>{clientes.map((c) => <SelectItem key={c.id} value={c.id}>{c.razao_social}</SelectItem>)}</SelectContent>
             </Select>
 
+            <Select
+              value={form.alocacao_id}
+              onValueChange={(value) => {
+                const alocacao = alocacoes.find((item) => item.id === value);
+                const local = alocacao?.cliente_local_id ? locais.find((item) => item.id === alocacao.cliente_local_id) : null;
+                setForm((current) => ({
+                  ...current,
+                  alocacao_id: value,
+                  local_servico: local?.nome || current.local_servico,
+                }));
+              }}
+              disabled={!form.cliente_id || alocacoesCliente.length === 0}
+            >
+              <SelectTrigger><SelectValue placeholder={alocacoesCliente.length ? "Equipamento / patrimônio alocado" : "Sem alocação operacional"} /></SelectTrigger>
+              <SelectContent>
+                {alocacoesCliente.map((item) => {
+                  const local = locais.find((l) => l.id === item.cliente_local_id);
+                  return (
+                    <SelectItem key={item.id} value={item.id}>
+                      {[item.patrimonio, item.placa, local?.nome].filter(Boolean).join(' • ')}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+
             <Select value={form.contrato_id} onValueChange={selecionarContrato} disabled={!form.cliente_id}>
               <SelectTrigger><SelectValue placeholder="Contrato / locação" /></SelectTrigger>
               <SelectContent>{contratosCliente.map((c) => <SelectItem key={c.id} value={c.id}>{c.numero} - {c.tipo}</SelectItem>)}</SelectContent>
@@ -438,6 +451,12 @@ const DespacharChamadoPage: React.FC = () => {
             </Select>
 
             <Input placeholder="Canteiro / local do serviço" value={form.local_servico} onChange={(e) => setForm((f) => ({ ...f, local_servico: e.target.value }))} />
+            {alocacaoSelecionada && (
+              <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs text-muted-foreground lg:col-span-2">
+                Patrimônio: <b className="text-foreground">{alocacaoSelecionada.patrimonio || '—'}</b> • Placa: <b className="text-foreground">{alocacaoSelecionada.placa || '—'}</b>
+                {alocacaoSelecionada.alerta_conferencia ? <span className="ml-2 font-bold text-amber-700">• Conferência pendente no cadastro</span> : null}
+              </div>
+            )}
 
             <Input placeholder="Quem solicitou no cliente *" value={form.solicitante_nome} onChange={(e) => setForm((f) => ({ ...f, solicitante_nome: e.target.value }))} />
             <Input placeholder="Telefone / contato do solicitante" value={form.solicitante_contato} onChange={(e) => setForm((f) => ({ ...f, solicitante_contato: e.target.value }))} />
