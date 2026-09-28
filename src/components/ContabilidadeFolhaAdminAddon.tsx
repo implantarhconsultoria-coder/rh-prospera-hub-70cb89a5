@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, CheckCircle2, ChevronRight, Clock3, Eye, FileCheck2,
@@ -53,6 +53,7 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
   const [selectedType, setSelectedType] = useState<ProcessType | null>(null);
   const [issueCycle, setIssueCycle] = useState<string | null>(null);
   const [issueText, setIssueText] = useState('');
+  const repairTriedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const mount = () => {
@@ -98,50 +99,47 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     if (!silent) setLoading(true);
     try {
       const result = await api('admin_state');
-      setState({
+      const nextState: AdminState = {
         competence:String(result.competence||''),
         companies:result.companies||[],
         cycles:result.cycles||[],
         documents:result.documents||[],
         uploads:result.uploads||[],
-      });
+      };
+      setState(nextState);
+
+      // Autocura segura: ciclo de Pagamento já liberado, mas sem o apontamento
+      // automático gravado. Isso cobre fechamentos que ficaram pela metade em
+      // versões antigas sem bloquear a Contabilidade.
+      const missingGenerated = nextState.cycles.filter((cycle) =>
+        cycle.tipo === 'pagamento'
+        && Boolean(cycle.apontamento_liberado_em)
+        && !nextState.uploads.some((upload) => upload.ciclo_id === cycle.id && upload.origem_tipo === 'rh_apontamento')
+        && !repairTriedRef.current.has(cycle.id),
+      );
+      for (const cycle of missingGenerated) {
+        repairTriedRef.current.add(cycle.id);
+        try {
+          const token = await authToken();
+          const response = await fetch('/api/accounting-closing-flow', {
+            method:'POST',
+            headers:{ 'content-type':'application/json', authorization:`Bearer ${token}` },
+            body:JSON.stringify({ action:'finalize', empresa_id:cycle.empresa_id, competencia:cycle.competencia }),
+          });
+          const repaired = await response.json().catch(() => ({}));
+          if (response.ok && repaired?.ok) {
+            console.info('[contabilidade][repair-closing] apontamento recuperado', cycle.id);
+          }
+        } catch (repairError) {
+          console.warn('[contabilidade][repair-closing]', repairError);
+        }
+      }
     } catch (error:any) {
       if (!silent) toast.error(error?.message || 'Não foi possível carregar o fluxo da folha.');
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [api]);
-
-  const finalizeClosing = useCallback(async (empresaId:string, competencia:string) => {
-    const token = await authToken();
-    setBusy(`closing:${empresaId}`);
-    let lastError = '';
-    try {
-      for (let attempt = 0; attempt < 6; attempt++) {
-        if (attempt) await new Promise(resolve => window.setTimeout(resolve, 750));
-        const response = await fetch('/api/accounting-closing-flow', {
-          method:'POST',
-          headers:{ 'content-type':'application/json', authorization:`Bearer ${token}` },
-          body:JSON.stringify({ action:'finalize', empresa_id:empresaId, competencia }),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (response.ok && result?.ok) {
-          if (result.email_status === 'enviado') toast.success('Fechamento concluído. PDF do apontamento gerado, Pagamento liberado e e-mail enviado à Contabilidade.');
-          else toast.warning(`Fechamento concluído e Pagamento liberado. O PDF foi gerado, mas o e-mail ficou pendente. ${result.email_error || ''}`.trim());
-          setSelectedType('pagamento');
-          const overviewTab = Array.from(document.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Visão geral') as HTMLButtonElement | undefined;
-          overviewTab?.click();
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          return;
-        }
-        lastError = result?.message || result?.error || 'Falha ao finalizar fechamento.';
-        if (result?.error !== 'fechamento_nao_concluido') throw new Error(lastError);
-      }
-      throw new Error(lastError || 'O fechamento não foi confirmado pelo banco a tempo.');
-    } finally {
-      setBusy(null);
-    }
-  }, [authToken]);
+  }, [api, authToken]);
 
   useEffect(() => { if (host) void load(); }, [host, load]);
   useEffect(() => {
@@ -150,6 +148,8 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     return () => window.clearInterval(timer);
   }, [host, load]);
 
+  // Apenas melhora o rótulo visual. O fechamento chama a integração diretamente
+  // em FechamentoPage; não interceptamos cliques nem duplicamos ações por DOM.
   useEffect(() => {
     if (!host) return;
     const enhanceClosingButton = () => {
@@ -157,55 +157,19 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
       for (const button of buttons) {
         const text = button.textContent?.trim() || '';
         if (text === 'Marcar como Fechado') {
-          const textNode = Array.from(button.childNodes).find(node => node.nodeType === Node.TEXT_NODE && node.textContent?.includes('Marcar como Fechado'));
+          const textNode = Array.from(button.childNodes).find(
+            node => node.nodeType === Node.TEXT_NODE && node.textContent?.includes('Marcar como Fechado'),
+          );
           if (textNode) textNode.textContent = ' Concluir e enviar à Contabilidade';
-          button.dataset.centralClosingButton = 'true';
-          button.title = 'Conclui o fechamento, gera o PDF do apontamento e libera o Pagamento para a Contabilidade.';
+          button.title = 'Conclui o fechamento e, depois de salvo, libera o Pagamento para a Contabilidade.';
         }
       }
     };
     const observer = new MutationObserver(() => requestAnimationFrame(enhanceClosingButton));
     observer.observe(document.body, { childList:true, subtree:true, characterData:true });
     enhanceClosingButton();
-
-    const onClick = (event:MouseEvent) => {
-      const button = (event.target as HTMLElement | null)?.closest('button') as HTMLButtonElement | null;
-      if (!button) return;
-      const text = button.textContent?.trim() || '';
-      if (button.dataset.centralClosingButton !== 'true' && !text.includes('Concluir e enviar à Contabilidade') && text !== 'Marcar como Fechado') return;
-
-      let saved:any = {};
-      try { saved = JSON.parse(window.sessionStorage.getItem(VIEW_STATE_KEY) || '{}'); } catch { saved = {}; }
-      const empresaId = String(saved?.selectedCompany || '');
-      const competencia = String(saved?.competencia || state?.competence || '');
-      if (!empresaId || !/^\d{4}-\d{2}$/.test(competencia)) {
-        event.preventDefault();
-        event.stopPropagation();
-        toast.error('Selecione a empresa e a competência antes de concluir.');
-        return;
-      }
-
-      const companyName = state?.companies.find(company => company.id === empresaId)?.nome || 'esta empresa';
-      const confirmed = window.confirm(`Concluir o fechamento de ${companyName} (${monthLabel(competencia)})?\n\nAo confirmar, o sistema vai gerar automaticamente o PDF do apontamento, liberar o card PAGAMENTO e enviar o apontamento para a Contabilidade.`);
-      if (!confirmed) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-
-      window.setTimeout(() => {
-        void finalizeClosing(empresaId, competencia)
-          .then(() => load(true))
-          .catch((error:any) => toast.error(error?.message || 'O fechamento foi salvo, mas não foi possível enviar o apontamento automaticamente.'));
-      }, 450);
-    };
-
-    document.addEventListener('click', onClick, true);
-    return () => {
-      observer.disconnect();
-      document.removeEventListener('click', onClick, true);
-    };
-  }, [host, finalizeClosing, load, state?.companies, state?.competence]);
+    return () => observer.disconnect();
+  }, [host]);
 
   const companyMap = useMemo(() => new Map((state?.companies||[]).map(company => [company.id,company])), [state?.companies]);
   const cyclesFor = useCallback((type:ProcessType) => (state?.cycles||[])

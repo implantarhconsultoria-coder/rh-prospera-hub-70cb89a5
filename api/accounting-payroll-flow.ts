@@ -255,6 +255,16 @@ const sendApprovalEmail = async (service: any, cycle: any, documentsReleased: nu
   return result;
 };
 
+const safeFormalizationEmail = async (label: string, work: () => Promise<any>) => {
+  try {
+    return await work();
+  } catch (error: any) {
+    const detail = String(error?.message || error || 'email_side_effect_failed').slice(0, 1000);
+    console.error(`[accounting-payroll-flow][email-isolated][${label}]`, detail);
+    return { status: 'erro', error: detail, isolated: true };
+  }
+};
+
 const portalState = async (service: any, user: any, portal: string) => {
   const competence = competenceNow();
   const companies = await allowedCompanies(service, user.id);
@@ -360,7 +370,7 @@ export default async function handler(req: any, res?: any) {
           status: 'conferido', conferido_em: now, conferido_por: user.id, observacao: null, updated_at: now,
         }).eq('id', cycle.id).select('*').single();
         if (error) throw error;
-        const emailResult = await sendApprovalEmail(service, { ...cycle, ...data }, documentIds.length);
+        const emailResult = await safeFormalizationEmail('approval', () => sendApprovalEmail(service, { ...cycle, ...data }, documentIds.length));
         return sendJson(res, { ok: true, cycle: data, documentos_liberados: documentIds.length, email_status: emailResult.status, email_error: emailResult.error || null });
       }
 
@@ -401,10 +411,22 @@ export default async function handler(req: any, res?: any) {
 
     if (action === 'ack_apontamento') {
       if (cycle.tipo !== 'pagamento' || !cycle.apontamento_liberado_em) return sendJson(res, { ok: false, error: 'apontamento_nao_liberado' }, 409);
+
+      // Idempotente: repetir a confirmação (duplo clique, rede lenta, retry do navegador)
+      // nunca transforma uma operação já concluída em erro.
+      if (cycle.contabilidade_recebeu_em) {
+        return sendJson(res, { ok: true, cycle, already_confirmed: true, email_isolated: true });
+      }
+
       const now = new Date().toISOString();
-      const { data, error } = await service.from('contabilidade_folha_ciclos').update({ contabilidade_recebeu_em: now, status: 'recebido', updated_at: now }).eq('id', cycle.id).select('*').single();
+      const { data, error } = await service.from('contabilidade_folha_ciclos').update({
+        contabilidade_recebeu_em: now,
+        status: 'recebido',
+        updated_at: now,
+      }).eq('id', cycle.id).select('*').single();
       if (error) throw error;
-      return sendJson(res, { ok: true, cycle: data });
+
+      return sendJson(res, { ok: true, cycle: data, already_confirmed: false, email_isolated: true });
     }
 
     assertCycleUploadAllowed(cycle);
@@ -614,7 +636,7 @@ export default async function handler(req: any, res?: any) {
         processamento_detalhes: { identificados: Number(identified || 0), revisar: Number(review || 0) },
         updated_at: now,
       }).eq('ciclo_id', cycle.id);
-      const emailResult = await sendSubmissionEmail(service, { ...cycle, ...data }, user, Number(identified || 0), Number(review || 0));
+      const emailResult = await safeFormalizationEmail('submission', () => sendSubmissionEmail(service, { ...cycle, ...data }, user, Number(identified || 0), Number(review || 0)));
       return sendJson(res, {
         ok: true,
         cycle: data,

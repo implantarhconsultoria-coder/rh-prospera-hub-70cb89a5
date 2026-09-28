@@ -251,6 +251,44 @@ export default async function handler(req: any, res?: any) {
 
     const cycle = await getOrCreatePaymentCycle(service, companyId, competencia);
     const { owner, emails, cc } = await accountingRecipients(service, companyId);
+
+    // Idempotência: se este mesmo fechamento já gerou o apontamento, não cria
+    // outro arquivo, não duplica e-mail e não volta o ciclo para trás.
+    const { data: existingGenerated, error: existingGeneratedError } = await service
+      .from('contabilidade_portal_uploads')
+      .select('*')
+      .eq('ciclo_id', cycle.id)
+      .eq('origem_tipo', 'rh_apontamento')
+      .eq('origem_id', fechamento.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingGeneratedError) throw existingGeneratedError;
+
+    if (existingGenerated) {
+      let stableCycle = cycle;
+      if (!cycle.apontamento_liberado_em) {
+        const stableNow = new Date().toISOString();
+        const { data: repaired, error: repairError } = await service.from('contabilidade_folha_ciclos').update({
+          apontamento_liberado_em: stableNow,
+          apontamento_liberado_por: user.id,
+          status: cycle.contabilidade_recebeu_em ? 'recebido' : 'liberado',
+          updated_at: stableNow,
+        }).eq('id', cycle.id).select('*').single();
+        if (repairError) throw repairError;
+        stableCycle = repaired;
+      }
+      return sendJson(res, {
+        ok: true,
+        cycle: stableCycle,
+        upload_id: existingGenerated.id,
+        arquivo_nome: existingGenerated.arquivo_nome,
+        email_status: existingGenerated.formalizacao_email_status || 'pendente',
+        email_error: null,
+        already_finalized: true,
+      });
+    }
+
     const { bytes, filename, company } = await buildClosingPdf(service, companyId, competencia);
 
     const { data: prior, error: priorError } = await service.from('contabilidade_portal_uploads')
@@ -272,7 +310,74 @@ export default async function handler(req: any, res?: any) {
     if (storageError) throw storageError;
 
     const now = new Date().toISOString();
-    const email = await sendAccountingEmail(service, { emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes });
+
+    // 1) Primeiro conclui a operação da plataforma.
+    // E-mail nunca pode ser pré-requisito para liberar a Contabilidade.
+    const { data: upload, error: uploadError } = await service.from('contabilidade_portal_uploads').insert({
+      portal_user_id: owner.id,
+      empresa_id: companyId,
+      ciclo_id: cycle.id,
+      processo_tipo: 'pagamento',
+      tipo_documento: 'apontamento_pagamento',
+      competencia,
+      arquivo_nome: filename,
+      tamanho_bytes: bytes.length,
+      storage_bucket: INBOX_BUCKET,
+      storage_path: storagePath,
+      status: 'recebido',
+      formalizacao_email_status: 'pendente',
+      formalizacao_email_em: null,
+      formalizacao_destinos: Array.from(new Set([...emails, ...cc])),
+      processamento_status: 'processado',
+      processamento_detalhes: { origem: 'fechamento_rh', fechamento_id: fechamento.id, gerado_automaticamente: true },
+      origem_tipo: 'rh_apontamento',
+      origem_id: fechamento.id,
+      created_at: now,
+      updated_at: now,
+    }).select('*').single();
+    if (uploadError) {
+      await service.storage.from(INBOX_BUCKET).remove([storagePath]).catch(() => null);
+      throw uploadError;
+    }
+
+    const { data: updatedCycle, error: cycleError } = await service.from('contabilidade_folha_ciclos').update({
+      apontamento_liberado_em: cycle.apontamento_liberado_em || now,
+      apontamento_liberado_por: cycle.apontamento_liberado_por || user.id,
+      contabilidade_recebeu_em: cycle.contabilidade_recebeu_em || null,
+      status: cycle.contabilidade_recebeu_em ? 'recebido' : 'liberado',
+      observacao: 'Apontamento gerado automaticamente no fechamento. Formalização por e-mail é independente da liberação operacional.',
+      email_envio_status: 'pendente',
+      updated_at: now,
+    }).eq('id', cycle.id).select('*').single();
+    if (cycleError) throw cycleError;
+
+    // 2) Só depois tenta formalizar por e-mail. Qualquer falha fica registrada,
+    // mas a ação da Vanessa continua liberada.
+    let email: any = { status: 'pendente', error: null };
+    try {
+      email = await sendAccountingEmail(service, {
+        emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes,
+      });
+    } catch (emailError: any) {
+      email = { status: 'erro', error: clean(emailError?.message || emailError).slice(0, 1000) };
+      console.error('[accounting-closing-flow][email-isolated]', email.error);
+    }
+
+    const emailNow = new Date().toISOString();
+    await service.from('contabilidade_portal_uploads').update({
+      formalizacao_email_status: email.status,
+      formalizacao_email_em: email.status === 'enviado' ? emailNow : null,
+      updated_at: emailNow,
+    }).eq('id', upload.id);
+
+    await service.from('contabilidade_folha_ciclos').update({
+      email_envio_status: email.status,
+      email_envio_em: email.status === 'enviado' ? emailNow : null,
+      observacao: email.status === 'enviado'
+        ? 'Apontamento gerado automaticamente no fechamento e formalizado por e-mail.'
+        : 'Apontamento liberado normalmente. Formalização por e-mail pendente, sem bloqueio operacional.',
+      updated_at: emailNow,
+    }).eq('id', cycle.id);
 
     try {
       await service.from('email_envios_log').insert({
@@ -289,57 +394,21 @@ export default async function handler(req: any, res?: any) {
         cc: cc.join('; '),
         assunto: `[TOPAC RH PRO] FECHAMENTO DA FOLHA - ${company.nome} - ${competenceLabel(competencia)}`,
         status: email.status === 'enviado' ? 'enviado' : 'erro',
-        erro: email.status === 'enviado' ? null : ('error' in email ? email.error || null : null),
-        enviado_em: new Date().toISOString(),
+        erro: email.status === 'enviado' ? null : (email.error || null),
+        enviado_em: emailNow,
       });
     } catch (logError) {
       console.warn('[accounting-closing-flow] email log failed', logError);
     }
 
-    const { data: upload, error: uploadError } = await service.from('contabilidade_portal_uploads').insert({
-      portal_user_id: owner.id,
-      empresa_id: companyId,
-      ciclo_id: cycle.id,
-      processo_tipo: 'pagamento',
-      tipo_documento: 'apontamento_pagamento',
-      competencia,
-      arquivo_nome: filename,
-      tamanho_bytes: bytes.length,
-      storage_bucket: INBOX_BUCKET,
-      storage_path: storagePath,
-      status: 'recebido',
-      formalizacao_email_status: email.status,
-      formalizacao_email_em: email.status === 'enviado' ? now : null,
-      formalizacao_destinos: Array.from(new Set([...emails, ...cc])),
-      processamento_status: 'processado',
-      processamento_detalhes: { origem: 'fechamento_rh', fechamento_id: fechamento.id, gerado_automaticamente: true },
-      origem_tipo: 'rh_apontamento',
-      origem_id: fechamento.id,
-      created_at: now,
-      updated_at: now,
-    }).select('*').single();
-    if (uploadError) {
-      await service.storage.from(INBOX_BUCKET).remove([storagePath]).catch(() => null);
-      throw uploadError;
-    }
-
-    const { data: updatedCycle, error: cycleError } = await service.from('contabilidade_folha_ciclos').update({
-      apontamento_liberado_em: now,
-      apontamento_liberado_por: user.id,
-      contabilidade_recebeu_em: null,
-      status: 'liberado',
-      observacao: email.status === 'enviado' ? 'Apontamento gerado automaticamente no fechamento e enviado à Contabilidade.' : 'Apontamento gerado automaticamente no fechamento. E-mail pendente.',
-      updated_at: now,
-    }).eq('id', cycle.id).select('*').single();
-    if (cycleError) throw cycleError;
-
     return sendJson(res, {
       ok: true,
-      cycle: updatedCycle,
+      cycle: { ...updatedCycle, email_envio_status: email.status },
       upload_id: upload.id,
       arquivo_nome: filename,
       email_status: email.status,
-      email_error: 'error' in email ? email.error || null : null,
+      email_error: email.error || null,
+      operation_released: true,
     });
   } catch (error: any) {
     console.error('[accounting-closing-flow]', error);
