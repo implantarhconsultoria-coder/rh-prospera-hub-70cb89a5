@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
+import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const BUCKET = 'contabilidade-inbox';
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -141,6 +142,9 @@ const sendStoredPdfEmail = async (service: any, input: {
   bucket: string;
   path: string;
   fileName: string;
+  empresaId?: string;
+  competencia?: string | null;
+  closeThread?: boolean;
 }) => {
   const resendKey = String(process.env.RESEND_API_KEY || '').trim();
   if (!resendKey) throw Object.assign(new Error('Envio de e-mail não configurado no servidor.'), { status: 503 });
@@ -161,6 +165,12 @@ const sendStoredPdfEmail = async (service: any, input: {
     : 'TOPAC RH PRO <no-reply@topacrh.pro>';
   const replyTo = cleanEmails(input.replyTo)[0] || String(process.env.EMAIL_REPLY_TO || process.env.REPLY_TO || TOPAC_CENTRAL_EMAIL).trim();
   const htmlBody = htmlEscape(input.body).replace(/\n/g, '<br>');
+  const threadKey = input.empresaId && input.competencia
+    ? buildAccountingThreadKey(input.empresaId, input.competencia)
+    : '';
+  const thread = threadKey
+    ? await prepareAccountingThread(service, { threadKey, subject: input.subject })
+    : { subject: input.subject, headers: {}, current: null as any };
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -170,9 +180,10 @@ const sendStoredPdfEmail = async (service: any, input: {
       to: input.to,
       ...(input.cc.length ? { cc: input.cc } : {}),
       reply_to: replyTo,
-      subject: input.subject,
+      subject: thread.subject,
       text: input.body,
       html: `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#111827;line-height:1.55"><div style="max-width:720px">${htmlBody}</div></body></html>`,
+      ...(Object.keys(thread.headers).length ? { headers: thread.headers } : {}),
       attachments: [{ filename: input.fileName, content: bytes.toString('base64') }],
     }),
   });
@@ -183,7 +194,20 @@ const sendStoredPdfEmail = async (service: any, input: {
     throw Object.assign(new Error('O PDF foi salvo, mas o provedor recusou o envio do e-mail.'), { status: 502 });
   }
   const provider = await response.json().catch(() => ({}));
-  return { provider_id: provider?.id || null };
+  const providerEmailId = provider?.id || null;
+  if (threadKey) {
+    const messageId = await fetchResendMessageId(resendKey, providerEmailId);
+    await saveAccountingThread(service, {
+      threadKey,
+      empresaId: input.empresaId || null,
+      competencia: input.competencia || null,
+      subject: thread.subject,
+      providerEmailId,
+      messageId,
+      close: !!input.closeThread,
+    });
+  }
+  return { provider_id: providerEmailId, thread_key: threadKey || null };
 };
 
 export default async function handler(req: any, res?: any) {
@@ -321,6 +345,9 @@ export default async function handler(req: any, res?: any) {
           bucket: BUCKET,
           path: storagePath,
           fileName,
+          empresaId: company.id,
+          competencia: competence,
+          closeThread: type === 'folha_processada',
         });
         const formalizedAt = new Date().toISOString();
         await service.from('contabilidade_portal_uploads').update({
@@ -368,6 +395,9 @@ export default async function handler(req: any, res?: any) {
           bucket: upload.storage_bucket,
           path: upload.storage_path,
           fileName: upload.arquivo_nome,
+          empresaId: upload.empresa_id,
+          competencia: upload.competencia,
+          closeThread: upload.tipo_documento === 'folha_processada',
         });
         const now = new Date().toISOString();
         await service.from('contabilidade_portal_uploads').update({
