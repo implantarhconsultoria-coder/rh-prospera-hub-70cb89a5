@@ -181,7 +181,7 @@ export const accountingEmailProviderStatus = () => {
     return {
       provider: 'RESEND',
       configured: missing.length === 0,
-      mailbox: env('ACCOUNTING_RESEND_MAILBOX') || 'centralrh@topacrh.pro',
+      mailbox: env('ACCOUNTING_RESEND_MAILBOX') || 'centralrh@mleurob.resend.app',
       missing,
       mode: 'WEBHOOK',
     };
