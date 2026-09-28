@@ -10,6 +10,7 @@ const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
 const TOPAC_CENTRAL_EMAIL = 'adm.matriz@topac.com.br';
 const TOPAC_ROBSON_EMAIL = 'robson@topac.com.br';
 const TOPAC_GOIANIA_EMAIL = 'adm.gyn@topac.com.br';
+const ANTONIO_CARLOS_PRAIA_EMAIL = 'antonio.carlos@topac.com.br';
 
 const TYPE_LABELS: Record<string, string> = {
   recibos_holerites: 'Recibos / Holerites',
@@ -262,6 +263,11 @@ export default async function handler(req: any, res?: any) {
       if (companyError) throw companyError;
       const typeLabel = TYPE_LABELS[type] || type;
       const routing = await getEmailRouting(service, portal, String(user.email || ''));
+      const isPraiaGrande = /praia/i.test(String(company.nome || company.codigo || ''));
+      const isFolhaFinal = type === 'folha_processada';
+      if (portal === 'principal' && isPraiaGrande && isFolhaFinal) {
+        routing.cc = uniqueEmails([...routing.cc, ANTONIO_CARLOS_PRAIA_EMAIL]);
+      }
 
       const { data: existing } = await service
         .from('contabilidade_portal_uploads')
@@ -379,8 +385,18 @@ export default async function handler(req: any, res?: any) {
 
       const user = await validateSession(service, portal, token, upload.empresa_id);
       const routing = await getEmailRouting(service, portal, String(user.email || ''));
+      const { data: uploadCompany } = await service.from('empresas').select('id,nome,codigo').eq('id', upload.empresa_id).maybeSingle();
+      const isPraiaGrande = /praia/i.test(String(uploadCompany?.nome || uploadCompany?.codigo || ''));
+      const isFolhaFinal = upload.tipo_documento === 'folha_processada';
+      if (portal === 'principal' && isPraiaGrande && isFolhaFinal) {
+        routing.cc = uniqueEmails([...routing.cc, ANTONIO_CARLOS_PRAIA_EMAIL]);
+      }
       const to = cleanEmails(body.to).length ? cleanEmails(body.to) : routing.to;
-      const cc = cleanEmails(body.cc);
+      const requestedCc = cleanEmails(body.cc);
+      const cc = uniqueEmails([
+        ...(requestedCc.length ? requestedCc : routing.cc),
+        ...(portal === 'principal' && isPraiaGrande && isFolhaFinal ? [ANTONIO_CARLOS_PRAIA_EMAIL] : []),
+      ]).filter((email) => !to.includes(email));
       const subject = String(body.subject || '').trim().slice(0, 240);
       const text = String(body.body || '').trim().slice(0, 12000);
       if (!to.length || !subject || !text) return sendJson(res, { ok: false, error: 'dados_email_invalidos', message: 'Destinatário, assunto e mensagem são obrigatórios.' }, 400);
