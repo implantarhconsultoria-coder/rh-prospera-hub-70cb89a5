@@ -4,7 +4,9 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { analyzePayrollFiles } from '@/lib/payrollPageDocuments';
+import { PDFDocument } from 'pdf-lib';
+import { matchEmployeeForPage } from '@/lib/payrollPageDocuments';
+import { extractPayrollDocumentMetadata } from '@/lib/payrollDocumentsV2';
 import { sha256Browser } from '@/lib/payrollDocuments';
 
 type PortalKind = 'principal' | 'goiania';
@@ -178,18 +180,66 @@ export default function ContabilidadeFolhaFluxo({ portal }: { portal: PortalKind
         const uploadId = finalized.upload?.id;
         if (!uploadId) throw new Error(`Não foi possível registrar ${file.name}.`);
 
-        const analyses = await analyzePayrollFiles({ files: [file], employees: companyEmployees });
-        const analysis = analyses[0];
-        if (!analysis || analysis.fatalError) {
+        const serverAnalysis = await call('analyze_original', {
+          ciclo_id: cycle.id,
+          empresa_id: selectedCompany.id,
+          upload_id: uploadId,
+        });
+        const serverPages = Array.isArray(serverAnalysis.pages) ? serverAnalysis.pages : [];
+        if (!serverPages.length) {
           review += 1;
           await call('register_page', {
             ciclo_id: cycle.id, empresa_id: selectedCompany.id, upload_id: uploadId,
-            pagina: 0, classificacao: 'erro', status: 'pdf_nao_lido', detalhes: { erro: analysis?.fatalError || 'Falha de leitura do PDF.' },
+            pagina: 0, classificacao: 'erro', status: 'pdf_nao_lido',
+            detalhes: { erro: 'O servidor não encontrou páginas legíveis no PDF.' },
           });
           continue;
         }
 
-        for (const page of analysis.documents) {
+        const sourceBytes = new Uint8Array(await file.arrayBuffer());
+        const sourceDoc = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+
+        for (const serverPage of serverPages) {
+          const pageNumber = Number(serverPage.page || 0);
+          const lines = Array.isArray(serverPage.lines) ? serverPage.lines.map((line:any) => String(line || '')) : [];
+          const text = String(serverPage.text || '');
+          const metadata = extractPayrollDocumentMetadata(text, lines);
+          const match = matchEmployeeForPage(text, lines, companyEmployees);
+
+          let pageBytes = new Uint8Array(0);
+          try {
+            if (pageNumber < 1 || pageNumber > sourceDoc.getPageCount()) throw new Error('pagina_fora_do_pdf');
+            const onePage = await PDFDocument.create();
+            const [copied] = await onePage.copyPages(sourceDoc, [pageNumber - 1]);
+            onePage.addPage(copied);
+            pageBytes = new Uint8Array(await onePage.save({ useObjectStreams: false }));
+          } catch (splitError:any) {
+            review += 1;
+            await call('register_page', {
+              ciclo_id: cycle.id, empresa_id: selectedCompany.id, upload_id: uploadId,
+              pagina: pageNumber || 0, classificacao: 'erro', status: 'falha_separar_pagina',
+              detalhes: { erro: String(splitError?.message || splitError) },
+            });
+            continue;
+          }
+
+          const page = {
+            pageNumber,
+            text,
+            documentType: metadata.documentType,
+            cnpjDetected: metadata.cnpjDetected,
+            status: match.status,
+            employeeId: match.employee?.id || null,
+            employeeName: match.employee?.name || null,
+            employeeNameDetected: metadata.employeeNameDetected,
+            cpfDetected: match.cpf,
+            bytes: pageBytes,
+            sha256: await sha256Browser(pageBytes),
+            message: match.message,
+            matchMethod: match.method,
+            competenciaDetected: metadata.competenciaDetected,
+            amountDetected: metadata.netAmountDetected,
+          };
           const receipt = likelyReceipt(selectedType, page);
           const detectedCnpj = digits(page.cnpjDetected);
           const expectedCnpj = digits(selectedCompany.cnpj);
@@ -219,7 +269,7 @@ export default function ContabilidadeFolhaFluxo({ portal }: { portal: PortalKind
           const saved = await call('finalize_document', {
             ciclo_id: cycle.id, empresa_id: selectedCompany.id, upload_id: uploadId,
             funcionario_id: page.employeeId, pagina: page.pageNumber, storage_path: pagePrepared.path,
-            arquivo_nome: filename, tamanho_bytes: page.bytes.byteLength, source_sha256: analysis.sourceSha256,
+            arquivo_nome: filename, tamanho_bytes: page.bytes.byteLength, source_sha256: sourceSha,
             document_sha256: pageHash, nome_detectado: page.employeeNameDetected || page.employeeName,
             cpf_detectado: page.cpfDetected, cnpj_detectado: page.cnpjDetected, tipo_detectado: page.documentType,
             metodo_vinculo: page.matchMethod, competencia_detectada: page.competenciaDetected, valor_liquido: page.amountDetected,
