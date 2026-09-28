@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Mail, Percent, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Percent, RefreshCw, Save } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,13 +7,11 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency, isTopacGoiania } from '@/lib/calculations';
 import type { Employee } from '@/types/database';
-import type { EmailPdfDraft } from '@/components/EmailPdfModal';
 
 type Props = {
   employee: Employee;
   company?: { id: string; name: string; cnpj?: string; city?: string; cidade?: string; codigo?: string } | null;
   sessionUserId?: string;
-  onEmailDraft: (draft: EmailPdfDraft) => void;
   updateEmployee: (id: string, changes: Partial<Employee>) => Promise<{ ok: boolean; error?: unknown }>;
   refreshData: () => Promise<void> | void;
 };
@@ -48,7 +46,7 @@ const buildPdf = (lines: string[], employeeName: string, competencia: string) =>
   return doc.output('blob');
 };
 
-const SalaryChangeRequestPanel: React.FC<Props> = ({ employee, company, sessionUserId, onEmailDraft, updateEmployee, refreshData }) => {
+const SalaryChangeRequestPanel: React.FC<Props> = ({ employee, company, sessionUserId, updateEmployee, refreshData }) => {
   const [percentual, setPercentual] = useState('');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [observacao, setObservacao] = useState('');
@@ -74,79 +72,55 @@ const SalaryChangeRequestPanel: React.FC<Props> = ({ employee, company, sessionU
 
   useEffect(() => { void loadPending(); }, [employee.id]);
 
-  const montarEmail = () => {
+  const registrarSolicitacao = async () => {
     if (!company) return toast.error('Empresa do funcionário não encontrada.');
     if (pct <= 0) return toast.error('Informe um percentual de reajuste maior que zero.');
     if (!competencia) return toast.error('Informe a competência do reajuste.');
 
-    const accountingTo = isTopacGoiania(company)
-      ? ['requisicao@incocontabilidade.com.br']
-      : ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br'];
+    setLoading(true);
+    try {
+      const commissionLines = isJerri ? [
+        '',
+        'COMISSIONAMENTO DO VENDEDOR JERRI — manter a configuração já definida na plataforma:',
+        '• Até R$ 500.000,00: 1%',
+        '• De R$ 501.000,00 até R$ 649.999,99: 1,5%',
+        '• A partir de R$ 650.000,00: 1,8%',
+      ] : [];
 
-    const commissionLines = isJerri ? [
-      '',
-      'COMISSIONAMENTO DO VENDEDOR JERRI — manter a configuração já definida na plataforma:',
-      '• Até R$ 500.000,00: 1%',
-      '• De R$ 501.000,00 até R$ 649.999,99: 1,5%',
-      '• A partir de R$ 650.000,00: 1,8%',
-      'Essa configuração deve constar expressamente na formalização e na folha correspondente.',
-    ] : [];
+      const bodyLines = [
+        `Funcionário: ${employee.name}`,
+        `Empresa: ${company.name}`,
+        `Competência: ${competencia}`,
+        `Salário atual: ${formatCurrency(salarioAtual)}`,
+        `Percentual de reajuste: ${pct.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`,
+        `Novo salário solicitado: ${formatCurrency(salarioNovo)}`,
+        ...(observacao.trim() ? [`Observação: ${observacao.trim()}`] : []),
+        ...commissionLines,
+      ];
+      const body = bodyLines.join('\n');
+      const subject = `ALTERAÇÃO SALARIAL — ${employee.name} — ${company.name} — ${pct.toLocaleString('pt-BR')}%`;
 
-    const bodyLines = [
-      'Bom dia,',
-      '',
-      'Solicito, por gentileza, a alteração salarial abaixo para processamento pela contabilidade:',
-      '',
-      `Funcionário: ${employee.name}`,
-      `Empresa: ${company.name}`,
-      `Competência: ${competencia}`,
-      `Salário atual: ${formatCurrency(salarioAtual)}`,
-      `Percentual de reajuste: ${pct.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`,
-      `Novo salário solicitado: ${formatCurrency(salarioNovo)}`,
-      ...(observacao.trim() ? [`Observação: ${observacao.trim()}`] : []),
-      ...commissionLines,
-      '',
-      'IMPORTANTE: o salário no TOPAC RH PRO não será alterado neste momento. A plataforma somente aplicará o novo salário após o retorno da folha processada pela contabilidade para esta competência.',
-      '',
-      'Por favor, confirmem o processamento no retorno da folha.',
-      '',
-      'Atenciosamente,',
-      'Rodrigo de Souza Sabino',
-    ];
-
-    const body = bodyLines.join('\n');
-    const subject = `ALTERAÇÃO SALARIAL — ${employee.name} — ${company.name} — ${pct.toLocaleString('pt-BR')}%`;
-    const attachmentBlob = buildPdf(bodyLines, employee.name, competencia);
-    const attachmentName = `SOLICITACAO_ALTERACAO_SALARIAL_${employee.name.replace(/[^A-Za-z0-9]+/g, '_')}_${competencia}.pdf`;
-
-    onEmailDraft({
-      to: accountingTo,
-      cc: isTopacGoiania(company) ? ['adm.gyn@topac.com.br'] : ['adm.matriz@topac.com.br', 'robson@topac.com.br'],
-      subject,
-      body,
-      attachmentBlob,
-      attachmentName,
-      moduleOrigin: 'alteracao-salarial',
-      senderUserId: sessionUserId,
-      documentName: 'Solicitação de alteração salarial',
-      afterSend: async () => {
-        const { error } = await (supabase as any).from('alteracoes_salariais').insert({
-          funcionario_id: employee.id,
-          empresa_id: company.id,
-          competencia,
-          salario_atual: salarioAtual,
-          percentual: pct,
-          salario_solicitado: salarioNovo,
-          observacao: observacao.trim() || null,
-          email_assunto: subject,
-          email_corpo: body,
-          status: 'aguardando_folha',
-          solicitado_por: sessionUserId || null,
-        });
-        if (error) throw error;
-        await loadPending();
-      },
-    });
+      const { error } = await (supabase as any).from('alteracoes_salariais').insert({
+        funcionario_id: employee.id,
+        empresa_id: company.id,
+        competencia,
+        salario_atual: salarioAtual,
+        percentual: pct,
+        salario_solicitado: salarioNovo,
+        observacao: observacao.trim() || null,
+        email_assunto: subject,
+        email_corpo: body,
+        status: 'aguardando_folha',
+        solicitado_por: sessionUserId || null,
+      });
+      if (error) throw error;
+      await loadPending();
+      toast.success('Alteração salarial adicionada ao fechamento. Ela seguirá no e-mail da contabilidade.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível registrar a alteração salarial.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const aplicarAposRetorno = async () => {
@@ -197,7 +171,7 @@ const SalaryChangeRequestPanel: React.FC<Props> = ({ employee, company, sessionU
         <div className="rounded-lg bg-violet-500/10 p-2"><Percent className="h-5 w-5 text-violet-300" /></div>
         <div>
           <h3 className="text-sm font-bold text-foreground">Alteração salarial</h3>
-          <p className="text-xs text-muted-foreground">Solicita à contabilidade por e-mail. O salário só muda na plataforma depois que a folha retornar.</p>
+          <p className="text-xs text-muted-foreground">Registra a solicitação para seguir junto no e-mail do fechamento. O salário só muda na plataforma depois que a folha retornar.</p>
         </div>
       </div>
 
@@ -240,7 +214,7 @@ const SalaryChangeRequestPanel: React.FC<Props> = ({ employee, company, sessionU
             </div>
           )}
           <div className="md:col-span-4">
-            <Button onClick={montarEmail}><Mail className="mr-2 h-4 w-4" /> Solicitar alteração à contabilidade</Button>
+            <Button onClick={registrarSolicitacao} disabled={loading}>{loading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Adicionar ao fechamento</Button>
           </div>
         </div>
       )}
