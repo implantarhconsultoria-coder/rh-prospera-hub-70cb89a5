@@ -5,11 +5,14 @@ import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import StableLoading from '@/components/StableLoading';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
+import { useOperatorBootstrap } from '@/hooks/useOperatorBootstrap';
 
 const AlmoxarifadoLayout: React.FC = () => {
   const { session, userRoles, roleLoading, logout } = useApp();
   const navigate = useNavigate();
   useActivityTracker(session);
+  const canBootstrapOperator = Boolean(session?.user?.id) && (userRoles.includes('almoxarifado') || userRoles.includes('admin') || userRoles.includes('diretor_geral'));
+  useOperatorBootstrap('almoxarifado', canBootstrapOperator);
 
   if (roleLoading) return <StableLoading label="Carregando permissão do Almoxarifado..." />;
 
