@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
+import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
 const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
@@ -299,7 +300,13 @@ export default async function handler(req: any, res?: any) {
 
     const to = validEmails(input.to).length ? validEmails(input.to) : prepared.routing.to;
     const cc = validEmails(input.cc).filter((email) => !to.includes(email));
-    const subject = clean(input.subject) || prepared.subject;
+    const requestedSubject = clean(input.subject) || prepared.subject;
+    const competenciaThread = /^\d{4}-\d{2}$/.test(clean(prepared.movement.reference)) ? clean(prepared.movement.reference) : '';
+    const threadKey = competenciaThread ? buildAccountingThreadKey(prepared.movement.companyId, competenciaThread) : '';
+    const thread = threadKey
+      ? await prepareAccountingThread(service, { threadKey, subject: requestedSubject })
+      : { subject: requestedSubject, headers: {}, current: null as any };
+    const subject = thread.subject;
     const body = clean(input.body) || prepared.body;
     if (!to.length || !subject || !body) {
       return sendJson(res, { ok: false, error: 'dados_invalidos', message: 'Destinatário, assunto e mensagem são obrigatórios.' }, 400);
@@ -324,6 +331,7 @@ export default async function handler(req: any, res?: any) {
         subject,
         text: body,
         html,
+        ...(Object.keys(thread.headers).length ? { headers: thread.headers } : {}),
         ...(attachment ? { attachments: [attachment] } : {}),
       }),
     });
@@ -348,6 +356,20 @@ export default async function handler(req: any, res?: any) {
         enviado_em: new Date().toISOString(),
       });
       throw Object.assign(new Error('falha_envio_email'), { status: 502, detail });
+    }
+
+    const providerData = detail ? JSON.parse(detail) : {};
+    const providerEmailId = providerData?.id || null;
+    if (threadKey) {
+      const messageId = await fetchResendMessageId(resendKey, providerEmailId);
+      await saveAccountingThread(service, {
+        threadKey,
+        empresaId: prepared.movement.companyId,
+        competencia: competenciaThread,
+        subject,
+        providerEmailId,
+        messageId,
+      });
     }
 
     await logEmail(service, {
