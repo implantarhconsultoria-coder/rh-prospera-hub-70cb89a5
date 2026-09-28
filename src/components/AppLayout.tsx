@@ -8,7 +8,7 @@ import EpiSemestralAlert from '@/components/EpiSemestralAlert';
 import ArchiveCoverDialog from '@/components/ArchiveCoverDialog';
 import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';
 import CabinetLabelsAddon from '@/components/CabinetLabelsAddon';
-import SupportCenter from '@/components/SupportCenter';
+import SupportCenter from '@/components/SupportCenter';\nimport ContabilidadeAdminInboxAddon from '@/components/ContabilidadeAdminInboxAddon';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -245,7 +245,7 @@ const AppLayout: React.FC = () => {
         </div>
       )}
 
-      <FechamentoEtiquetasAddon />
+      {userRole === 'admin' && <ContabilidadeAdminInboxAddon />}\n      <FechamentoEtiquetasAddon />
       <CabinetLabelsAddon />
       <SupportCenter />
       <ArchiveCoverDialog open={archiveCoverOpen} onOpenChange={setArchiveCoverOpen} />
