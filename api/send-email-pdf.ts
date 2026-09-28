@@ -317,6 +317,8 @@ const buildMimeMessage = (payload: any, from: string) => {
     raw: [
       `From: ${from}`,
       ...(payload.replyTo ? [`Reply-To: ${payload.replyTo}`] : []),
+      ...(payload.threadHeaders?.['In-Reply-To'] ? [`In-Reply-To: ${payload.threadHeaders['In-Reply-To']}`] : []),
+      ...(payload.threadHeaders?.References ? [`References: ${payload.threadHeaders.References}`] : []),
       `To: ${payload.to.join(', ')}`,
       ...(payload.cc.length ? [`Cc: ${payload.cc.join(', ')}`] : []),
       `Subject: ${encodeHeader(payload.subject)}`,
@@ -404,6 +406,7 @@ const sendWithResend = async (payload: any, supabase: SupabaseServer) => {
       cc: payload.cc,
       subject: payload.subject,
       text: payload.body,
+      ...(payload.threadHeaders && Object.keys(payload.threadHeaders).length ? { headers: payload.threadHeaders } : {}),
       attachments: payload.attachments.map((attachment: ResolvedAttachment) => ({
         filename: attachment.attachmentName,
         content: attachment.attachmentBase64,
@@ -423,7 +426,7 @@ const sendWithSendGrid = async (payload: any, supabase: SupabaseServer) => {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      personalizations: [{ to: payload.to.map((email: string) => ({ email })), cc: payload.cc.map((email: string) => ({ email })), subject: payload.subject }],
+      personalizations: [{ to: payload.to.map((email: string) => ({ email })), cc: payload.cc.map((email: string) => ({ email })), subject: payload.subject, ...(payload.threadHeaders && Object.keys(payload.threadHeaders).length ? { headers: payload.threadHeaders } : {}) }],
       from: { email: env('MAIL_FROM_EMAIL') || env('EMAIL_FROM_EMAIL') || parseEmailAddress(from), name: env('MAIL_FROM_NAME') || env('EMAIL_FROM_NAME') || parseEmailName(from) },
       reply_to: { email: parseEmailAddress(payload.replyTo || getEmailReplyTo()) },
       content: [{ type: 'text/plain', value: payload.body }],
@@ -478,11 +481,19 @@ export default async function handler(req: any, res?: any) {
     references = normalizeAttachmentReferences(body, user.id);
     const attachments = await resolveAttachments(supabase, references, provider);
     const attachmentNames = attachments.map((attachment) => attachment.attachmentName).join('; ');
+    const requestedSubject = String(body.subject || '').trim();
+    const threadKey = String(body.threadKey || body.thread_key || '').trim();
+    const thread = threadKey
+      ? await prepareAccountingThread(supabase, { threadKey, subject: requestedSubject })
+      : { subject: requestedSubject, headers: {}, current: null as any };
     payload = {
       to: cleanList(body.to),
       cc: cleanList([body.cc, ...MANDATORY_EMAIL_CC]),
-      subject: String(body.subject || '').trim(),
+      subject: thread.subject,
       body: String(body.body || '').trim(),
+      threadKey,
+      threadHeaders: thread.headers,
+      closeThread: body.closeThread === true || body.close_thread === true,
       ...senderContext,
       attachments,
       attachmentNames,
@@ -500,6 +511,20 @@ export default async function handler(req: any, res?: any) {
           ? await sendWithSendGrid(payload, supabase)
           : null;
     if (!result) throw new EmailConfigError('Envio de e-mail não configurado no servidor. Configure Resend, SMTP ou SendGrid nas variáveis de ambiente da Vercel.', ['RESEND_API_KEY', 'EMAIL_FROM'], [['RESEND_API_KEY', 'EMAIL_FROM'], ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM'], ['SENDGRID_API_KEY', 'EMAIL_FROM']], provider);
+
+    if (payload.threadKey) {
+      const providerEmailId = result?.data?.id || result?.provider_id || null;
+      const messageId = result.provider === 'resend'
+        ? await fetchResendMessageId(env('RESEND_API_KEY'), providerEmailId)
+        : '';
+      await saveAccountingThread(supabase, {
+        threadKey: payload.threadKey,
+        subject: payload.subject,
+        providerEmailId,
+        messageId,
+        close: !!payload.closeThread,
+      });
+    }
 
     await recordEmailLog(supabase, payload, 'enviado', result.provider);
     return send({ ok: true, ...result, attachments: references.length });
