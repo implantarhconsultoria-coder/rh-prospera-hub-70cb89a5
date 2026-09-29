@@ -49,39 +49,60 @@ interface HistoricoResumo {
   chamados?: any[];
 }
 
-function ActionCard({ icon: Icon, title, subtitle, disabled, onClick, badge, greenBadge }: { icon: ElementType; title: string; subtitle: string; disabled?: boolean; onClick: () => void; badge?: string; greenBadge?: string }) {
+function ActionCard({ icon: Icon, title, subtitle, disabled, onClick, badge, greenBadge, accent = "purple" }: { icon: ElementType; title: string; subtitle: string; disabled?: boolean; onClick: () => void; badge?: string; greenBadge?: string; accent?: "purple" | "amber" }) {
+  const amber = accent === "amber";
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="grid min-h-[104px] grid-cols-[42px_1fr_14px] items-center gap-2 rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-2.5 text-left text-white transition active:scale-[.985] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[118px] sm:grid-cols-[56px_1fr_18px] sm:p-4"
+      className={`group relative min-h-[128px] overflow-hidden rounded-[22px] border p-3.5 text-left text-white shadow-[0_14px_34px_rgba(0,0,0,.32)] transition duration-150 active:scale-[.975] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[138px] sm:p-4 ${
+        amber
+          ? "border-amber-400/30 bg-[linear-gradient(145deg,rgba(38,27,8,.96),rgba(10,9,12,.98)_58%,rgba(31,16,45,.88))]"
+          : "border-fuchsia-500/25 bg-[linear-gradient(145deg,rgba(24,12,34,.98),rgba(8,8,14,.98)_60%,rgba(15,10,23,.98))]"
+      }`}
     >
-      <span className="grid h-11 w-11 place-items-center text-fuchsia-400 sm:h-14 sm:w-14">
-        <Icon className="h-8 w-8 stroke-[1.45] sm:h-10 sm:w-10" />
-      </span>
-      <span className="min-w-0">
-        <strong className="block text-[12px] font-bold leading-tight sm:text-[15px]">{title}</strong>
-        <span className="mt-1 block text-[9px] leading-snug text-zinc-400 sm:text-[11px]">{subtitle}</span>
-        {(badge || greenBadge) && (
-          <span className="mt-1.5 flex flex-wrap gap-1">
-            {badge && <em className="rounded-md bg-fuchsia-500/15 px-1.5 py-0.5 text-[7px] not-italic text-fuchsia-300 sm:text-[8px]">{badge}</em>}
-            {greenBadge && <em className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[7px] not-italic text-emerald-400 sm:text-[8px]">{greenBadge}</em>}
+      <span className={`pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full blur-3xl ${amber ? "bg-amber-400/10" : "bg-fuchsia-500/10"}`} />
+      <span className={`absolute inset-x-5 top-0 h-px ${amber ? "bg-gradient-to-r from-transparent via-amber-300/70 to-transparent" : "bg-gradient-to-r from-transparent via-fuchsia-400/60 to-transparent"}`} />
+      <span className="relative flex h-full flex-col">
+        <span className="flex items-start justify-between gap-2">
+          <span className={`grid h-12 w-12 place-items-center rounded-[17px] border shadow-inner sm:h-13 sm:w-13 ${
+            amber
+              ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
+              : "border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-300"
+          }`}>
+            <Icon className="h-7 w-7 stroke-[1.7]" />
           </span>
-        )}
+          <span className="grid h-8 w-8 place-items-center rounded-full border border-white/5 bg-white/[.035] text-zinc-500 transition group-active:text-white">
+            <ChevronRight className="h-4 w-4" />
+          </span>
+        </span>
+        <span className="mt-4 min-w-0">
+          <strong className="block text-[13px] font-black leading-[1.12] tracking-[-.01em] sm:text-[15px]">{title}</strong>
+          <span className="mt-1.5 block text-[9px] leading-snug text-zinc-400 sm:text-[10px]">{subtitle}</span>
+          {(badge || greenBadge) && (
+            <span className="mt-2 flex flex-wrap gap-1">
+              {badge && <em className="rounded-full border border-fuchsia-400/15 bg-fuchsia-500/10 px-2 py-1 text-[7px] font-bold not-italic text-fuchsia-200 sm:text-[8px]">{badge}</em>}
+              {greenBadge && <em className="rounded-full border border-emerald-400/15 bg-emerald-500/10 px-2 py-1 text-[7px] font-bold not-italic text-emerald-300 sm:text-[8px]">{greenBadge}</em>}
+            </span>
+          )}
+        </span>
       </span>
-      <ChevronRight className="h-4 w-4 text-zinc-500" />
     </button>
   );
 }
 
 function SummaryItem({ icon: Icon, label, value, danger = false }: { icon: ElementType; label: string; value: React.ReactNode; danger?: boolean }) {
   return (
-    <div className="grid min-h-[55px] grid-cols-[31px_1fr] items-center gap-2 sm:grid-cols-[38px_1fr]">
-      <span className="grid h-8 w-8 place-items-center rounded-full bg-fuchsia-500/10 text-fuchsia-400 sm:h-9 sm:w-9"><Icon className="h-4 w-4 sm:h-5 sm:w-5" /></span>
-      <span className="min-w-0">
-        <small className="block text-[9px] text-zinc-400 sm:text-[11px]">{label}</small>
-        <strong className={`mt-0.5 block truncate text-[12px] font-extrabold sm:text-[14px] ${danger ? "text-red-500" : "text-amber-400"}`}>{value}</strong>
-      </span>
+    <div className="relative min-h-[88px] overflow-hidden rounded-[18px] border border-white/[.055] bg-[linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.012))] p-3">
+      <div className="flex items-start gap-2.5">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[13px] border border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-300">
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
+        <span className="min-w-0">
+          <small className="block text-[8px] font-semibold uppercase tracking-[.08em] text-zinc-500 sm:text-[9px]">{label}</small>
+          <strong className={`mt-1 block break-words text-[12px] font-black leading-tight sm:text-[14px] ${danger ? "text-red-400" : "text-amber-300"}`}>{value}</strong>
+        </span>
+      </div>
     </div>
   );
 }
@@ -194,17 +215,18 @@ export default function HomePage() {
   const RecentIcon = ({ kind }: { kind: string }) => kind === "fuel" ? <Fuel className="h-4 w-4" /> : kind === "maintenance" ? <Wrench className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />;
 
   return (
-    <div className="space-y-4 pb-2 pt-[env(safe-area-inset-top)]">
-      <header className="flex items-center justify-between gap-3 px-0.5 pt-1">
+    <div className="space-y-5 pb-2 pt-[env(safe-area-inset-top)]">
+      <header className="relative overflow-hidden rounded-[24px] border border-fuchsia-500/15 bg-[linear-gradient(135deg,rgba(20,11,29,.94),rgba(6,6,11,.92))] px-4 py-4 shadow-[0_18px_44px_rgba(0,0,0,.28)]">
         <div className="min-w-0">
-          <h1 className="truncate text-[26px] font-black tracking-tight text-white sm:text-3xl">{greeting}, <span className="text-amber-400">{firstName}</span></h1>
-          <p className="mt-1.5 text-[12px] capitalize text-zinc-400 sm:text-sm">{dateLabel}</p>
+          <p className="mb-1 text-[8px] font-black uppercase tracking-[.22em] text-fuchsia-400">TOPAC • OPERAÇÃO</p>
+          <h1 className="truncate text-[27px] font-black tracking-[-.03em] text-white sm:text-3xl">{greeting}, <span className="text-amber-300">{firstName}</span></h1>
+          <p className="mt-1.5 text-[11px] capitalize text-zinc-400 sm:text-sm">{dateLabel}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="relative grid h-11 w-11 place-items-center rounded-full border border-fuchsia-500/20 bg-[#08080e] text-zinc-200">
+          <span className="relative grid h-11 w-11 place-items-center rounded-[15px] border border-white/10 bg-white/[.035] text-zinc-200">
             <Bell className="h-5 w-5" /><i className="absolute right-1 top-1 h-2 w-2 rounded-full bg-fuchsia-500 shadow-[0_0_10px_#a855f7]" />
           </span>
-          <span className="grid h-11 w-11 place-items-center rounded-full border border-fuchsia-500/60 bg-[#09070d] text-[13px] font-bold text-white">{initials}</span>
+          <span className="grid h-11 w-11 place-items-center rounded-[15px] border border-fuchsia-400/35 bg-fuchsia-500/10 text-[13px] font-black text-white shadow-[0_0_24px_rgba(168,85,247,.12)]">{initials}</span>
         </div>
       </header>
 
@@ -213,7 +235,7 @@ export default function HomePage() {
           <h2 className="flex items-center gap-2 text-[13px] font-extrabold text-white sm:text-base"><Wrench className="h-4 w-4 text-amber-400" /> APP MECÂNICO</h2>
           <span className="text-[9px] font-semibold text-fuchsia-400 sm:text-[11px]">Operação</span>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2.5">
           <ActionCard icon={LogIn} title="Entrada de Ponto" subtitle={hasEntry ? `Entrada às ${pointTime(entrada)}` : "Registre o início da jornada"} disabled={hasEntry} onClick={() => navigate(`${base}/ponto?tipo=entrada`)} />
           <ActionCard icon={UtensilsCrossed} title="Início do Almoço" subtitle={almocoInicio ? `Iniciado às ${pointTime(almocoInicio)}` : "Registre a saída para o intervalo"} disabled={!hasEntry || hasExit || Boolean(almocoInicio)} onClick={() => navigate(`${base}/ponto?tipo=almoco_inicio`)} />
           <ActionCard icon={Clock3} title="Fim do Almoço" subtitle={almocoFim ? `Retorno às ${pointTime(almocoFim)}` : almocoInicio ? "Registre o retorno do intervalo" : "Disponível após iniciar o almoço"} disabled={!almocoInicio || Boolean(almocoFim) || hasExit} onClick={() => navigate(`${base}/ponto?tipo=almoco_fim`)} />
@@ -225,39 +247,35 @@ export default function HomePage() {
             onClick={() => navigate(`${base}/ponto?tipo=saida`)}
           />
           <ActionCard icon={Gauge} title="Ponto do Carro / KM" subtitle="Registre hodômetro e localização" onClick={() => navigate(`${base}/veiculo`)} />
-          <ActionCard icon={Fuel} title="Solicitação de Abastecimento" subtitle="Solicite combustível de forma controlada" onClick={() => navigate(`${base}/abastecimento`)} />
+          <ActionCard icon={Fuel} title="Solicitação de Abastecimento" subtitle="Solicite combustível de forma controlada" accent="amber" onClick={() => navigate(`${base}/abastecimento`)} />
           <ActionCard icon={Wrench} title="Ocorrências" subtitle="Receba, aceite e acompanhe ocorrências dos compressores" onClick={() => navigate(`${base}/chamados`)} />
-          <ActionCard icon={CalendarDays} title="Plantão" subtitle={weekend ? "Disponível para registro" : "Somente fim de semana"} badge="Somente fim de semana" greenBadge="Conta como extra" disabled={!weekend || hasEntry} onClick={() => navigate(`${base}/ponto?tipo=entrada&origem=plantao`)} />
+          <ActionCard icon={CalendarDays} title="Plantão" subtitle={weekend ? "Disponível para registro" : "Somente fim de semana"} badge="Somente fim de semana" greenBadge="Conta como extra" accent="amber" disabled={!weekend || hasEntry} onClick={() => navigate(`${base}/ponto?tipo=entrada&origem=plantao`)} />
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-fuchsia-500/20 bg-[#07070d]">
-        <div className="flex items-center justify-between border-b border-fuchsia-500/10 px-3 py-2.5">
-          <h2 className="flex items-center gap-2 text-[12px] font-extrabold text-white sm:text-sm"><ClipboardCheck className="h-4 w-4 text-fuchsia-400" /> RESUMO DO DIA</h2>
-          <span className="text-[8px] text-zinc-500 sm:text-[9px]">Dados atuais</span>
+      <section className="overflow-hidden rounded-[22px] border border-fuchsia-500/20 bg-[#07070d] shadow-[0_16px_38px_rgba(0,0,0,.26)]">
+        <div className="flex items-center justify-between border-b border-white/[.05] px-3.5 py-3">
+          <h2 className="flex items-center gap-2 text-[12px] font-black text-white sm:text-sm"><ClipboardCheck className="h-4 w-4 text-fuchsia-300" /> RESUMO DO DIA</h2>
+          <span className="rounded-full border border-white/[.06] bg-white/[.025] px-2 py-1 text-[8px] font-semibold text-zinc-500 sm:text-[9px]">Dados atuais</span>
         </div>
-        <div className="grid grid-cols-2 px-2 py-1">
-          <div className="border-r border-fuchsia-500/10 pr-2">
-            <SummaryItem icon={Clock3} label="Jornada de hoje" value={workLabel} />
-            <SummaryItem icon={Car} label="Veículo atual" value={vehicleLabel} />
-            <SummaryItem icon={Clock3} label="Última entrada" value={entrada ? pointTime(entrada) : "—"} />
-          </div>
-          <div className="pl-2">
-            <SummaryItem icon={Gauge} label="KM registrado hoje" value={`${Number(resumo.km_hoje || 0).toLocaleString("pt-BR")} km`} />
-            <SummaryItem icon={Fuel} label="Último abastecimento" value={resumo.ultimo_abastecimento_data ? `${shortDate(resumo.ultimo_abastecimento_data)} • ${money(resumo.ultimo_abastecimento_valor)}` : "—"} />
-            <SummaryItem icon={AlertTriangle} label="Pendências operacionais" value={`${pending} ${pending === 1 ? "item" : "itens"}`} danger={pending > 0} />
-          </div>
+        <div className="grid grid-cols-2 gap-2 p-2.5">
+          <SummaryItem icon={Clock3} label="Jornada de hoje" value={workLabel} />
+          <SummaryItem icon={Gauge} label="KM registrado hoje" value={`${Number(resumo.km_hoje || 0).toLocaleString("pt-BR")} km`} />
+          <SummaryItem icon={Car} label="Veículo atual" value={vehicleLabel} />
+          <SummaryItem icon={Fuel} label="Último abastecimento" value={resumo.ultimo_abastecimento_data ? `${shortDate(resumo.ultimo_abastecimento_data)} • ${money(resumo.ultimo_abastecimento_valor)}` : "—"} />
+          <SummaryItem icon={Clock3} label="Última entrada" value={entrada ? pointTime(entrada) : "—"} />
+          <SummaryItem icon={AlertTriangle} label="Pendências operacionais" value={`${pending} ${pending === 1 ? "item" : "itens"}`} danger={pending > 0} />
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-fuchsia-500/20 bg-[#07070d]">
+      <section className="overflow-hidden rounded-[22px] border border-fuchsia-500/20 bg-[#07070d] shadow-[0_16px_38px_rgba(0,0,0,.24)]">
         <div className="flex items-center justify-between border-b border-fuchsia-500/10 px-3 py-2.5">
           <h2 className="flex items-center gap-2 text-[12px] font-extrabold text-white sm:text-sm"><FileCheck2 className="h-4 w-4 text-fuchsia-400" /> ÚLTIMOS REGISTROS</h2>
           <button onClick={() => navigate(`${base}/historico`)} className="flex items-center gap-0.5 text-[8px] font-semibold text-fuchsia-400 sm:text-[10px]">Ver histórico completo <ChevronRight className="h-3 w-3" /></button>
         </div>
         <div className="space-y-1.5 p-2">
           {recent.length ? recent.map((row, index) => (
-            <button key={`${row.at}-${index}`} onClick={() => navigate(`${base}/historico`)} className="grid w-full grid-cols-[32px_1fr_auto_56px_12px] items-center gap-1.5 rounded-lg border border-fuchsia-500/10 bg-[#05050a] px-2 py-2 text-left sm:grid-cols-[38px_1fr_auto_76px_14px] sm:gap-2">
+            <button key={`${row.at}-${index}`} onClick={() => navigate(`${base}/historico`)} className="grid w-full grid-cols-[36px_1fr_auto_58px_12px] items-center gap-2 rounded-[15px] border border-white/[.055] bg-[linear-gradient(135deg,rgba(255,255,255,.028),rgba(255,255,255,.01))] px-2.5 py-2.5 text-left transition active:scale-[.99] sm:grid-cols-[40px_1fr_auto_76px_14px]">
               <span className="grid h-8 w-8 place-items-center rounded-full bg-fuchsia-500/10 text-fuchsia-400 sm:h-9 sm:w-9"><RecentIcon kind={row.kind} /></span>
               <span className="min-w-0"><strong className="block truncate text-[10px] text-white sm:text-[12px]">{row.title}</strong><small className="mt-0.5 block truncate text-[8px] text-zinc-500 sm:text-[9px]">{row.sub}</small></span>
               <strong className={`whitespace-nowrap rounded-md px-1.5 py-0.5 text-[8px] font-bold sm:text-[9px] ${row.metaClass}`}>{row.meta}</strong>
