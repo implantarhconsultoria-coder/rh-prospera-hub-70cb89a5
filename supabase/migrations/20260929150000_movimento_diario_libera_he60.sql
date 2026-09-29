@@ -9,6 +9,7 @@ alter table public.movimento_diario
     'he50'::text,
     'he60'::text,
     'he100'::text,
+    'comissao'::text,
     'adicional'::text,
     'desconto'::text,
     'adiantamento'::text,
