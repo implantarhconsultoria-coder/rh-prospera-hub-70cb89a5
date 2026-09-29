@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { registrarAcao } from '@/lib/acoesLog';
 import OperadorCodeDialog from '@/components/OperadorCodeDialog';
 import { formalizarOperacaoPorEmail } from '@/lib/operacionalFormalizacao';
+import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { toast } from 'sonner';
 
 interface AtivoDoc {
@@ -131,6 +132,7 @@ const inferSubstitution = (items: ProtocolItem[], sourceText: string) => {
 
 const ProtocoloPage: React.FC = () => {
   const { companies, session } = useApp();
+  const { developerMode } = useDeveloperMode();
   const [searchParams] = useSearchParams();
   const isLocacaoFlow = searchParams.get('acao') === 'locacao';
   const placaInicial = normalizePlate(searchParams.get('placa'));
@@ -596,12 +598,17 @@ const ProtocoloPage: React.FC = () => {
   };
 
   const pedirCodigo = (action: 'save' | 'print') => {
+    if (developerMode) {
+      void confirmarCodigoOperador('', action);
+      return;
+    }
     setCodigoAction(action);
     setCodigoOpen(true);
   };
 
-  const confirmarCodigoOperador = async (codigo: string) => {
-    if (!codigoAction) return;
+  const confirmarCodigoOperador = async (codigo: string, forcedAction?: 'save' | 'print') => {
+    const action = forcedAction || codigoAction;
+    if (!action) return;
     setCodigoLoading(true);
     try {
       const { data, error } = await rpc.rpc('operador_operacao_validar_codigo', {
@@ -618,7 +625,7 @@ const ProtocoloPage: React.FC = () => {
         nome: String(data.operador.nome || 'Operador'),
       };
 
-      if (codigoAction === 'save') {
+      if (action === 'save') {
         await persistProtocols(operador);
       } else {
         await printProtocol(codigo, operador);
