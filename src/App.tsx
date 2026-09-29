@@ -29,7 +29,6 @@ import FilialAlertasPage from "@/pages/filial/FilialAlertasPage";
 import MovimentoDiarioPage from "@/pages/filial/MovimentoDiarioPage";
 import FilialFechamentoPage from "@/pages/filial/FilialFechamentoPage";
 import FilialDocumentosPage from "@/pages/filial/FilialDocumentosPage";
-import FilialApontamentoPage from "@/pages/filial/FilialApontamentoPage";
 import FechamentosFiliaisPage from "@/pages/admin/FechamentosFiliaisPage";
 import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
