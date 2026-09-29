@@ -90,7 +90,7 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
       .eq('ativo', true)
       .order('nome'),
     service.from('lancamentos_mensais')
-      .select('funcionario_id,faltas_dias,faltas_datas,atrasos,he50,he100,comissao_base,adicionais,descontos_diversos,adiantamento,observacoes')
+      .select('funcionario_id,faltas_dias,faltas_datas,atrasos,he50,he60,he100,comissao_base,adicionais,descontos_diversos,adiantamento,observacoes')
       .eq('company_id', companyId)
       .eq('competencia', competencia)
       .is('apagado_em', null),
@@ -116,8 +116,9 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
     { label: 'Funcionario', width: 150, max: 25 },
     { label: 'Faltas', width: 40, max: 7 },
     { label: 'Atrasos', width: 48, max: 8 },
-    { label: 'HE 50/60', width: 50, max: 8 },
-    { label: 'HE 100', width: 48, max: 8 },
+    { label: 'HE 50', width: 44, max: 7 },
+    { label: 'HE 60', width: 44, max: 7 },
+    { label: 'HE 100', width: 44, max: 7 },
     { label: 'Comissao base', width: 75, max: 12 },
     { label: 'Adicional', width: 62, max: 11 },
     { label: 'Desc. extra', width: 62, max: 11 },
@@ -154,8 +155,9 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
         shorten(employee.nome, 25),
         shorten(num(entry.faltas_dias).toLocaleString('pt-BR', { maximumFractionDigits: 1 }), 7),
         shorten(`${num(entry.atrasos).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, 8),
-        shorten(`${num(entry.he50).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, 8),
-        shorten(`${num(entry.he100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, 8),
+        shorten(`${num(entry.he50).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, 7),
+        shorten(`${num(entry.he60).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, 7),
+        shorten(`${num(entry.he100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h`, 7),
         shorten(money(entry.comissao_base), 12),
         shorten(money(entry.adicionais), 11),
         shorten(money(entry.descontos_diversos), 11),
@@ -201,7 +203,7 @@ async function sendAccountingEmail(service: any, input: { emails: string[]; cc: 
     body: JSON.stringify({
       from,
       to: input.emails,
-      cc: input.cc,
+      cc: Array.from(new Set([...input.cc, 'adm.matriz@topac.com.br'])).filter((email) => !input.emails.includes(email)),
       reply_to: 'adm.matriz@topac.com.br',
       subject: thread.subject,
       text,
