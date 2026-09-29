@@ -862,6 +862,18 @@ const ProtocoloPage: React.FC = () => {
             </div>
           )}
 
+          {readiness.vehicleFlowBlocked && (
+            <div className="rounded-xl border-2 border-red-400 bg-red-500/10 p-4 text-sm text-red-800">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-extrabold">DOCUMENTO DE VEÍCULO BLOQUEADO</p>
+                  <p className="mt-1">Para veículo com placa, inicie pela área DISPONIBILIDADE DE PLACAS. O documento só é liberado no fechamento da locação, junto com o protocolo.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" size="lg" disabled={saving || !readiness.ready} onClick={() => pedirCodigo('save')}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}
