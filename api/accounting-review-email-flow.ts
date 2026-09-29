@@ -211,34 +211,44 @@ const buildPrepared = async (service: any, input: any) => {
   const originType = clean(input.origem_tipo);
   const originId = clean(input.origem_id);
   const observation = clean(input.observacao);
+  const reviewStatus = clean(input.status || input.p_status || 'conferido').toLowerCase();
+  const isPending = reviewStatus === 'pendencia';
   if (!originType || !originId) throw Object.assign(new Error('origem_obrigatoria'), { status: 400 });
+  if (isPending && !observation) throw Object.assign(new Error('observacao_pendencia_obrigatoria'), { status: 400 });
 
   const movement = await resolveMovement(service, originType, originId);
   const user = await validatePortal(service, portal, token, movement.companyId);
   const companyName = await companyNameFor(service, movement);
   const routing = await routingFor(service, portal, clean(user.email));
-  const subject = `${movement.subjectLabel} - ${companyName}${movement.employeeName ? ` - ${movement.employeeName}` : ''}`;
+  const subjectLabel = isPending ? `Pendência - ${movement.label}` : movement.subjectLabel;
+  const subject = `${subjectLabel} - ${companyName}${movement.employeeName ? ` - ${movement.employeeName}` : ''}`;
+  const statusText = isPending
+    ? 'A Contabilidade identificou uma pendência neste processo. Favor corrigir o item indicado e manter todo o retorno nesta mesma conversa.'
+    : movement.confirmationText;
   const body = [
     'Prezados,',
     '',
-    movement.confirmationText,
+    statusText,
     '',
     `Movimento: ${movement.label}`,
     `Empresa: ${companyName}`,
     movement.employeeName ? `Funcionário: ${movement.employeeName}` : '',
     movement.reference ? `Referência: ${movement.reference}` : '',
-    observation ? `Observação: ${observation}` : '',
+    `Status: ${isPending ? 'PENDÊNCIA' : 'CONFERIDO'}`,
+    observation ? `Observação da Contabilidade: ${observation}` : '',
     '',
     movement.path
       ? 'O documento compartilhado segue anexado e permanece disponível no TOPAC RH PRO.'
       : 'O registro permanece disponível no TOPAC RH PRO.',
+    '',
+    isPending ? 'Após a correção, responda nesta mesma conversa para preservar todo o histórico do processo.' : '',
     '',
     'Atenciosamente,',
     clean(user.nome) || 'Contabilidade',
     'Contabilidade',
   ].filter((line, index, list) => line !== '' || (index > 0 && list[index - 1] !== '')).join('\n');
 
-  return { portal, token, originType, originId, observation, movement, user, companyName, routing, subject, body };
+  return { portal, token, originType, originId, observation, reviewStatus, movement, user, companyName, routing, subject, body };
 };
 
 const attachmentFor = async (service: any, movement: Movement) => {

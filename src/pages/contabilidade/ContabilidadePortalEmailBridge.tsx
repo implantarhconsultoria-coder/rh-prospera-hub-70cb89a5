@@ -28,6 +28,7 @@ type BridgeDetail = {
   competencia?: string | null;
   funcionario_nome?: string | null;
   observacao?: string | null;
+  review_status?: 'conferido' | 'pendencia';
   sender_name?: string;
   sender_email?: string;
   email_to?: string[];
@@ -129,7 +130,7 @@ export default function ContabilidadePortalEmailBridge() {
       if (url.includes(REVIEW_RPC) && bodyText) {
         try {
           const payload = JSON.parse(bodyText);
-          if (payload?.p_status === 'conferido' && payload?.p_token && payload?.p_portal && payload?.p_origem_tipo && payload?.p_origem_id) {
+          if (['conferido', 'pendencia'].includes(payload?.p_status) && payload?.p_token && payload?.p_portal && payload?.p_origem_tipo && payload?.p_origem_id) {
             setPreparing(true);
             const prepareResponse = await originalFetch.call(window, '/api/accounting-review-email-flow', {
               method: 'POST',
@@ -141,6 +142,7 @@ export default function ContabilidadePortalEmailBridge() {
                 origem_tipo: payload.p_origem_tipo,
                 origem_id: payload.p_origem_id,
                 observacao: payload.p_observacao || null,
+                status: payload.p_status,
               }),
             });
             const prepared = await prepareResponse.json().catch(() => ({}));
@@ -161,6 +163,7 @@ export default function ContabilidadePortalEmailBridge() {
               origem_tipo: payload.p_origem_tipo,
               origem_id: payload.p_origem_id,
               observacao: payload.p_observacao || null,
+              review_status: payload.p_status,
               attachment_name: prepared.attachment_name || null,
               attachment_url: prepared.attachment_url || null,
               has_attachment: prepared.has_attachment === true,
@@ -325,7 +328,7 @@ export default function ContabilidadePortalEmailBridge() {
           body: JSON.stringify({
             action: 'send', portal: review.portal, token: review.token,
             origem_tipo: review.origem_tipo, origem_id: review.origem_id,
-            observacao: review.observacao || null, to, cc,
+            observacao: review.observacao || null, status: review.review_status || 'conferido', to, cc,
             subject: review.subject.trim(), body: review.body.trim(),
           }),
         });
@@ -336,7 +339,10 @@ export default function ContabilidadePortalEmailBridge() {
         pending.resolve(rpcResponse);
         pendingConfirmation.current = null;
         setReview(null);
-        toast.success(data.attached ? 'E-mail enviado com o documento. Registrando conferência...' : 'E-mail enviado. Registrando conferência...');
+        const isPending = review.review_status === 'pendencia';
+        toast.success(isPending
+          ? (data.attached ? 'Pendência enviada com o documento. Registrando no processo...' : 'Pendência enviada. Registrando no processo...')
+          : (data.attached ? 'E-mail enviado com o documento. Registrando conferência...' : 'E-mail enviado. Registrando conferência...'));
         return;
       }
 
@@ -361,16 +367,16 @@ export default function ContabilidadePortalEmailBridge() {
 
   return (
     <>
-      {preparing && <div className="fixed inset-x-0 top-0 z-[100] flex justify-center p-2 pointer-events-none"><div className="flex items-center gap-2 rounded-full border border-violet-500/30 bg-[#0b0711]/95 px-4 py-2 text-xs font-semibold text-violet-100 shadow-xl"><Loader2 className="h-4 w-4 animate-spin" />Preparando e-mail da conferência...</div></div>}
+      {preparing && <div className="fixed inset-x-0 top-0 z-[100] flex justify-center p-2 pointer-events-none"><div className="flex items-center gap-2 rounded-full border border-violet-500/30 bg-[#0b0711]/95 px-4 py-2 text-xs font-semibold text-violet-100 shadow-xl"><Loader2 className="h-4 w-4 animate-spin" />Preparando e-mail do processo...</div></div>}
       <Dialog open={!!review} onOpenChange={(open) => { if (!open) cancelReview(); }}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto border-[#3a2849] bg-[#05080d] text-zinc-100">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-white"><Mail className="h-5 w-5 text-[#a855f7]" /> {review?.mode === 'confirmation' ? 'Confirmar e enviar e-mail ao RH' : 'Enviar anexos por e-mail'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-white"><Mail className="h-5 w-5 text-[#a855f7]" /> {review?.mode === 'confirmation' ? (review.review_status === 'pendencia' ? 'Registrar pendência e responder ao RH' : 'Confirmar e enviar e-mail ao RH') : 'Enviar anexos por e-mail'}</DialogTitle>
           </DialogHeader>
 
           {review && (
             <div className="space-y-3">
-              {review.mode === 'confirmation' && <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[.05] p-3 text-xs text-emerald-200">Mesmo fluxo do fechamento: revise o e-mail pronto abaixo. A conferência só será registrada depois que o envio for concluído.</div>}
+              {review.mode === 'confirmation' && <div className={`rounded-md border p-3 text-xs ${review.review_status === 'pendencia' ? 'border-rose-500/20 bg-rose-500/[.05] text-rose-200' : 'border-emerald-500/20 bg-emerald-500/[.05] text-emerald-200'}`}>{review.review_status === 'pendencia' ? 'A pendência será enviada dentro da mesma conversa do processo. O registro só será concluído depois que o e-mail sair.' : 'Mesmo fluxo do fechamento: revise o e-mail pronto abaixo. A conferência só será registrada depois que o envio for concluído.'}</div>}
               <div><Label className="text-zinc-300">Para</Label><Input value={review.to} onChange={(e) => setReview((old) => old ? { ...old, to: e.target.value } : old)} className="border-[#49335c] bg-white text-slate-900" /></div>
               <div><Label className="text-zinc-300">Cópia (CC)</Label><Input value={review.cc} onChange={(e) => setReview((old) => old ? { ...old, cc: e.target.value } : old)} className="border-[#49335c] bg-white text-slate-900" /></div>
               <div><Label className="text-zinc-300">Assunto</Label><Input value={review.subject} onChange={(e) => setReview((old) => old ? { ...old, subject: e.target.value } : old)} className="border-[#49335c] bg-white text-slate-900" /></div>
@@ -385,7 +391,7 @@ export default function ContabilidadePortalEmailBridge() {
 
           <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={openManual} disabled={sending} className="border-amber-500/50 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 hover:text-amber-100">Abrir e-mail manual</Button>
-            <Button onClick={() => void sendPlatform()} disabled={sending || !canSend} className="bg-[#6d28d9] text-white hover:bg-[#7c3aed] disabled:bg-[#4c2a73] disabled:text-white">{sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{review?.mode === 'confirmation' ? 'Confirmar e enviar' : 'Enviar pela plataforma'}</Button>
+            <Button onClick={() => void sendPlatform()} disabled={sending || !canSend} className="bg-[#6d28d9] text-white hover:bg-[#7c3aed] disabled:bg-[#4c2a73] disabled:text-white">{sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{review?.mode === 'confirmation' ? (review.review_status === 'pendencia' ? 'Enviar pendência' : 'Confirmar e enviar') : 'Enviar pela plataforma'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
