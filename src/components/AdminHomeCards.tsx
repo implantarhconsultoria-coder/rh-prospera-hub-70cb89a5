@@ -5,6 +5,7 @@ import {useApp} from '@/context/AppContext';
 import {supabase} from '@/integrations/supabase/client';
 import {ADMIN_MODULE_GROUPS} from '@/data/adminModules';
 import FuncionariosMoneyOverview from '@/components/FuncionariosMoneyOverview';
+import {usePrivateModuleAccess} from '@/hooks/usePrivateModuleAccess';
 
 const fmt=(n:number)=>new Intl.NumberFormat('pt-BR').format(n);
 
@@ -15,6 +16,7 @@ const AdminHomeCards:React.FC=()=>{
   const [openGroups,setOpenGroups]=useState<string[]>(['frequentes']);
   const [stockAlert,setStockAlert]=useState<number|null>(null);
   const [uniformQuantity,setUniformQuantity]=useState<number|null>(null);
+  const {allowed:canViewFrota}=usePrivateModuleAccess('frota_ipva');
   const firstName=String(session?.user?.user_metadata?.nome_completo||
     session?.user?.user_metadata?.full_name||session?.user?.email?.split('@')[0]||'Administrador').trim().split(/\s+/)[0];
   const active=employees.filter(e=>e.status==='ativo').length;
@@ -36,9 +38,12 @@ const AdminHomeCards:React.FC=()=>{
 
   const normalized=query.trim().toLocaleLowerCase('pt-BR');
   const groups=useMemo(()=>ADMIN_MODULE_GROUPS.map(group=>({
-    ...group,items:group.items.filter(item=>(item.label+' '+item.description+' '+group.title)
-      .toLocaleLowerCase('pt-BR').includes(normalized)),
-  })).filter(group=>group.items.length),[normalized]);
+    ...group,items:group.items.filter(item=>{
+      const privateFleet=item.path==='/admin/documentos-ativos'||item.path==='/admin/monitoramento';
+      if(privateFleet&&!canViewFrota)return false;
+      return (item.label+' '+item.description+' '+group.title).toLocaleLowerCase('pt-BR').includes(normalized);
+    }),
+  })).filter(group=>group.items.length),[normalized,canViewFrota]);
 
   const go=(path:string)=>nav(path,{state:{openMobileModule:true}});
   const toggle=(id:string)=>setOpenGroups(old=>old.includes(id)?old.filter(x=>x!==id):[...old,id]);
