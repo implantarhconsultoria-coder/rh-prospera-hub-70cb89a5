@@ -134,7 +134,7 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
           if (prior?.length) throw new Error('Este apontamento já foi somado anteriormente: ' + row.funcionario.name);
         }
         const { data: current, error: readError } = await supabase.from('lancamentos_mensais')
-          .select('id,company_id,funcionario_id,competencia,he50,he100,comissao_base,bloqueado')
+          .select('id,company_id,funcionario_id,competencia,he50,he60,he100,comissao_base,bloqueado')
           .eq('funcionario_id', row.funcionario.id).eq('company_id', props.companyId)
           .eq('competencia', props.competencia).is('apagado_em', null).maybeSingle();
         if (readError) throw readError;
@@ -190,11 +190,11 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
             {props.companies.map(company => <option value={company.id} key={company.id}>{company.name}</option>)}
           </select>
         </label>
-        <p className="text-xs text-muted-foreground">Competência: <strong>{props.competencia}</strong> • Extra semanal: {formatPercent(props.percentualSemanal)}.</p>
+        <p className="text-xs text-muted-foreground">Competência: <strong>{props.competencia}</strong> • Padrão geral: 1ª e 2ª hora = 50% • 3ª em diante = 60% • domingos/feriados = 100%.</p>
       </div>
       <textarea value={texto} onChange={event => { setTexto(event.target.value); setAnalisado(false); }}
         disabled={enviando} className="min-h-[135px] w-full rounded-lg border border-violet-400/30 bg-background p-3 text-sm outline-none focus:border-violet-400"
-        placeholder={'Ana Clara 2.00 ' + props.percentualSemanal + '%\nFrancinaldo 2:55 100%\nAbinadab 369,50 comissão final 1%\nAldenei 5283,40 comissão final 2%'} />
+        placeholder={'Ana Clara 2.00 50%\nAna Clara 1.30 60%\nFrancinaldo 2:55 100%\nAbinadab 369,50 comissão final 1%'} />
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={analisar} disabled={!texto.trim() || enviando}>Analisar apontamentos</Button>
         <label className="text-xs">Ao confirmar: <select value={modoAplicacao} disabled={enviando}
@@ -223,7 +223,7 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
                 }} className="mt-1 block w-full max-w-48 rounded border bg-background p-1"><option value="">Selecionar cadastro...</option>
                   {props.funcionarios.slice().sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')).map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                 </select>}</td>
-              <td className="p-2">{row.tipo === 'comissao' ? 'Comissão' : row.tipo === 'he100' ? 'HE 100%' : row.tipo === 'he50' ? 'HE ' + props.percentualSemanal + '%' : '—'}</td>
+              <td className="p-2">{row.tipo === 'comissao' ? 'Comissão' : row.tipo === 'he100' ? 'HE 100%' : row.tipo === 'he60' ? 'HE 60%' : row.tipo === 'he50' ? 'HE 50%' : '—'}</td>
               <td className="p-2">{row.tipo === 'comissao' ? dinheiroLegivel(row.valor || 0) + ' a ' + formatPercent(row.percentual || 0) :
                 row.horas !== undefined ? horasLegiveis(row.horas) : row.original}
                 {row.tipo === 'comissao' && <select className="mt-1 block rounded border bg-background p-1" value={row.modo}
@@ -245,7 +245,8 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
             {simulacoes.map(item => <div key={item.employee.id} className="rounded-lg border border-emerald-400/25 bg-[#080f13] p-3">
               <p className="font-bold text-sm">{item.employee.name}</p>
               <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                <p>HE {props.percentualSemanal}%<br/><strong>{horasLegiveis(item.previsto.he50)} — {dinheiroLegivel(item.calculado.he50Val)}</strong></p>
+                <p>HE 50%<br/><strong>{horasLegiveis(item.previsto.he50)} — {dinheiroLegivel(item.calculado.he50Val)}</strong></p>
+                <p>HE 60%<br/><strong>{horasLegiveis(item.previsto.he60)} — {dinheiroLegivel(item.calculado.he60Val)}</strong></p>
                 <p>HE 100%<br/><strong>{horasLegiveis(item.previsto.he100)} — {dinheiroLegivel(item.calculado.he100Val)}</strong></p>
                 <p>Comissão<br/><strong>{dinheiroLegivel(item.calculado.comissaoVal)}</strong></p>
                 <p>DSR<br/><strong>{dinheiroLegivel(item.calculado.dsrHE + item.calculado.dsrComissao)}</strong></p>
@@ -260,13 +261,14 @@ const ApontamentoInteligente: React.FC<Props> = (props) => {
           </div>
           <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[830px] text-xs">
             <thead className="border-b border-emerald-400/20 text-left"><tr>
-              <th className="p-2">Funcionário</th><th className="p-2">HE semanal</th><th className="p-2">HE 100%</th>
+              <th className="p-2">Funcionário</th><th className="p-2">HE 50%</th><th className="p-2">HE 60%</th><th className="p-2">HE 100%</th>
               <th className="p-2">Comissão</th><th className="p-2">DSR total</th><th className="p-2">Bruto</th>
               <th className="p-2">Líquido anterior</th><th className="p-2">Valor a receber (previsto)</th>
             </tr></thead>
             <tbody>{simulacoes.map(item => <tr key={item.employee.id} className="border-b border-emerald-400/10">
               <td className="p-2 font-bold">{item.employee.name}</td>
               <td className="p-2">{horasLegiveis(item.previsto.he50)}<br />{dinheiroLegivel(item.calculado.he50Val)}</td>
+              <td className="p-2">{horasLegiveis(item.previsto.he60)}<br />{dinheiroLegivel(item.calculado.he60Val)}</td>
               <td className="p-2">{horasLegiveis(item.previsto.he100)}<br />{dinheiroLegivel(item.calculado.he100Val)}</td>
               <td className="p-2">{dinheiroLegivel(item.calculado.comissaoVal)}
                 <br /><span className="text-muted-foreground">Base {dinheiroLegivel(item.previsto.comissaoBase)}</span></td>
