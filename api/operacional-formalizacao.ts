@@ -132,11 +132,33 @@ export default async function handler(req: any, res?: any) {
 
   try {
     const service = getServiceClient();
-    const { user } = await requireOperationalUser(req, service);
     const body = readBody(req);
     const type = clean(body.type);
     const id = clean(body.id);
     const ids = Array.isArray(body.ids) ? body.ids.map(clean).filter(Boolean) : [];
+    const mecanicoAcessoId = clean(body.mecanico_acesso_id);
+    let mechanicFuncionarioId = '';
+    let user: any;
+
+    if (type === 'ocorrencia_concluida' && mecanicoAcessoId) {
+      const { data: acesso, error: acessoError } = await service
+        .from('acessos_externos')
+        .select('id,nome,email,email_corporativo,funcionario_id,modulo,status,acesso_liberado')
+        .eq('id', mecanicoAcessoId)
+        .eq('modulo', 'mecanico')
+        .eq('status', 'ativo')
+        .eq('acesso_liberado', true)
+        .maybeSingle();
+      if (acessoError || !acesso?.funcionario_id) throw Object.assign(new Error('mecanico_nao_autorizado'), { status: 403 });
+      mechanicFuncionarioId = String(acesso.funcionario_id);
+      user = {
+        id: null,
+        email: acesso.email_corporativo || acesso.email || null,
+        user_metadata: { nome_completo: acesso.nome || 'Mecânico' },
+      };
+    } else {
+      user = (await requireOperationalUser(req, service)).user;
+    }
 
     if (type === 'locacao') {
       if (!ids.length) return sendJson(res, { ok: false, error: 'protocolos_obrigatorios' }, 400);
@@ -196,9 +218,11 @@ export default async function handler(req: any, res?: any) {
 
     if (type.startsWith('ocorrencia_')) {
       if (!id) return sendJson(res, { ok: false, error: 'ocorrencia_obrigatoria' }, 400);
-      const { data, error } = await service.from('chamados')
-        .select('id,numero,cliente,local_servico,tipo_servico,itens_previstos,observacoes,status,solicitante_nome,solicitante_contato,operador_abertura_nome,aceito_por_nome,descricao_conclusao,cancelamento_motivo,placa_snapshot,patrimonio_snapshot,created_at')
-        .eq('id', id).maybeSingle();
+      let occurrenceQuery = service.from('chamados')
+        .select('id,numero,cliente,local_servico,tipo_servico,itens_previstos,observacoes,status,solicitante_nome,solicitante_contato,operador_abertura_nome,aceito_por_nome,descricao_conclusao,cancelamento_motivo,placa_snapshot,patrimonio_snapshot,colaborador_id,created_at')
+        .eq('id', id);
+      if (mechanicFuncionarioId) occurrenceQuery = occurrenceQuery.eq('colaborador_id', mechanicFuncionarioId);
+      const { data, error } = await occurrenceQuery.maybeSingle();
       if (error || !data) throw Object.assign(new Error('ocorrencia_nao_encontrada'), { status: 404 });
 
       const label = type === 'ocorrencia_concluida' ? 'OCORRÊNCIA CONCLUÍDA'
