@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
-import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
+import { buildAccountingProcessThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
 const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
@@ -302,7 +302,12 @@ export default async function handler(req: any, res?: any) {
     const cc = validEmails(input.cc).filter((email) => !to.includes(email));
     const requestedSubject = clean(input.subject) || prepared.subject;
     const competenciaThread = /^\d{4}-\d{2}$/.test(clean(prepared.movement.reference)) ? clean(prepared.movement.reference) : '';
-    const threadKey = competenciaThread ? buildAccountingThreadKey(prepared.movement.companyId, competenciaThread) : '';
+    const threadKey = buildAccountingProcessThreadKey({
+      originType: prepared.originType,
+      originId: prepared.originId,
+      companyId: prepared.movement.companyId,
+      reference: prepared.movement.reference,
+    });
     const thread = threadKey
       ? await prepareAccountingThread(service, { threadKey, subject: requestedSubject })
       : { subject: requestedSubject, headers: {}, current: null as any };

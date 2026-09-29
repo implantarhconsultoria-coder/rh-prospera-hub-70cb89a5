@@ -542,6 +542,9 @@ const RescisaoPage: React.FC = () => {
       body: buildEmailBody(row), attachmentBlob: pdf.blob, attachmentName: pdf.fileName,
       senderUserId: session?.user?.id, senderName: nomeUsuario, senderEmail: session?.user?.email,
       moduleOrigin: 'rescisoes', documentId: registro?.id, documentName: 'Memoria de Calculo da Rescisao',
+      threadKey: row?.id && (row?.company_id || emp?.companyId)
+        ? `processo:demissao:${row.company_id || emp?.companyId}:${row.id}`
+        : undefined,
       afterSend: async () => {
         if (registro?.id && session?.user) {
           await marcarComoEnviado(registro.id, session.user.id, nomeUsuario, [...destinatarios, ...copia].join(', '));

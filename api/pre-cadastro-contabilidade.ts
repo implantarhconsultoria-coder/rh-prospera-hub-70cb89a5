@@ -1,4 +1,5 @@
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
+import { buildAccountingProcessThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const clean = (value:unknown) => String(value ?? '').trim();
 const getHeader = (req:any, name:string) => typeof req?.headers?.get === 'function' ? req.headers.get(name) : req?.headers?.[name] || req?.headers?.[name.toLowerCase()] || '';
@@ -42,6 +43,8 @@ export default async function handler(req:any,res?:any){
     const from=isGoiania?'TOPAC RH PRO | Contabilidade Goiânia <contabilidade.goiania@topacrh.pro>':'TOPAC RH PRO | Contabilidade SP <contabilidade.sp@topacrh.pro>';
     const replyTo=isGoiania?'adm.gyn@topac.com.br':'adm.matriz@topac.com.br';
     const subject=`Documentação admissional completa - ${clean(pre.nome)} - ${clean(pre.empresa_nome)}`;
+    const threadKey=buildAccountingProcessThreadKey({originType:'admissao',originId:id,companyId:clean(pre.empresa_id),reference:pre.data_admissao});
+    const thread=await prepareAccountingThread(service,{threadKey,subject});
     const documentLines=(docs||[]).filter((d:any)=>clean(d.arquivo_url)).map((d:any)=>`<li>${esc(d.nome_arquivo||d.tipo_documento)}</li>`).join('');
     const html=`<div style="font-family:Arial,sans-serif;color:#182033;line-height:1.55"><p>Prezados,</p><p>O processo admissional abaixo foi concluído no TOPAC RH PRO e o ASO retornou ao sistema. A documentação segue anexada para continuidade junto à contabilidade.</p><table style="border-collapse:collapse;width:100%;max-width:720px"><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>Nome</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(pre.nome)}</td></tr><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>CPF</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(pre.cpf)}</td></tr><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>Empresa</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(pre.empresa_nome)}</td></tr><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>Função</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(pre.funcao)}</td></tr><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>Admissão</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(formatDate(pre.data_admissao))}</td></tr><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>Salário</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(formatMoney(pre.salario))}</td></tr><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>Celular</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(pre.celular)}</td></tr><tr><td style="padding:6px;border-bottom:1px solid #ddd"><b>E-mail</b></td><td style="padding:6px;border-bottom:1px solid #ddd">${esc(pre.email)}</td></tr></table><p><b>Arquivos anexados:</b></p><ul>${documentLines}</ul><p>Atenciosamente,<br>TOPAC RH PRO</p></div>`;
 
@@ -51,8 +54,10 @@ export default async function handler(req:any,res?:any){
     for(const doc of uniqueDocs){const att=await fileToAttachment(doc);if(!att)continue;total+=Math.ceil(att.content.length*0.75);if(total>35*1024*1024) throw new Error('anexos_excedem_limite_email');attachments.push(att);}
 
     const apiKey=clean(process.env.RESEND_API_KEY); if(!apiKey) throw new Error('resend_nao_configurado');
-    const emailRes=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from,to,cc,reply_to:replyTo,subject,html,attachments})});
+    const emailRes=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from,to,cc,reply_to:replyTo,subject:thread.subject,html,attachments,...(Object.keys(thread.headers).length?{headers:thread.headers}:{})})});
     const emailData=await emailRes.json().catch(()=>({})); if(!emailRes.ok) throw new Error(clean(emailData?.message||emailData?.error||'falha_envio_contabilidade'));
+    const messageId=await fetchResendMessageId(apiKey,emailData?.id||null);
+    await saveAccountingThread(service,{threadKey,empresaId:clean(pre.empresa_id),subject:thread.subject,providerEmailId:emailData?.id||null,messageId});
     const now=new Date().toISOString(); const history=Array.isArray(pre.historico)?pre.historico:[];
     const {error:updateError}=await service.from('pre_cadastros_admissionais').update({status:'documentacao_completa',email_contabilidade_preparado_em:now,historico:[...history,{em:now,acao:'documentacao_admissional_enviada_contabilidade_automaticamente',email_id:emailData?.id||null,por:user.id}],updated_at:now}).eq('id',id); if(updateError) throw updateError;
     return sendJson(res,{ok:true,email_id:emailData?.id||null,to,cc,status:'documentacao_completa'});

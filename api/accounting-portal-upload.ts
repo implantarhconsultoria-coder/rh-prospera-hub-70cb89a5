@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
-import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
+import { buildAccountingProcessThreadKey, buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const BUCKET = 'contabilidade-inbox';
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -145,6 +145,7 @@ const sendStoredPdfEmail = async (service: any, input: {
   fileName: string;
   empresaId?: string;
   competencia?: string | null;
+  threadKey?: string;
   closeThread?: boolean;
 }) => {
   const resendKey = String(process.env.RESEND_API_KEY || '').trim();
@@ -166,9 +167,9 @@ const sendStoredPdfEmail = async (service: any, input: {
     : 'TOPAC RH PRO <no-reply@topacrh.pro>';
   const replyTo = cleanEmails(input.replyTo)[0] || String(process.env.EMAIL_REPLY_TO || process.env.REPLY_TO || TOPAC_CENTRAL_EMAIL).trim();
   const htmlBody = htmlEscape(input.body).replace(/\n/g, '<br>');
-  const threadKey = input.empresaId && input.competencia
+  const threadKey = String(input.threadKey || '').trim() || (input.empresaId && input.competencia
     ? buildAccountingThreadKey(input.empresaId, input.competencia)
-    : '';
+    : '');
   const thread = threadKey
     ? await prepareAccountingThread(service, { threadKey, subject: input.subject })
     : { subject: input.subject, headers: {}, current: null as any };
@@ -248,6 +249,8 @@ export default async function handler(req: any, res?: any) {
       const competence = String(body.competencia || '').trim().slice(0, 20) || null;
       const employeeName = String(body.funcionario_nome || '').trim().slice(0, 180) || null;
       const observation = String(body.observacao || '').trim().slice(0, 2000) || null;
+      const originType = String(body.origem_tipo || '').trim().slice(0, 60) || null;
+      const originId = String(body.origem_id || '').trim().slice(0, 120) || null;
       const fileSize = Number(body.tamanho_bytes || 0) || null;
       const deferEmail = body.defer_email === true;
       if (!companyId || !storagePath || !fileName) return sendJson(res, { ok: false, error: 'dados_invalidos' }, 400);
@@ -309,6 +312,8 @@ export default async function handler(req: any, res?: any) {
           status: 'recebido',
           formalizacao_email_status: initialStatus,
           formalizacao_destinos: uniqueEmails([...routing.to, ...routing.cc]),
+          origem_tipo: originType,
+          origem_id: originId,
           created_at: now,
           updated_at: now,
         })
@@ -353,6 +358,9 @@ export default async function handler(req: any, res?: any) {
           fileName,
           empresaId: company.id,
           competencia: competence,
+          threadKey: originType && originId
+            ? buildAccountingProcessThreadKey({ originType, originId, companyId: company.id, reference: competence })
+            : undefined,
           closeThread: type === 'folha_processada',
         });
         const formalizedAt = new Date().toISOString();
@@ -413,6 +421,14 @@ export default async function handler(req: any, res?: any) {
           fileName: upload.arquivo_nome,
           empresaId: upload.empresa_id,
           competencia: upload.competencia,
+          threadKey: upload.origem_tipo && upload.origem_id
+            ? buildAccountingProcessThreadKey({
+                originType: upload.origem_tipo,
+                originId: upload.origem_id,
+                companyId: upload.empresa_id,
+                reference: upload.competencia,
+              })
+            : undefined,
           closeThread: upload.tipo_documento === 'folha_processada',
         });
         const now = new Date().toISOString();

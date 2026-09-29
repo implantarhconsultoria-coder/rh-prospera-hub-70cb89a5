@@ -454,6 +454,12 @@ const AvisoFeriasPage: React.FC = () => {
     const pdf = gerarPdfAtual();
     if (!pdf) return;
 
+    const saved = await salvarFeriasNoBanco({ silent: true });
+    if (!saved?.id) {
+      toast.error('Não foi possível registrar o processo de férias antes do envio.');
+      return;
+    }
+
     const destinatarios = Array.from(getDestinatariosFerias(company?.name || ''));
     const copia = Array.from(getCcRh(company?.name || ''));
     const body = [
@@ -481,6 +487,7 @@ const AvisoFeriasPage: React.FC = () => {
       body,
       attachmentBlob: pdf.blob,
       attachmentName: pdf.fileName,
+      threadKey: company?.id ? `processo:ferias:${company.id}:${saved.id}` : undefined,
       afterSend: async () => {
         const registro = await arquivarAvisoFerias(pdf);
         await salvarFeriasNoBanco({ silent: true, avisoPdfUrl: (registro as any)?.arquivo_url || '' });
