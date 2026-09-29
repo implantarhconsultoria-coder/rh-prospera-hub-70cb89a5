@@ -1,6 +1,27 @@
 export const buildAccountingThreadKey = (empresaId: string, competencia: string) =>
   `folha:${String(empresaId || '').trim()}:${String(competencia || '').trim()}`;
 
+const cleanThreadPart = (value: unknown) =>
+  String(value ?? '').trim().replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+
+export const buildAccountingProcessThreadKey = (input: {
+  originType: string;
+  originId: string;
+  companyId: string;
+  reference?: string | null;
+}) => {
+  const originType = cleanThreadPart(input.originType).toLowerCase();
+  const originId = cleanThreadPart(input.originId);
+  const companyId = cleanThreadPart(input.companyId);
+  const reference = String(input.reference || '').trim();
+
+  if (!originType || !originId || !companyId) return '';
+  if (originType === 'fechamento' && /^\d{4}-\d{2}$/.test(reference)) {
+    return buildAccountingThreadKey(companyId, reference);
+  }
+  return `processo:${originType}:${companyId}:${originId}`;
+};
+
 export const loadAccountingThread = async (service: any, threadKey: string) => {
   if (!threadKey) return null;
   const { data, error } = await service
