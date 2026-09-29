@@ -6,6 +6,7 @@ import{Input}from'@/components/ui/input';
 import{supabase}from'@/integrations/supabase/client';
 import OperadorCodeDialog from'@/components/OperadorCodeDialog';
 import{formalizarOperacaoPorEmail}from'@/lib/operacionalFormalizacao';
+import{useDeveloperMode}from'@/hooks/useDeveloperMode';
 import{toast}from'sonner';
 
 type Status='ativo'|'encerrado'|'devolvido'|'alterado';
@@ -17,6 +18,7 @@ const fmt=(v?:string|null)=>v?new Date(String(v).slice(0,10)+'T12:00:00').toLoca
 const state=(r:Row):Status=>r.status_locacao||'ativo';
 
 export default function LevantamentoLocacaoOperacional(){
+ const{developerMode}=useDeveloperMode();
  const[rows,setRows]=useState<Row[]>([]);const[loading,setLoading]=useState(true);const[filter,setFilter]=useState<Status>('ativo');const[q,setQ]=useState('');
  const[target,setTarget]=useState<Row|null>(null);const[next,setNext]=useState<Status|null>(null);const[action,setAction]=useState<'status'|'deactivate'|null>(null);const[reason,setReason]=useState('');const[codeOpen,setCodeOpen]=useState(false);const[saving,setSaving]=useState(false);
  const load=async()=>{setLoading(true);const{data,error}=await supabase.from('protocolos_documentos'as any).select('id,empresa_destinataria,local_canteiro,responsavel_recebimento,data_emissao,descricao_ativo,placa,patrimonio,status_locacao,ultima_alteracao_motivo,operador_nome,created_at').eq('registro_ativo',true).order('created_at',{ascending:false}).limit(5000);setLoading(false);if(error){toast.error(error.message);setRows([])}else setRows((data as unknown as Row[])||[])};
@@ -24,14 +26,14 @@ export default function LevantamentoLocacaoOperacional(){
  const current=useMemo(()=>{const m=new Map<string,Row>();for(const r of rows){const k=(r.placa||r.patrimonio||r.id).toUpperCase();if(!m.has(k))m.set(k,r)}return Array.from(m.values())},[rows]);
  const counts=useMemo(()=>({ativo:current.filter(r=>state(r)==='ativo').length,encerrado:current.filter(r=>state(r)==='encerrado').length,devolvido:current.filter(r=>state(r)==='devolvido').length,alterado:current.filter(r=>state(r)==='alterado').length}),[current]);
  const list=useMemo(()=>{const x=q.trim().toLowerCase();return current.filter(r=>state(r)===filter).filter(r=>!x||[r.empresa_destinataria,r.local_canteiro,r.placa,r.patrimonio,r.descricao_ativo].some(v=>String(v||'').toLowerCase().includes(x)))},[current,filter,q]);
- const askStatus=(r:Row,n:Status)=>{if(state(r)===n)return;const m=window.prompt('Motivo obrigatório da alteração:')?.trim();if(!m||m.length<3)return toast.error('Informe o motivo.');setTarget(r);setNext(n);setAction('status');setReason(m);setCodeOpen(true)};
- const askRemove=(r:Row)=>{const m=window.prompt('Motivo obrigatório para retirar este registro da visão operacional:')?.trim();if(!m||m.length<3)return toast.error('Informe o motivo.');setTarget(r);setNext(null);setAction('deactivate');setReason(m);setCodeOpen(true)};
- const confirm=async(code:string)=>{if(!target||!action)return;setSaving(true);try{
-  if(action==='status'&&next){const{data,error}=await rpc.rpc('operacional_protocolo_alterar_status',{p_codigo_operador:code,p_protocolo_id:target.id,p_status:next,p_motivo:reason});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Alteração não autorizada.');setRows(v=>v.map(r=>r.id===target.id?{...r,status_locacao:next,ultima_alteracao_motivo:reason}:r));if(next==='devolvido'||next==='encerrado'){try{await formalizarOperacaoPorEmail({type:'devolucao',id:target.id})}catch(e:any){toast.warning(e?.message||'Registro salvo; e-mail pendente.')}}toast.success('Alteração registrada com operador, motivo, data e hora.')}
-  if(action==='deactivate'){const{data,error}=await rpc.rpc('operacional_protocolo_desativar_registro',{p_codigo_operador:code,p_protocolo_id:target.id,p_motivo:reason});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Operação não autorizada.');setRows(v=>v.filter(r=>r.id!==target.id));toast.success('Registro retirado da visão. Histórico preservado.')}
+ const runAction=async(r:Row,a:'status'|'deactivate',n:Status|null,m:string,code:string)=>{setSaving(true);try{
+  if(a==='status'&&n){const{data,error}=await rpc.rpc('operacional_protocolo_alterar_status',{p_codigo_operador:code,p_protocolo_id:r.id,p_status:n,p_motivo:m});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Alteração não autorizada.');setRows(v=>v.map(x=>x.id===r.id?{...x,status_locacao:n,ultima_alteracao_motivo:m}:x));if(n==='devolvido'||n==='encerrado'){try{await formalizarOperacaoPorEmail({type:'devolucao',id:r.id})}catch(e:any){toast.warning(e?.message||'Registro salvo; e-mail pendente.')}}toast.success('Alteração registrada com operador, motivo, data e hora.')}
+  if(a==='deactivate'){const{data,error}=await rpc.rpc('operacional_protocolo_desativar_registro',{p_codigo_operador:code,p_protocolo_id:r.id,p_motivo:m});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Operação não autorizada.');setRows(v=>v.filter(x=>x.id!==r.id));toast.success('Registro retirado da visão. Histórico preservado.')}
   setCodeOpen(false);setTarget(null);setNext(null);setAction(null);setReason('');
  }catch(e:any){toast.error(e?.message||'Falha na operação.')}finally{setSaving(false)}};
- const tabs:[Status,string,any][]=[['ativo','Ativos',CheckCircle2],['encerrado','Encerrados',XCircle],['devolvido','Devolvidos',PackageOpen],['alterado','Alterados / Troca',ArrowRightLeft]];
+ const askStatus=(r:Row,n:Status)=>{if(state(r)===n)return;const m=window.prompt('Motivo obrigatório da alteração:')?.trim();if(!m||m.length<3)return toast.error('Informe o motivo.');if(developerMode){void runAction(r,'status',n,m,'');return;}setTarget(r);setNext(n);setAction('status');setReason(m);setCodeOpen(true)};
+ const askRemove=(r:Row)=>{const m=window.prompt('Motivo obrigatório para retirar este registro da visão operacional:')?.trim();if(!m||m.length<3)return toast.error('Informe o motivo.');if(developerMode){void runAction(r,'deactivate',null,m,'');return;}setTarget(r);setNext(null);setAction('deactivate');setReason(m);setCodeOpen(true)};
+ const confirm=async(code:string)=>{if(!target||!action)return;await runAction(target,action,next,reason,code)}; const tabs:[Status,string,any][]=[['ativo','Ativos',CheckCircle2],['encerrado','Encerrados',XCircle],['devolvido','Devolvidos',PackageOpen],['alterado','Alterados / Troca',ArrowRightLeft]];
  return <div className="space-y-4">
   <section className="card-premium space-y-4 p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Levantamento de Locação</h2><p className="mt-1 text-xs text-muted-foreground">Somente dados operacionais. Documento, IPVA e licenciamento não ficam disponíveis nesta área.</p></div><Button variant="outline" size="sm" onClick={()=>void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</Button></div>
    <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">{tabs.map(([k,l,I])=><button key={k} onClick={()=>setFilter(k)} className={`rounded-xl border px-3 py-3 text-left ${filter===k?classes[k]:'border-border bg-muted/10'}`}><div className="flex justify-between"><span className="flex items-center gap-2 text-xs font-bold"><I className="h-4 w-4"/>{l}</span><strong>{counts[k]}</strong></div></button>)}</div>
