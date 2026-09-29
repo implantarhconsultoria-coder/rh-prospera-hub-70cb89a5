@@ -37,6 +37,9 @@ type ProtocolRow = {
   encerrado_em?: string | null;
   devolvido_em?: string | null;
   protocolo_lote_id?: string | null;
+  registro_ativo?: boolean | null;
+  ultima_alteracao_motivo?: string | null;
+  operador_nome?: string | null;
   created_at: string;
 };
 
@@ -116,6 +119,7 @@ const alertClasses: Record<AlertStatus, string> = {
 
 const LevantamentoLocacao: React.FC = () => {
   const navigate = useNavigate();
+  const { allowed: canViewFrota } = usePrivateModuleAccess('frota_ipva');
   const [history, setHistory] = useState<ProtocolRow[]>([]);
   const [assets, setAssets] = useState<FrotaAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,6 +127,12 @@ const LevantamentoLocacao: React.FC = () => {
   const [categoria, setCategoria] = useState<CategoriaAtivo>('veiculo');
   const [status, setStatus] = useState<StatusLocacao>('ativo');
   const [search, setSearch] = useState('');
+  const [pendingRow, setPendingRow] = useState<ProtocolRow | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<StatusLocacao | null>(null);
+  const [pendingAction, setPendingAction] = useState<'status' | 'deactivate' | null>(null);
+  const [motivo, setMotivo] = useState('');
+  const [codigoOpen, setCodigoOpen] = useState(false);
+  const [codigoLoading, setCodigoLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
