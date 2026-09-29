@@ -251,7 +251,7 @@ const AuthGate = () => {
         <Route path="/filial/protocolo" element={<ProtocoloPage />} />
         <Route path="/filial/alertas" element={<FilialAlertasPage />} />
         <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
-        <Route path="/filial/apontamento" element={<FilialApontamentoPage />} />
+        <Route path="/filial/apontamento" element={<FilialFechamentoPage />} />
         <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
         <Route path="/filial/documentos" element={<FilialDocumentosPage />} />
       </Route>
@@ -342,7 +342,7 @@ const App = () => (
                 <Route path="protocolo" element={<ProtocoloPage />} />
                 <Route path="alertas" element={<FilialAlertasPage />} />
                 <Route path="movimento-diario" element={<MovimentoDiarioPage />} />
-                <Route path="apontamento" element={<FilialApontamentoPage />} />
+                <Route path="apontamento" element={<FilialFechamentoPage />} />
                 <Route path="fechamento" element={<FilialFechamentoPage />} />
               </Route>
 
