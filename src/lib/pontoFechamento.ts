@@ -220,8 +220,6 @@ export const cruzarCartaoComAtestados = (
   const j = JORNADA_PADRAO;
   const jornadaMin = j.horasDia * 60;
   const entradaPadrao = parseHHMM(j.entradaPadrao) || 8 * 60;
-  const podeHE50 = NOMES_HE50_LIVRE.some((n) => norm(cartao.funcionario_nome).includes(n));
-
   let faltasDias = 0;
   let diasAtestado = 0;
   let atrasosMinutos = 0;
@@ -305,21 +303,29 @@ export const cruzarCartaoComAtestados = (
     }
     atrasosMinutos += atraso;
 
-    // HE
+    // HE geral: 1ª e 2ª horas extras = 50%; da 3ª em diante = 60%.
+    // Domingo, feriado, DSR/folga trabalhada ou dia marcado 100% = 100%.
     let he50 = 0;
+    let he60 = 0;
     let he100 = 0;
-    if (util) {
-      const extra = calc.trabalhados - jornadaMin;
-      if (extra > 0 && podeHE50) {
-        he50 = extra; // Marcelo: HE 50% liberada
-        he50Min += extra;
-      }
+    const dow = new Date(dia.data + 'T12:00:00').getDay();
+    const dia100 = dow === 0
+      || obs.includes('FERIADO')
+      || obs.includes('DSR')
+      || obs.includes('FOLGA')
+      || obs.includes('100%')
+      || obs.includes('CONVENCAO')
+      || obs.includes('CONVENÇÃO');
+
+    if (dia100) {
+      he100 = calc.trabalhados;
+      he100Min += he100;
     } else {
-      // sábado/domingo trabalhado → HE 100%
-      if (calc.trabalhados > 0) {
-        he100 = calc.trabalhados;
-        he100Min += calc.trabalhados;
-      }
+      const extra = util ? Math.max(0, calc.trabalhados - jornadaMin) : calc.trabalhados;
+      he50 = Math.min(extra, 120);
+      he60 = Math.max(0, extra - 120);
+      he50Min += he50;
+      he60Min += he60;
     }
 
     baseRes.dias.push({
@@ -328,6 +334,7 @@ export const cruzarCartaoComAtestados = (
       minutosTrabalhados: calc.trabalhados,
       atrasoMin: atraso,
       he50Min: he50,
+      he60Min: he60,
       he100Min: he100,
     });
   }
@@ -354,6 +361,7 @@ export const cruzarCartaoComAtestados = (
   baseRes.diasAtestado = diasAtestado;
   baseRes.atrasosMinutos = atrasosMinutos;
   baseRes.he50Horas = Math.round((he50Min / 60) * 100) / 100;
+  baseRes.he60Horas = Math.round((he60Min / 60) * 100) / 100;
   baseRes.he100Horas = Math.round((he100Min / 60) * 100) / 100;
   baseRes.dsrPerdido = faltasDias; // 1 DSR por falta sem cobertura
 
