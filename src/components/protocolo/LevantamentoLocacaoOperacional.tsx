@@ -1,0 +1,43 @@
+import React,{useEffect,useMemo,useState}from'react';
+import{CheckCircle2,Loader2,PackageOpen,RefreshCw,Search,Trash2,XCircle,ArrowRightLeft}from'lucide-react';
+import{Badge}from'@/components/ui/badge';
+import{Button}from'@/components/ui/button';
+import{Input}from'@/components/ui/input';
+import{supabase}from'@/integrations/supabase/client';
+import OperadorCodeDialog from'@/components/OperadorCodeDialog';
+import{formalizarOperacaoPorEmail}from'@/lib/operacionalFormalizacao';
+import{toast}from'sonner';
+
+type Status='ativo'|'encerrado'|'devolvido'|'alterado';
+type Row={id:string;empresa_destinataria?:string|null;local_canteiro?:string|null;responsavel_recebimento?:string|null;data_emissao:string;descricao_ativo?:string|null;placa?:string|null;patrimonio?:string|null;status_locacao?:Status|null;ultima_alteracao_motivo?:string|null;operador_nome?:string|null;created_at:string};
+const rpc=supabase as unknown as{rpc:(name:string,args?:Record<string,unknown>)=>Promise<{data:any;error:{message?:string}|null}>};
+const labels:Record<Status,string>={ativo:'ATIVO',encerrado:'ENCERRADO',devolvido:'DEVOLVIDO',alterado:'ALTERADO / TROCA'};
+const classes:Record<Status,string>={ativo:'border-emerald-400/35 bg-emerald-500/10 text-emerald-700',encerrado:'border-slate-400/35 bg-slate-500/10 text-slate-700',devolvido:'border-blue-400/35 bg-blue-500/10 text-blue-700',alterado:'border-amber-400/35 bg-amber-500/10 text-amber-700'};
+const fmt=(v?:string|null)=>v?new Date(String(v).slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
+const state=(r:Row):Status=>r.status_locacao||'ativo';
+
+export default function LevantamentoLocacaoOperacional(){
+ const[rows,setRows]=useState<Row[]>([]);const[loading,setLoading]=useState(true);const[filter,setFilter]=useState<Status>('ativo');const[q,setQ]=useState('');
+ const[target,setTarget]=useState<Row|null>(null);const[next,setNext]=useState<Status|null>(null);const[action,setAction]=useState<'status'|'deactivate'|null>(null);const[reason,setReason]=useState('');const[codeOpen,setCodeOpen]=useState(false);const[saving,setSaving]=useState(false);
+ const load=async()=>{setLoading(true);const{data,error}=await supabase.from('protocolos_documentos'as any).select('id,empresa_destinataria,local_canteiro,responsavel_recebimento,data_emissao,descricao_ativo,placa,patrimonio,status_locacao,ultima_alteracao_motivo,operador_nome,created_at').eq('registro_ativo',true).order('created_at',{ascending:false}).limit(5000);setLoading(false);if(error){toast.error(error.message);setRows([])}else setRows((data as unknown as Row[])||[])};
+ useEffect(()=>{void load()},[]);
+ const current=useMemo(()=>{const m=new Map<string,Row>();for(const r of rows){const k=(r.placa||r.patrimonio||r.id).toUpperCase();if(!m.has(k))m.set(k,r)}return Array.from(m.values())},[rows]);
+ const counts=useMemo(()=>({ativo:current.filter(r=>state(r)==='ativo').length,encerrado:current.filter(r=>state(r)==='encerrado').length,devolvido:current.filter(r=>state(r)==='devolvido').length,alterado:current.filter(r=>state(r)==='alterado').length}),[current]);
+ const list=useMemo(()=>{const x=q.trim().toLowerCase();return current.filter(r=>state(r)===filter).filter(r=>!x||[r.empresa_destinataria,r.local_canteiro,r.placa,r.patrimonio,r.descricao_ativo].some(v=>String(v||'').toLowerCase().includes(x)))},[current,filter,q]);
+ const askStatus=(r:Row,n:Status)=>{if(state(r)===n)return;const m=window.prompt('Motivo obrigatório da alteração:')?.trim();if(!m||m.length<3)return toast.error('Informe o motivo.');setTarget(r);setNext(n);setAction('status');setReason(m);setCodeOpen(true)};
+ const askRemove=(r:Row)=>{const m=window.prompt('Motivo obrigatório para retirar este registro da visão operacional:')?.trim();if(!m||m.length<3)return toast.error('Informe o motivo.');setTarget(r);setNext(null);setAction('deactivate');setReason(m);setCodeOpen(true)};
+ const confirm=async(code:string)=>{if(!target||!action)return;setSaving(true);try{
+  if(action==='status'&&next){const{data,error}=await rpc.rpc('operacional_protocolo_alterar_status',{p_codigo_operador:code,p_protocolo_id:target.id,p_status:next,p_motivo:reason});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Alteração não autorizada.');setRows(v=>v.map(r=>r.id===target.id?{...r,status_locacao:next,ultima_alteracao_motivo:reason}:r));if(next==='devolvido'||next==='encerrado'){try{await formalizarOperacaoPorEmail({type:'devolucao',id:target.id})}catch(e:any){toast.warning(e?.message||'Registro salvo; e-mail pendente.')}}toast.success('Alteração registrada com operador, motivo, data e hora.')}
+  if(action==='deactivate'){const{data,error}=await rpc.rpc('operacional_protocolo_desativar_registro',{p_codigo_operador:code,p_protocolo_id:target.id,p_motivo:reason});if(error||!data?.ok)throw new Error(data?.error||error?.message||'Operação não autorizada.');setRows(v=>v.filter(r=>r.id!==target.id));toast.success('Registro retirado da visão. Histórico preservado.')}
+  setCodeOpen(false);setTarget(null);setNext(null);setAction(null);setReason('');
+ }catch(e:any){toast.error(e?.message||'Falha na operação.')}finally{setSaving(false)}};
+ const tabs:[Status,string,any][]=[['ativo','Ativos',CheckCircle2],['encerrado','Encerrados',XCircle],['devolvido','Devolvidos',PackageOpen],['alterado','Alterados / Troca',ArrowRightLeft]];
+ return <div className="space-y-4">
+  <section className="card-premium space-y-4 p-5"><div className="flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Levantamento de Locação</h2><p className="mt-1 text-xs text-muted-foreground">Somente dados operacionais. Documento, IPVA e licenciamento não ficam disponíveis nesta área.</p></div><Button variant="outline" size="sm" onClick={()=>void load()} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`}/>Atualizar</Button></div>
+   <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">{tabs.map(([k,l,I])=><button key={k} onClick={()=>setFilter(k)} className={`rounded-xl border px-3 py-3 text-left ${filter===k?classes[k]:'border-border bg-muted/10'}`}><div className="flex justify-between"><span className="flex items-center gap-2 text-xs font-bold"><I className="h-4 w-4"/>{l}</span><strong>{counts[k]}</strong></div></button>)}</div>
+   <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar cliente, canteiro, placa ou patrimônio..." className="pl-9"/></div>
+  </section>
+  <section className="card-premium overflow-hidden">{loading?<div className="flex min-h-52 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin"/></div>:list.length===0?<div className="p-10 text-center text-sm text-muted-foreground">Nenhum registro neste filtro.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm"><thead className="bg-muted/50"><tr><th className="p-3 text-left">DATA</th><th className="p-3 text-left">CLIENTE</th><th className="p-3 text-left">CANTEIRO</th><th className="p-3 text-left">PLACA</th><th className="p-3 text-left">PATRIMÔNIO</th><th className="p-3 text-left">SITUAÇÃO</th><th className="p-3 text-left">AÇÃO</th></tr></thead><tbody>{list.map(r=><tr key={r.id} className="border-t"><td className="p-3">{fmt(r.data_emissao)}</td><td className="p-3 font-semibold">{r.empresa_destinataria||'—'}</td><td className="p-3">{r.local_canteiro||'—'}</td><td className="p-3 font-mono font-semibold">{r.placa||'—'}</td><td className="p-3">{r.patrimonio||'—'}</td><td className="p-3"><Badge variant="outline" className={classes[state(r)]}>{labels[state(r)]}</Badge>{r.ultima_alteracao_motivo&&<div className="mt-1 text-[10px] text-muted-foreground">Motivo: {r.ultima_alteracao_motivo}</div>}</td><td className="p-3"><div className="flex gap-2"><select value={state(r)} onChange={e=>askStatus(r,e.target.value as Status)} className="h-9 rounded-lg border bg-background px-2 text-xs"><option value="ativo">Ativo</option><option value="encerrado">Encerrado</option><option value="devolvido">Devolvido</option><option value="alterado">Alterado / Troca</option></select><Button size="icon" variant="ghost" onClick={()=>askRemove(r)} title="Retirar com motivo"><Trash2 className="h-4 w-4 text-red-500"/></Button></div></td></tr>)}</tbody></table></div>}</section>
+  <OperadorCodeDialog open={codeOpen} onOpenChange={setCodeOpen} loading={saving} title={action==='deactivate'?'Confirmar retirada do registro':'Confirmar alteração'} description="Informe seu código. Motivo, operador, data, hora e movimentação ficarão registrados." onConfirm={confirm}/>
+ </div>
+}
