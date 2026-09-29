@@ -4,7 +4,7 @@ import { useApp } from '@/context/AppContext';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { asoStatus, feriasStatus } from '@/lib/calculations';
 import {
-  Bell, CalendarCheck, CalendarDays, FileCheck, Lock, Send,
+  Bell, CalendarCheck, CalendarDays, FileCheck, Send,
   Stethoscope, UploadCloud, User, Users,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
