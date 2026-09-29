@@ -121,6 +121,18 @@ export default async function handler(req:any,res?:any){
       return sendJson(res,{ok:true,company:scope.company,employees:data || []});
     }
 
+    if (action === 'employee_documents') {
+      const employeeId = clean(body.employeeId);
+      await assertEmployee(service,scope,employeeId);
+      const { data, error } = await service.from('documentos_funcionario').select('*')
+        .eq('company_id',scope.companyId).eq('funcionario_id',employeeId)
+        .order('created_at',{ascending:false}).limit(300);
+      if (error) throw error;
+      const enriched:any[]=[];
+      for (const d of data || []) enriched.push({ ...d, download_url: await signedReadUrl(service,d) });
+      return sendJson(res,{ok:true,documents:enriched});
+    }
+
     if (action === 'documents') {
       const { data, error } = await service.from('documentos_funcionario').select('*').eq('company_id',scope.companyId).order('created_at',{ascending:false}).limit(1500);
       if (error) throw error;
