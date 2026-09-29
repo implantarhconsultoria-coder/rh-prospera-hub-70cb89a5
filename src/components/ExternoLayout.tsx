@@ -25,6 +25,7 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
   const [menuOpen, setMenuOpen] = useState(false);
   const externalSession = useMemo(() => readExternalSession(), []);
   const moduloRemovido = REMOVED_MODULES.has(String(modulo || '').toLowerCase());
+  const filialTheme = String(modulo || '').toLowerCase() === 'filial';
 
   useEffect(() => {
     if (moduloRemovido) return;
@@ -89,8 +90,8 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="lg:hidden sticky top-0 z-40 flex items-center gap-2 px-3 py-2 bg-card border-b border-border">
+    <div className={cn('min-h-screen', filialTheme ? 'bg-[#020507] text-[#f2eef7]' : 'bg-background')}>
+      <header className={cn('lg:hidden sticky top-0 z-40 flex items-center gap-2 px-3 py-2 border-b', filialTheme ? 'bg-[#030609] border-[#24202c]' : 'bg-card border-border')}>
         <Button size="icon" variant="ghost" onClick={() => setMenuOpen(true)} aria-label="Abrir menu"><Menu className="w-5 h-5" /></Button>
         <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', cor)}><Building2 className="w-4 h-4 text-white" /></div>
         <div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{titulo}</div><div className="text-[10px] text-muted-foreground truncate">{acesso?.nome}</div></div>
@@ -100,15 +101,15 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
       {menuOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
-          <aside className="relative w-72 max-w-[85%] h-full bg-card border-r border-border flex flex-col">
-            <div className="p-4 border-b border-border flex items-center gap-2">
+          <aside className={cn('relative w-72 max-w-[85%] h-full border-r flex flex-col', filialTheme ? 'bg-[#030609] border-[#24202c]' : 'bg-card border-border')}>
+            <div className={cn('p-4 border-b flex items-center gap-2', filialTheme ? 'border-[#24202c]' : 'border-border')}>
               <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', cor)}><Building2 className="w-5 h-5 text-white" /></div>
               <div className="flex-1"><div className="font-bold text-sm">{titulo}</div><div className="text-[10px] text-muted-foreground">Acesso externo</div></div>
               <Button size="icon" variant="ghost" onClick={() => setMenuOpen(false)}><X className="w-4 h-4" /></Button>
             </div>
             <nav className="flex-1 overflow-y-auto p-2 space-y-1">
               {items.map((it) => (
-                <NavLink key={it.to} to={it.to} end={it.end} onClick={() => setMenuOpen(false)} className={({ isActive }) => cn('flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition', isActive ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted')}>
+                <NavLink key={it.to} to={it.to} end={it.end} onClick={() => setMenuOpen(false)} className={({ isActive }) => cn('flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition', filialTheme ? (isActive ? 'bg-gradient-to-r from-[#251548] via-[#211339] to-[#181023] text-white border-r-2 border-[#ffc400]' : 'text-zinc-400 hover:bg-white/[0.035] hover:text-white') : (isActive ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-muted'))}>
                   <it.icon className="w-4 h-4" /> {it.label}
                 </NavLink>
               ))}
@@ -123,7 +124,7 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
         </div>
       )}
 
-      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex-col">
+      <aside className={cn('hidden lg:flex fixed left-0 top-0 h-screen w-64 border-r flex-col', filialTheme ? 'bg-[#030609] border-[#24202c] shadow-[18px_0_50px_rgba(0,0,0,.34)]' : 'bg-card border-border')}>
         <div className="p-4 border-b border-border flex items-center gap-2">
           <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', cor)}><Building2 className="w-5 h-5 text-white" /></div>
           <div><div className="font-bold text-sm">{titulo}</div><div className="text-[10px] text-muted-foreground">Acesso externo</div></div>
@@ -142,7 +143,7 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
           <Button size="sm" variant="outline" className="w-full" onClick={sair}><LogOut className="w-3 h-3 mr-1" /> Sair</Button>
         </div>
       </aside>
-      <main className="lg:ml-64 min-h-screen"><div className="p-3 sm:p-4 lg:p-6 max-w-[1600px] mx-auto"><Outlet /></div></main>
+      <main className={cn('lg:ml-64 min-h-screen', filialTheme && 'bg-[#020507]')}><div className="p-3 sm:p-4 lg:p-6 max-w-[1600px] mx-auto"><Outlet /></div></main>
     </div>
   );
 };
