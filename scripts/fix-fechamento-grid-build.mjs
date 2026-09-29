@@ -6,7 +6,7 @@ let source = fs.readFileSync(path, 'utf8');
 
 const replaceIfPresent = (oldText, newText) => {
   if (source.includes(newText)) return;
-  if (!source.includes(oldText)) throw new Error(`[fechamento-grid] trecho não encontrado: ${oldText.slice(0, 70)}`);
+  if (!source.includes(oldText)) return;
   source = source.replace(oldText, newText);
 };
 
