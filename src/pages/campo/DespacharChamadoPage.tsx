@@ -19,6 +19,7 @@ import OperacionalChamadoDetailDialog from '@/components/operacional/Operacional
 import OperacionalMovimentacoesPanel from '@/components/operacional/OperacionalMovimentacoesPanel';
 import OperacionalClientesPanel from '@/components/operacional/OperacionalClientesPanel';
 import OperacionalDisponibilidadePlacas from '@/components/operacional/OperacionalDisponibilidadePlacas';
+import OperacionalOcorrenciasHistoricoPanel from '@/components/operacional/OperacionalOcorrenciasHistoricoPanel';
 import { formalizarOperacaoPorEmail } from '@/lib/operacionalFormalizacao';
 import { toast } from 'sonner';
 
@@ -63,7 +64,7 @@ const emptyChamadoForm = {
   solicitante_contato: '',
 };
 
-type Tab = 'clientes' | 'disponibilidade' | 'novo' | 'lista' | 'movimentacoes' | 'operadores';
+type Tab = 'clientes' | 'disponibilidade' | 'novo' | 'lista' | 'historico' | 'movimentacoes' | 'operadores';
 
 const DespacharChamadoPage: React.FC = () => {
   const { session, userRoles } = useApp();
@@ -110,7 +111,7 @@ const DespacharChamadoPage: React.FC = () => {
       supabase.from('clientes_fat').select('id, razao_social, nome_fantasia, cnpj_cpf, telefone, email, cidade, uf, endereco, status').eq('status', 'ativo').order('razao_social'),
       supabase.from('contratos').select('id, numero, cliente_id, tipo, status, data_inicio, data_fim, observacoes, clientes_fat(razao_social)').eq('status', 'ativo').order('created_at', { ascending: false }),
       supabase.from('contrato_equipamentos').select('id, contrato_id, ativo_id, descricao_livre, patrimonio, placa, status, observacao, ativos(descricao, placa, patrimonio, tipo)').eq('status', 'ativo').order('created_at', { ascending: false }),
-      supabase.from('chamados').select('*').order('created_at', { ascending: false }).limit(150),
+      supabase.from('chamados').select('*').order('created_at', { ascending: false }).limit(1000),
       supabase.from('chamado_adicionais' as any).select('id,chamado_id,status,visualizado_em,created_at').is('visualizado_em', null).order('created_at', { ascending: false }).limit(100),
       supabase.from('cliente_locais_operacionais' as any).select('id,cliente_id,nome,cidade,uf,ativo').eq('ativo', true).order('nome'),
       supabase.from('operacional_alocacoes' as any).select('id,cliente_id,cliente_local_id,ativo_id,placa,patrimonio,fonte,fonte_arquivo,fonte_pagina,data_base,observacao,alerta_conferencia,ativo').eq('ativo', true).order('patrimonio'),
@@ -375,6 +376,7 @@ const DespacharChamadoPage: React.FC = () => {
     { key: 'disponibilidade', label: 'Disponibilidade de placas' },
     { key: 'novo', label: 'Nova ocorrência' },
     { key: 'lista', label: 'Ocorrências', alert: metricas.adicionais },
+    { key: 'historico', label: 'Histórico' },
     { key: 'movimentacoes', label: 'Movimentações' },
     ...(isAdmin ? [{ key: 'operadores' as Tab, label: 'Operadores' }] : []),
   ];
@@ -551,7 +553,7 @@ const DespacharChamadoPage: React.FC = () => {
                 {c.info_adicional && <div className="flex items-start gap-1 whitespace-pre-wrap text-xs text-muted-foreground"><FileText className="mt-0.5 h-3 w-3" />{c.info_adicional}</div>}
 
                 <div className="flex flex-wrap justify-end gap-2 pt-1">
-                  <Button size="sm" variant="outline" onClick={() => setDetail(c)}><Eye className="mr-1 h-4 w-4" />Histórico</Button>
+                  <Button size="sm" variant="outline" onClick={() => setDetail(c)}><Eye className="mr-1 h-4 w-4" />Detalhes</Button>
                   {!['concluido', 'cancelado'].includes(c.status) && <Button size="sm" variant="outline" onClick={() => abrirEdicao(c)}><Edit2 className="mr-1 h-4 w-4" />Editar</Button>}
                   {!['concluido', 'cancelado'].includes(c.status) && <Button size="sm" variant="destructive" onClick={() => cancelarChamado(c)}><XCircle className="mr-1 h-4 w-4" />Cancelar</Button>}
                 </div>
@@ -559,6 +561,14 @@ const DespacharChamadoPage: React.FC = () => {
             );
           })}
         </div>
+      )}
+
+      {tab === 'historico' && (
+        <OperacionalOcorrenciasHistoricoPanel
+          chamados={chamados}
+          nomeTecnico={nomeTecnico}
+          onOpenDetail={setDetail}
+        />
       )}
 
       {tab === 'movimentacoes' && <OperacionalMovimentacoesPanel equipamentos={equipamentos} clientes={clientes} />}
