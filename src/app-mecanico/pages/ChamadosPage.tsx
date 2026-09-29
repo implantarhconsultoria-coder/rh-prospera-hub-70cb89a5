@@ -210,6 +210,25 @@ export default function ChamadosPage() {
         iniciar: "Serviço iniciado com localização registrada.",
         finalizar: "Ocorrência finalizada. Serviço e localização registrados.",
       };
+      if (acaoAtual === "finalizar") {
+        try {
+          const response = await fetch("/api/operacional-formalizacao", {
+            method: "POST",
+            headers: { "content-type": "application/json; charset=utf-8" },
+            body: JSON.stringify({
+              type: "ocorrencia_concluida",
+              id: chamado.id,
+              mecanico_acesso_id: mecanico.acesso_id,
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload?.ok === false) {
+            toast.warning("Ocorrência concluída; o e-mail de formalização ficou pendente.");
+          }
+        } catch {
+          toast.warning("Ocorrência concluída; o e-mail de formalização ficou pendente.");
+        }
+      }
       toast.success(mensagem[acaoAtual]);
       setAberto(null);
       setObs("");
