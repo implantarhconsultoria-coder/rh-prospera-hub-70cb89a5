@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, Car, CheckCircle2, FileSpreadsheet, FileText, Loader2, PackageOpen, RefreshCw, Search, Truck, XCircle } from 'lucide-react';
+import { ArrowRightLeft, Car, CheckCircle2, FileSpreadsheet, FileText, Loader2, PackageOpen, RefreshCw, Search, ShieldCheck, Trash2, Truck, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,9 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { registrarAcao } from '@/lib/acoesLog';
+import OperadorCodeDialog from '@/components/OperadorCodeDialog';
+import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
+import { formalizarOperacaoPorEmail } from '@/lib/operacionalFormalizacao';
 import { toast } from 'sonner';
 
 type CategoriaAtivo = 'veiculo' | 'compressor';
@@ -46,6 +49,10 @@ type FrotaAsset = {
 };
 
 type AlertStatus = 'em_dia' | 'a_vencer' | 'vencido' | 'sem_data';
+
+const rpc = supabase as unknown as {
+  rpc: (name: string, args?: Record<string, unknown>) => Promise<{ data: any; error: { message?: string } | null }>;
+};
 
 const normalizePlate = (value: unknown) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const normalizePatrimonio = (value: unknown) => String(value || '').toUpperCase().replace(/\s+/g, '').trim();
