@@ -48,10 +48,11 @@ type FormattedNumberInputProps = Omit<React.ComponentProps<typeof Input>, 'type'
   decimals?: number;
   fixedDecimals?: boolean;
   allowNegative?: boolean;
+  commitOnBlur?: boolean;
 };
 
 export const FormattedNumberInput = React.forwardRef<HTMLInputElement, FormattedNumberInputProps>(
-  ({ value, onValueChange, decimals = 2, fixedDecimals = false, allowNegative = false, onBlur, onFocus, ...props }, ref) => {
+  ({ value, onValueChange, decimals = 2, fixedDecimals = false, allowNegative = false, commitOnBlur = false, onBlur, onFocus, ...props }, ref) => {
     const [focused, setFocused] = React.useState(false);
     const [text, setText] = React.useState(formatBrazilianNumber(value, decimals, fixedDecimals));
 
@@ -74,7 +75,7 @@ export const FormattedNumberInput = React.forwardRef<HTMLInputElement, Formatted
         onChange={(event) => {
           const next = cleanNumberText(event.target.value, allowNegative);
           setText(next);
-          onValueChange(parseBrazilianNumber(next));
+          if (!commitOnBlur) onValueChange(parseBrazilianNumber(next));
         }}
         onBlur={(event) => {
           setFocused(false);
