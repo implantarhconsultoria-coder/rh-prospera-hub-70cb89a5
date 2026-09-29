@@ -202,8 +202,8 @@ async function sendAccountingEmail(service: any, input: { emails: string[]; cc: 
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       from,
-      to: input.emails,
-      cc: Array.from(new Set([...input.cc, 'adm.matriz@topac.com.br'])).filter((email) => !input.emails.includes(email)),
+      to: Array.from(new Set([...input.emails, 'adm.matriz@topac.com.br'])),
+      cc: Array.from(new Set(input.cc)).filter((email) => ![...input.emails, 'adm.matriz@topac.com.br'].includes(email)),
       reply_to: 'adm.matriz@topac.com.br',
       subject: thread.subject,
       text,
