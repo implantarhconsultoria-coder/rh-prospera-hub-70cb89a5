@@ -382,17 +382,26 @@ export default function AbastecimentoPageV4() {
       };
 
       const pdf = await gerarCupomAbastecimentoPdf(info);
-      const reciboPdfUrl = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `recibo-${info.id}`, pdf.blob);
-      await supabaseRpc.rpc("app_mecanico_vincular_recibo_pdf", {
-        p_acesso_id: mecanico.acesso_id,
-        p_abastecimento_id: info.id,
-        p_recibo_pdf_url: reciboPdfUrl,
-      });
 
+      // O abastecimento já foi concluído no banco. O recibo deve aparecer imediatamente
+      // no aparelho, mesmo se a persistência do PDF sofrer uma falha temporária de rede.
       setReceipt(info);
       setPdfCache(pdf);
       setStep("ok");
-      toast.success("Abastecimento concluído. As três fotos e o recibo foram salvos.");
+
+      try {
+        const reciboPdfUrl = await uploadFoto("abastecimento-fotos", mecanico.acesso_id, `recibo-${info.id}`, pdf.blob);
+        const { error: linkError } = await supabaseRpc.rpc("app_mecanico_vincular_recibo_pdf", {
+          p_acesso_id: mecanico.acesso_id,
+          p_abastecimento_id: info.id,
+          p_recibo_pdf_url: reciboPdfUrl,
+        });
+        if (linkError) throw new Error(linkError.message || "Falha ao vincular o comprovante.");
+        toast.success("Abastecimento concluído. As três fotos e o recibo foram salvos.");
+      } catch (persistError) {
+        console.error("Abastecimento concluído, mas o PDF não foi persistido:", persistError);
+        toast.warning("Abastecimento concluído e recibo gerado. O comprovante está disponível para visualizar ou compartilhar.");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível finalizar o abastecimento.");
     } finally {
