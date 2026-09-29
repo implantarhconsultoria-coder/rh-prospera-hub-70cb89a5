@@ -23,12 +23,13 @@ const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
 const HOURS_DOC_RE = /DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/i;
 
 const FilialFechamentoPage: React.FC = () => {
-  const { companies, employees } = useApp();
+  const { companies, employees, userRoles } = useApp();
   const filial = useFilialFilter();
   const ext = useAcessoExternoFiltro();
   const companyId = ext.isExterno ? (ext.empresaIds?.[0] || '') : (filial.filialCompanyId || '');
   const empresaAtual = companies.find((c) => c.id === companyId);
   const empresaNome = empresaAtual?.name || ext.empresaNome || 'Filial autorizada';
+  const acessoFilialRestrito = ext.isExterno || !userRoles.includes('admin');
 
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [movimentos, setMovimentos] = useState<MovimentoRow[]>([]);
@@ -264,11 +265,13 @@ const FilialFechamentoPage: React.FC = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className={acessoFilialRestrito ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4' : 'grid grid-cols-2 gap-3 xl:grid-cols-4'}>
         <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Funcionários</p><p className="mt-1 text-xl font-black text-amber-300">{compEmps.length}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Proventos estimados</p><p className="mt-1 text-xl font-black">{formatCurrency(totals.proventos)}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Descontos estimados</p><p className="mt-1 text-xl font-black text-amber-300">{formatCurrency(totals.descontos)}</p></div>
-        <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Líquido estimado</p><p className="mt-1 text-xl font-black text-violet-300">{formatCurrency(totals.liquido)}</p></div>
+        {!acessoFilialRestrito && <>
+          <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Proventos estimados</p><p className="mt-1 text-xl font-black">{formatCurrency(totals.proventos)}</p></div>
+          <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Descontos estimados</p><p className="mt-1 text-xl font-black text-amber-300">{formatCurrency(totals.descontos)}</p></div>
+          <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Líquido estimado</p><p className="mt-1 text-xl font-black text-violet-300">{formatCurrency(totals.liquido)}</p></div>
+        </>}
       </div>
 
       <section className="card-premium overflow-hidden">
@@ -280,8 +283,8 @@ const FilialFechamentoPage: React.FC = () => {
           <table className="w-full min-w-[1450px] table-fixed text-[10px]">
             <thead className="sticky top-0 z-20 bg-[#070a0f]">
               <tr className="border-b border-violet-400/30">
-                {['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.','HE 50%','HE 60%','HE 100%','DSR','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((h,i)=>
-                  <th key={h} style={{width:['11%','7%','4%','6%','5%','5%','5%','5%','5%','6%','7%','6%','6%','7%','7%','12%'][i]}} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase text-violet-100">{h}</th>
+                {['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.','HE 50%','HE 60%','HE 100%',...(acessoFilialRestrito?[]:['DSR']),'Comissão','Adicional','Desc. extra','Adiantamento',...(acessoFilialRestrito?[]:['Líquido']),'Observações'].map((h)=>
+                  <th key={h} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase text-violet-100">{h}</th>
                 )}
               </tr>
             </thead>
@@ -291,19 +294,19 @@ const FilialFechamentoPage: React.FC = () => {
                 return <tr key={emp.id} className="border-b border-violet-400/10 align-top hover:bg-violet-500/[0.025]">
                   <td className="px-1 py-2 text-[9px] font-semibold">{emp.name}</td>
                   <td className="px-1 py-2 text-[8px] text-muted-foreground">{empresaNome}</td>
-                  <td className="px-1 py-1.5"><DecimalInput value={entry.faltasDias} decimals={1} disabled={fechado||savingKey===`${emp.id}-falta`} onValueChange={(v)=>void saveAggregate(emp.id,'falta',v)} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.faltasDias} decimals={1} commitOnBlur disabled={fechado||savingKey===`${emp.id}-falta`} onValueChange={(v)=>void saveAggregate(emp.id,'falta',v)} className={inputClass}/></td>
                   <td className="px-1 py-1.5"><Input defaultValue={faltaDatas(emp.id)} disabled={fechado} onBlur={(e)=>void saveMeta(emp.id,{datas:e.target.value})} placeholder="Ex.: 03, 17" className={inputClass}/></td>
-                  <td className="px-1 py-1.5"><DecimalInput value={entry.atrasos} decimals={2} disabled={fechado||savingKey===`${emp.id}-atraso`} onValueChange={(v)=>void saveAggregate(emp.id,'atraso',v)} className={inputClass}/><div className="mt-1 text-muted-foreground">{formatCurrency(calc.atrasoVal)}</div></td>
-                  <td className="px-1 py-1.5"><DecimalInput value={horasDoc(emp.id)} decimals={2} disabled={fechado} onValueChange={(v)=>void saveMeta(emp.id,{horasDoc:v})} className={inputClass}/></td>
-                  <td className="px-1 py-1.5"><DecimalInput value={entry.he50} decimals={2} disabled={fechado||savingKey===`${emp.id}-he50`} onValueChange={(v)=>void saveAggregate(emp.id,'he50',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he50Val)}</div></td>
-                  <td className="px-1 py-1.5"><DecimalInput value={entry.he60} decimals={2} disabled={fechado||savingKey===`${emp.id}-he60`} onValueChange={(v)=>void saveAggregate(emp.id,'he60',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he60Val)}</div></td>
-                  <td className="px-1 py-1.5"><DecimalInput value={entry.he100} decimals={2} disabled={fechado||savingKey===`${emp.id}-he100`} onValueChange={(v)=>void saveAggregate(emp.id,'he100',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he100Val)}</div></td>
-                  <td className="px-1 py-2 font-bold text-emerald-300">{formatCurrency(calc.dsrHE+calc.dsrComissao)}</td>
-                  <td className="px-1 py-1.5"><MoneyInput value={entry.comissaoBase} disabled={fechado||savingKey===`${emp.id}-comissao`} onValueChange={(v)=>void saveAggregate(emp.id,'comissao',v,true)} className={inputClass}/><div className="mt-1 text-amber-300">{(calc.comissaoPct*100).toLocaleString('pt-BR',{maximumFractionDigits:2})}% = {formatCurrency(calc.comissaoVal)}</div></td>
-                  <td className="px-1 py-1.5"><MoneyInput value={entry.adicionais} disabled={fechado||savingKey===`${emp.id}-adicional`} onValueChange={(v)=>void saveAggregate(emp.id,'adicional',v,true)} className={inputClass}/></td>
-                  <td className="px-1 py-1.5"><MoneyInput value={entry.descontosDiversos} disabled={fechado||savingKey===`${emp.id}-desconto`} onValueChange={(v)=>void saveAggregate(emp.id,'desconto',v,true)} className={inputClass}/></td>
-                  <td className="px-1 py-1.5"><MoneyInput value={entry.adiantamento} disabled={fechado||savingKey===`${emp.id}-adiantamento`} onValueChange={(v)=>void saveAggregate(emp.id,'adiantamento',v,true)} className={inputClass}/></td>
-                  <td className="px-1 py-2 text-[9px] font-extrabold text-violet-200">{formatCurrency(calc.liquido)}</td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.atrasos} decimals={2} commitOnBlur disabled={fechado||savingKey===`${emp.id}-atraso`} onValueChange={(v)=>void saveAggregate(emp.id,'atraso',v)} className={inputClass}/>{!acessoFilialRestrito && <div className="mt-1 text-muted-foreground">{formatCurrency(calc.atrasoVal)}</div>}</td>
+                  <td className="px-1 py-1.5"><DecimalInput value={horasDoc(emp.id)} decimals={2} commitOnBlur disabled={fechado} onValueChange={(v)=>void saveMeta(emp.id,{horasDoc:v})} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.he50} decimals={2} commitOnBlur disabled={fechado||savingKey===`${emp.id}-he50`} onValueChange={(v)=>void saveAggregate(emp.id,'he50',v)} className={inputClass}/>{!acessoFilialRestrito && <div className="mt-1 text-violet-300">{formatCurrency(calc.he50Val)}</div>}</td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.he60} decimals={2} commitOnBlur disabled={fechado||savingKey===`${emp.id}-he60`} onValueChange={(v)=>void saveAggregate(emp.id,'he60',v)} className={inputClass}/>{!acessoFilialRestrito && <div className="mt-1 text-violet-300">{formatCurrency(calc.he60Val)}</div>}</td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.he100} decimals={2} commitOnBlur disabled={fechado||savingKey===`${emp.id}-he100`} onValueChange={(v)=>void saveAggregate(emp.id,'he100',v)} className={inputClass}/>{!acessoFilialRestrito && <div className="mt-1 text-violet-300">{formatCurrency(calc.he100Val)}</div>}</td>
+                  {!acessoFilialRestrito && <td className="px-1 py-2 font-bold text-emerald-300">{formatCurrency(calc.dsrHE+calc.dsrComissao)}</td>}
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.comissaoBase} commitOnBlur disabled={fechado||savingKey===`${emp.id}-comissao`} onValueChange={(v)=>void saveAggregate(emp.id,'comissao',v,true)} className={inputClass}/>{!acessoFilialRestrito && <div className="mt-1 text-amber-300">{(calc.comissaoPct*100).toLocaleString('pt-BR',{maximumFractionDigits:2})}% = {formatCurrency(calc.comissaoVal)}</div>}</td>
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.adicionais} commitOnBlur disabled={fechado||savingKey===`${emp.id}-adicional`} onValueChange={(v)=>void saveAggregate(emp.id,'adicional',v,true)} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.descontosDiversos} commitOnBlur disabled={fechado||savingKey===`${emp.id}-desconto`} onValueChange={(v)=>void saveAggregate(emp.id,'desconto',v,true)} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.adiantamento} commitOnBlur disabled={fechado||savingKey===`${emp.id}-adiantamento`} onValueChange={(v)=>void saveAggregate(emp.id,'adiantamento',v,true)} className={inputClass}/></td>
+                  {!acessoFilialRestrito && <td className="px-1 py-2 text-[9px] font-extrabold text-violet-200">{formatCurrency(calc.liquido)}</td>}
                   <td className="px-1 py-1.5"><Input defaultValue={observacaoLivre(emp.id)} disabled={fechado} onBlur={(e)=>void saveMeta(emp.id,{obs:e.target.value})} placeholder="Observação..." className={inputClass}/></td>
                 </tr>;
               })}
