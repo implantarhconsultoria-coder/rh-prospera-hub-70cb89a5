@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileCheck, Lock, RefreshCw, Send } from 'lucide-react';
+import { Lock, RefreshCw, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
