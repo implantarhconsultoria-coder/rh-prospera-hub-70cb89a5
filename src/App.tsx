@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate, useParams, useLocation } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, Outlet, useParams, useLocation } from "react-router-dom";
 
 const MecanicoExtAlias = () => {
   const { acessoId } = useParams<{ acessoId: string }>();
@@ -148,6 +148,15 @@ const RoleRedirect = () => {
   return <AguardandoAcesso />;
 };
 
+const CentralRouteGuard = () => {
+  const { userRoles, roleLoading } = useApp();
+  if (roleLoading) return <StableLoading label="Verificando acesso..." />;
+  const filialOnly = (userRoles.includes('filial_matriz') || userRoles.includes('filial_praia') || userRoles.includes('filial_goiania'))
+    && !userRoles.includes('admin') && !userRoles.includes('diretor_geral');
+  if (filialOnly) return <Navigate to="/filial" replace />;
+  return <Outlet />;
+};
+
 const AdminHomeRoute = () => {
   const { userRoles } = useApp();
   if (isDirectorRole(userRoles) && !userRoles.includes('admin')) return <DirectorDashboardPage />;
@@ -185,6 +194,7 @@ const AuthGate = () => {
       <Route path="/index" element={<Navigate to="/" replace />} />
       <Route path="/login" element={<LoginPage />} />
 
+      <Route element={<CentralRouteGuard />}>
       <Route element={<AppLayout />}>
         <Route path="/admin" element={<AdminHomeRoute />} />
         <Route path="/admin/implanta-central" element={<Navigate to="/admin" replace />} />
@@ -239,6 +249,7 @@ const AuthGate = () => {
         <Route path="/admin/assistente" element={<AssistentePage />} />
         <Route path="/admin/faturamento/*" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/financeiro/*" element={<Navigate to="/admin" replace />} />
+      </Route>
       </Route>
 
       <Route path="/estoque-interno" element={<EstoqueInternoPage />} />
