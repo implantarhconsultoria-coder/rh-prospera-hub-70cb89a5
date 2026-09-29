@@ -1,4 +1,4 @@
-const CACHE_NAME = 'topac-pro-20260908-mecanicos-oficial-v2';
+const CACHE_NAME = 'topac-pro-20260929-ocorrencias-alerta-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -67,7 +67,9 @@ self.addEventListener('push', (event) => {
     icon: '/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2',
     badge: '/icons/topac-rh-pro.svg?v=20260908-mecanicos-v2',
     tag: data.tag || 'notification',
-    requireInteraction: data.requireInteraction || false,
+    renotify: data.renotify !== false,
+    requireInteraction: data.requireInteraction !== false,
+    vibrate: Array.isArray(data.vibrate) && data.vibrate.length ? data.vibrate : [650, 250, 650],
     data: { url: data.url || '/' },
   };
   event.waitUntil(self.registration.showNotification(title, options));
