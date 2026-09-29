@@ -7,13 +7,15 @@ import {
   Bell, CalendarCheck, CalendarDays, Receipt, Send,
   Stethoscope, UploadCloud, Users, Building2, UserRound, UserPlus,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 
 const FilialDashboardPage: React.FC = () => {
   const { employees, companies, session } = useApp();
   const { filialCompanyId } = useFilialFilter();
   const navigate = useNavigate();
+  const { acessoId } = useParams<{ acessoId?: string }>();
+  const basePath = acessoId ? `/filial-ext/${acessoId}` : '/filial';
 
   const emps = employees.filter(e => e.companyId === filialCompanyId && e.status === 'ativo');
   const asoAlerta = emps.filter(e => asoStatus(e.dataExameMedico).status !== 'ok').length;
@@ -46,38 +48,38 @@ const FilialDashboardPage: React.FC = () => {
       label: 'Funcionários',
       description: 'Cadastro e gestão da equipe da filial',
       icon: Users,
-      path: '/filial/funcionarios',
+      path: `${basePath}/funcionarios`,
       value: emps.length,
     },
     {
       label: 'Movimento Diário',
       description: 'Faltas, atrasos, extras e ocorrências',
       icon: CalendarDays,
-      path: '/filial/movimento-diario',
+      path: `${basePath}/movimento-diario`,
     },
     {
       label: 'Apontamento / Fechamento',
       description: 'Fechamento mensal e envio para a central',
       icon: Send,
-      path: '/filial/fechamento',
+      path: `${basePath}/fechamento`,
     },
     {
       label: 'Pré-Cadastro',
       description: 'Ficha admissional e envio direto à contabilidade',
       icon: UserPlus,
-      path: '/filial/pre-cadastro',
+      path: `${basePath}/pre-cadastro`,
     },
     {
       label: 'Documentos',
       description: 'Atestados e demais documentos por funcionário',
       icon: UploadCloud,
-      path: '/filial/documentos',
+      path: `${basePath}/documentos`,
     },
     {
       label: 'Aviso de Férias',
       description: feriasAlerta > 0 ? `${feriasAlerta} pendência(s) para atenção` : 'Programação e avisos de férias',
       icon: CalendarCheck,
-      path: '/filial/aviso-ferias',
+      path: `${basePath}/aviso-ferias`,
       value: feriasAlerta || undefined,
       warning: feriasAlerta > 0,
     },
@@ -85,7 +87,7 @@ const FilialDashboardPage: React.FC = () => {
       label: 'ASO / Agendamento',
       description: asoAlerta > 0 ? `${asoAlerta} pendência(s) para atenção` : 'Controle e agendamento de exames',
       icon: Stethoscope,
-      path: '/filial/aso',
+      path: `${basePath}/aso`,
       value: asoAlerta || undefined,
       warning: asoAlerta > 0,
     },
@@ -93,13 +95,13 @@ const FilialDashboardPage: React.FC = () => {
       label: 'Recibos / Holerites',
       description: 'Imprimir, assinar, devolver e consultar histórico',
       icon: Receipt,
-      path: '/filial/recibos-holerites',
+      path: `${basePath}/recibos-holerites`,
     },
     {
       label: 'Alertas',
       description: totalAlertas > 0 ? `${totalAlertas} alerta(s) ativo(s)` : 'Nenhuma pendência ativa',
       icon: Bell,
-      path: '/filial/alertas',
+      path: `${basePath}/alertas`,
       value: totalAlertas || undefined,
       warning: totalAlertas > 0,
     },
