@@ -722,7 +722,7 @@ const ProtocoloPage: React.FC = () => {
                             <td className="px-3 py-3">
                               {item.ativo && url ? (
                                 <span className="inline-flex items-center gap-2 rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-                                  <CheckCircle2 className="h-4 w-4" /> PDF vinculado automaticamente — Documento OK
+                                  <CheckCircle2 className="h-4 w-4" /> Documento conferido — liberado somente junto à impressão do protocolo
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-2 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive">
