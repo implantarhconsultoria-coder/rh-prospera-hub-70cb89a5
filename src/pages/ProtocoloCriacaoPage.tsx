@@ -403,7 +403,7 @@ const ProtocoloPage: React.FC = () => {
       </section>`;
   };
 
-  const persistProtocols = async ({ silent = false }: { silent?: boolean } = {}) => {
+  const persistProtocols = async (operador: { id: string; nome: string }, { silent = false }: { silent?: boolean } = {}) => {
     if (!readiness.ready) {
       toast.error('Não é possível salvar/imprimir enquanto houver Cliente, Local ou Documento pendente.');
       return null;
@@ -415,6 +415,7 @@ const ProtocoloPage: React.FC = () => {
 
     setSaving(true);
     try {
+      const loteId = crypto.randomUUID();
       const payload = groups.flatMap((group) => group.itens.map((item) => {
         const asset = item.ativo!;
         const vehicleFields = toProtocolVehicleFields(asset);
@@ -432,6 +433,9 @@ const ProtocoloPage: React.FC = () => {
           observacoes: buildGroupObservationText(group),
           texto_original: textoColado,
           criado_por: session.user.id,
+          operador_id: operador.id,
+          operador_nome: operador.nome,
+          protocolo_lote_id: loteId,
         };
       }));
 
