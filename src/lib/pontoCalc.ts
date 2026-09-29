@@ -71,6 +71,10 @@ export interface DiaPonto {
   minutosEsperados: number;
   /** Minutos de atraso na entrada (acima da tolerância) */
   atrasoMin: number;
+  /** HE classificadas pela regra geral do dia. */
+  he50Min: number;
+  he60Min: number;
+  he100Min: number;
   /** Inconsistências detectadas (faltam batidas, ordem errada etc.) */
   inconsistencias: string[];
   /** Esse dia é útil (seg-sex)? */
@@ -87,6 +91,9 @@ export interface ResumoColaborador {
   atrasoTotalMin: number;
   horasNormaisMin: number;
   horasExtrasMin: number;
+  he50Min: number;
+  he60Min: number;
+  he100Min: number;
   horasFaltantesMin: number;
   jornadaCumpridaMin: number;
   jornadaEsperadaMin: number;
@@ -127,9 +134,11 @@ export const calcularResumoColaborador = (
   registros: RegistroPonto[],
   competencia: string,
   jornada: JornadaConfig = JORNADA_PADRAO,
+  datas100: string[] = [],
 ): ResumoColaborador => {
   const minutosEsperadosDia = jornada.horasDia * 60;
   const entradaEsperadaMin = parseHHMM(jornada.entradaPadrao);
+  const datas100Set = new Set(datas100);
 
   // Agrupa por data
   const porData = new Map<string, RegistroPonto[]>();
@@ -139,7 +148,9 @@ export const calcularResumoColaborador = (
   }
 
   const dias: DiaPonto[] = listarDiasDoMes(competencia).map((data) => {
-    const util = isDiaUtil(data);
+    const dow = new Date(data + 'T12:00:00').getDay();
+    const dia100 = dow === 0 || datas100Set.has(data);
+    const util = isDiaUtil(data) && !datas100Set.has(data);
     const regs = porData.get(data) || [];
     const get = (...tipos: string[]) => regs.find((r) => tipos.includes(r.tipo))?.hora;
 
@@ -159,6 +170,9 @@ export const calcularResumoColaborador = (
         minutosTrabalhados: 0,
         minutosEsperados: util ? minutosEsperadosDia : 0,
         atrasoMin: 0,
+        he50Min: 0,
+        he60Min: 0,
+        he100Min: 0,
         inconsistencias: [],
         diaUtil: util,
         faltou: util,
@@ -197,6 +211,15 @@ export const calcularResumoColaborador = (
       inconsistencias.push('batidas insuficientes');
     }
 
+    const extraDoDia = dia100
+      ? minutosTrabalhados
+      : util
+        ? Math.max(0, minutosTrabalhados - minutosEsperadosDia)
+        : minutosTrabalhados;
+    const he100Min = dia100 ? extraDoDia : 0;
+    const he50Min = dia100 ? 0 : Math.min(extraDoDia, 120);
+    const he60Min = dia100 ? 0 : Math.max(0, extraDoDia - 120);
+
     return {
       data,
       entrada,
@@ -206,6 +229,9 @@ export const calcularResumoColaborador = (
       minutosTrabalhados,
       minutosEsperados: util ? minutosEsperadosDia : 0,
       atrasoMin,
+      he50Min,
+      he60Min,
+      he100Min,
       inconsistencias,
       diaUtil: util,
       faltou: false,
@@ -219,6 +245,9 @@ export const calcularResumoColaborador = (
   let atrasoTotalMin = 0;
   let horasNormaisMin = 0;
   let horasExtrasMin = 0;
+  let he50Min = 0;
+  let he60Min = 0;
+  let he100Min = 0;
   let horasFaltantesMin = 0;
   let jornadaCumpridaMin = 0;
   let jornadaEsperadaMin = 0;
@@ -241,8 +270,11 @@ export const calcularResumoColaborador = (
       jornadaCumpridaMin += d.minutosTrabalhados;
       const normais = Math.min(d.minutosTrabalhados, d.minutosEsperados || d.minutosTrabalhados);
       horasNormaisMin += normais;
-      const extras = Math.max(0, d.minutosTrabalhados - (d.minutosEsperados || d.minutosTrabalhados));
+      const extras = d.he50Min + d.he60Min + d.he100Min;
       horasExtrasMin += extras;
+      he50Min += d.he50Min;
+      he60Min += d.he60Min;
+      he100Min += d.he100Min;
       if (d.diaUtil && d.minutosTrabalhados < d.minutosEsperados) {
         horasFaltantesMin += d.minutosEsperados - d.minutosTrabalhados;
       }
@@ -261,6 +293,9 @@ export const calcularResumoColaborador = (
     atrasoTotalMin,
     horasNormaisMin,
     horasExtrasMin,
+    he50Min,
+    he60Min,
+    he100Min,
     horasFaltantesMin,
     jornadaCumpridaMin,
     jornadaEsperadaMin,
