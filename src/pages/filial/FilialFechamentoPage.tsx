@@ -16,7 +16,7 @@ import { obterAtorAtual, registrarAcao } from '@/lib/acoesLog';
 import { registrarAlertaFilial } from '@/lib/alertasFilial';
 import type { MovimentoRow, FechamentoRow, TipoOcorrencia } from '@/lib/movimento';
 
-type GridTipo = TipoOcorrencia | 'comissao';
+type GridTipo = TipoOcorrencia | 'he60' | 'comissao';
 
 const GRID_MARK = '__GRADE_FILIAL__';
 const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
@@ -58,8 +58,7 @@ const FilialFechamentoPage: React.FC = () => {
     [employees, companyId],
   );
 
-  const hePct = getHoraExtraSemanalPercentual(empresaAtual || companyId);
-  const heLabel = `HE ${hePct}%`;
+  const hePct = 50;
   const diasUteis = getWorkingDays(competencia);
   const [yy, mm] = competencia.split('-').map(Number);
   const domingosFeriados = yy && mm ? new Date(yy, mm, 0).getDate() - diasUteis : 0;
@@ -164,6 +163,7 @@ const FilialFechamentoPage: React.FC = () => {
       faltasDias: aggregate(emp.id, 'falta', 'quantidade'),
       atrasos: aggregate(emp.id, 'atraso', 'quantidade'),
       he50: aggregate(emp.id, 'he50', 'quantidade'),
+      he60: aggregate(emp.id, 'he60', 'quantidade'),
       he100: aggregate(emp.id, 'he100', 'quantidade'),
       comissaoBase: aggregate(emp.id, 'comissao', 'valor'),
       adicionais: aggregate(emp.id, 'adicional', 'valor'),
@@ -206,7 +206,7 @@ const FilialFechamentoPage: React.FC = () => {
         const { entry } = calcEntry(emp);
         const payload:any = {
           company_id: companyId, funcionario_id: emp.id, competencia,
-          faltas_dias: entry.faltasDias, atrasos: entry.atrasos, he50: entry.he50, he100: entry.he100,
+          faltas_dias: entry.faltasDias, atrasos: entry.atrasos, he50: entry.he50, he60: entry.he60, he100: entry.he100,
           comissao_base: entry.comissaoBase, adicionais: entry.adicionais, descontos_diversos: entry.descontosDiversos,
           adiantamento: entry.adiantamento, vr_aplicado: emp.vrAtivo, va_aplicado: emp.vaAtivo, vt_aplicado: emp.vtAtivo,
           insalubridade_aplicada: entry.insalubridadeAplicada,
@@ -280,8 +280,8 @@ const FilialFechamentoPage: React.FC = () => {
           <table className="w-full min-w-[1450px] table-fixed text-[10px]">
             <thead className="sticky top-0 z-20 bg-[#070a0f]">
               <tr className="border-b border-violet-400/30">
-                {['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.',heLabel,'HE 100%','DSR','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((h,i)=>
-                  <th key={h} style={{width:['12%','7%','4%','6%','5%','5%','5%','5%','6%','7%','6%','6%','7%','7%','12%'][i]}} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase text-violet-100">{h}</th>
+                {['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.','HE 50%','HE 60%','HE 100%','DSR','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((h,i)=>
+                  <th key={h} style={{width:['11%','7%','4%','6%','5%','5%','5%','5%','5%','6%','7%','6%','6%','7%','7%','12%'][i]}} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase text-violet-100">{h}</th>
                 )}
               </tr>
             </thead>
@@ -296,6 +296,7 @@ const FilialFechamentoPage: React.FC = () => {
                   <td className="px-1 py-1.5"><DecimalInput value={entry.atrasos} decimals={2} disabled={fechado||savingKey===`${emp.id}-atraso`} onValueChange={(v)=>void saveAggregate(emp.id,'atraso',v)} className={inputClass}/><div className="mt-1 text-muted-foreground">{formatCurrency(calc.atrasoVal)}</div></td>
                   <td className="px-1 py-1.5"><DecimalInput value={horasDoc(emp.id)} decimals={2} disabled={fechado} onValueChange={(v)=>void saveMeta(emp.id,{horasDoc:v})} className={inputClass}/></td>
                   <td className="px-1 py-1.5"><DecimalInput value={entry.he50} decimals={2} disabled={fechado||savingKey===`${emp.id}-he50`} onValueChange={(v)=>void saveAggregate(emp.id,'he50',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he50Val)}</div></td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.he60} decimals={2} disabled={fechado||savingKey===`${emp.id}-he60`} onValueChange={(v)=>void saveAggregate(emp.id,'he60',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he60Val)}</div></td>
                   <td className="px-1 py-1.5"><DecimalInput value={entry.he100} decimals={2} disabled={fechado||savingKey===`${emp.id}-he100`} onValueChange={(v)=>void saveAggregate(emp.id,'he100',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he100Val)}</div></td>
                   <td className="px-1 py-2 font-bold text-emerald-300">{formatCurrency(calc.dsrHE+calc.dsrComissao)}</td>
                   <td className="px-1 py-1.5"><MoneyInput value={entry.comissaoBase} disabled={fechado||savingKey===`${emp.id}-comissao`} onValueChange={(v)=>void saveAggregate(emp.id,'comissao',v,true)} className={inputClass}/><div className="mt-1 text-amber-300">{(calc.comissaoPct*100).toLocaleString('pt-BR',{maximumFractionDigits:2})}% = {formatCurrency(calc.comissaoVal)}</div></td>
