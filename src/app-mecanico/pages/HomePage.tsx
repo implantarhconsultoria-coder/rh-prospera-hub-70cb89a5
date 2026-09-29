@@ -154,7 +154,7 @@ export default function HomePage() {
         at: row.created_at,
         kind: "maintenance",
         title: row.titulo || row.assunto || "Ordem de Serviço",
-        sub: row.descricao || row.observacao || "Chamado operacional",
+        sub: row.descricao || row.observacao || "Ocorrência operacional",
         meta: row.status || "Aberto",
         metaClass: String(row.status || "").toLowerCase().includes("concl") ? "text-emerald-400 bg-emerald-500/10" : "text-zinc-300",
       })),
@@ -226,7 +226,7 @@ export default function HomePage() {
           />
           <ActionCard icon={Gauge} title="Ponto do Carro / KM" subtitle="Registre hodômetro e localização" onClick={() => navigate(`${base}/veiculo`)} />
           <ActionCard icon={Fuel} title="Solicitação de Abastecimento" subtitle="Solicite combustível de forma controlada" onClick={() => navigate(`${base}/abastecimento`)} />
-          <ActionCard icon={Wrench} title="Manutenção" subtitle="Abra e acompanhe ordens de serviço" onClick={() => navigate(`${base}/chamados`)} />
+          <ActionCard icon={Wrench} title="Manutenção" subtitle="Abra e acompanhe ocorrências de serviço" onClick={() => navigate(`${base}/chamados`)} />
           <ActionCard icon={CalendarDays} title="Plantão" subtitle={weekend ? "Disponível para registro" : "Somente fim de semana"} badge="Somente fim de semana" greenBadge="Conta como extra" disabled={!weekend || hasEntry} onClick={() => navigate(`${base}/ponto?tipo=entrada&origem=plantao`)} />
         </div>
       </section>
