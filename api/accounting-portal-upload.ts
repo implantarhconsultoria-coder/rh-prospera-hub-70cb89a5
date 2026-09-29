@@ -16,8 +16,15 @@ const TYPE_LABELS: Record<string, string> = {
   recibos_holerites: 'Recibos / Holerites',
   folha_processada: 'Folha processada',
   contrato: 'Contrato de trabalho',
+  admissao: 'Documentos de admissão',
   rescisao: 'Documentos de rescisão',
+  demissao: 'Documentos de rescisão',
   ferias: 'Documentos de férias',
+  atestado: 'Documento de atestado / afastamento',
+  alteracao_salario: 'Documento de alteração salarial',
+  alteracao_funcao: 'Documento de alteração de função',
+  fechamento: 'Documento de fechamento',
+  adiantamento: 'Documento de adiantamento',
   retorno_folha: 'Retorno da contabilidade',
   outro: 'Outro documento',
 };
@@ -447,6 +454,28 @@ export default async function handler(req: any, res?: any) {
         }).eq('id', uploadId);
         return sendJson(res, { ok: false, error: 'email_send_failed', message: String(error?.message || error) }, Number(error?.status || 502));
       }
+    }
+
+    if (action === 'list_process') {
+      const companyId = String(body.empresa_id || '').trim();
+      const originType = String(body.origem_tipo || '').trim().slice(0, 60);
+      const originId = String(body.origem_id || '').trim().slice(0, 120);
+      if (!companyId || !originType || !originId) {
+        return sendJson(res, { ok: false, error: 'processo_obrigatorio' }, 400);
+      }
+
+      await validateSession(service, portal, token, companyId);
+      const { data, error } = await service
+        .from('contabilidade_portal_uploads')
+        .select('id,tipo_documento,arquivo_nome,tamanho_bytes,status,formalizacao_email_status,formalizacao_email_em,created_at,updated_at')
+        .eq('empresa_id', companyId)
+        .eq('origem_tipo', originType)
+        .eq('origem_id', originId)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (error) throw error;
+
+      return sendJson(res, { ok: true, documentos: data || [] });
     }
 
     if (action === 'view') {

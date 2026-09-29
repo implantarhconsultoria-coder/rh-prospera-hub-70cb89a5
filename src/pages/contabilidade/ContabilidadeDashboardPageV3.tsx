@@ -450,7 +450,7 @@ export default function ContabilidadeDashboardPageV3({ portal }: { portal: Porta
               </div>
               {showIssueForm && <div className="mt-3 space-y-2"><textarea value={pendenciaTexto} onChange={e => setPendenciaTexto(e.target.value)} placeholder="Descreva o que precisa ser corrigido..." className="min-h-[90px] w-full rounded-md border border-[#3a2d46] bg-[#05070a] p-3 text-sm text-zinc-100 outline-none focus:border-[#8b22ff]" /><Button disabled={updating || !pendenciaTexto.trim()} onClick={() => void marcar(selecionado, 'pendencia', pendenciaTexto)} className="bg-rose-600 text-white hover:bg-rose-500">Registrar pendência</Button></div>}
             </div>}
-            {selecionado.status === 'conferido' && !isInformational(selecionado) && selecionado.categoria !== 'fechamento' && sessao?.token && (
+            {selecionado.origem_tipo !== 'ferias_alerta' && sessao?.token && (
               <ContabilidadeProcessReturn portal={portal} token={sessao.token} evento={selecionado} />
             )}
             <button onClick={() => setSelecionado(null)} className="text-xs font-semibold text-[#b85cff] hover:text-white">← Voltar para a lista</button>
