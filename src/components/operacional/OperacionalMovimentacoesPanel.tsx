@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import OperadorCodeDialog from '@/components/OperadorCodeDialog';
+import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { toast } from 'sonner';
 
 const rpc = supabase as unknown as {
@@ -26,6 +27,7 @@ const TIPOS = [
 ];
 
 const OperacionalMovimentacoesPanel: React.FC<Props> = ({ equipamentos, clientes }) => {
+  const { developerMode } = useDeveloperMode();
   const [lista, setLista] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [codigoOpen, setCodigoOpen] = useState(false);
@@ -124,7 +126,7 @@ const OperacionalMovimentacoesPanel: React.FC<Props> = ({ equipamentos, clientes
             Selecionado: {[equipamentoSelecionado.ativos?.descricao || equipamentoSelecionado.descricao_livre, equipamentoSelecionado.patrimonio || equipamentoSelecionado.ativos?.patrimonio, equipamentoSelecionado.placa || equipamentoSelecionado.ativos?.placa].filter(Boolean).join(' • ')}
           </p>
         )}
-        <Button className="mt-4" disabled={!form.equipamento_id} onClick={() => setCodigoOpen(true)}>
+        <Button className="mt-4" disabled={!form.equipamento_id} onClick={() => developerMode ? void confirmar('') : setCodigoOpen(true)}>
           <ArrowRightLeft className="mr-2 h-4 w-4" /> Confirmar movimentação
         </Button>
       </div>
