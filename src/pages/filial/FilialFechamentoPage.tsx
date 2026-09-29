@@ -1,344 +1,324 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { FileCheck, Lock, RefreshCw, Send } from 'lucide-react';
+import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
+import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { FileCheck, Lock, Unlock, RefreshCw, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
-import { toast } from 'sonner';
-import { calcTotalFuncionario, formatCurrency } from '@/lib/calculations';
+import { DecimalInput, MoneyInput } from '@/components/ui/number-format-input';
+import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual, getHoraExtraSemanalPercentual } from '@/lib/calculations';
+import { getWorkingDays } from '@/lib/workingDays';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
-import { TIPOS_OCORRENCIA, type MovimentoRow, type FechamentoRow, type TipoOcorrencia } from '@/lib/movimento';
+import { obterAtorAtual, registrarAcao } from '@/lib/acoesLog';
+import { registrarAlertaFilial } from '@/lib/alertasFilial';
+import type { MovimentoRow, FechamentoRow, TipoOcorrencia } from '@/lib/movimento';
+
+const GRID_MARK = '__GRADE_FILIAL__';
+const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
+const HOURS_DOC_RE = /DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/i;
 
 const FilialFechamentoPage: React.FC = () => {
-  const { companies, employees, session } = useApp();
-  const { filialCompanyId } = useFilialFilter();
-  const companyId = filialCompanyId || '';
+  const { companies, employees } = useApp();
+  const filial = useFilialFilter();
+  const ext = useAcessoExternoFiltro();
+  const companyId = ext.isExterno ? (ext.empresaIds?.[0] || '') : (filial.filialCompanyId || '');
+  const empresaAtual = companies.find((c) => c.id === companyId);
+  const empresaNome = empresaAtual?.name || ext.empresaNome || 'Filial autorizada';
+
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [movimentos, setMovimentos] = useState<MovimentoRow[]>([]);
   const [fechamento, setFechamento] = useState<FechamentoRow | null>(null);
-  const [historico, setHistorico] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [savingKey, setSavingKey] = useState('');
   const [processando, setProcessando] = useState(false);
 
   const carregar = async () => {
     if (!companyId || !competencia) return;
     setLoading(true);
     const [mov, fech] = await Promise.all([
-      supabase.from('movimento_diario').select('*').eq('company_id', companyId).eq('competencia', competencia),
+      supabase.from('movimento_diario').select('*').eq('company_id', companyId).eq('competencia', competencia).order('created_at', { ascending: true }),
       supabase.from('fechamentos_filial').select('*').eq('company_id', companyId).eq('competencia', competencia).maybeSingle(),
     ]);
+    if (mov.error) toast.error(mov.error.message);
     setMovimentos((mov.data as any) || []);
     setFechamento((fech.data as any) || null);
-    if (fech.data) {
-      const hist = await supabase.from('fechamentos_historico').select('*').eq('fechamento_id', (fech.data as any).id).order('created_at', { ascending: false });
-      setHistorico(hist.data || []);
-    } else {
-      setHistorico([]);
-    }
     setLoading(false);
   };
 
   useEffect(() => { void carregar(); /* eslint-disable-next-line */ }, [companyId, competencia]);
 
-  // Consolida movimento → totais por funcionário
-  const consolidado = useMemo(() => {
-    const map = new Map<string, Record<TipoOcorrencia, { quantidade: number; valor: number; observacoes: string[] }>>();
-    for (const m of movimentos) {
-      if (!map.has(m.funcionario_id)) {
-        map.set(m.funcionario_id, {
-          falta: { quantidade: 0, valor: 0, observacoes: [] },
-          atraso: { quantidade: 0, valor: 0, observacoes: [] },
-          he50: { quantidade: 0, valor: 0, observacoes: [] },
-          he100: { quantidade: 0, valor: 0, observacoes: [] },
-          adicional: { quantidade: 0, valor: 0, observacoes: [] },
-          desconto: { quantidade: 0, valor: 0, observacoes: [] },
-          adiantamento: { quantidade: 0, valor: 0, observacoes: [] },
-          observacao: { quantidade: 0, valor: 0, observacoes: [] },
-        });
-      }
-      const acc = map.get(m.funcionario_id)!;
-      acc[m.tipo].quantidade += Number(m.quantidade || 0);
-      acc[m.tipo].valor += Number(m.valor || 0);
-      if (m.observacao) acc[m.tipo].observacoes.push(m.observacao);
-    }
-    return map;
-  }, [movimentos]);
-
+  const fechado = fechamento?.status === 'fechado';
   const compEmps = useMemo(
-    () => employees.filter(e => e.companyId === companyId && e.status === 'ativo' && e.categoria === 'operacional'),
-    [employees, companyId]
+    () => employees.filter((e) => e.companyId === companyId && e.status === 'ativo' && e.categoria === 'operacional'),
+    [employees, companyId],
   );
 
-  const empresaAtual = companies.find(c => c.id === companyId);
-  const empresaNome = empresaAtual?.name || '';
-  const textoEmpresa = `${empresaAtual?.codigo || ''} ${empresaAtual?.name || ''} ${empresaAtual?.city || ''}`
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const filialGoiania = textoEmpresa.includes('goian') || textoEmpresa.includes('gyn');
+  const hePct = getHoraExtraSemanalPercentual(empresaAtual || companyId);
+  const heLabel = `HE ${hePct}%`;
+  const diasUteis = getWorkingDays(competencia);
+  const [yy, mm] = competencia.split('-').map(Number);
+  const domingosFeriados = yy && mm ? new Date(yy, mm, 0).getDate() - diasUteis : 0;
+  const comissaoPct = getComissaoPercentual(empresaAtual);
 
-  const montarEntry = (emp: any, c: any) => ({
-    employeeId: emp.id,
-    companyId,
-    competencia,
-    faltasDias: c?.falta.quantidade || 0,
-    atrasos: c?.atraso.quantidade || 0,
-    he50: c?.he50.quantidade || 0,
-    he100: c?.he100.quantidade || 0,
-    adicionais: c?.adicional.valor || 0,
-    descontosDiversos: c?.desconto.valor || 0,
-    adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
-    vrAplicado: emp.vrAtivo,
-    vrDias: 0,
-    vaAplicado: emp.vaAtivo,
-    vtAplicado: emp.vtAtivo,
-    vtDesconto: 0,
-    comissaoBase: 0,
-    insalubridadeAplicada: employeeHasInsalubridade(emp),
-    observacoes: '',
-    statusConferencia: 'pendente',
-  } as any);
+  const rowsFor = (employeeId: string, tipo?: TipoOcorrencia) =>
+    movimentos.filter((m) => m.funcionario_id === employeeId && (!tipo || m.tipo === tipo));
 
-  const diferencialHEGoiania = (emp: any, c: any) => {
-    if (!filialGoiania || !c?.he50.quantidade) return 0;
-    const calc = calcTotalFuncionario(emp, montarEntry(emp, c));
-    return Math.round((calc.he50Val / 15) * 100) / 100;
+  const aggregate = (employeeId: string, tipo: TipoOcorrencia, field: 'quantidade' | 'valor') =>
+    rowsFor(employeeId, tipo).reduce((sum, row) => sum + Number(row[field] || 0), 0);
+
+  const metaRow = (employeeId: string) =>
+    rowsFor(employeeId, 'observacao').filter((r) => String(r.observacao || '').startsWith(GRID_MARK)).at(-1);
+
+  const metaText = (employeeId: string) => String(metaRow(employeeId)?.observacao || '').replace(GRID_MARK, '').replace(/^\s*\|\s*/, '').trim();
+  const faltaDatas = (employeeId: string) => metaText(employeeId).match(FALTAS_RE)?.[1]?.trim() || '';
+  const horasDoc = (employeeId: string) => Number(String(metaText(employeeId).match(HOURS_DOC_RE)?.[1] || '0').replace(',', '.')) || 0;
+  const observacaoLivre = (employeeId: string) => metaText(employeeId)
+    .replace(/(^|\s*\|\s*)FALTAS:\s*[^|]+/i, '')
+    .replace(/(^|\s*\|\s*)DECLARACAO\/ATESTADO HORAS:\s*\+[\d.,]+h/i, '')
+    .replace(/^\s*\|\s*|\s*\|\s*$/g, '')
+    .trim();
+
+  const saveAggregate = async (employeeId: string, tipo: TipoOcorrencia, desired: number, usaValor = false) => {
+    if (fechado) return toast.error('Período fechado. Para alterar, solicite reabertura à central.');
+    if (!companyId) return;
+    const key = `${employeeId}-${tipo}`;
+    setSavingKey(key);
+    try {
+      const field = usaValor ? 'valor' : 'quantidade';
+      const typeRows = rowsFor(employeeId, tipo);
+      const grid = typeRows.find((r) => String(r.observacao || '').startsWith(GRID_MARK));
+      const otherTotal = typeRows.filter((r) => r.id !== grid?.id).reduce((sum, r) => sum + Number((r as any)[field] || 0), 0);
+      const gridValue = Number(desired || 0) - otherTotal;
+      const ator = await obterAtorAtual();
+
+      if (grid) {
+        const patch:any = { [field]: gridValue, registrado_por_nome: ator.funcionarioNome || ator.userEmail || 'Filial' };
+        const { error } = await supabase.from('movimento_diario').update(patch).eq('id', grid.id).eq('company_id', companyId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('movimento_diario').insert({
+          company_id: companyId,
+          funcionario_id: employeeId,
+          competencia,
+          data: `${competencia}-01`,
+          tipo,
+          quantidade: usaValor ? 0 : gridValue,
+          valor: usaValor ? gridValue : 0,
+          observacao: `${GRID_MARK} | edição pela grade`,
+          registrado_por_user_id: ator.userId || null,
+          registrado_por_nome: ator.funcionarioNome || ator.userEmail || 'Filial',
+        } as any);
+        if (error) throw error;
+      }
+      await carregar();
+    } catch (e:any) {
+      toast.error(e?.message || 'Não foi possível salvar o apontamento.');
+    } finally {
+      setSavingKey('');
+    }
   };
 
-  // Cálculo dos totais consolidados
-  const totaisGerais = useMemo(() => {
-    let proventos = 0, descontos = 0, liquido = 0;
-    let funcAfetados = 0;
-    compEmps.forEach(emp => {
-      const c = consolidado.get(emp.id);
-      const calc = calcTotalFuncionario(emp, montarEntry(emp, c));
-      const diferencial60 = diferencialHEGoiania(emp, c);
-      proventos += calc.proventos + diferencial60;
-      descontos += calc.descontos;
-      liquido += calc.liquido + diferencial60;
-      if (c) funcAfetados += 1;
-    });
-    return { proventos, descontos, liquido, funcAfetados };
-  }, [consolidado, compEmps, filialGoiania, companyId, competencia]);
-
-  const userName = session?.user?.user_metadata?.nome_completo || session?.user?.user_metadata?.full_name || session?.user?.email || '';
-  const fechado = fechamento?.status === 'fechado';
-
-  const fechar = async () => {
-    if (!session) return;
-    if (!companyId || !empresaAtual) return toast.error('Filial não autorizada para esta sessão.');
-    if (!confirm(`Confirmar fechamento de ${empresaNome} • ${competencia}?\n\nIsso vai gerar ${compEmps.length} lançamento(s) e travar a edição da filial.`)) return;
-    setProcessando(true);
-
+  const saveMeta = async (employeeId: string, patch: { datas?: string; horasDoc?: number; obs?: string }) => {
+    if (fechado) return toast.error('Período fechado. Para alterar, solicite reabertura à central.');
+    const key = `${employeeId}-meta`;
+    setSavingKey(key);
     try {
-      // 1) upsert do fechamento (pré-status, valida limites)
-      const { data: fechRow, error: fechErr } = await supabase
-        .from('fechamentos_filial')
-        .upsert({
-          company_id: companyId,
-          empresa_nome: empresaNome,
-          competencia,
-          status: 'fechado',
-          fechado_por_user_id: session.user.id,
-          fechado_por_nome: userName,
-          fechado_em: new Date().toISOString(),
-          total_funcionarios: compEmps.length,
-          total_proventos: totaisGerais.proventos,
-          total_descontos: totaisGerais.descontos,
-          total_liquido: totaisGerais.liquido,
-        }, { onConflict: 'company_id,competencia' })
-        .select()
-        .single();
+      const currentDatas = patch.datas ?? faltaDatas(employeeId);
+      const currentHoras = patch.horasDoc ?? horasDoc(employeeId);
+      const currentObs = patch.obs ?? observacaoLivre(employeeId);
+      const text = [
+        GRID_MARK,
+        currentDatas.trim() ? `FALTAS: ${currentDatas.trim()}` : '',
+        currentHoras > 0 ? `DECLARACAO/ATESTADO HORAS: +${currentHoras.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h` : '',
+        currentObs.trim(),
+      ].filter(Boolean).join(' | ');
+      const ator = await obterAtorAtual();
+      const existing = metaRow(employeeId);
+      if (existing) {
+        const { error } = await supabase.from('movimento_diario').update({ observacao: text, registrado_por_nome: ator.funcionarioNome || ator.userEmail || 'Filial' } as any).eq('id', existing.id).eq('company_id', companyId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('movimento_diario').insert({
+          company_id: companyId, funcionario_id: employeeId, competencia, data: `${competencia}-01`,
+          tipo: 'observacao', quantidade: 0, valor: 0, observacao: text,
+          registrado_por_user_id: ator.userId || null, registrado_por_nome: ator.funcionarioNome || ator.userEmail || 'Filial',
+        } as any);
+        if (error) throw error;
+      }
+      await carregar();
+    } catch (e:any) {
+      toast.error(e?.message || 'Não foi possível salvar a observação.');
+    } finally {
+      setSavingKey('');
+    }
+  };
 
+  const calcEntry = (emp:any) => {
+    const entry:any = {
+      employeeId: emp.id, companyId, competencia,
+      faltasDias: aggregate(emp.id, 'falta', 'quantidade'),
+      atrasos: aggregate(emp.id, 'atraso', 'quantidade'),
+      he50: aggregate(emp.id, 'he50', 'quantidade'),
+      he100: aggregate(emp.id, 'he100', 'quantidade'),
+      comissaoBase: aggregate(emp.id, 'comissao', 'valor'),
+      adicionais: aggregate(emp.id, 'adicional', 'valor'),
+      descontosDiversos: aggregate(emp.id, 'desconto', 'valor'),
+      adiantamento: aggregate(emp.id, 'adiantamento', 'valor') || Math.round(emp.salarioBase * 0.4 * 100) / 100,
+      vrAplicado: emp.vrAtivo, vrDias: 0, vaAplicado: emp.vaAtivo, vtAplicado: emp.vtAtivo, vtDesconto: 0,
+      insalubridadeAplicada: employeeHasInsalubridade(emp), observacoes: metaText(emp.id), statusConferencia: 'pendente',
+    };
+    return { entry, calc: calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct, horaExtraSemanalPct: hePct }) };
+  };
+
+  const totals = useMemo(() => compEmps.reduce((acc, emp) => {
+    const { calc } = calcEntry(emp);
+    acc.proventos += calc.proventos;
+    acc.descontos += calc.descontosLegais + calc.descontosOperacionais + calc.adiantamento + calc.descontosDiversos;
+    acc.liquido += calc.liquido;
+    return acc;
+  }, { proventos: 0, descontos: 0, liquido: 0 }), [compEmps, movimentos, competencia]);
+
+  const enviarCentral = async () => {
+    if (!companyId || !empresaAtual) return toast.error('Filial não autorizada.');
+    if (!confirm(`Enviar fechamento de ${empresaNome} • ${competencia} para a central?\n\nDepois do envio o período ficará travado para a filial.`)) return;
+    setProcessando(true);
+    try {
+      const ator = await obterAtorAtual();
+      const { data: fechRow, error: fechErr } = await supabase.from('fechamentos_filial').upsert({
+        company_id: companyId, empresa_nome: empresaNome, competencia, status: 'fechado',
+        fechado_por_user_id: ator.userId || null,
+        fechado_por_nome: ator.funcionarioNome || ator.userEmail || 'Filial',
+        fechado_em: new Date().toISOString(),
+        total_funcionarios: compEmps.length,
+        total_proventos: totals.proventos,
+        total_descontos: totals.descontos,
+        total_liquido: totals.liquido,
+      } as any, { onConflict: 'company_id,competencia' }).select().single();
       if (fechErr) throw fechErr;
       const fechamentoId = (fechRow as any).id;
 
-      // 2) Para cada funcionário, gerar/atualizar lançamento mensal consolidado
       for (const emp of compEmps) {
-        const c = consolidado.get(emp.id);
-        const diferencial60 = diferencialHEGoiania(emp, c);
-        const obsLista = c ? [
-          ...c.falta.observacoes, ...c.atraso.observacoes, ...c.he50.observacoes, ...c.he100.observacoes,
-          ...c.adicional.observacoes, ...c.desconto.observacoes, ...c.adiantamento.observacoes, ...c.observacao.observacoes,
-        ].filter(Boolean) : [];
-        if (diferencial60 > 0) obsLista.push(`Goiânia: adicional de 10% aplicado às ${c?.he50.quantidade || 0}h de dias úteis, totalizando HE 60%`);
-
-        const payload = {
-          company_id: companyId,
-          funcionario_id: emp.id,
-          competencia,
-          faltas_dias: c?.falta.quantidade || 0,
-          atrasos: c?.atraso.quantidade || 0,
-          he50: c?.he50.quantidade || 0,
-          he100: c?.he100.quantidade || 0,
-          adicionais: (c?.adicional.valor || 0) + diferencial60,
-          descontos_diversos: c?.desconto.valor || 0,
-          adiantamento: c?.adiantamento.valor || Math.round(emp.salarioBase * 0.4 * 100) / 100,
-          vr_aplicado: emp.vrAtivo,
-          va_aplicado: emp.vaAtivo,
-          vt_aplicado: emp.vtAtivo,
-          insalubridade_aplicada: employeeHasInsalubridade(emp),
-          observacoes: obsLista.join(' | ').slice(0, 500),
-          status_conferencia: 'pendente',
-          fechamento_id: fechamentoId,
-          origem: 'consolidado',
-          bloqueado: true,
+        const { entry } = calcEntry(emp);
+        const payload:any = {
+          company_id: companyId, funcionario_id: emp.id, competencia,
+          faltas_dias: entry.faltasDias, atrasos: entry.atrasos, he50: entry.he50, he100: entry.he100,
+          comissao_base: entry.comissaoBase, adicionais: entry.adicionais, descontos_diversos: entry.descontosDiversos,
+          adiantamento: entry.adiantamento, vr_aplicado: emp.vrAtivo, va_aplicado: emp.vaAtivo, vt_aplicado: emp.vtAtivo,
+          insalubridade_aplicada: entry.insalubridadeAplicada,
+          observacoes: metaText(emp.id).slice(0, 500), status_conferencia: 'pendente',
+          fechamento_id: fechamentoId, origem: 'consolidado', bloqueado: true,
         };
-
-        // upsert manual: tenta update; se 0 linhas, insert
-        const { data: existing } = await supabase
-          .from('lancamentos_mensais')
-          .select('id')
-          .eq('company_id', companyId).eq('funcionario_id', emp.id).eq('competencia', competencia)
-          .maybeSingle();
-
+        const { data: existing } = await supabase.from('lancamentos_mensais').select('id').eq('company_id', companyId).eq('funcionario_id', emp.id).eq('competencia', competencia).maybeSingle();
         if (existing) {
-          await supabase.from('lancamentos_mensais').update(payload).eq('id', (existing as any).id).eq('company_id', companyId);
+          const { error } = await supabase.from('lancamentos_mensais').update(payload).eq('id', (existing as any).id).eq('company_id', companyId);
+          if (error) throw error;
         } else {
-          await supabase.from('lancamentos_mensais').insert(payload);
+          const { error } = await supabase.from('lancamentos_mensais').insert(payload);
+          if (error) throw error;
         }
       }
 
-      // 3) Histórico
       await supabase.from('fechamentos_historico').insert({
-        fechamento_id: fechamentoId,
-        acao: 'fechado',
-        user_id: session.user.id,
-        usuario_nome: userName,
-        detalhes: {
-          total_funcionarios: compEmps.length,
-          total_proventos: totaisGerais.proventos,
-          total_descontos: totaisGerais.descontos,
-          total_liquido: totaisGerais.liquido,
-          regra_hora_extra: filialGoiania ? 'dias úteis 60% e domingos/feriados 100%' : 'dias úteis 50% e domingos/feriados 100%',
-        },
-      });
+        fechamento_id: fechamentoId, acao: 'fechado', user_id: ator.userId || null,
+        usuario_nome: ator.funcionarioNome || ator.userEmail || 'Filial',
+        detalhes: { total_funcionarios: compEmps.length, total_proventos: totals.proventos, total_descontos: totals.descontos, total_liquido: totals.liquido },
+      } as any);
 
-      toast.success(`Fechamento concluído — ${compEmps.length} lançamento(s) gerado(s)`);
-      carregar();
-    } catch (e: any) {
-      toast.error('Erro ao fechar: ' + (e.message || e));
+      await registrarAcao({ modulo: 'filial', entidade: 'fechamento', entidadeId: fechamentoId, acao: 'enviou', depois: { companyId, competencia, totals } }, ator);
+      await registrarAlertaFilial({ filial: ext.filialNome || empresaNome, empresaNome, modulo: 'fechamento', acao: `Fechamento ${competencia} enviado para a central`, nivel: 'informativo', dadoNovo: { totals } });
+      toast.success('Fechamento enviado para a central.');
+      await carregar();
+    } catch (e:any) {
+      toast.error(e?.message || 'Não foi possível enviar o fechamento.');
     } finally {
       setProcessando(false);
     }
   };
 
+  const inputClass = 'h-7 w-full min-w-0 border-violet-400/20 bg-black/20 px-1 text-[10px] focus:border-violet-400/60';
+
   return (
     <div className="space-y-5 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold font-display flex items-center gap-2">
-          <FileCheck className="w-6 h-6 text-primary" /> Fechamento da Filial
-        </h1>
-        <p className="text-sm text-muted-foreground">Consolida o movimento do período e envia para Lançamentos.</p>
-      </div>
-
-      <div className="card-premium p-4 flex flex-wrap gap-3 items-end">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Empresa autorizada</label>
-          <div className="min-w-[220px] rounded-lg border bg-background px-3 py-2 text-sm font-semibold text-foreground">
-            {empresaAtual?.name || 'Filial não identificada'}
-          </div>
+          <h1 className="text-2xl font-bold font-display">Apontamento / Fechamento</h1>
+          <p className="text-sm text-muted-foreground">Mesma grade da central, limitada aos funcionários desta filial.</p>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Competência</label>
-          <Input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="w-44" />
-        </div>
-        <div className="ml-auto flex gap-2">
-          <Button variant="outline" size="sm" onClick={carregar} disabled={!companyId}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
-          </Button>
-        </div>
+        <Badge variant="outline" className={fechado ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-violet-500/30 bg-violet-500/10 text-violet-300'}>
+          {fechado ? 'ENVIADO / FECHADO' : 'ABERTO'}
+        </Badge>
       </div>
 
-      {filialGoiania && (
-        <div className="card-premium p-4 border-l-4 border-primary bg-primary/5">
-          <p className="text-sm font-semibold">Regra de Goiânia ativa</p>
-          <p className="text-xs text-muted-foreground mt-1">Horas extras em dias úteis: 60%. Domingos e feriados: 100%.</p>
-        </div>
-      )}
-
-      {/* Status */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="card-premium p-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            {fechado ? (
-              <>
-                <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <Lock className="w-6 h-6 text-destructive" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
-                  <p className="text-lg font-bold text-destructive">FECHADO</p>
-                  <p className="text-xs text-muted-foreground">Por {fechamento?.fechado_por_nome} em {fechamento?.fechado_em ? new Date(fechamento.fechado_em).toLocaleString('pt-BR') : '—'}</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
-                  <Unlock className="w-6 h-6 text-success" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
-                  <p className="text-lg font-bold text-success">ABERTO</p>
-                  <p className="text-xs text-muted-foreground">Aguardando fechamento da filial</p>
-                </div>
-              </>
-            )}
-          </div>
-          {!fechado && (
-            <Button onClick={fechar} disabled={processando || compEmps.length === 0 || !companyId} className="gradient-primary text-primary-foreground">
-              <FileCheck className="w-4 h-4 mr-2" /> {processando ? 'Processando…' : 'Fechar período e enviar para Lançamentos'}
-            </Button>
-          )}
-          {fechado && (
-            <Badge variant="destructive" className="text-xs">Para reabrir, contate o admin</Badge>
-          )}
-        </div>
-      </motion.div>
-
-      {/* Totais previstos */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { l: 'Funcionários', v: compEmps.length, c: 'text-primary' },
-          { l: 'Proventos', v: formatCurrency(totaisGerais.proventos), c: 'text-success' },
-          { l: 'Descontos', v: formatCurrency(totaisGerais.descontos), c: 'text-destructive' },
-          { l: 'Líquido', v: formatCurrency(totaisGerais.liquido), c: 'text-accent' },
-        ].map((card, i) => (
-          <div key={i} className="card-premium p-4">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{card.l}</p>
-            <p className={`text-lg font-bold font-display mt-1 ${card.c}`}>{card.v}</p>
-          </div>
-        ))}
+      <div className="card-premium flex flex-wrap items-center gap-3 p-4">
+        <div className="min-w-[240px] rounded-lg border border-violet-400/20 bg-background px-3 py-2 text-sm font-semibold">{empresaNome}</div>
+        <Input type="month" value={competencia} onChange={(e)=>setCompetencia(e.target.value)} className="w-48" />
+        <span className="text-xs text-muted-foreground">Dias úteis: <b className="text-foreground">{diasUteis}</b></span>
+        <span className="text-xs text-muted-foreground">Dom/Feriados: <b className="text-foreground">{domingosFeriados}</b></span>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={()=>void carregar()} disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading?'animate-spin':''}`} />Atualizar
+        </Button>
       </div>
 
-      {/* Histórico */}
-      <div className="card-premium p-5">
-        <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-primary" /> Histórico de ações</h2>
-        {historico.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sem registros ainda.</p>
-        ) : (
-          <ul className="space-y-2">
-            {historico.map((h: any) => (
-              <li key={h.id} className="flex items-center gap-3 text-sm border-b last:border-0 py-2">
-                {h.acao === 'fechado' ? <Lock className="w-4 h-4 text-destructive" /> : h.acao === 'reaberto' ? <Unlock className="w-4 h-4 text-success" /> : <CheckCircle2 className="w-4 h-4 text-primary" />}
-                <span className="font-medium uppercase text-xs">{h.acao}</span>
-                <span className="text-muted-foreground">por {h.usuario_nome}</span>
-                <span className="text-xs text-muted-foreground ml-auto">{new Date(h.created_at).toLocaleString('pt-BR')}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Funcionários</p><p className="mt-1 text-xl font-black text-amber-300">{compEmps.length}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Proventos estimados</p><p className="mt-1 text-xl font-black">{formatCurrency(totals.proventos)}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Descontos estimados</p><p className="mt-1 text-xl font-black text-amber-300">{formatCurrency(totals.descontos)}</p></div>
+        <div className="card-premium p-4"><p className="text-[10px] uppercase text-muted-foreground">Líquido estimado</p><p className="mt-1 text-xl font-black text-violet-300">{formatCurrency(totals.liquido)}</p></div>
       </div>
 
-      {movimentos.length === 0 && !fechado && (
-        <div className="card-premium p-5 border-l-4 border-warning bg-warning/5">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-warning" />
-            <p className="text-sm">Nenhum movimento registrado neste período. Vá em <strong>Movimento Diário</strong> e alimente as ocorrências antes de fechar.</p>
-          </div>
+      <section className="card-premium overflow-hidden">
+        <div className="border-b border-violet-400/20 p-4">
+          <h2 className="font-bold">Apontamento para Contabilidade</h2>
+          <p className="text-xs text-muted-foreground">Preencha direto na linha do funcionário. As alterações ficam salvas na filial e serão consolidadas ao enviar.</p>
         </div>
-      )}
+        <div className="w-full overflow-auto">
+          <table className="w-full min-w-[1450px] table-fixed text-[10px]">
+            <thead className="sticky top-0 z-20 bg-[#070a0f]">
+              <tr className="border-b border-violet-400/30">
+                {['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.',heLabel,'HE 100%','DSR','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((h,i)=>
+                  <th key={h} style={{width:['12%','7%','4%','6%','5%','5%','5%','5%','6%','7%','6%','6%','7%','7%','12%'][i]}} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase text-violet-100">{h}</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {compEmps.map((emp)=>{
+                const {entry,calc}=calcEntry(emp);
+                return <tr key={emp.id} className="border-b border-violet-400/10 align-top hover:bg-violet-500/[0.025]">
+                  <td className="px-1 py-2 text-[9px] font-semibold">{emp.name}</td>
+                  <td className="px-1 py-2 text-[8px] text-muted-foreground">{empresaNome}</td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.faltasDias} decimals={1} disabled={fechado||savingKey===`${emp.id}-falta`} onValueChange={(v)=>void saveAggregate(emp.id,'falta',v)} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><Input defaultValue={faltaDatas(emp.id)} disabled={fechado} onBlur={(e)=>void saveMeta(emp.id,{datas:e.target.value})} placeholder="Ex.: 03, 17" className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.atrasos} decimals={2} disabled={fechado||savingKey===`${emp.id}-atraso`} onValueChange={(v)=>void saveAggregate(emp.id,'atraso',v)} className={inputClass}/><div className="mt-1 text-muted-foreground">{formatCurrency(calc.atrasoVal)}</div></td>
+                  <td className="px-1 py-1.5"><DecimalInput value={horasDoc(emp.id)} decimals={2} disabled={fechado} onValueChange={(v)=>void saveMeta(emp.id,{horasDoc:v})} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.he50} decimals={2} disabled={fechado||savingKey===`${emp.id}-he50`} onValueChange={(v)=>void saveAggregate(emp.id,'he50',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he50Val)}</div></td>
+                  <td className="px-1 py-1.5"><DecimalInput value={entry.he100} decimals={2} disabled={fechado||savingKey===`${emp.id}-he100`} onValueChange={(v)=>void saveAggregate(emp.id,'he100',v)} className={inputClass}/><div className="mt-1 text-violet-300">{formatCurrency(calc.he100Val)}</div></td>
+                  <td className="px-1 py-2 font-bold text-emerald-300">{formatCurrency(calc.dsrHE+calc.dsrComissao)}</td>
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.comissaoBase} disabled={fechado||savingKey===`${emp.id}-comissao`} onValueChange={(v)=>void saveAggregate(emp.id,'comissao',v,true)} className={inputClass}/><div className="mt-1 text-amber-300">{(calc.comissaoPct*100).toLocaleString('pt-BR',{maximumFractionDigits:2})}% = {formatCurrency(calc.comissaoVal)}</div></td>
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.adicionais} disabled={fechado||savingKey===`${emp.id}-adicional`} onValueChange={(v)=>void saveAggregate(emp.id,'adicional',v,true)} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.descontosDiversos} disabled={fechado||savingKey===`${emp.id}-desconto`} onValueChange={(v)=>void saveAggregate(emp.id,'desconto',v,true)} className={inputClass}/></td>
+                  <td className="px-1 py-1.5"><MoneyInput value={entry.adiantamento} disabled={fechado||savingKey===`${emp.id}-adiantamento`} onValueChange={(v)=>void saveAggregate(emp.id,'adiantamento',v,true)} className={inputClass}/></td>
+                  <td className="px-1 py-2 text-[9px] font-extrabold text-violet-200">{formatCurrency(calc.liquido)}</td>
+                  <td className="px-1 py-1.5"><Input defaultValue={observacaoLivre(emp.id)} disabled={fechado} onBlur={(e)=>void saveMeta(emp.id,{obs:e.target.value})} placeholder="Observação..." className={inputClass}/></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div className="card-premium flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="text-xs text-muted-foreground">
+          {fechado ? 'Período enviado. Para alterar, a central precisa reabrir.' : 'Revise a grade e envie quando estiver pronta.'}
+        </div>
+        {!fechado && <Button onClick={()=>void enviarCentral()} disabled={processando||!companyId||compEmps.length===0} className="gradient-primary text-primary-foreground">
+          {processando ? <RefreshCw className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4"/>}
+          Enviar fechamento para a central
+        </Button>}
+        {fechado && <Button variant="outline" disabled><Lock className="mr-2 h-4 w-4"/>Enviado para a central</Button>}
+      </div>
     </div>
   );
 };
