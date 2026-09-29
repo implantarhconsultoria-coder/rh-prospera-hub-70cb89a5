@@ -12,6 +12,7 @@ import AdminHomeCards from '@/components/AdminHomeCards';
 import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
+import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
 
 
 type SearchItem = { label: string; path: string };
@@ -58,6 +59,7 @@ const AdminMobileLayout: React.FC = () => {
   const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
+  const { allowed: canViewFrota } = usePrivateModuleAccess('frota_ipva');
   const [moduleOpen,setModuleOpen] = useState(Boolean((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'));
   const isNativeCardModule = ['/admin/estoque-interno','/admin/uniformes','/admin/epi']
     .some(path=>location.pathname===path || location.pathname.startsWith(path+'/'));
@@ -79,8 +81,10 @@ const AdminMobileLayout: React.FC = () => {
   const isHome = location.pathname === '/admin';
 
   const searchModules: SearchModule[] = useMemo(
-    () => SEARCH_ITEMS.map(item => ({ label: item.label, path: item.path })),
-    [],
+    () => SEARCH_ITEMS
+      .filter(item => canViewFrota || !['/admin/documentos-ativos','/admin/monitoramento'].includes(item.path))
+      .map(item => ({ label: item.label, path: item.path })),
+    [canViewFrota],
   );
 
   if (isDirector && !isDirectorRouteAllowed(location.pathname)) return <DirectorBlocked />;
