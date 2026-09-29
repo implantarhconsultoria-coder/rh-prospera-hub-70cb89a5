@@ -65,7 +65,7 @@ function ActionCard({ icon: Icon, title, subtitle, disabled, onClick, badge, gre
       <span className={`absolute inset-x-5 top-0 h-px ${amber ? "bg-gradient-to-r from-transparent via-amber-300/70 to-transparent" : "bg-gradient-to-r from-transparent via-fuchsia-400/60 to-transparent"}`} />
       <span className="relative flex h-full flex-col">
         <span className="flex items-start justify-between gap-2">
-          <span className={`grid h-12 w-12 place-items-center rounded-[17px] border shadow-inner sm:h-13 sm:w-13 ${
+          <span className={`grid h-12 w-12 place-items-center rounded-[17px] border shadow-inner sm:h-14 sm:w-14 ${
             amber
               ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
               : "border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-300"
@@ -216,7 +216,7 @@ export default function HomePage() {
 
   return (
     <div className="space-y-5 pb-2 pt-[env(safe-area-inset-top)]">
-      <header className="relative overflow-hidden rounded-[24px] border border-fuchsia-500/15 bg-[linear-gradient(135deg,rgba(20,11,29,.94),rgba(6,6,11,.92))] px-4 py-4 shadow-[0_18px_44px_rgba(0,0,0,.28)]">
+      <header className="relative flex items-center justify-between gap-3 overflow-hidden rounded-[24px] border border-fuchsia-500/15 bg-[linear-gradient(135deg,rgba(20,11,29,.94),rgba(6,6,11,.92))] px-4 py-4 shadow-[0_18px_44px_rgba(0,0,0,.28)]">
         <div className="min-w-0">
           <p className="mb-1 text-[8px] font-black uppercase tracking-[.22em] text-fuchsia-400">TOPAC • OPERAÇÃO</p>
           <h1 className="truncate text-[27px] font-black tracking-[-.03em] text-white sm:text-3xl">{greeting}, <span className="text-amber-300">{firstName}</span></h1>
