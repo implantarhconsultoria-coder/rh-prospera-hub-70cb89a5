@@ -1,6 +1,6 @@
 // Tipos auxiliares e helpers para movimento diário e fechamento
 
-export type TipoOcorrencia = 'falta' | 'atraso' | 'he50' | 'he100' | 'comissao' | 'adicional' | 'desconto' | 'adiantamento' | 'observacao';
+export type TipoOcorrencia = 'falta' | 'atraso' | 'he50' | 'he100' | 'adicional' | 'desconto' | 'adiantamento' | 'observacao';
 
 export const TIPOS_OCORRENCIA: { value: TipoOcorrencia; label: string; campoEntry: string; usaQuantidade: boolean; usaValor: boolean }[] = [
   { value: 'falta',         label: 'Falta',          campoEntry: 'faltasDias',         usaQuantidade: true,  usaValor: false },
@@ -56,7 +56,6 @@ export function consolidarMovimento(movimentos: MovimentoRow[]) {
         atraso: { quantidade: 0, valor: 0, observacoes: [] },
         he50: { quantidade: 0, valor: 0, observacoes: [] },
         he100: { quantidade: 0, valor: 0, observacoes: [] },
-        comissao: { quantidade: 0, valor: 0, observacoes: [] },
         adicional: { quantidade: 0, valor: 0, observacoes: [] },
         desconto: { quantidade: 0, valor: 0, observacoes: [] },
         adiantamento: { quantidade: 0, valor: 0, observacoes: [] },
