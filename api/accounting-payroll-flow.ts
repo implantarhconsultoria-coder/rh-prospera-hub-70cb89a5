@@ -235,7 +235,7 @@ const sendSubmissionEmail = async (service: any, cycle: any, user: any, identifi
     formalizacao_destinos: uniqueEmails([...to, ...cc]),
     updated_at: now,
   }).eq('ciclo_id', cycle.id);
-  return result;
+  return { ...result, to, cc };
 };
 
 const sendApprovalEmail = async (service: any, cycle: any, documentsReleased: number) => {
@@ -276,7 +276,7 @@ const sendApprovalEmail = async (service: any, cycle: any, documentsReleased: nu
     email_retorno_em: result.status === 'enviado' ? now : null,
     updated_at: now,
   }).eq('id', cycle.id);
-  return result;
+  return { ...result, to, cc };
 };
 
 const safeFormalizationEmail = async (label: string, work: () => Promise<any>) => {
@@ -395,6 +395,16 @@ export default async function handler(req: any, res?: any) {
         }).eq('id', cycle.id).select('*').single();
         if (error) throw error;
         const emailResult = await safeFormalizationEmail('approval', () => sendApprovalEmail(service, { ...cycle, ...data }, documentIds.length));
+        try {
+          await service.from('email_envios_log').insert({
+            user_id:user.id, usuario_nome:user.email || 'Administrador', email_corporativo_usado:TOPAC_CENTRAL_EMAIL,
+            email_remetente:verifiedFrom(), reply_to:TOPAC_CENTRAL_EMAIL, provider:'resend',
+            modulo_origem:'contabilidade_retorno', documento_id:null, documento_nome:`${cycle.tipo} - ${cycle.competencia}`,
+            destinatarios:(emailResult.to || []).join('; '), cc:(emailResult.cc || []).join('; '),
+            assunto:`${cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento'} conferido / OK`,
+            status:emailResult.status === 'enviado' ? 'enviado' : 'erro', erro:emailResult.error || null, enviado_em:new Date().toISOString(),
+          });
+        } catch (logError) { console.warn('[accounting-payroll-flow] approval email log failed', logError); }
         return sendJson(res, { ok: true, cycle: data, documentos_liberados: documentIds.length, email_status: emailResult.status, email_error: emailResult.error || null });
       }
 
@@ -711,6 +721,16 @@ export default async function handler(req: any, res?: any) {
         updated_at: now,
       }).eq('ciclo_id', cycle.id);
       const emailResult = await safeFormalizationEmail('submission', () => sendSubmissionEmail(service, { ...cycle, ...data }, user, Number(identified || 0), Number(review || 0)));
+      try {
+        await service.from('email_envios_log').insert({
+          user_id:null, usuario_nome:clean(user.nome) || 'Contabilidade', email_corporativo_usado:clean(user.email),
+          email_remetente:verifiedFrom(), reply_to:clean(user.email), provider:'resend',
+          modulo_origem:'contabilidade_recebimento', documento_id:null, documento_nome:`${cycle.tipo} - ${cycle.competencia}`,
+          destinatarios:(emailResult.to || []).join('; '), cc:(emailResult.cc || []).join('; '),
+          assunto:`${cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento'} recebido para conferência`,
+          status:emailResult.status === 'enviado' ? 'enviado' : 'erro', erro:emailResult.error || null, enviado_em:new Date().toISOString(),
+        });
+      } catch (logError) { console.warn('[accounting-payroll-flow] submission email log failed', logError); }
       return sendJson(res, {
         ok: true,
         cycle: data,
