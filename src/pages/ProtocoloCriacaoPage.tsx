@@ -779,6 +779,18 @@ const ProtocoloPage: React.FC = () => {
             </div>
           )}
 
+          {isLocacaoFlow && readiness.missingAvailability > 0 && (
+            <div className="rounded-xl border-2 border-amber-400 bg-amber-500/10 p-4 text-sm text-amber-800">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-extrabold">LOCAÇÃO BLOQUEADA — DISPONIBILIDADE NÃO CONFIRMADA</p>
+                  <p className="mt-1">Há {readiness.missingAvailability} placa(s) com estado NÃO ou PENDENTE. A impressão só é liberada quando a disponibilidade estiver SIM.</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" size="lg" disabled={saving || !readiness.ready} onClick={() => void persistProtocols()}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}
