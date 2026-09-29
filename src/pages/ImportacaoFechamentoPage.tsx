@@ -362,7 +362,7 @@ const ImportacaoFechamentoPage: React.FC = () => {
         // Atualiza somente os campos vindos do cartão (preserva manuais).
         const obs = `Importado do cartão de ponto em ${new Date().toLocaleString('pt-BR')}. ` +
           `${r.diasAtestado} dia(s) cobertos por atestado; ${r.faltasDias} falta(s); ` +
-          `${r.atrasosMinutos} min de atraso; HE50 ${r.he50Horas}h; HE100 ${r.he100Horas}h.`;
+          `${r.atrasosMinutos} min de atraso; HE50 ${r.he50Horas}h; HE60 ${r.he60Horas}h; HE100 ${r.he100Horas}h.`;
 
         await supabase
           .from('lancamentos_mensais')
@@ -374,6 +374,7 @@ const ImportacaoFechamentoPage: React.FC = () => {
               faltasDias: r.faltasDias,
               atrasos: Math.round((r.atrasosMinutos / 60) * 100) / 100, // horas
               he50: r.he50Horas,
+              he60: r.he60Horas,
               he100: r.he100Horas,
               observacoes: obs,
             }),
@@ -393,10 +394,11 @@ const ImportacaoFechamentoPage: React.FC = () => {
       faltas: acc.faltas + r.faltasDias,
       atest: acc.atest + r.diasAtestado,
       he50: acc.he50 + r.he50Horas,
+      he60: acc.he60 + r.he60Horas,
       he100: acc.he100 + r.he100Horas,
       atrasos: acc.atrasos + r.atrasosMinutos,
       ignorados: acc.ignorados + (r.ignorado ? 1 : 0),
-    }), { faltas: 0, atest: 0, he50: 0, he100: 0, atrasos: 0, ignorados: 0 });
+    }), { faltas: 0, atest: 0, he50: 0, he60: 0, he100: 0, atrasos: 0, ignorados: 0 });
   }, [resultados]);
 
   return (
@@ -407,7 +409,7 @@ const ImportacaoFechamentoPage: React.FC = () => {
           <p className="text-sm text-muted-foreground mt-1">
             Suba <strong>Atestados</strong> e <strong>Cartões de Ponto</strong>. O sistema cruza automaticamente:
             atestado válido cobre falta (só desconta VR/VT); sem atestado vira falta + DSR + VR/VT.
-            Tolerância de {TOLERANCIA_MIN} min. Exceções: Jerri, mecânicos de rua, Rodrigo Sabino, Rodrigo Medrado e regra HE 50% do Marcelo.
+            Tolerância de {TOLERANCIA_MIN} min. Exceções: Jerri, mecânicos de rua, Rodrigo Sabino, Rodrigo Medrado e HE padrão geral: 1ª e 2ª horas extras a 50%, da 3ª em diante a 60%, domingos/feriados/dias convencionados a 100%.
           </p>
         </div>
         <div className="flex items-end gap-2">
