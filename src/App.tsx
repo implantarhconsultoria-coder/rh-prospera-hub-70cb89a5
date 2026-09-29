@@ -96,6 +96,7 @@ import AssistentePage from "@/pages/admin/AssistentePage";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import GlobalErrorCatcher from "@/components/GlobalErrorCatcher";
 import StableLoading from "@/components/StableLoading";
+import PrivateFleetGuard from "@/components/PrivateFleetGuard";
 import { isDirectorRole } from "@/lib/directorPermissions";
 import ExternoLayout from "@/components/ExternoLayout";
 import AguardandoAcesso from "@/components/AguardandoAcesso";
@@ -209,7 +210,7 @@ const AuthGate = () => {
         <Route path="/admin/prestadores" element={<PrestadoresPage />} />
         <Route path="/admin/galoes-combustivel" element={<CombustivelPage />} />
         <Route path="/admin/protocolo" element={<Navigate to="/admin/operacional/protocolo" replace />} />
-        <Route path="/admin/documentos-ativos" element={<DocumentosVeiculosPage />} />
+        <Route path="/admin/documentos-ativos" element={<PrivateFleetGuard><DocumentosVeiculosPage /></PrivateFleetGuard>} />
         <Route path="/admin/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/admin/atestados" element={<AtestadosImportPage />} />
         <Route path="/admin/importar-fechamento" element={<ImportacaoFechamentoPage />} />
@@ -221,7 +222,7 @@ const AuthGate = () => {
         <Route path="/admin/rescisoes" element={<RescisaoPage />} />
         <Route path="/admin/compras" element={<ComprasPage />} />
         <Route path="/admin/emails-contabilidade" element={<EmailsContabilidadePage />} />
-        <Route path="/admin/monitoramento" element={<RastreamentoFrotaPage />} />
+        <Route path="/admin/monitoramento" element={<PrivateFleetGuard><RastreamentoFrotaPage /></PrivateFleetGuard>} />
         <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/operacional" element={<DespacharChamadoPage />} />
         <Route path="/admin/operacional/protocolo" element={<ProtocoloPage />} />
