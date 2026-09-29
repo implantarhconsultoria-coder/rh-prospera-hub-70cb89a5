@@ -37,13 +37,14 @@ export const isTopacGoiania = (company?: CompanyHourRuleRef | null) => {
     || digits.includes(TOPAC_GYN_CNPJ);
 };
 
-export const getHoraExtraSemanalPercentual = (company?: CompanyHourRuleRef | null) =>
-  isTopacGoiania(company) ? 60 : 50;
+export const getHoraExtraSemanalPercentual = (_company?: CompanyHourRuleRef | null) => 50;
 
 export const valorHora = (salario: number) => salario / 220;
 
 export const calcHE50 = (salario: number, horas: number, percentual: number = 50) =>
   valorHora(salario) * (1 + percentual / 100) * horas;
+export const calcHE60 = (salario: number, horas: number) =>
+  valorHora(salario) * 1.6 * horas;
 export const calcHE100 = (salario: number, horas: number) => valorHora(salario) * 2 * horas;
 export const calcFalta = (salario: number, dias: number) => (salario / 30) * dias;
 export const calcAtraso = (salario: number, horas: number) => valorHora(salario) * horas;
@@ -171,6 +172,7 @@ type PayrollOptions = {
 export type PayrollBreakdown = {
   valorHora: number;
   he50Val: number;
+  he60Val: number;
   he100Val: number;
   totalHE: number;
   dsrHE: number;
@@ -221,10 +223,11 @@ export const calcPayrollBreakdown = (
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const valorHora = (emp.salarioBase + insVal + periculosidadeVal) / 220;
-  const heSemanalPct = opts.horaExtraSemanalPct ?? getHoraExtraSemanalPercentual(emp.companyId);
+  const heSemanalPct = opts.horaExtraSemanalPct ?? 50;
   const he50Val = round2(valorHora * (1 + heSemanalPct / 100) * (entry.he50 || 0));
+  const he60Val = round2(valorHora * 1.6 * (entry.he60 || 0));
   const he100Val = round2(valorHora * 2 * (entry.he100 || 0));
-  const totalHE = round2(he50Val + he100Val);
+  const totalHE = round2(he50Val + he60Val + he100Val);
   const dsrHE = diasUteis > 0 ? round2((totalHE / diasUteis) * domingosFeriados) : 0;
   const comissaoBase = entry.comissaoBase || 0;
   const nomeNormalizado = String(emp.name || '')
@@ -252,7 +255,7 @@ export const calcPayrollBreakdown = (
   const atrasoVal = round2(calcAtraso(emp.salarioBase, entry.atrasos || 0));
   const adicionais = round2(entry.adicionais || 0);
   const descontosDiversos = round2(entry.descontosDiversos || 0);
-  const proventos = round2(emp.salarioBase + insVal + periculosidadeVal + he50Val + he100Val + dsrHE + comissaoVal + dsrComissao + adicionais);
+  const proventos = round2(emp.salarioBase + insVal + periculosidadeVal + he50Val + he60Val + he100Val + dsrHE + comissaoVal + dsrComissao + adicionais);
   const descontosOperacionais = round2(faltaVal + atrasoVal);
   const bruto = round2(Math.max(0, proventos - descontosOperacionais));
   const baseINSS = bruto;
@@ -271,6 +274,7 @@ export const calcPayrollBreakdown = (
   return {
     valorHora: round2(valorHora),
     he50Val,
+    he60Val,
     he100Val,
     totalHE,
     dsrHE,
@@ -305,13 +309,15 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
   const insVal = getInsalubridadeAplicavel(emp, entry);
   const periculosidadeVal = getPericulosidadeAplicavel(emp);
   const baseHora = emp.salarioBase + insVal + periculosidadeVal;
-  const he50Val = calcHE50(baseHora, entry.he50, horaExtraSemanalPct ?? getHoraExtraSemanalPercentual(emp.companyId));
+  const he50Val = calcHE50(baseHora, entry.he50, horaExtraSemanalPct ?? 50);
+  const he60Val = calcHE60(baseHora, entry.he60 || 0);
   const he100Val = calcHE100(baseHora, entry.he100);
-  const totalHE = he50Val + he100Val;
+  const totalHE = he50Val + he60Val + he100Val;
   const dsrHE = calcDSR(totalHE, diasUteis, entry.competencia);
 
   const proventos = emp.salarioBase
     + he50Val
+    + he60Val
     + he100Val
     + dsrHE
     + entry.adicionais
@@ -339,6 +345,7 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
     vtVal,
     vrDiasEfetivos,
     he50Val,
+    he60Val,
     he100Val,
     dsrHE,
     insVal,
