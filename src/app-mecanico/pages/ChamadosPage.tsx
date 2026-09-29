@@ -37,7 +37,25 @@ interface Chamado {
 
 type MaterialDraft = { descricao: string; quantidade: string; unidade: string };
 
-const ITENS_PREDEFINIDOS = ["Freios", "Pneus", "Óleo / filtros", "Luzes / elétrica", "Suspensão", "Motor", "Arrefecimento", "Outros"];
+const ITENS_PREDEFINIDOS = [
+  "Troca de óleo da unidade",
+  "Troca de óleo do motor",
+  "Filtro de ar — limpar",
+  "Filtro de ar — trocar",
+  "Filtro separador — trocar",
+  "Filtro de óleo / lubrificante",
+  "Correia do alternador",
+  "Bateria",
+  "Relé / fusível / solenoide",
+  "Sensor / cebolinha de óleo",
+  "Mangueira / abraçadeira",
+  "Água / reservatório / radiador",
+  "Bomba injetora",
+  "Motor de partida / alternador",
+  "Acoplamento",
+  "Revisão preventiva",
+  "Outro",
+];
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: "Nova ocorrência",
@@ -101,15 +119,15 @@ export default function ChamadosPage() {
       const { data, error } = await chamadosRpc.rpc("app_mecanico_listar_chamados", { p_acesso_id: mecanico.acesso_id });
       const result = data as RpcResult<Chamado> | null;
       if (error || !result?.ok) {
-        const message = result?.error || error?.message || "Erro ao carregar chamados";
-        console.error("Erro ao carregar chamados do app mecânico:", error || result);
+        const message = result?.error || error?.message || "Erro ao carregar ocorrências";
+        console.error("Erro ao carregar ocorrências do app mecânico:", error || result);
         setErro(message);
         setLista([]);
       } else {
         setLista(normalizarChamados(result.chamados));
       }
     } catch (error) {
-      console.error("Falha inesperada nos chamados do app mecânico:", error);
+      console.error("Falha inesperada nas ocorrências do app mecânico:", error);
       setErro("Não foi possível carregar as ocorrências agora.");
       setLista([]);
     } finally {
@@ -146,18 +164,18 @@ export default function ChamadosPage() {
       });
       const result = data as RpcResult<Chamado> | null;
       if (error || !result?.ok) {
-        toast.error(result?.error || error?.message || "Erro ao abrir solicitação");
+        toast.error(result?.error || error?.message || "Erro ao abrir ocorrência");
         return;
       }
-      toast.success("Solicitação de manutenção aberta.");
+      toast.success("Ocorrência aberta.");
       setNovoAberto(false);
       setTipoServico("");
       setItens([]);
       setNovaObs("");
       await carregar();
     } catch (error) {
-      console.error("Falha ao criar chamado do app mecânico:", error);
-      toast.error("Não foi possível abrir a solicitação agora.");
+      console.error("Falha ao criar ocorrência do app mecânico:", error);
+      toast.error("Não foi possível abrir a ocorrência agora.");
     } finally {
       setActing(false);
     }
@@ -199,7 +217,7 @@ export default function ChamadosPage() {
       if (error || !result?.ok) {
         toast.error(result?.error === "sequencia_status_invalida"
           ? "A ocorrência mudou de etapa. Atualize e tente novamente."
-          : result?.error || error?.message || "Erro ao atualizar chamado");
+          : result?.error || error?.message || "Erro ao atualizar ocorrência");
         return;
       }
 
@@ -235,8 +253,8 @@ export default function ChamadosPage() {
       setConclusao("");
       await carregar();
     } catch (error) {
-      console.error("Falha ao atualizar chamado do app mecânico:", error);
-      toast.error("Não foi possível atualizar o chamado agora.");
+      console.error("Falha ao atualizar ocorrência do app mecânico:", error);
+      toast.error("Não foi possível atualizar a ocorrência agora.");
     } finally {
       setActing(false);
     }
@@ -325,10 +343,10 @@ export default function ChamadosPage() {
               <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white">{novos.length}</span>
             </span>
             <div className="flex-1">
-              <p className="font-black text-amber-100">Nova ocorrência recebido</p>
+              <p className="font-black text-amber-100">Nova ocorrência recebida</p>
               <p className="mt-1 text-xs text-amber-200/80">Este aviso permanece até você aceitar a ocorrência.</p>
               <Button size="sm" className="mt-3 bg-amber-500 font-black text-black hover:bg-amber-400" onClick={() => setAberto(novos[0].id)}>
-                Ver chamado
+                Ver ocorrência
               </Button>
             </div>
           </div>
@@ -339,25 +357,25 @@ export default function ChamadosPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-fuchsia-500/10 text-fuchsia-400"><Wrench className="h-6 w-6" /></span>
-            <div><h1 className="font-bold">Manutenção</h1><p className="text-xs text-zinc-400">Ocorrências, atendimento e serviços adicionais</p></div>
+            <div><h1 className="font-bold">Ocorrências</h1><p className="text-xs text-zinc-400">Compressores • atendimento • serviços adicionais</p></div>
           </div>
-          <Button size="sm" onClick={() => setNovoAberto((value) => !value)}><Plus className="mr-1 h-4 w-4" /> Nova</Button>
+          <Button size="sm" onClick={() => setNovoAberto((value) => !value)}><Plus className="mr-1 h-4 w-4" /> Nova ocorrência</Button>
         </div>
       </Card>
 
       {novoAberto && (
         <Card className="space-y-4 p-5">
           <div>
-            <p className="font-semibold">Nova solicitação própria</p>
-            <p className="text-xs text-muted-foreground">Use quando você identificar uma necessidade de manutenção. Ocorrências enviadas pelo Operacional aparecem automaticamente abaixo.</p>
+            <p className="font-semibold">Nova ocorrência própria</p>
+            <p className="text-xs text-muted-foreground">Use quando você identificar uma ocorrência no compressor. As ocorrências enviadas pelo Operacional aparecem automaticamente abaixo.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {ITENS_PREDEFINIDOS.map((item) => (
               <button key={item} type="button" onClick={() => alternarItem(item)} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${itens.includes(item) ? "border-fuchsia-500 bg-fuchsia-500/10 text-fuchsia-700" : "border-border"}`}>{item}</button>
             ))}
           </div>
-          <Input placeholder="Problema / serviço necessário" value={tipoServico} onChange={(event) => setTipoServico(event.target.value)} />
-          <Textarea placeholder="Descrição livre, sintomas, ruídos, peças ou qualquer informação importante" value={novaObs} onChange={(event) => setNovaObs(event.target.value)} rows={4} />
+          <Input placeholder="Ocorrência / problema identificado" value={tipoServico} onChange={(event) => setTipoServico(event.target.value)} />
+          <Textarea placeholder="Sintomas, ruídos, vazamentos, falhas ou qualquer informação importante" value={novaObs} onChange={(event) => setNovaObs(event.target.value)} rows={4} />
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" onClick={() => { setNovoAberto(false); setTipoServico(""); setItens([]); setNovaObs(""); }} disabled={acting}>Cancelar</Button>
             <Button onClick={() => void criarChamado()} disabled={acting}>{acting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Abrir ocorrência"}</Button>
@@ -372,7 +390,7 @@ export default function ChamadosPage() {
           <Button variant="outline" onClick={() => void carregar()}><RotateCcw className="mr-2 h-4 w-4" /> Tentar novamente</Button>
         </Card>
       ) : lista.length === 0 ? (
-        <Card className="p-6 text-center text-muted-foreground">Nenhuma ocorrência de manutenção.</Card>
+        <Card className="p-6 text-center text-muted-foreground">Nenhuma ocorrência registrada.</Card>
       ) : (
         <div className="space-y-3">
           {lista.map((c) => {
