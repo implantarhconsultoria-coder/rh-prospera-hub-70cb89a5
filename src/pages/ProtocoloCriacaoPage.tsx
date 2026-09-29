@@ -737,15 +737,9 @@ const ProtocoloPage: React.FC = () => {
                   </table>
                 </div>
 
-                {group.itens.map((item, itemIndex) => {
-                  const url = pdfOf(item.ativo);
-                  return url ? (
-                    <details key={`pdf-${group.key}-${itemIndex}`} className="rounded-lg border p-3">
-                      <summary className="cursor-pointer text-xs font-semibold">Visualizar {item.ativo?.documento_nome || item.ativo?.descricao || 'documento vinculado'}</summary>
-                      <div className="mt-3"><PdfDocumentViewer source={{ url, tipo: 'protocolo' }} title={item.ativo?.descricao || 'Documento da Frota'} /></div>
-                    </details>
-                  ) : null;
-                })}
+                <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                  Documento protegido. A consulta livre fica bloqueada; o arquivo é liberado somente dentro da impressão do protocolo de locação.
+                </div>
               </section>
             );
           })}
