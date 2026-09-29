@@ -61,6 +61,7 @@ export interface MonthlyEntry {
   faltasDias: number;
   atrasos: number;
   he50: number;
+  he60: number;
   he100: number;
   adicionais: number;
   descontosDiversos: number;
@@ -221,6 +222,7 @@ export const mapEntry = (row: any): MonthlyEntry => ({
   faltasDias: Number(row.faltas_dias) || 0,
   atrasos: Number(row.atrasos) || 0,
   he50: Number(row.he50) || 0,
+  he60: Number(row.he60) || 0,
   he100: Number(row.he100) || 0,
   adicionais: Number(row.adicionais) || 0,
   descontosDiversos: Number(row.descontos_diversos) || 0,
@@ -268,6 +270,7 @@ export const entryToRow = (entry: Partial<MonthlyEntry>) => {
   if (entry.faltasDias !== undefined) row.faltas_dias = entry.faltasDias;
   if (entry.atrasos !== undefined) row.atrasos = entry.atrasos;
   if (entry.he50 !== undefined) row.he50 = entry.he50;
+  if (entry.he60 !== undefined) row.he60 = entry.he60;
   if (entry.he100 !== undefined) row.he100 = entry.he100;
   if (entry.adicionais !== undefined) row.adicionais = entry.adicionais;
   if (entry.descontosDiversos !== undefined) row.descontos_diversos = entry.descontosDiversos;
