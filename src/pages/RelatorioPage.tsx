@@ -18,6 +18,7 @@ type ReportRow = {
   entry: any;
   calc: any;
   he50Val: number;
+  he60Val: number;
   he100Val: number;
   faltaVal: number;
   atrasoVal: number;
@@ -45,6 +46,7 @@ const defaultEntry = (emp: any, competencia: string, diasUteis: number) => ({
   faltasDias: 0,
   atrasos: 0,
   he50: 0,
+  he60: 0,
   he100: 0,
   adicionais: 0,
   descontosDiversos: 0,
@@ -87,16 +89,17 @@ const RelatorioPage: React.FC = () => {
       const entry = compEntries.find(e => e.employeeId === emp.id) || defaultEntry(emp, competencia, diasUteis);
       const calc = calcTotalFuncionario(emp, entry, diasUteis, getHoraExtraSemanalPercentual(emp.companyId));
       const he50Val = calc.he50Val;
+      const he60Val = calc.he60Val;
       const he100Val = calc.he100Val;
       const faltaVal = calcFalta(emp.salarioBase, entry.faltasDias);
       const atrasoVal = calcAtraso(emp.salarioBase, entry.atrasos);
       const insVal = calc.insVal;
       const periculosidadeVal = calc.periculosidadeVal;
       const companyName = companies.find(c => c.id === emp.companyId)?.name || 'Empresa não identificada';
-      const row: ReportRow = { emp, companyName, entry, calc, he50Val, he100Val, faltaVal, atrasoVal, insVal, periculosidadeVal };
+      const row: ReportRow = { emp, companyName, entry, calc, he50Val, he60Val, he100Val, faltaVal, atrasoVal, insVal, periculosidadeVal };
 
       t.proventos += calc.proventos; t.descontos += calc.descontos; t.liquido += calc.liquido;
-      t.beneficios += calc.beneficios; t.insalubridade += insVal; t.periculosidade += periculosidadeVal; t.he += he50Val + he100Val;
+      t.beneficios += calc.beneficios; t.insalubridade += insVal; t.periculosidade += periculosidadeVal; t.he += he50Val + he60Val + he100Val;
       t.adiantamentos += entry.adiantamento; t.faltaDias += entry.faltasDias; t.faltaVal += faltaVal;
 
       const current = grouped.get(emp.companyId) || { name: companyName, rows: [], totals: emptyTotals() };
@@ -107,7 +110,7 @@ const RelatorioPage: React.FC = () => {
       current.totals.beneficios += calc.beneficios;
       current.totals.insalubridade += insVal;
       current.totals.periculosidade += periculosidadeVal;
-      current.totals.he += he50Val + he100Val;
+      current.totals.he += he50Val + he60Val + he100Val;
       current.totals.adiantamentos += entry.adiantamento;
       current.totals.faltaDias += entry.faltasDias;
       current.totals.faltaVal += faltaVal;
@@ -263,7 +266,7 @@ const RelatorioPage: React.FC = () => {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  {(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário', isAllCompanies ? 'HE semanal' : `HE ${selectedHePct}%`, 'HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (
+                  {(isAllCompanies ? ['Empresa'] : []).concat(['Nome','Cargo','Salário','HE 50%','HE 60%','HE 100%','Adic.','Insal.','Peric.','VR','VT','Faltas','Adiant.','Desc.','Líquido']).map(h => (
                     <th key={h} className="px-2 py-2 text-left font-medium text-muted-foreground uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -275,7 +278,8 @@ const RelatorioPage: React.FC = () => {
                     <td className="px-2 py-2 font-medium whitespace-nowrap">{r.emp.name}</td>
                     <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">{r.emp.cargo}</td>
                     <td className="px-2 py-2">{formatCurrency(r.emp.salarioBase)}</td>
-                    <td className="px-2 py-2">{isAllCompanies ? `HE ${getHoraExtraSemanalPercentual(r.emp.companyId)}% · ${formatCurrency(r.he50Val)}` : formatCurrency(r.he50Val)}</td>
+                    <td className="px-2 py-2">{formatCurrency(r.he50Val)}</td>
+                    <td className="px-2 py-2">{formatCurrency(r.he60Val)}</td>
                     <td className="px-2 py-2">{formatCurrency(r.he100Val)}</td>
                     <td className="px-2 py-2">{formatCurrency(r.entry.adicionais)}</td>
                     <td className="px-2 py-2">{formatCurrency(r.insVal)}</td>
@@ -293,7 +297,7 @@ const RelatorioPage: React.FC = () => {
                 <tr className="border-t-2 bg-muted/30 font-bold">
                   <td colSpan={isAllCompanies ? 3 : 2} className="px-2 py-2">TOTAIS</td>
                   <td className="px-2 py-2">{formatCurrency(compEmps.reduce((s, e) => s + e.salarioBase, 0))}</td>
-                  <td colSpan={2} className="px-2 py-2">{formatCurrency(totals.he)}</td>
+                  <td colSpan={3} className="px-2 py-2">{formatCurrency(totals.he)}</td>
                   <td></td>
                   <td className="px-2 py-2">{formatCurrency(totals.insalubridade)}</td>
                   <td className="px-2 py-2">{formatCurrency(totals.periculosidade)}</td>
