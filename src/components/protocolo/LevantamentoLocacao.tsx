@@ -227,35 +227,109 @@ const LevantamentoLocacao: React.FC = () => {
       .sort((a, b) => `${b.data_emissao}|${b.created_at}`.localeCompare(`${a.data_emissao}|${a.created_at}`));
   }, [currentRows, categoria, status, search]);
 
-  const updateStatus = async (row: ProtocolRow, nextStatus: StatusLocacao) => {
+  const solicitarAlteracaoStatus = (row: ProtocolRow, nextStatus: StatusLocacao) => {
     if (inferStatus(row) === nextStatus) return;
-    setUpdatingId(row.id);
-    const now = new Date().toISOString();
-    const patch: Record<string, unknown> = {
-      status_locacao: nextStatus,
-      status_atualizado_em: now,
-      encerrado_em: nextStatus === 'encerrado' ? now : null,
-      devolvido_em: nextStatus === 'devolvido' ? now : null,
-    };
+    const reason = window.prompt(`Motivo obrigatório para alterar a situação para ${statusLabel[nextStatus]}:`)?.trim();
+    if (!reason || reason.length < 3) {
+      toast.error('A situação só pode ser alterada com o motivo registrado.');
+      return;
+    }
+    setPendingRow(row);
+    setPendingStatus(nextStatus);
+    setPendingAction('status');
+    setMotivo(reason);
+    setCodigoOpen(true);
+  };
+
+  const solicitarDesativacao = (row: ProtocolRow) => {
+    const reason = window.prompt('Motivo obrigatório para retirar este registro da visão operacional:')?.trim();
+    if (!reason || reason.length < 3) {
+      toast.error('O registro só pode ser retirado com o motivo salvo no histórico.');
+      return;
+    }
+    setPendingRow(row);
+    setPendingStatus(null);
+    setPendingAction('deactivate');
+    setMotivo(reason);
+    setCodigoOpen(true);
+  };
+
+  const confirmarAcaoAuditada = async (codigo: string) => {
+    if (!pendingRow || !pendingAction) return;
+    setCodigoLoading(true);
+    setUpdatingId(pendingRow.id);
 
     try {
-      const { error } = await supabase.from('protocolos_documentos' as any).update(patch as any).eq('id', row.id);
-      if (error) throw error;
+      if (pendingAction === 'status' && pendingStatus) {
+        const { data, error } = await rpc.rpc('operacional_protocolo_alterar_status', {
+          p_codigo_operador: codigo,
+          p_protocolo_id: pendingRow.id,
+          p_status: pendingStatus,
+          p_motivo: motivo,
+        });
+        if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Alteração não autorizada.');
 
-      setHistory((current) => current.map((item) => item.id === row.id ? { ...item, ...patch } as ProtocolRow : item));
-      await registrarAcao({
-        modulo: 'protocolo',
-        entidade: 'protocolos_documentos',
-        entidadeId: row.id,
-        acao: 'alterou',
-        antes: { status_locacao: inferStatus(row) },
-        depois: { status_locacao: nextStatus },
-        observacao: `Situação da locação alterada para ${statusLabel[nextStatus]}.`,
-      });
-      toast.success(`Locação marcada como ${statusLabel[nextStatus]}.`);
+        const now = new Date().toISOString();
+        setHistory((current) => current.map((item) => item.id === pendingRow.id ? {
+          ...item,
+          status_locacao: pendingStatus,
+          status_atualizado_em: now,
+          encerrado_em: pendingStatus === 'encerrado' ? now : item.encerrado_em,
+          devolvido_em: pendingStatus === 'devolvido' ? now : item.devolvido_em,
+          ultima_alteracao_motivo: motivo,
+        } : item));
+
+        await registrarAcao({
+          modulo: 'protocolo',
+          entidade: 'protocolos_documentos',
+          entidadeId: pendingRow.id,
+          acao: 'alterou_com_motivo',
+          antes: { status_locacao: inferStatus(pendingRow) },
+          depois: { status_locacao: pendingStatus },
+          observacao: motivo,
+        });
+
+        if (pendingStatus === 'devolvido' || pendingStatus === 'encerrado') {
+          try {
+            await formalizarOperacaoPorEmail({ type: 'devolucao', id: pendingRow.id });
+          } catch (mailError: any) {
+            toast.warning(mailError?.message || 'Devolução registrada; formalização por e-mail ficou pendente.');
+          }
+        }
+
+        toast.success(`Situação alterada por ${data.operador}. Motivo, data e hora foram preservados.`);
+      }
+
+      if (pendingAction === 'deactivate') {
+        const { data, error } = await rpc.rpc('operacional_protocolo_desativar_registro', {
+          p_codigo_operador: codigo,
+          p_protocolo_id: pendingRow.id,
+          p_motivo: motivo,
+        });
+        if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Operação não autorizada.');
+
+        setHistory((current) => current.filter((item) => item.id !== pendingRow.id));
+        await registrarAcao({
+          modulo: 'protocolo',
+          entidade: 'protocolos_documentos',
+          entidadeId: pendingRow.id,
+          acao: 'desativou_com_motivo',
+          antes: pendingRow,
+          depois: { registro_ativo: false },
+          observacao: motivo,
+        });
+        toast.success(`Registro retirado da visão operacional por ${data.operador}. O histórico foi preservado.`);
+      }
+
+      setCodigoOpen(false);
+      setPendingRow(null);
+      setPendingStatus(null);
+      setPendingAction(null);
+      setMotivo('');
     } catch (error: any) {
-      toast.error(`Não foi possível atualizar a locação: ${error?.message || error}`);
+      toast.error(error?.message || 'Não foi possível concluir a operação.');
     } finally {
+      setCodigoLoading(false);
       setUpdatingId('');
     }
   };
