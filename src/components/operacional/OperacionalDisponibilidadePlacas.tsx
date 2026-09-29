@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Loader2, Search, ShieldCheck, XCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -51,6 +51,7 @@ const STATUS = {
 
 const OperacionalDisponibilidadePlacas: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [rows, setRows] = useState<Row[]>([]);
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(true);
@@ -118,7 +119,9 @@ const OperacionalDisponibilidadePlacas: React.FC = () => {
 
   const iniciarLocacao = (row: Row) => {
     if (row.status !== 'sim') return;
-    navigate(`/operacional/protocolo?acao=locacao&placa=${encodeURIComponent(row.placa)}`);
+    const ext = location.pathname.match(/^\/operacional-ext\/[^/]+/)?.[0];
+    const base = ext ? `${ext}/protocolo` : location.pathname.startsWith('/admin') ? '/admin/operacional/protocolo' : '/operacional/protocolo';
+    navigate(`${base}?acao=locacao&placa=${encodeURIComponent(row.placa)}`);
   };
 
   return (
