@@ -189,12 +189,13 @@ export default function ContabilidadePortalEmailBridge() {
 
       try {
         const payload = JSON.parse(bodyText);
-        if (payload?.action !== 'finalize') return originalFetch.call(window, input, init);
+        // Regra padrão: upload da Contabilidade formaliza e envia o PDF automaticamente.
+        // O modo de revisão/manual só é usado quando a própria tela pedir defer_email explicitamente.
+        if (payload?.action !== 'finalize' || payload?.defer_email !== true) {
+          return originalFetch.call(window, input, init);
+        }
         const file = findSelectedPdf();
-        const response = await originalFetch.call(window, input, {
-          ...init,
-          body: JSON.stringify({ ...payload, defer_email: true }),
-        });
+        const response = await originalFetch.call(window, input, init);
         if (response.ok) {
           const data = await response.clone().json().catch(() => null);
           if (data?.ok && data?.upload_id) {
