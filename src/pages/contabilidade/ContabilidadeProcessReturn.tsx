@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Eye, FileText, FileUp, Loader2, RefreshCw } from 'lucide-react';
+import { Eye, FileText, FileUp, Loader2, RefreshCw, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -89,6 +89,7 @@ export default function ContabilidadeProcessReturn({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [retrying, setRetrying] = useState('');
   const [docs, setDocs] = useState<ProcessDocument[]>([]);
 
   const loadDocs = useCallback(async () => {
@@ -141,7 +142,7 @@ export default function ContabilidadeProcessReturn({
       );
       if (storageError) throw storageError;
 
-      await postJson({
+      const finalized = await postJson({
         action: 'finalize',
         portal,
         token,
@@ -155,17 +156,59 @@ export default function ContabilidadeProcessReturn({
         arquivo_nome: file.name,
         tamanho_bytes: file.size,
         storage_path: prepared.path,
-        defer_email: true,
       });
 
       await loadDocs();
-      toast.success('PDF anexado. O e-mail de retorno foi preparado na mesma conversa do processo.');
+      if (finalized?.email_status !== 'enviado') {
+        toast.warning('PDF salvo. O envio do e-mail ficou pendente e pode ser reenviado abaixo.');
+      } else {
+        toast.success('PDF salvo e e-mail de retorno enviado na mesma conversa.');
+      }
     } catch (error: any) {
       console.error('[contabilidade-process-return]', error);
       toast.error(error?.message || 'Não foi possível anexar o PDF.');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  const retryEmail = async (doc: ProcessDocument) => {
+    if (retrying) return;
+    setRetrying(doc.id);
+    try {
+      const competence = competenceFor(evento);
+      const typeLabel = documentTypeFor(evento).replace(/_/g, ' ');
+      const subject = ['Retorno da Contabilidade', typeLabel, evento.empresa_nome || '', competence || ''].filter(Boolean).join(' - ');
+      const body = [
+        'Prezados,',
+        '',
+        `Segue em anexo o retorno da Contabilidade referente a ${evento.titulo}.`,
+        '',
+        evento.empresa_nome ? `Empresa: ${evento.empresa_nome}` : '',
+        evento.funcionario_nome ? `Funcionário: ${evento.funcionario_nome}` : '',
+        competence ? `Competência / referência: ${competence}` : '',
+        `Documento: ${doc.arquivo_nome}`,
+        '',
+        'O PDF segue anexado para conferência e arquivamento no TOPAC RH PRO.',
+        '',
+        'Contabilidade',
+      ].filter((line, index, list) => line !== '' || (index > 0 && list[index - 1] !== '')).join('\n');
+
+      await postJson({
+        action: 'send_email',
+        portal,
+        token,
+        upload_id: doc.id,
+        subject,
+        body,
+      });
+      toast.success('E-mail reenviado com o PDF anexado.');
+      await loadDocs();
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível reenviar o e-mail.');
+    } finally {
+      setRetrying('');
     }
   };
 
@@ -244,6 +287,19 @@ export default function ContabilidadeProcessReturn({
                     {doc.created_at ? ` · ${formatDateTime(doc.created_at)}` : ''}
                   </div>
                 </div>
+                {doc.formalizacao_email_status !== 'enviado' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={retrying === doc.id}
+                    onClick={() => void retryEmail(doc)}
+                    className="h-8 border-amber-500/30 bg-amber-500/10 px-2.5 text-amber-200"
+                  >
+                    {retrying === doc.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+                    Enviar e-mail
+                  </Button>
+                )}
                 <Button
                   type="button"
                   size="sm"
