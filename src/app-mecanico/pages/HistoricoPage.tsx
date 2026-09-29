@@ -169,12 +169,12 @@ export default function HistoricoPage() {
       </Card>
 
       <Card className="border-fuchsia-500/15 bg-[#07070d] p-4 text-white">
-        <h2 className="mb-3 flex items-center gap-2 font-semibold"><Wrench className="h-4 w-4 text-fuchsia-400" /> Manutenções</h2>
-        {chamados.length === 0 ? <p className="text-sm text-zinc-500">Nenhuma manutenção.</p> : (
+        <h2 className="mb-3 flex items-center gap-2 font-semibold"><Wrench className="h-4 w-4 text-fuchsia-400" /> Ocorrências</h2>
+        {chamados.length === 0 ? <p className="text-sm text-zinc-500">Nenhuma ocorrência.</p> : (
           <ul className="divide-y divide-fuchsia-500/10 text-sm">
             {chamados.map((c) => (
               <li key={c.id} className="space-y-1.5 py-3">
-                <div className="flex items-start justify-between gap-2"><strong>{c.tipo_servico || "Manutenção"}</strong><span className="text-xs text-zinc-500">{c.status || "pendente"}</span></div>
+                <div className="flex items-start justify-between gap-2"><strong>{c.tipo_servico || "Ocorrência"}</strong><span className="text-xs text-zinc-500">{c.status || "pendente"}</span></div>
                 {c.itens_previstos && <p className="text-xs text-zinc-400">{c.itens_previstos}</p>}
                 {c.observacoes && <p className="text-[11px] text-zinc-500">{c.observacoes}</p>}
                 <p className="text-[11px] text-zinc-500">{dataHoraIso(c.created_at)}</p>
