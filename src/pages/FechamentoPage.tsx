@@ -73,8 +73,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   const fechamento = getFechamento(selectedCompany, competencia);
   const selectedCompanyData = companies.find((company) => company.id === selectedCompany);
   const comissaoPct = getComissaoPercentual(selectedCompanyData);
-  const heSemanalPct = getHoraExtraSemanalPercentual(selectedCompanyData || selectedCompany);
-  const heSemanalLabel = `HE ${heSemanalPct}%`;
+  const heSemanalPct = 50;
   const diasUteis = diasUteisManual;
 
   const getFaltaDatas = (observacoes = '') => observacoes.match(FALTAS_RE)?.[1]?.trim() || '';
@@ -101,7 +100,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
     ].filter(Boolean).join(' | ');
   };
 
-  const calcPayroll = (emp: typeof compEmps[number], entry: typeof compEntries[number]) => calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct, horaExtraSemanalPct: heSemanalPct });
+  const calcPayroll = (emp: typeof compEmps[number], entry: typeof compEntries[number]) => calcPayrollBreakdown(emp, entry, { diasUteis, domingosFeriados, comissaoPct, horaExtraSemanalPct: 50 });
 
   const totals = useMemo(() => compEmps.reduce((acc, emp) => {
     const entry = compEntries.find((item) => item.employeeId === emp.id);
@@ -234,12 +233,12 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   };
 
   const exportApontamentoCsv = () => {
-    const headers = ['Funcionario','Empresa','Faltas','Datas das faltas','Horas descontadas','Horas por atestado/declaracao',heSemanalLabel,'HE 100%','Valor HE','DSR HE','Base comissao','Comissao','DSR comissao','Adicional','Desconto extra','Adiantamento','INSS','IRRF','FGTS informativo','Liquido','Observacoes'];
+    const headers = ['Funcionario','Empresa','Faltas','Datas das faltas','Horas descontadas','Horas por atestado/declaracao','HE 50%','HE 60%','HE 100%','Valor HE','DSR HE','Base comissao','Comissao','DSR comissao','Adicional','Desconto extra','Adiantamento','INSS','IRRF','FGTS informativo','Liquido','Observacoes'];
     const rows = compEmps.map((emp) => {
       const entry = compEntries.find((item) => item.employeeId === emp.id);
       if (!entry) return null;
       const calc = calcPayroll(emp, entry);
-      return [emp.name, selectedCompanyData?.name || '', entry.faltasDias, getFaltaDatas(entry.observacoes), entry.atrasos || 0, getHorasDocumento(entry.observacoes), entry.he50, entry.he100, calc.totalHE, calc.dsrHE, entry.comissaoBase, calc.comissaoVal, calc.dsrComissao, entry.adicionais, entry.descontosDiversos, calc.adiantamento, calc.inss, calc.irrf, calc.fgtsInformativo, calc.liquido, getObservacaoLivre(entry.observacoes)];
+      return [emp.name, selectedCompanyData?.name || '', entry.faltasDias, getFaltaDatas(entry.observacoes), entry.atrasos || 0, getHorasDocumento(entry.observacoes), entry.he50, entry.he60, entry.he100, calc.totalHE, calc.dsrHE, entry.comissaoBase, calc.comissaoVal, calc.dsrComissao, entry.adicionais, entry.descontosDiversos, calc.adiantamento, calc.inss, calc.irrf, calc.fgtsInformativo, calc.liquido, getObservacaoLivre(entry.observacoes)];
     }).filter(Boolean) as Array<Array<string | number>>;
     const csv = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');
     const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
@@ -314,7 +313,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
         </div>
         <div className="max-h-[calc(100vh-315px)] w-full overflow-auto overscroll-contain [scrollbar-gutter:stable]">
           <table className="w-full table-fixed text-[10px]">
-            <thead className="sticky top-0 z-30 bg-[#070a0f]/[.98] shadow-[0_8px_22px_rgba(0,0,0,.45)] backdrop-blur"><tr className="border-b border-violet-400/30">{['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.',heSemanalLabel,'HE 100%','DSR','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((header, index) => <th key={header} style={{ width: ['12%','7%','4%','6%','5%','5%','5%','5%','6%','7%','6%','6%','7%','7%','12%'][index] }} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase leading-tight tracking-[-.01em] text-violet-100 whitespace-normal">{header}</th>)}</tr></thead>
+            <thead className="sticky top-0 z-30 bg-[#070a0f]/[.98] shadow-[0_8px_22px_rgba(0,0,0,.45)] backdrop-blur"><tr className="border-b border-violet-400/30">{['Funcionário','Empresa','Faltas','Datas','Horas desc.','Horas doc.','HE 50%','HE 60%','HE 100%','DSR','Comissão','Adicional','Desc. extra','Adiantamento','Líquido','Observações'].map((header, index) => <th key={header} style={{ width: ['11%','7%','4%','6%','5%','5%','5%','5%','5%','6%','7%','6%','6%','7%','7%','12%'][index] }} className="px-1 py-2 text-left text-[8px] font-extrabold uppercase leading-tight tracking-[-.01em] text-violet-100 whitespace-normal">{header}</th>)}</tr></thead>
             <tbody>{compEmps.map((emp) => {
               const entry = compEntries.find((item) => item.employeeId === emp.id); if (!entry) return null;
               const calc = calcPayroll(emp, entry);
@@ -328,6 +327,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
                 <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.atrasos} decimals={2} onValueChange={(value) => update({ atrasos: value })} className={inputClass} /><div className="mt-1 text-[10px] text-muted-foreground">{formatCurrency(calc.atrasoVal)}</div></td>
                 <td className="px-1 py-1.5 min-w-0"><DecimalInput value={docHoras} decimals={2} onValueChange={(value) => update({ observacoes: setHorasDocumento(entry.observacoes, value) })} className={inputClass} /></td>
                 <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.he50} decimals={2} onValueChange={(value) => update({ he50: value })} className={inputClass} /><div className="mt-1 text-[10px] text-violet-300">{formatCurrency(calc.he50Val)}</div></td>
+                <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.he60} decimals={2} onValueChange={(value) => update({ he60: value })} className={inputClass} /><div className="mt-1 text-[10px] text-violet-300">{formatCurrency(calc.he60Val)}</div></td>
                 <td className="px-1 py-1.5 min-w-0"><DecimalInput value={entry.he100} decimals={2} onValueChange={(value) => update({ he100: value })} className={inputClass} /><div className="mt-1 text-[10px] text-violet-300">{formatCurrency(calc.he100Val)}</div></td>
                 <td className="px-1 py-2 min-w-0"><div className="text-[10px] font-bold text-emerald-300">{formatCurrency(calc.dsrHE + calc.dsrComissao)}</div><div className="mt-1 text-[8px] leading-tight text-muted-foreground"><span>HE {formatCurrency(calc.dsrHE)}</span>{calc.dsrComissao > 0 && <span> · Com. {formatCurrency(calc.dsrComissao)}</span>}</div></td>
                 <td className="px-1 py-1.5 min-w-0"><MoneyInput value={entry.comissaoBase || 0} onValueChange={(value) => update({ comissaoBase: value })} className={`${inputClass} text-right`} /><div className="mt-1 text-[10px] text-amber-300">{(calc.comissaoPct * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% = {formatCurrency(calc.comissaoVal)}</div></td>
