@@ -148,7 +148,7 @@ export default function ChamadosPage() {
 
   useEffect(() => {
     void carregar();
-    const timer = window.setInterval(() => void carregar(true), 12000);
+    const timer = window.setInterval(() => void carregar(true), 5000);
     return () => window.clearInterval(timer);
   }, [carregar]);
 
