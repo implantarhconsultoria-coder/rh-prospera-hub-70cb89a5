@@ -295,15 +295,22 @@ const ProtocoloPage: React.FC = () => {
     const items = groups.flatMap((group) => group.itens);
     const missingContext = groups.filter((group) => !group.cliente.trim() || !group.local.trim()).length;
     const missingDocs = items.filter((item) => !item.ativo || !pdfOf(item.ativo)).length;
+    const missingAvailability = isLocacaoFlow
+      ? items.filter((item) => {
+          const plate = normalizePlate(item.ativo?.placa || item.placa);
+          return Boolean(plate) && disponibilidades[plate] !== 'sim';
+        }).length
+      : 0;
 
     return {
       totalGroups: groups.length,
       totalItems: items.length,
       missingContext,
       missingDocs,
-      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0,
+      missingAvailability,
+      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0 && missingAvailability === 0,
     };
-  }, [groups]);
+  }, [groups, disponibilidades, isLocacaoFlow]);
 
   const getSubstitution = (group: ProtocolGroup) => {
     const sai = group.itens.find((item) => item.ativo?.id === group.substituicaoSaiId) || null;
