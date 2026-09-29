@@ -1,11 +1,12 @@
 // Tipos auxiliares e helpers para movimento diário e fechamento
 
-export type TipoOcorrencia = 'falta' | 'atraso' | 'he50' | 'he100' | 'adicional' | 'desconto' | 'adiantamento' | 'observacao';
+export type TipoOcorrencia = 'falta' | 'atraso' | 'he50' | 'he60' | 'he100' | 'adicional' | 'desconto' | 'adiantamento' | 'observacao';
 
 export const TIPOS_OCORRENCIA: { value: TipoOcorrencia; label: string; campoEntry: string; usaQuantidade: boolean; usaValor: boolean }[] = [
   { value: 'falta',         label: 'Falta',           campoEntry: 'faltasDias',        usaQuantidade: true,  usaValor: false },
   { value: 'atraso',        label: 'Atraso (h)',      campoEntry: 'atrasos',           usaQuantidade: true,  usaValor: false },
   { value: 'he50',          label: 'HE 50%',          campoEntry: 'he50',              usaQuantidade: true,  usaValor: false },
+  { value: 'he60',          label: 'HE 60%',          campoEntry: 'he60',              usaQuantidade: true,  usaValor: false },
   { value: 'he100',         label: 'HE 100%',         campoEntry: 'he100',             usaQuantidade: true,  usaValor: false },
   { value: 'adicional',     label: 'Adicional R$',    campoEntry: 'adicionais',        usaQuantidade: false, usaValor: true  },
   { value: 'desconto',      label: 'Desconto R$',     campoEntry: 'descontosDiversos', usaQuantidade: false, usaValor: true  },
@@ -55,6 +56,7 @@ export function consolidarMovimento(movimentos: MovimentoRow[]) {
         falta: { quantidade: 0, valor: 0, observacoes: [] },
         atraso: { quantidade: 0, valor: 0, observacoes: [] },
         he50: { quantidade: 0, valor: 0, observacoes: [] },
+        he60: { quantidade: 0, valor: 0, observacoes: [] },
         he100: { quantidade: 0, valor: 0, observacoes: [] },
         adicional: { quantidade: 0, valor: 0, observacoes: [] },
         desconto: { quantidade: 0, valor: 0, observacoes: [] },
