@@ -34,7 +34,7 @@ const Header = () => {
   const title = location.pathname.includes("/abastecimento") ? "Abastecimento"
     : location.pathname.includes("/historico") ? "Histórico"
     : location.pathname.includes("/veiculo") ? "KM / Veículo"
-    : location.pathname.includes("/chamados") ? "Manutenção"
+    : location.pathname.includes("/chamados") ? "Ocorrências"
     : location.pathname.includes("/ponto") ? "Registro de Ponto"
     : "TOPAC RH PRO";
 
@@ -241,7 +241,7 @@ const BottomNav = () => {
               <button onClick={() => setMoreOpen(false)} className="grid h-9 w-9 place-items-center rounded-full border border-fuchsia-500/20 text-zinc-400"><X className="h-4 w-4" /></button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => { setMoreOpen(false); navigate(`${base}/chamados`); }} className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-left text-white"><Wrench className="mb-3 h-5 w-5 text-fuchsia-400" /><strong className="block text-sm">Manutenção</strong><span className="mt-1 block text-[10px] text-zinc-500">Ocorrências e serviços</span></button>
+              <button onClick={() => { setMoreOpen(false); navigate(`${base}/chamados`); }} className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-left text-white"><Wrench className="mb-3 h-5 w-5 text-fuchsia-400" /><strong className="block text-sm">Ocorrências</strong><span className="mt-1 block text-[10px] text-zinc-500">Compressores e serviços</span></button>
               <button onClick={sair} className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-left text-white"><LogOut className="mb-3 h-5 w-5 text-red-400" /><strong className="block text-sm">Sair</strong><span className="mt-1 block text-[10px] text-zinc-500">Encerrar acesso</span></button>
             </div>
           </div>
