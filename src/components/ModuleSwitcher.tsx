@@ -24,18 +24,27 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
     ? '/admin/almoxarifado'
     : location.pathname.startsWith('/operacional')
       ? '/admin/operacional'
-      : null;
+      : location.pathname.startsWith('/filial')
+        ? '/admin/central-contabilidade'
+        : null;
 
   const abrirFilialPraia = () => {
     sessionStorage.setItem('admin_filial_preview_codigo', 'topac-pg');
     navigate('/filial');
   };
 
+  const voltarAoAdmin = () => {
+    if (location.pathname.startsWith('/filial')) {
+      sessionStorage.removeItem('admin_filial_preview_codigo');
+    }
+    if (portalBackTarget) navigate(portalBackTarget);
+  };
+
   return (
     <div className="flex items-center gap-2">
       {isAdmin && <EmployeeAccessControl />}
 
-      {isAdmin && (
+      {isAdmin && !location.pathname.startsWith('/filial') && (
         <Button
           variant="outline"
           size={compact ? 'sm' : 'default'}
@@ -64,11 +73,11 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
         <Button
           variant="outline"
           size={compact ? 'sm' : 'default'}
-          onClick={() => navigate(portalBackTarget)}
+          onClick={voltarAoAdmin}
           className="gap-2 border-[#5b2a78] bg-[#120b19] text-white shadow-md hover:border-[#8b3fe7] hover:bg-[#1a0f24] hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          {!compact && <span>Voltar ao painel administrativo</span>}
+          {!compact && <span>{location.pathname.startsWith('/filial') ? 'Voltar à Minha Central' : 'Voltar ao painel administrativo'}</span>}
         </Button>
       )}
     </div>
