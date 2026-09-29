@@ -231,41 +231,70 @@ const BottomNav = () => {
   const isFuel = location.pathname.includes("/abastecimento");
   const isVehicle = location.pathname.includes("/veiculo");
 
+  const itemClass = (active: boolean) =>
+    `relative flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-[18px] border text-[9px] font-semibold transition active:scale-[.97] ${
+      active
+        ? "border-fuchsia-400/20 bg-[linear-gradient(180deg,rgba(168,85,247,.14),rgba(168,85,247,.035))] text-white shadow-[inset_0_1px_0_rgba(255,255,255,.04)]"
+        : "border-transparent text-zinc-500"
+    }`;
+
   return (
     <>
       {moreOpen && (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/70 p-3 backdrop-blur-sm" onClick={() => setMoreOpen(false)}>
-          <div className="mx-auto w-full max-w-lg rounded-[24px] border border-fuchsia-500/25 bg-[#08080e] p-4 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end bg-black/75 p-3 backdrop-blur-md" onClick={() => setMoreOpen(false)}>
+          <div className="mx-auto w-full max-w-lg rounded-[28px] border border-fuchsia-500/20 bg-[linear-gradient(155deg,#100918,#07070d_55%,#050509)] p-4 pb-[calc(16px+env(safe-area-inset-bottom))] shadow-[0_-24px_70px_rgba(0,0,0,.65)]" onClick={(event) => event.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
-              <div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-fuchsia-400">Mais opções</p><h2 className="mt-1 text-lg font-black text-white">Operação do dia</h2></div>
-              <button onClick={() => setMoreOpen(false)} className="grid h-9 w-9 place-items-center rounded-full border border-fuchsia-500/20 text-zinc-400"><X className="h-4 w-4" /></button>
+              <div><p className="text-[9px] font-black uppercase tracking-[.2em] text-fuchsia-300">Mais opções</p><h2 className="mt-1 text-lg font-black tracking-tight text-white">Operação do dia</h2></div>
+              <button onClick={() => setMoreOpen(false)} className="grid h-10 w-10 place-items-center rounded-[14px] border border-white/[.07] bg-white/[.03] text-zinc-400"><X className="h-4 w-4" /></button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => { setMoreOpen(false); navigate(`${base}/chamados`); }} className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-left text-white"><Wrench className="mb-3 h-5 w-5 text-fuchsia-400" /><strong className="block text-sm">Ocorrências</strong><span className="mt-1 block text-[10px] text-zinc-500">Compressores e serviços</span></button>
-              <button onClick={sair} className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-left text-white"><LogOut className="mb-3 h-5 w-5 text-red-400" /><strong className="block text-sm">Sair</strong><span className="mt-1 block text-[10px] text-zinc-500">Encerrar acesso</span></button>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button onClick={() => { setMoreOpen(false); navigate(`${base}/chamados`); }} className="rounded-[20px] border border-fuchsia-500/20 bg-[linear-gradient(145deg,rgba(168,85,247,.09),rgba(255,255,255,.015))] p-4 text-left text-white shadow-[0_12px_30px_rgba(0,0,0,.25)]"><span className="grid h-11 w-11 place-items-center rounded-[15px] border border-fuchsia-400/20 bg-fuchsia-500/10 text-fuchsia-300"><Wrench className="h-5 w-5" /></span><strong className="mt-4 block text-sm font-black">Ocorrências</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-500">Compressores e serviços</span></button>
+              <button onClick={sair} className="rounded-[20px] border border-red-500/15 bg-[linear-gradient(145deg,rgba(239,68,68,.07),rgba(255,255,255,.012))] p-4 text-left text-white shadow-[0_12px_30px_rgba(0,0,0,.25)]"><span className="grid h-11 w-11 place-items-center rounded-[15px] border border-red-400/15 bg-red-500/10 text-red-300"><LogOut className="h-5 w-5" /></span><strong className="mt-4 block text-sm font-black">Sair</strong><span className="mt-1 block text-[10px] leading-snug text-zinc-500">Encerrar acesso</span></button>
             </div>
           </div>
         </div>
       )}
 
-      <nav className="fixed bottom-2 left-1/2 z-40 grid w-[calc(100%-18px)] max-w-lg -translate-x-1/2 grid-cols-5 items-end rounded-[24px] border border-fuchsia-500/20 bg-[#07070df2] px-1.5 pb-[calc(7px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_35px_rgba(0,0,0,.4)] backdrop-blur-xl">
-        <button onClick={() => navigate(base)} className={`flex min-h-14 flex-col items-center justify-end gap-1 text-[8px] ${isHome ? "text-fuchsia-400" : "text-zinc-500"}`}><Home className="h-6 w-6" /><span>Início</span></button>
-        <button onClick={() => navigate(`${base}/historico`)} className={`flex min-h-14 flex-col items-center justify-end gap-1 text-[8px] ${isHistory ? "text-fuchsia-400" : "text-zinc-500"}`}><History className="h-6 w-6" /><span>Histórico</span></button>
-        <button onClick={() => navigate(`${base}/abastecimento`)} className={`relative -translate-y-1 flex min-h-16 flex-col items-center justify-end gap-0.5 text-[8px] ${isFuel ? "text-fuchsia-300" : "text-zinc-200"}`}>
-          <span className="grid h-14 w-14 place-items-center rounded-full border border-fuchsia-400/80 bg-[radial-gradient(circle_at_45%_35%,#6d1da8,#1b0927_68%,#08070d)] shadow-[0_0_28px_rgba(168,85,247,.38)]"><Fuel className="h-7 w-7" /></span><span>Abastecimento</span>
+      <nav className="fixed bottom-2.5 left-1/2 z-40 grid w-[calc(100%-16px)] max-w-lg -translate-x-1/2 grid-cols-5 items-center gap-1 rounded-[30px] border border-white/[.08] bg-[linear-gradient(180deg,rgba(18,14,24,.96),rgba(7,7,12,.98))] px-2 pb-[calc(8px+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_42px_rgba(0,0,0,.5),0_10px_34px_rgba(0,0,0,.45)] backdrop-blur-2xl">
+        <button onClick={() => navigate(base)} className={itemClass(isHome)}>
+          <Home className="h-[22px] w-[22px]" />
+          <span>Início</span>
+          {isHome && <i className="absolute bottom-1 h-1 w-1 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,.7)]" />}
         </button>
-        <button onClick={() => navigate(`${base}/veiculo`)} className={`flex min-h-14 flex-col items-center justify-end gap-1 text-[8px] ${isVehicle ? "text-fuchsia-400" : "text-zinc-500"}`}><Gauge className="h-6 w-6" /><span>KM / Veículo</span></button>
-        <button onClick={() => setMoreOpen(true)} className="flex min-h-14 flex-col items-center justify-end gap-1 text-[8px] text-zinc-500"><Menu className="h-6 w-6" /><span>Mais</span></button>
+        <button onClick={() => navigate(`${base}/historico`)} className={itemClass(isHistory)}>
+          <History className="h-[22px] w-[22px]" />
+          <span>Histórico</span>
+          {isHistory && <i className="absolute bottom-1 h-1 w-1 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,.7)]" />}
+        </button>
+        <button onClick={() => navigate(`${base}/abastecimento`)} className={`relative -translate-y-3 flex min-h-[72px] flex-col items-center justify-end gap-1 text-[8px] font-black ${isFuel ? "text-amber-200" : "text-zinc-300"}`}>
+          <span className={`grid h-[62px] w-[62px] place-items-center rounded-[22px] border shadow-[0_14px_32px_rgba(0,0,0,.48)] transition active:scale-[.96] ${
+            isFuel
+              ? "border-amber-300/50 bg-[linear-gradient(145deg,#6e3e08,#2b142f_62%,#120918)] shadow-[0_0_30px_rgba(245,158,11,.22)]"
+              : "border-fuchsia-400/35 bg-[linear-gradient(145deg,#4a176a,#21102e_62%,#0d0912)] shadow-[0_0_30px_rgba(168,85,247,.2)]"
+          }`}>
+            <Fuel className="h-8 w-8" />
+          </span>
+          <span className="max-w-[72px] truncate">Abastecer</span>
+        </button>
+        <button onClick={() => navigate(`${base}/veiculo`)} className={itemClass(isVehicle)}>
+          <Gauge className="h-[22px] w-[22px]" />
+          <span>KM</span>
+          {isVehicle && <i className="absolute bottom-1 h-1 w-1 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,.7)]" />}
+        </button>
+        <button onClick={() => setMoreOpen(true)} className={itemClass(moreOpen)}>
+          <Menu className="h-[22px] w-[22px]" />
+          <span>Mais</span>
+        </button>
       </nav>
     </>
   );
 };
 
 const MecanicoShell = () => (
-  <div className="min-h-screen bg-[#030309] text-white">
-    <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_82%_-5%,rgba(126,34,206,0.13),transparent_31%),radial-gradient(circle_at_7%_32%,rgba(88,28,135,0.06),transparent_27%)]" />
+  <div className="min-h-screen bg-[#030307] text-white">
+    <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_84%_-4%,rgba(168,85,247,.16),transparent_30%),radial-gradient(circle_at_8%_28%,rgba(245,158,11,.045),transparent_25%),linear-gradient(180deg,#050309_0%,#030307_48%,#020205_100%)]" />
     <Header />
-    <main className="relative mx-auto w-full max-w-lg px-3 pb-[calc(128px+env(safe-area-inset-bottom))] pt-3 sm:px-4">
+    <main className="relative mx-auto w-full max-w-lg px-3 pb-[calc(142px+env(safe-area-inset-bottom))] pt-3 sm:px-4">
       <FuelTravelMode />
       <Outlet />
     </main>
