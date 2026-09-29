@@ -295,10 +295,12 @@ const ProtocoloPage: React.FC = () => {
     const items = groups.flatMap((group) => group.itens);
     const missingContext = groups.filter((group) => !group.cliente.trim() || !group.local.trim()).length;
     const missingDocs = items.filter((item) => !item.ativo || !pdfOf(item.ativo)).length;
+    const vehicleItems = items.filter((item) => Boolean(normalizePlate(item.ativo?.placa || item.placa)));
+    const vehicleFlowBlocked = vehicleItems.length > 0 && !isLocacaoFlow;
     const missingAvailability = isLocacaoFlow
-      ? items.filter((item) => {
+      ? vehicleItems.filter((item) => {
           const plate = normalizePlate(item.ativo?.placa || item.placa);
-          return Boolean(plate) && disponibilidades[plate] !== 'sim';
+          return disponibilidades[plate] !== 'sim';
         }).length
       : 0;
 
@@ -308,7 +310,8 @@ const ProtocoloPage: React.FC = () => {
       missingContext,
       missingDocs,
       missingAvailability,
-      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0 && missingAvailability === 0,
+      vehicleFlowBlocked,
+      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0 && missingAvailability === 0 && !vehicleFlowBlocked,
     };
   }, [groups, disponibilidades, isLocacaoFlow]);
 
