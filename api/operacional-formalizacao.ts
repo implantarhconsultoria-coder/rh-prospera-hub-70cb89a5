@@ -40,7 +40,10 @@ const sendFormalization = async (service: any, input: {
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) throw Object.assign(new Error('RESEND_API_KEY nao configurada'), { status: 503 });
 
-  const from = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>');
+  const configuredFrom = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM);
+  const from = configuredFrom && !/@resend\.dev/i.test(configuredFrom)
+    ? configuredFrom
+    : 'TOPAC RH PRO <no-reply@topacrh.pro>';
   const replyTo = clean(process.env.EMAIL_REPLY_TO || ADM_EMAIL);
   const to = [ROBSON_EMAIL];
   const cc = [ADM_EMAIL];
