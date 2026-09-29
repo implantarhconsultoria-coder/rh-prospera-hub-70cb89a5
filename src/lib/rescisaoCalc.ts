@@ -17,6 +17,7 @@ export type SituacaoFerias =
 
 export type RescisaoDescontoTipo =
   | 'faltas'
+  | 'atrasos'
   | 'adiantamento_salarial'
   | 'adiantamento_13'
   | 'vale_transporte'
