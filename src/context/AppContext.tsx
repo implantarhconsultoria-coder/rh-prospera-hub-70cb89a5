@@ -263,6 +263,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       faltasDias: 0,
       atrasos: 0,
       he50: 0,
+      he60: 0,
       he100: 0,
       adicionais: 0,
       descontosDiversos: 0,
