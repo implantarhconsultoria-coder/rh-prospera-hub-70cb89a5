@@ -298,7 +298,7 @@ const App = () => (
               <Route path="/acesso-modulos" element={<Navigate to="/modulos" replace />} />
               <Route path="/portais" element={<ErrorBoundary><PortaisPage /></ErrorBoundary>} />
               <Route path="/acesso-almoxarifado" element={<Navigate to="/modulos" replace />} />
-              <Route path="/acesso-operacional" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-operacional" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso-campo" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-rh" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-financeiro" element={<Navigate to="/modulos" replace />} />
