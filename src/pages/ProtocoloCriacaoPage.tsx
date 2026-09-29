@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRightLeft, CheckCircle2, FileCheck, LinkIcon, Loader2, MessageSquareText, Printer, Sparkles } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
 import { registrarAcao } from '@/lib/acoesLog';
+import OperadorCodeDialog from '@/components/OperadorCodeDialog';
+import { formalizarOperacaoPorEmail } from '@/lib/operacionalFormalizacao';
 import { toast } from 'sonner';
 
 interface AtivoDoc {
@@ -50,6 +52,10 @@ interface ProtocolGroup {
 }
 
 const PROTOCOL_PARSE_ENDPOINT = '/api/protocolos-parse';
+
+const rpc = supabase as unknown as {
+  rpc: (name: string, args?: Record<string, unknown>) => Promise<{ data: any; error: { message?: string } | null }>;
+};
 
 const normalize = (value: unknown) =>
   String(value || '')
@@ -125,6 +131,9 @@ const inferSubstitution = (items: ProtocolItem[], sourceText: string) => {
 
 const ProtocoloPage: React.FC = () => {
   const { companies, session } = useApp();
+  const [searchParams] = useSearchParams();
+  const isLocacaoFlow = searchParams.get('acao') === 'locacao';
+  const placaInicial = normalizePlate(searchParams.get('placa'));
   const topac = companies.find((company) => company.id === 'topac-matriz');
 
   const [textoColado, setTextoColado] = useState('');
@@ -136,6 +145,10 @@ const ProtocoloPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [lastSavedIds, setLastSavedIds] = useState<string[]>([]);
+  const [disponibilidades, setDisponibilidades] = useState<Record<string, string>>({});
+  const [codigoOpen, setCodigoOpen] = useState(false);
+  const [codigoLoading, setCodigoLoading] = useState(false);
+  const [codigoAction, setCodigoAction] = useState<'save' | 'print' | null>(null);
 
   const loadAssets = async (): Promise<AtivoDoc[]> => {
     setLoadingAssets(true);
@@ -161,7 +174,20 @@ const ProtocoloPage: React.FC = () => {
 
   useEffect(() => {
     void loadAssets();
+    void (async () => {
+      const { data, error } = await rpc.rpc('operacional_consultar_placas', { p_busca: null });
+      if (!error && data?.ok) {
+        const map: Record<string, string> = {};
+        (data.placas || []).forEach((row: any) => { map[normalizePlate(row.placa)] = row.status; });
+        setDisponibilidades(map);
+      }
+    })();
   }, []);
+
+  useEffect(() => {
+    if (!placaInicial || textoColado.trim()) return;
+    setTextoColado(`PLACA ${placaInicial} — NOVA LOCAÇÃO\nCliente: \nLocal / Canteiro: \nResponsável: `);
+  }, [placaInicial]);
 
   const resolveAsset = (item: ParsedItem, pool: AtivoDoc[] = ativos) => {
     const plate = normalizePlate(item.placa);
