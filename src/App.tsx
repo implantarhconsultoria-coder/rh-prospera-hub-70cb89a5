@@ -342,8 +342,11 @@ const App = () => (
                 <Route path="funcionarios/:id" element={<EmployeeDetailPage />} />
                 <Route path="aviso-ferias" element={<AvisoFeriasPage />} />
                 <Route path="aso" element={<ASOPage />} />
-                <Route path="atestados" element={<AtestadosImportPage />} />
-                <Route path="protocolo" element={<ProtocoloPage />} />
+                <Route path="atestados" element={<FilialDocumentosPage />} />
+                <Route path="pre-cadastro" element={<FilialPreCadastroPage />} />
+                <Route path="documentos" element={<FilialDocumentosPage />} />
+                <Route path="recibos-holerites" element={<FilialRecibosHoleritesPage />} />
+                <Route path="protocolo" element={<FilialRecibosHoleritesPage />} />
                 <Route path="alertas" element={<FilialAlertasPage />} />
                 <Route path="movimento-diario" element={<MovimentoDiarioPage />} />
                 <Route path="apontamento" element={<FilialFechamentoPage />} />
