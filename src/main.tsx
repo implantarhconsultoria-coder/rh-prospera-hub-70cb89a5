@@ -40,7 +40,7 @@ const isMecanicoPublicPortal = /^\/(?:mecanicos|acesso-mecanico|app-mecanico(?:\
 const isContabilidadePublicPortal = /^\/(?:acesso-contabilidade(?:-goiania)?|contabilidade(?:-goiania)?)\/?$/i.test(currentPath);
 // Nova versão do app administrativo instalado, sem alterar a versão estável do app dos mecânicos.
 const MOBILE_BUILD_TAG = isMecanicoPublicPortal
-  ? "20260908-mecanicos-oficial-v2"
+  ? "20260929-mecanicos-black-screen-hotfix-v1"
   : "20260924-payroll-admin-archive-v3";
 const MOBILE_CACHE_RESET_KEY = `topac-mobile-cache-reset-${MOBILE_BUILD_TAG}`;
 
