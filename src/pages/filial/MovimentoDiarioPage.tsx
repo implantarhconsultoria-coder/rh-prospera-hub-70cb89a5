@@ -100,7 +100,6 @@ const MovimentoDiarioPage: React.FC = () => {
           atraso: 0,
           he50: 0,
           he100: 0,
-          comissao: 0,
           adicional: 0,
           desconto: 0,
           adiantamento: 0,
@@ -249,7 +248,7 @@ const MovimentoDiarioPage: React.FC = () => {
           <table className="w-full text-sm">
             <thead className="bg-muted">
               <tr>
-                {['Funcionario','Faltas','Atrasos','HE 50','HE 100','Comissão','Adic.','Desc.','Adiant.'].map((header) => (
+                {['Funcionario','Faltas','Atrasos','HE 50','HE 100','Adic.','Desc.','Adiant.'].map((header) => (
                   <th key={header} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">{header}</th>
                 ))}
               </tr>
@@ -265,7 +264,6 @@ const MovimentoDiarioPage: React.FC = () => {
                     <td className="px-3 py-2">{totais.atraso}h</td>
                     <td className="px-3 py-2">{totais.he50}h</td>
                     <td className="px-3 py-2">{totais.he100}h</td>
-                    <td className="px-3 py-2">{formatCurrency(totais.comissao)}</td>
                     <td className="px-3 py-2">{formatCurrency(totais.adicional)}</td>
                     <td className="px-3 py-2">{formatCurrency(totais.desconto)}</td>
                     <td className="px-3 py-2">{formatCurrency(totais.adiantamento)}</td>
