@@ -9,6 +9,7 @@ import {
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
 import { isDirectorRole } from '@/lib/directorPermissions';
+import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
 
 interface MenuItem { label: string; icon: React.ElementType; path: string }
 
@@ -39,6 +40,8 @@ const operationalItems: MenuItem[] = [
   { label: 'Histórico', icon: History, path: '/admin/historico' },
 ];
 
+const PRIVATE_FLEET_PATHS = new Set(['/admin/documentos-ativos', '/admin/monitoramento']);
+
 const directorItems: MenuItem[] = [
   { label: 'Central TOPAC', icon: LayoutDashboard, path: '/admin' },
   { label: 'Envios para Clínicas', icon: FileText, path: '/admin/emails-contabilidade' },
@@ -67,8 +70,10 @@ interface Props { collapsed: boolean; onToggle: () => void }
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
   const { logout, userRoles } = useApp();
   const location = useLocation();
+  const { allowed: canViewFrota } = usePrivateModuleAccess('frota_ipva');
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
-  const items = isDirector ? directorItems : [...menuItems, ...operationalItems];
+  const visibleOperationalItems = operationalItems.filter(item => canViewFrota || !PRIVATE_FLEET_PATHS.has(item.path));
+  const items = isDirector ? directorItems : [...menuItems, ...visibleOperationalItems];
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
