@@ -478,7 +478,7 @@ const ProtocoloPage: React.FC = () => {
     }
   };
 
-  const printProtocol = async () => {
+  const printProtocol = async (codigo: string, operador: { id: string; nome: string }) => {
     if (!readiness.ready) {
       toast.error('IMPRESSÃO BLOQUEADA: existe Cliente/Local pendente ou Documento Faltando.');
       return;
@@ -486,8 +486,36 @@ const ProtocoloPage: React.FC = () => {
 
     setPrinting(true);
     try {
-      const saved = await persistProtocols({ silent: true });
+      const saved = await persistProtocols(operador, { silent: true });
       if (!saved) return;
+
+      try {
+        await formalizarOperacaoPorEmail({ type: 'locacao', ids: saved });
+      } catch (mailError: any) {
+        toast.warning(mailError?.message || 'Locação registrada; formalização por e-mail ficou pendente.');
+      }
+
+      if (isLocacaoFlow) {
+        const plates = Array.from(new Set(groups.flatMap((group) => group.itens)
+          .map((item) => normalizePlate(item.ativo?.placa || item.placa))
+          .filter(Boolean)));
+        for (const plate of plates) {
+          const { data, error } = await rpc.rpc('operacional_definir_disponibilidade', {
+            p_codigo_operador: codigo,
+            p_placa: plate,
+            p_status: 'nao',
+            p_motivo: `Locação formalizada e documento liberado junto ao protocolo ${saved.join(', ')}.`,
+          });
+          if (error || !data?.ok) {
+            toast.warning(`Protocolo salvo, mas não foi possível atualizar a disponibilidade da placa ${plate}.`);
+          }
+        }
+        setDisponibilidades((current) => {
+          const next = { ...current };
+          plates.forEach((plate) => { next[plate] = 'nao'; });
+          return next;
+        });
+      }
 
       let content = '';
       for (const group of groups) {
