@@ -249,13 +249,15 @@ const AuthGate = () => {
         <Route path="/filial/funcionarios/:id" element={<EmployeeDetailPage />} />
         <Route path="/filial/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/filial/aso" element={<ASOPage />} />
-        <Route path="/filial/atestados" element={<AtestadosImportPage />} />
-        <Route path="/filial/protocolo" element={<ProtocoloPage />} />
+        <Route path="/filial/atestados" element={<Navigate to="/filial/documentos" replace />} />
+        <Route path="/filial/pre-cadastro" element={<FilialPreCadastroPage />} />
+        <Route path="/filial/recibos-holerites" element={<FilialRecibosHoleritesPage />} />
         <Route path="/filial/alertas" element={<FilialAlertasPage />} />
         <Route path="/filial/movimento-diario" element={<MovimentoDiarioPage />} />
         <Route path="/filial/apontamento" element={<FilialFechamentoPage />} />
         <Route path="/filial/fechamento" element={<FilialFechamentoPage />} />
         <Route path="/filial/documentos" element={<FilialDocumentosPage />} />
+        <Route path="/filial/protocolo" element={<Navigate to="/filial/recibos-holerites" replace />} />
       </Route>
 
       <Route element={<AlmoxarifadoLayout />}>
