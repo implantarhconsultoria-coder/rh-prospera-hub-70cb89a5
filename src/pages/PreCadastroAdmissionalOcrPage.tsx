@@ -334,7 +334,26 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     }
   };
 
-  const uploadASO = async (file?: File | null) => { if (!file || !form.id) return; const url = await uploadAdmissionFile(file, `aso/${form.id}`); await (supabase as any).from('pre_cadastro_documentos').insert({ pre_cadastro_id: form.id, tipo_documento: 'aso', nome_arquivo: file.name, arquivo_url: url }); await (supabase as any).from('pre_cadastros_admissionais').update({ arquivo_aso_url: url }).eq('id', form.id); setForm(prev => ({ ...prev, arquivo_aso_url: url })); await carregarDocumentos({ ...form, arquivo_aso_url: url }); };
+  const uploadASO = async (file?: File | null) => {
+    if (!file || !form.id) return;
+    const url = await uploadAdmissionFile(file, `aso/${form.id}`);
+    await (supabase as any).from('pre_cadastro_documentos').insert({ pre_cadastro_id: form.id, tipo_documento: 'aso', nome_arquivo: file.name, arquivo_url: url });
+    await (supabase as any).from('pre_cadastros_admissionais').update({ arquivo_aso_url: url }).eq('id', form.id);
+    setForm(prev => ({ ...prev, arquivo_aso_url: url }));
+    await carregarDocumentos({ ...form, arquivo_aso_url: url });
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Sessão administrativa não encontrada.');
+      const response = await fetch('/api/pre-cadastro-contabilidade', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ preCadastroId: form.id }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Falha ao enviar para contabilidade.');
+      toast.success('ASO recebido. Documentação enviada automaticamente à contabilidade.');
+      await carregar();
+    } catch (error: any) {
+      toast.error(`ASO salvo, mas o envio automático à contabilidade falhou: ${error?.message || 'tente novamente'}`);
+    }
+  };
   const uploadToxicologico = async (file?: File | null) => { if (!file || !form.id) return; const url = await uploadAdmissionFile(file, `toxicologico/${form.id}`); await (supabase as any).from('pre_cadastro_documentos').insert({ pre_cadastro_id: form.id, tipo_documento: 'toxicologico', nome_arquivo: file.name, arquivo_url: url }); await (supabase as any).from('pre_cadastros_admissionais').update({ arquivo_toxicologico_url: url, exige_toxicologico: true }).eq('id', form.id); setForm(prev => ({ ...prev, arquivo_toxicologico_url: url, exige_toxicologico: true })); await carregarDocumentos({ ...form, arquivo_toxicologico_url: url, exige_toxicologico: true }); };
 
   const buildGuiaAsoPdf = () => { if (!form.nome || !form.empresa_nome || !form.cpf || !form.funcao) { toast.error('Informe empresa, nome, CPF e funcao antes de gerar a guia ASO.'); return null; } return gerarAutorizacaoExameAdmissionalPdf({ empresa: form.empresa_nome || '', cnpj: form.cnpj || '', nome: form.nome || '', cpf: form.cpf || '', rg: form.rg || '', funcao: form.funcao || '', dataAdmissao: form.data_admissao || '', dataNascimento: form.data_nascimento || '', setorGhe: form.setor_ghe || '', dataExame: new Date().toISOString().slice(0, 10), tipoExame: form.tipo_admissao || 'Admissional', obraLocal: form.obra_local || '', trabalhoAltura: false, espacoConfinado: false, toxicologico: !!form.exige_toxicologico, responsavelContato: form.responsavel_contato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385' }); };
@@ -394,7 +413,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
         <div className="flex gap-2"><Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." /><Button variant="outline" onClick={carregar}><RefreshCw className="w-4 h-4" /></Button></div>
         <Button onClick={novo} className="w-full">Novo pre-cadastro</Button>
         <div className="border-t pt-3 space-y-2"><select value={migrationEmployeeId} onChange={e => setMigrationEmployeeId(e.target.value)} className="w-full border rounded-lg px-3 py-2"><option value="">Funcionario origem</option>{migrationEmployees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}</select><select value={migrationCompanyId} onChange={e => setMigrationCompanyId(e.target.value)} className="w-full border rounded-lg px-3 py-2"><option value="">Empresa destino</option>{migrationDestinationCompanies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>{migrationEmployee && <div className="text-xs text-muted-foreground">Origem: {migrationOriginCompany?.name || '-'}</div>}<Button variant="outline" onClick={prepararMigracaoFuncionario} className="w-full"><ArrowRight className="w-4 h-4 mr-2" />Puxar para pre-ficha</Button></div>
-        <div className="space-y-2 max-h-[62vh] overflow-y-auto">{filtered.map(row => <button key={row.id} onClick={() => setSelectedId(row.id)} className={`w-full text-left rounded-xl border p-3 ${selectedId === row.id ? 'border-primary bg-primary/5' : ''}`}><div className="font-semibold text-sm">{row.nome || 'Sem nome'}</div><div className="text-xs text-muted-foreground">{row.empresa_nome || '-'} - {row.cpf || '-'}</div><Badge variant="outline" className="mt-2 text-[10px]">{statusLabel[row.status] || row.status}</Badge></button>)}</div>
+        <div className="space-y-2 max-h-[62vh] overflow-y-auto">{filtered.map(row => <button key={row.id} data-pre-cadastro-id={row.id} onClick={() => setSelectedId(row.id)} className={`w-full text-left rounded-xl border p-3 ${selectedId === row.id ? 'border-primary bg-primary/5' : ''}`}><div className="font-semibold text-sm">{row.nome || 'Sem nome'}</div><div className="text-xs text-muted-foreground">{row.empresa_nome || '-'} - {row.cpf || '-'}</div><Badge variant="outline" className="mt-2 text-[10px]">{statusLabel[row.status] || row.status}</Badge></button>)}</div>
       </div>
       <div className="card-premium p-5 space-y-5">
         <div className="flex justify-between"><div><h2 className="text-lg font-bold">Conferencia admissional</h2><p className="text-xs text-muted-foreground">Confira dados e documentos antes do envio.</p></div></div>
