@@ -1,6 +1,6 @@
 import type { Employee } from '@/types/database';
 
-export type ApontamentoTipo = 'he50' | 'he100' | 'comissao';
+export type ApontamentoTipo = 'he50' | 'he60' | 'he100' | 'comissao';
 export type ComissaoModo = 'base' | 'final' | 'pendente';
 export type ApontamentoLido = {
   key: string; linha: number; original: string; funcionario: Employee | null; nomeDigitado: string;
@@ -61,9 +61,8 @@ export const interpretarApontamentos = (texto: string, funcionarios: Employee[],
         const found = localizarFuncionario(nomeDigitado, funcionarios);
         const horas = lerHoras(he[2]); const percentual = Number(he[3]);
         return { ...base, nomeDigitado, funcionario: found.funcionario,
-          tipo: percentual === 100 ? 'he100' : 'he50', horas: horas ?? undefined, percentual,
-          erro: found.erro || (horas === null || horas <= 0 ? 'Hora inválida; use 2h30, 2:30 ou 2.30' :
-            percentual !== 100 && percentual !== percentualSemanal ? 'Percentual incompatível com a empresa selecionada' : undefined),
+          tipo: percentual === 100 ? 'he100' : percentual === 60 ? 'he60' : 'he50', horas: horas ?? undefined, percentual,
+          erro: found.erro || (horas === null || horas <= 0 ? 'Hora inválida; use 2h30, 2:30 ou 2.30' : undefined),
         } as ApontamentoLido;
       }
       const com = original.match(/^(.+?)\s+(?:R\$\s*)?(\d[\d.,]*)\s+(?:(comiss[aã]o\s+final|valor\s+final|final|base|a)\s+)?(?:(?:de|a)\s+)?(\d+(?:[,.]\d+)?)\s*%$/i);
