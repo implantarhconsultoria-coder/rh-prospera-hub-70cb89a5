@@ -102,7 +102,7 @@ import { isDirectorRole } from "@/lib/directorPermissions";
 import ExternoLayout from "@/components/ExternoLayout";
 import AguardandoAcesso from "@/components/AguardandoAcesso";
 import {
-  UserCircle, Stethoscope, FileWarning, CalendarDays, FileCheck,
+  UserCircle, Stethoscope, CalendarDays, FileCheck, FileText, UserPlus, Receipt,
   Package, Wrench, Headphones, LayoutDashboard, Bell, Activity, ClipboardCheck,
 } from "lucide-react";
 
@@ -118,12 +118,14 @@ const EXT_ITEMS_OP = [
 
 const EXT_ITEMS_FILIAL = [
   { to: '', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: 'funcionarios', label: 'Funcionarios', icon: UserCircle },
-  { to: 'aviso-ferias', label: 'Aviso de Ferias', icon: CalendarDays },
+  { to: 'funcionarios', label: 'Funcionários', icon: UserCircle },
+  { to: 'pre-cadastro', label: 'Pré-Cadastro', icon: UserPlus },
+  { to: 'documentos', label: 'Documentos', icon: FileText },
+  { to: 'recibos-holerites', label: 'Recibos / Holerites', icon: Receipt },
+  { to: 'aviso-ferias', label: 'Aviso de Férias', icon: CalendarDays },
   { to: 'aso', label: 'ASO', icon: Stethoscope },
-  { to: 'atestados', label: 'Atestados', icon: FileWarning },
   { to: 'alertas', label: 'Alertas', icon: Bell },
-  { to: 'movimento-diario', label: 'Movimento Diario', icon: Activity },
+  { to: 'movimento-diario', label: 'Movimento Diário', icon: Activity },
   { to: 'fechamento', label: 'Apontamento / Fechamento', icon: ClipboardCheck },
 ];
 
