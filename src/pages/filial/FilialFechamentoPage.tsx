@@ -16,6 +16,8 @@ import { obterAtorAtual, registrarAcao } from '@/lib/acoesLog';
 import { registrarAlertaFilial } from '@/lib/alertasFilial';
 import type { MovimentoRow, FechamentoRow, TipoOcorrencia } from '@/lib/movimento';
 
+type GridTipo = TipoOcorrencia | 'comissao';
+
 const GRID_MARK = '__GRADE_FILIAL__';
 const FALTAS_RE = /FALTAS:\s*([^|]+)/i;
 const HOURS_DOC_RE = /DECLARACAO\/ATESTADO HORAS:\s*\+([\d.,]+)h/i;
@@ -63,10 +65,10 @@ const FilialFechamentoPage: React.FC = () => {
   const domingosFeriados = yy && mm ? new Date(yy, mm, 0).getDate() - diasUteis : 0;
   const comissaoPct = getComissaoPercentual(empresaAtual);
 
-  const rowsFor = (employeeId: string, tipo?: TipoOcorrencia) =>
+  const rowsFor = (employeeId: string, tipo?: GridTipo) =>
     movimentos.filter((m) => m.funcionario_id === employeeId && (!tipo || m.tipo === tipo));
 
-  const aggregate = (employeeId: string, tipo: TipoOcorrencia, field: 'quantidade' | 'valor') =>
+  const aggregate = (employeeId: string, tipo: GridTipo, field: 'quantidade' | 'valor') =>
     rowsFor(employeeId, tipo).reduce((sum, row) => sum + Number(row[field] || 0), 0);
 
   const metaRow = (employeeId: string) =>
@@ -81,7 +83,7 @@ const FilialFechamentoPage: React.FC = () => {
     .replace(/^\s*\|\s*|\s*\|\s*$/g, '')
     .trim();
 
-  const saveAggregate = async (employeeId: string, tipo: TipoOcorrencia, desired: number, usaValor = false) => {
+  const saveAggregate = async (employeeId: string, tipo: GridTipo, desired: number, usaValor = false) => {
     if (fechado) return toast.error('Período fechado. Para alterar, solicite reabertura à central.');
     if (!companyId) return;
     const key = `${employeeId}-${tipo}`;
