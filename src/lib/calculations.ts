@@ -50,6 +50,18 @@ export const calcFalta = (salario: number, dias: number) => (salario / 30) * dia
 export const calcAtraso = (salario: number, horas: number) => valorHora(salario) * horas;
 export const calcAdiantamento = (salario: number, pct: number = 40) => salario * (pct / 100);
 
+const sumObservationMarkers = (observacoes: unknown, pattern: RegExp) => {
+  const text = String(observacoes || '');
+  const matches = [...text.matchAll(pattern)];
+  return round2(matches.reduce((sum, match) => sum + (Number(String(match[1] || '').replace(',', '.')) || 0), 0));
+};
+
+export const getHorasAbonadasDocumental = (observacoes: unknown) =>
+  sumObservationMarkers(observacoes, /(?:DECLARACAO\/ATESTADO HORAS|ABONO DOCUMENTAL HORAS):\s*\+([\d.,]+)h/gi);
+
+export const getDiasAbonadosDocumental = (observacoes: unknown) =>
+  sumObservationMarkers(observacoes, /ABONO DOCUMENTAL DIAS:\s*\+([\d.,]+)/gi);
+
 export const getComissaoPercentual = (company?: { codigo?: string; name?: string; city?: string; nome?: string; cidade?: string } | null) => {
   const text = `${company?.codigo || ''} ${company?.name || company?.nome || ''} ${company?.city || company?.cidade || ''}`
     .normalize('NFD')
@@ -184,6 +196,10 @@ export type PayrollBreakdown = {
   dsrComissao: number;
   faltaVal: number;
   atrasoVal: number;
+  diasAbonados: number;
+  horasAbonadas: number;
+  faltasDiasDescontadas: number;
+  atrasoHorasDescontadas: number;
   adicionais: number;
   proventos: number;
   bruto: number;
@@ -251,8 +267,12 @@ export const calcPayrollBreakdown = (
   const dsrComissao = diasUteis > 0 && comissaoVal > 0
     ? round2((comissaoVal / diasUteis) * domingosFeriados)
     : 0;
-  const faltaVal = round2(calcFalta(emp.salarioBase, entry.faltasDias || 0));
-  const atrasoVal = round2(calcAtraso(emp.salarioBase, entry.atrasos || 0));
+  const diasAbonados = getDiasAbonadosDocumental(entry.observacoes);
+  const horasAbonadas = getHorasAbonadasDocumental(entry.observacoes);
+  const faltasDiasDescontadas = round2(Math.max(0, (entry.faltasDias || 0) - diasAbonados));
+  const atrasoHorasDescontadas = round2(Math.max(0, (entry.atrasos || 0) - horasAbonadas));
+  const faltaVal = round2(calcFalta(emp.salarioBase, faltasDiasDescontadas));
+  const atrasoVal = round2(calcAtraso(emp.salarioBase, atrasoHorasDescontadas));
   const adicionais = round2(entry.adicionais || 0);
   const descontosDiversos = round2(entry.descontosDiversos || 0);
   const proventos = round2(emp.salarioBase + insVal + periculosidadeVal + he50Val + he60Val + he100Val + dsrHE + comissaoVal + dsrComissao + adicionais);
@@ -286,6 +306,10 @@ export const calcPayrollBreakdown = (
     dsrComissao,
     faltaVal,
     atrasoVal,
+    diasAbonados,
+    horasAbonadas,
+    faltasDiasDescontadas,
+    atrasoHorasDescontadas,
     adicionais,
     proventos,
     bruto,
@@ -330,8 +354,10 @@ export const calcTotalFuncionario = (emp: Employee, entry: MonthlyEntry, diasUte
   const vtVal = entry.vtAplicado && emp.vtAtivo ? emp.vtDiario * Math.max(0, diasUteis - entry.faltasDias) : 0;
   const beneficios = vrVal + vaVal + vtVal;
 
-  const descontos = calcFalta(emp.salarioBase, entry.faltasDias)
-    + calcAtraso(emp.salarioBase, entry.atrasos)
+  const faltasDiasDescontadas = Math.max(0, entry.faltasDias - getDiasAbonadosDocumental(entry.observacoes));
+  const atrasoHorasDescontadas = Math.max(0, entry.atrasos - getHorasAbonadasDocumental(entry.observacoes));
+  const descontos = calcFalta(emp.salarioBase, faltasDiasDescontadas)
+    + calcAtraso(emp.salarioBase, atrasoHorasDescontadas)
     + entry.descontosDiversos
     + (entry.adiantamento || 0);
 
