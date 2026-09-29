@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import OperadorCodeDialog from '@/components/OperadorCodeDialog';
+import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { toast } from 'sonner';
 
 const rpc = supabase as unknown as {
@@ -52,6 +53,7 @@ const STATUS = {
 const OperacionalDisponibilidadePlacas: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { developerMode } = useDeveloperMode();
   const [rows, setRows] = useState<Row[]>([]);
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(true);
@@ -93,6 +95,10 @@ const OperacionalDisponibilidadePlacas: React.FC = () => {
   const confirmarAjuste = () => {
     if (!selected) return;
     if (motivo.trim().length < 3) return toast.error('Informe o motivo da alteração.');
+    if (developerMode) {
+      void salvarAjuste('');
+      return;
+    }
     setCodigoOpen(true);
   };
 
