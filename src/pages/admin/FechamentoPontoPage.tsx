@@ -74,7 +74,7 @@ const buildObservacoesPonto = (linha: LinhaResumo, anterior?: string) => {
   const resumo =
     `${marcador} ${linha.diasTrabalhados} dia(s) trabalhado(s); ` +
     `${linha.faltas} falta(s); ${roundHours(linha.atrasoTotalMin)}h atraso; ` +
-    `${roundHours(linha.horasExtrasMin)}h HE50; ${linha.inconsistencias} pendencia(s).`;
+    `${roundHours(linha.he50Min)}h HE50; ${roundHours(linha.he60Min)}h HE60; ${roundHours(linha.he100Min)}h HE100; ${linha.inconsistencias} pendencia(s).`;
   const limpo = String(anterior || '').replace(/\n?\[PONTO_MECANICOS\][^\n]*/g, '').trim();
   return [limpo, resumo].filter(Boolean).join('\n');
 };
@@ -283,7 +283,9 @@ const FechamentoPontoPage: React.FC = () => {
         competencia,
         faltas_dias: linha.faltas,
         atrasos: roundHours(linha.atrasoTotalMin),
-        he50: roundHours(linha.horasExtrasMin),
+        he50: roundHours(linha.he50Min),
+        he60: roundHours(linha.he60Min),
+        he100: roundHours(linha.he100Min),
         adiantamento: base.adiantamento,
         vr_aplicado: base.vrAplicado,
         vr_dias: base.vrDias,
@@ -344,6 +346,9 @@ const FechamentoPontoPage: React.FC = () => {
       faltas: 0,
       atrasoMin: 0,
       heMin: 0,
+      he50Min: 0,
+      he60Min: 0,
+      he100Min: 0,
       hfMin: 0,
       saldoMin: 0,
       inconsist: 0,
@@ -353,6 +358,9 @@ const FechamentoPontoPage: React.FC = () => {
       t.faltas += l.faltas;
       t.atrasoMin += l.atrasoTotalMin;
       t.heMin += l.horasExtrasMin;
+      t.he50Min += l.he50Min;
+      t.he60Min += l.he60Min;
+      t.he100Min += l.he100Min;
       t.hfMin += l.horasFaltantesMin;
       t.saldoMin += l.saldoMin;
       t.inconsist += l.inconsistencias + (l.employeeId ? 0 : 1);
@@ -444,7 +452,7 @@ const FechamentoPontoPage: React.FC = () => {
             </Card>
             <Card className="p-4">
               <div className="text-xs text-muted-foreground uppercase">Horas Extras</div>
-              <p className="text-2xl font-bold font-display mt-1 text-success">{formatarMinutos(totais.heMin)}</p>
+              <p className="text-sm font-bold font-display mt-1 text-success">50% {formatarMinutos(totais.he50Min)} · 60% {formatarMinutos(totais.he60Min)} · 100% {formatarMinutos(totais.he100Min)}</p>
             </Card>
             <Card className="p-4">
               <div className="text-xs text-muted-foreground uppercase">Horas Faltantes</div>
@@ -476,7 +484,9 @@ const FechamentoPontoPage: React.FC = () => {
                     'Saída',
                     'Faltas',
                     'Atraso',
-                    'HE',
+                    'HE 50%',
+                    'HE 60%',
+                    'HE 100%',
                     'Pendências',
                   ].map((h) => (
                     <th key={h} className="px-2 py-3 text-left text-xs font-medium text-muted-foreground uppercase whitespace-nowrap">
@@ -497,7 +507,9 @@ const FechamentoPontoPage: React.FC = () => {
                     <td className="px-2 py-2 text-xs">{l.saidaCount || '-'}</td>
                     <td className="px-2 py-2 text-xs text-destructive">{l.faltas || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.atrasoTotalMin > 0 ? formatarMinutos(l.atrasoTotalMin) : '-'}</td>
-                    <td className="px-2 py-2 text-xs text-success">{l.horasExtrasMin > 0 ? formatarMinutos(l.horasExtrasMin) : '-'}</td>
+                    <td className="px-2 py-2 text-xs text-success">{l.he50Min > 0 ? formatarMinutos(l.he50Min) : '-'}</td>
+                    <td className="px-2 py-2 text-xs text-success">{l.he60Min > 0 ? formatarMinutos(l.he60Min) : '-'}</td>
+                    <td className="px-2 py-2 text-xs text-success">{l.he100Min > 0 ? formatarMinutos(l.he100Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs">
                       {l.pendencias.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -513,7 +525,7 @@ const FechamentoPontoPage: React.FC = () => {
                 ))}
                 {linhas.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-2 py-8 text-center text-muted-foreground text-sm">
+                    <td colSpan={13} className="px-2 py-8 text-center text-muted-foreground text-sm">
                       Nenhum mecânico vinculado encontrado para esta seleção.
                     </td>
                   </tr>
@@ -523,7 +535,7 @@ const FechamentoPontoPage: React.FC = () => {
           </Card>
 
           <p className="text-xs text-muted-foreground italic">
-            O fechamento grava automaticamente faltas, atrasos e HE 50% em lançamentos mensais, usando o mesmo fechamento geral dos funcionários.
+            O fechamento grava automaticamente faltas, atrasos e HE 50% / 60% / 100% em lançamentos mensais, usando o mesmo fechamento geral dos funcionários.
           </p>
         </>
       )}
