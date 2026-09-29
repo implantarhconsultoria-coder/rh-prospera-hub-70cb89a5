@@ -43,10 +43,36 @@ interface AtestadoStaging {
   aplicarVR: boolean;
   aplicarVT: boolean;
   descricao?: string;
+  classificacao?: string;
+  dataDocumento?: string;
+  horaInicio?: string;
+  horaFim?: string;
+  horasJustificadas?: number;
+  acaoPonto?: 'abonar_dia' | 'abonar_intervalo' | 'nao_abonar' | 'revisar';
+  parecer?: string;
 }
 
 const onlyDigits = (s: string) => (s || '').replace(/\D/g, '');
-const TIPOS_DOC = ['Atestado Médico', 'Comprovante Comum', 'Declaração', 'Recibo', 'Receita Médica', 'Outros'];
+const TIPOS_DOC = ['Atestado Médico', 'Declaração de Comparecimento', 'Comparecimento Judicial', 'Documento de Identidade', 'Comprovante Comum', 'Recibo', 'Receita Médica', 'Outros'];
+
+const tipoLabel = (tipo: string) => ({
+  atestado_medico: 'Atestado Médico',
+  declaracao_comparecimento: 'Declaração de Comparecimento',
+  comparecimento_judicial: 'Comparecimento Judicial',
+  documento_identidade: 'Documento de Identidade',
+  recibo: 'Recibo',
+  receita_medica: 'Receita Médica',
+  outro: 'Outros',
+} as Record<string, string>)[tipo] || 'Outros';
+
+const pontoStatusLabel = (acao?: string) => ({
+  abonar_dia: 'ABONO DE DIA',
+  abonar_intervalo: 'ABONO DE HORAS',
+  nao_abonar: 'SEM ABONO',
+  revisar: 'REVISAR',
+} as Record<string, string>)[acao || ''] || 'REVISAR';
+
+const formatHours = (value: number) => Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 const AtestadosImportPage: React.FC = () => {
   const { employees, companies, session } = useApp();
@@ -94,7 +120,7 @@ const AtestadosImportPage: React.FC = () => {
       setStaging(prev => [...prev, {
         fileName: file.name, fileUrl: '', fileSize: file.size,
         status: 'subindo', aplicarVR: true, aplicarVT: true,
-        ehAtestado: true, tipoDocumento: 'Atestado Médico',
+        ehAtestado: false, tipoDocumento: 'Comprovante Comum', acaoPonto: 'revisar',
       }]);
 
       const up = await supabase.storage.from('atestados').upload(path, file, { upsert: false });
@@ -121,28 +147,38 @@ const AtestadosImportPage: React.FC = () => {
           dataUrl = await fileToDataUrl(file);
         }
 
-        const { data, error } = await supabase.functions.invoke('ocr-atestado', { body: { dataUrl } });
+        const { data, error } = await supabase.functions.invoke('ocr-documento-ponto', { body: { dataUrl } });
         if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Falha OCR');
 
         const ext = data.data;
         const emp = matchFuncionario({ funcionario_nome: ext.funcionario_nome, cpf: ext.cpf });
         const empresa = emp ? companies.find(c => c.id === emp.companyId) : undefined;
+        const classificacao = String(ext.tipo_documento || 'outro');
+        const ehAtestado = classificacao === 'atestado_medico';
 
         setStaging(prev => prev.map(s => s.fileUrl === fileUrl ? {
           ...s,
           status: 'ok',
-          ehAtestado: true,
-          tipoDocumento: 'Atestado Médico',
+          ehAtestado,
+          classificacao,
+          tipoDocumento: tipoLabel(classificacao),
           funcionarioId: emp?.id,
           funcionarioNome: ext.funcionario_nome || emp?.name || '',
           empresaNome: empresa?.name || '',
           cpf: ext.cpf || '',
-          dataInicio: ext.data_inicio || '',
-          dataFim: ext.data_fim || '',
-          diasCobertos: Number(ext.dias_cobertos) || 1,
+          dataDocumento: ext.data_documento || ext.data_inicio || '',
+          dataInicio: ext.data_inicio || ext.data_documento || '',
+          dataFim: ext.data_fim || ext.data_inicio || ext.data_documento || '',
+          diasCobertos: Number(ext.dias_cobertos) || (ehAtestado ? 1 : 0),
+          horaInicio: ext.hora_inicio || '',
+          horaFim: ext.hora_fim || '',
+          horasJustificadas: Number(ext.horas_justificadas) || 0,
+          acaoPonto: ext.acao_ponto || 'revisar',
+          parecer: ext.parecer || '',
           cid: ext.cid || '',
           medico: ext.medico || '',
           crm: ext.crm || '',
+          descricao: ext.motivo || '',
           textoBruto: ext.texto_bruto || '',
           confianca: Number(ext.confianca) || 0,
         } : s));
@@ -159,8 +195,11 @@ const AtestadosImportPage: React.FC = () => {
           funcionarioId: empPorNome?.id,
           funcionarioNome: empPorNome?.name || '',
           empresaNome: empresa?.name || '',
+          dataDocumento: new Date().toISOString().slice(0, 10),
           dataInicio: new Date().toISOString().slice(0, 10),
-          diasCobertos: 1,
+          diasCobertos: 0,
+          acaoPonto: 'revisar',
+          parecer: 'Documento não lido automaticamente. Necessária conferência manual antes de qualquer abono.',
         } : s));
       }
     }
@@ -185,11 +224,28 @@ const AtestadosImportPage: React.FC = () => {
 
       const atestadosRows: any[] = [];
       const docsRows: any[] = [];
+      const pointActions: Array<{
+        funcionarioId: string;
+        companyId: string;
+        competencia: string;
+        acao: AtestadoStaging['acaoPonto'];
+        horas: number;
+        dias: number;
+        parecer: string;
+        fileName: string;
+      }> = [];
 
       for (const v of validos) {
         const emp = employees.find(e => e.id === v.funcionarioId);
         const company = emp ? companies.find(c => c.id === emp.companyId) : undefined;
-        const competencia = (v.dataInicio || new Date().toISOString().slice(0, 10)).slice(0, 7);
+        const dataBase = v.dataInicio || v.dataDocumento || new Date().toISOString().slice(0, 10);
+        const competencia = dataBase.slice(0, 7);
+        const parecerBase = v.parecer || (
+          v.acaoPonto === 'nao_abonar'
+            ? `${v.tipoDocumento}: documento arquivado sem abono automático.`
+            : `${v.tipoDocumento}: documento arquivado para conferência.`
+        );
+        const parecer = `[DOC:${v.fileName}] PARECER DOCUMENTO: ${parecerBase}`;
 
         if (v.ehAtestado) {
           atestadosRows.push({
@@ -200,7 +256,7 @@ const AtestadosImportPage: React.FC = () => {
             competencia,
             data_inicio: v.dataInicio || null,
             data_fim: v.dataFim || null,
-            dias_cobertos: v.diasCobertos || 1,
+            dias_cobertos: Math.max(1, v.diasCobertos || 1),
             cid: v.cid || '',
             medico: v.medico || '',
             crm: v.crm || '',
@@ -218,20 +274,40 @@ const AtestadosImportPage: React.FC = () => {
 
         docsRows.push({
           funcionario_id: v.funcionarioId!,
-          funcionario_nome: emp?.name || '',
+          funcionario_nome: emp?.name || v.funcionarioNome || '',
           company_id: emp?.companyId,
           empresa_nome: company?.name || '',
-          tipo_documento: v.ehAtestado ? 'Atestado Médico' : v.tipoDocumento,
+          tipo_documento: v.tipoDocumento,
+          categoria: v.tipoDocumento.toUpperCase(),
           competencia,
           descricao: v.ehAtestado
             ? `Atestado ${v.diasCobertos || 1} dia(s)${v.cid ? ` — CID ${v.cid}` : ''}${v.medico ? ` — Dr(a). ${v.medico}` : ''}`
-            : (v.descricao || `${v.tipoDocumento} arquivado manualmente`),
+            : (v.descricao || v.tipoDocumento),
+          observacao: parecer,
           arquivo_url: v.fileUrl,
+          nome_arquivo: v.fileName,
+          data_documento: `${v.dataDocumento || dataBase}T12:00:00-03:00`,
+          origem: 'upload_manual',
+          storage_bucket: 'atestados',
+          storage_path: '',
           gerado_por_user_id: userId,
           gerado_por_nome: userName,
           status_envio: 'arquivado',
           unidade: company?.name || '',
         });
+
+        if (emp?.companyId) {
+          pointActions.push({
+            funcionarioId: v.funcionarioId!,
+            companyId: emp.companyId,
+            competencia,
+            acao: v.acaoPonto || 'revisar',
+            horas: Math.max(0, Number(v.horasJustificadas) || 0),
+            dias: Math.max(0, Number(v.diasCobertos) || 0),
+            parecer,
+            fileName: v.fileName,
+          });
+        }
       }
 
       if (atestadosRows.length) {
@@ -239,7 +315,53 @@ const AtestadosImportPage: React.FC = () => {
         if (errA) throw errA;
       }
       if (docsRows.length) {
-        await supabase.from('documentos_funcionario').insert(docsRows);
+        const { error: errD } = await supabase.from('documentos_funcionario').insert(docsRows);
+        if (errD) throw errD;
+      }
+
+      for (const action of pointActions) {
+        const { data: current, error: loadError } = await supabase
+          .from('lancamentos_mensais')
+          .select('id,observacoes,bloqueado')
+          .eq('funcionario_id', action.funcionarioId)
+          .eq('competencia', action.competencia)
+          .is('apagado_em', null)
+          .maybeSingle();
+        if (loadError) throw loadError;
+        if (current?.bloqueado) continue;
+
+        const existing = String(current?.observacoes || '');
+        if (existing.includes(`[DOC:${action.fileName}]`)) continue;
+
+        const markers: string[] = [];
+        if (action.acao === 'abonar_intervalo' && action.horas > 0) {
+          markers.push(`DECLARACAO/ATESTADO HORAS: +${formatHours(action.horas)}h`);
+        }
+        if (action.acao === 'abonar_dia' && action.dias > 0) {
+          markers.push(`ABONO DOCUMENTAL DIAS: +${formatHours(action.dias)}`);
+        }
+        if (action.acao === 'revisar') markers.push('REVISÃO DOCUMENTAL PENDENTE');
+        if (action.acao === 'nao_abonar') markers.push('SEM ABONO AUTOMÁTICO');
+
+        const observacoes = [existing, ...markers, action.parecer].filter(Boolean).join(' | ');
+        if (current?.id) {
+          const { error: updateError } = await supabase
+            .from('lancamentos_mensais')
+            .update({ observacoes } as any)
+            .eq('id', current.id);
+          if (updateError) throw updateError;
+        } else {
+          const { error: insertError } = await supabase.from('lancamentos_mensais').insert({
+            funcionario_id: action.funcionarioId,
+            company_id: action.companyId,
+            competencia: action.competencia,
+            observacoes,
+            origem: 'consolidado',
+            status_conferencia: action.acao === 'revisar' ? 'divergente' : 'pendente',
+            user_id: userId,
+          } as any);
+          if (insertError) throw insertError;
+        }
       }
 
       toast.success(`${validos.length} documento(s) arquivado(s).`);
@@ -326,7 +448,18 @@ const AtestadosImportPage: React.FC = () => {
               )}
 
               {(s.status === 'ok' || s.status === 'manual') && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                <>
+                  <div className="mb-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{pontoStatusLabel(s.acaoPonto)}</Badge>
+                      {s.horasJustificadas ? <span className="text-xs text-foreground">{formatHours(s.horasJustificadas)}h justificadas</span> : null}
+                      {s.diasCobertos && s.acaoPonto === 'abonar_dia' ? <span className="text-xs text-foreground">{s.diasCobertos} dia(s) justificado(s)</span> : null}
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      {s.parecer || 'Documento arquivado. Sem decisão automática de abono.'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
                   <div className="lg:col-span-2">
                     <label className="text-[10px] uppercase text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" />Funcionário *</label>
                     <select value={s.funcionarioId || ''} onChange={e => updateRow(i, { funcionarioId: e.target.value || undefined })}
@@ -347,7 +480,13 @@ const AtestadosImportPage: React.FC = () => {
                     <div className="flex gap-2 items-center">
                       <select value={s.tipoDocumento} onChange={e => {
                         const t = e.target.value;
-                        updateRow(i, { tipoDocumento: t, ehAtestado: t === 'Atestado Médico' });
+                        updateRow(i, {
+                          tipoDocumento: t,
+                          ehAtestado: t === 'Atestado Médico',
+                          classificacao: undefined,
+                          acaoPonto: 'revisar',
+                          parecer: 'Tipo ajustado manualmente. Conferir antes de qualquer abono.',
+                        });
                       }} className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background">
                         {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
@@ -395,6 +534,7 @@ const AtestadosImportPage: React.FC = () => {
                     </div>
                   )}
                 </div>
+                </>
               )}
             </Card>
           ))}
