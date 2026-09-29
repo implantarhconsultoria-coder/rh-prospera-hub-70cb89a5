@@ -17,6 +17,8 @@ import OperadoresOperacaoPanel from '@/components/OperadoresOperacaoPanel';
 import OperacionalChamadoDetailDialog from '@/components/operacional/OperacionalChamadoDetailDialog';
 import OperacionalMovimentacoesPanel from '@/components/operacional/OperacionalMovimentacoesPanel';
 import OperacionalClientesPanel from '@/components/operacional/OperacionalClientesPanel';
+import OperacionalDisponibilidadePlacas from '@/components/operacional/OperacionalDisponibilidadePlacas';
+import { formalizarOperacaoPorEmail } from '@/lib/operacionalFormalizacao';
 import { toast } from 'sonner';
 
 const rpc = supabase as unknown as {
@@ -60,7 +62,7 @@ const emptyChamadoForm = {
   solicitante_contato: '',
 };
 
-type Tab = 'clientes' | 'novo' | 'lista' | 'movimentacoes' | 'operadores';
+type Tab = 'clientes' | 'disponibilidade' | 'novo' | 'lista' | 'movimentacoes' | 'operadores';
 
 const DespacharChamadoPage: React.FC = () => {
   const { session, userRoles } = useApp();
@@ -253,13 +255,18 @@ const DespacharChamadoPage: React.FC = () => {
         toast.error(data?.error || error?.message || 'Código inválido ou chamado não autorizado.');
         return;
       }
-      toast.success(`Chamado #${data.numero} enviado por ${data.operador}.`);
+      toast.success(`Ocorrência #${data.numero} enviada por ${data.operador}.`);
+      try {
+        await formalizarOperacaoPorEmail({ type: 'ocorrencia_aberta', id: data.id });
+      } catch (mailError: any) {
+        toast.warning(mailError?.message || 'Ocorrência registrada; formalização por e-mail ficou pendente.');
+      }
       setForm(emptyChamadoForm);
       setCodigoOpen(false);
       setPendingAction(null);
       await carregar();
       setTab('lista');
-    }, 'Confirmar abertura do chamado', 'Informe seu código. Seu nome, data e hora ficarão registrados como responsável pela abertura.');
+    }, 'Confirmar abertura da ocorrência', 'Informe seu código. Seu nome, data e hora ficarão registrados como responsável pela abertura.');
   };
 
   const nomeTecnico = (funcionarioId: string | null) =>
@@ -289,9 +296,15 @@ const DespacharChamadoPage: React.FC = () => {
       return;
     }
 
+    const motivo = window.prompt('Motivo obrigatório da alteração:')?.trim();
+    if (!motivo || motivo.length < 3) {
+      toast.error('A alteração só pode ser salva com o motivo registrado.');
+      return;
+    }
+
     exigirOperador(async (codigo) => {
       setSavingEdit(true);
-      const { data, error } = await rpc.rpc('operacional_editar_chamado', {
+      const { data, error } = await rpc.rpc('operacional_editar_chamado_auditado', {
         p_codigo_operador: codigo,
         p_chamado_id: editando.id,
         p_colaborador_id: editForm.colaborador_id,
@@ -300,19 +313,25 @@ const DespacharChamadoPage: React.FC = () => {
         p_tipo_servico: editForm.tipo_servico.trim(),
         p_itens_previstos: editForm.itens_previstos.trim() || null,
         p_observacoes: editForm.observacoes.trim() || null,
+        p_motivo: motivo,
       });
       setSavingEdit(false);
       if (error || !data?.ok) {
         toast.error(data?.error || error?.message || 'Código inválido ou alteração não autorizada.');
         return;
       }
-      toast.success(`Chamado atualizado por ${data.operador}.`);
+      toast.success(`Ocorrência atualizada por ${data.operador}. Motivo registrado.`);
+      try {
+        await formalizarOperacaoPorEmail({ type: 'ocorrencia_alterada', id: editando.id });
+      } catch (mailError: any) {
+        toast.warning(mailError?.message || 'Alteração registrada; formalização por e-mail ficou pendente.');
+      }
       setEditando(null);
       setEditForm(emptyChamadoForm);
       setCodigoOpen(false);
       setPendingAction(null);
       await carregar();
-    }, 'Confirmar alteração', 'Informe seu código de operador. A alteração será registrada na linha do tempo do chamado.');
+    }, 'Confirmar alteração', 'Informe seu código de operador. A alteração e o motivo ficarão preservados na linha do tempo.');
   };
 
   const cancelarChamado = (chamado: any) => {
@@ -329,11 +348,16 @@ const DespacharChamadoPage: React.FC = () => {
         toast.error(data?.error || error?.message || 'Código inválido ou cancelamento não autorizado.');
         return;
       }
-      toast.success(`Chamado cancelado por ${data.operador}.`);
+      toast.success(`Ocorrência cancelada por ${data.operador}.`);
+      try {
+        await formalizarOperacaoPorEmail({ type: 'ocorrencia_cancelada', id: chamado.id });
+      } catch (mailError: any) {
+        toast.warning(mailError?.message || 'Cancelamento registrado; formalização por e-mail ficou pendente.');
+      }
       setCodigoOpen(false);
       setPendingAction(null);
       await carregar();
-    }, 'Confirmar cancelamento', 'O chamado não será apagado. O cancelamento, operador, data e hora ficarão no histórico.');
+    }, 'Confirmar cancelamento', 'A ocorrência não será apagada. Motivo, operador, data e hora ficarão no histórico.');
   };
 
   const selecionarContrato = (contratoId: string) => {
@@ -342,8 +366,9 @@ const DespacharChamadoPage: React.FC = () => {
 
   const tabs: Array<{ key: Tab; label: string; alert?: number }> = [
     { key: 'clientes', label: 'Clientes' },
-    { key: 'novo', label: 'Novo chamado' },
-    { key: 'lista', label: 'Chamados', alert: metricas.adicionais },
+    { key: 'disponibilidade', label: 'Disponibilidade de placas' },
+    { key: 'novo', label: 'Nova ocorrência' },
+    { key: 'lista', label: 'Ocorrências', alert: metricas.adicionais },
     { key: 'movimentacoes', label: 'Movimentações' },
     ...(isAdmin ? [{ key: 'operadores' as Tab, label: 'Operadores' }] : []),
   ];
@@ -401,10 +426,12 @@ const DespacharChamadoPage: React.FC = () => {
         />
       )}
 
+      {tab === 'disponibilidade' && <OperacionalDisponibilidadePlacas />}
+
       {tab === 'novo' && (
         <div className="card-premium space-y-4 p-5">
           <div>
-            <h2 className="font-bold">Novo chamado de manutenção</h2>
+            <h2 className="font-bold">Nova ocorrência de manutenção</h2>
             <p className="text-xs text-muted-foreground">Registre quem pediu no cliente e depois identifique o operador TOPAC pelo código individual.</p>
           </div>
 
@@ -479,7 +506,7 @@ const DespacharChamadoPage: React.FC = () => {
 
           <Button className="h-12 w-full rounded-xl text-base font-semibold" onClick={enviar} disabled={loading}>
             {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Send className="mr-2 h-5 w-5" />}
-            Enviar chamado para o mecânico
+            Enviar ocorrência para o mecânico
           </Button>
         </div>
       )}
@@ -493,7 +520,7 @@ const DespacharChamadoPage: React.FC = () => {
             </div>
           )}
 
-          {chamados.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhum chamado</p> : chamados.map((c) => {
+          {chamados.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma ocorrência</p> : chamados.map((c) => {
             const temAdicional = adicionaisPendentes.some((a) => a.chamado_id === c.id);
             return (
               <div key={c.id} className={`card-premium space-y-2 p-4 ${temAdicional ? 'border-amber-300 bg-amber-50/40' : ''}`}>
@@ -533,7 +560,7 @@ const DespacharChamadoPage: React.FC = () => {
 
       <Dialog open={!!editando} onOpenChange={(open) => { if (!open && !savingEdit) setEditando(null); }}>
         <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Editar chamado {editando?.numero ? `#${editando.numero}` : ''}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Editar ocorrência {editando?.numero ? `#${editando.numero}` : ''}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <Select value={editForm.colaborador_id} onValueChange={(v) => setEditForm((f) => ({ ...f, colaborador_id: v }))}>
               <SelectTrigger><SelectValue placeholder="Selecionar mecânico / técnico" /></SelectTrigger>
