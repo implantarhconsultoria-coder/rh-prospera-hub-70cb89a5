@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import { useOperatorBootstrap } from '@/hooks/useOperatorBootstrap';
+import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import OperadorCodeDialog from '@/components/OperadorCodeDialog';
 import OperadoresOperacaoPanel from '@/components/OperadoresOperacaoPanel';
 import OperacionalChamadoDetailDialog from '@/components/operacional/OperacionalChamadoDetailDialog';
@@ -71,6 +72,7 @@ const DespacharChamadoPage: React.FC = () => {
   const isAdmin = userRoles.includes('admin') || userRoles.includes('diretor_geral');
   const canBootstrapOperator = Boolean(session?.user?.id) && (isAdmin || userRoles.includes('operacional'));
   const operatorBootstrap = useOperatorBootstrap('operacional', canBootstrapOperator);
+  const { developerMode } = useDeveloperMode();
 
   const [tab, setTab] = useState<Tab>('clientes');
   const [busca, setBusca] = useState('');
@@ -202,6 +204,10 @@ const DespacharChamadoPage: React.FC = () => {
   ) => {
     if (!session?.user?.id) {
       toast.error('Para registrar operações, faça o primeiro acesso pelo e-mail autorizado e mantenha esta estação conectada.');
+      return;
+    }
+    if (developerMode) {
+      void action('');
       return;
     }
     setPendingAction(() => action);
@@ -384,8 +390,8 @@ const DespacharChamadoPage: React.FC = () => {
         </div>
         {operatorBootstrap.operador && (
           <div className="rounded-xl border bg-card px-3 py-2 text-right">
-            <div className="flex items-center justify-end gap-1 text-xs font-bold"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Estação autorizada</div>
-            <div className="text-[10px] text-muted-foreground">Operações exigem código individual</div>
+            <div className="flex items-center justify-end gap-1 text-xs font-bold"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> {developerMode ? 'Modo desenvolvedor' : 'Estação autorizada'}</div>
+            <div className="text-[10px] text-muted-foreground">{developerMode ? 'Acesso administrativo sem bloqueio de operador' : 'Operações exigem código individual'}</div>
           </div>
         )}
       </div>
