@@ -40,7 +40,7 @@ type MaterialDraft = { descricao: string; quantidade: string; unidade: string };
 const ITENS_PREDEFINIDOS = ["Freios", "Pneus", "Óleo / filtros", "Luzes / elétrica", "Suspensão", "Motor", "Arrefecimento", "Outros"];
 
 const STATUS_LABELS: Record<string, string> = {
-  pendente: "Novo chamado",
+  pendente: "Nova ocorrência",
   aceito: "Aceito",
   em_deslocamento: "A caminho",
   no_local: "No cliente",
@@ -110,7 +110,7 @@ export default function ChamadosPage() {
       }
     } catch (error) {
       console.error("Falha inesperada nos chamados do app mecânico:", error);
-      setErro("Não foi possível carregar as manutenções agora.");
+      setErro("Não foi possível carregar as ocorrências agora.");
       setLista([]);
     } finally {
       if (!silent) setLoading(false);
@@ -198,17 +198,17 @@ export default function ChamadosPage() {
       const result = data as RpcResult<Chamado> | null;
       if (error || !result?.ok) {
         toast.error(result?.error === "sequencia_status_invalida"
-          ? "O chamado mudou de etapa. Atualize e tente novamente."
+          ? "A ocorrência mudou de etapa. Atualize e tente novamente."
           : result?.error || error?.message || "Erro ao atualizar chamado");
         return;
       }
 
       const mensagem: Record<string, string> = {
-        aceitar: "Chamado aceito. A Central Operacional já foi atualizada.",
+        aceitar: "Ocorrência aceita. A Central Operacional já foi atualizada.",
         deslocamento: "Deslocamento iniciado.",
         chegada: "Chegada ao cliente registrada com localização.",
         iniciar: "Serviço iniciado com localização registrada.",
-        finalizar: "Chamado finalizado. Serviço e localização registrados.",
+        finalizar: "Ocorrência finalizada. Serviço e localização registrados.",
       };
       toast.success(mensagem[acaoAtual]);
       setAberto(null);
@@ -284,7 +284,7 @@ export default function ChamadosPage() {
 
   const proximaAcao = (status: string) => {
     switch (status) {
-      case "pendente": return { label: "ACEITAR CHAMADO", acao: "aceitar" as const, icon: CheckCircle2 };
+      case "pendente": return { label: "ACEITAR OCORRÊNCIA", acao: "aceitar" as const, icon: CheckCircle2 };
       case "aceito": return { label: "ESTOU A CAMINHO", acao: "deslocamento" as const, icon: Truck };
       case "em_deslocamento": return { label: "CHEGUEI NO CLIENTE", acao: "chegada" as const, icon: MapPin };
       case "no_local": return { label: "INICIAR SERVIÇO", acao: "iniciar" as const, icon: Wrench };
@@ -306,8 +306,8 @@ export default function ChamadosPage() {
               <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white">{novos.length}</span>
             </span>
             <div className="flex-1">
-              <p className="font-black text-amber-100">Novo chamado recebido</p>
-              <p className="mt-1 text-xs text-amber-200/80">Este aviso permanece até você aceitar o chamado.</p>
+              <p className="font-black text-amber-100">Nova ocorrência recebido</p>
+              <p className="mt-1 text-xs text-amber-200/80">Este aviso permanece até você aceitar a ocorrência.</p>
               <Button size="sm" className="mt-3 bg-amber-500 font-black text-black hover:bg-amber-400" onClick={() => setAberto(novos[0].id)}>
                 Ver chamado
               </Button>
@@ -320,7 +320,7 @@ export default function ChamadosPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-fuchsia-500/10 text-fuchsia-400"><Wrench className="h-6 w-6" /></span>
-            <div><h1 className="font-bold">Manutenção</h1><p className="text-xs text-zinc-400">Chamados, atendimento e serviços adicionais</p></div>
+            <div><h1 className="font-bold">Manutenção</h1><p className="text-xs text-zinc-400">Ocorrências, atendimento e serviços adicionais</p></div>
           </div>
           <Button size="sm" onClick={() => setNovoAberto((value) => !value)}><Plus className="mr-1 h-4 w-4" /> Nova</Button>
         </div>
@@ -330,7 +330,7 @@ export default function ChamadosPage() {
         <Card className="space-y-4 p-5">
           <div>
             <p className="font-semibold">Nova solicitação própria</p>
-            <p className="text-xs text-muted-foreground">Use quando você identificar uma necessidade de manutenção. Chamados enviados pelo Operacional aparecem automaticamente abaixo.</p>
+            <p className="text-xs text-muted-foreground">Use quando você identificar uma necessidade de manutenção. Ocorrências enviadas pelo Operacional aparecem automaticamente abaixo.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {ITENS_PREDEFINIDOS.map((item) => (
@@ -341,7 +341,7 @@ export default function ChamadosPage() {
           <Textarea placeholder="Descrição livre, sintomas, ruídos, peças ou qualquer informação importante" value={novaObs} onChange={(event) => setNovaObs(event.target.value)} rows={4} />
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" onClick={() => { setNovoAberto(false); setTipoServico(""); setItens([]); setNovaObs(""); }} disabled={acting}>Cancelar</Button>
-            <Button onClick={() => void criarChamado()} disabled={acting}>{acting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Abrir solicitação"}</Button>
+            <Button onClick={() => void criarChamado()} disabled={acting}>{acting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Abrir ocorrência"}</Button>
           </div>
         </Card>
       )}
@@ -353,7 +353,7 @@ export default function ChamadosPage() {
           <Button variant="outline" onClick={() => void carregar()}><RotateCcw className="mr-2 h-4 w-4" /> Tentar novamente</Button>
         </Card>
       ) : lista.length === 0 ? (
-        <Card className="p-6 text-center text-muted-foreground">Nenhum chamado de manutenção.</Card>
+        <Card className="p-6 text-center text-muted-foreground">Nenhuma ocorrência de manutenção.</Card>
       ) : (
         <div className="space-y-3">
           {lista.map((c) => {
@@ -412,7 +412,7 @@ export default function ChamadosPage() {
                   <div className="space-y-3 rounded-xl border border-amber-400/40 bg-amber-500/5 p-4">
                     <div>
                       <p className="font-black text-amber-700">Adicional encontrado no atendimento</p>
-                      <p className="text-xs text-muted-foreground">Ao salvar, o Operacional recebe o alerta dentro deste mesmo chamado.</p>
+                      <p className="text-xs text-muted-foreground">Ao salvar, o Operacional recebe o alerta dentro desta mesma ocorrência.</p>
                     </div>
                     <Textarea placeholder="O que foi encontrado além do solicitado? *" value={adicionalProblema} onChange={(e) => setAdicionalProblema(e.target.value)} rows={2} />
                     <Textarea placeholder="O que você fez nesse serviço adicional? *" value={adicionalExecutado} onChange={(e) => setAdicionalExecutado(e.target.value)} rows={2} />
@@ -446,7 +446,7 @@ export default function ChamadosPage() {
                 {!isOpen && c.status !== "concluido" && c.status !== "cancelado" && (
                   <Button size="sm" variant="outline" className="w-full" onClick={() => setAberto(c.id)}>
                     {c.status === "pendente" ? <BellRing className="mr-2 h-4 w-4" /> : <Wrench className="mr-2 h-4 w-4" />}
-                    {c.status === "pendente" ? "Abrir novo chamado" : "Continuar atendimento"}
+                    {c.status === "pendente" ? "Abrir ocorrência" : "Continuar atendimento"}
                   </Button>
                 )}
 
