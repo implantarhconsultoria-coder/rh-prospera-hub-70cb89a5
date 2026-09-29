@@ -50,6 +50,9 @@ type LegacyAcessoRow = {
   cpf_clean: string;
   pin: string;
   email: string | null;
+  email_corporativo?: string | null;
+  telefone?: string | null;
+  ultima_validacao_email_em?: string | null;
   empresa: string | null;
   filial: string | null;
   funcao: string | null;
@@ -330,7 +333,7 @@ export default function AcessoExternoPage() {
     const { data, error } = await supabase
       .from("acessos_externos" as any)
       .select(
-        "id,nome,cpf_clean,pin,email,empresa,filial,funcao,modulo,perfil_acesso,status,acesso_liberado,ativo,observacoes",
+        "id,nome,cpf_clean,pin,email,email_corporativo,telefone,ultima_validacao_email_em,empresa,filial,funcao,modulo,perfil_acesso,status,acesso_liberado,ativo,observacoes",
       )
       .eq("cpf_clean", cpfDigits);
 
@@ -378,7 +381,7 @@ export default function AcessoExternoPage() {
     const { data, error } = await supabase
       .from("acessos_externos" as any)
       .select(
-        "id,nome,cpf_clean,pin,email,empresa,filial,funcao,modulo,perfil_acesso,status,acesso_liberado,ativo,observacoes",
+        "id,nome,cpf_clean,pin,email,email_corporativo,telefone,ultima_validacao_email_em,empresa,filial,funcao,modulo,perfil_acesso,status,acesso_liberado,ativo,observacoes",
       )
       .eq("cpf_clean", cpfDigits);
 
@@ -514,6 +517,63 @@ export default function AcessoExternoPage() {
         return;
       }
 
+      const { data: rowsData, error: rowsError } = await supabase
+        .from("acessos_externos" as any)
+        .select("id,nome,cpf_clean,pin,email,email_corporativo,telefone,ultima_validacao_email_em,empresa,filial,funcao,modulo,perfil_acesso,status,acesso_liberado,ativo,observacoes")
+        .eq("cpf_clean", cpfDigits);
+
+      if (rowsError) {
+        setErro("Erro ao validar acesso. Tente novamente.");
+        return;
+      }
+
+      const rows = (((rowsData as any[]) || []) as LegacyAcessoRow[])
+        .filter((row) => String(row.modulo || "").toLowerCase() !== "mecanico");
+
+      if (!rows.length) {
+        await validarCpfLegacy(cpfDigits);
+        return;
+      }
+
+      const ativos = rows.filter((row) =>
+        row.status === "ativo" &&
+        row.acesso_liberado === true &&
+        (row.ativo === true || row.ativo === null || row.ativo === undefined)
+      );
+
+      if (!ativos.length) {
+        const preparado = rows.find((row) => row.status === "ativo" && (row.ativo === true || row.ativo == null));
+        if (preparado && !String(preparado.email_corporativo || preparado.email || "").trim()) {
+          setErro("Acesso preparado. O administrador ainda precisa cadastrar seu e-mail corporativo.");
+        } else {
+          setErro("Acesso bloqueado pelo administrador.");
+        }
+        return;
+      }
+
+      const principal = ativos[0];
+      const emailCorporativo = String(principal.email_corporativo || principal.email || "").trim().toLowerCase();
+      if (!emailCorporativo) {
+        setErro("E-mail corporativo ainda não cadastrado. Procure o administrador.");
+        return;
+      }
+
+      const validacoes = ativos
+        .map((row) => row.ultima_validacao_email_em || parseLegacyObservacoes(row.observacoes).ultima_validacao_email_em)
+        .filter(Boolean) as string[];
+      const ultimaValidacao = validacoes.sort().at(-1) || null;
+
+      if (needsWeeklyValidation(ultimaValidacao)) {
+        setDesafio({
+          cpf_clean: cpfDigits,
+          nome: principal.nome || "Usuário",
+          email_corporativo: emailCorporativo,
+          email_mask: maskEmail(emailCorporativo),
+          ultima_validacao_email_em: ultimaValidacao,
+        });
+        return;
+      }
+
       await validarCpfLegacy(cpfDigits);
     } finally {
       setLoading(false);
@@ -601,7 +661,8 @@ export default function AcessoExternoPage() {
       return;
     }
 
-    const redirect = `${window.location.origin}/modulos?cpf=${desafio.cpf_clean}&verified=1`;
+    const basePath = window.location.pathname.startsWith("/acesso-operacional") ? "/acesso-operacional" : "/modulos";
+    const redirect = `${window.location.origin}${basePath}?cpf=${desafio.cpf_clean}&verified=1`;
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
       email: desafio.email_corporativo,
@@ -658,7 +719,8 @@ export default function AcessoExternoPage() {
       }
 
       await supabase.auth.signOut();
-      window.history.replaceState({}, document.title, "/modulos");
+      const basePath = window.location.pathname.startsWith("/acesso-operacional") ? "/acesso-operacional" : "/modulos";
+      window.history.replaceState({}, document.title, basePath);
       toast.success("Identidade confirmada. Acesso liberado.");
       setCpf(cpfParam);
       await validarCpf(cpfParam);
