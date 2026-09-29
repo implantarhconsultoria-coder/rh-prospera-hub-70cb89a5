@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Building2, ExternalLink } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import EmployeeAccessControl from '@/components/EmployeeAccessControl';
 import { Button } from '@/components/ui/button';
@@ -26,9 +26,27 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
       ? '/admin/operacional'
       : null;
 
+  const abrirFilialPraia = () => {
+    sessionStorage.setItem('admin_filial_preview_codigo', 'topac-pg');
+    navigate('/filial');
+  };
+
   return (
     <div className="flex items-center gap-2">
       {isAdmin && <EmployeeAccessControl />}
+
+      {isAdmin && (
+        <Button
+          variant="outline"
+          size={compact ? 'sm' : 'default'}
+          onClick={abrirFilialPraia}
+          className="gap-2 border-[#5b2a78] bg-[#120b19] text-white shadow-md hover:border-[#8b3fe7] hover:bg-[#1a0f24] hover:text-white"
+          title="Visualizar Portal da Filial Praia Grande"
+        >
+          <Building2 className="h-4 w-4" />
+          {!compact && <span>Filial Praia Grande</span>}
+        </Button>
+      )}
 
       {canPreview && adminPortalTarget && (
         <Button
