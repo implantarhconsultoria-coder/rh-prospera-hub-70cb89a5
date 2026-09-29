@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Building2, Check, KeyRound, Landmark, Save, Search, ShieldCheck, Upload, UserPlus, Users, X } from 'lucide-react';
+import { ArrowLeft, Brain, Building2, Check, KeyRound, Landmark, Save, Search, ShieldCheck, Upload, UserPlus, Users, X } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import AdmissionDossierWorkspace from '@/components/AdmissionDossierWorkspace';
 import BulkBankingDataEditor from '@/components/BulkBankingDataEditor';
 import BulkEmployeeDataImporter from '@/components/BulkEmployeeDataImporter';
 import EmployeeSmartTextPanel from '@/components/EmployeeSmartTextPanel';
+import EmployeeLaborAssistantDialog from '@/components/EmployeeLaborAssistantDialog';
 import { emptyBankingData, type BankingData } from '@/lib/bankingParser';
 import type { EmployeeSmartData } from '@/lib/smartTextParser';
 import { supabase } from '@/integrations/supabase/client';
@@ -84,6 +85,7 @@ const FuncionariosPage: React.FC = () => {
   const portalPrefix = location.pathname.startsWith('/filial') ? '/filial' : location.pathname.startsWith('/admin') ? '/admin' : '';
   const isAdminPortal = portalPrefix === '/admin';
   const canManageAdmissionDossier = userRoles?.includes('admin') || userRoles?.includes('diretor_geral');
+  const canUseLaborAssistant = ['admin','diretor_geral','rh','filial'].some((role) => userRoles?.includes(role));
 
   const [listState, setListState] = usePersistentViewState(`funcionarios:list:${portalPrefix || 'root'}`, {
     search: '',
@@ -119,6 +121,7 @@ const FuncionariosPage: React.FC = () => {
   const [savingBank, setSavingBank] = useState(false);
 
   const [accessEmployeeId, setAccessEmployeeId] = useState<string | null>(null);
+  const [laborEmployeeId, setLaborEmployeeId] = useState<string | null>(null);
   const [activeModules, setActiveModules] = useState<string[]>([]);
   const [loadingAccess, setLoadingAccess] = useState(false);
   const [savingAccess, setSavingAccess] = useState(false);
@@ -126,6 +129,7 @@ const FuncionariosPage: React.FC = () => {
   const effectiveCompany = isFilial ? filialCompanyId || '' : filterCompany;
   const bankEmployee = employees.find((employee) => employee.id === bankEmployeeId) || null;
   const accessEmployee = employees.find((employee) => employee.id === accessEmployeeId) || null;
+  const laborEmployee = employees.find((employee) => employee.id === laborEmployeeId) || null;
   const accessCompany = accessEmployee ? companies.find((company) => company.id === accessEmployee.companyId) : null;
 
   useEffect(() => {
@@ -391,7 +395,11 @@ const FuncionariosPage: React.FC = () => {
             {filtered.map((employee) => {
               const company = companies.find((item) => item.id === employee.companyId);
               return <div key={employee.id} className="card-premium cursor-pointer p-5 transition-shadow hover:shadow-premium" onClick={() => navigate(portalPrefix + '/funcionarios/' + employee.id)}>
-                <div className="mb-3 flex items-start gap-3"><div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground">{employee.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{employee.name}</h3><p className="truncate text-xs text-muted-foreground">{employee.cargo}</p></div><div className="flex gap-1"><Button type="button" variant="outline" size="icon" onClick={(event) => void openBanking(event, employee.id)} title="Editar dados bancários"><Landmark className="h-4 w-4" /></Button>{isAdminPortal && <Button type="button" variant="outline" size="icon" onClick={(event) => { event.stopPropagation(); setActiveModules([]); setAccessEmployeeId(employee.id); }} title="Liberar módulos"><KeyRound className="h-4 w-4" /></Button>}</div></div>
+                <div className="mb-3 flex items-start gap-3"><div className="gradient-primary flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-primary-foreground">{employee.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{employee.name}</h3><p className="truncate text-xs text-muted-foreground">{employee.cargo}</p></div><div className="flex gap-1">
+                  {canUseLaborAssistant && <Button type="button" variant="outline" size="icon" onClick={(event) => { event.stopPropagation(); setLaborEmployeeId(employee.id); }} title="Assistente RH / análise trabalhista"><Brain className="h-4 w-4 text-violet-500" /></Button>}
+                  <Button type="button" variant="outline" size="icon" onClick={(event) => void openBanking(event, employee.id)} title="Editar dados bancários"><Landmark className="h-4 w-4" /></Button>
+                  {isAdminPortal && <Button type="button" variant="outline" size="icon" onClick={(event) => { event.stopPropagation(); setActiveModules([]); setAccessEmployeeId(employee.id); }} title="Liberar módulos"><KeyRound className="h-4 w-4" /></Button>}
+                </div></div>
                 <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">{company?.name}</span><span className="font-semibold">{formatCurrency(employee.salarioBase)}</span></div>
                 <div className="mt-2"><Badge className={employee.status === 'ativo' ? 'bg-success text-success-foreground' : ''}>{employee.status}</Badge></div>
               </div>;
@@ -404,6 +412,18 @@ const FuncionariosPage: React.FC = () => {
           )}
         </section>
       )}
+
+      <EmployeeLaborAssistantDialog
+        open={!!laborEmployeeId}
+        onOpenChange={(open) => !open && setLaborEmployeeId(null)}
+        employee={laborEmployee ? {
+          id: laborEmployee.id,
+          name: laborEmployee.name,
+          cargo: laborEmployee.cargo,
+          dataAdmissao: laborEmployee.dataAdmissao,
+          status: laborEmployee.status,
+        } : null}
+      />
 
       <BulkEmployeeDataImporter open={bulkEmployeeOpen} onOpenChange={setBulkEmployeeOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
       <BulkBankingDataEditor open={bulkBankOpen} onOpenChange={setBulkBankOpen} employees={employees} companies={companies} companyId={effectiveCompany || undefined} onSaved={refreshData} />
