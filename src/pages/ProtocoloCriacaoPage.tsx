@@ -592,6 +592,42 @@ const ProtocoloPage: React.FC = () => {
     }
   };
 
+  const pedirCodigo = (action: 'save' | 'print') => {
+    setCodigoAction(action);
+    setCodigoOpen(true);
+  };
+
+  const confirmarCodigoOperador = async (codigo: string) => {
+    if (!codigoAction) return;
+    setCodigoLoading(true);
+    try {
+      const { data, error } = await rpc.rpc('operador_operacao_validar_codigo', {
+        p_codigo: codigo,
+        p_modulo: 'operacional',
+      });
+      if (error || !data?.ok || !data?.operador?.id) {
+        toast.error(data?.error || error?.message || 'Código de operador inválido.');
+        return;
+      }
+
+      const operador = {
+        id: String(data.operador.id),
+        nome: String(data.operador.nome || 'Operador'),
+      };
+
+      if (codigoAction === 'save') {
+        await persistProtocols(operador);
+      } else {
+        await printProtocol(codigo, operador);
+      }
+
+      setCodigoOpen(false);
+      setCodigoAction(null);
+    } finally {
+      setCodigoLoading(false);
+    }
+  };
+
   const clearAll = () => {
     setTextoColado('');
     setGroups([]);
@@ -824,11 +860,11 @@ const ProtocoloPage: React.FC = () => {
           )}
 
           <div className="flex flex-wrap gap-3">
-            <Button variant="outline" size="lg" disabled={saving || !readiness.ready} onClick={() => void persistProtocols()}>
+            <Button variant="outline" size="lg" disabled={saving || !readiness.ready} onClick={() => pedirCodigo('save')}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}
               {saving ? 'Salvando...' : 'Salvar Protocolos'}
             </Button>
-            <Button size="lg" disabled={printing || saving || !readiness.ready} onClick={() => void printProtocol()} className="gradient-accent text-accent-foreground">
+            <Button size="lg" disabled={printing || saving || !readiness.ready} onClick={() => pedirCodigo('print')} className="gradient-accent text-accent-foreground">
               {printing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
               {printing ? 'Montando impressão...' : 'Imprimir Protocolo'}
             </Button>
@@ -838,6 +874,20 @@ const ProtocoloPage: React.FC = () => {
           <p className="text-xs text-muted-foreground">Impressão unificada: 2 vias no modelo detalhado do protocolo + 1 via completa de cada documento vinculado em sequência. A janela de impressão é aberta pelo navegador.</p>
         </section>
       )}
+
+      <OperadorCodeDialog
+        open={codigoOpen}
+        onOpenChange={(open) => {
+          if (!codigoLoading) {
+            setCodigoOpen(open);
+            if (!open) setCodigoAction(null);
+          }
+        }}
+        loading={codigoLoading}
+        title={codigoAction === 'print' ? 'Liberar impressão do protocolo' : 'Confirmar salvamento do protocolo'}
+        description="Informe seu código individual. Operador, data, hora e ação ficarão registrados no histórico."
+        onConfirm={confirmarCodigoOperador}
+      />
     </div>
   );
 };
