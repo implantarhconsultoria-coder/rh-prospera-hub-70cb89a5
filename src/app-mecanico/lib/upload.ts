@@ -2,7 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 type UploadBucket = "ponto-selfies" | "abastecimento-fotos";
 
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_UPLOAD_BYTES = 20 * 1024 * 1024;
 const RETRY_DELAYS_MS = [0, 900, 2200] as const;
 
 const limparPartePath = (value: string) =>
@@ -52,7 +53,13 @@ export async function uploadFoto(
   blob: Blob,
 ): Promise<string> {
   if (!blob || blob.size === 0) throw new Error("Arquivo vazio. Tire a foto novamente.");
-  if (blob.size > MAX_UPLOAD_BYTES) throw new Error("A foto ficou muito grande. Tire novamente para o app reduzir o arquivo.");
+  const isPdf = blob.type.includes("pdf");
+  const maxBytes = isPdf ? MAX_PDF_UPLOAD_BYTES : MAX_IMAGE_UPLOAD_BYTES;
+  if (blob.size > maxBytes) {
+    throw new Error(isPdf
+      ? "O comprovante PDF ficou acima de 20 MB. Gere novamente ou reduza as fotos."
+      : "A foto ficou muito grande. Tire novamente para o app reduzir o arquivo.");
+  }
   if (!acessoId) throw new Error("Acesso do mecânico não encontrado. Entre novamente pelo PIN.");
 
   const ext = getExt(blob);
