@@ -19,7 +19,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Liberar campos manuais
         shell: python
@@ -33,7 +33,7 @@ jobs:
           if n1==0 and n2==0:
               print('Campos ja liberados')
           p.write_text(s,encoding='utf-8')
-      - run: npm ci
+      - run: npm install --no-package-lock
       - run: node scripts/normalize-source-encoding.mjs
       - run: npm run build
       - name: Publicar correcao
