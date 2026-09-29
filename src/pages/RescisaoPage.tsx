@@ -35,6 +35,7 @@ import PedidoDemissaoModelDialog from '@/components/PedidoDemissaoModelDialog';
 
 const discountLabels: Record<RescisaoDescontoTipo, string> = {
   faltas: 'Faltas',
+  atrasos: 'Atrasos',
   adiantamento_salarial: 'Adiantamento salarial',
   adiantamento_13: 'Adiantamento de 13º',
   vale_transporte: 'Vale-transporte',
@@ -255,6 +256,24 @@ const RescisaoPage: React.FC = () => {
         valor: Math.round(((Number(emp.salarioBase) || 0) / 30) * faltasDias * 100) / 100,
         observacao: `Importado do fechamento de ${competenciaFolha}.`, automatico: true,
       });
+      const atrasosHoras = Number(entry?.atrasos) || 0;
+      if (atrasosHoras > 0 && entry) {
+        const diasUteisAtraso = getWorkingDays(competenciaFolha);
+        const domingosFeriadosAtraso = new Date(year, month, 0).getDate() - diasUteisAtraso;
+        const payrollAtraso = calcPayrollBreakdown(emp, entry, {
+          diasUteis: diasUteisAtraso,
+          domingosFeriados: domingosFeriadosAtraso,
+          comissaoPct: getComissaoPercentual(empresa),
+        });
+        automaticos.push({
+          id: 'auto-atrasos',
+          tipo: 'atrasos',
+          descricao: `Atrasos (${atrasosHoras} h)`,
+          valor: Math.round((Number(payrollAtraso.atrasoVal) || 0) * 100) / 100,
+          observacao: `Importado automaticamente do fechamento de ${competenciaFolha}. Total de atraso: ${atrasosHoras} hora(s).`,
+          automatico: true,
+        });
+      }
       if ((Number(entry?.adiantamento) || 0) > 0) automaticos.push({
         id: 'auto-adiantamento', tipo: 'adiantamento_salarial', descricao: 'Adiantamento salarial',
         valor: Number(entry?.adiantamento) || 0, observacao: `Importado do fechamento de ${competenciaFolha}.`, automatico: true,
@@ -714,7 +733,7 @@ const RescisaoPage: React.FC = () => {
               </Card>
 
               <Card className="p-4 space-y-3">
-                <div className="flex justify-between items-center"><div><div className="font-bold">Descontos</div><div className="text-xs text-muted-foreground">Faltas e dados disponíveis no fechamento são carregados automaticamente.</div></div><Button type="button" variant="outline" size="sm" onClick={addDiscount}><Plus className="w-4 h-4 mr-1" />Adicionar</Button></div>
+                <div className="flex justify-between items-center"><div><div className="font-bold">Descontos</div><div className="text-xs text-muted-foreground">Faltas, atrasos e demais dados disponíveis no fechamento são carregados automaticamente.</div></div><Button type="button" variant="outline" size="sm" onClick={addDiscount}><Plus className="w-4 h-4 mr-1" />Adicionar</Button></div>
                 <div className="space-y-2">
                   {descontos.map((item) => <div key={item.id} className="grid md:grid-cols-[180px_1fr_150px_1fr_40px] gap-2 items-end border rounded p-2">
                     <div><Label className="text-xs">Tipo</Label><Select value={item.tipo} onValueChange={(value) => updateDiscount(item.id, { tipo: value as RescisaoDescontoTipo, descricao: discountLabels[value as RescisaoDescontoTipo] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(discountLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
@@ -746,7 +765,7 @@ const RescisaoPage: React.FC = () => {
                 <div className="flex justify-between font-bold border-t pt-1"><span>TOTAL DE PROVENTOS</span><span>{formatCurrency(resultado.totalProventos)}</span></div>
                 <div className="flex justify-between text-destructive"><span>INSS</span><span>{formatCurrency(resultado.inss)}</span></div>
                 <div className="flex justify-between text-destructive"><span>IRRF</span><span>{formatCurrency(resultado.irrf)}</span></div>
-                <div className="flex justify-between text-destructive"><span>Adiantamentos / VT / VR / outros</span><span>{formatCurrency(resultado.outrosDescontos)}</span></div>
+                <div className="flex justify-between text-destructive"><span>Faltas / atrasos / adiantamentos / VT / VR / outros</span><span>{formatCurrency(resultado.outrosDescontos)}</span></div>
                 <div className="flex justify-between font-bold"><span>TOTAL DE DESCONTOS</span><span>{formatCurrency(resultado.totalDescontos)}</span></div>
                 <div className="flex justify-between font-bold text-lg border-t pt-2 text-success"><span>LÍQUIDO ESTIMADO</span><span>{formatCurrency(resultado.liquido)}</span></div>
                 <div className="flex justify-between text-muted-foreground border-t pt-2"><span>FGTS informado/importado</span><span>{formatCurrency(resultado.saldoFgtsConsiderado)}</span></div>
