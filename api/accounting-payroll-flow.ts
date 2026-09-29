@@ -250,10 +250,12 @@ const sendApprovalEmail = async (service: any, cycle: any, documentsReleased: nu
   const processLabel = cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento';
   const uploaderEmail = clean(accountingUser?.email);
   const counterpart = counterpartFor(uploaderEmail);
-  const to = uniqueEmails([uploaderEmail || (cycle.portal === 'goiania' ? TOPAC_GOIANIA_EMAIL : VANESSA_EMAIL)]);
+  const to = cycle.portal === 'goiania'
+    ? uniqueEmails([uploaderEmail || TOPAC_GOIANIA_EMAIL, TOPAC_GOIANIA_EMAIL])
+    : uniqueEmails([uploaderEmail || VANESSA_EMAIL, TOPAC_CENTRAL_EMAIL]);
   const cc = cycle.portal === 'goiania'
-    ? uniqueEmails([TOPAC_GOIANIA_EMAIL])
-    : uniqueEmails([counterpart, TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL]).filter(email => !to.includes(email));
+    ? []
+    : uniqueEmails([counterpart, TOPAC_ROBSON_EMAIL]).filter(email => !to.includes(email));
   const body = [
     'Prezados,', '',
     `O ${processLabel} enviado para ${companyName} foi conferido e aprovado pelo RH.`, '',
