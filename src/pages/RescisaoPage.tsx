@@ -668,13 +668,13 @@ const RescisaoPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="md:col-span-2 lg:col-span-4">
                 <Label>Funcionário</Label>
-                <EmployeeCombobox value={empId || undefined} onChange={(employee) => { setEmpId(employee?.id || ''); setConfirmouFerias(false); }} placeholder="Buscar por nome, CPF, função ou empresa..." />
+                <EmployeeCombobox value={empId || undefined} onChange={(employee) => { setEmpId(employee?.id || ''); }} placeholder="Buscar por nome, CPF, função ou empresa..." />
               </div>
               {emp && <div className="md:col-span-2 lg:col-span-4 text-xs text-muted-foreground bg-muted p-3 rounded grid md:grid-cols-4 gap-2">
                 <span><strong>Empresa:</strong> {empresa?.name}</span><span><strong>Admissão:</strong> {emp.dataAdmissao || '-'}</span>
                 <span><strong>CPF:</strong> {emp.cpf || '-'}</span><span><strong>Salário:</strong> {formatCurrency(emp.salarioBase)}</span>
               </div>}
-              <div><Label>Data do desligamento</Label><Input type="date" value={dataDesligamento} onChange={(e) => { setDataDesligamento(e.target.value); setConfirmouFerias(false); }} /></div>
+              <div><Label>Data do desligamento</Label><Input type="date" value={dataDesligamento} onChange={(e) => { setDataDesligamento(e.target.value); }} /></div>
               <div><Label>Tipo de rescisão</Label><Select value={tipo} onValueChange={(value) => setTipo(value as TipoRescisao)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
                 <SelectItem value="sem_justa_causa">Sem justa causa (empregador)</SelectItem><SelectItem value="pedido_demissao">Pedido de demissão</SelectItem>
                 <SelectItem value="acordo_mutuo_484a">Acordo mútuo (Art. 484-A)</SelectItem><SelectItem value="justa_causa">Justa causa</SelectItem>
