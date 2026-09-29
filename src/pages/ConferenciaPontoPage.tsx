@@ -207,7 +207,7 @@ const ConferenciaPontoPage: React.FC = () => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
-                {['Funcionário', 'Status', 'Faltas', 'Atestados', 'Atraso', 'HE 50%', 'HE 100%', 'Divergências', 'Arquivo', 'Ações'].map((h) => (
+                {['Funcionário', 'Status', 'Faltas', 'Atestados', 'Atraso', 'HE 50%', 'HE 60%', 'HE 100%', 'Divergências', 'Arquivo', 'Ações'].map((h) => (
                   <th key={h} className="px-3 py-2 text-left text-xs font-medium uppercase text-muted-foreground whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -223,6 +223,7 @@ const ConferenciaPontoPage: React.FC = () => {
                     <td className="px-3 py-2 text-xs text-warning">{r.diasAtestado || '—'}</td>
                     <td className="px-3 py-2 text-xs">{r.atrasosMinutos > 0 ? `${r.atrasosMinutos}min` : '—'}</td>
                     <td className="px-3 py-2 text-xs text-success">{r.he50Horas > 0 ? `${r.he50Horas}h` : '—'}</td>
+                    <td className="px-3 py-2 text-xs text-success">{r.he60Horas > 0 ? `${r.he60Horas}h` : '—'}</td>
                     <td className="px-3 py-2 text-xs text-success">{r.he100Horas > 0 ? `${r.he100Horas}h` : '—'}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground max-w-[260px]">
                       {r.divergencias.length > 0
