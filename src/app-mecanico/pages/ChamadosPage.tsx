@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  AlertTriangle, BellRing, CheckCircle2, Loader2, MapPin, Package,
-  Plus, RotateCcw, Send, Trash2, Truck, Wrench,
+  AlertTriangle, BellRing, Building2, CheckCircle2, Clock3, Loader2, MapPin, Package,
+  Plus, RotateCcw, Trash2, Truck, UserRound, Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,13 +32,15 @@ interface Chamado {
   solicitante_contato?: string | null;
   operador_abertura_nome?: string | null;
   descricao_conclusao?: string | null;
+  placa_snapshot?: string | null;
+  patrimonio_snapshot?: string | null;
   notificacao_pendente?: boolean;
   created_at: string;
 }
 
 type MaterialDraft = { descricao: string; quantidade: string; unidade: string };
 
-const ITENS_PREDEFINIDOS = [
+const SERVICOS_PADRAO_COMPRESSOR = [
   "Troca de óleo da unidade",
   "Troca de óleo do motor",
   "Filtro de ar — limpar",
@@ -68,6 +71,12 @@ const STATUS_LABELS: Record<string, string> = {
   cancelado: "Cancelado",
 };
 
+const dt = (value?: string | null) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+};
+
 const normalizarChamados = (items: unknown): Chamado[] => {
   if (!Array.isArray(items)) return [];
   return items
@@ -78,7 +87,7 @@ const normalizarChamados = (items: unknown): Chamado[] => {
       numero: item.numero == null ? null : Number(item.numero),
       cliente: String(item.cliente || "Sem cliente"),
       local_servico: String(item.local_servico || ""),
-      tipo_servico: String(item.tipo_servico || "Serviço"),
+      tipo_servico: String(item.tipo_servico || "Ocorrência"),
       itens_previstos: item.itens_previstos || null,
       status: String(item.status || "pendente"),
       observacoes: item.observacoes || null,
@@ -86,6 +95,8 @@ const normalizarChamados = (items: unknown): Chamado[] => {
       solicitante_contato: item.solicitante_contato || null,
       operador_abertura_nome: item.operador_abertura_nome || null,
       descricao_conclusao: item.descricao_conclusao || null,
+      placa_snapshot: item.placa_snapshot || null,
+      patrimonio_snapshot: item.patrimonio_snapshot || null,
       notificacao_pendente: Boolean(item.notificacao_pendente),
       created_at: String(item.created_at || ""),
     }));
@@ -100,11 +111,8 @@ export default function ChamadosPage() {
   const [aberto, setAberto] = useState<string | null>(null);
   const [obs, setObs] = useState("");
   const [conclusao, setConclusao] = useState("");
+  const [servicosExecutados, setServicosExecutados] = useState<string[]>([]);
   const [acting, setActing] = useState(false);
-  const [novoAberto, setNovoAberto] = useState(false);
-  const [tipoServico, setTipoServico] = useState("");
-  const [itens, setItens] = useState<string[]>([]);
-  const [novaObs, setNovaObs] = useState("");
 
   const [adicionalChamadoId, setAdicionalChamadoId] = useState<string | null>(null);
   const [adicionalProblema, setAdicionalProblema] = useState("");
@@ -120,14 +128,12 @@ export default function ChamadosPage() {
       const result = data as RpcResult<Chamado> | null;
       if (error || !result?.ok) {
         const message = result?.error || error?.message || "Erro ao carregar ocorrências";
-        console.error("Erro ao carregar ocorrências do app mecânico:", error || result);
         setErro(message);
         setLista([]);
       } else {
         setLista(normalizarChamados(result.chamados));
       }
-    } catch (error) {
-      console.error("Falha inesperada nas ocorrências do app mecânico:", error);
+    } catch {
       setErro("Não foi possível carregar as ocorrências agora.");
       setLista([]);
     } finally {
@@ -142,49 +148,35 @@ export default function ChamadosPage() {
   }, [carregar]);
 
   const novos = useMemo(() => lista.filter((c) => c.status === "pendente" && c.notificacao_pendente), [lista]);
+  const chamadoAberto = useMemo(() => lista.find((c) => c.id === aberto) || null, [lista, aberto]);
 
-  const alternarItem = (item: string) => {
-    setItens((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item]);
+  const fecharDetalhes = () => {
+    if (acting) return;
+    setAberto(null);
+    setObs("");
+    setConclusao("");
+    setServicosExecutados([]);
+    setAdicionalChamadoId(null);
+    setAdicionalProblema("");
+    setAdicionalExecutado("");
+    setAdicionalObs("");
+    setMateriais([]);
   };
 
-  const criarChamado = async () => {
-    if (acting) return;
-    if (!tipoServico.trim() && itens.length === 0) {
-      toast.error("Informe o problema ou selecione pelo menos um item.");
-      return;
-    }
-    setActing(true);
-    try {
-      const { data, error } = await chamadosRpc.rpc("app_mecanico_criar_chamado", {
-        p_acesso_id: mecanico.acesso_id,
-        p_tipo_servico: tipoServico.trim() || "Solicitação de manutenção",
-        p_itens_previstos: itens.join(", ") || null,
-        p_observacoes: novaObs.trim() || null,
-        p_local_servico: null,
-      });
-      const result = data as RpcResult<Chamado> | null;
-      if (error || !result?.ok) {
-        toast.error(result?.error || error?.message || "Erro ao abrir ocorrência");
-        return;
-      }
-      toast.success("Ocorrência aberta.");
-      setNovoAberto(false);
-      setTipoServico("");
-      setItens([]);
-      setNovaObs("");
-      await carregar();
-    } catch (error) {
-      console.error("Falha ao criar ocorrência do app mecânico:", error);
-      toast.error("Não foi possível abrir a ocorrência agora.");
-    } finally {
-      setActing(false);
-    }
+  const alternarServico = (item: string) => {
+    setServicosExecutados((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item]);
   };
 
   const acao = async (chamado: Chamado, acaoAtual: "aceitar" | "deslocamento" | "chegada" | "iniciar" | "finalizar") => {
     if (acting) return;
-    if (acaoAtual === "finalizar" && !conclusao.trim()) {
-      toast.error("Descreva o que foi executado antes de finalizar.");
+
+    const descricaoFinal = [
+      servicosExecutados.length ? `Serviços realizados: ${servicosExecutados.join(", ")}.` : "",
+      conclusao.trim() ? `Observação do mecânico: ${conclusao.trim()}` : "",
+    ].filter(Boolean).join(" ");
+
+    if (acaoAtual === "finalizar" && !descricaoFinal) {
+      toast.error("Selecione o serviço realizado ou descreva o que foi executado.");
       return;
     }
 
@@ -211,7 +203,7 @@ export default function ChamadosPage() {
         p_observacao: obs.trim() || null,
         p_latitude: latitude,
         p_longitude: longitude,
-        p_descricao_conclusao: acaoAtual === "finalizar" ? conclusao.trim() : null,
+        p_descricao_conclusao: acaoAtual === "finalizar" ? descricaoFinal : null,
       });
       const result = data as RpcResult<Chamado> | null;
       if (error || !result?.ok) {
@@ -228,6 +220,7 @@ export default function ChamadosPage() {
         iniciar: "Serviço iniciado com localização registrada.",
         finalizar: "Ocorrência finalizada. Serviço e localização registrados.",
       };
+
       if (acaoAtual === "finalizar") {
         try {
           const response = await fetch("/api/operacional-formalizacao", {
@@ -247,13 +240,14 @@ export default function ChamadosPage() {
           toast.warning("Ocorrência concluída; o e-mail de formalização ficou pendente.");
         }
       }
+
       toast.success(mensagem[acaoAtual]);
-      setAberto(null);
       setObs("");
       setConclusao("");
-      await carregar();
-    } catch (error) {
-      console.error("Falha ao atualizar ocorrência do app mecânico:", error);
+      setServicosExecutados([]);
+      await carregar(true);
+      if (acaoAtual === "finalizar") setAberto(null);
+    } catch {
       toast.error("Não foi possível atualizar a ocorrência agora.");
     } finally {
       setActing(false);
@@ -265,14 +259,6 @@ export default function ChamadosPage() {
     current.map((item, i) => i === index ? { ...item, [key]: value } : item)
   );
   const removerMaterial = (index: number) => setMateriais((current) => current.filter((_, i) => i !== index));
-
-  const limparAdicional = () => {
-    setAdicionalChamadoId(null);
-    setAdicionalProblema("");
-    setAdicionalExecutado("");
-    setAdicionalObs("");
-    setMateriais([]);
-  };
 
   const salvarAdicional = async (chamado: Chamado) => {
     if (acting) return;
@@ -309,10 +295,13 @@ export default function ChamadosPage() {
       }
 
       toast.success("Adicional registrado. A Central Operacional foi alertada.");
-      limparAdicional();
+      setAdicionalChamadoId(null);
+      setAdicionalProblema("");
+      setAdicionalExecutado("");
+      setAdicionalObs("");
+      setMateriais([]);
       await carregar(true);
-    } catch (error) {
-      console.error("Falha ao registrar adicional:", error);
+    } catch {
       toast.error("Não foi possível registrar o adicional.");
     } finally {
       setActing(false);
@@ -326,7 +315,7 @@ export default function ChamadosPage() {
       case "em_deslocamento": return { label: "CHEGUEI NO CLIENTE", acao: "chegada" as const, icon: MapPin };
       case "no_local": return { label: "INICIAR SERVIÇO", acao: "iniciar" as const, icon: Wrench };
       case "em_execucao":
-      case "em_atendimento": return { label: "FINALIZAR SERVIÇO", acao: "finalizar" as const, icon: CheckCircle2 };
+      case "em_atendimento": return { label: "FINALIZAR OCORRÊNCIA", acao: "finalizar" as const, icon: CheckCircle2 };
       default: return null;
     }
   };
@@ -344,9 +333,9 @@ export default function ChamadosPage() {
             </span>
             <div className="flex-1">
               <p className="font-black text-amber-100">Nova ocorrência recebida</p>
-              <p className="mt-1 text-xs text-amber-200/80">Este aviso permanece até você aceitar a ocorrência.</p>
+              <p className="mt-1 text-xs text-amber-200/80">Confira todos os detalhes antes de aceitar.</p>
               <Button size="sm" className="mt-3 bg-amber-500 font-black text-black hover:bg-amber-400" onClick={() => setAberto(novos[0].id)}>
-                Ver ocorrência
+                Ver detalhes da ocorrência
               </Button>
             </div>
           </div>
@@ -354,149 +343,212 @@ export default function ChamadosPage() {
       )}
 
       <Card className="border-fuchsia-500/20 bg-[#07070d] p-5 text-white">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-fuchsia-500/10 text-fuchsia-400"><Wrench className="h-6 w-6" /></span>
-            <div><h1 className="font-bold">Ocorrências</h1><p className="text-xs text-zinc-400">Compressores • atendimento • serviços adicionais</p></div>
+        <div className="flex items-center gap-3">
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-fuchsia-500/10 text-fuchsia-400"><Wrench className="h-6 w-6" /></span>
+          <div>
+            <h1 className="font-bold">Ocorrências</h1>
+            <p className="text-xs text-zinc-400">Receba, confira e execute as ocorrências enviadas pelo Operacional.</p>
           </div>
-          <Button size="sm" onClick={() => setNovoAberto((value) => !value)}><Plus className="mr-1 h-4 w-4" /> Nova ocorrência</Button>
         </div>
       </Card>
-
-      {novoAberto && (
-        <Card className="space-y-4 p-5">
-          <div>
-            <p className="font-semibold">Nova ocorrência própria</p>
-            <p className="text-xs text-muted-foreground">Use quando você identificar uma ocorrência no compressor. As ocorrências enviadas pelo Operacional aparecem automaticamente abaixo.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {ITENS_PREDEFINIDOS.map((item) => (
-              <button key={item} type="button" onClick={() => alternarItem(item)} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${itens.includes(item) ? "border-fuchsia-500 bg-fuchsia-500/10 text-fuchsia-700" : "border-border"}`}>{item}</button>
-            ))}
-          </div>
-          <Input placeholder="Ocorrência / problema identificado" value={tipoServico} onChange={(event) => setTipoServico(event.target.value)} />
-          <Textarea placeholder="Sintomas, ruídos, vazamentos, falhas ou qualquer informação importante" value={novaObs} onChange={(event) => setNovaObs(event.target.value)} rows={4} />
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" onClick={() => { setNovoAberto(false); setTipoServico(""); setItens([]); setNovaObs(""); }} disabled={acting}>Cancelar</Button>
-            <Button onClick={() => void criarChamado()} disabled={acting}>{acting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Abrir ocorrência"}</Button>
-          </div>
-        </Card>
-      )}
 
       {erro ? (
         <Card className="space-y-4 p-6 text-center">
           <AlertTriangle className="mx-auto h-8 w-8 text-amber-500" />
-          <div><p className="font-medium">Manutenção indisponível no momento.</p><p className="mt-1 text-sm text-muted-foreground">{erro}</p></div>
+          <div><p className="font-medium">Ocorrências indisponíveis no momento.</p><p className="mt-1 text-sm text-muted-foreground">{erro}</p></div>
           <Button variant="outline" onClick={() => void carregar()}><RotateCcw className="mr-2 h-4 w-4" /> Tentar novamente</Button>
         </Card>
       ) : lista.length === 0 ? (
-        <Card className="p-6 text-center text-muted-foreground">Nenhuma ocorrência registrada.</Card>
+        <Card className="p-6 text-center text-muted-foreground">Nenhuma ocorrência recebida.</Card>
       ) : (
         <div className="space-y-3">
-          {lista.map((c) => {
-            const action = proximaAcao(c.status);
+          {lista.map((c) => (
+            <Card key={c.id} className={`space-y-3 p-4 ${c.status === "pendente" && c.notificacao_pendente ? "border-amber-400/60 bg-amber-500/5" : ""}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{c.numero ? `#${c.numero} • ` : ""}{c.tipo_servico || "Ocorrência"}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{c.cliente || "TOPAC"} • {c.local_servico || "Local não informado"}</p>
+                  {(c.patrimonio_snapshot || c.placa_snapshot) && (
+                    <p className="mt-1 text-[11px] font-semibold text-fuchsia-500">
+                      {[c.patrimonio_snapshot && `Pat. ${c.patrimonio_snapshot}`, c.placa_snapshot && `Placa ${c.placa_snapshot}`].filter(Boolean).join(" • ")}
+                    </p>
+                  )}
+                </div>
+                <Badge variant={c.status === "concluido" ? "secondary" : c.status === "em_execucao" ? "default" : "outline"}>{STATUS_LABELS[c.status] || c.status}</Badge>
+              </div>
+
+              <Button variant={c.status === "pendente" ? "default" : "outline"} className="w-full" onClick={() => setAberto(c.id)}>
+                {c.status === "pendente" ? "VER DETALHES ANTES DE ACEITAR" : c.status === "concluido" ? "VER OCORRÊNCIA" : "CONTINUAR OCORRÊNCIA"}
+              </Button>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={!!chamadoAberto} onOpenChange={(open) => { if (!open) fecharDetalhes(); }}>
+        <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto bg-[#07070d] text-white">
+          {chamadoAberto && (() => {
+            const action = proximaAcao(chamadoAberto.status);
             const ActionIcon = action?.icon || Wrench;
-            const isOpen = aberto === c.id;
-            const showAdicional = adicionalChamadoId === c.id;
+            const emExecucao = ["em_execucao", "em_atendimento"].includes(chamadoAberto.status);
+            const podeObservacao = ["no_local", "em_execucao", "em_atendimento"].includes(chamadoAberto.status);
+            const showAdicional = adicionalChamadoId === chamadoAberto.id;
 
             return (
-              <Card key={c.id} className={`space-y-3 p-4 ${c.status === "pendente" && c.notificacao_pendente ? "border-amber-400/60 bg-amber-500/5" : ""}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold">{c.numero ? `#${c.numero} • ` : ""}{c.tipo_servico || "Serviço"}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{c.cliente || "TOPAC"} • {c.local_servico || "Local não informado"}</p>
-                  </div>
-                  <Badge variant={c.status === "concluido" ? "secondary" : c.status === "em_execucao" ? "default" : "outline"}>{STATUS_LABELS[c.status] || c.status}</Badge>
-                </div>
+              <>
+                <DialogHeader>
+                  <DialogTitle className="text-left">
+                    Ocorrência {chamadoAberto.numero ? `#${chamadoAberto.numero}` : ""}
+                  </DialogTitle>
+                </DialogHeader>
 
-                {c.solicitante_nome && (
-                  <div className="rounded-lg border bg-muted/30 p-3 text-xs">
-                    <b>Solicitado por:</b> {c.solicitante_nome}{c.solicitante_contato ? ` • ${c.solicitante_contato}` : ""}
-                  </div>
-                )}
-
-                {c.itens_previstos && <p className="text-xs"><span className="text-muted-foreground">Orientação:</span> {c.itens_previstos}</p>}
-                {c.observacoes && <p className="text-sm text-muted-foreground">{c.observacoes}</p>}
-
-                {isOpen && c.status !== "concluido" && c.status !== "cancelado" && (
-                  <div className="space-y-3 rounded-xl border bg-muted/20 p-3">
-                    {(c.status === "no_local" || c.status === "em_execucao" || c.status === "em_atendimento") && (
-                      <Textarea placeholder="Observação do atendimento (opcional)" value={obs} onChange={(e) => setObs(e.target.value)} rows={2} />
-                    )}
-
-                    {(c.status === "em_execucao" || c.status === "em_atendimento") && (
-                      <Textarea placeholder="O que foi executado neste serviço? *" value={conclusao} onChange={(e) => setConclusao(e.target.value)} rows={3} />
-                    )}
-
-                    {action && (
-                      <Button className="h-12 w-full font-black" onClick={() => void acao(c, action.acao)} disabled={acting}>
-                        {acting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ActionIcon className="mr-2 h-4 w-4" />}
-                        {action.label}
-                      </Button>
-                    )}
-
-                    {(c.status === "em_execucao" || c.status === "em_atendimento") && (
-                      <Button variant="outline" className="w-full border-amber-400/40 text-amber-700" onClick={() => { setAdicionalChamadoId(showAdicional ? null : c.id); }}>
-                        <Plus className="mr-2 h-4 w-4" /> Serviço adicional não previsto
-                      </Button>
-                    )}
-
-                    <Button size="sm" variant="ghost" className="w-full" onClick={() => { setAberto(null); setObs(""); setConclusao(""); }}>Fechar detalhes</Button>
-                  </div>
-                )}
-
-                {showAdicional && (
-                  <div className="space-y-3 rounded-xl border border-amber-400/40 bg-amber-500/5 p-4">
-                    <div>
-                      <p className="font-black text-amber-700">Adicional encontrado no atendimento</p>
-                      <p className="text-xs text-muted-foreground">Ao salvar, o Operacional recebe o alerta dentro desta mesma ocorrência.</p>
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-amber-400/25 bg-amber-500/5 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black uppercase tracking-wide text-amber-400">Detalhes da ocorrência</span>
+                      <Badge variant="outline">{STATUS_LABELS[chamadoAberto.status] || chamadoAberto.status}</Badge>
                     </div>
-                    <Textarea placeholder="O que foi encontrado além do solicitado? *" value={adicionalProblema} onChange={(e) => setAdicionalProblema(e.target.value)} rows={2} />
-                    <Textarea placeholder="O que você fez nesse serviço adicional? *" value={adicionalExecutado} onChange={(e) => setAdicionalExecutado(e.target.value)} rows={2} />
-                    <Textarea placeholder="Observação adicional" value={adicionalObs} onChange={(e) => setAdicionalObs(e.target.value)} rows={2} />
+                    {chamadoAberto.status === "pendente" && (
+                      <p className="mt-2 text-xs text-zinc-400">Confira as informações abaixo antes de aceitar a responsabilidade pelo atendimento.</p>
+                    )}
+                  </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="flex items-center gap-1 text-xs font-bold"><Package className="h-3.5 w-3.5" /> Materiais utilizados</p>
-                        <Button size="sm" variant="outline" onClick={novaLinhaMaterial}><Plus className="mr-1 h-3.5 w-3.5" />Adicionar</Button>
-                      </div>
-                      {materiais.map((m, index) => (
-                        <div key={index} className="grid grid-cols-[1fr_72px_64px_36px] gap-2">
-                          <Input placeholder="Material / peça" value={m.descricao} onChange={(e) => atualizarMaterial(index, "descricao", e.target.value)} />
-                          <Input inputMode="decimal" placeholder="Qtd." value={m.quantidade} onChange={(e) => atualizarMaterial(index, "quantidade", e.target.value)} />
-                          <Input placeholder="un" value={m.unidade} onChange={(e) => atualizarMaterial(index, "unidade", e.target.value)} />
-                          <Button size="icon" variant="ghost" onClick={() => removerMaterial(index)}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                      ))}
-                      {materiais.length === 0 && <p className="text-xs text-muted-foreground">Se não houve uso de peça/material, pode deixar vazio.</p>}
+                  <div className="grid gap-3">
+                    <div className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3">
+                      <span className="flex items-center gap-1 text-[10px] uppercase text-zinc-500"><Building2 className="h-3 w-3" /> Cliente / local</span>
+                      <p className="mt-1 font-bold">{chamadoAberto.cliente}</p>
+                      <p className="text-sm text-zinc-400">{chamadoAberto.local_servico || "Local não informado"}</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
-                      <Button variant="outline" onClick={limparAdicional}>Cancelar</Button>
-                      <Button className="bg-amber-600 hover:bg-amber-700" onClick={() => void salvarAdicional(c)} disabled={acting}>
-                        {acting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Enviar adicional
-                      </Button>
+                      <div className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3">
+                        <span className="text-[10px] uppercase text-zinc-500">Patrimônio</span>
+                        <p className="mt-1 font-bold">{chamadoAberto.patrimonio_snapshot || "—"}</p>
+                      </div>
+                      <div className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3">
+                        <span className="text-[10px] uppercase text-zinc-500">Placa</span>
+                        <p className="mt-1 font-bold">{chamadoAberto.placa_snapshot || "—"}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3">
+                      <span className="flex items-center gap-1 text-[10px] uppercase text-zinc-500"><Wrench className="h-3 w-3" /> Problema informado</span>
+                      <p className="mt-1 font-bold">{chamadoAberto.tipo_servico || "—"}</p>
+                      {chamadoAberto.itens_previstos && <p className="mt-2 text-sm text-zinc-300"><b>Orientação:</b> {chamadoAberto.itens_previstos}</p>}
+                      {chamadoAberto.observacoes && <p className="mt-2 text-sm text-zinc-400"><b>Observação:</b> {chamadoAberto.observacoes}</p>}
+                    </div>
+
+                    <div className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3">
+                      <span className="flex items-center gap-1 text-[10px] uppercase text-zinc-500"><UserRound className="h-3 w-3" /> Solicitante</span>
+                      <p className="mt-1 font-bold">{chamadoAberto.solicitante_nome || "Não informado"}</p>
+                      <p className="text-sm text-zinc-400">{chamadoAberto.solicitante_contato || "Sem contato informado"}</p>
+                    </div>
+
+                    <div className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-xs text-zinc-400">
+                      <p><b className="text-zinc-200">Registrado por:</b> {chamadoAberto.operador_abertura_nome || "registro anterior"}</p>
+                      <p className="mt-1 flex items-center gap-1"><Clock3 className="h-3 w-3" /> {dt(chamadoAberto.created_at)}</p>
                     </div>
                   </div>
-                )}
 
-                {!isOpen && c.status !== "concluido" && c.status !== "cancelado" && (
-                  <Button size="sm" variant="outline" className="w-full" onClick={() => setAberto(c.id)}>
-                    {c.status === "pendente" ? <BellRing className="mr-2 h-4 w-4" /> : <Wrench className="mr-2 h-4 w-4" />}
-                    {c.status === "pendente" ? "Abrir ocorrência" : "Continuar atendimento"}
-                  </Button>
-                )}
+                  {podeObservacao && (
+                    <Textarea
+                      placeholder="Observação do atendimento (opcional)"
+                      value={obs}
+                      onChange={(e) => setObs(e.target.value)}
+                      rows={2}
+                      className="bg-[#05050a]"
+                    />
+                  )}
 
-                {c.status === "concluido" && c.descricao_conclusao && (
-                  <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/5 p-3 text-sm">
-                    <b>Serviço concluído:</b> {c.descricao_conclusao}
-                  </div>
-                )}
-              </Card>
+                  {emExecucao && (
+                    <div className="space-y-3 rounded-xl border border-fuchsia-500/20 bg-[#05050a] p-3">
+                      <div>
+                        <p className="text-sm font-bold">Serviços realizados</p>
+                        <p className="text-[11px] text-zinc-500">Selecione o que foi feito no compressor. Pode marcar mais de um.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {SERVICOS_PADRAO_COMPRESSOR.map((item) => (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => alternarServico(item)}
+                            className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${servicosExecutados.includes(item) ? "border-fuchsia-400 bg-fuchsia-500/20 text-fuchsia-200" : "border-zinc-700 text-zinc-300"}`}
+                          >
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                      <Textarea
+                        placeholder="Complemento / o que foi executado (opcional se já selecionou acima)"
+                        value={conclusao}
+                        onChange={(e) => setConclusao(e.target.value)}
+                        rows={3}
+                        className="bg-[#07070d]"
+                      />
+                    </div>
+                  )}
+
+                  {chamadoAberto.descricao_conclusao && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                      <b>Serviço concluído:</b> {chamadoAberto.descricao_conclusao}
+                    </div>
+                  )}
+
+                  {action && (
+                    <Button className="h-12 w-full font-black" onClick={() => void acao(chamadoAberto, action.acao)} disabled={acting}>
+                      {acting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ActionIcon className="mr-2 h-4 w-4" />}
+                      {action.label}
+                    </Button>
+                  )}
+
+                  {emExecucao && (
+                    <Button
+                      variant="outline"
+                      className="w-full border-amber-400/40 text-amber-300"
+                      onClick={() => setAdicionalChamadoId(showAdicional ? null : chamadoAberto.id)}
+                    >
+                      <Plus className="mr-2 h-4 w-4" /> Serviço adicional não previsto
+                    </Button>
+                  )}
+
+                  {showAdicional && (
+                    <div className="space-y-3 rounded-xl border border-amber-400/30 bg-amber-500/5 p-4">
+                      <div>
+                        <p className="font-bold">Serviço adicional</p>
+                        <p className="text-xs text-zinc-500">Use somente para algo encontrado durante o atendimento que não estava previsto na ocorrência.</p>
+                      </div>
+                      <Textarea placeholder="O que foi encontrado? *" value={adicionalProblema} onChange={(e) => setAdicionalProblema(e.target.value)} rows={2} className="bg-[#05050a]" />
+                      <Textarea placeholder="O que foi executado? *" value={adicionalExecutado} onChange={(e) => setAdicionalExecutado(e.target.value)} rows={2} className="bg-[#05050a]" />
+                      <Textarea placeholder="Observação adicional" value={adicionalObs} onChange={(e) => setAdicionalObs(e.target.value)} rows={2} className="bg-[#05050a]" />
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="flex items-center gap-1 text-xs font-bold"><Package className="h-3 w-3" /> Materiais utilizados</p>
+                          <Button size="sm" variant="outline" onClick={novaLinhaMaterial}><Plus className="mr-1 h-3 w-3" /> Material</Button>
+                        </div>
+                        {materiais.map((m, index) => (
+                          <div key={index} className="grid grid-cols-[1fr_72px_72px_36px] gap-2">
+                            <Input placeholder="Material" value={m.descricao} onChange={(e) => atualizarMaterial(index, "descricao", e.target.value)} className="bg-[#05050a]" />
+                            <Input placeholder="Qtd." value={m.quantidade} onChange={(e) => atualizarMaterial(index, "quantidade", e.target.value)} className="bg-[#05050a]" />
+                            <Input placeholder="Un." value={m.unidade} onChange={(e) => atualizarMaterial(index, "unidade", e.target.value)} className="bg-[#05050a]" />
+                            <Button size="icon" variant="ghost" onClick={() => removerMaterial(index)}><Trash2 className="h-4 w-4 text-red-400" /></Button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Button className="w-full" onClick={() => void salvarAdicional(chamadoAberto)} disabled={acting}>
+                        {acting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Registrar adicional"}
+                      </Button>
+                    </div>
+                  )}
+
+                  <Button size="sm" variant="ghost" className="w-full" onClick={fecharDetalhes}>Fechar detalhes</Button>
+                </div>
+              </>
             );
-          })}
-        </div>
-      )}
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
