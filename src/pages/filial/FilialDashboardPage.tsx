@@ -4,8 +4,8 @@ import { useApp } from '@/context/AppContext';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { asoStatus, feriasStatus } from '@/lib/calculations';
 import {
-  Bell, CalendarCheck, CalendarDays, FileCheck, Send,
-  Stethoscope, UploadCloud, Users, Building2, UserRound,
+  Bell, CalendarCheck, CalendarDays, Receipt, Send,
+  Stethoscope, UploadCloud, Users, Building2, UserRound, UserPlus,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -62,10 +62,16 @@ const FilialDashboardPage: React.FC = () => {
       path: '/filial/fechamento',
     },
     {
+      label: 'Pré-Cadastro',
+      description: 'Ficha admissional e envio direto à contabilidade',
+      icon: UserPlus,
+      path: '/filial/pre-cadastro',
+    },
+    {
       label: 'Documentos',
-      description: 'Atestados e documentos da filial',
+      description: 'Atestados e demais documentos por funcionário',
       icon: UploadCloud,
-      path: '/filial/atestados',
+      path: '/filial/documentos',
     },
     {
       label: 'Aviso de Férias',
@@ -84,10 +90,10 @@ const FilialDashboardPage: React.FC = () => {
       warning: asoAlerta > 0,
     },
     {
-      label: 'Protocolos',
-      description: 'Protocolos e documentos funcionais',
-      icon: FileCheck,
-      path: '/filial/protocolo',
+      label: 'Recibos / Holerites',
+      description: 'Imprimir, assinar, devolver e consultar histórico',
+      icon: Receipt,
+      path: '/filial/recibos-holerites',
     },
     {
       label: 'Alertas',
