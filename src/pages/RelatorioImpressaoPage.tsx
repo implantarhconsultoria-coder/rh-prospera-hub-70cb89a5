@@ -18,7 +18,9 @@ const columns = [
   { label: 'Cargo', width: '7%', numeric: false },
   { label: 'Salário/Base', width: '7%', numeric: true },
   { label: 'HE50 qtd', width: '4%', numeric: true },
-  { label: 'HE50 valor', width: '6%', numeric: true },
+  { label: 'HE50 valor', width: '5%', numeric: true },
+  { label: 'HE60 qtd', width: '4%', numeric: true },
+  { label: 'HE60 valor', width: '5%', numeric: true },
   { label: 'HE100 qtd', width: '4%', numeric: true },
   { label: 'HE100 valor', width: '6%', numeric: true },
   { label: 'Base comissão', width: '7%', numeric: true },
@@ -39,6 +41,7 @@ const defaultEntry = (emp: Employee, competencia: string, diasUteis: number): Mo
   faltasDias: 0,
   atrasos: 0,
   he50: 0,
+  he60: 0,
   he100: 0,
   adicionais: 0,
   descontosDiversos: 0,
@@ -63,6 +66,8 @@ const emptyTotals = () => ({
   periculosidade: 0,
   he50Horas: 0,
   he50Valor: 0,
+  he60Horas: 0,
+  he60Valor: 0,
   he100Horas: 0,
   he100Valor: 0,
   comissaoBase: 0,
@@ -134,6 +139,8 @@ const RelatorioImpressaoPage: React.FC = () => {
       totals.periculosidade += calc.periculosidadeVal;
       totals.he50Horas += Number(entry.he50 || 0);
       totals.he50Valor += calc.he50Val;
+      totals.he60Horas += Number(entry.he60 || 0);
+      totals.he60Valor += calc.he60Val;
       totals.he100Horas += Number(entry.he100 || 0);
       totals.he100Valor += calc.he100Val;
       totals.comissaoBase += calc.comissaoBase;
@@ -252,21 +259,14 @@ const RelatorioImpressaoPage: React.FC = () => {
                     </th>
                   </tr>
                   <tr className="bg-gray-200">
-                    {columns.map(column => {
-                      const displayLabel = column.label === 'HE50 qtd'
-                        ? `HE${heSemanalPct} qtd`
-                        : column.label === 'HE50 valor'
-                          ? `HE${heSemanalPct} valor`
-                          : column.label;
-                      return (
-                        <th
-                          key={column.label}
-                          className={`border border-gray-400 px-1 py-1 font-semibold ${column.numeric ? 'numeric' : 'text-left'}`}
-                        >
-                          {displayLabel}
-                        </th>
-                      );
-                    })}
+                    {columns.map(column => (
+                      <th
+                        key={column.label}
+                        className={`border border-gray-400 px-1 py-1 font-semibold ${column.numeric ? 'numeric' : 'text-left'}`}
+                      >
+                        {column.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -278,6 +278,8 @@ const RelatorioImpressaoPage: React.FC = () => {
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.emp.salarioBase)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{hours(r.entry.he50)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.he50Val)}</td>
+                      <td className="border border-gray-300 px-1 py-1 numeric">{hours(r.entry.he60)}</td>
+                      <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.he60Val)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{hours(r.entry.he100)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.he100Val)}</td>
                       <td className="border border-gray-300 px-1 py-1 numeric">{money(r.calc.comissaoBase)}</td>
@@ -311,6 +313,8 @@ const RelatorioImpressaoPage: React.FC = () => {
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.salarios)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{hours(totals.he50Horas)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.he50Valor)}</td>
+                    <td className="border border-gray-400 px-1 py-1 numeric">{hours(totals.he60Horas)}</td>
+                    <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.he60Valor)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{hours(totals.he100Horas)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.he100Valor)}</td>
                     <td className="border border-gray-400 px-1 py-1 numeric">{money(totals.comissaoBase)}</td>
