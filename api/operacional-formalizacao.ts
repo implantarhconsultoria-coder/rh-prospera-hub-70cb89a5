@@ -230,6 +230,26 @@ export default async function handler(req: any, res?: any) {
         : type === 'ocorrencia_alterada' ? 'OCORRÊNCIA ALTERADA'
         : 'OCORRÊNCIA ABERTA';
 
+      let extraLines: string[] = [];
+      if (type === 'ocorrencia_concluida') {
+        const [{ data: adicionais }, { data: materiais }] = await Promise.all([
+          service.from('chamado_adicionais')
+            .select('descricao_identificada,servico_executado,observacao')
+            .eq('chamado_id', data.id)
+            .order('created_at', { ascending: true }),
+          service.from('chamado_materiais')
+            .select('descricao,quantidade,unidade')
+            .eq('chamado_id', data.id)
+            .order('created_at', { ascending: true }),
+        ]);
+        if (adicionais?.length) {
+          extraLines.push(`Adicionais: ${adicionais.map((item:any,index:number) => `${index + 1}) ${item.descricao_identificada || 'Adicional'} — ${item.servico_executado || 'sem descrição de execução'}`).join(' | ')}`);
+        }
+        if (materiais?.length) {
+          extraLines.push(`Materiais utilizados: ${materiais.map((item:any) => `${item.descricao || 'Material'} ${item.quantidade || ''} ${item.unidade || ''}`.trim()).join(' | ')}`);
+        }
+      }
+
       return sendJson(res, await sendFormalization(service, {
         action: label,
         subject: `[TOPAC OPERACIONAL] ${label} #${data.numero || data.id.slice(0,8)} – ${data.cliente}`,
@@ -244,6 +264,7 @@ export default async function handler(req: any, res?: any) {
           `Mecânico: ${data.aceito_por_nome || 'ainda não aceito'}`,
           `Conclusão: ${data.descricao_conclusao || '—'}`,
           `Cancelamento: ${data.cancelamento_motivo || '—'}`,
+          ...extraLines,
           `Ocorrência: ${data.numero || data.id}`,
         ],
         user,
