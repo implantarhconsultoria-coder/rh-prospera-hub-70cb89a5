@@ -26,6 +26,7 @@ import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNot
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
 import { toast } from 'sonner';
+import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -37,6 +38,7 @@ const AppLayout: React.FC = () => {
   const isMobile = useIsMobile();
   const location = useLocation();
   const navigate = useNavigate();
+  const { allowed: canViewFrota } = usePrivateModuleAccess('frota_ipva');
 
   useActivityTracker(session);
 
@@ -50,7 +52,7 @@ const AppLayout: React.FC = () => {
       ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionários', '/admin/funcionarios'],
       ['Pré-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
       ['Fechamento', '/admin/fechamento'], ['Apontamento Inteligente', '/admin/apontamento-inteligente'], ['VR', '/admin/relatorio-vr'], ['VT', '/admin/relatorio-vt'], ['Uniformes', '/admin/uniformes'], ['EPI', '/admin/epi'],
-      ['Frota / Documentos', '/admin/documentos-ativos'], ['Almoxarifado', '/admin/almoxarifado'], ['Estoque Interno', '/admin/estoque-interno'],
+      ...(canViewFrota ? [['Frota / Documentos', '/admin/documentos-ativos']] : []), ['Almoxarifado', '/admin/almoxarifado'], ['Estoque Interno', '/admin/estoque-interno'],
       ['Relatório de Abastecimento', '/admin/abastecimento-qrcode'], ['Assinatura Digital', '/admin/folha-pagamento'],
     ]
       .filter(([label, path]) => `${label} ${path}`.toLowerCase().includes(q))
@@ -67,7 +69,7 @@ const AppLayout: React.FC = () => {
       .map(e => ({ label: e.name, subtitle: `${e.cpf || 'CPF pendente'} • ${companies.find(c => c.id === e.companyId)?.name || ''}`, path: `/admin/funcionarios/${e.id}`, icon: User }));
 
     return [...moduleResults, ...companyResults, ...employeeResults].slice(0, 20);
-  }, [searchQuery, companies, employees]);
+  }, [searchQuery, companies, employees, canViewFrota]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
