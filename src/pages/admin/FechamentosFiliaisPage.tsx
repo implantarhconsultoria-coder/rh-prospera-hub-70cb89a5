@@ -70,6 +70,7 @@ const FechamentosFiliaisPage: React.FC = () => {
             faltasDias: Number(lanc.faltas_dias || 0),
             atrasos: Number(lanc.atrasos || 0),
             he50: Number(lanc.he50 || 0),
+            he60: Number(lanc.he60 || 0),
             he100: Number(lanc.he100 || 0),
             adicionais: Number(lanc.adicionais || 0),
             descontosDiversos: Number(lanc.descontos_diversos || 0),
