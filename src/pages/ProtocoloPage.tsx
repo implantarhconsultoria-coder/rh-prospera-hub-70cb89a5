@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ClipboardList, FileCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ProtocoloCriacaoPage from '@/pages/ProtocoloCriacaoPage';
-import LevantamentoLocacao from '@/components/protocolo/LevantamentoLocacao';
+import LevantamentoLocacaoOperacional from '@/components/protocolo/LevantamentoLocacaoOperacional';
 
 type ProtocoloView = 'criar' | 'levantamento';
 
@@ -34,7 +34,7 @@ const ProtocoloPage: React.FC = () => {
         </div>
       </section>
 
-      {view === 'criar' ? <ProtocoloCriacaoPage /> : <LevantamentoLocacao />}
+      {view === 'criar' ? <ProtocoloCriacaoPage /> : <LevantamentoLocacaoOperacional />}
     </div>
   );
 };
