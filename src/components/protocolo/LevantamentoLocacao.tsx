@@ -140,12 +140,13 @@ const LevantamentoLocacao: React.FC = () => {
       const [protocolsRes, assetsRes] = await Promise.all([
         supabase
           .from('protocolos_documentos' as any)
-          .select('id,empresa_origem,empresa_destinataria,local_canteiro,responsavel_recebimento,data_emissao,descricao_ativo,placa,renavam,chassi,patrimonio,observacoes,pdf_url,ativo_id,categoria_ativo,status_locacao,status_atualizado_em,encerrado_em,devolvido_em,protocolo_lote_id,created_at')
+          .select('id,empresa_origem,empresa_destinataria,local_canteiro,responsavel_recebimento,data_emissao,descricao_ativo,placa,patrimonio,observacoes,ativo_id,categoria_ativo,status_locacao,status_atualizado_em,encerrado_em,devolvido_em,protocolo_lote_id,registro_ativo,ultima_alteracao_motivo,operador_nome,created_at')
+          .eq('registro_ativo', true)
           .order('created_at', { ascending: false })
           .limit(5000),
         supabase
           .from('ativos')
-          .select('id,placa,patrimonio,vencimento_ipva,vencimento_licenciamento')
+          .select(canViewFrota ? 'id,placa,patrimonio,vencimento_ipva,vencimento_licenciamento' : 'id,placa,patrimonio')
           .in('tipo', ['veiculo', 'equipamento']),
       ]);
 
@@ -160,7 +161,7 @@ const LevantamentoLocacao: React.FC = () => {
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [canViewFrota]);
 
   const assetMap = useMemo(() => {
     const map = new Map<string, FrotaAsset>();
