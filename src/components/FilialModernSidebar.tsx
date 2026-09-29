@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, CalendarCheck, Stethoscope, FileCheck, Bell,
-  Building2, ChevronLeft, Menu, LogOut, CalendarDays, Lock, UploadCloud,
+  Building2, ChevronLeft, Menu, LogOut, CalendarDays, UploadCloud,
   Send, Headphones,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
