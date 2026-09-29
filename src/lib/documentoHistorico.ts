@@ -137,11 +137,21 @@ const extrairHorasAtestado = (doc: DocumentoRegistro) => {
   return 0;
 };
 
-const appendAtestadoHorasObservacao = (observacoes: string, horas: number, dataDocumento?: string) => {
-  const partes = [observacoes || ''];
-  const referenciaData = dataDocumento ? ` em ${dataDocumento}` : '';
-  partes.push(`DECLARACAO/ATESTADO HORAS: +${horas.toLocaleString('pt-BR')}h${referenciaData}`);
-  return partes.filter(Boolean).join(' | ');
+const appendUniqueObservation = (observacoes: string, marker: string) => {
+  const atual = String(observacoes || '').trim();
+  if (!marker || atual.includes(marker)) return atual;
+  return [atual, marker].filter(Boolean).join(' | ');
+};
+
+const appendAtestadoHorasObservacao = (
+  observacoes: string,
+  horas: number,
+  doc: DocumentoRegistro,
+) => {
+  const referenciaData = doc.dataDocumento ? ` em ${doc.dataDocumento}` : '';
+  const marker = `DECLARACAO/ATESTADO HORAS: +${horas.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h${referenciaData}`;
+  const parecer = `PARECER DOCUMENTO: ${doc.tipoDocumento || doc.categoria || 'Documento'}; ${horas.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h justificadas; arquivo ${doc.nomeArquivo || 'anexado'}`;
+  return appendUniqueObservation(appendUniqueObservation(observacoes, marker), parecer);
 };
 
 const aplicarAtestadoHorasNoLancamento = async (doc: DocumentoRegistro) => {
@@ -151,7 +161,7 @@ const aplicarAtestadoHorasNoLancamento = async (doc: DocumentoRegistro) => {
   const competencia = resolveCompetenciaAtestado(doc);
   const { data: entry, error: entryError } = await supabase
     .from('lancamentos_mensais')
-    .select('id, atrasos, observacoes, bloqueado')
+    .select('id, observacoes, bloqueado')
     .eq('funcionario_id', doc.funcionarioId)
     .eq('competencia', competencia)
     .is('apagado_em', null)
@@ -159,50 +169,31 @@ const aplicarAtestadoHorasNoLancamento = async (doc: DocumentoRegistro) => {
 
   if (entryError) throw entryError;
   if (entry?.bloqueado) {
-    console.warn('Declaracao/atestado de horas nao aplicado: fechamento bloqueado para a competencia.', { funcionarioId: doc.funcionarioId, competencia });
+    console.warn('Documento reconhecido, mas o fechamento está bloqueado; parecer mantido apenas no histórico documental.', { funcionarioId: doc.funcionarioId, competencia });
     return;
   }
 
-  const observacoes = appendAtestadoHorasObservacao(String(entry?.observacoes || ''), horas, doc.dataDocumento);
+  // Importante: não somamos as horas justificadas em "atrasos".
+  // "atrasos" permanece como apontamento bruto; o cálculo desconta o marcador documental.
+  const observacoes = appendAtestadoHorasObservacao(String(entry?.observacoes || ''), horas, doc);
+
   if (entry?.id) {
     const { error } = await supabase
       .from('lancamentos_mensais')
-      .update({
-        atrasos: round2(Number(entry.atrasos) + horas),
-        observacoes,
-      } as any)
+      .update({ observacoes } as any)
       .eq('id', entry.id);
     if (error) throw error;
     return;
   }
 
-  const { data: employee } = await supabase
-    .from('funcionarios')
-    .select('salario_base, salario, vr_ativo, va_ativo, vt_ativo, insalubridade_ativa')
-    .eq('id', doc.funcionarioId)
-    .maybeSingle();
-  const salarioBase = Number((employee as any)?.salario_base ?? (employee as any)?.salario) || 0;
-
   const { error } = await supabase.from('lancamentos_mensais').insert({
     funcionario_id: doc.funcionarioId,
     company_id: doc.companyId,
     competencia,
-    faltas_dias: 0,
-    atrasos: horas,
-    he50: 0,
-    he100: 0,
-    adicionais: 0,
-    descontos_diversos: 0,
-    adiantamento: round2(salarioBase * 0.4),
-    vr_aplicado: Boolean((employee as any)?.vr_ativo),
-    vr_dias: (employee as any)?.vr_ativo ? 22 : 0,
-    va_aplicado: Boolean((employee as any)?.va_ativo),
-    vt_aplicado: Boolean((employee as any)?.vt_ativo),
-    vt_desconto: 0,
-    comissao_base: 0,
-    insalubridade_aplicada: Boolean((employee as any)?.insalubridade_ativa),
-    status_conferencia: 'pendente',
     observacoes,
+    origem: 'consolidado',
+    status_conferencia: 'pendente',
+    user_id: doc.geradoPorUserId || null,
   } as any);
   if (error) throw error;
 };
