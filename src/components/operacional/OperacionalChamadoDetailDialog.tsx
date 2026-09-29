@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import OperadorCodeDialog from '@/components/OperadorCodeDialog';
+import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { toast } from 'sonner';
 
 const rpc = supabase as unknown as {
@@ -18,22 +19,23 @@ type Props = {
 };
 
 const EVENT_LABEL: Record<string, string> = {
-  criado: 'Chamado criado',
+  criado: 'Ocorrência criada',
   atribuido: 'Enviado ao mecânico',
-  editado: 'Chamado alterado',
-  aceitar: 'Chamado aceito',
+  editado: 'Ocorrência alterada',
+  aceitar: 'Ocorrência aceita',
   deslocamento: 'Mecânico a caminho',
   chegada: 'Chegada ao cliente',
   iniciar: 'Serviço iniciado',
   adicional_registrado: 'Serviço adicional informado',
   adicional_visualizado: 'Adicional visualizado pelo Operacional',
   finalizar: 'Serviço concluído',
-  cancelado: 'Chamado cancelado',
+  cancelado: 'Ocorrência cancelada',
 };
 
 const dt = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR') : '—';
 
 const OperacionalChamadoDetailDialog: React.FC<Props> = ({ chamado, open, onOpenChange, onRefresh }) => {
+  const { developerMode } = useDeveloperMode();
   const [loading, setLoading] = useState(false);
   const [detalhe, setDetalhe] = useState<any>({ eventos: [], adicionais: [], materiais: [] });
   const [codigoOpen, setCodigoOpen] = useState(false);
@@ -80,7 +82,7 @@ const OperacionalChamadoDetailDialog: React.FC<Props> = ({ chamado, open, onOpen
         <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Chamado {chamado?.numero ? `#${chamado.numero}` : ''} • {chamado?.cliente || 'Cliente'}
+              Ocorrência {chamado?.numero ? `#${chamado.numero}` : ''} • {chamado?.cliente || 'Cliente'}
             </DialogTitle>
           </DialogHeader>
 
@@ -90,7 +92,9 @@ const OperacionalChamadoDetailDialog: React.FC<Props> = ({ chamado, open, onOpen
                 <div><span className="text-[11px] uppercase text-muted-foreground">Solicitante no cliente</span><p className="font-semibold">{chamado?.solicitante_nome || 'Não informado'}</p><p className="text-xs text-muted-foreground">{chamado?.solicitante_contato || ''}</p></div>
                 <div><span className="text-[11px] uppercase text-muted-foreground">Registrado por</span><p className="font-semibold">{chamado?.operador_abertura_nome || 'Registro anterior ao novo fluxo'}</p><p className="text-xs text-muted-foreground">{dt(chamado?.created_at)}</p></div>
                 <div><span className="text-[11px] uppercase text-muted-foreground">Local</span><p className="font-semibold">{chamado?.local_servico || '—'}</p></div>
-                <div><span className="text-[11px] uppercase text-muted-foreground">Serviço solicitado</span><p className="font-semibold">{chamado?.tipo_servico || '—'}</p></div>
+                <div><span className="text-[11px] uppercase text-muted-foreground">Ocorrência / problema informado</span><p className="font-semibold">{chamado?.tipo_servico || '—'}</p></div>
+                <div><span className="text-[11px] uppercase text-muted-foreground">Patrimônio</span><p className="font-semibold">{chamado?.patrimonio_snapshot || '—'}</p></div>
+                <div><span className="text-[11px] uppercase text-muted-foreground">Placa</span><p className="font-semibold">{chamado?.placa_snapshot || '—'}</p></div>
               </div>
 
               {(detalhe.adicionais || []).length > 0 && (
@@ -107,7 +111,7 @@ const OperacionalChamadoDetailDialog: React.FC<Props> = ({ chamado, open, onOpen
                           <p className="mt-2 text-xs text-muted-foreground">{a.mecanico_nome || 'Mecânico'} • {dt(a.created_at)}</p>
                         </div>
                         {!a.visualizado_em && (
-                          <Button size="sm" variant="outline" onClick={() => { setAdicionalAlvo(a); setCodigoOpen(true); }}>Confirmar ciência</Button>
+                          <Button size="sm" variant="outline" onClick={() => { setAdicionalAlvo(a); if (developerMode) void marcarVisto(''); else setCodigoOpen(true); }}>Confirmar ciência</Button>
                         )}
                       </div>
                       {materiaisDoAdicional(a.id).length > 0 && (
@@ -126,7 +130,7 @@ const OperacionalChamadoDetailDialog: React.FC<Props> = ({ chamado, open, onOpen
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 font-bold"><Clock3 className="h-4 w-4 text-primary" /> Linha do tempo</h3>
                 {(detalhe.eventos || []).length === 0 ? (
-                  <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Este chamado é anterior à nova linha do tempo ou ainda não possui eventos.</p>
+                  <p className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Esta ocorrência é anterior à nova linha do tempo ou ainda não possui eventos.</p>
                 ) : (
                   <div className="relative space-y-3 border-l-2 border-primary/20 pl-5">
                     {(detalhe.eventos || []).map((e: any) => (
