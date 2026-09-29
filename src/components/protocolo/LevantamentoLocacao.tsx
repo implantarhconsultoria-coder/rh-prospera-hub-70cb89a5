@@ -409,7 +409,7 @@ const LevantamentoLocacao: React.FC = () => {
     licensingSheet['!cols'] = [12, 14, 28, 24, 14, 22, 14, 18, 20, 22].map((wch) => ({ wch }));
     XLSX.utils.book_append_sheet(workbook, currentSheet, 'Levantamento Atual');
     XLSX.utils.book_append_sheet(workbook, historySheet, 'Historico Protocolos');
-    XLSX.utils.book_append_sheet(workbook, licensingSheet, 'Licenciamento');
+    if (canViewFrota) XLSX.utils.book_append_sheet(workbook, licensingSheet, 'Licenciamento');
 
     const today = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(workbook, `Levantamento_Locacao_TOPAC_${categoria}_${status}_${today}.xlsx`);
