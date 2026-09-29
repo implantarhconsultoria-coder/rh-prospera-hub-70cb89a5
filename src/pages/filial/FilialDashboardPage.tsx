@@ -53,15 +53,9 @@ const FilialDashboardPage: React.FC = () => {
       path: '/filial/movimento-diario',
     },
     {
-      label: 'Apontamento',
-      description: 'Conferência e apontamentos operacionais da filial',
+      label: 'Apontamento / Fechamento',
+      description: 'Preencher a grade e enviar o período para a central',
       icon: Send,
-      path: '/filial/apontamento',
-    },
-    {
-      label: 'Fechamento',
-      description: 'Consolidar o período e enviar os lançamentos',
-      icon: Lock,
       path: '/filial/fechamento',
     },
     {
