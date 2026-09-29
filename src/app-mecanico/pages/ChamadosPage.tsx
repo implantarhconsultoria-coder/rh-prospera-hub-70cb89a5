@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMecanicoApp } from "../MecanicoAppContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useGeolocation } from "@/hooks/useGeolocation";
@@ -113,6 +113,11 @@ export default function ChamadosPage() {
   const [conclusao, setConclusao] = useState("");
   const [servicosExecutados, setServicosExecutados] = useState<string[]>([]);
   const [acting, setActing] = useState(false);
+  const [notificacaoAberta, setNotificacaoAberta] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+  );
+  const notifiedIdsRef = useRef<Set<string>>(new Set());
 
   const [adicionalChamadoId, setAdicionalChamadoId] = useState<string | null>(null);
   const [adicionalProblema, setAdicionalProblema] = useState("");
@@ -149,6 +154,105 @@ export default function ChamadosPage() {
 
   const novos = useMemo(() => lista.filter((c) => c.status === "pendente" && c.notificacao_pendente), [lista]);
   const chamadoAberto = useMemo(() => lista.find((c) => c.id === aberto) || null, [lista, aberto]);
+  const ocorrenciaNotificacao = novos[0] || null;
+
+  const fecharNotificacaoSistema = useCallback(async (id: string) => {
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const notices = await registration.getNotifications({ tag: `topac-ocorrencia-${id}` });
+      notices.forEach((notice) => notice.close());
+    } catch {
+      // Notificação de sistema é complementar; o fluxo do app continua.
+    }
+  }, []);
+
+  const mostrarNotificacaoSistema = useCallback(async (c: Chamado) => {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted" || !("serviceWorker" in navigator)) return;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const url = `${window.location.pathname}?ocorrencia=${encodeURIComponent(c.id)}`;
+      const options = {
+        body: `${c.cliente} • ${c.local_servico || "Local não informado"}\n${c.tipo_servico || "Nova ocorrência"}`,
+        icon: "/icons/topac-rh-pro.svg?v=20260929-ocorrencias",
+        badge: "/icons/topac-rh-pro.svg?v=20260929-ocorrencias",
+        tag: `topac-ocorrencia-${c.id}`,
+        renotify: true,
+        requireInteraction: true,
+        vibrate: [600, 250, 600],
+        data: { url },
+      } as NotificationOptions & { vibrate?: number[]; renotify?: boolean };
+      await registration.showNotification(`TOPAC • Nova ocorrência #${c.numero || ""}`.trim(), options);
+    } catch {
+      // A janela interna continua sendo a garantia principal.
+    }
+  }, []);
+
+  const ativarNotificacoes = async () => {
+    if (typeof Notification === "undefined") {
+      setNotificationPermission("unsupported");
+      toast.error("Este aparelho/navegador não suporta notificação do sistema.");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") {
+        toast.success("Alertas do celular ativados.");
+        if (ocorrenciaNotificacao) await mostrarNotificacaoSistema(ocorrenciaNotificacao);
+      } else {
+        toast.warning("Notificação do sistema não foi autorizada. O alerta dentro do app continuará ativo.");
+      }
+    } catch {
+      toast.error("Não foi possível solicitar a permissão de notificação.");
+    }
+  };
+
+  useEffect(() => {
+    if (!novos.length) {
+      setNotificacaoAberta(false);
+      if ("vibrate" in navigator) navigator.vibrate(0);
+      return;
+    }
+
+    setNotificacaoAberta(true);
+
+    const vibrar = () => {
+      if (document.visibilityState !== "hidden" && "vibrate" in navigator) {
+        navigator.vibrate([650, 250, 650]);
+      }
+    };
+
+    vibrar();
+    const timer = window.setInterval(vibrar, 5000);
+    return () => {
+      window.clearInterval(timer);
+      if ("vibrate" in navigator) navigator.vibrate(0);
+    };
+  }, [novos.length]);
+
+  useEffect(() => {
+    for (const c of novos) {
+      if (notifiedIdsRef.current.has(c.id)) continue;
+      notifiedIdsRef.current.add(c.id);
+      void mostrarNotificacaoSistema(c);
+    }
+
+    const activeIds = new Set(novos.map((c) => c.id));
+    for (const id of Array.from(notifiedIdsRef.current)) {
+      if (!activeIds.has(id)) {
+        notifiedIdsRef.current.delete(id);
+        void fecharNotificacaoSistema(id);
+      }
+    }
+  }, [novos, mostrarNotificacaoSistema, fecharNotificacaoSistema]);
+
+  useEffect(() => {
+    const targetId = new URLSearchParams(window.location.search).get("ocorrencia");
+    if (!targetId || !lista.some((c) => c.id === targetId)) return;
+    setAberto(targetId);
+    setNotificacaoAberta(true);
+  }, [lista]);
 
   const fecharDetalhes = () => {
     if (acting) return;
@@ -242,6 +346,9 @@ export default function ChamadosPage() {
       }
 
       toast.success(mensagem[acaoAtual]);
+      if (acaoAtual === "aceitar") {
+        await fecharNotificacaoSistema(chamado.id);
+      }
       setObs("");
       setConclusao("");
       setServicosExecutados([]);
@@ -384,6 +491,73 @@ export default function ChamadosPage() {
           ))}
         </div>
       )}
+
+      <Dialog
+        open={notificacaoAberta && !!ocorrenciaNotificacao && !chamadoAberto}
+        onOpenChange={(open) => {
+          if (!open && ocorrenciaNotificacao) {
+            setNotificacaoAberta(true);
+            return;
+          }
+          setNotificacaoAberta(open);
+        }}
+      >
+        <DialogContent
+          className="max-w-sm border-amber-400/50 bg-[#09090f] text-white"
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          {ocorrenciaNotificacao && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-left text-amber-300">
+                  <span className="relative grid h-10 w-10 place-items-center rounded-full bg-amber-500 text-black">
+                    <BellRing className="h-5 w-5" />
+                    <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white">{novos.length}</span>
+                  </span>
+                  NOVA OCORRÊNCIA
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-400/25 bg-amber-500/5 p-4">
+                  <p className="text-lg font-black">#{ocorrenciaNotificacao.numero || "—"} • {ocorrenciaNotificacao.cliente}</p>
+                  <p className="mt-1 text-sm text-zinc-300">{ocorrenciaNotificacao.local_servico || "Local não informado"}</p>
+                  <p className="mt-3 font-semibold text-white">{ocorrenciaNotificacao.tipo_servico || "Ocorrência recebida"}</p>
+                  {(ocorrenciaNotificacao.patrimonio_snapshot || ocorrenciaNotificacao.placa_snapshot) && (
+                    <p className="mt-2 text-xs text-fuchsia-300">
+                      {[ocorrenciaNotificacao.patrimonio_snapshot && `Pat. ${ocorrenciaNotificacao.patrimonio_snapshot}`, ocorrenciaNotificacao.placa_snapshot && `Placa ${ocorrenciaNotificacao.placa_snapshot}`].filter(Boolean).join(" • ")}
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-200">
+                  O alerta permanece ativo e o aparelho tenta vibrar a cada 5 segundos até a ocorrência ser aceita.
+                </div>
+
+                <Button
+                  className="h-12 w-full bg-amber-500 font-black text-black hover:bg-amber-400"
+                  onClick={() => {
+                    setNotificacaoAberta(false);
+                    setAberto(ocorrenciaNotificacao.id);
+                  }}
+                >
+                  VER DETALHES DA OCORRÊNCIA
+                </Button>
+
+                {notificationPermission === "default" && (
+                  <Button variant="outline" className="w-full border-fuchsia-500/30" onClick={() => void ativarNotificacoes()}>
+                    Ativar notificação do celular
+                  </Button>
+                )}
+                {notificationPermission === "denied" && (
+                  <p className="text-center text-[10px] text-zinc-500">Notificações do sistema estão bloqueadas no aparelho. O alerta interno continua ativo.</p>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!chamadoAberto} onOpenChange={(open) => { if (!open) fecharDetalhes(); }}>
         <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto bg-[#07070d] text-white">
