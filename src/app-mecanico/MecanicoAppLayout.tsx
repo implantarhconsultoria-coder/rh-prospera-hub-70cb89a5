@@ -10,11 +10,11 @@ const supabaseRpc = supabase as unknown as {
 };
 
 const aplicarIdentidadeMecanico = () => {
-  const iconHref = "/icons/topac-rh-pro.svg?v=20260908-mecanicos-v3";
+  const iconHref = "/icons/topac-mecanicos-oficial-20260908-1050-192.png?v=20260929-app-layout-v1";
   document.title = "TOPAC Mecânicos";
   const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-  if (manifest) manifest.href = "/manifest-mecanico.json?v=20260908-mecanicos-v3";
-  document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]').forEach((icon) => { icon.href = iconHref; icon.type = "image/svg+xml"; });
+  if (manifest) manifest.href = "/manifest-mecanicos-install-20260908.json?v=20260929-app-layout-v1";
+  document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]').forEach((icon) => { icon.href = iconHref; icon.type = "image/png"; });
   const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
   if (apple) apple.href = iconHref;
   const theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
