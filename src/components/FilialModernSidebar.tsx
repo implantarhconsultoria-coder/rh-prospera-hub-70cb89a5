@@ -1,8 +1,8 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, CalendarCheck, Stethoscope, FileCheck, Bell,
-  Building2, ChevronLeft, Menu, LogOut, CalendarDays, UploadCloud,
+  LayoutDashboard, Users, CalendarCheck, Stethoscope, Receipt, Bell,
+  Building2, ChevronLeft, Menu, LogOut, CalendarDays, UploadCloud, UserPlus,
   Send, Headphones,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
@@ -14,10 +14,11 @@ const menuItems = [
   { label: 'Funcionários', icon: Users, path: '/filial/funcionarios' },
   { label: 'Movimento Diário', icon: CalendarDays, path: '/filial/movimento-diario' },
   { label: 'Apontamento / Fechamento', icon: Send, path: '/filial/fechamento' },
-  { label: 'Documentos', icon: UploadCloud, path: '/filial/atestados' },
+  { label: 'Pré-Cadastro', icon: UserPlus, path: '/filial/pre-cadastro' },
+  { label: 'Documentos', icon: UploadCloud, path: '/filial/documentos' },
   { label: 'Aviso de Férias', icon: CalendarCheck, path: '/filial/aviso-ferias' },
   { label: 'ASO / Agendamento', icon: Stethoscope, path: '/filial/aso' },
-  { label: 'Protocolos', icon: FileCheck, path: '/filial/protocolo' },
+  { label: 'Recibos / Holerites', icon: Receipt, path: '/filial/recibos-holerites' },
   { label: 'Alertas', icon: Bell, path: '/filial/alertas' },
 ];
 
