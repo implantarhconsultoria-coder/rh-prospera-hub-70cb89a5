@@ -80,7 +80,8 @@ export interface ResultadoCruzamento {
   faltasDias: number;        // só faltas reais (sem cobertura)
   diasAtestado: number;      // dias cobertos por atestado (descontam só VR/VT)
   atrasosMinutos: number;    // somados após tolerância
-  he50Horas: number;         // horas extras 50% (apenas se permitido)
+  he50Horas: number;
+  he60Horas: number;
   he100Horas: number;        // horas extras 100% (domingo/feriado/folga trabalhado)
   dsrPerdido: number;        // 1 DSR por falta sem atestado (informativo p/ relatório)
   dias: Array<{
@@ -89,6 +90,7 @@ export interface ResultadoCruzamento {
     minutosTrabalhados: number;
     atrasoMin: number;
     he50Min: number;
+    he60Min: number;
     he100Min: number;
     motivo?: string;
   }>;
@@ -198,6 +200,7 @@ export const cruzarCartaoComAtestados = (
     diasAtestado: 0,
     atrasosMinutos: 0,
     he50Horas: 0,
+    he60Horas: 0,
     he100Horas: 0,
     dsrPerdido: 0,
     dias: [],
@@ -223,6 +226,7 @@ export const cruzarCartaoComAtestados = (
   let diasAtestado = 0;
   let atrasosMinutos = 0;
   let he50Min = 0;
+  let he60Min = 0;
   let he100Min = 0;
   let diasUteis = 0;
 
@@ -253,12 +257,12 @@ export const cruzarCartaoComAtestados = (
     const marcaFalta = obs.includes('FALTA');
 
     if (isFerias) {
-      baseRes.dias.push({ data: dia.data, classificacao: 'ignorado', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0, motivo: 'Férias' });
+      baseRes.dias.push({ data: dia.data, classificacao: 'ignorado', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he60Min: 0, he100Min: 0, motivo: 'Férias' });
       continue;
     }
 
     if (isFolga && !dia.entrada && !dia.saida) {
-      baseRes.dias.push({ data: dia.data, classificacao: 'folga', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0 });
+      baseRes.dias.push({ data: dia.data, classificacao: 'folga', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he60Min: 0, he100Min: 0 });
       continue;
     }
 
@@ -268,17 +272,17 @@ export const cruzarCartaoComAtestados = (
     if (semBatidas || marcaFalta || marcaAtestado) {
       if (!util && !marcaAtestado) {
         // sábado/domingo sem batida = folga normal
-        baseRes.dias.push({ data: dia.data, classificacao: 'folga', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0 });
+        baseRes.dias.push({ data: dia.data, classificacao: 'folga', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he60Min: 0, he100Min: 0 });
         continue;
       }
       datasComFaltaNoPonto.add(dia.data);
       const coberto = marcaAtestado || cobertoPorAtestado(dia.data, atestados);
       if (coberto) {
         diasAtestado += 1;
-        baseRes.dias.push({ data: dia.data, classificacao: 'falta_justificada', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0, motivo: 'Coberto por atestado' });
+        baseRes.dias.push({ data: dia.data, classificacao: 'falta_justificada', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he60Min: 0, he100Min: 0, motivo: 'Coberto por atestado' });
       } else {
         faltasDias += 1;
-        baseRes.dias.push({ data: dia.data, classificacao: 'falta_sem_justificativa', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0 });
+        baseRes.dias.push({ data: dia.data, classificacao: 'falta_sem_justificativa', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he60Min: 0, he100Min: 0 });
         baseRes.divergencias.push(`Falta sem atestado em ${dia.data}`);
       }
       continue;
@@ -289,7 +293,7 @@ export const cruzarCartaoComAtestados = (
     if (!calc.valido) {
       warnings.push(`Dia ${dia.data}: batidas inconsistentes — verifique manualmente`);
       baseRes.divergencias.push(`Batida inconsistente em ${dia.data}`);
-      baseRes.dias.push({ data: dia.data, classificacao: 'ignorado', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he100Min: 0, motivo: 'Batidas inválidas' });
+      baseRes.dias.push({ data: dia.data, classificacao: 'ignorado', minutosTrabalhados: 0, atrasoMin: 0, he50Min: 0, he60Min: 0, he100Min: 0, motivo: 'Batidas inválidas' });
       continue;
     }
 
