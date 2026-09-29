@@ -123,8 +123,7 @@ const EXT_ITEMS_FILIAL = [
   { to: 'atestados', label: 'Atestados', icon: FileWarning },
   { to: 'alertas', label: 'Alertas', icon: Bell },
   { to: 'movimento-diario', label: 'Movimento Diario', icon: Activity },
-  { to: 'apontamento', label: 'Apontamento', icon: ClipboardCheck },
-  { to: 'fechamento', label: 'Fechamento', icon: ClipboardCheck },
+  { to: 'fechamento', label: 'Apontamento / Fechamento', icon: ClipboardCheck },
 ];
 
 const EXT_ITEMS_CAMPO = [
