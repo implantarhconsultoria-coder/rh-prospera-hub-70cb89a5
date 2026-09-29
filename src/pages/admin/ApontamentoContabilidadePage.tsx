@@ -287,17 +287,17 @@ const ApontamentoContabilidadePage: React.FC = () => {
         setApontamentoId(null);
         const compEmps = employees.filter(e => e.companyId === companyId && e.status === 'ativo');
         const compEntries = entries.filter(e => e.companyId === companyId && e.competencia === competencia);
-        const empGO = company ? usaHE60(company.name) : false;
         const rows: ItemRow[] = compEmps.map(emp => {
           const ent = compEntries.find(e => e.employeeId === emp.id);
           const salario = Number(emp.salarioBase || 0);
           const insal = getInsalubridadeAplicavel(emp, ent, config.valorInsalubridade);
           const periculosidade = getPericulosidadeAplicavel(emp);
           const valorHora = (salario + insal + periculosidade) / 220;
-          const heExtraHoras = Number(ent?.he50 || 0);
+          const he50Horas = Number(ent?.he50 || 0);
+          const he60Horas = Number(ent?.he60 || 0);
           const he100Horas = Number(ent?.he100 || 0);
-          const he50Valor = !empGO ? round2(heExtraHoras * valorHora * 1.5) : 0;
-          const he60Valor = empGO ? round2(heExtraHoras * valorHora * 1.6) : 0;
+          const he50Valor = round2(he50Horas * valorHora * 1.5);
+          const he60Valor = round2(he60Horas * valorHora * 1.6);
           const he100Valor = round2(he100Horas * valorHora * 2);
           const faltasQtd = Number(ent?.faltasDias || 0);
           const descFalta = round2(faltasQtd * (salario / 30));
@@ -317,9 +317,9 @@ const ApontamentoContabilidadePage: React.FC = () => {
             comissao_base: baseDefault,
             comissao_percentual: pctDefault,
             comissao_valor: comissaoValor,
-            hora_extra_50_horas: empGO ? 0 : heExtraHoras,
+            hora_extra_50_horas: he50Horas,
             hora_extra_50: he50Valor,
-            hora_extra_60_horas: empGO ? heExtraHoras : 0,
+            hora_extra_60_horas: he60Horas,
             hora_extra_60: he60Valor,
             hora_extra_100_horas: he100Horas,
             hora_extra_100: he100Valor,
@@ -538,14 +538,14 @@ const ApontamentoContabilidadePage: React.FC = () => {
   const montarItensCalculadosEmpresa = (empId: string, nomeEmpresa: string): ItemRow[] => {
     const compEmps = employees.filter(e => e.companyId === empId && e.status === 'ativo');
     const compEntries = entries.filter(e => e.companyId === empId && e.competencia === competencia);
-    const empGO = usaHE60(nomeEmpresa);
     return compEmps.map(emp => {
       const ent = compEntries.find(e => e.employeeId === emp.id);
       const salario = Number(emp.salarioBase || 0);
       const insal = getInsalubridadeAplicavel(emp, ent, config.valorInsalubridade);
       const periculosidade = getPericulosidadeAplicavel(emp);
       const valorHora = (salario + insal + periculosidade) / 220;
-      const heExtraHoras = Number(ent?.he50 || 0);
+      const he50Horas = Number(ent?.he50 || 0);
+      const he60Horas = Number(ent?.he60 || 0);
       const he100Horas = Number(ent?.he100 || 0);
       const pctDefault = defaultComissaoPct(nomeEmpresa, emp.name);
       const baseDefault = Number(ent?.comissaoBase || 0);
@@ -561,10 +561,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
         comissao_base: baseDefault,
         comissao_percentual: pctDefault,
         comissao_valor: temComissao ? calcComissaoValor(baseDefault, pctDefault) : 0,
-        hora_extra_50_horas: empGO ? 0 : heExtraHoras,
-        hora_extra_50: empGO ? 0 : round2(heExtraHoras * valorHora * 1.5),
-        hora_extra_60_horas: empGO ? heExtraHoras : 0,
-        hora_extra_60: empGO ? round2(heExtraHoras * valorHora * 1.6) : 0,
+        hora_extra_50_horas: he50Horas,
+        hora_extra_50: round2(he50Horas * valorHora * 1.5),
+        hora_extra_60_horas: he60Horas,
+        hora_extra_60: round2(he60Horas * valorHora * 1.6),
         hora_extra_100_horas: he100Horas,
         hora_extra_100: round2(he100Horas * valorHora * 2),
         assistencia_medica: 0,
@@ -1424,8 +1424,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
                 <th className="px-2 py-2 text-right font-semibold border border-border">Base Com.</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">Com. %</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">Com. Valor</th>
-                <th className="px-2 py-2 text-right font-semibold border border-border">HE {heLabelPct} h</th>
-                <th className="px-2 py-2 text-right font-semibold border border-border">HE {heLabelPct}</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE 50% h</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE 50%</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE 60% h</th>
+                <th className="px-2 py-2 text-right font-semibold border border-border">HE 60%</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">HE 100% h</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">HE 100%</th>
                 <th className="px-2 py-2 text-right font-semibold border border-border">Assist. Méd.</th>
@@ -1468,14 +1470,15 @@ const ApontamentoContabilidadePage: React.FC = () => {
                     {formatBRL(r.comissao_valor)}
                   </td>
                   <td className="px-1 py-1 border border-border text-right">
-                    <NumberInput
-                      value={isGO ? r.hora_extra_60_horas : r.hora_extra_50_horas}
-                      onCommit={(n) => updateRow(idx, isGO ? { hora_extra_60_horas: n } : { hora_extra_50_horas: n })}
+                    <NumberInput value={r.hora_extra_50_horas} onCommit={(n) => updateRow(idx, { hora_extra_50_horas: n })}
                       className="w-14 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
                   </td>
+                  <td className="px-1 py-1 border border-border text-right">{formatBRL(r.hora_extra_50)}</td>
                   <td className="px-1 py-1 border border-border text-right">
-                    {formatBRL(isGO ? r.hora_extra_60 : r.hora_extra_50)}
+                    <NumberInput value={r.hora_extra_60_horas} onCommit={(n) => updateRow(idx, { hora_extra_60_horas: n })}
+                      className="w-14 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
                   </td>
+                  <td className="px-1 py-1 border border-border text-right">{formatBRL(r.hora_extra_60)}</td>
                   <td className="px-1 py-1 border border-border text-right">
                     <NumberInput value={r.hora_extra_100_horas} onCommit={(n) => updateRow(idx, { hora_extra_100_horas: n })}
                       className="w-14 bg-transparent border border-border rounded px-1 py-0.5 text-right text-[11px]" />
@@ -1506,7 +1509,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
             </tbody>
             <tfoot>
               <tr className="bg-muted font-bold">
-                <td colSpan={19} className="px-2 py-2 border border-border text-right">TOTAL GERAL</td>
+                <td colSpan={21} className="px-2 py-2 border border-border text-right">TOTAL GERAL</td>
                 <td className="px-2 py-2 border border-border text-right">{formatBRL(totalGeral)}</td>
               </tr>
             </tfoot>
@@ -1515,7 +1518,7 @@ const ApontamentoContabilidadePage: React.FC = () => {
 
         <p className="text-[10px] text-muted-foreground mt-4 text-center">
           Documento para conferência da contabilidade. Não inclui VR, VT nem reembolso.
-          Total = Salário + Insalubridade + Periculosidade + Comissão Valor + HE {heLabelPct} + HE 100% − Assistência Médica − Desconto Falta − Desconto DSR − Adiantamento.
+          Total = Salário + Insalubridade + Periculosidade + Comissão Valor + HE 50% + HE 60% + HE 100% − Assistência Médica − Desconto Falta − Desconto DSR − Adiantamento.
         </p>
       </div>
       <EmailPdfModal
