@@ -1,4 +1,5 @@
 import { createWorker } from 'tesseract.js';
+import { getVercelOidcToken } from '@vercel/oidc';
 
 const MODEL = 'google/gemini-2.5-flash';
 const ALLOWED_HOST = 'djfjnxmbvjgweqzjvqtr.supabase.co';
@@ -302,7 +303,7 @@ export default async function handler(req: any, res: any) {
   if (!['bomba', 'painel_km', 'recibo_posto'].includes(tipo)) return send(res, { ok: false, error: 'tipo_invalido' }, 400);
 
   try {
-    const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '';
+    const token = process.env.AI_GATEWAY_API_KEY || (await getVercelOidcToken()) || '';
     console.info('[abastecimento-ocr] ai-gateway-status', { tipo, token_disponivel: Boolean(token) });
     let gatewayDiag: any = { token_disponivel: Boolean(token), status: null, erro: null };
     if (token) {
