@@ -5,6 +5,11 @@ import { supabase } from '@/integrations/supabase/client';
 
 const FILIAL_ROLES = new Set(['filial_praia', 'filial_goiania']);
 
+const FILIAL_LOGIN_ALIASES: Record<string, string> = {
+  'adm.gyn@topac.com.br': 'ana.clara@topac.com.br',
+  'comercial.go@topac.com.br': 'aldenei.pereira@topac.com.br',
+};
+
 export default function FilialLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,8 +21,9 @@ export default function FilialLoginPage() {
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
+      const authEmail = FILIAL_LOGIN_ALIASES[normalizedEmail] || normalizedEmail;
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
+        email: authEmail,
         password,
       });
 
