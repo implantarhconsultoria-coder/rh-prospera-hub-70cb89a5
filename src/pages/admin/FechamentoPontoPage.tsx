@@ -61,11 +61,6 @@ const normalize = (value: unknown) =>
 
 const roundHours = (minutos: number) => Math.round((minutos / 60) * 100) / 100;
 
-const isMecanico = (employee: Employee) => {
-  const haystack = normalize([employee.cargo, employee.setorGhe, employee.observacoes].join(' '));
-  return haystack.includes('mecan');
-};
-
 const contarTipos = (registros: RegistroPonto[], tipos: string[]) =>
   registros.filter((r) => tipos.includes(String(r.tipo))).length;
 
@@ -165,17 +160,8 @@ const FechamentoPontoPage: React.FC = () => {
       .map((acesso) => ({ acesso, employee: resolveEmployee(acesso, empsAlvo) }))
       .filter(({ acesso, employee }) => companyMatchesAccess(acesso, employee));
 
-    const mecanicosPorEmployee = new Set(
-      acessosResolvidos
-        .map(({ employee }) => employee?.id)
-        .filter(Boolean) as string[],
-    );
-
-    const mecanicosFallback = empsAlvo
-      .filter((e) => isMecanico(e) && !mecanicosPorEmployee.has(e.id))
-      .map((employee) => ({ acesso: null as AcessoMecanico | null, employee }));
-
-    const mecanicos = [...acessosResolvidos, ...mecanicosFallback];
+    // Somente quem possui acesso ativo e liberado ao app dos mecânicos entra neste fechamento.
+    const mecanicos = acessosResolvidos;
 
     let pontosRes = await (supabase as any)
       .from('registros_ponto')
@@ -473,7 +459,7 @@ const FechamentoPontoPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Ponto dos Mecânicos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Selecione empresa e competência para listar automaticamente os mecânicos vinculados. O botão de fechamento grava faltas, atrasos e HE no fechamento geral.
+            Selecione empresa e competência para listar somente os mecânicos com acesso ativo ao app. O botão de fechamento grava faltas, atrasos e HE no fechamento geral.
           </p>
         </div>
       </div>
