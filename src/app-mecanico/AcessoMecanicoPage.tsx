@@ -14,7 +14,7 @@ const acessoRpc = supabase as unknown as {
 };
 
 const MECHANIC_ICON = "/icons/topac-mecanicos-oficial-20260908-1050-180.png";
-const MECHANIC_MANIFEST = "/manifest-mecanicos-install-20260908.json?v=20260929-app-layout-v1";
+const MECHANIC_MANIFEST = "/manifest-mecanicos-install-20260908.json";
 const SESSION_KEY = "topac_mecanico_session_v2";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -74,7 +74,7 @@ const aplicarIdentidadeMecanico = () => {
   const apple = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
   if (apple) apple.href = MECHANIC_ICON;
   const theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (theme) theme.content = "#030309";
+  if (theme) theme.content = "#030818";
   const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
   if (appleTitle) appleTitle.content = "TOPAC Mecânicos";
   const appName = document.querySelector<HTMLMetaElement>('meta[name="application-name"]');
