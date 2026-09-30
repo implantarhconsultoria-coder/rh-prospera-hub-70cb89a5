@@ -359,6 +359,16 @@ export default function AbastecimentoPageV4() {
       const result = data as { ok?: boolean; error?: string; id?: string; duplicado?: boolean } | null;
       if (error || !result?.ok || !result.id) return toast.error(fuelErrorMessage(result?.error || error?.message));
 
+      void supabase.functions.invoke("topac-abastecimento-leitura", {
+        body: {
+          acessoId: mecanico.acesso_id,
+          autorizacaoId: current.id,
+          fotoBombaUrl,
+          fotoPainelUrl,
+          fotoReciboUrl,
+        },
+      }).catch((ocrError) => console.warn("Leitura automática ficará para conferência na plataforma:", ocrError));
+
       const station = postoAtual || postos.find(p => p.codigo === current.posto_codigo) || null;
       const vehicle = veiculos.find(v => normalizePlate(v.placa) === normalizePlate(current.placa)) || null;
       const info: ReceiptInfo = {
