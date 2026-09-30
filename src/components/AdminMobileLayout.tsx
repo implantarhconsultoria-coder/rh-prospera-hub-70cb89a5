@@ -115,6 +115,8 @@ const AdminMobileLayout: React.FC = () => {
 
   const moreItems = [
     { label:'Empresas', detail:'Empresas e filiais', path:'/admin/empresas', icon:Building2 },
+    { label:'Filial Praia Grande', detail:'Abrir portal da unidade', path:'/filial', icon:Building2, previewCodigo:'topac-pg' },
+    { label:'Filial Goiânia', detail:'Abrir portal da unidade', path:'/filial', icon:Building2, previewCodigo:'topac-gyn' },
     { label:'Documentos', detail:'Holerites e assinaturas', path:'/admin/folha-pagamento', icon:FileText },
     { label:'Uniformes', detail:'Estoque e entrega', path:'/admin/uniformes', icon:Shirt },
     { label:'Estoque', detail:'Materiais internos', path:'/admin/estoque-interno', icon:Archive },
@@ -179,7 +181,12 @@ const AdminMobileLayout: React.FC = () => {
             <div className="grid grid-cols-2 gap-2">
               {moreItems.map(item=>{
                 const Icon=item.icon;
-                return <button key={item.path} type="button" onClick={()=>go(item.path)}
+                return <button key={`${item.path}-${item.label}`} type="button" onClick={()=>{
+                  if ('previewCodigo' in item && item.previewCodigo) {
+                    sessionStorage.setItem('admin_filial_preview_codigo', item.previewCodigo);
+                  }
+                  go(item.path);
+                }}
                   className="rounded-xl border border-fuchsia-500/15 bg-[#05050a] p-3 text-left text-white active:scale-[.985]">
                   <Icon className="mb-3 h-5 w-5 text-fuchsia-400"/>
                   <strong className="block text-sm">{item.label}</strong>
