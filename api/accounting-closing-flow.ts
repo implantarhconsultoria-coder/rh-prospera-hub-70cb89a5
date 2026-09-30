@@ -263,6 +263,7 @@ export default async function handler(req: any, res?: any) {
     }
 
     const cycle = await getOrCreatePaymentCycle(service, companyId, competencia);
+    const portal = clean(cycle?.portal) || (/goi[âa]nia|gyn/i.test(clean((await service.from('empresas').select('nome,codigo').eq('id', companyId).maybeSingle()).data?.nome || '')) ? 'goiania' : 'principal');
     const { owner, emails, cc } = await accountingRecipients(service, companyId);
 
     // Idempotência: se este mesmo fechamento já gerou o apontamento, não cria
