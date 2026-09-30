@@ -13,9 +13,13 @@ export type PortalExterno = {
 export type SessaoAcessoExterno = {
   cpf_clean: string;
   nome: string;
+  email?: string;
   portais: PortalExterno[];
   ts: number;
   expira_em: number;
+  session_token?: string;
+  sessao_id?: string;
+  lembrar?: boolean;
 };
 
 export type UltimoUsuarioExterno = {
@@ -61,13 +65,17 @@ export const createExternalSession = (
 export const isExternalSessionExpired = (session: SessaoAcessoExterno | null | undefined) =>
   !session || Number(session.expira_em || 0) <= Date.now();
 
-export const saveExternalSession = (session: SessaoAcessoExterno) => {
-  sessionStorage.setItem(ACESSO_EXTERNO_SESSAO_KEY, JSON.stringify(session));
+export const saveExternalSession = (session: SessaoAcessoExterno, lembrar = false) => {
+  const target = lembrar ? localStorage : sessionStorage;
+  const other = lembrar ? sessionStorage : localStorage;
+  other.removeItem(ACESSO_EXTERNO_SESSAO_KEY);
+  target.setItem(ACESSO_EXTERNO_SESSAO_KEY, JSON.stringify({ ...session, lembrar }));
 };
 
 export const readExternalSession = (): SessaoAcessoExterno | null => {
   try {
-    const raw = sessionStorage.getItem(ACESSO_EXTERNO_SESSAO_KEY);
+    const raw = sessionStorage.getItem(ACESSO_EXTERNO_SESSAO_KEY)
+      || localStorage.getItem(ACESSO_EXTERNO_SESSAO_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SessaoAcessoExterno;
     if (!parsed?.cpf_clean || !Array.isArray(parsed.portais)) return null;
@@ -79,6 +87,7 @@ export const readExternalSession = (): SessaoAcessoExterno | null => {
 
 export const clearExternalSession = () => {
   sessionStorage.removeItem(ACESSO_EXTERNO_SESSAO_KEY);
+  localStorage.removeItem(ACESSO_EXTERNO_SESSAO_KEY);
   localStorage.removeItem('acesso_externo');
   localStorage.removeItem('app_mecanico_acesso_id');
 };
