@@ -166,25 +166,12 @@ const localOcr = async (fileUrl: string, tipo: string) => {
 
   const worker = await createWorker('eng', 1, { cachePath: '/tmp/tesseract-cache' });
   try {
-    const readings: string[] = [];
-
     await worker.setParameters({
       preserve_interword_spaces: '1',
       tessedit_pageseg_mode: '6',
-      tessedit_char_whitelist: '',
     } as any);
-    const normal = await worker.recognize(bytes);
-    readings.push(String(normal?.data?.text || ''));
-
-    await worker.setParameters({
-      preserve_interword_spaces: '1',
-      tessedit_pageseg_mode: '11',
-      tessedit_char_whitelist: tipo === 'painel_km' ? '0123456789. KMODO' : '0123456789.,',
-    } as any);
-    const numeric = await worker.recognize(bytes);
-    readings.push(String(numeric?.data?.text || ''));
-
-    const text = readings.join('\n');
+    const result = await worker.recognize(bytes);
+    const text = String(result?.data?.text || '');
     if (tipo === 'painel_km') {
       const parsed = parsePanelText(text);
       return parsed ? { ok: true, km: parsed.km, km_atual: parsed.km, confianca: parsed.confianca, motivo: 'Leitura OCR local do hodômetro.', provider: 'tesseract-local' } : { ok: false, error: 'km_nao_confirmado', motivo: 'Não foi possível confirmar o hodômetro na foto.', provider: 'tesseract-local' };
