@@ -346,9 +346,12 @@ export default function AbastecimentoPageV4() {
       const location = await getBrowserLocation();
       if (location.latitude == null || location.longitude == null) return toast.error("Ative a localização do aparelho. O GPS é obrigatório.");
 
-      const { data, error } = await supabaseRpc.rpc("app_mecanico_finalizar_abastecimento_fotografico_v2", {
+      const { data, error } = await supabaseRpc.rpc("app_mecanico_finalizar_abastecimento_fotografico_v3", {
         p_acesso_id: mecanico.acesso_id,
         p_autorizacao_id: current.id,
+        p_valor: null,
+        p_litros: null,
+        p_km: null,
         p_foto_bomba_url: fotoBombaUrl,
         p_foto_painel_url: fotoPainelUrl,
         p_foto_recibo_url: fotoReciboUrl,
@@ -358,6 +361,16 @@ export default function AbastecimentoPageV4() {
       });
       const result = data as { ok?: boolean; error?: string; id?: string; duplicado?: boolean } | null;
       if (error || !result?.ok || !result.id) return toast.error(fuelErrorMessage(result?.error || error?.message));
+
+      void supabase.functions.invoke("topac-abastecimento-leitura", {
+        body: {
+          acessoId: mecanico.acesso_id,
+          autorizacaoId: current.id,
+          fotoBombaUrl,
+          fotoPainelUrl,
+          fotoReciboUrl,
+        },
+      }).catch((ocrError) => console.warn("Leitura automática ficará para conferência na plataforma:", ocrError));
 
       const station = postoAtual || postos.find(p => p.codigo === current.posto_codigo) || null;
       const vehicle = veiculos.find(v => normalizePlate(v.placa) === normalizePlate(current.placa)) || null;
@@ -510,7 +523,7 @@ export default function AbastecimentoPageV4() {
         <Button variant="outline" onClick={() => setCamRecibo(true)} disabled={loading}><ReceiptText className="h-4 w-4" /></Button>
       </div>
       <Button className="h-12 w-full" onClick={() => void finalizar()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Finalizar e gerar recibo</Button>
-      <p className="text-center text-[11px] text-muted-foreground">Não há reconhecimento nem digitação. As 3 fotos + GPS são o registro.</p>
+      <p className="text-center text-[11px] text-muted-foreground">As 3 fotos + GPS são salvos primeiro. A plataforma lê bomba, KM e recibo depois, sem bloquear o mecânico.</p>
     </Card>}
 
     {step === "ok" && receipt && <Card className="space-y-4 border-emerald-500/30 p-5">
