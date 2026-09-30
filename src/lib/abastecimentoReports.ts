@@ -23,7 +23,11 @@ export type FuelReportRecord = {
   posto_telefone: string | null;
   foto_bomba_url: string | null;
   foto_painel_url: string | null;
+  foto_recibo_url?: string | null;
   recibo_pdf_url: string | null;
+  preenchimento?: string | null;
+  acesso_externo_id?: string | null;
+  autorizacao_id?: string | null;
   observacao: string | null;
   status: string | null;
   created_at: string | null;
