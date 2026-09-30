@@ -28,8 +28,8 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
         ? '/admin/central-contabilidade'
         : null;
 
-  const abrirFilialPraia = () => {
-    sessionStorage.setItem('admin_filial_preview_codigo', 'topac-pg');
+  const abrirFilial = (codigo: 'topac-pg' | 'topac-gyn') => {
+    sessionStorage.setItem('admin_filial_preview_codigo', codigo);
     navigate('/filial');
   };
 
@@ -45,16 +45,28 @@ const ModuleSwitcher: React.FC<{ compact?: boolean }> = ({ compact }) => {
       {isAdmin && <EmployeeAccessControl />}
 
       {isAdmin && !location.pathname.startsWith('/filial') && (
-        <Button
-          variant="outline"
-          size={compact ? 'sm' : 'default'}
-          onClick={abrirFilialPraia}
-          className="gap-2 border-[#5b2a78] bg-[#120b19] text-white shadow-md hover:border-[#8b3fe7] hover:bg-[#1a0f24] hover:text-white"
-          title="Visualizar Portal da Filial Praia Grande"
-        >
-          <Building2 className="h-4 w-4" />
-          {!compact && <span>Filial Praia Grande</span>}
-        </Button>
+        <>
+          <Button
+            variant="outline"
+            size={compact ? 'sm' : 'default'}
+            onClick={() => abrirFilial('topac-pg')}
+            className="gap-2 border-[#5b2a78] bg-[#120b19] text-white shadow-md hover:border-[#8b3fe7] hover:bg-[#1a0f24] hover:text-white"
+            title="Visualizar Portal da Filial Praia Grande"
+          >
+            <Building2 className="h-4 w-4" />
+            {!compact && <span>Filial Praia Grande</span>}
+          </Button>
+          <Button
+            variant="outline"
+            size={compact ? 'sm' : 'default'}
+            onClick={() => abrirFilial('topac-gyn')}
+            className="gap-2 border-[#5b2a78] bg-[#120b19] text-white shadow-md hover:border-[#8b3fe7] hover:bg-[#1a0f24] hover:text-white"
+            title="Visualizar Portal da Filial Goiânia"
+          >
+            <Building2 className="h-4 w-4" />
+            {!compact && <span>Filial Goiânia</span>}
+          </Button>
+        </>
       )}
 
       {canPreview && adminPortalTarget && (
