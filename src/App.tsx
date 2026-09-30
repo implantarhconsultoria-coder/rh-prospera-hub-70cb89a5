@@ -91,6 +91,7 @@ import EstoqueVeiculoPage from "@/pages/campo/EstoqueVeiculoPage";
 import RegistroKmPage from "@/pages/campo/RegistroKmPage";
 import NotFound from "@/pages/NotFound";
 import AcessoExternoPage from "@/pages/AcessoExternoPage";
+import FilialLoginPage from "@/pages/FilialLoginPage";
 import AcessoDiretoPage from "@/pages/AcessoDiretoPage";
 import PortaisPage from "@/pages/PortaisPage";
 import AssistentePage from "@/pages/admin/AssistentePage";
@@ -309,7 +310,8 @@ const App = () => (
             <Routes>
               <Route path="/modulos" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
               <Route path="/acesso/:slug" element={<ErrorBoundary><AcessoDiretoPage /></ErrorBoundary>} />
-              <Route path="/acesso-filial" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/acesso-filial" element={<ErrorBoundary><FilialLoginPage /></ErrorBoundary>} />
+              <Route path="/filiais" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-modulos" element={<Navigate to="/modulos" replace />} />
               <Route path="/portais" element={<ErrorBoundary><PortaisPage /></ErrorBoundary>} />
               <Route path="/acesso-almoxarifado" element={<Navigate to="/modulos" replace />} />
