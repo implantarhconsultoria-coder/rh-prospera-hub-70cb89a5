@@ -26,6 +26,7 @@ const menuItems: MenuItem[] = [
 const operationalItems: MenuItem[] = [
   { label: 'Operacional', icon: ClipboardList, path: '/admin/operacional' },
   { label: 'App Mecânico', icon: Wrench, path: '/admin/app-mecanico' },
+  { label: 'Ponto dos Mecânicos', icon: ClipboardCheck, path: '/admin/fechamento-ponto' },
   { label: 'Relatório de Abastecimento', icon: Fuel, path: '/admin/abastecimento-qrcode' },
   { label: 'Almoxarifado', icon: Package, path: '/admin/almoxarifado' },
   { label: 'Estoque Interno', icon: Archive, path: '/admin/estoque-interno' },
