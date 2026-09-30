@@ -398,7 +398,7 @@ export default async function handler(req: any, res?: any) {
         usuario_nome: user.email || 'Administrador',
         email_corporativo_usado: 'adm.matriz@topac.com.br',
         email_remetente: clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>'),
-        reply_to: 'adm.matriz@topac.com.br',
+        reply_to: ACCOUNTING_REPLY_MAILBOX,
         provider: 'resend',
         modulo_origem: 'contabilidade_fechamento',
         documento_id: null,
