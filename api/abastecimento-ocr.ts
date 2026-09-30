@@ -266,7 +266,14 @@ const gatewayOcr = async (fileUrl: string, tipo: string, token: string) => {
     }),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.error('[abastecimento-ocr] ai-gateway-falhou', {
+      status: response.status,
+      tipo,
+      erro: String(payload?.error?.message || payload?.error?.code || payload?.message || 'sem_detalhe').slice(0, 300),
+    });
+    return null;
+  }
   const parsed = parseJson(payload?.choices?.[0]?.message?.content);
   if (!parsed) return null;
 
@@ -296,6 +303,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '';
+    console.info('[abastecimento-ocr] ai-gateway-status', { tipo, token_disponivel: Boolean(token) });
     if (token) {
       const gateway = await gatewayOcr(fileUrl, tipo, token).catch(() => null);
       if (gateway?.ok) return send(res, gateway);
