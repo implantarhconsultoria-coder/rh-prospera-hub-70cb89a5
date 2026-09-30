@@ -308,16 +308,16 @@ const App = () => (
           <BrowserRouter>
             <GlobalErrorCatcher />
             <Routes>
-              <Route path="/modulos" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
+              <Route path="/modulos" element={<ErrorBoundary><FilialLoginPage /></ErrorBoundary>} />
               <Route path="/acesso/:slug" element={<ErrorBoundary><AcessoDiretoPage /></ErrorBoundary>} />
               <Route path="/acesso-filial" element={<ErrorBoundary><FilialLoginPage /></ErrorBoundary>} />
               <Route path="/filiais" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-modulos" element={<Navigate to="/modulos" replace />} />
               <Route path="/portais" element={<ErrorBoundary><PortaisPage /></ErrorBoundary>} />
-              <Route path="/acesso-almoxarifado" element={<Navigate to="/modulos" replace />} />
-              <Route path="/acesso-operacional" element={<ErrorBoundary><AcessoExternoPage /></ErrorBoundary>} />
-              <Route path="/acesso-campo" element={<Navigate to="/modulos" replace />} />
-              <Route path="/acesso-rh" element={<Navigate to="/modulos" replace />} />
+              <Route path="/acesso-almoxarifado" element={<ErrorBoundary><FilialLoginPage /></ErrorBoundary>} />
+              <Route path="/acesso-operacional" element={<ErrorBoundary><FilialLoginPage /></ErrorBoundary>} />
+              <Route path="/acesso-campo" element={<ErrorBoundary><FilialLoginPage /></ErrorBoundary>} />
+              <Route path="/acesso-rh" element={<Navigate to="/acesso-filial" replace />} />
               <Route path="/acesso-financeiro" element={<Navigate to="/modulos" replace />} />
               <Route path="/acesso-faturamento" element={<Navigate to="/modulos" replace />} />
 
