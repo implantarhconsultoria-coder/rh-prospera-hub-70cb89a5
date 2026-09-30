@@ -11,13 +11,7 @@ const replaceOrThrow = (text, from, to, label) => {
 
 let page = fs.readFileSync(pagePath, 'utf8');
 
-if (
-  page.includes('topac-abastecimento-leitura')
-  && page.includes('app_mecanico_finalizar_abastecimento_fotografico_v3')
-  && page.includes('p_valor: null')
-  && page.includes('p_litros: null')
-  && page.includes('p_km: null')
-) {
+if (page.includes('topac-abastecimento-leitura')) {
   console.log('[abastecimento-ocr] fluxo assíncrono da plataforma detectado; OCR no app não será reaplicado.');
   process.exit(0);
 }
