@@ -71,7 +71,7 @@ const codigoErro = (error: unknown) => {
 
 const mensagemPonto = (code: string) => {
   if (code === "gps_obrigatorio") return "Ative a localização do aparelho. Sem GPS o ponto não pode ser registrado.";
-  if (code === "selfie_obrigatoria") return "A selfie ao vivo é obrigatória para registrar a entrada.";
+  if (code === "selfie_obrigatoria") return "A selfie ao vivo é obrigatória para registrar entrada e saída.";
   if (code === "entrada_ja_registrada") return "A entrada de hoje já foi registrada.";
   if (code === "entrada_obrigatoria") return "Registre a entrada antes desta ação.";
   if (code === "almoco_inicio_ja_registrado") return "O início do almoço de hoje já foi registrado.";
@@ -214,7 +214,7 @@ export default function PontoPage() {
   const [pendentes, setPendentes] = useState(0);
   const sincronizandoRef = useRef(false);
 
-  const exigirSelfie = tipo === "entrada";
+  const exigirSelfie = tipo === "entrada" || tipo === "saida";
   const temGps = gpsValido(pos.lat, pos.lng);
 
   const atualizarQuantidadePendente = useCallback(() => {
@@ -312,7 +312,7 @@ export default function PontoPage() {
   const registrar = async () => {
     if (loading || doneMessage) return;
     if (exigirSelfie && !selfieDataUrl) {
-      toast.error("Tire a selfie ao vivo para concluir a entrada.");
+      toast.error(tipo === "saida" ? "Tire a selfie ao vivo para concluir a saída." : "Tire a selfie ao vivo para concluir a entrada.");
       setOpenCam(true);
       return;
     }
@@ -420,7 +420,7 @@ export default function PontoPage() {
 
       {doneMessage ? <div className="flex items-center gap-2 text-emerald-600"><CheckCircle2 className="h-5 w-5" /> {doneMessage}</div> : <Button onClick={() => void registrar()} disabled={loading || locating || !temGps} className="h-12 w-full">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}</Button>}
 
-      <CameraCapture open={openCam} onClose={() => setOpenCam(false)} onCapture={handleSelfie} facing="user" allowGallery={false} title="Selfie de Entrada" hint="Centralize o rosto. A foto deve ser tirada agora." />
+      <CameraCapture open={openCam} onClose={() => setOpenCam(false)} onCapture={handleSelfie} facing="user" allowGallery={false} title={tipo === "saida" ? "Selfie de Saída" : "Selfie de Entrada"} hint="Centralize o rosto. A foto deve ser tirada agora." />
     </Card>
   );
 }
