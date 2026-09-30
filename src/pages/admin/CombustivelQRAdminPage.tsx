@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { Building2, CalendarRange, Download, Fuel, History, Loader2, Mail, Pencil, Plus, Printer, QrCode, Trash2 } from 'lucide-react';
+import { AlertTriangle, Building2, CalendarRange, Download, Eye, Fuel, History, Loader2, Mail, Pencil, Plus, Printer, QrCode, ReceiptText, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,7 @@ export default function CombustivelQRAdminPage() {
   const navigate = useNavigate();
   const { userRoles } = useApp();
   const canDelete = userRoles.includes('admin');
+  const canCorrect = userRoles.includes('admin') || userRoles.includes('diretor_geral');
   const [postos, setPostos] = useState<Posto[]>([]);
   const [companies, setCompanies] = useState<RegisteredCompany[]>([]);
   const [records, setRecords] = useState<FuelReportRecord[]>([]);
@@ -87,6 +88,10 @@ export default function CombustivelQRAdminPage() {
   const [emailOpen, setEmailOpen] = useState(false);
   const [deleteRecord, setDeleteRecord] = useState<FuelReportRecord | null>(null);
   const [deletingRecord, setDeletingRecord] = useState(false);
+  const [correctionRecord, setCorrectionRecord] = useState<FuelReportRecord | null>(null);
+  const [correctionDraft, setCorrectionDraft] = useState({ valor: '', litros: '', preco: '', km: '', observacao: '' });
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
   const loadBase = useCallback(async () => {
     setLoadingBase(true);
@@ -121,8 +126,17 @@ export default function CombustivelQRAdminPage() {
       toast.error(fuelResult.error?.message || kmResult.error?.message || 'Não foi possível consultar os relatórios operacionais.');
       return;
     }
-    const rows = ((fuelResult.data as unknown[]) || []).map((item) => (typeof item === 'string' ? JSON.parse(item) : item)) as FuelReportRecord[];
+    let rows = ((fuelResult.data as unknown[]) || []).map((item) => (typeof item === 'string' ? JSON.parse(item) : item)) as FuelReportRecord[];
     const kmRows = ((kmResult.data as unknown[]) || []).map((item) => (typeof item === 'string' ? JSON.parse(item) : item)) as KmReportRecord[];
+
+    if (rows.length) {
+      const { data: extraRows } = await (supabase.from('abastecimentos' as any) as any)
+        .select('id,foto_recibo_url,preenchimento,acesso_externo_id,autorizacao_id')
+        .in('id', rows.map((row) => row.id));
+      const extraMap = new Map(((extraRows as any[]) || []).map((row) => [row.id, row]));
+      rows = rows.map((row) => ({ ...row, ...(extraMap.get(row.id) || {}) }));
+    }
+
     setRecords(rows);
     setKmRecords(kmRows);
     setLoadedPeriodLabel(period.label);
@@ -269,6 +283,80 @@ export default function CombustivelQRAdminPage() {
     URL.revokeObjectURL(url);
   };
 
+  const openCorrection = (record: FuelReportRecord) => {
+    const showNumber = (value?: number | null) => Number(value || 0) > 0 ? String(value) : '';
+    setCorrectionRecord(record);
+    setCorrectionDraft({
+      valor: showNumber(record.valor),
+      litros: showNumber(record.litros),
+      preco: showNumber(record.valor_por_litro),
+      km: showNumber(record.km_atual),
+      observacao: '',
+    });
+  };
+
+  const parseDraftNumber = (value: string) => {
+    const normalized = String(value || '').trim().replace(/\./g, '').replace(',', '.');
+    if (!normalized) return null;
+    const number = Number(normalized);
+    return Number.isFinite(number) && number > 0 ? number : null;
+  };
+
+  const saveCorrection = async () => {
+    if (!correctionRecord) return;
+    setSavingCorrection(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_corrigir_abastecimento_manual' as any, {
+        p_id: correctionRecord.id,
+        p_valor: parseDraftNumber(correctionDraft.valor),
+        p_litros: parseDraftNumber(correctionDraft.litros),
+        p_valor_por_litro: parseDraftNumber(correctionDraft.preco),
+        p_km: parseDraftNumber(correctionDraft.km),
+        p_observacao: correctionDraft.observacao || null,
+      });
+      const result = data as any;
+      if (error || !result?.ok) throw new Error(result?.error || error?.message || 'Não foi possível salvar a conferência manual.');
+      toast.success(result.completo ? 'Conferência manual concluída.' : 'Dados salvos. O comprovante continua em revisão manual.');
+      setCorrectionRecord(null);
+      await loadReport();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a conferência manual.');
+    } finally {
+      setSavingCorrection(false);
+    }
+  };
+
+  const reprocessCorrection = async () => {
+    if (!correctionRecord?.acesso_externo_id || !correctionRecord?.autorizacao_id) {
+      return toast.error('Este registro antigo não possui vínculo suficiente para reprocessamento automático.');
+    }
+    if (!correctionRecord.foto_bomba_url || !correctionRecord.foto_painel_url || !correctionRecord.foto_recibo_url) {
+      return toast.error('As três fotos são necessárias para reprocessar automaticamente.');
+    }
+    setReprocessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('topac-abastecimento-leitura', {
+        body: {
+          acessoId: correctionRecord.acesso_externo_id,
+          autorizacaoId: correctionRecord.autorizacao_id,
+          fotoBombaUrl: correctionRecord.foto_bomba_url,
+          fotoPainelUrl: correctionRecord.foto_painel_url,
+          fotoReciboUrl: correctionRecord.foto_recibo_url,
+        },
+      });
+      const result = data as any;
+      if (error || !result?.ok) throw new Error(result?.error || error?.message || 'A leitura automática não pôde ser concluída.');
+      if (result.revisao_manual) toast.warning('As fotos foram relidas, mas ainda há dados que precisam de conferência manual.');
+      else toast.success('Leitura automática concluída e dados atualizados.');
+      setCorrectionRecord(null);
+      await loadReport();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível reprocessar as fotos.');
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   const deleteFuelRecord = async () => {
     if (!deleteRecord || !canDelete) return;
     setDeletingRecord(true);
@@ -385,7 +473,7 @@ export default function CombustivelQRAdminPage() {
         <TabsContent value="detalhado">
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-3"><CardTitle>Relatório Detalhado</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={exportDetailedCsv} disabled={!filteredRecords.length}>CSV</Button><Button variant="outline" onClick={() => openPdf('detalhado')} disabled={!filteredRecords.length}><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button><Button onClick={() => prepareEmail('detalhado')} disabled={!filteredRecords.length}><Mail className="mr-2 h-4 w-4" /> Enviar</Button></div></CardHeader>
-            <CardContent><DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} /></CardContent>
+            <CardContent><DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} onCorrect={canCorrect ? openCorrection : undefined} /></CardContent>
           </Card>
         </TabsContent>
 
@@ -415,13 +503,55 @@ export default function CombustivelQRAdminPage() {
         </TabsContent>
 
         <TabsContent value="historico">
-          <Card><CardHeader><CardTitle>Histórico do período consultado</CardTitle></CardHeader><CardContent><div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3"><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{generalTotals.quantity}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Litros</div><div className="text-xl font-bold">{formatNumber(generalTotals.liters)}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Valor</div><div className="text-xl font-bold">{formatMoney(generalTotals.value)}</div></div></div><DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} /></CardContent></Card>
+          <Card><CardHeader><CardTitle>Histórico do período consultado</CardTitle></CardHeader><CardContent><div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3"><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Abastecimentos</div><div className="text-xl font-bold">{generalTotals.quantity}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Litros</div><div className="text-xl font-bold">{formatNumber(generalTotals.liters)}</div></div><div className="rounded-lg border p-3"><div className="text-xs text-muted-foreground">Valor</div><div className="text-xl font-bold">{formatMoney(generalTotals.value)}</div></div></div><DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} onCorrect={canCorrect ? openCorrection : undefined} /></CardContent></Card>
         </TabsContent>
 
         <TabsContent value="qrcodes">
           <Card><CardHeader className="flex-row items-center justify-between"><CardTitle>Postos cadastrados</CardTitle><Button onClick={() => { setPostoDraft(emptyPosto); setPostoDialog(true); }}><Plus className="mr-2 h-4 w-4" /> Novo posto</Button></CardHeader><CardContent>{loadingBase ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin" /></div> : <Table><TableHeader><TableRow><TableHead>Posto</TableHead><TableHead>CNPJ</TableHead><TableHead>Endereço</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{postos.map((posto) => <TableRow key={posto.id}><TableCell><div className="font-medium">{posto.nome}</div><code className="text-xs text-muted-foreground">{posto.codigo}</code></TableCell><TableCell>{posto.cnpj || '-'}</TableCell><TableCell>{posto.endereco || '-'}</TableCell><TableCell><Badge variant={posto.status === 'ativo' ? 'default' : 'destructive'}>{posto.status}</Badge></TableCell><TableCell className="text-right"><Button size="icon" variant="ghost" onClick={() => void showQr(posto)}><QrCode className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => { setPostoDraft({ id: posto.id, nome: posto.nome, cnpj: posto.cnpj || '', endereco: posto.endereco || '', telefone: posto.telefone || '', observacao: posto.observacao || '' }); setPostoDialog(true); }}><Pencil className="h-4 w-4" /></Button><Button size="sm" variant="outline" onClick={() => void togglePosto(posto)}>{posto.status === 'ativo' ? 'Bloquear' : 'Liberar'}</Button></TableCell></TableRow>)}</TableBody></Table>}</CardContent></Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!correctionRecord} onOpenChange={(open) => !open && !savingCorrection && !reprocessing && setCorrectionRecord(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader><DialogTitle>Conferência do abastecimento</DialogTitle></DialogHeader>
+          {correctionRecord && <div className="space-y-5">
+            <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="text-sm"><strong>Comprovante preservado.</strong><div className="text-muted-foreground">Confira as fotos. Se a leitura automática não conseguir identificar algum campo, preencha abaixo somente o que você conseguir ler.</div></div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                ['Bomba', correctionRecord.foto_bomba_url],
+                ['Painel / KM', correctionRecord.foto_painel_url],
+                ['Recibo do posto', correctionRecord.foto_recibo_url],
+              ].map(([label, url]) => <div key={label} className="rounded-lg border p-2">
+                <div className="mb-2 text-xs font-semibold">{label}</div>
+                {url ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={label} className="h-44 w-full rounded-md bg-muted object-contain" /></a> : <div className="grid h-44 place-items-center rounded-md bg-muted text-xs text-muted-foreground">Foto não disponível</div>}
+                {url && <Button size="sm" variant="outline" className="mt-2 w-full" asChild><a href={url} target="_blank" rel="noreferrer"><Eye className="mr-2 h-4 w-4" />Abrir foto</a></Button>}
+              </div>)}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-4">
+              <div><Label>Valor total (R$)</Label><Input inputMode="decimal" value={correctionDraft.valor} onChange={(e) => setCorrectionDraft({ ...correctionDraft, valor: e.target.value })} placeholder="Ex.: 302,87" /></div>
+              <div><Label>Litros</Label><Input inputMode="decimal" value={correctionDraft.litros} onChange={(e) => setCorrectionDraft({ ...correctionDraft, litros: e.target.value })} placeholder="Ex.: 44,671" /></div>
+              <div><Label>Preço / litro</Label><Input inputMode="decimal" value={correctionDraft.preco} onChange={(e) => setCorrectionDraft({ ...correctionDraft, preco: e.target.value })} placeholder="Calculado se vazio" /></div>
+              <div><Label>KM do painel</Label><Input inputMode="numeric" value={correctionDraft.km} onChange={(e) => setCorrectionDraft({ ...correctionDraft, km: e.target.value.replace(/\D/g, '') })} placeholder="Ex.: 90100" /></div>
+            </div>
+
+            <div><Label>Observação da conferência</Label><Input value={correctionDraft.observacao} onChange={(e) => setCorrectionDraft({ ...correctionDraft, observacao: e.target.value })} placeholder="Opcional — registre o que estava ilegível ou o que foi corrigido" /></div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" onClick={() => void reprocessCorrection()} disabled={reprocessing || savingCorrection}>
+                {reprocessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Tentar leitura novamente
+              </Button>
+              <Button onClick={() => void saveCorrection()} disabled={savingCorrection || reprocessing}>
+                {savingCorrection ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Salvar conferência manual
+              </Button>
+            </div>
+          </div>}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!deleteRecord} onOpenChange={(open) => !open && !deletingRecord && setDeleteRecord(null)}>
         <DialogContent className="max-w-md">
@@ -475,7 +605,61 @@ const KmReportView = ({ groups }: { groups: KmReportGroup[] }) => {
   ))}</div>;
 };
 
-const DetailedTable = ({ records, onDelete }: { records: FuelReportRecord[]; onDelete?: (record: FuelReportRecord) => void }) => {
+const needsManualReview = (record: FuelReportRecord) =>
+  record.preenchimento === 'app_mecanicos_revisao_manual'
+  || Number(record.valor || 0) <= 0
+  || Number(record.litros || 0) <= 0
+  || record.km_atual == null
+  || Number(record.km_atual || 0) <= 0;
+
+const DetailedTable = ({
+  records,
+  onDelete,
+  onCorrect,
+}: {
+  records: FuelReportRecord[];
+  onDelete?: (record: FuelReportRecord) => void;
+  onCorrect?: (record: FuelReportRecord) => void;
+}) => {
   if (!records.length) return <p className="py-10 text-center text-sm text-muted-foreground">Nenhum abastecimento localizado.</p>;
-  return <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Empresa</TableHead><TableHead>Funcionário</TableHead><TableHead>Placa</TableHead><TableHead>Posto</TableHead><TableHead>Combustível</TableHead><TableHead className="text-right">Litros</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">KM</TableHead><TableHead>Status</TableHead>{onDelete && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{records.map((record) => <TableRow key={record.id}><TableCell className="whitespace-nowrap">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell><TableCell>{record.empresa_nome || record.empresa || record.filial || '-'}</TableCell><TableCell>{record.funcionario_nome}</TableCell><TableCell>{record.placa || '-'}</TableCell><TableCell>{record.posto_nome || '-'}</TableCell><TableCell>{record.combustivel || '-'}</TableCell><TableCell className="text-right">{formatNumber(record.litros)}</TableCell><TableCell className="text-right font-medium">{formatMoney(record.valor)}</TableCell><TableCell className="text-right">{record.km_atual == null ? '-' : formatNumber(record.km_atual, 0)}</TableCell><TableCell><Badge variant={record.status === 'cancelado' ? 'destructive' : 'secondary'}>{record.status || '-'}</Badge></TableCell>{onDelete && <TableCell className="text-right"><Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => onDelete(record)}><Trash2 className="mr-2 h-4 w-4" /> Excluir</Button></TableCell>}</TableRow>)}</TableBody></Table></div>;
+
+  return <div className="overflow-x-auto"><Table>
+    <TableHeader><TableRow>
+      <TableHead>Data</TableHead><TableHead>Empresa</TableHead><TableHead>Funcionário</TableHead><TableHead>Placa</TableHead>
+      <TableHead>Posto</TableHead><TableHead>Combustível</TableHead><TableHead className="text-right">Litros</TableHead>
+      <TableHead className="text-right">Valor</TableHead><TableHead className="text-right">KM</TableHead>
+      <TableHead>Leitura</TableHead><TableHead>Comprovantes</TableHead>{(onDelete || onCorrect) && <TableHead className="text-right">Ações</TableHead>}
+    </TableRow></TableHeader>
+    <TableBody>{records.map((record) => {
+      const manual = needsManualReview(record);
+      return <TableRow key={record.id} className={manual ? 'bg-amber-500/5' : undefined}>
+        <TableCell className="whitespace-nowrap">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell>
+        <TableCell>{record.empresa_nome || record.empresa || record.filial || '-'}</TableCell>
+        <TableCell>{record.funcionario_nome}</TableCell>
+        <TableCell>{record.placa || '-'}</TableCell>
+        <TableCell>{record.posto_nome || '-'}</TableCell>
+        <TableCell>{record.combustivel || '-'}</TableCell>
+        <TableCell className="text-right">{Number(record.litros || 0) > 0 ? formatNumber(record.litros) : '—'}</TableCell>
+        <TableCell className="text-right font-medium">{Number(record.valor || 0) > 0 ? formatMoney(record.valor) : '—'}</TableCell>
+        <TableCell className="text-right">{record.km_atual == null || Number(record.km_atual) <= 0 ? '—' : formatNumber(record.km_atual, 0)}</TableCell>
+        <TableCell>{manual
+          ? <Badge variant="destructive" className="whitespace-nowrap"><AlertTriangle className="mr-1 h-3 w-3" />REVISÃO MANUAL</Badge>
+          : <Badge variant="secondary" className="whitespace-nowrap">{record.preenchimento === 'manual_corrigido' ? 'MANUAL CONFERIDO' : 'AUTOMÁTICO OK'}</Badge>}
+        </TableCell>
+        <TableCell>
+          <div className="flex flex-wrap gap-1">
+            {record.foto_bomba_url && <Button size="sm" variant="outline" asChild><a href={record.foto_bomba_url} target="_blank" rel="noreferrer">Bomba</a></Button>}
+            {record.foto_painel_url && <Button size="sm" variant="outline" asChild><a href={record.foto_painel_url} target="_blank" rel="noreferrer">KM</a></Button>}
+            {record.foto_recibo_url && <Button size="sm" variant="outline" asChild><a href={record.foto_recibo_url} target="_blank" rel="noreferrer"><ReceiptText className="mr-1 h-3.5 w-3.5" />Recibo</a></Button>}
+          </div>
+        </TableCell>
+        {(onDelete || onCorrect) && <TableCell className="text-right">
+          <div className="flex justify-end gap-1">
+            {onCorrect && <Button size="sm" variant={manual ? 'default' : 'outline'} onClick={() => onCorrect(record)}>{manual ? 'Corrigir' : 'Conferir'}</Button>}
+            {onDelete && <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button>}
+          </div>
+        </TableCell>}
+      </TableRow>;
+    })}</TableBody>
+  </Table></div>;
 };
