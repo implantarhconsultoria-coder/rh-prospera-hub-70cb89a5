@@ -23,18 +23,28 @@ const shorten = (value: unknown, max: number) => {
 };
 
 async function getOrCreatePaymentCycle(service: any, companyId: string, competencia: string) {
-  const { data: existing, error: findError } = await service.from('contabilidade_folha_ciclos')
+  const { data: company, error: companyError } = await service.from('empresas')
+    .select('id,nome,codigo')
+    .eq('id', companyId)
+    .maybeSingle();
+  if (companyError || !company) throw companyError || new Error('empresa_nao_encontrada');
+
+  const portal = /goi[âa]nia|gyn/i.test(clean(company.nome || company.codigo)) ? 'goiania' : 'principal';
+
+  const { data: existingRows, error: findError } = await service.from('contabilidade_folha_ciclos')
     .select('*')
-    .eq('portal', 'principal')
     .eq('empresa_id', companyId)
     .eq('competencia', competencia)
     .eq('tipo', 'pagamento')
-    .maybeSingle();
+    .order('created_at', { ascending: false })
+    .limit(2);
   if (findError) throw findError;
+
+  const existing = Array.isArray(existingRows) ? existingRows[0] : null;
   if (existing) return existing;
 
   const { data, error } = await service.from('contabilidade_folha_ciclos').insert({
-    portal: 'principal',
+    portal,
     empresa_id: companyId,
     competencia,
     tipo: 'pagamento',
