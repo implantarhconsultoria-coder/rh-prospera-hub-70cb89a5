@@ -51,7 +51,7 @@ const AppLayout: React.FC = () => {
     const moduleResults = [
       ['Dashboard', '/admin'], ['Empresas', '/admin/empresas'], ['Funcionários', '/admin/funcionarios'],
       ['Pré-cadastro admissional', '/admin/pre-cadastro-admissional'], ['ASO', '/admin/aso'],
-      ['Fechamento', '/admin/fechamento'], ['Apontamento Inteligente', '/admin/apontamento-inteligente'], ['VR', '/admin/relatorio-vr'], ['VT', '/admin/relatorio-vt'], ['Uniformes', '/admin/uniformes'], ['EPI', '/admin/epi'],
+      ['Fechamento', '/admin/fechamento'], ['Ponto dos Mecânicos', '/admin/fechamento-ponto'], ['Apontamento Inteligente', '/admin/apontamento-inteligente'], ['VR', '/admin/relatorio-vr'], ['VT', '/admin/relatorio-vt'], ['Uniformes', '/admin/uniformes'], ['EPI', '/admin/epi'],
       ...(canViewFrota ? [['Frota / Documentos', '/admin/documentos-ativos']] : []), ['Almoxarifado', '/admin/almoxarifado'], ['Estoque Interno', '/admin/estoque-interno'],
       ['Relatório de Abastecimento', '/admin/abastecimento-qrcode'], ['Assinatura Digital', '/admin/folha-pagamento'],
     ]
