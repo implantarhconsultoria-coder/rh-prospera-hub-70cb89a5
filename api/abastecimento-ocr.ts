@@ -130,6 +130,45 @@ const parsePumpText = (text: string) => {
     }
   }
 
+  // Alguns visores/recibos perdem a virgula no OCR (ex.: 46636 => 46,636).
+  // Se a leitura decimal normal falhar, reconstrua candidatos pela escala esperada
+  // e aceite somente combinações que fecham matematicamente.
+  if (!best) {
+    const rawInts = Array.from(normalizeOcrText(text).matchAll(/\b\d{3,7}\b/g))
+      .map((m, index) => ({ raw: m[0], n: Number(m[0]), index }))
+      .filter(x => Number.isFinite(x.n));
+
+    const totalCandidates = rawInts
+      .filter(x => x.raw.length >= 3 && x.raw.length <= 6)
+      .map(x => ({ ...x, value: x.n / 100 }))
+      .filter(x => x.value >= 5 && x.value <= 10000);
+
+    const volumeCandidates = rawInts
+      .filter(x => x.raw.length >= 4 && x.raw.length <= 6)
+      .map(x => ({ ...x, value: x.n / 1000 }))
+      .filter(x => x.value >= 0.5 && x.value <= 500);
+
+    const priceCandidates = rawInts.flatMap(x => {
+      const out: Array<{ raw: string; n: number; index: number; value: number }> = [];
+      if (x.raw.length >= 3 && x.raw.length <= 5) out.push({ ...x, value: x.n / 1000 });
+      if (x.raw.length === 3 || x.raw.length === 4) out.push({ ...x, value: x.n / 100 });
+      return out;
+    }).filter(x => x.value >= 1.5 && x.value <= 30);
+
+    for (const total of totalCandidates) {
+      for (const volume of volumeCandidates) {
+        if (total.index === volume.index) continue;
+        for (const price of priceCandidates) {
+          if (price.index === total.index || price.index === volume.index) continue;
+          const error = Math.abs(total.value - volume.value * price.value) / Math.max(total.value, 1);
+          if (error <= 0.012 && (!best || error < best.error)) {
+            best = { total: total.value, volume: volume.value, price: price.value, error };
+          }
+        }
+      }
+    }
+  }
+
   if (best) {
     valor ??= best.total;
     litros ??= best.volume;
