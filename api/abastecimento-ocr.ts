@@ -272,10 +272,10 @@ const gatewayOcr = async (fileUrl: string, tipo: string, token: string) => {
       tipo,
       erro: String(payload?.error?.message || payload?.error?.code || payload?.message || 'sem_detalhe').slice(0, 300),
     });
-    return null;
+    return { ok: false, __gateway_status: response.status, __gateway_error: String(payload?.error?.message || payload?.error?.code || payload?.message || 'gateway_http').slice(0, 200) };
   }
   const parsed = parseJson(payload?.choices?.[0]?.message?.content);
-  if (!parsed) return null;
+  if (!parsed) return { ok: false, __gateway_status: response.status, __gateway_error: 'resposta_gateway_invalida' };
 
   if (tipo === 'painel_km') {
     const km = kmOrNull(parsed.km ?? parsed.km_atual ?? parsed.odo ?? parsed.hodometro);
@@ -304,13 +304,23 @@ export default async function handler(req: any, res: any) {
   try {
     const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '';
     console.info('[abastecimento-ocr] ai-gateway-status', { tipo, token_disponivel: Boolean(token) });
+    let gatewayDiag: any = { token_disponivel: Boolean(token), status: null, erro: null };
     if (token) {
-      const gateway = await gatewayOcr(fileUrl, tipo, token).catch(() => null);
+      const gateway = await gatewayOcr(fileUrl, tipo, token).catch((error) => ({
+        ok: false,
+        __gateway_status: 0,
+        __gateway_error: error instanceof Error ? error.message : String(error),
+      }));
       if (gateway?.ok) return send(res, gateway);
+      gatewayDiag = {
+        token_disponivel: true,
+        status: gateway?.__gateway_status ?? null,
+        erro: gateway?.__gateway_error ?? 'falha_sem_detalhe',
+      };
     }
 
     const local = await localOcr(fileUrl, tipo);
-    return send(res, local);
+    return send(res, { ...local, diagnostico_visual: gatewayDiag });
   } catch (error) {
     return send(res, { ok: false, error: 'erro_leitura_visual', detail: error instanceof Error ? error.message : String(error) }, 200);
   }
