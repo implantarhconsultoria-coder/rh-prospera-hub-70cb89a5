@@ -71,9 +71,10 @@ Extraia SOMENTE os valores do abastecimento quando estiverem legiveis:
 - TOTAL / VALOR TOTAL / TOTAL A PAGAR => valor
 - LITROS / VOLUME / QUANTIDADE => litros
 - PRECO UNITARIO / PRECO POR LITRO => valor_por_litro
+- KM / QUILOMETRAGEM impresso no recibo => km (opcional)
 Nao invente digitos. Ignore CNPJ, NSU, autorizacao, data, hora, troco e outros numeros.
-Retorne SOMENTE JSON: {"ok":true,"valor":257.24,"litros":37.941,"valor_por_litro":6.780,"confianca":0.99,"motivo":"legivel"}.
-Se nao houver seguranca suficiente, retorne ok=false e os campos como null.`;
+Retorne SOMENTE JSON: {"ok":true,"valor":257.24,"litros":37.941,"valor_por_litro":6.780,"km":59145,"confianca":0.99,"motivo":"legivel"}.
+Se os dados do combustivel nao estiverem seguros, retorne ok=false para valor/litros/preco; ainda assim informe km quando ele estiver claramente impresso.`;
 
 const panelPrompt = `Analise visualmente esta FOTO REAL do painel de um veiculo.
 Extraia SOMENTE a quilometragem TOTAL atual do hodometro/ODO.
@@ -143,6 +144,13 @@ const parsePumpText = (text: string) => {
   return { valor, litros, valor_por_litro: Number(preco.toFixed(3)), confianca: best ? 0.90 : 0.82 };
 };
 
+const parseReceiptKm = (text: string) => {
+  const normalized = normalizeOcrText(text).replace(/(?<=\d)[. ](?=\d{3}\b)/g, '');
+  const labeled = normalized.match(/(?:^|\s)KM\s*[:=-]?\s*(\d[\d .]{3,9})/im);
+  const km = kmOrNull(labeled?.[1]);
+  return km ? { km, confianca: 0.94 } : null;
+};
+
 const parsePanelText = (text: string) => {
   const normalized = normalizeOcrText(text).replace(/(?<=\d)[. ](?=\d{3}\b)/g, '');
   const labeled = normalized.match(/(?:ODO(?:METRO)?|HOD(?:OMETRO)?|KM)\D{0,24}(\d[\d .]{3,10})/i);
@@ -166,19 +174,38 @@ const localOcr = async (fileUrl: string, tipo: string) => {
 
   const worker = await createWorker('eng', 1, { cachePath: '/tmp/tesseract-cache' });
   try {
-    await worker.setParameters({
-      preserve_interword_spaces: '1',
-      tessedit_pageseg_mode: '6',
-    } as any);
-    const result = await worker.recognize(bytes);
-    const text = String(result?.data?.text || '');
+    const texts: string[] = [];
+    const runPass = async (psm: string, whitelist = '') => {
+      await worker.setParameters({
+        preserve_interword_spaces: '1',
+        tessedit_pageseg_mode: psm,
+        tessedit_char_whitelist: whitelist,
+      } as any);
+      const result = await worker.recognize(bytes);
+      const text = String(result?.data?.text || '');
+      if (text.trim()) texts.push(text);
+      return text;
+    };
+
+    // 1) bloco uniforme; 2) texto esparso; 3) numeros puros.
+    await runPass('6');
+    await runPass('11');
+    if (tipo !== 'painel_km') await runPass('11', '0123456789.,');
+    const combined = texts.join('\n');
+
     if (tipo === 'painel_km') {
-      const parsed = parsePanelText(text);
-      return parsed ? { ok: true, km: parsed.km, km_atual: parsed.km, confianca: parsed.confianca, motivo: 'Leitura OCR local do hodômetro.', provider: 'tesseract-local' } : { ok: false, error: 'km_nao_confirmado', motivo: 'Não foi possível confirmar o hodômetro na foto.', provider: 'tesseract-local' };
+      const parsed = parsePanelText(combined);
+      return parsed
+        ? { ok: true, km: parsed.km, km_atual: parsed.km, confianca: parsed.confianca, motivo: 'Leitura OCR local do hodômetro em múltiplas passadas.', provider: 'tesseract-local-multipass' }
+        : { ok: false, error: 'km_nao_confirmado', motivo: 'Não foi possível confirmar o hodômetro na foto.', provider: 'tesseract-local-multipass' };
     }
-    const parsed = parsePumpText(text);
+
+    const parsed = parsePumpText(combined);
     const origem = tipo === 'recibo_posto' ? 'recibo' : 'bomba';
-    return parsed ? { ok: true, ...parsed, motivo: `Leitura OCR local do ${origem} validada pela relação valor x litros x preço.`, provider: 'tesseract-local' } : { ok: false, error: `${origem}_nao_confirmado`, motivo: `Não foi possível confirmar total, litros e preço no ${origem}.`, provider: 'tesseract-local' };
+    const receiptKm = tipo === 'recibo_posto' ? parseReceiptKm(combined) : null;
+    return parsed
+      ? { ok: true, ...parsed, km: receiptKm?.km ?? null, motivo: `Leitura OCR local do ${origem} validada em múltiplas passadas.`, provider: 'tesseract-local-multipass' }
+      : { ok: false, km: receiptKm?.km ?? null, error: `${origem}_nao_confirmado`, motivo: `Não foi possível confirmar total, litros e preço no ${origem}.`, provider: 'tesseract-local-multipass' };
   } finally {
     await worker.terminate();
   }
@@ -217,7 +244,8 @@ const gatewayOcr = async (fileUrl: string, tipo: string, token: string) => {
   if (!preco || preco < 1.5 || preco > 30) preco = valor / litros;
   const arithmeticError = Math.abs(valor - litros * preco) / Math.max(valor, 1);
   if (arithmeticError > 0.04) return null;
-  return { ok: true, valor, litros, valor_por_litro: Number(preco.toFixed(3)), confianca: Number(parsed.confianca ?? 0.95), motivo: String(parsed.motivo || 'Valor e litros identificados visualmente.'), provider: 'vercel-ai-gateway', model: MODEL };
+  const receiptKm = tipo === 'recibo_posto' ? kmOrNull(parsed.km ?? parsed.quilometragem ?? parsed.odometro) : null;
+  return { ok: true, valor, litros, valor_por_litro: Number(preco.toFixed(3)), km: receiptKm, confianca: Number(parsed.confianca ?? 0.95), motivo: String(parsed.motivo || 'Valor e litros identificados visualmente.'), provider: 'vercel-ai-gateway', model: MODEL };
 };
 
 export default async function handler(req: any, res: any) {
