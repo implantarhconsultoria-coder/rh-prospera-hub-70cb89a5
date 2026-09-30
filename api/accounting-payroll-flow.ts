@@ -130,7 +130,6 @@ const getCycle = async (service: any, cycleId: string) => {
 };
 
 const assertCycleUploadAllowed = (cycle: any) => {
-  if (cycle.status === 'conferido') throw Object.assign(new Error('ciclo_ja_conferido'), { status: 409 });
   if (cycle.tipo === 'pagamento' && !cycle.apontamento_liberado_em) {
     throw Object.assign(new Error('aguardando_apontamento'), { status: 409 });
   }
