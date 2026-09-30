@@ -1,5 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, BriefcaseBusiness, Building2, Fingerprint, KeyRound, Loader2, LockKeyhole, Mail, UserRound } from 'lucide-react';
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  Building2,
+  CheckCircle2,
+  Clock3,
+  Fingerprint,
+  KeyRound,
+  Loader2,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { saveExternalSession, type SessaoAcessoExterno } from '@/lib/acessoExternoAuth';
@@ -28,6 +41,9 @@ const MODULE_REDIRECT: Record<string, (id: string) => string> = {
 
 const onlyDigits = (value: string) => String(value || '').replace(/\D/g, '');
 
+const inputClass =
+  'portal-access-input h-12 w-full rounded-xl border border-white/10 bg-[#080c14] pl-11 pr-4 text-[15px] text-white shadow-inner outline-none transition placeholder:text-slate-600 focus:border-[#f7c900]/65 focus:ring-2 focus:ring-[#f7c900]/10';
+
 export default function FilialLoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,15 +61,16 @@ export default function FilialLoginPage() {
   const [cadastroMensagem, setCadastroMensagem] = useState('');
 
   const descricao = useMemo(() => {
-    if (modulo === 'filial') return 'Praia Grande e Goiânia • a unidade é definida pelo cadastro.';
-    if (modulo === 'todos') return 'Um login para os módulos liberados ao seu perfil.';
-    return 'Acesso individual para colaboradores autorizados.';
+    if (modulo === 'filial') return 'Praia Grande e Goiânia. A unidade é identificada automaticamente pelo cadastro.';
+    if (modulo === 'todos') return 'Um único acesso para os módulos liberados ao seu perfil.';
+    return 'Acesso individual e rastreável para colaboradores autorizados.';
   }, [modulo]);
 
   const entrar = async (event: React.FormEvent) => {
     event.preventDefault();
     const emailNormalizado = email.trim().toLowerCase();
     const pin = onlyDigits(senha);
+
     if (!emailNormalizado.includes('@') || pin.length !== 4) {
       toast.error('Informe o e-mail corporativo e a senha de 4 números.');
       return;
@@ -66,6 +83,7 @@ export default function FilialLoginPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'login', email: emailNormalizado, senha: pin, lembrar, modulo }),
       });
+
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.ok) {
         toast.error(payload?.message || 'Não foi possível entrar.');
@@ -83,6 +101,7 @@ export default function FilialLoginPage() {
         sessao_id: payload.sessao_id,
         lembrar: Boolean(payload.lembrar),
       };
+
       saveExternalSession(sessao, Boolean(payload.lembrar));
 
       if (sessao.portais.length === 1) {
@@ -93,6 +112,7 @@ export default function FilialLoginPage() {
           return;
         }
       }
+
       navigate('/portais', { replace: true });
     } finally {
       setLoading(false);
@@ -103,6 +123,7 @@ export default function FilialLoginPage() {
     event.preventDefault();
     const emailNormalizado = email.trim().toLowerCase();
     const cpfLimpo = onlyDigits(cpf);
+
     if (!emailNormalizado.includes('@') || nome.trim().length < 3 || cpfLimpo.length !== 11 || funcao.trim().length < 2) {
       toast.error('Preencha e-mail corporativo, nome completo, CPF e função.');
       return;
@@ -122,11 +143,13 @@ export default function FilialLoginPage() {
           accessPath: location.pathname === '/' ? '/modulos' : location.pathname,
         }),
       });
+
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || !payload?.ok) {
         toast.error(payload?.message || 'Não foi possível concluir o cadastro.');
         return;
       }
+
       setCadastroMensagem(payload?.message || 'Cadastro concluído.');
       toast.success(payload?.email_enviado ? 'E-mail de boas-vindas enviado.' : 'Cadastro concluído.');
     } finally {
@@ -141,115 +164,229 @@ export default function FilialLoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#05070c] p-4 text-white">
-      <section className="w-full max-w-md rounded-2xl border border-[#373044] bg-[#0e1119] p-7 shadow-2xl">
-        <div className="mb-6 flex items-center gap-3 border-b border-[#30283a] pb-5">
-          <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-3">
-            <Building2 className="h-7 w-7 text-[#ffc400]" />
-          </div>
-          <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-violet-400">TOPAC RH PRO</div>
-            <h1 className="text-xl font-black">{titulo}</h1>
-            <p className="mt-1 text-xs text-zinc-400">{descricao}</p>
-          </div>
-        </div>
+    <main className="relative min-h-screen overflow-hidden bg-[#03060b] text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-32 top-[-10rem] h-[34rem] w-[34rem] rounded-full bg-violet-700/12 blur-3xl" />
+        <div className="absolute -right-20 bottom-[-11rem] h-[32rem] w-[32rem] rounded-full bg-cyan-500/8 blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:36px_36px]" />
+      </div>
 
-        {cadastroMensagem ? (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
-              {cadastroMensagem}
+      <div className="relative mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 px-5 py-8 lg:grid-cols-[1.08fr_0.92fr] lg:px-10">
+        <section className="hidden lg:block">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#f7c900]/20 bg-[#f7c900]/7 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-[#f7c900]">
+            <ShieldCheck className="h-4 w-4" />
+            Acesso corporativo seguro
+          </div>
+
+          <div className="mt-8 flex items-center gap-4">
+            <div className="grid h-16 w-16 place-items-center rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-600/25 to-slate-950 shadow-[0_15px_60px_rgba(90,43,150,0.18)]">
+              <Building2 className="h-8 w-8 text-[#f7c900]" />
             </div>
-            <p className="text-xs leading-relaxed text-zinc-400">
-              A senha inicial é enviada por e-mail e corresponde aos quatro últimos números do CPF.
-            </p>
-            <button type="button" onClick={voltarLogin} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#ffc400] font-bold text-black hover:bg-[#ffda58]">
-              <ArrowRight className="h-4 w-4" /> Ir para o login
-            </button>
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.28em] text-violet-300">TOPAC RH PRO</p>
+              <h1 className="mt-1 text-4xl font-black tracking-tight">{titulo}</h1>
+            </div>
           </div>
-        ) : modo === 'login' ? (
-          <form onSubmit={entrar} className="space-y-4">
-            <label className="block text-sm text-zinc-300">
-              E-mail corporativo
-              <span className="relative mt-1 block">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-                <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nome@topac.com.br"
-                  className="h-11 w-full rounded-lg border border-[#41334f] bg-[#090b12] pl-10 pr-3 text-white outline-none focus:border-violet-400" />
-              </span>
-            </label>
 
-            <label className="block text-sm text-zinc-300">
-              Senha
-              <span className="relative mt-1 block">
-                <KeyRound className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-                <input type="password" inputMode="numeric" maxLength={4} autoComplete="current-password" required
-                  value={senha} onChange={(e) => setSenha(onlyDigits(e.target.value).slice(0, 4))}
-                  placeholder="4 números"
-                  className="h-11 w-full rounded-lg border border-[#41334f] bg-[#090b12] pl-10 pr-3 text-white outline-none focus:border-violet-400" />
-              </span>
-            </label>
+          <p className="mt-7 max-w-xl text-lg leading-8 text-slate-400">{descricao}</p>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-[#30283a] bg-[#090b12] p-3">
-              <input type="checkbox" checked={lembrar} onChange={(e) => setLembrar(e.target.checked)} className="mt-0.5 h-4 w-4" />
-              <span>
-                <span className="block text-sm font-semibold text-zinc-200">Manter acesso neste dispositivo</span>
-                <span className="mt-1 block text-xs leading-relaxed text-zinc-500">
-                  Somente durante o período atual. No almoço e no fim do expediente o acesso é encerrado automaticamente.
-                </span>
-              </span>
-            </label>
+          <div className="mt-10 grid max-w-xl gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/7 bg-white/[0.025] p-5">
+              <div className="flex items-center gap-3 text-sm font-bold">
+                <Clock3 className="h-5 w-5 text-[#f7c900]" />
+                Sessão por período
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                O acesso encerra automaticamente no almoço e no fim do expediente.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/7 bg-white/[0.025] p-5">
+              <div className="flex items-center gap-3 text-sm font-bold">
+                <LockKeyhole className="h-5 w-5 text-violet-300" />
+                Acesso rastreável
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Entradas, saídas e extensões ficam registradas para auditoria.
+              </p>
+            </div>
+          </div>
 
-            <button type="submit" disabled={loading} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#ffc400] font-bold text-black hover:bg-[#ffda58] disabled:opacity-50">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} Entrar
-            </button>
+          <div className="mt-7 flex max-w-xl items-center gap-3 rounded-2xl border border-emerald-400/10 bg-emerald-400/[0.035] px-5 py-4 text-sm text-slate-400">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+            O login identifica automaticamente a unidade e libera apenas o que pertence ao seu perfil.
+          </div>
+        </section>
 
-            <button type="button" onClick={() => setModo('cadastro')} className="w-full text-sm font-semibold text-violet-300 hover:underline">
-              Primeiro acesso / fazer cadastro
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={cadastrar} className="space-y-4">
-            <label className="block text-sm text-zinc-300">E-mail corporativo
-              <span className="relative mt-1 block"><Mail className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                  className="h-11 w-full rounded-lg border border-[#41334f] bg-[#090b12] pl-10 pr-3 text-white outline-none focus:border-violet-400" />
-              </span>
-            </label>
+        <section className="mx-auto w-full max-w-[480px]">
+          <div className="rounded-[28px] border border-white/10 bg-[#0b1019]/95 p-5 shadow-[0_28px_90px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:p-7">
+            <div className="flex items-center justify-between gap-4 border-b border-white/7 pb-5">
+              <div className="flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-xl border border-violet-400/20 bg-violet-500/10 lg:hidden">
+                  <Building2 className="h-5 w-5 text-[#f7c900]" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-black uppercase tracking-[0.2em] text-violet-300">TOPAC RH PRO</div>
+                  <h2 className="mt-1 text-xl font-black">{titulo}</h2>
+                </div>
+              </div>
+              <div className="hidden rounded-full border border-emerald-400/15 bg-emerald-400/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 sm:block">
+                Seguro
+              </div>
+            </div>
 
-            <label className="block text-sm text-zinc-300">Nome completo
-              <span className="relative mt-1 block"><UserRound className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-                <input required value={nome} onChange={(e) => setNome(e.target.value)}
-                  className="h-11 w-full rounded-lg border border-[#41334f] bg-[#090b12] pl-10 pr-3 text-white outline-none focus:border-violet-400" />
-              </span>
-            </label>
+            {!cadastroMensagem && (
+              <div className="mt-6 grid grid-cols-2 rounded-xl border border-white/7 bg-[#060a11] p-1">
+                <button
+                  type="button"
+                  onClick={() => setModo('login')}
+                  className={`rounded-lg px-3 py-2.5 text-sm font-bold transition ${modo === 'login' ? 'bg-[#171d29] text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  Entrar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModo('cadastro')}
+                  className={`rounded-lg px-3 py-2.5 text-sm font-bold transition ${modo === 'cadastro' ? 'bg-[#171d29] text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  Primeiro acesso
+                </button>
+              </div>
+            )}
 
-            <label className="block text-sm text-zinc-300">CPF
-              <span className="relative mt-1 block"><Fingerprint className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-                <input inputMode="numeric" maxLength={11} required value={cpf} onChange={(e) => setCpf(onlyDigits(e.target.value).slice(0, 11))}
-                  className="h-11 w-full rounded-lg border border-[#41334f] bg-[#090b12] pl-10 pr-3 text-white outline-none focus:border-violet-400" />
-              </span>
-            </label>
+            {cadastroMensagem ? (
+              <div className="mt-6 space-y-5">
+                <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-5">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+                    <div>
+                      <p className="font-bold text-emerald-100">Cadastro concluído</p>
+                      <p className="mt-1 text-sm leading-6 text-emerald-100/70">{cadastroMensagem}</p>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm leading-6 text-slate-500">
+                  A senha inicial corresponde aos quatro últimos números do CPF e é enviada para o e-mail corporativo.
+                </p>
+                <button type="button" onClick={voltarLogin} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f7c900] font-black text-[#101010] transition hover:bg-[#ffda35]">
+                  Ir para o login <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            ) : modo === 'login' ? (
+              <form onSubmit={entrar} className="mt-6 space-y-5">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-300">E-mail corporativo</span>
+                  <span className="relative block">
+                    <Mail className="absolute left-3.5 top-3.5 h-5 w-5 text-slate-600" />
+                    <input
+                      type="email"
+                      autoComplete="username"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="nome@topac.com.br"
+                      className={inputClass}
+                    />
+                  </span>
+                </label>
 
-            <label className="block text-sm text-zinc-300">Função
-              <span className="relative mt-1 block"><BriefcaseBusiness className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
-                <input required value={funcao} onChange={(e) => setFuncao(e.target.value)} placeholder="Ex.: Auxiliar Administrativo"
-                  className="h-11 w-full rounded-lg border border-[#41334f] bg-[#090b12] pl-10 pr-3 text-white outline-none focus:border-violet-400" />
-              </span>
-            </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-300">Senha</span>
+                  <span className="relative block">
+                    <KeyRound className="absolute left-3.5 top-3.5 h-5 w-5 text-slate-600" />
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      autoComplete="current-password"
+                      required
+                      value={senha}
+                      onChange={(e) => setSenha(onlyDigits(e.target.value).slice(0, 4))}
+                      placeholder="4 números"
+                      className={inputClass}
+                    />
+                  </span>
+                </label>
 
-            <button type="submit" disabled={loading} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#ffc400] font-bold text-black hover:bg-[#ffda58] disabled:opacity-50">
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />} Enviar cadastro
-            </button>
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/7 bg-[#070b12] p-4">
+                  <input
+                    type="checkbox"
+                    checked={lembrar}
+                    onChange={(e) => setLembrar(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[#f7c900]"
+                  />
+                  <span>
+                    <span className="block text-sm font-bold text-slate-200">Manter acesso neste dispositivo</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Somente durante o período atual. O acesso será encerrado no almoço e no fim do expediente.
+                    </span>
+                  </span>
+                </label>
 
-            <button type="button" onClick={voltarLogin} className="w-full text-sm font-semibold text-zinc-400 hover:underline">Já tenho acesso</button>
-          </form>
-        )}
+                <button type="submit" disabled={loading} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f7c900] font-black text-[#101010] transition hover:bg-[#ffda35] disabled:cursor-not-allowed disabled:opacity-60">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  Entrar no portal
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={cadastrar} className="mt-6 space-y-4">
+                <div className="rounded-xl border border-violet-400/10 bg-violet-400/[0.035] px-4 py-3 text-xs leading-5 text-slate-400">
+                  Informe os dados abaixo. O sistema cruza o CPF com o cadastro interno antes de liberar o acesso.
+                </div>
 
-        <p className="mt-6 flex items-start gap-2 border-t border-[#30283a] pt-4 text-xs leading-relaxed text-zinc-500">
-          <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
-          Entradas, saídas automáticas, extensões e motivos ficam registrados para auditoria.
-        </p>
-      </section>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-300">E-mail corporativo</span>
+                  <span className="relative block">
+                    <Mail className="absolute left-3.5 top-3.5 h-5 w-5 text-slate-600" />
+                    <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nome@topac.com.br" className={inputClass} />
+                  </span>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-300">Nome completo</span>
+                  <span className="relative block">
+                    <UserRound className="absolute left-3.5 top-3.5 h-5 w-5 text-slate-600" />
+                    <input required value={nome} onChange={(e) => setNome(e.target.value)} className={inputClass} />
+                  </span>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-300">CPF</span>
+                  <span className="relative block">
+                    <Fingerprint className="absolute left-3.5 top-3.5 h-5 w-5 text-slate-600" />
+                    <input
+                      inputMode="numeric"
+                      maxLength={11}
+                      required
+                      value={cpf}
+                      onChange={(e) => setCpf(onlyDigits(e.target.value).slice(0, 11))}
+                      placeholder="Somente números"
+                      className={inputClass}
+                    />
+                  </span>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-300">Função</span>
+                  <span className="relative block">
+                    <BriefcaseBusiness className="absolute left-3.5 top-3.5 h-5 w-5 text-slate-600" />
+                    <input required value={funcao} onChange={(e) => setFuncao(e.target.value)} placeholder="Ex.: Auxiliar Administrativo" className={inputClass} />
+                  </span>
+                </label>
+
+                <button type="submit" disabled={loading} className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f7c900] font-black text-[#101010] transition hover:bg-[#ffda35] disabled:cursor-not-allowed disabled:opacity-60">
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  Enviar cadastro
+                </button>
+              </form>
+            )}
+
+            <div className="mt-6 flex items-start gap-2 border-t border-white/7 pt-5 text-xs leading-5 text-slate-600">
+              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
+              Acesso individual. Entradas, saídas automáticas e extensões ficam registradas para auditoria.
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
