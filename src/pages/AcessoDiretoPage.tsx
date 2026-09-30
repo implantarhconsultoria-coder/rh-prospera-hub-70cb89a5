@@ -3,13 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  createExternalSession,
-  saveExternalSession,
-  saveLastExternalUser,
-  type PortalExterno,
-} from '@/lib/acessoExternoAuth';
-import { MODULO_REDIRECT } from '@/pages/AcessoExternoPage';
+import { type PortalExterno } from '@/lib/acessoExternoAuth';
+
+const MODULO_LOGIN: Record<string, string> = {
+  filial: '/acesso-filial',
+  almoxarifado: '/acesso-almoxarifado',
+  operacional: '/acesso-operacional',
+  campo: '/acesso-campo',
+};
 
 type DirectResponse = {
   ok?: boolean;
@@ -53,37 +54,18 @@ const AcessoDiretoPage = () => {
         return;
       }
 
-      const nome = res.nome || res.titulo || 'TOPAC';
-      const sessao = createExternalSession({
-        cpf_clean: res.cpf_clean || `link:${slug}`,
-        nome,
-        portais,
-      });
-      saveExternalSession(sessao);
-      saveLastExternalUser({ nome, cpf_clean: res.cpf_clean || `link:${slug}` });
-
       if (portais.length === 1) {
         const portal = portais[0];
-        const goto = MODULO_REDIRECT[portal.modulo];
-        if (!goto) {
+        const loginPath = MODULO_LOGIN[String(portal.modulo || '').toLowerCase()];
+        if (!loginPath) {
           setErro('Modulo sem rota liberada.');
           return;
         }
-        localStorage.setItem('acesso_externo', JSON.stringify({
-          id: portal.acesso_id,
-          nome,
-          modulo: portal.modulo,
-          perfil_acesso: portal.perfil_acesso,
-          empresa: portal.empresa,
-          filial: portal.filial,
-          funcao: portal.funcao,
-          ts: Date.now(),
-        }));
-        navigate(goto(portal.acesso_id), { replace: true });
+        navigate(loginPath, { replace: true });
         return;
       }
 
-      navigate('/portais', { replace: true });
+      navigate('/modulos', { replace: true });
     };
 
     abrir();
