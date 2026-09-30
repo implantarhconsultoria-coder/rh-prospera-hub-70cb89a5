@@ -2,6 +2,7 @@ import { requireAdmin, readBody, sendJson } from '../src/server/payrollServer.js
 import { accountingEmailProviderStatus } from '../src/server/accountingEmailProviders.js';
 
 const TOPAC_CENTRAL_EMAIL = 'adm.matriz@topac.com.br';
+const ACCOUNTING_REPLY_MAILBOX = String(process.env.ACCOUNTING_RESEND_MAILBOX || 'centralrh@mleurob.resend.app').trim();
 const DEFAULT_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
 
 const clean = (value: unknown) => String(value ?? '').trim();
@@ -187,7 +188,7 @@ const sendReply = async (service: any, user: any, messageId: string, messageText
     body: JSON.stringify({
       from,
       to: [recipient],
-      reply_to: TOPAC_CENTRAL_EMAIL,
+      reply_to: ACCOUNTING_REPLY_MAILBOX,
       subject,
       text,
       html: `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#111827;line-height:1.55;white-space:pre-wrap">${htmlEscape(text).replace(/\n/g, '<br>')}</body></html>`,
