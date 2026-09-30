@@ -155,7 +155,6 @@ export default function ContabilidadeFolhaFluxo({ portal }: { portal: PortalKind
     if (!cycle) return toast.error('Ciclo não encontrado. Atualize a página.');
     if (selectedType === 'pagamento' && !cycle.apontamento_liberado_em) return toast.error('O Pagamento ainda está bloqueado. Aguarde o apontamento do RH.');
     if (selectedType === 'pagamento' && !cycle.contabilidade_recebeu_em) return toast.error('Confirme primeiro o recebimento do apontamento.');
-    if (cycle.status === 'conferido') return toast.info('Este processo já está conferido.');
 
     setUploading(true);
     try {
@@ -328,7 +327,7 @@ export default function ContabilidadeFolhaFluxo({ portal }: { portal: PortalKind
             const docs = docsForCycle(cycle?.id);
             const locked = selectedType === 'pagamento' && !cycle?.apontamento_liberado_em;
             const needsAck = selectedType === 'pagamento' && cycle?.apontamento_liberado_em && !cycle.contabilidade_recebeu_em;
-            const canUpload = Boolean(cycle && !locked && !needsAck && cycle.status !== 'conferido');
+            const canUpload = Boolean(cycle && !locked && !needsAck);
             return <div className="space-y-4">
               <button onClick={() => setSelectedCompany(null)} className="text-xs font-bold text-violet-300 hover:text-white">← Voltar para empresas</button>
               <div className="rounded-xl border border-[#2c2732] bg-[#090b10] p-4">
@@ -340,7 +339,7 @@ export default function ContabilidadeFolhaFluxo({ portal }: { portal: PortalKind
 
               {needsAck && cycle && <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[.04] p-5"><div className="text-sm font-black text-white">Apontamento disponível</div><div className="mt-1 text-xs text-zinc-500">Confirme que recebeu o apontamento antes de iniciar o processamento.</div><Button onClick={() => void acknowledge(cycle)} disabled={busyCycle === cycle.id} className="mt-3 bg-cyan-600 text-white hover:bg-cyan-500">{busyCycle === cycle.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}Confirmar recebimento</Button></div>}
 
-              {canUpload && <div className="rounded-xl border border-dashed border-violet-500/35 bg-violet-500/[.035] p-6 text-center"><FileUp className="mx-auto h-8 w-8 text-violet-400" /><div className="mt-3 text-sm font-black">Selecione todos os PDFs desta empresa</div><div className="mt-1 text-xs text-zinc-500">Pode selecionar 1, 4, 5 ou quantos arquivos fizerem parte do processo. O sistema separa e identifica os recibos individualmente.</div><input ref={fileInput} type="file" accept="application/pdf,.pdf" multiple className="hidden" onChange={event => void processFiles(Array.from(event.target.files || []))} /><Button onClick={() => fileInput.current?.click()} disabled={uploading} className="mt-4 bg-violet-600 text-white hover:bg-violet-500">{uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileUp className="mr-2 h-4 w-4" />}{uploading ? 'Lendo e enviando PDFs...' : 'Selecionar PDFs'}</Button></div>}
+              {canUpload && <div className="rounded-xl border border-dashed border-violet-500/35 bg-violet-500/[.035] p-6 text-center"><FileUp className="mx-auto h-8 w-8 text-violet-400" /><div className="mt-3 text-sm font-black">Selecione todos os PDFs desta empresa</div><div className="mt-1 text-xs text-zinc-500">Pode selecionar 1, 4, 5 ou quantos arquivos fizerem parte do processo. O sistema separa e identifica os recibos individualmente. Se o processo já estiver Conferido / OK, um novo envio reabre a conferência do RH automaticamente.</div><input ref={fileInput} type="file" accept="application/pdf,.pdf" multiple className="hidden" onChange={event => void processFiles(Array.from(event.target.files || []))} /><Button onClick={() => fileInput.current?.click()} disabled={uploading} className="mt-4 bg-violet-600 text-white hover:bg-violet-500">{uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileUp className="mr-2 h-4 w-4" />}{uploading ? 'Lendo e enviando PDFs...' : 'Selecionar PDFs'}</Button></div>}
 
               <div className="grid grid-cols-3 gap-2">
                 <SmallStat label="Identificados" value={docs.filter(d => d.classificacao === 'identificado').length} tone="text-emerald-300" />
