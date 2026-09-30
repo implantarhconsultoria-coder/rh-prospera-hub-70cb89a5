@@ -78,28 +78,28 @@ const FuncionariosMoneyOverview: React.FC<{
 
   return (
     <section className="space-y-3" aria-label="Resumo financeiro dos funcionários">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-amber-400/50 bg-gradient-to-br from-amber-400/20 via-violet-500/10 to-zinc-950 p-5 shadow-[0_12px_35px_rgba(245,158,11,.10)]">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+        <div className="col-span-2 rounded-xl border border-amber-400/30 bg-[#07070d] p-4 shadow-[0_0_24px_rgba(245,158,11,.05)] md:col-span-1 md:p-5">
           <p className="flex items-center gap-2 text-sm font-semibold text-amber-300"><Wallet size={17}/> Salários-base atuais</p>
           <p className="mt-3 text-3xl font-black tracking-tight text-white">{MONEY(total)}</p>
           <p className="mt-1 text-xs text-zinc-300">Soma cadastrada de {active.length} funcionários ativos{filterCompany ? ' na empresa selecionada' : ' nas empresas'}.</p>
         </div>
-        <div className="rounded-2xl border border-fuchsia-400/50 bg-gradient-to-br from-fuchsia-500/20 via-indigo-600/10 to-zinc-950 p-5">
+        <div className="rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-3 md:p-5">
           <p className="flex items-center gap-2 text-sm font-semibold text-fuchsia-300"><Building2 size={17}/> Empresas em consulta</p>
           <p className="mt-3 text-3xl font-black text-white">{grouped.filter(co => co.count).length}</p>
           <p className="mt-1 text-xs text-zinc-300">Valores separados por CNPJ abaixo.</p>
         </div>
-        <div className="rounded-2xl border border-cyan-400/50 bg-gradient-to-br from-cyan-400/15 via-blue-600/10 to-zinc-950 p-5">
+        <div className="rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-3 md:p-5">
           <p className="flex items-center gap-2 text-sm font-semibold text-cyan-300"><Activity size={17}/> Funcionários ativos</p>
           <p className="mt-3 text-3xl font-black text-white">{active.length}</p>
           <p className="mt-1 text-xs text-zinc-300">Base de funcionários, sem desligados.</p>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-2 xl:grid-cols-5">
         {grouped.map(co => (
           <button key={co.id} type="button" disabled={!onCompanySelect} onClick={() => onCompanySelect?.(co.id)}
             aria-label={'Abrir funcionários de ' + co.name}
-            className="rounded-xl border bg-zinc-950/80 p-4 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-zinc-900/90 enabled:focus-visible:outline enabled:focus-visible:outline-2 enabled:focus-visible:outline-amber-400"
+            className="rounded-xl border bg-[#05050a] p-3 text-left transition-colors enabled:cursor-pointer enabled:hover:bg-[#0b0810] enabled:focus-visible:outline enabled:focus-visible:outline-2 enabled:focus-visible:outline-amber-400"
             style={{ borderColor: co.color + '80', boxShadow: 'inset 0 1px 0 ' + co.color + '33' }}>
             <p className="truncate text-xs font-semibold" style={{ color: co.color }} title={co.name}>{co.name}</p>
             <p className="mt-2 text-xl font-black text-white">{MONEY(co.total)}</p>
@@ -110,7 +110,7 @@ const FuncionariosMoneyOverview: React.FC<{
       <p className="text-xs text-amber-300/90">
         Valores acima são a referência nominal dos salários-base atuais; não representam folha líquida, encargos, VR ou VT.
       </p>
-      <div className="rounded-2xl border border-violet-400/40 bg-gradient-to-br from-[#201033] via-[#100b20] to-[#06121d] shadow-[0_10px_40px_rgba(126,34,206,.12)]">
+      <div className="rounded-xl border border-fuchsia-500/20 bg-[#07070d] shadow-[0_10px_40px_rgba(0,0,0,.22)]">
         <button type="button" className="flex w-full items-center justify-between gap-3 p-5 text-left"
           onClick={() => setExpanded(value => !value)} aria-expanded={expanded}>
           <span><strong className="flex items-center gap-2 text-base text-white"><BarChart3 className="text-fuchsia-300"/> Evolução mês a mês — folha líquida fechada</strong>
