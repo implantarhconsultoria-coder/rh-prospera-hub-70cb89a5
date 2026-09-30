@@ -98,7 +98,7 @@ const getPeriodExpiry = (now = new Date()) => {
 const activeAccessRows = async (db: any, cpf: string, modulo?: string) => {
   const { data, error } = await db
     .from('acessos_externos')
-    .select('id,nome,cpf_clean,empresa,filial,funcao,modulo,perfil_acesso,status,acesso_liberado,ativo,funcionario_id')
+    .select('id,nome,cpf_clean,email,email_corporativo,empresa,filial,funcao,modulo,perfil_acesso,status,acesso_liberado,ativo,funcionario_id')
     .eq('cpf_clean', cpf);
   if (error) throw error;
   return (data || []).filter((row: any) => {
