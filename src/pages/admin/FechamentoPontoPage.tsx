@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Lock, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock, Users } from 'lucide-react';
+import { Lock, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock, Users, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Employee, MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
@@ -368,6 +368,105 @@ const FechamentoPontoPage: React.FC = () => {
     return t;
   }, [linhas]);
 
+
+  const gerarRelatorioPonto = useCallback(() => {
+    if (!linhas.length) {
+      toast.warning('Não há dados de ponto para gerar o relatório.');
+      return;
+    }
+
+    const esc = (value: unknown) =>
+      String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const empresaLabel = selectedCompany === 'todas'
+      ? 'Todas as empresas'
+      : companies.find((company) => company.id === selectedCompany)?.name || 'Empresa selecionada';
+
+    const competenciaLabel = competencia.split('-').reverse().join('/');
+    const rows = linhas.map((linha) => `
+      <tr>
+        <td>${esc(linha.nome)}</td>
+        <td>${esc(linha.empresaNome)}</td>
+        <td>${esc(linha.cargo)}</td>
+        <td>${linha.entradaCount || '-'}</td>
+        <td>${linha.almocoInicioCount || '-'}</td>
+        <td>${linha.almocoFimCount || '-'}</td>
+        <td>${linha.saidaCount || '-'}</td>
+        <td>${linha.faltas || '-'}</td>
+        <td>${linha.atrasoTotalMin > 0 ? esc(formatarMinutos(linha.atrasoTotalMin)) : '-'}</td>
+        <td>${linha.he50Min > 0 ? esc(formatarMinutos(linha.he50Min)) : '-'}</td>
+        <td>${linha.he60Min > 0 ? esc(formatarMinutos(linha.he60Min)) : '-'}</td>
+        <td>${linha.he100Min > 0 ? esc(formatarMinutos(linha.he100Min)) : '-'}</td>
+        <td>${esc(linha.pendencias.length ? linha.pendencias.join(' • ') : 'OK')}</td>
+      </tr>
+    `).join('');
+
+    const win = window.open('', '_blank', 'noopener,noreferrer');
+    if (!win) {
+      toast.error('O navegador bloqueou a abertura do relatório.');
+      return;
+    }
+
+    win.document.write(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Fechamento de Ponto - ${esc(empresaLabel)} - ${esc(competenciaLabel)}</title>
+  <style>
+    @page { size: A4 landscape; margin: 9mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; color: #111; margin: 0; font-size: 9px; }
+    h1 { margin: 0; font-size: 18px; }
+    .sub { margin-top: 4px; color: #555; font-size: 10px; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0; }
+    .box { border: 1px solid #bbb; border-radius: 6px; padding: 7px; }
+    .box span { display:block; color:#666; font-size:8px; text-transform:uppercase; }
+    .box strong { display:block; margin-top:3px; font-size:12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #bbb; padding: 5px; vertical-align: top; }
+    th { background: #f0f0f0; text-align: left; font-size: 8px; text-transform: uppercase; }
+    tbody tr:nth-child(even) { background: #fafafa; }
+    .footer { margin-top: 10px; color: #666; font-size: 8px; }
+  </style>
+</head>
+<body>
+  <h1>TOPAC RH PRO — Fechamento de Ponto</h1>
+  <div class="sub">${esc(empresaLabel)} • Competência ${esc(competenciaLabel)} • Emitido em ${esc(new Date().toLocaleString('pt-BR'))}</div>
+
+  <div class="summary">
+    <div class="box"><span>Mecânicos</span><strong>${totais.pessoas}</strong></div>
+    <div class="box"><span>Dias trabalhados</span><strong>${totais.diasTrab}</strong></div>
+    <div class="box"><span>Faltas</span><strong>${totais.faltas}</strong></div>
+    <div class="box"><span>Atrasos</span><strong>${esc(formatarMinutos(totais.atrasoMin))}</strong></div>
+    <div class="box"><span>HE 50%</span><strong>${esc(formatarMinutos(totais.he50Min))}</strong></div>
+    <div class="box"><span>HE 60%</span><strong>${esc(formatarMinutos(totais.he60Min))}</strong></div>
+    <div class="box"><span>HE 100%</span><strong>${esc(formatarMinutos(totais.he100Min))}</strong></div>
+    <div class="box"><span>Pendências</span><strong>${totais.inconsist}</strong></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Mecânico</th><th>Empresa</th><th>Cargo</th><th>Entrada</th><th>Início almoço</th>
+        <th>Retorno almoço</th><th>Saída</th><th>Faltas</th><th>Atraso</th>
+        <th>HE 50%</th><th>HE 60%</th><th>HE 100%</th><th>Pendências</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="footer">Relatório gerado a partir dos registros de ponto da plataforma TOPAC RH PRO.</div>
+  <script>window.onload = () => setTimeout(() => window.print(), 250)<\/script>
+</body>
+</html>`);
+    win.document.close();
+  }, [companies, competencia, linhas, selectedCompany, totais]);
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -415,6 +514,14 @@ const FechamentoPontoPage: React.FC = () => {
             <Lock className="w-4 h-4 mr-2" />
           )}
           {carregando ? 'Processando...' : 'FECHAR O MÊS'}
+        </Button>
+        <Button
+          onClick={gerarRelatorioPonto}
+          disabled={carregando || linhas.length === 0}
+          variant="outline"
+        >
+          <Printer className="w-4 h-4 mr-2" />
+          RELATÓRIO / PDF
         </Button>
         {executado && (
           <Button onClick={() => carregarMecanicos(false)} variant="outline" size="icon" title="Recarregar">
