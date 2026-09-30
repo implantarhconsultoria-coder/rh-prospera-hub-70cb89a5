@@ -2,7 +2,10 @@ import { createWorker } from 'tesseract.js';
 
 const MODEL = 'google/gemini-2.5-flash';
 const ALLOWED_HOST = 'djfjnxmbvjgweqzjvqtr.supabase.co';
-const ALLOWED_PATH = '/storage/v1/object/public/abastecimento-fotos/';
+const ALLOWED_PATHS = [
+  '/storage/v1/object/public/abastecimento-fotos/',
+  '/storage/v1/object/public/ponto-veiculo/',
+] as const;
 
 const send = (res: any, body: unknown, status = 200) =>
   res.status(status).setHeader('Cache-Control', 'no-store').json(body);
@@ -37,7 +40,7 @@ const safeImageUrl = (raw: unknown) => {
   if (!value) return '';
   try {
     const url = new URL(value);
-    if (url.protocol !== 'https:' || url.hostname !== ALLOWED_HOST || !url.pathname.startsWith(ALLOWED_PATH)) return '';
+    if (url.protocol !== 'https:' || url.hostname !== ALLOWED_HOST || !ALLOWED_PATHS.some(path => url.pathname.startsWith(path))) return '';
     return url.toString();
   } catch { return ''; }
 };
@@ -62,6 +65,15 @@ Extraia SOMENTE os numeros associados aos rotulos corretos:
 Nao invente digitos. Preserve as casas decimais visiveis. Ignore CNPJ, data, hora, numero da bomba e outros textos.
 Retorne SOMENTE JSON: {"ok":true,"valor":257.24,"litros":37.941,"valor_por_litro":6.780,"confianca":0.99,"motivo":"legivel"}.
 Se total e litros nao estiverem legiveis, retorne ok=false e os campos como null.`;
+
+const receiptPrompt = `Analise visualmente esta FOTO REAL de um recibo/comprovante de posto de combustivel brasileiro.
+Extraia SOMENTE os valores do abastecimento quando estiverem legiveis:
+- TOTAL / VALOR TOTAL / TOTAL A PAGAR => valor
+- LITROS / VOLUME / QUANTIDADE => litros
+- PRECO UNITARIO / PRECO POR LITRO => valor_por_litro
+Nao invente digitos. Ignore CNPJ, NSU, autorizacao, data, hora, troco e outros numeros.
+Retorne SOMENTE JSON: {"ok":true,"valor":257.24,"litros":37.941,"valor_por_litro":6.780,"confianca":0.99,"motivo":"legivel"}.
+Se nao houver seguranca suficiente, retorne ok=false e os campos como null.`;
 
 const panelPrompt = `Analise visualmente esta FOTO REAL do painel de um veiculo.
 Extraia SOMENTE a quilometragem TOTAL atual do hodometro/ODO.
@@ -165,14 +177,15 @@ const localOcr = async (fileUrl: string, tipo: string) => {
       return parsed ? { ok: true, km: parsed.km, km_atual: parsed.km, confianca: parsed.confianca, motivo: 'Leitura OCR local do hodômetro.', provider: 'tesseract-local' } : { ok: false, error: 'km_nao_confirmado', motivo: 'Não foi possível confirmar o hodômetro na foto.', provider: 'tesseract-local' };
     }
     const parsed = parsePumpText(text);
-    return parsed ? { ok: true, ...parsed, motivo: 'Leitura OCR local da bomba validada pela relação valor x litros x preço.', provider: 'tesseract-local' } : { ok: false, error: 'bomba_nao_confirmada', motivo: 'Não foi possível confirmar total, litros e preço na foto.', provider: 'tesseract-local' };
+    const origem = tipo === 'recibo_posto' ? 'recibo' : 'bomba';
+    return parsed ? { ok: true, ...parsed, motivo: `Leitura OCR local do ${origem} validada pela relação valor x litros x preço.`, provider: 'tesseract-local' } : { ok: false, error: `${origem}_nao_confirmado`, motivo: `Não foi possível confirmar total, litros e preço no ${origem}.`, provider: 'tesseract-local' };
   } finally {
     await worker.terminate();
   }
 };
 
 const gatewayOcr = async (fileUrl: string, tipo: string, token: string) => {
-  const prompt = tipo === 'painel_km' ? panelPrompt : pumpPrompt;
+  const prompt = tipo === 'painel_km' ? panelPrompt : tipo === 'recibo_posto' ? receiptPrompt : pumpPrompt;
   const response = await fetch('https://ai-gateway.vercel.sh/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -212,7 +225,7 @@ export default async function handler(req: any, res: any) {
   const fileUrl = safeImageUrl(req.body?.fileUrl);
   const tipo = String(req.body?.tipo || 'bomba');
   if (!fileUrl) return send(res, { ok: false, error: 'imagem_invalida' }, 400);
-  if (!['bomba', 'painel_km'].includes(tipo)) return send(res, { ok: false, error: 'tipo_invalido' }, 400);
+  if (!['bomba', 'painel_km', 'recibo_posto'].includes(tipo)) return send(res, { ok: false, error: 'tipo_invalido' }, 400);
 
   try {
     const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '';
