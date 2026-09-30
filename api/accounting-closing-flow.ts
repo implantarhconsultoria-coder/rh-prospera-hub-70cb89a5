@@ -3,6 +3,7 @@ import { getServiceClient, readBody, requireAdmin, sendJson } from '../src/serve
 import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const INBOX_BUCKET = 'contabilidade-inbox';
+const ACCOUNTING_REPLY_MAILBOX = String(process.env.ACCOUNTING_RESEND_MAILBOX || 'centralrh@mleurob.resend.app').trim();
 const clean = (value: unknown) => String(value ?? '').trim();
 const num = (value: unknown) => Number(value || 0) || 0;
 const money = (value: unknown) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num(value));
@@ -214,7 +215,7 @@ async function sendAccountingEmail(service: any, input: { emails: string[]; cc: 
       from,
       to: Array.from(new Set([...input.emails, 'adm.matriz@topac.com.br'])),
       cc: Array.from(new Set(input.cc)).filter((email) => ![...input.emails, 'adm.matriz@topac.com.br'].includes(email)),
-      reply_to: 'adm.matriz@topac.com.br',
+      reply_to: ACCOUNTING_REPLY_MAILBOX,
       subject: thread.subject,
       text,
       html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827"><p>Prezadas,</p><p><strong>Fica formalizado o início do processo de fechamento da folha desta competência.</strong></p><p><strong>Empresa:</strong> ${safePdfText(input.companyName)}<br><strong>Competência:</strong> ${competenceLabel(input.competencia)}</p><p>O PDF do apontamento segue anexo e o processo já está liberado no Portal da Contabilidade.</p><p>A partir deste e-mail, toda pendência, correção, confirmação e o retorno da folha fechada deverão permanecer nesta mesma conversa.</p><p>TOPAC RH PRO</p></div>`,
