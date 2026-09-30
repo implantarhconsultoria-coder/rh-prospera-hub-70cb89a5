@@ -650,3 +650,27 @@
   margin: 0 auto;
   background: #fff;
 }
+
+
+/* Portal de acessos externos: impede autofill do navegador de quebrar o tema escuro. */
+.portal-access-input,
+.portal-access-input:focus {
+  color-scheme: dark;
+  caret-color: #f7c900;
+}
+
+.portal-access-input:-webkit-autofill,
+.portal-access-input:-webkit-autofill:hover,
+.portal-access-input:-webkit-autofill:focus,
+.portal-access-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0 1000px #080c14 inset !important;
+  box-shadow: 0 0 0 1000px #080c14 inset !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.portal-access-input::selection {
+  background: rgba(247, 201, 0, 0.28);
+  color: #ffffff;
+}
