@@ -149,7 +149,7 @@ const FechamentoPontoPage: React.FC = () => {
       .from('acessos_externos')
       .select('id,nome,empresa,filial,funcao,funcionario_id,profile_user_id,cpf,cpf_clean')
       .eq('modulo', 'mecanico')
-      .in('perfil_acesso', ['mecanico_externo', 'mecanico_teste'])
+      .eq('perfil_acesso', 'mecanico_externo')
       .eq('status', 'ativo')
       .eq('acesso_liberado', true)
       .order('nome');
