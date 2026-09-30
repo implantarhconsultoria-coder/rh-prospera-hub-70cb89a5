@@ -30,7 +30,7 @@ async function getOrCreatePaymentCycle(service: any, companyId: string, competen
     .maybeSingle();
   if (companyError || !company) throw companyError || new Error('empresa_nao_encontrada');
 
-  const portal = /goi[âa]nia|gyn/i.test(clean(company.nome || company.codigo)) ? 'goiania' : 'principal';
+  const accountingPortal = /goi[âa]nia|gyn/i.test(clean(company.nome || company.codigo)) ? 'goiania' : 'principal';
 
   const { data: existingRows, error: findError } = await service.from('contabilidade_folha_ciclos')
     .select('*')
@@ -45,7 +45,7 @@ async function getOrCreatePaymentCycle(service: any, companyId: string, competen
   if (existing) return existing;
 
   const { data, error } = await service.from('contabilidade_folha_ciclos').insert({
-    portal,
+    portal: accountingPortal,
     empresa_id: companyId,
     competencia,
     tipo: 'pagamento',
