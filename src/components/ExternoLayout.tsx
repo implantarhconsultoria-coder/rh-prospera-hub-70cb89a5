@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, LogOut, Building2, AlertCircle, Layers, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { clearExternalSession, isExternalSessionExpired, readExternalSession } from '@/lib/acessoExternoAuth';
+import { clearExternalSession, isExternalSessionExpired, readExternalSession, saveExternalSession, type SessaoAcessoExterno } from '@/lib/acessoExternoAuth';
 
 export type ExternoNavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }>; end?: boolean };
 
@@ -23,7 +23,11 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
   const [estado, setEstado] = useState<'loading' | 'ok' | 'bloqueado' | 'invalido'>('loading');
   const [acesso, setAcesso] = useState<any>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const externalSession = useMemo(() => readExternalSession(), []);
+  const [externalSession, setExternalSession] = useState<SessaoAcessoExterno | null>(() => readExternalSession());
+  const [showExpiryWarning, setShowExpiryWarning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(30);
+  const [motivoExtensao, setMotivoExtensao] = useState('');
+  const [extending, setExtending] = useState(false);
   const moduloRemovido = REMOVED_MODULES.has(String(modulo || '').toLowerCase());
   const filialTheme = String(modulo || '').toLowerCase() === 'filial';
 
@@ -32,11 +36,24 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
     let cancelado = false;
     (async () => {
       if (!acessoId) { setEstado('invalido'); return; }
-      if (!externalSession || isExternalSessionExpired(externalSession)) {
+      if (!externalSession || isExternalSessionExpired(externalSession) || !externalSession.session_token) {
         clearExternalSession();
         nav('/modulos', { replace: true });
         return;
       }
+
+      const validation = await fetch('/api/portal-access', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'validate', token: externalSession.session_token }),
+      });
+      const validationPayload = await validation.json().catch(() => ({}));
+      if (!validation.ok || !validationPayload?.ok) {
+        clearExternalSession();
+        nav('/modulos', { replace: true });
+        return;
+      }
+
       let local: any = null;
       try { local = JSON.parse(localStorage.getItem('acesso_externo') || 'null'); } catch { /* ignore */ }
       const { data, error } = await supabase.rpc('acesso_externo_obter' as any, {
@@ -53,16 +70,84 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
         localStorage.setItem('acesso_externo', JSON.stringify({ ...a, ts: Date.now() }));
       }
       setEstado('ok');
+
+      void fetch('/api/portal-access', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'event',
+          token: externalSession.session_token,
+          evento: 'portal_aberto',
+          modulo,
+          acessoId,
+        }),
+      });
     })();
     return () => { cancelado = true; };
-  }, [acessoId, externalSession, modulo, moduloRemovido, nav]);
+  }, [acessoId, externalSession?.session_token, modulo, moduloRemovido, nav]);
 
   if (moduloRemovido) return <Navigate to="/modulos" replace />;
 
-  const sair = () => {
+  const encerrarSessao = async (motivo: string) => {
+    const token = externalSession?.session_token;
+    if (token) {
+      await fetch('/api/portal-access', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'logout', token, motivo }),
+      }).catch(() => null);
+    }
     clearExternalSession();
+    setExternalSession(null);
     nav('/modulos', { replace: true });
   };
+
+  const sair = () => {
+    void encerrarSessao('manual');
+  };
+
+  const continuarSessao = async () => {
+    const motivo = motivoExtensao.trim();
+    if (motivo.length < 5 || !externalSession?.session_token) return;
+    setExtending(true);
+    try {
+      const response = await fetch('/api/portal-access', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'extend', token: externalSession.session_token, motivo }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.ok) return;
+      const next = { ...externalSession, expira_em: new Date(payload.expira_em).getTime() };
+      saveExternalSession(next, Boolean(next.lembrar));
+      setExternalSession(next);
+      setMotivoExtensao('');
+      setShowExpiryWarning(false);
+    } finally {
+      setExtending(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!externalSession?.session_token || !externalSession.expira_em) return;
+    const tick = () => {
+      const remaining = externalSession.expira_em - Date.now();
+      if (remaining <= 0) {
+        setShowExpiryWarning(false);
+        void encerrarSessao('automatico_periodo');
+        return;
+      }
+      if (remaining <= 30000) {
+        setSecondsLeft(Math.max(0, Math.ceil(remaining / 1000)));
+        setShowExpiryWarning(true);
+      } else {
+        setShowExpiryWarning(false);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [externalSession?.session_token, externalSession?.expira_em]);
 
   const trocarPortal = () => {
     const sess = readExternalSession();
@@ -144,6 +229,35 @@ const ExternoLayout: React.FC<ExternoLayoutProps> = ({ modulo, titulo, cor = 'bg
         </div>
       </aside>
       <main className={cn('lg:ml-64 min-h-screen', filialTheme && 'bg-[#020507]')}><div className="p-3 sm:p-4 lg:p-6 max-w-[1600px] mx-auto"><Outlet /></div></main>
+
+      {showExpiryWarning && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-amber-400/30 bg-[#0e1119] p-6 text-white shadow-2xl">
+            <div className="text-xs font-bold uppercase tracking-[0.22em] text-amber-300">Sessão encerrando</div>
+            <h2 className="mt-2 text-xl font-black">Você será desconectado em {secondsLeft}s</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              O período atual terminou. Se houver uma urgência, informe o motivo para continuar por mais 1 hora. A extensão ficará registrada.
+            </p>
+            <textarea
+              value={motivoExtensao}
+              onChange={(e) => setMotivoExtensao(e.target.value)}
+              placeholder="Motivo para continuar conectado"
+              className="mt-4 min-h-24 w-full rounded-lg border border-[#41334f] bg-[#090b12] p-3 text-sm text-white outline-none focus:border-amber-400"
+            />
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Button variant="outline" onClick={() => void encerrarSessao('manual_aviso_periodo')}>Sair agora</Button>
+              <Button
+                onClick={() => void continuarSessao()}
+                disabled={motivoExtensao.trim().length < 5 || extending}
+                className="bg-[#ffc400] font-bold text-black hover:bg-[#ffda58]"
+              >
+                {extending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Continuar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
