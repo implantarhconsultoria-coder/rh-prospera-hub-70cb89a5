@@ -17,11 +17,11 @@ const LOGIN_ALIASES: Record<string, string> = {
 const ROLE_REDIRECTS: Record<string, string> = {
   admin: '/admin',
   diretor_geral: '/admin',
-  faturamento: '/faturamento',
-  financeiro: '/financeiro',
   filial_matriz: '/filial',
   filial_praia: '/filial',
   filial_goiania: '/filial',
+  faturamento: '/faturamento',
+  financeiro: '/financeiro',
   almoxarifado: '/almoxarifado',
   operacional: '/operacional',
   tecnico_campo: '/campo',
