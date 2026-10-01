@@ -14,6 +14,7 @@ import AvisoFeriasPage from '@/pages/AvisoFeriasPage';
 import ASOPage from '@/pages/ASOPage';
 import EmailsContabilidadePage from '@/pages/admin/EmailsContabilidadePage';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type TabKey = 'visao' | 'movimentacoes' | 'documentos' | 'fechamento';
 type ModuleKey = 'pre-cadastro' | 'rescisao' | 'ferias' | 'aso' | 'clinicas';
@@ -69,6 +70,8 @@ const CentralContabilidadePage: React.FC = () => {
 
   const companyMap = useMemo(() => new Map(companies.map((c) => [c.id, c.name])), [companies]);
   const userMap = useMemo(() => new Map(portalUsers.map((u) => [u.id, u])), [portalUsers]);
+  const replyUpload = useMemo(() => uploads.find((u) => u.id === replyUploadId) || null, [uploads, replyUploadId]);
+  const replySender = replyUpload ? userMap.get(replyUpload.portal_user_id) : null;
 
   const carregar = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -340,7 +343,6 @@ const CentralContabilidadePage: React.FC = () => {
             <div className="space-y-3">
               {uploads.map((u) => {
                 const sender = userMap.get(u.portal_user_id);
-                const replying = replyUploadId === u.id;
                 return (
                   <div key={u.id} className="rounded-lg border border-[#24212a] bg-[#080a0e]">
                     <div className="grid gap-3 p-4 lg:grid-cols-[1.5fr_.8fr_.8fr_.8fr_auto] lg:items-center">
@@ -360,8 +362,8 @@ const CentralContabilidadePage: React.FC = () => {
                         <div className="mt-2 text-[10px] text-zinc-600">{brDateTime(u.created_at)}</div>
                       </div>
                       <div className="flex flex-wrap gap-2 lg:justify-end">
-                        <button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200">Ver o que enviou</button>
-                        <button onClick={()=>{setReplyUploadId(replying?null:u.id);setReplyText(u.rh_resposta||'');}} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">{u.rh_resposta_em?'Ver / responder novamente':'Responder'}</button>
+                        <button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200">Abrir PDF</button>
+                        <button onClick={()=>{setReplyUploadId(u.id);setReplyText('');}} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">{u.rh_resposta_em?'Responder novamente':'Responder'}</button>
                         {!emailOk(u.formalizacao_email_status)&&<button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="rounded-md border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-200">Reenviar formalização</button>}
                       </div>
                     </div>
@@ -373,22 +375,7 @@ const CentralContabilidadePage: React.FC = () => {
                       </div>
                     )}
 
-                    {replying && (
-                      <div className="border-t border-[#27222e] p-4">
-                        <div className="mb-2 text-xs font-bold text-white">Responder para {sender?.nome||'Contabilidade'}{sender?.email?` · ${sender.email}`:''}</div>
-                        <textarea
-                          value={replyText}
-                          onChange={(e)=>setReplyText(e.target.value)}
-                          rows={5}
-                          placeholder="Escreva aqui seu retorno para a Contabilidade..."
-                          className="w-full rounded-lg border border-[#3a2c48] bg-[#05070b] p-3 text-sm text-white outline-none focus:border-violet-500"
-                        />
-                        <div className="mt-3 flex gap-2">
-                          <button onClick={()=>void responderUpload(u)} disabled={busyId===u.id || !replyText.trim()} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{busyId===u.id?<Loader2 className="h-4 w-4 animate-spin"/>:<Send className="h-4 w-4"/>}Enviar retorno</button>
-                          <button onClick={()=>{setReplyUploadId(null);setReplyText('');}} className="rounded-md border border-[#423051] px-4 py-2 text-xs font-bold text-zinc-300">Cancelar</button>
-                        </div>
-                      </div>
-                    )}
+
                   </div>
                 );
               })}
@@ -396,6 +383,71 @@ const CentralContabilidadePage: React.FC = () => {
           )}
         </Panel>
       )}
+
+      <Dialog open={!!replyUpload} onOpenChange={(open) => {
+        if (!open) {
+          setReplyUploadId(null);
+          setReplyText('');
+        }
+      }}>
+        <DialogContent className="max-w-2xl border-[#3a2c48] bg-[#07090d] text-white">
+          <DialogHeader>
+            <DialogTitle>Responder à Contabilidade</DialogTitle>
+          </DialogHeader>
+
+          {replyUpload && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-[#2b2631] bg-[#05070b] p-4">
+                <div className="text-sm font-black text-white">{replyUpload.arquivo_nome}</div>
+                <div className="mt-2 grid gap-2 text-xs text-zinc-400 sm:grid-cols-2">
+                  <div><b className="text-zinc-500">Empresa:</b> {companyMap.get(replyUpload.empresa_id)||'—'}</div>
+                  <div><b className="text-zinc-500">Enviado por:</b> {replySender?.nome||'Contabilidade'}</div>
+                  {replySender?.email && <div className="sm:col-span-2"><b className="text-zinc-500">E-mail:</b> {replySender.email}</div>}
+                </div>
+                {replyUpload.observacao && (
+                  <div className="mt-3 rounded-md border border-violet-500/15 bg-violet-500/[.035] p-3 text-xs text-zinc-300">
+                    <b className="text-violet-300">Mensagem da Contabilidade:</b> {replyUpload.observacao}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={()=>void abrirUpload(replyUpload)}
+                  className="mt-3 inline-flex items-center gap-2 rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200"
+                >
+                  <Eye className="h-4 w-4"/> Abrir PDF recebido
+                </button>
+              </div>
+
+              <textarea
+                value={replyText}
+                onChange={(e)=>setReplyText(e.target.value)}
+                rows={5}
+                placeholder="Digite aqui o retorno para a Contabilidade..."
+                className="w-full resize-y rounded-lg border border-[#49315e] bg-[#05070b] p-3 text-sm text-white outline-none focus:border-violet-500"
+              />
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={()=>{setReplyUploadId(null);setReplyText('');}}
+                  className="rounded-md border border-[#423051] px-4 py-2 text-xs font-bold text-zinc-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={()=>void responderUpload(replyUpload)}
+                  disabled={busyId===replyUpload.id || !replyText.trim()}
+                  className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                >
+                  {busyId===replyUpload.id?<Loader2 className="h-4 w-4 animate-spin"/>:<Send className="h-4 w-4"/>}
+                  Enviar retorno
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
