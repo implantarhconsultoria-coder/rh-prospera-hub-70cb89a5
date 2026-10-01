@@ -74,8 +74,6 @@ const CentralContabilidadePage: React.FC = () => {
   const userMap = useMemo(() => new Map(portalUsers.map((u) => [u.id, u])), [portalUsers]);
   const replyUpload = useMemo(() => uploads.find((u) => u.id === replyUploadId) || null, [uploads, replyUploadId]);
   const replySender = replyUpload ? userMap.get(replyUpload.portal_user_id) : null;
-  const selectedUploads = useMemo(() => uploads.filter((u) => selectedUploadIds.includes(u.id)), [uploads, selectedUploadIds]);
-
   const buildReplyTemplate = useCallback((items:Upload[]) => {
     if (!items.length) return '';
     const empresas = Array.from(new Set(items.map((u) => companyMap.get(u.empresa_id) || 'Empresa')));
@@ -125,7 +123,9 @@ const CentralContabilidadePage: React.FC = () => {
 
   const pendencias = useMemo(() => revisoes.filter((r) => ['pendencia','retificacao','aguardando_analise'].includes(r.status)), [revisoes]);
   const conferidos = useMemo(() => revisoes.filter((r) => r.status === 'conferido'), [revisoes]);
-  const errosEmail = useMemo(() => uploads.filter((u) => !!u.formalizacao_email_status && !emailOk(u.formalizacao_email_status)), [uploads]);
+  const receivedUploads = useMemo(() => uploads.filter((u) => u.origem_tipo !== 'rh_apontamento'), [uploads]);
+  const errosEmail = useMemo(() => receivedUploads.filter((u) => !!u.formalizacao_email_status && !emailOk(u.formalizacao_email_status)), [receivedUploads]);
+  const selectedUploads = useMemo(() => receivedUploads.filter((u) => selectedUploadIds.includes(u.id)), [receivedUploads, selectedUploadIds]);
   const hoje = useMemo(() => {
     const key = new Date().toLocaleDateString('en-CA');
     return uploads.filter((u) => new Date(u.created_at).toLocaleDateString('en-CA') === key).length
@@ -235,7 +235,12 @@ const CentralContabilidadePage: React.FC = () => {
       setSelectedUploadIds([]);
       await carregar(true);
     } catch (e:any) {
-      toast.error(e?.message || 'Não foi possível enviar o retorno em massa.');
+      const message = String(e?.message || '');
+      if (message === 'nenhum_envio_concluido' || message.includes('domínio') || message.includes('domain')) {
+        toast.error('O envio foi bloqueado pelo serviço de e-mail. O domínio/remetente da plataforma precisa estar validado na mesma conta da chave de envio.');
+      } else {
+        toast.error(message || 'Não foi possível enviar o retorno em massa.');
+      }
     } finally {
       setBusyId(null);
     }
@@ -291,7 +296,7 @@ const CentralContabilidadePage: React.FC = () => {
         <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
           <MetricCard icon={AlertTriangle} label="Pendências / retificações" value={pendencias.length} tone="amber" />
           <MetricCard icon={CheckCircle2} label="Conferidos" value={conferidos.length} tone="green" />
-          <MetricCard icon={FileText} label="Documentos recebidos" value={uploads.length} tone="purple" />
+          <MetricCard icon={FileText} label="Documentos recebidos" value={receivedUploads.length} tone="purple" />
           <MetricCard icon={Clock3} label="Movimentações hoje" value={hoje} tone="blue" />
         </div>
 
@@ -360,7 +365,7 @@ const CentralContabilidadePage: React.FC = () => {
           </Panel>
 
           <Panel title="Últimos documentos recebidos" icon={UploadCloud}>
-            {uploads.length===0 ? <Empty text="Nenhum documento recebido."/> : uploads.slice(0,8).map((u) => (
+            {receivedUploads.length===0 ? <Empty text="Nenhum documento recebido."/> : receivedUploads.slice(0,8).map((u) => (
               <div key={u.id} className="flex items-center justify-between gap-3 border-b border-[#1f2026] py-3 last:border-0">
                 <div className="min-w-0"><div className="truncate text-sm font-bold text-zinc-100">{u.arquivo_nome}</div><div className="mt-1 text-xs text-zinc-500">{companyMap.get(u.empresa_id)||'Empresa'} · {userMap.get(u.portal_user_id)?.nome||'Contabilidade'} · {brDateTime(u.created_at)}</div></div>
                 <button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#3a2c48] px-3 py-1.5 text-xs font-bold text-zinc-200 hover:border-[#8b22ff]">Abrir</button>
@@ -383,15 +388,15 @@ const CentralContabilidadePage: React.FC = () => {
         </Panel>
       ) : (
         <Panel title="Documentos enviados pela contabilidade para o RH" icon={UploadCloud}>
-          {uploads.length===0 ? <Empty text="Nenhum documento recebido."/> : (
+          {receivedUploads.length===0 ? <Empty text="Nenhum documento recebido."/> : (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#2b2631] bg-[#080a0e] p-3">
                 <div className="flex items-center gap-3">
                   <label className="inline-flex items-center gap-2 text-xs font-bold text-zinc-300">
                     <input
                       type="checkbox"
-                      checked={uploads.length > 0 && selectedUploadIds.length === uploads.length}
-                      onChange={(e)=>setSelectedUploadIds(e.target.checked ? uploads.map(u => u.id) : [])}
+                      checked={receivedUploads.length > 0 && selectedUploadIds.length === receivedUploads.length}
+                      onChange={(e)=>setSelectedUploadIds(e.target.checked ? receivedUploads.map(u => u.id) : [])}
                       className="h-4 w-4 accent-violet-600"
                     />
                     Selecionar todos
@@ -407,7 +412,7 @@ const CentralContabilidadePage: React.FC = () => {
                   <Send className="h-4 w-4"/> Responder selecionados ({selectedUploadIds.length})
                 </button>
               </div>
-              {uploads.map((u) => {
+              {receivedUploads.map((u) => {
                 const sender = userMap.get(u.portal_user_id);
                 return (
                   <div key={u.id} className={`rounded-lg border bg-[#080a0e] ${selectedUploadIds.includes(u.id) ? 'border-violet-500/60' : 'border-[#24212a]'}`}>
