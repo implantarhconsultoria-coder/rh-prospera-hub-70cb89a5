@@ -36,7 +36,7 @@ import PdfDocumentViewer from '@/components/PdfDocumentViewer';
 import { useApp } from '@/context/AppContext';
 import { downloadDocument, getDocumentUrl, type DocumentSource } from '@/lib/documentUrl';
 import { buildHistoricDocumentPdf } from '@/lib/historicoDocumentalPdf';
-import { CC_OBRIGATORIO, DESTINATARIOS_CONTABILIDADE } from '@/lib/emailUtils';
+import { CC_OBRIGATORIO, DESTINATARIOS_CONTABILIDADE, EMAIL_CONTABILIDADE_GOIANIA, getCcRh, isGoianiaUnidade } from '@/lib/emailUtils';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { toast } from 'sonner';
 import { prepareDocumentTextForSave } from '@/lib/documentoHistoricoTexto';
@@ -420,7 +420,11 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     let to = [...DESTINATARIOS_CONTABILIDADE] as string[];
     let cc = [...CC_OBRIGATORIO] as string[];
 
-    if (isAtestado) {
+    if (isAtestado && isGoianiaUnidade(company.name)) {
+      // Goiânia usa a contabilidade própria e mantém Matriz, Robson e ADM Goiânia em cópia.
+      to = [EMAIL_CONTABILIDADE_GOIANIA];
+      cc = [...getCcRh(company.name)];
+    } else if (isAtestado) {
       const { data: emailConfig, error: emailConfigError } = await supabase
         .from('config_emails_contabilidade' as any)
         .select('email_marisa,email_robson,emails_copia')
