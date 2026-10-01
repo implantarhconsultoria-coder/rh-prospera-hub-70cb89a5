@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Archive, Building2, ChevronDown, ClipboardList, FileText, Home,
-  Menu, Package, Search, Settings, Shirt, Users, Wrench, X,
+  LockKeyhole, Menu, Package, Search, Settings, Shirt, Users, Wrench, X,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNot
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
 import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
+import { SYSTEM_OWNER_USER_ID } from '@/lib/systemAccessControl';
 
 type SearchItem = { label: string; path: string };
 
@@ -62,12 +63,12 @@ const AdminMobileLayout: React.FC = () => {
   const { allowed: canViewFrota } = usePrivateModuleAccess('frota_ipva');
 
   const [moduleOpen,setModuleOpen] = useState(Boolean((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'));
-  const isNativeCardModule = ['/admin/estoque-interno','/admin/uniformes','/admin/epi']
+  const isNativeCardModule = ['/admin/estoque-interno','/admin/uniformes','/admin/epi','/admin/system-control']
     .some(path=>location.pathname===path || location.pathname.startsWith(path+'/'));
   const moduleItem = [...SEARCH_ITEMS].filter(item=>item.path.startsWith('/admin/')
     && (location.pathname===item.path || location.pathname.startsWith(item.path+'/')))
     .sort((a,b)=>b.path.length-a.path.length)[0];
-  const moduleLabel=moduleItem?.label||location.pathname.split('/').filter(Boolean).slice(1).join(' / ').replace(/-/g,' ')||'Módulo';
+  const moduleLabel=location.pathname==='/admin/system-control'?'Controle de Acesso':moduleItem?.label||location.pathname.split('/').filter(Boolean).slice(1).join(' / ').replace(/-/g,' ')||'Módulo';
   const moduleKey=moduleItem?.path||location.pathname;
   const lastModule=useRef(moduleKey);
 
@@ -114,6 +115,7 @@ const AdminMobileLayout: React.FC = () => {
   };
 
   const moreItems = [
+    ...(session?.user?.id === SYSTEM_OWNER_USER_ID ? [{ label:'Controle de Acesso', detail:'Restringir ou liberar módulos', path:'/admin/system-control', icon:LockKeyhole }] : []),
     { label:'Empresas', detail:'Empresas e filiais', path:'/admin/empresas', icon:Building2 },
     { label:'Filial Praia Grande', detail:'Abrir portal da unidade', path:'/filial', icon:Building2, previewCodigo:'topac-pg' },
     { label:'Filial Goiânia', detail:'Abrir portal da unidade', path:'/filial', icon:Building2, previewCodigo:'topac-gyn' },
