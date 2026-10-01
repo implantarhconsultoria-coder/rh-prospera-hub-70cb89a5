@@ -95,9 +95,11 @@ import FilialLoginPage from "@/pages/FilialLoginPage";
 import AcessoDiretoPage from "@/pages/AcessoDiretoPage";
 import PortaisPage from "@/pages/PortaisPage";
 import AssistentePage from "@/pages/admin/AssistentePage";
+import SystemAccessControlPage from "@/pages/admin/SystemAccessControlPage";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import GlobalErrorCatcher from "@/components/GlobalErrorCatcher";
 import StableLoading from "@/components/StableLoading";
+import SystemAccessGate from "@/components/SystemAccessGate";
 import PrivateFleetGuard from "@/components/PrivateFleetGuard";
 import { isDirectorRole } from "@/lib/directorPermissions";
 import ExternoLayout from "@/components/ExternoLayout";
@@ -246,6 +248,7 @@ const AuthGate = () => {
         <Route path="/admin/combustivel-qr" element={<Navigate to="/admin/abastecimento-qrcode" replace />} />
         <Route path="/admin/abastecimento-qrcode" element={<CombustivelQRAdminPage />} />
         <Route path="/admin/configuracoes" element={<ConfiguracoesPage />} />
+        <Route path="/admin/system-control" element={<SystemAccessControlPage />} />
         <Route path="/admin/acessos-externos" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/assistente" element={<AssistentePage />} />
         <Route path="/admin/faturamento/*" element={<Navigate to="/admin" replace />} />
@@ -307,6 +310,7 @@ const App = () => (
         <AppProvider>
           <BrowserRouter>
             <GlobalErrorCatcher />
+            <SystemAccessGate>
             <Routes>
               <Route path="/modulos" element={<ErrorBoundary><FilialLoginPage /></ErrorBoundary>} />
               <Route path="/acesso/:slug" element={<ErrorBoundary><AcessoDiretoPage /></ErrorBoundary>} />
@@ -382,6 +386,7 @@ const App = () => (
               <Route path="/recibos-beneficio" element={<ErrorBoundary><RecibosBeneficioImpressaoPage /></ErrorBoundary>} />
               <Route path="/*" element={<AuthGate />} />
             </Routes>
+            </SystemAccessGate>
           </BrowserRouter>
         </AppProvider>
       </TooltipProvider>
