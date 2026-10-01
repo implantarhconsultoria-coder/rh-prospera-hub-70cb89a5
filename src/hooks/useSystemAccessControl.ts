@@ -37,28 +37,26 @@ export const useSystemAccessControl = () => {
   }, []);
 
   useEffect(() => {
-    let active = true;
     void load();
 
-    const channel = supabase
-      .channel('topac-system-access-control')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_access_controls' }, () => {
-        if (active) void load();
-      })
-      .subscribe();
-
+    // Atualizacao curta e estavel. Evita colisao de canais Realtime quando
+    // o gate global e a tela de controle ficam montados ao mesmo tempo.
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') void load();
-    }, 5000);
+    }, 2000);
 
     const onFocus = () => void load();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+
     window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      active = false;
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
-      void supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [load]);
 
