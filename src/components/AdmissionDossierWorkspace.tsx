@@ -217,10 +217,12 @@ const AdmissionDossierWorkspace: React.FC<{
     const {error:storageError}=await supabase.storage.from(bucket).upload(path,file,{upsert:false});
     if(storageError) throw storageError;
     const url=supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-    const {data,error}=await (supabase as any).from('pre_cadastro_documentos').insert({
+    const {data:rows,error}=await (supabase as any).from('pre_cadastro_documentos').insert({
       pre_cadastro_id:id,tipo_documento:kind,nome_arquivo:file.name,arquivo_url:url,status:'recebido',
-    }).select('*').single();
+    }).select('*').limit(1);
     if(error) throw error;
+    const data=rows?.[0];
+    if(!data?.id) throw new Error('Documento salvo, mas o registro não pôde ser confirmado.');
     return data as StoredDoc;
   };
 
@@ -244,20 +246,23 @@ const AdmissionDossierWorkspace: React.FC<{
       };
       if(!draft.id) row.criado_por=session.user.id;
       const req=draft.id
-        ? (supabase as any).from('pre_cadastros_admissionais').update(row).eq('id',draft.id).select('*').single()
-        : (supabase as any).from('pre_cadastros_admissionais').insert(row).select('*').single();
-      const {data,error}=await req;
+        ? (supabase as any).from('pre_cadastros_admissionais').update(row).eq('id',draft.id).select('*').limit(1)
+        : (supabase as any).from('pre_cadastros_admissionais').insert(row).select('*').limit(1);
+      const {data:rows,error}=await req;
       if(error) throw error;
-      const saved=data as Draft;
+      const saved=rows?.[0] as Draft | undefined;
+      if(!saved?.id) throw new Error('O pré-cadastro foi processado, mas não retornou um registro válido.');
       const id=saved.id!;
-      const {data:staged,error:stageError}=await (supabase as any).from('admission_dossier_workflow')
+      const {data:stagedRows,error:stageError}=await (supabase as any).from('admission_dossier_workflow')
         .upsert({pre_cadastro_id:id,dados_bancarios:bank,
           vr_diario:vrDaily===''?null:Number(vrDaily),
           vt_diario:vtDaily===''?null:Number(vtDaily),
-          updated_at:new Date().toISOString()},{onConflict:'pre_cadastro_id'}).select('*').single();
+          updated_at:new Date().toISOString()},{onConflict:'pre_cadastro_id'}).select('*').limit(1);
       if(stageError) throw stageError;
+      const staged=stagedRows?.[0] as Stage | undefined;
+      if(!staged) throw new Error('O dossiê foi salvo, mas o estágio de conferência não pôde ser confirmado.');
       setDraft({...draft,...saved,salario:saved.salario===null?'':String(saved.salario||'')});
-      setStage(staged as Stage);
+      setStage(staged);
       setDirty(false);
       const failed:File[]=[];
       let uploaded=0;
@@ -281,11 +286,13 @@ const AdmissionDossierWorkspace: React.FC<{
     setBusy(true);
     try{
       const doc=await uploadFile(file,draft.id,'contrato_recebido');
-      const {data,error}=await (supabase as any).from('admission_dossier_workflow').update({
+      const {data:rows,error}=await (supabase as any).from('admission_dossier_workflow').update({
         contrato_documento_id:doc.id,contrato_recebido_em:new Date().toISOString(),updated_at:new Date().toISOString(),
-      }).eq('pre_cadastro_id',draft.id).select('*').single();
+      }).eq('pre_cadastro_id',draft.id).select('*').limit(1);
       if(error) throw error;
-      setStage(data as Stage);await fetchDocs(draft.id);await fetchRows();
+      const data=rows?.[0] as Stage | undefined;
+      if(!data) throw new Error('Contrato recebido, mas o estágio do dossiê não pôde ser confirmado.');
+      setStage(data);await fetchDocs(draft.id);await fetchRows();
       toast.success('Contrato recebido e vinculado ao dossiê. OK disponível após conferir todos os dados.');
     }catch(error:any){toast.error('Contrato não confirmado: '+(error?.message||error));}
     finally{setBusy(false);}
@@ -325,10 +332,11 @@ const AdmissionDossierWorkspace: React.FC<{
       const {data,error}=await (supabase as any).rpc('admin_dossie_aprovar_com_contrato',{p_id:draft.id});
       if(error) throw error;
       const employeeId=String(data||'');
-      const {data:official,error:stageError}=await (supabase as any).from('admission_dossier_workflow')
-        .select('*').eq('pre_cadastro_id',draft.id).single();
+      const {data:officialRows,error:stageError}=await (supabase as any).from('admission_dossier_workflow')
+        .select('*').eq('pre_cadastro_id',draft.id).limit(1);
       if(stageError) throw stageError;
-      const stageValue=official as Stage;
+      const stageValue=officialRows?.[0] as Stage | undefined;
+      if(!stageValue) throw new Error('Admissão concluída, mas o estágio do dossiê não foi localizado para atualização da tela.');
       setStage(stageValue);
       setDraft(prev=>({...prev,status:'cadastro_oficial'}));
       setDirty(false);
