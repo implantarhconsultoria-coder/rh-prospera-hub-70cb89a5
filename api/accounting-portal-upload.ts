@@ -147,9 +147,10 @@ const sendStoredPdfEmail = async (service: any, input: {
   subject: string;
   body: string;
   replyTo?: string;
-  bucket: string;
-  path: string;
-  fileName: string;
+  bucket?: string;
+  path?: string;
+  fileName?: string;
+  attachments?: Array<{ bucket: string; path: string; fileName: string }>;
   empresaId?: string;
   competencia?: string | null;
   threadKey?: string;
@@ -160,12 +161,23 @@ const sendStoredPdfEmail = async (service: any, input: {
   if (!input.to.length) throw Object.assign(new Error('Informe ao menos um destinatário.'), { status: 400 });
   if (!input.subject.trim() || !input.body.trim()) throw Object.assign(new Error('Assunto e mensagem são obrigatórios.'), { status: 400 });
 
-  const { data: pdf, error: downloadError } = await service.storage.from(input.bucket).download(input.path);
-  if (downloadError || !pdf) throw downloadError || new Error('pdf_nao_encontrado');
-  const bytes = Buffer.from(await pdf.arrayBuffer());
-  if (!bytes.length) throw new Error('pdf_anexo_vazio');
-  if (bytes.length > MAX_EMAIL_ATTACHMENT_BYTES) {
-    throw Object.assign(new Error('O PDF está salvo na plataforma, mas excede 20 MB para envio automático por e-mail. Use o e-mail manual.'), { status: 413 });
+  const attachmentInputs = input.attachments?.length
+    ? input.attachments
+    : (input.bucket && input.path && input.fileName ? [{ bucket: input.bucket, path: input.path, fileName: input.fileName }] : []);
+  if (!attachmentInputs.length) throw Object.assign(new Error('Nenhum PDF foi informado para envio.'), { status: 400 });
+
+  const emailAttachments: Array<{ filename: string; content: string }> = [];
+  let totalAttachmentBytes = 0;
+  for (const attachment of attachmentInputs) {
+    const { data: pdf, error: downloadError } = await service.storage.from(attachment.bucket).download(attachment.path);
+    if (downloadError || !pdf) throw downloadError || new Error('pdf_nao_encontrado');
+    const bytes = Buffer.from(await pdf.arrayBuffer());
+    if (!bytes.length) throw new Error('pdf_anexo_vazio');
+    totalAttachmentBytes += bytes.length;
+    emailAttachments.push({ filename: attachment.fileName, content: bytes.toString('base64') });
+  }
+  if (totalAttachmentBytes > MAX_EMAIL_ATTACHMENT_BYTES) {
+    throw Object.assign(new Error('Os PDFs estão salvos na plataforma, mas o conjunto de anexos excede 20 MB para um único e-mail. Divida o envio em dois lotes.'), { status: 413 });
   }
 
   const configuredFrom = String(process.env.EMAIL_FROM || process.env.MAIL_FROM || '').trim();
@@ -193,7 +205,7 @@ const sendStoredPdfEmail = async (service: any, input: {
       text: input.body,
       html: `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#111827;line-height:1.55"><div style="max-width:720px">${htmlBody}</div></body></html>`,
       ...(Object.keys(thread.headers).length ? { headers: thread.headers } : {}),
-      attachments: [{ filename: input.fileName, content: bytes.toString('base64') }],
+      attachments: emailAttachments,
     }),
   });
 
@@ -384,6 +396,123 @@ export default async function handler(req: any, res?: any) {
           updated_at: new Date().toISOString(),
         }).eq('id', upload.id);
         return sendJson(res, { ok: true, upload_id: upload.id, email_status: 'erro_envio_email', email_to: routing.to, email_cc: routing.cc, email_error: String(mailError?.message || mailError) });
+      }
+    }
+
+    if (action === 'send_batch_email') {
+      const uploadIds = Array.isArray(body.upload_ids)
+        ? Array.from(new Set(body.upload_ids.map((value: unknown) => String(value || '').trim()).filter(Boolean))).slice(0, 30)
+        : [];
+      if (!uploadIds.length) return sendJson(res, { ok: false, error: 'upload_ids_obrigatorios' }, 400);
+
+      const { data: uploads, error: uploadsError } = await service
+        .from('contabilidade_portal_uploads')
+        .select('*')
+        .in('id', uploadIds);
+      if (uploadsError) throw uploadsError;
+      if (!uploads || uploads.length !== uploadIds.length) {
+        return sendJson(res, { ok: false, error: 'documentos_nao_encontrados' }, 404);
+      }
+
+      const first = uploads[0];
+      const user = await validateSession(service, portal, token, first.empresa_id);
+      const sameProcess = uploads.every((upload: any) =>
+        upload.empresa_id === first.empresa_id &&
+        String(upload.origem_tipo || '') === String(first.origem_tipo || '') &&
+        String(upload.origem_id || '') === String(first.origem_id || '')
+      );
+      if (!sameProcess) {
+        return sendJson(res, { ok: false, error: 'lote_processos_diferentes', message: 'Os PDFs do lote precisam pertencer ao mesmo processo.' }, 400);
+      }
+
+      const routing = await getEmailRouting(service, portal, String(user.email || ''));
+      const { data: company } = await service.from('empresas').select('id,nome,codigo').eq('id', first.empresa_id).maybeSingle();
+      if (!company) return sendJson(res, { ok: false, error: 'empresa_nao_encontrada' }, 404);
+
+      const isPraiaGrande = /praia/i.test(String(company.nome || company.codigo || ''));
+      const isFolhaFinal = uploads.some((upload: any) => upload.tipo_documento === 'folha_processada');
+      if (portal === 'principal' && isPraiaGrande && isFolhaFinal) {
+        routing.cc = uniqueEmails([...routing.cc, ANTONIO_CARLOS_PRAIA_EMAIL]);
+      }
+
+      const typeLabel = TYPE_LABELS[first.tipo_documento] || first.tipo_documento || 'Retorno da contabilidade';
+      const competence = first.competencia || null;
+      const subject = String(body.subject || '').trim().slice(0, 240)
+        || defaultSubject(company.nome, typeLabel, competence);
+      const fileNames = uploads.map((upload: any) => upload.arquivo_nome);
+      const requestedBody = String(body.body || '').trim().slice(0, 12000);
+      const text = requestedBody || [
+        'Prezados,',
+        '',
+        `Segue em anexo o retorno da Contabilidade referente a ${typeLabel}.`,
+        '',
+        `Empresa: ${company.nome}`,
+        first.funcionario_nome ? `Funcionário: ${first.funcionario_nome}` : '',
+        competence ? `Competência / referência: ${competence}` : '',
+        `Documentos anexados (${fileNames.length}):`,
+        ...fileNames.map((name: string) => `- ${name}`),
+        '',
+        'Os PDFs seguem anexados em um único envio para conferência e arquivamento no TOPAC RH PRO.',
+        '',
+        'Atenciosamente,',
+        user.nome || 'Contabilidade',
+        'Contabilidade',
+      ].filter((line, index, list) => line !== '' || (index > 0 && list[index - 1] !== '')).join('\n');
+
+      try {
+        const provider = await sendStoredPdfEmail(service, {
+          to: routing.to,
+          cc: routing.cc,
+          subject,
+          body: text,
+          replyTo: String(user.email || ''),
+          attachments: uploads.map((upload: any) => ({
+            bucket: upload.storage_bucket,
+            path: upload.storage_path,
+            fileName: upload.arquivo_nome,
+          })),
+          empresaId: first.empresa_id,
+          competencia: competence,
+          threadKey: first.origem_tipo && first.origem_id
+            ? buildAccountingProcessThreadKey({
+                originType: first.origem_tipo,
+                originId: first.origem_id,
+                companyId: first.empresa_id,
+                reference: competence,
+              })
+            : undefined,
+          closeThread: isFolhaFinal,
+        });
+
+        const now = new Date().toISOString();
+        await service.from('contabilidade_portal_uploads').update({
+          formalizacao_email_status: 'enviado',
+          formalizacao_email_em: now,
+          formalizacao_destinos: uniqueEmails([...routing.to, ...routing.cc]),
+          updated_at: now,
+        }).in('id', uploadIds);
+
+        return sendJson(res, {
+          ok: true,
+          email_status: 'enviado',
+          formalizado_em: now,
+          provider_id: provider.provider_id,
+          quantidade_anexos: uploads.length,
+          email_to: routing.to,
+          email_cc: routing.cc,
+        });
+      } catch (error: any) {
+        await service.from('contabilidade_portal_uploads').update({
+          formalizacao_email_status: 'erro_envio_email',
+          formalizacao_destinos: uniqueEmails([...routing.to, ...routing.cc]),
+          updated_at: new Date().toISOString(),
+        }).in('id', uploadIds);
+
+        return sendJson(res, {
+          ok: false,
+          error: 'batch_email_send_failed',
+          message: String(error?.message || error),
+        }, Number(error?.status || 502));
       }
     }
 
