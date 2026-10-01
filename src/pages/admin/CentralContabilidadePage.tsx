@@ -29,8 +29,10 @@ type Upload = {
   arquivo_nome:string; tamanho_bytes?:number|null; status:string;
   formalizacao_email_status?:string|null; formalizacao_email_em?:string|null;
   formalizacao_destinos?:string[]|null; origem_tipo?:string|null; origem_id?:string|null; created_at:string;
+  ciclo_id?:string|null; processo_tipo?:string|null;
   rh_resposta?:string|null; rh_resposta_em?:string|null; rh_resposta_por?:string|null;
 };
+type PayrollCycle = { id:string; empresa_id:string; competencia:string; tipo:string; status:string; conferido_em?:string|null; updated_at?:string|null };
 type PortalUser = { id:string; nome:string; email?:string|null; portal:string };
 
 const MODULE_KEYS: ModuleKey[] = ['pre-cadastro','rescisao','ferias','aso','clinicas'];
@@ -60,6 +62,7 @@ const CentralContabilidadePage: React.FC = () => {
   const [revisoes, setRevisoes] = useState<Revisao[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
+  const [payrollCycles, setPayrollCycles] = useState<PayrollCycle[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [replyUploadId, setReplyUploadId] = useState<string | null>(null);
@@ -97,17 +100,20 @@ const CentralContabilidadePage: React.FC = () => {
   const carregar = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [a, b, c] = await Promise.all([
+      const [a, b, c, d] = await Promise.all([
         supabase.from('contabilidade_portal_revisoes' as any).select('*').order('updated_at', { ascending:false }).limit(250),
         supabase.from('contabilidade_portal_uploads' as any).select('*').order('created_at', { ascending:false }).limit(250),
         supabase.from('contabilidade_portal_usuarios' as any).select('id,nome,email,portal').eq('ativo', true),
+        supabase.from('contabilidade_folha_ciclos' as any).select('id,empresa_id,competencia,tipo,status,conferido_em,updated_at').order('updated_at', { ascending:false }).limit(250),
       ]);
       if (a.error) throw a.error;
       if (b.error) throw b.error;
       if (c.error) throw c.error;
+      if (d.error) throw d.error;
       setRevisoes((a.data || []) as any);
       setUploads((b.data || []) as any);
       setPortalUsers((c.data || []) as any);
+      setPayrollCycles((d.data || []) as any);
     } catch (e:any) {
       toast.error(e?.message || 'Não foi possível carregar a Central da Contabilidade.');
     } finally {
@@ -124,8 +130,51 @@ const CentralContabilidadePage: React.FC = () => {
   const pendencias = useMemo(() => revisoes.filter((r) => ['pendencia','retificacao','aguardando_analise'].includes(r.status)), [revisoes]);
   const conferidos = useMemo(() => revisoes.filter((r) => r.status === 'conferido'), [revisoes]);
   const receivedUploads = useMemo(() => uploads.filter((u) => u.origem_tipo !== 'rh_apontamento'), [uploads]);
-  const errosEmail = useMemo(() => receivedUploads.filter((u) => !!u.formalizacao_email_status && !emailOk(u.formalizacao_email_status)), [receivedUploads]);
-  const selectedUploads = useMemo(() => receivedUploads.filter((u) => selectedUploadIds.includes(u.id)), [receivedUploads, selectedUploadIds]);
+
+  const uploadProcessType = useCallback((u:Upload): 'pagamento' | 'adiantamento' | 'outros' => {
+    const explicit = String(u.processo_tipo || '').toLowerCase();
+    if (explicit === 'adiantamento' || explicit === 'pagamento') return explicit;
+    if (/adiant/i.test(u.arquivo_nome || '')) return 'adiantamento';
+    if (String(u.origem_tipo || '').toLowerCase() === 'fechamento' || String(u.tipo_documento || '').toLowerCase() === 'fechamento') return 'pagamento';
+    return 'outros';
+  }, []);
+
+  const uploadCycle = useCallback((u:Upload) => {
+    if (u.ciclo_id) {
+      const direct = payrollCycles.find(cycle => cycle.id === u.ciclo_id);
+      if (direct) return direct;
+    }
+    const tipo = uploadProcessType(u);
+    if (tipo === 'outros' || !u.competencia) return null;
+    return payrollCycles.find(cycle =>
+      cycle.empresa_id === u.empresa_id &&
+      cycle.competencia === u.competencia &&
+      cycle.tipo === tipo
+    ) || null;
+  }, [payrollCycles, uploadProcessType]);
+
+  const uploadConcluded = useCallback((u:Upload) => {
+    if (u.rh_resposta_em) return true;
+    const cycle = uploadCycle(u);
+    return String(cycle?.status || '').toLowerCase() === 'conferido';
+  }, [uploadCycle]);
+
+  const pendingReceivedUploads = useMemo(() => receivedUploads.filter(u => !uploadConcluded(u)), [receivedUploads, uploadConcluded]);
+  const completedReceivedUploads = useMemo(() => receivedUploads.filter(u => uploadConcluded(u)), [receivedUploads, uploadConcluded]);
+  const pendingPagamento = useMemo(() => pendingReceivedUploads.filter(u => uploadProcessType(u) === 'pagamento'), [pendingReceivedUploads, uploadProcessType]);
+  const pendingAdiantamento = useMemo(() => pendingReceivedUploads.filter(u => uploadProcessType(u) === 'adiantamento'), [pendingReceivedUploads, uploadProcessType]);
+  const pendingOutros = useMemo(() => pendingReceivedUploads.filter(u => uploadProcessType(u) === 'outros'), [pendingReceivedUploads, uploadProcessType]);
+  const historicoPagamento = useMemo(() => completedReceivedUploads.filter(u => uploadProcessType(u) === 'pagamento'), [completedReceivedUploads, uploadProcessType]);
+  const historicoAdiantamento = useMemo(() => completedReceivedUploads.filter(u => uploadProcessType(u) === 'adiantamento'), [completedReceivedUploads, uploadProcessType]);
+  const historicoOutros = useMemo(() => completedReceivedUploads.filter(u => uploadProcessType(u) === 'outros'), [completedReceivedUploads, uploadProcessType]);
+
+  useEffect(() => {
+    const allowed = new Set(pendingReceivedUploads.map(u => u.id));
+    setSelectedUploadIds(current => current.filter(id => allowed.has(id)));
+  }, [pendingReceivedUploads.map(u => u.id).join('|')]);
+
+  const errosEmail = useMemo(() => pendingReceivedUploads.filter((u) => !!u.formalizacao_email_status && !emailOk(u.formalizacao_email_status)), [pendingReceivedUploads]);
+  const selectedUploads = useMemo(() => pendingReceivedUploads.filter((u) => selectedUploadIds.includes(u.id)), [pendingReceivedUploads, selectedUploadIds]);
   const hoje = useMemo(() => {
     const key = new Date().toLocaleDateString('en-CA');
     return uploads.filter((u) => new Date(u.created_at).toLocaleDateString('en-CA') === key).length
@@ -260,6 +309,57 @@ const CentralContabilidadePage: React.FC = () => {
     }
   };
 
+  const renderReceivedUploadRow = (u:Upload, historical = false) => {
+    const sender = userMap.get(u.portal_user_id);
+    const process = uploadProcessType(u);
+    return (
+      <div key={u.id} className={`rounded-lg border bg-[#080a0e] ${!historical && selectedUploadIds.includes(u.id) ? 'border-violet-500/60' : 'border-[#24212a]'} ${historical ? 'opacity-80' : ''}`}>
+        <div className={`grid gap-3 p-4 ${historical ? 'lg:grid-cols-[1.5fr_.8fr_.8fr_.8fr_auto]' : 'lg:grid-cols-[auto_1.5fr_.8fr_.8fr_.8fr_auto]'} lg:items-center`}>
+          {!historical && (
+            <label className="flex items-center justify-center">
+              <input
+                type="checkbox"
+                checked={selectedUploadIds.includes(u.id)}
+                onChange={(e)=>setSelectedUploadIds(current => e.target.checked ? Array.from(new Set([...current, u.id])) : current.filter(id => id !== u.id))}
+                className="h-4 w-4 accent-violet-600"
+                aria-label={`Selecionar ${u.arquivo_nome}`}
+              />
+            </label>
+          )}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold text-white">{u.arquivo_nome}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+              <span>{tipoLabel(u.tipo_documento)}{u.funcionario_nome?` · ${u.funcionario_nome}`:''}</span>
+              <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${process==='adiantamento'?'border-amber-500/20 text-amber-300':process==='pagamento'?'border-sky-500/20 text-sky-300':'border-zinc-500/20 text-zinc-400'}`}>
+                {process==='adiantamento'?'Adiantamento':process==='pagamento'?'Pagamento':'Outro processo'}
+              </span>
+              {historical && <span className="rounded-full border border-emerald-500/20 bg-emerald-500/[.05] px-2 py-0.5 text-[9px] font-black uppercase text-emerald-300">Concluído</span>}
+            </div>
+            {u.observacao && <div className="mt-2 rounded-md border border-[#30283a] bg-[#06080c] p-2 text-xs text-zinc-300"><b className="text-zinc-500">Mensagem da Contabilidade:</b> {u.observacao}</div>}
+          </div>
+          <Info label="Empresa" value={companyMap.get(u.empresa_id)||'—'}/>
+          <div>
+            <Info label="Enviado por" value={sender?.nome||'Contabilidade'}/>
+            {sender?.email && <div className="mt-1 text-[10px] text-zinc-600">{sender.email}</div>}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase text-zinc-600">Formalização</div>
+            <div className="mt-1"><StatusBadge value={u.formalizacao_email_status||'—'}/></div>
+            <div className="mt-2 text-[10px] text-zinc-600">{brDateTime(u.created_at)}</div>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200">Abrir PDF</button>
+            {!historical && <button onClick={()=>{setReplyUploadId(u.id);setReplyText(buildReplyTemplate([u]));}} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">Responder</button>}
+            {!historical && !emailOk(u.formalizacao_email_status)&&<button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="rounded-md border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-200">Reenviar formalização</button>}
+          </div>
+        </div>
+        {historical && u.rh_resposta_em && (
+          <div className="mx-4 mb-3 text-[10px] text-emerald-300">Retorno do RH registrado em {brDateTime(u.rh_resposta_em)}</div>
+        )}
+      </div>
+    );
+  };
+
   const tabs:Array<{key:TabKey;label:string;icon:React.ElementType}> = [
     { key:'visao', label:'Visão geral', icon:Building2 },
     { key:'movimentacoes', label:'Conferências', icon:FileCheck2 },
@@ -389,76 +489,106 @@ const CentralContabilidadePage: React.FC = () => {
       ) : (
         <Panel title="Documentos enviados pela contabilidade para o RH" icon={UploadCloud}>
           {receivedUploads.length===0 ? <Empty text="Nenhum documento recebido."/> : (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#2b2631] bg-[#080a0e] p-3">
-                <div className="flex items-center gap-3">
-                  <label className="inline-flex items-center gap-2 text-xs font-bold text-zinc-300">
-                    <input
-                      type="checkbox"
-                      checked={receivedUploads.length > 0 && selectedUploadIds.length === receivedUploads.length}
-                      onChange={(e)=>setSelectedUploadIds(e.target.checked ? receivedUploads.map(u => u.id) : [])}
-                      className="h-4 w-4 accent-violet-600"
-                    />
-                    Selecionar todos
-                  </label>
-                  <span className="text-xs text-zinc-500">{selectedUploadIds.length} selecionado(s)</span>
-                </div>
-                <button
-                  type="button"
-                  disabled={selectedUploadIds.length === 0}
-                  onClick={()=>{setReplyText(buildReplyTemplate(selectedUploads));setBulkReplyOpen(true);}}
-                  className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
-                >
-                  <Send className="h-4 w-4"/> Responder selecionados ({selectedUploadIds.length})
-                </button>
-              </div>
-              {receivedUploads.map((u) => {
-                const sender = userMap.get(u.portal_user_id);
-                return (
-                  <div key={u.id} className={`rounded-lg border bg-[#080a0e] ${selectedUploadIds.includes(u.id) ? 'border-violet-500/60' : 'border-[#24212a]'}`}>
-                    <div className="grid gap-3 p-4 lg:grid-cols-[auto_1.5fr_.8fr_.8fr_.8fr_auto] lg:items-center">
-                      <label className="flex items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedUploadIds.includes(u.id)}
-                          onChange={(e)=>setSelectedUploadIds(current => e.target.checked ? Array.from(new Set([...current, u.id])) : current.filter(id => id !== u.id))}
-                          className="h-4 w-4 accent-violet-600"
-                          aria-label={`Selecionar ${u.arquivo_nome}`}
-                        />
-                      </label>
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-bold text-white">{u.arquivo_nome}</div>
-                        <div className="mt-1 text-xs text-zinc-500">{tipoLabel(u.tipo_documento)}{u.funcionario_nome?` · ${u.funcionario_nome}`:''}</div>
-                        {u.observacao && <div className="mt-2 rounded-md border border-[#30283a] bg-[#06080c] p-2 text-xs text-zinc-300"><b className="text-zinc-500">Mensagem da Contabilidade:</b> {u.observacao}</div>}
-                      </div>
-                      <Info label="Empresa" value={companyMap.get(u.empresa_id)||'—'}/>
-                      <div>
-                        <Info label="Enviado por" value={sender?.nome||'Contabilidade'}/>
-                        {sender?.email && <div className="mt-1 text-[10px] text-zinc-600">{sender.email}</div>}
-                      </div>
-                      <div>
-                        <div className="text-[10px] uppercase text-zinc-600">Formalização</div>
-                        <div className="mt-1"><StatusBadge value={u.formalizacao_email_status||'—'}/></div>
-                        <div className="mt-2 text-[10px] text-zinc-600">{brDateTime(u.created_at)}</div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 lg:justify-end">
-                        <button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200">Abrir PDF</button>
-                        <button onClick={()=>{setReplyUploadId(u.id);setReplyText(buildReplyTemplate([u]));}} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">{u.rh_resposta_em?'Responder novamente':'Responder'}</button>
-                        {!emailOk(u.formalizacao_email_status)&&<button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="rounded-md border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-200">Reenviar formalização</button>}
-                      </div>
-                    </div>
-
-                    {u.rh_resposta_em && (
-                      <div className="mx-4 mb-3 rounded-md border border-emerald-500/20 bg-emerald-500/[.035] p-3">
-                        <div className="text-[10px] font-black uppercase tracking-wide text-emerald-300">Último retorno do RH · {brDateTime(u.rh_resposta_em)}</div>
-                        <div className="mt-1 whitespace-pre-wrap text-xs text-zinc-300">{u.rh_resposta}</div>
-                      </div>
-                    )}
-
-
+            <div className="space-y-4">
+              {pendingReceivedUploads.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#2b2631] bg-[#080a0e] p-3">
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex items-center gap-2 text-xs font-bold text-zinc-300">
+                      <input
+                        type="checkbox"
+                        checked={pendingReceivedUploads.length > 0 && selectedUploadIds.length === pendingReceivedUploads.length}
+                        onChange={(e)=>setSelectedUploadIds(e.target.checked ? pendingReceivedUploads.map(u => u.id) : [])}
+                        className="h-4 w-4 accent-violet-600"
+                      />
+                      Selecionar pendentes
+                    </label>
+                    <span className="text-xs text-zinc-500">{selectedUploadIds.length} selecionado(s)</span>
                   </div>
-                );
-              })}
+                  <button
+                    type="button"
+                    disabled={selectedUploadIds.length === 0}
+                    onClick={()=>{setReplyText(buildReplyTemplate(selectedUploads));setBulkReplyOpen(true);}}
+                    className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+                  >
+                    <Send className="h-4 w-4"/> Responder selecionados ({selectedUploadIds.length})
+                  </button>
+                </div>
+              )}
+
+              {pendingPagamento.length > 0 && (
+                <section className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="text-[11px] font-black uppercase tracking-[.14em] text-sky-300">Pagamento · aguardando conclusão</div>
+                    <div className="text-[10px] text-zinc-500">{pendingPagamento.length} documento(s)</div>
+                  </div>
+                  {pendingPagamento.map(u => renderReceivedUploadRow(u))}
+                </section>
+              )}
+
+              {pendingAdiantamento.length > 0 && (
+                <section className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="text-[11px] font-black uppercase tracking-[.14em] text-amber-300">Adiantamento · aguardando conclusão</div>
+                    <div className="text-[10px] text-zinc-500">{pendingAdiantamento.length} documento(s)</div>
+                  </div>
+                  {pendingAdiantamento.map(u => renderReceivedUploadRow(u))}
+                </section>
+              )}
+
+              {pendingOutros.length > 0 && (
+                <section className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="text-[11px] font-black uppercase tracking-[.14em] text-zinc-300">Outros processos · aguardando conclusão</div>
+                    <div className="text-[10px] text-zinc-500">{pendingOutros.length} documento(s)</div>
+                  </div>
+                  {pendingOutros.map(u => renderReceivedUploadRow(u))}
+                </section>
+              )}
+
+              {pendingReceivedUploads.length === 0 && (
+                <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/[.035] px-4 py-4 text-sm text-emerald-300">
+                  Nenhum documento pendente. Os processos concluídos estão somente no histórico abaixo.
+                </div>
+              )}
+
+              {(historicoPagamento.length > 0 || historicoAdiantamento.length > 0 || historicoOutros.length > 0) && (
+                <div className="space-y-2 border-t border-[#28212f] pt-4">
+                  <div className="text-[10px] font-black uppercase tracking-[.16em] text-zinc-600">Histórico concluído</div>
+
+                  {historicoPagamento.length > 0 && (
+                    <details className="rounded-lg border border-[#24212a] bg-[#07090d]">
+                      <summary className="cursor-pointer list-none px-4 py-3 text-xs font-black text-zinc-300">
+                        Pagamento concluído <span className="ml-2 text-zinc-600">({historicoPagamento.length})</span>
+                      </summary>
+                      <div className="space-y-2 border-t border-[#24212a] p-3">
+                        {historicoPagamento.map(u => renderReceivedUploadRow(u, true))}
+                      </div>
+                    </details>
+                  )}
+
+                  {historicoAdiantamento.length > 0 && (
+                    <details className="rounded-lg border border-[#24212a] bg-[#07090d]">
+                      <summary className="cursor-pointer list-none px-4 py-3 text-xs font-black text-zinc-300">
+                        Adiantamento concluído <span className="ml-2 text-zinc-600">({historicoAdiantamento.length})</span>
+                      </summary>
+                      <div className="space-y-2 border-t border-[#24212a] p-3">
+                        {historicoAdiantamento.map(u => renderReceivedUploadRow(u, true))}
+                      </div>
+                    </details>
+                  )}
+
+                  {historicoOutros.length > 0 && (
+                    <details className="rounded-lg border border-[#24212a] bg-[#07090d]">
+                      <summary className="cursor-pointer list-none px-4 py-3 text-xs font-black text-zinc-300">
+                        Outros processos concluídos <span className="ml-2 text-zinc-600">({historicoOutros.length})</span>
+                      </summary>
+                      <div className="space-y-2 border-t border-[#24212a] p-3">
+                        {historicoOutros.map(u => renderReceivedUploadRow(u, true))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </Panel>
