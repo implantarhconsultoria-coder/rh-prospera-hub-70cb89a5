@@ -742,7 +742,6 @@ const RelatorioImpressaoPage: React.FC = () => {
       </div>
     </>
   );
-  );
 };
 
 export default RelatorioImpressaoPage;
