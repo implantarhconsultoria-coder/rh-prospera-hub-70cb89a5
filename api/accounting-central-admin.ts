@@ -13,6 +13,14 @@ const clean = (value:unknown) => String(value || '').trim();
 const htmlEscape = (value:unknown) => String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 const unique = (values:string[]) => Array.from(new Set(values.map((v) => v.trim().toLowerCase()).filter(Boolean)));
 
+const getPlatformFrom = () => {
+  const configured = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM);
+  if (!configured || /@resend\.dev/i.test(configured) || /onboarding@/i.test(configured)) {
+    return 'TOPAC RH PRO <centralrh@topacrh.pro>';
+  }
+  return configured;
+};
+
 const validateAdmin = async (req:any, service:any) => {
   const token = getBearer(req);
   if (!token) throw Object.assign(new Error('sessao_invalida'), { status:401 });
@@ -51,7 +59,7 @@ const retryEmail = async (service:any, uploadId:string) => {
     ...(isPraiaGrande && isFolhaFinal ? [ANTONIO_CARLOS_PRAIA_EMAIL] : []),
   ]);
   const resendKey = clean(process.env.RESEND_API_KEY);
-  const from = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>');
+  const from = getPlatformFrom();
   const replyTo = clean(user.email || process.env.EMAIL_REPLY_TO || ADM_EMAIL);
   const createdAt = new Date(upload.created_at || Date.now()).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo' });
   const typeLabels:Record<string,string> = { recibos_holerites:'Recibos / Holerites', folha_processada:'Folha processada', contrato:'Contrato de trabalho', rescisao:'Documentos de rescisão', ferias:'Documentos de férias', retorno_folha:'Retorno da contabilidade', outro:'Outro documento' };
@@ -162,7 +170,7 @@ export default async function handler(req:any, res?:any) {
       const companyMap = new Map((companies || []).map((c:any) => [c.id, c]));
       const resendKey = clean(process.env.RESEND_API_KEY);
       if (!resendKey) return sendJson(res, { ok:false, error:'email_nao_configurado' }, 500);
-      const from = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>');
+      const from = getPlatformFrom();
       const adminUser = await validateAdmin(req, service);
 
       // Agrupa por remetente da Contabilidade + empresa + competência.
@@ -273,7 +281,7 @@ export default async function handler(req:any, res?:any) {
       const resendKey = clean(process.env.RESEND_API_KEY);
       if (!resendKey) return sendJson(res, { ok:false, error:'email_nao_configurado' }, 500);
 
-      const from = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>');
+      const from = getPlatformFrom();
       const to = unique([String(portalUser.email)]);
       const counterpart = portalUser.portal === 'principal' ? counterpartFor(String(portalUser.email || '')) : '';
       const cc = unique([ROBSON_EMAIL, ADM_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
