@@ -22,6 +22,11 @@ const isTransientNetworkError = (error: unknown) => {
   ].some((pattern) => message.includes(pattern));
 };
 
+const isRecoveredPostgrestShapeError = (error: unknown) => {
+  const message = getMessage(error).trim().toLowerCase();
+  return message.includes('cannot coerce the result to a single json object');
+};
+
 const GlobalErrorCatcher: React.FC = () => {
   const [message, setMessage] = useState('');
 
@@ -33,6 +38,15 @@ const GlobalErrorCatcher: React.FC = () => {
     };
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (isRecoveredPostgrestShapeError(event.reason)) {
+        // O pré-cadastro trabalha com consultas que podem legitimamente retornar
+        // zero ou mais de um registro. Essas ocorrências são tratadas no fluxo
+        // local e não devem abrir o alerta global de recuperação.
+        console.warn('[RecoveredPostgrestShapeError]', event.reason);
+        event.preventDefault();
+        return;
+      }
+
       if (isTransientNetworkError(event.reason)) {
         // Falhas transitórias de rede não derrubam a aplicação e não devem ser
         // apresentadas como erro global. Chamadas funcionais devem tratar seus
