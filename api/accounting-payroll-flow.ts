@@ -425,6 +425,30 @@ export default async function handler(req: any, res?: any) {
         return sendJson(res, { ok: true, cycle: data });
       }
 
+      if (action === 'admin_ack_return') {
+        const cycle = await getCycle(service, clean(body.ciclo_id));
+        const { count, error: uploadError } = await service
+          .from('contabilidade_portal_uploads')
+          .select('id', { count: 'exact', head: true })
+          .eq('ciclo_id', cycle.id)
+          .neq('origem_tipo', 'rh_apontamento');
+        if (uploadError) throw uploadError;
+        if (!count) return sendJson(res, { ok: false, error: 'retorno_contabilidade_nao_encontrado' }, 409);
+
+        if (cycle.rh_recebeu_em) {
+          return sendJson(res, { ok: true, cycle, already_confirmed: true });
+        }
+
+        const now = new Date().toISOString();
+        const { data, error } = await service.from('contabilidade_folha_ciclos').update({
+          rh_recebeu_em: now,
+          rh_recebeu_por: user.id,
+          updated_at: now,
+        }).eq('id', cycle.id).select('*').single();
+        if (error) throw error;
+        return sendJson(res, { ok: true, cycle: data, already_confirmed: false });
+      }
+
       if (action === 'admin_approve_cycle') {
         const cycle = await getCycle(service, clean(body.ciclo_id));
         const { data: mapped, error: mapError } = await service.from('contabilidade_folha_documentos')
