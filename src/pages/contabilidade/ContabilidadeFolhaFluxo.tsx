@@ -290,13 +290,12 @@ export default function ContabilidadeFolhaFluxo({ portal }: { portal: PortalKind
     }
   };
 
-  if (portal !== 'principal') return null;
   if (loading && !state) return <section className="mb-5 rounded-xl border border-[#2b2532] bg-[#05070b] p-5"><div className="flex items-center gap-2 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin" />Carregando Adiantamento e Pagamento...</div></section>;
 
   return (
     <section className="mb-5 rounded-xl border border-[#2b2532] bg-[#05070b] shadow-[0_18px_50px_rgba(0,0,0,.18)]">
       <div className="flex flex-col gap-3 border-b border-[#25202b] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-violet-400">Folha · competência {monthLabel(state?.competence || '')}</div><h2 className="mt-1 text-lg font-black text-white">Adiantamento e Pagamento</h2><p className="mt-1 text-xs text-zinc-500">Envio dos PDFs por empresa, identificação automática dos recibos e encaminhamento para Assinatura Digital.</p></div>
+        <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-violet-400">Folha · competência {monthLabel(state?.competence || '')} {portal === 'goiania' ? '· Goiânia' : ''}</div><h2 className="mt-1 text-lg font-black text-white">Adiantamento e Pagamento</h2><p className="mt-1 text-xs text-zinc-500">Envio dos PDFs por empresa, identificação automática dos recibos e encaminhamento para Assinatura Digital.</p></div>
         <Button variant="outline" size="sm" onClick={() => void load()} className="border-[#3d3150] bg-[#090b10] text-zinc-300"><RefreshCw className="mr-2 h-3.5 w-3.5" />Atualizar</Button>
       </div>
       <div className="grid gap-3 p-4 md:grid-cols-2">
