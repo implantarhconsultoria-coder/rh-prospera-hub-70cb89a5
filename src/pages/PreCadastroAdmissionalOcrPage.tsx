@@ -294,7 +294,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   };
 
   const salvar = async () => {
-    setSaving(true); const payload = { ...form, criado_por: session?.user?.id || null }; const request = form.id ? (supabase as any).from('pre_cadastros_admissionais').update(payload).eq('id', form.id).select('*').single() : (supabase as any).from('pre_cadastros_admissionais').insert(payload).select('*').single(); const { data, error } = await request; setSaving(false); if (error) return toast.error(`Erro ao salvar: ${error.message}`); setSelectedId(data.id); toast.success('Pre-cadastro salvo no banco'); await carregar();
+    setSaving(true); const payload = { ...form, criado_por: session?.user?.id || null }; const request = form.id ? (supabase as any).from('pre_cadastros_admissionais').update(payload).eq('id', form.id).select('*').limit(1) : (supabase as any).from('pre_cadastros_admissionais').insert(payload).select('*').limit(1); const { data: rows, error } = await request; setSaving(false); if (error) return toast.error(`Erro ao salvar: ${error.message}`); const data = rows?.[0]; if (!data?.id) return toast.error('Erro ao salvar: o pré-cadastro não retornou um registro válido.'); setSelectedId(data.id); toast.success('Pre-cadastro salvo no banco'); await carregar();
   };
 
   const mergeOcrIntoForm = (result: OcrResult, arquivoUrl: string) => {
