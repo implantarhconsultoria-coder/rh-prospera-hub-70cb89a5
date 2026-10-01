@@ -10,6 +10,7 @@ const MAX_EMAIL_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
 const TOPAC_CENTRAL_EMAIL = 'adm.matriz@topac.com.br';
 const TOPAC_ROBSON_EMAIL = 'robson@topac.com.br';
 const TOPAC_GOIANIA_EMAIL = 'adm.gyn@topac.com.br';
+const GOIANIA_ACCOUNTING_EMAIL = 'requisicao@incocontabilidade.com.br';
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
 const MARISA_EMAIL = 'marisa@aatconsultoria.com.br';
 const DEFAULT_EMAIL_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
@@ -196,10 +197,13 @@ const sendSubmissionEmail = async (service: any, cycle: any, user: any, identifi
   const companyName = clean(company?.nome) || 'Empresa';
   const { attachments, uploads } = await buildCycleAttachments(service, cycle.id);
   const counterpart = counterpartFor(user.email);
-  const to = cycle.portal === 'goiania' ? [TOPAC_GOIANIA_EMAIL] : [TOPAC_CENTRAL_EMAIL];
+  // Quando a Contabilidade devolve arquivos ao RH, a Matriz recebe como destino
+  // principal. Em Goiânia, Robson, ADM Goiânia e a própria Contabilidade ficam
+  // copiados para manter o mesmo rastro formal do restante do fluxo.
+  const to = [TOPAC_CENTRAL_EMAIL];
   const cc = cycle.portal === 'goiania'
-    ? uniqueEmails([clean(user.email)])
-    : uniqueEmails([TOPAC_ROBSON_EMAIL, clean(user.email), counterpart]);
+    ? uniqueEmails([TOPAC_ROBSON_EMAIL, TOPAC_GOIANIA_EMAIL, clean(user.email)]).filter(email => !to.includes(email))
+    : uniqueEmails([TOPAC_ROBSON_EMAIL, clean(user.email), counterpart]).filter(email => !to.includes(email));
   const processLabel = cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento';
   const names = uploads.map((row: any) => `• ${row.arquivo_nome}`).join('\n');
   const body = [
@@ -249,12 +253,14 @@ const sendApprovalEmail = async (service: any, cycle: any, documentsReleased: nu
   const processLabel = cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento';
   const uploaderEmail = clean(accountingUser?.email);
   const counterpart = counterpartFor(uploaderEmail);
+  // No retorno do RH, a Contabilidade é o destinatário principal.
+  // Matriz e Robson ficam sempre em cópia; Goiânia também inclui o ADM da filial.
   const to = cycle.portal === 'goiania'
-    ? uniqueEmails([uploaderEmail || TOPAC_GOIANIA_EMAIL, TOPAC_GOIANIA_EMAIL])
-    : uniqueEmails([uploaderEmail || VANESSA_EMAIL, TOPAC_CENTRAL_EMAIL]);
+    ? uniqueEmails([uploaderEmail || GOIANIA_ACCOUNTING_EMAIL])
+    : uniqueEmails([uploaderEmail || VANESSA_EMAIL]);
   const cc = cycle.portal === 'goiania'
-    ? []
-    : uniqueEmails([counterpart, TOPAC_ROBSON_EMAIL]).filter(email => !to.includes(email));
+    ? uniqueEmails([TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL, TOPAC_GOIANIA_EMAIL]).filter(email => !to.includes(email))
+    : uniqueEmails([counterpart, TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL]).filter(email => !to.includes(email));
   const body = [
     'Prezados,', '',
     `O ${processLabel} enviado para ${companyName} foi conferido e aprovado pelo RH.`, '',
@@ -314,31 +320,80 @@ const portalState = async (service: any, user: any, portal: string) => {
 
 const adminState = async (service: any) => {
   const competence = competenceNow();
-  const { data: principalUsers, error: userError } = await service.from('contabilidade_portal_usuarios').select('id').eq('portal', 'principal').eq('ativo', true);
+
+  // A Central do RH precisa enxergar os dois portais. Antes, o painel administrativo
+  // carregava somente o portal principal e os ciclos de Goiânia ficavam invisíveis
+  // para conferência final, embora existissem no banco.
+  const { data: portalUsers, error: userError } = await service
+    .from('contabilidade_portal_usuarios')
+    .select('id,portal')
+    .eq('ativo', true)
+    .in('portal', ['principal', 'goiania']);
   if (userError) throw userError;
-  const userIds = (principalUsers || []).map((row: any) => String(row.id || '')).filter(Boolean);
+
+  const userIds = (portalUsers || []).map((row: any) => String(row.id || '')).filter(Boolean);
+  const portalByUser = new Map((portalUsers || []).map((row: any) => [String(row.id), String(row.portal)]));
+
   const { data: access, error: accessError } = userIds.length
-    ? await service.from('contabilidade_portal_acesso_empresas').select('empresa_id').in('portal_user_id', userIds)
+    ? await service
+        .from('contabilidade_portal_acesso_empresas')
+        .select('portal_user_id,empresa_id')
+        .in('portal_user_id', userIds)
     : { data: [], error: null } as any;
   if (accessError) throw accessError;
-  const companyIds = Array.from(new Set((access || []).map((row: any) => String(row.empresa_id || '')).filter(Boolean))) as string[];
-  for (const companyId of companyIds) {
-    await ensureCycle(service, { portal: 'principal', companyId, competence, type: 'adiantamento' });
-    await ensureCycle(service, { portal: 'principal', companyId, competence, type: 'pagamento' });
+
+  const scopeKeys = new Set<string>();
+  const scopes: Array<{ portal: 'principal' | 'goiania'; companyId: string }> = [];
+  for (const row of access || []) {
+    const companyId = String((row as any).empresa_id || '');
+    const portal = String(portalByUser.get(String((row as any).portal_user_id)) || '');
+    if (!companyId || !['principal', 'goiania'].includes(portal)) continue;
+    const key = `${portal}:${companyId}`;
+    if (scopeKeys.has(key)) continue;
+    scopeKeys.add(key);
+    scopes.push({ portal: portal as 'principal' | 'goiania', companyId });
   }
+
+  for (const scope of scopes) {
+    await ensureCycle(service, { portal: scope.portal, companyId: scope.companyId, competence, type: 'adiantamento' });
+    await ensureCycle(service, { portal: scope.portal, companyId: scope.companyId, competence, type: 'pagamento' });
+  }
+
+  const companyIds = Array.from(new Set(scopes.map((scope) => scope.companyId)));
   const [{ data: companies, error: companyError }, { data: cycles, error: cycleError }] = await Promise.all([
-    companyIds.length ? service.from('empresas').select('id,nome,codigo,cnpj').in('id', companyIds).order('nome') : Promise.resolve({ data: [], error: null }),
-    companyIds.length ? service.from('contabilidade_folha_ciclos').select('*').eq('portal', 'principal').in('empresa_id', companyIds).eq('competencia', competence).eq('ativo', true).order('tipo').order('empresa_id') : Promise.resolve({ data: [], error: null }),
+    companyIds.length
+      ? service.from('empresas').select('id,nome,codigo,cnpj').in('id', companyIds).order('nome')
+      : Promise.resolve({ data: [], error: null }),
+    companyIds.length
+      ? service.from('contabilidade_folha_ciclos')
+          .select('*')
+          .in('portal', ['principal', 'goiania'])
+          .in('empresa_id', companyIds)
+          .eq('competencia', competence)
+          .eq('ativo', true)
+          .order('portal')
+          .order('tipo')
+          .order('empresa_id')
+      : Promise.resolve({ data: [], error: null }),
   ] as any);
   if (companyError) throw companyError;
   if (cycleError) throw cycleError;
+
   const cycleIds = (cycles || []).map((row: any) => row.id);
   const [{ data: docs, error: docError }, { data: uploads, error: uploadError }] = await Promise.all([
-    cycleIds.length ? service.from('contabilidade_folha_documentos').select('*').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
-    cycleIds.length ? service.from('contabilidade_portal_uploads').select('id,ciclo_id,empresa_id,arquivo_nome,processo_tipo,processamento_status,processamento_detalhes,formalizacao_email_status,created_at,storage_bucket,storage_path').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
+    cycleIds.length
+      ? service.from('contabilidade_folha_documentos').select('*').in('ciclo_id', cycleIds).order('created_at')
+      : Promise.resolve({ data: [], error: null }),
+    cycleIds.length
+      ? service.from('contabilidade_portal_uploads')
+          .select('id,ciclo_id,empresa_id,arquivo_nome,processo_tipo,processamento_status,processamento_detalhes,formalizacao_email_status,created_at,storage_bucket,storage_path,origem_tipo')
+          .in('ciclo_id', cycleIds)
+          .order('created_at')
+      : Promise.resolve({ data: [], error: null }),
   ] as any);
   if (docError) throw docError;
   if (uploadError) throw uploadError;
+
   return { competence, companies: companies || [], cycles: cycles || [], documents: docs || [], uploads: uploads || [] };
 };
 
