@@ -35,6 +35,18 @@ interface Chamado {
   placa_snapshot?: string | null;
   patrimonio_snapshot?: string | null;
   notificacao_pendente?: boolean;
+  os_digital?: {
+    id: string;
+    numero: number;
+    status: string;
+    aberta_em?: string | null;
+    aceita_em?: string | null;
+    deslocamento_em?: string | null;
+    chegada_em?: string | null;
+    inicio_execucao_em?: string | null;
+    concluida_em?: string | null;
+    relatorio_conclusao?: string | null;
+  } | null;
   created_at: string;
 }
 
@@ -98,6 +110,7 @@ const normalizarChamados = (items: unknown): Chamado[] => {
       placa_snapshot: item.placa_snapshot || null,
       patrimonio_snapshot: item.patrimonio_snapshot || null,
       notificacao_pendente: Boolean(item.notificacao_pendente),
+      os_digital: item.os_digital || null,
       created_at: String(item.created_at || ""),
     }));
 };
@@ -574,6 +587,11 @@ export default function ChamadosPage() {
                   <DialogTitle className="text-left">
                     Ocorrência {chamadoAberto.numero ? `#${chamadoAberto.numero}` : ""}
                   </DialogTitle>
+                  {chamadoAberto.os_digital && (
+                    <div className="mt-2 inline-flex items-center rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1 text-[11px] font-black text-fuchsia-200">
+                      OS DIGITAL #{chamadoAberto.os_digital.numero}
+                    </div>
+                  )}
                 </DialogHeader>
 
                 <div className="space-y-4">
