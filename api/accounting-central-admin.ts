@@ -142,6 +142,100 @@ export default async function handler(req:any, res?:any) {
       return sendJson(res, { ok:true, ...result });
     }
 
+    if (action === 'reply_upload') {
+      const responseText = clean(body.text).slice(0, 5000);
+      if (!responseText) return sendJson(res, { ok:false, error:'resposta_obrigatoria' }, 400);
+
+      const { data:upload, error:uploadError } = await service.from('contabilidade_portal_uploads').select('*').eq('id', uploadId).maybeSingle();
+      if (uploadError || !upload) return sendJson(res, { ok:false, error:'documento_nao_encontrado' }, 404);
+
+      const [{ data:portalUser }, { data:company }] = await Promise.all([
+        service.from('contabilidade_portal_usuarios').select('id,nome,email,portal').eq('id', upload.portal_user_id).maybeSingle(),
+        service.from('empresas').select('id,nome,codigo').eq('id', upload.empresa_id).maybeSingle(),
+      ]);
+      if (!portalUser?.email || !company) return sendJson(res, { ok:false, error:'destinatario_nao_encontrado' }, 400);
+
+      const resendKey = clean(process.env.RESEND_API_KEY);
+      if (!resendKey) return sendJson(res, { ok:false, error:'email_nao_configurado' }, 500);
+
+      const from = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>');
+      const to = unique([String(portalUser.email)]);
+      const counterpart = portalUser.portal === 'principal' ? counterpartFor(String(portalUser.email || '')) : '';
+      const cc = unique([ROBSON_EMAIL, ADM_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
+
+      const requestedSubject = `[TOPAC RH PRO] Retorno do RH · ${company.nome}${upload.competencia ? ` · Competência ${upload.competencia}` : ''}`;
+      const threadKey = upload.competencia ? buildAccountingThreadKey(company.id, upload.competencia) : '';
+      const thread = threadKey
+        ? await prepareAccountingThread(service, { threadKey, subject: requestedSubject })
+        : { subject: requestedSubject, headers: {}, current: null as any };
+      const subject = thread.subject;
+
+      const text = [
+        'Prezados,','',
+        `Retorno do RH referente ao documento: ${upload.arquivo_nome}`,
+        `Empresa: ${company.nome}`,
+        upload.competencia ? `Competência: ${upload.competencia}` : '',
+        '',
+        responseText,
+        '',
+        'Atenciosamente,',
+        'TOPAC RH PRO',
+      ].filter(Boolean).join('\n');
+      const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.6;max-width:720px"><h2>Retorno do RH</h2><p><b>Documento:</b> ${htmlEscape(upload.arquivo_nome)}</p><p><b>Empresa:</b> ${htmlEscape(company.nome)}</p>${upload.competencia ? `<p><b>Competência:</b> ${htmlEscape(upload.competencia)}</p>` : ''}<hr style="border:0;border-top:1px solid #e5e7eb;margin:16px 0"/><p>${htmlEscape(responseText).replace(/\n/g,'<br/>')}</p></div>`;
+
+      const response = await fetch('https://api.resend.com/emails', {
+        method:'POST',
+        headers:{ Authorization:`Bearer ${resendKey}`, 'Content-Type':'application/json' },
+        body:JSON.stringify({ from, to, cc, reply_to:ADM_EMAIL, subject, text, html, ...(Object.keys(thread.headers).length ? { headers:thread.headers } : {}) }),
+      });
+      const detail = await response.text().catch(() => '');
+      if (!response.ok) return sendJson(res, { ok:false, error:'erro_envio_email', detail:detail.slice(0,500) }, 502);
+
+      const provider = detail ? JSON.parse(detail) : {};
+      const providerEmailId = provider?.id || null;
+      if (threadKey) {
+        const messageId = await fetchResendMessageId(resendKey, providerEmailId);
+        await saveAccountingThread(service, {
+          threadKey,
+          empresaId:company.id,
+          competencia:upload.competencia,
+          subject,
+          providerEmailId,
+          messageId,
+          close:false,
+        });
+      }
+
+      const now = new Date().toISOString();
+      const { user:adminUser } = await validateAdmin(req, service).then((u:any) => ({ user:u }));
+      await service.from('contabilidade_portal_uploads').update({
+        rh_resposta: responseText,
+        rh_resposta_em: now,
+        rh_resposta_por: adminUser.id,
+        updated_at: now,
+      }).eq('id', upload.id);
+
+      await service.from('email_envios_log').insert({
+        user_id:adminUser.id,
+        usuario_nome:adminUser.email || 'Administrador',
+        email_corporativo_usado:ADM_EMAIL,
+        email_remetente:from,
+        reply_to:ADM_EMAIL,
+        provider:'resend',
+        modulo_origem:'central_contabilidade_retorno',
+        documento_id:null,
+        documento_nome:upload.arquivo_nome,
+        destinatarios:to.join(', '),
+        cc:cc.join(', '),
+        assunto:subject,
+        status:'enviado',
+        erro:null,
+        enviado_em:now,
+      });
+
+      return sendJson(res, { ok:true, enviado_em:now, to, cc });
+    }
+
     return sendJson(res, { ok:false, error:'action_invalid' }, 400);
   } catch (e:any) {
     console.error('[accounting-central-admin]', e);
