@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Clock3, Copy, ExternalLink, FileArchive, FileSignature, FileUp, Loader2, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -173,6 +173,7 @@ const PayrollPortalAdminModule: React.FC<{ companyId: string; competencia: strin
   const unifiedInput = useRef<HTMLInputElement>(null);
   const lateProofInput = useRef<HTMLInputElement>(null);
   const [lateProofTarget, setLateProofTarget] = useState<any>(null);
+  const [printingReceipts, setPrintingReceipts] = useState(false);
   const autoRefreshRunning = useRef(false);
 
   const load = async (silent = false) => {
@@ -665,6 +666,116 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
     }
   };
 
+  const allowedPayrollCompanies = useMemo(() => companies
+    .filter((item:any) => ALLOWED_CODES.has(String(item?.codigo || '').trim().toLowerCase()) && ALLOWED_CNPJS.has(digits(item?.cnpj)))
+    .sort((a:any,b:any) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')), [companies]);
+
+  const loadPrintableRows = async (targetCompanyId:string) => {
+    const { data, error } = await (supabase as any)
+      .from('payroll_admin_status_v')
+      .select('*')
+      .eq('company_id', targetCompanyId)
+      .eq('competencia', competencia)
+      .order('employee_name', { ascending:true, nullsFirst:false });
+    if (error) throw error;
+    return ((data || []) as any[]).filter(row => Boolean(row.document_id) && !isSignatureExcluded(
+      employees.find((employee:any) => employee.id === row.employee_id) || { cargo:row.employee_role || row.employee_cargo || '' }
+    ));
+  };
+
+  const appendPdfFromUrl = async (output:PDFDocument, url:string) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Não foi possível carregar um dos recibos para impressão.');
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const source = await PDFDocument.load(bytes, { ignoreEncryption:true, updateMetadata:false });
+    const pages = await output.copyPages(source, source.getPageIndices());
+    pages.forEach(page => output.addPage(page));
+  };
+
+  const addCompanyCover = async (output:PDFDocument, companyName:string, companyCnpj:string, printableRows:any[]) => {
+    const page = output.addPage([595.28, 841.89]);
+    const regular = await output.embedFont(StandardFonts.Helvetica);
+    const bold = await output.embedFont(StandardFonts.HelveticaBold);
+    const total = printableRows.reduce((sum,row) => sum + (Number(row.net_amount) || 0), 0);
+    const comp = formatMessageCompetencia(competencia);
+
+    page.drawText('TOPAC RH PRO', { x:48, y:790, size:22, font:bold });
+    page.drawText('IMPRESSÃO DE RECIBOS — CAPA DE SEPARAÇÃO', { x:48, y:752, size:14, font:bold });
+    page.drawText(String(companyName || 'EMPRESA').toUpperCase().slice(0,70), { x:48, y:715, size:17, font:bold });
+    page.drawText(`CNPJ: ${companyCnpj || '—'}`, { x:48, y:690, size:10, font:regular });
+    page.drawText(`Competência: ${comp}`, { x:48, y:672, size:10, font:regular });
+
+    page.drawText('CONSOLIDADO', { x:48, y:625, size:13, font:bold });
+    page.drawText(`Recibos: ${printableRows.length}`, { x:58, y:598, size:12, font:bold });
+    page.drawText(`Total líquido: ${currency(total)}`, { x:58, y:575, size:12, font:bold });
+
+    let y = 530;
+    page.drawText('FUNCIONÁRIOS INCLUÍDOS', { x:48, y, size:11, font:bold });
+    y -= 22;
+    printableRows.slice(0,28).forEach((row,index) => {
+      const name = String(row.employee_name || 'Funcionário');
+      const amount = currency(Number(row.net_amount) || 0);
+      page.drawText(`${String(index + 1).padStart(2,'0')}. ${name}`.slice(0,67), { x:58, y, size:8.5, font:regular });
+      page.drawText(amount, { x:430, y, size:8.5, font:regular });
+      y -= 16;
+    });
+    if (printableRows.length > 28) page.drawText(`+ ${printableRows.length - 28} funcionário(s) na sequência`, { x:58, y:y-2, size:8.5, font:regular });
+    page.drawText('Após esta capa seguem somente os recibos desta empresa.', { x:48, y:55, size:8, font:regular });
+  };
+
+  const printReceiptPack = async (scope:'empresa'|'todas') => {
+    setPrintingReceipts(true);
+    try {
+      const targets = scope === 'empresa'
+        ? (company ? [company] : [])
+        : allowedPayrollCompanies;
+
+      if (!targets.length) return toast.info('Nenhuma empresa disponível para impressão.');
+
+      const output = await PDFDocument.create();
+      let totalReceipts = 0;
+
+      for (const target of targets) {
+        const printableRows = target.id === companyId ? rows.filter(row => Boolean(row.document_id)) : await loadPrintableRows(target.id);
+        if (!printableRows.length) continue;
+
+        await addCompanyCover(output, target.name, target.cnpj, printableRows);
+
+        for (const row of printableRows) {
+          const urls = await adminArchiveUrls(String(row.document_id || ''), target.id);
+          if (urls.holerite_url) {
+            await appendPdfFromUrl(output, urls.holerite_url);
+            totalReceipts += 1;
+          }
+        }
+      }
+
+      if (!totalReceipts || !output.getPageCount()) return toast.info('Nenhum recibo disponível nesta competência.');
+
+      output.setTitle(scope === 'todas' ? `RECIBOS_TODAS_EMPRESAS_${competencia}` : `RECIBOS_${company?.name || 'EMPRESA'}_${competencia}`);
+      output.setCreator('TOPAC RH PRO');
+      const bytes = await output.save({ addDefaultPage:false, useObjectStreams:false });
+      const blob = new Blob([bytes as any], { type:'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = scope === 'todas'
+          ? `RECIBOS_TODAS_EMPRESAS_${competencia}.pdf`
+          : `RECIBOS_${safeFile(company?.name || 'EMPRESA')}_${competencia}.pdf`;
+        link.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      toast.success(`${totalReceipts} recibo(s) preparados para impressão.`);
+    } catch (error:any) {
+      console.error('[temporary-receipt-print]', error);
+      toast.error(error?.message || 'Não foi possível montar os recibos para impressão.');
+    } finally {
+      setPrintingReceipts(false);
+    }
+  };
+
   const consolidated = async () => {
     const filtered = rows.filter(row => consolidatedFilter === 'todos' ? Boolean(row.document_id) : consolidatedFilter === 'assinados' ? row.signature_status === 'ASSINADO' : row.signature_status !== 'ASSINADO');
     if (!filtered.length) return toast.info('Nenhum documento nesse filtro.');
@@ -732,6 +843,26 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
       <td className="px-3 py-3"><Badge variant="outline" className={statusClass(displayStatus(row))}>{displayStatus(row)}</Badge></td>
       <td className="px-3 py-3"><div className="flex max-w-[520px] flex-wrap gap-1"><Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'holerite')}>Documento</Button>{row.receipt_id&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'receipt')}>Comprovante</Button>}{!row.receipt_id&&<Button size="sm" variant="outline" onClick={()=>{setLateProofTarget(row);lateProofInput.current?.click();}}><FileUp className="mr-1 h-3 w-3"/>Anexar comprovante</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="ghost" onClick={()=>void openAdminFile(row,'certificate')}>Certificado</Button>}{row.signature_status==='ASSINADO'&&<Button size="sm" variant="outline" onClick={()=>void dossier(row)}><FileArchive className="mr-1 h-3 w-3"/>Dossiê</Button>}{row.request_id&&<Button size="sm" variant="ghost" onClick={()=>void openTimeline(row)}><Clock3 className="mr-1 h-3 w-3"/>Histórico</Button>}{row.signature_status!=='ASSINADO'&&<Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={()=>void deleteEntry(row)}><Trash2 className="mr-1 h-3 w-3"/>Excluir</Button>}</div></td>
     </tr>)}{!rows.length&&<tr><td colSpan={8} className="p-8 text-center text-muted-foreground">Nenhum documento recebido nesta competência.</td></tr>}</tbody></table></div>
+
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/[.06] p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wide text-amber-300">Impressão temporária · assinatura digital pausada</p>
+          <p className="mt-1 text-xs text-muted-foreground">Imprime somente os recibos da competência. Não inclui comprovantes bancários nem certificados.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={printingReceipts} onClick={()=>void printReceiptPack('empresa')}>
+            {printingReceipts?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<FileArchive className="mr-2 h-4 w-4"/>}
+            Imprimir {company?.name || 'empresa'}
+          </Button>
+          <Button disabled={printingReceipts} onClick={()=>void printReceiptPack('todas')} className="bg-amber-500 text-black hover:bg-amber-400">
+            {printingReceipts?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<FileArchive className="mr-2 h-4 w-4"/>}
+            Imprimir todas as empresas
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-amber-100/70">Ao imprimir todas, o PDF é organizado por empresa e recebe uma capa de separação antes de cada bloco, com quantidade de recibos, total líquido e relação dos funcionários.</div>
+    </div>
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3"><FileArchive className="h-4 w-4"/><b className="text-xs">SALVAR PDF CONSOLIDADO</b><select value={consolidatedFilter} onChange={e=>setConsolidatedFilter(e.target.value as any)} className="rounded border bg-background px-2 py-1.5 text-xs"><option value="assinados">Somente assinados</option><option value="todos">Todos</option><option value="pendentes">Somente pendentes</option></select><Button size="sm" variant="outline" onClick={()=>void consolidated()}>Salvar consolidado</Button></div>
 
