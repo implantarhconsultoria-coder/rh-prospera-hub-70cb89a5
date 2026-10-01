@@ -125,8 +125,8 @@ export default function ContabilidadeProcessReturn({
 
     setUploading(true);
     let uploaded = 0;
-    let pendingEmail = 0;
     const failed: string[] = [];
+    const uploadIds: string[] = [];
 
     try {
       for (const file of files) {
@@ -162,30 +162,59 @@ export default function ContabilidadeProcessReturn({
             arquivo_nome: file.name,
             tamanho_bytes: file.size,
             storage_path: prepared.path,
+            defer_email: true,
           });
 
           uploaded += 1;
-          if (finalized?.email_status !== 'enviado') pendingEmail += 1;
+          if (finalized?.upload_id) uploadIds.push(String(finalized.upload_id));
         } catch (error: any) {
           console.error('[contabilidade-process-return][bulk-upload]', file.name, error);
           failed.push(file.name);
         }
       }
 
+      if (uploadIds.length) {
+        const competence = competenceFor(evento);
+        const typeLabel = documentTypeFor(evento).replace(/_/g, ' ');
+        const subject = ['Retorno da Contabilidade', typeLabel, evento.empresa_nome || '', competence || ''].filter(Boolean).join(' - ');
+        const body = [
+          'Prezados,',
+          '',
+          `Segue em anexo o retorno da Contabilidade referente a ${evento.titulo}.`,
+          '',
+          evento.empresa_nome ? `Empresa: ${evento.empresa_nome}` : '',
+          evento.funcionario_nome ? `Funcionário: ${evento.funcionario_nome}` : '',
+          competence ? `Competência / referência: ${competence}` : '',
+          `Documentos anexados: ${uploadIds.length}`,
+          '',
+          'Os PDFs seguem anexados em um único envio para conferência e arquivamento no TOPAC RH PRO.',
+          '',
+          'Contabilidade',
+        ].filter((line, index, list) => line !== '' || (index > 0 && list[index - 1] !== '')).join('\n');
+
+        await postJson({
+          action: 'send_batch_email',
+          portal,
+          token,
+          upload_ids: uploadIds,
+          subject,
+          body,
+        });
+      }
+
       await loadDocs();
 
-      if (uploaded && !failed.length && !pendingEmail) {
-        toast.success(`${uploaded} PDF(s) salvos e enviados na mesma conversa de e-mail.`);
+      if (uploaded && !failed.length) {
+        toast.success(`${uploaded} PDF(s) salvos e enviados juntos em um único e-mail.`);
       } else if (uploaded) {
-        const details = [
-          `${uploaded} PDF(s) salvos`,
-          pendingEmail ? `${pendingEmail} com e-mail pendente` : '',
-          failed.length ? `${failed.length} com falha` : '',
-        ].filter(Boolean).join(' · ');
-        toast.warning(details);
+        toast.warning(`${uploaded} PDF(s) enviados juntos · ${failed.length} arquivo(s) com falha.`);
       } else {
         toast.error('Nenhum PDF foi enviado.');
       }
+    } catch (error: any) {
+      console.error('[contabilidade-process-return][batch-email]', error);
+      toast.error(error?.message || 'Os PDFs foram salvos, mas não foi possível enviar o e-mail único.');
+      await loadDocs();
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
