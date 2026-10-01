@@ -64,6 +64,8 @@ const CentralContabilidadePage: React.FC = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [replyUploadId, setReplyUploadId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [selectedUploadIds, setSelectedUploadIds] = useState<string[]>([]);
+  const [bulkReplyOpen, setBulkReplyOpen] = useState(false);
 
   const moduleParam = searchParams.get('modulo') || '';
   const activeModule: ModuleKey | null = MODULE_KEYS.includes(moduleParam as ModuleKey) ? moduleParam as ModuleKey : null;
@@ -72,6 +74,27 @@ const CentralContabilidadePage: React.FC = () => {
   const userMap = useMemo(() => new Map(portalUsers.map((u) => [u.id, u])), [portalUsers]);
   const replyUpload = useMemo(() => uploads.find((u) => u.id === replyUploadId) || null, [uploads, replyUploadId]);
   const replySender = replyUpload ? userMap.get(replyUpload.portal_user_id) : null;
+  const selectedUploads = useMemo(() => uploads.filter((u) => selectedUploadIds.includes(u.id)), [uploads, selectedUploadIds]);
+
+  const buildReplyTemplate = useCallback((items:Upload[]) => {
+    if (!items.length) return '';
+    const empresas = Array.from(new Set(items.map((u) => companyMap.get(u.empresa_id) || 'Empresa')));
+    const competencias = Array.from(new Set(items.map((u) => u.competencia).filter(Boolean) as string[]));
+    const arquivos = items.map((u) => `- ${u.arquivo_nome}`).join('\n');
+    return [
+      'Prezados,',
+      '',
+      `Confirmamos o recebimento dos documentos abaixo${empresas.length === 1 ? ` referentes à ${empresas[0]}` : ''}${competencias.length === 1 ? ` — competência ${competencias[0]}` : ''}:`,
+      '',
+      arquivos,
+      '',
+      'Documentos recebidos e registrados pelo RH.',
+      'Caso seja necessário algum ajuste ou complemento, retornaremos por este mesmo fluxo.',
+      '',
+      'Atenciosamente,',
+      'RH TOPAC',
+    ].join('\n');
+  }, [companyMap]);
 
   const carregar = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -192,6 +215,27 @@ const CentralContabilidadePage: React.FC = () => {
       await carregar(true);
     } catch (e:any) {
       toast.error(e?.message || 'Não foi possível enviar a resposta.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const responderEmMassa = async () => {
+    const items = selectedUploads;
+    const text = replyText.trim();
+    if (!items.length) return toast.error('Selecione pelo menos um documento.');
+    if (!text) return toast.error('A resposta não pode ficar vazia.');
+    setBusyId('bulk');
+    try {
+      const first = items[0];
+      const result = await chamarCentralAdmin('reply_uploads_bulk', first.id, { upload_ids:items.map(i=>i.id), text });
+      toast.success(`Retorno enviado em massa: ${Number(result.sent || items.length)} documento(s).`);
+      setBulkReplyOpen(false);
+      setReplyText('');
+      setSelectedUploadIds([]);
+      await carregar(true);
+    } catch (e:any) {
+      toast.error(e?.message || 'Não foi possível enviar o retorno em massa.');
     } finally {
       setBusyId(null);
     }
@@ -341,11 +385,42 @@ const CentralContabilidadePage: React.FC = () => {
         <Panel title="Documentos enviados pela contabilidade para o RH" icon={UploadCloud}>
           {uploads.length===0 ? <Empty text="Nenhum documento recebido."/> : (
             <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#2b2631] bg-[#080a0e] p-3">
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2 text-xs font-bold text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={uploads.length > 0 && selectedUploadIds.length === uploads.length}
+                      onChange={(e)=>setSelectedUploadIds(e.target.checked ? uploads.map(u => u.id) : [])}
+                      className="h-4 w-4 accent-violet-600"
+                    />
+                    Selecionar todos
+                  </label>
+                  <span className="text-xs text-zinc-500">{selectedUploadIds.length} selecionado(s)</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={selectedUploadIds.length === 0}
+                  onClick={()=>{setReplyText(buildReplyTemplate(selectedUploads));setBulkReplyOpen(true);}}
+                  className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+                >
+                  <Send className="h-4 w-4"/> Responder selecionados ({selectedUploadIds.length})
+                </button>
+              </div>
               {uploads.map((u) => {
                 const sender = userMap.get(u.portal_user_id);
                 return (
-                  <div key={u.id} className="rounded-lg border border-[#24212a] bg-[#080a0e]">
-                    <div className="grid gap-3 p-4 lg:grid-cols-[1.5fr_.8fr_.8fr_.8fr_auto] lg:items-center">
+                  <div key={u.id} className={`rounded-lg border bg-[#080a0e] ${selectedUploadIds.includes(u.id) ? 'border-violet-500/60' : 'border-[#24212a]'}`}>
+                    <div className="grid gap-3 p-4 lg:grid-cols-[auto_1.5fr_.8fr_.8fr_.8fr_auto] lg:items-center">
+                      <label className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedUploadIds.includes(u.id)}
+                          onChange={(e)=>setSelectedUploadIds(current => e.target.checked ? Array.from(new Set([...current, u.id])) : current.filter(id => id !== u.id))}
+                          className="h-4 w-4 accent-violet-600"
+                          aria-label={`Selecionar ${u.arquivo_nome}`}
+                        />
+                      </label>
                       <div className="min-w-0">
                         <div className="truncate text-sm font-bold text-white">{u.arquivo_nome}</div>
                         <div className="mt-1 text-xs text-zinc-500">{tipoLabel(u.tipo_documento)}{u.funcionario_nome?` · ${u.funcionario_nome}`:''}</div>
@@ -363,7 +438,7 @@ const CentralContabilidadePage: React.FC = () => {
                       </div>
                       <div className="flex flex-wrap gap-2 lg:justify-end">
                         <button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200">Abrir PDF</button>
-                        <button onClick={()=>{setReplyUploadId(u.id);setReplyText('');}} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">{u.rh_resposta_em?'Responder novamente':'Responder'}</button>
+                        <button onClick={()=>{setReplyUploadId(u.id);setReplyText(buildReplyTemplate([u]));}} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">{u.rh_resposta_em?'Responder novamente':'Responder'}</button>
                         {!emailOk(u.formalizacao_email_status)&&<button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="rounded-md border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-200">Reenviar formalização</button>}
                       </div>
                     </div>
@@ -383,6 +458,44 @@ const CentralContabilidadePage: React.FC = () => {
           )}
         </Panel>
       )}
+
+      <Dialog open={bulkReplyOpen} onOpenChange={(open) => {
+        setBulkReplyOpen(open);
+        if (!open) setReplyText('');
+      }}>
+        <DialogContent className="max-w-2xl border-[#3a2c48] bg-[#07090d] text-white">
+          <DialogHeader>
+            <DialogTitle>Responder documentos selecionados</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-[#2b2631] bg-[#05070b] p-4">
+              <div className="text-xs font-black uppercase tracking-wide text-violet-300">{selectedUploads.length} documento(s) selecionado(s)</div>
+              <div className="mt-2 max-h-36 space-y-1 overflow-y-auto text-xs text-zinc-400">
+                {selectedUploads.map(u => <div key={u.id}>• {u.arquivo_nome} — {companyMap.get(u.empresa_id)||'Empresa'}</div>)}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-xs font-bold text-zinc-300">E-mail de resposta já preparado</div>
+              <textarea
+                value={replyText}
+                onChange={(e)=>setReplyText(e.target.value)}
+                rows={10}
+                className="w-full resize-y rounded-lg border border-[#49315e] bg-[#05070b] p-3 text-sm text-white outline-none focus:border-violet-500"
+              />
+            </div>
+            <div className="rounded-md border border-sky-500/15 bg-sky-500/[.035] p-3 text-[11px] text-zinc-400">
+              O sistema envia a resposta para os responsáveis corretos de cada documento e mantém o registro individual no histórico.
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={()=>setBulkReplyOpen(false)} className="rounded-md border border-[#423051] px-4 py-2 text-xs font-bold text-zinc-300">Cancelar</button>
+              <button type="button" onClick={()=>void responderEmMassa()} disabled={busyId==='bulk'||!replyText.trim()} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                {busyId==='bulk'?<Loader2 className="h-4 w-4 animate-spin"/>:<Send className="h-4 w-4"/>}
+                Enviar retorno em massa
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!replyUpload} onOpenChange={(open) => {
         if (!open) {
