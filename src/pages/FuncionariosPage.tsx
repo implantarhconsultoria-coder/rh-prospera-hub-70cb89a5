@@ -347,8 +347,17 @@ const FuncionariosPage: React.FC = () => {
                 className="rounded-xl border bg-zinc-950/80 p-4 text-left transition-colors hover:bg-zinc-900/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
                 style={{ borderColor: color + '80', boxShadow: 'inset 0 1px 0 ' + color + '33' }}>
                 <p className="truncate text-xs font-semibold" style={{ color }} title={company.name}>{company.name}</p>
-                <p className="mt-2 text-xl font-black text-white">{formatCurrency(payroll)}</p>
-                <p className="mt-1 text-xs text-zinc-300">{active} ativo(s) • salário-base</p>
+                {isFilial ? (
+                  <div className="mt-2">
+                    <p className="text-2xl font-black text-white">{active}</p>
+                    <p className="mt-1 text-xs text-zinc-300">funcionário(s) ativo(s)</p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mt-2 text-xl font-black text-white">{formatCurrency(payroll)}</p>
+                    <p className="mt-1 text-xs text-zinc-300">{active} ativo(s) • salário-base</p>
+                  </>
+                )}
               </button>
             );
           })}
