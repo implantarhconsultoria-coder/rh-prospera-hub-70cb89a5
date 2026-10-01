@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Clock3, Loader2, MapPin, Package, UserRound, Wrench } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, Clock3, Loader2, MapPin, Package, UserRound, Wrench } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -88,6 +88,26 @@ const OperacionalChamadoDetailDialog: React.FC<Props> = ({ chamado, open, onOpen
 
           {loading ? <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" /></div> : (
             <div className="space-y-5">
+              {detalhe.ordem_servico && (
+                <section className="rounded-xl border border-violet-500/25 bg-violet-500/[.05] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-violet-500">
+                        <ClipboardCheck className="h-4 w-4" /> Ordem de Serviço Digital
+                      </div>
+                      <div className="mt-1 text-xl font-black">OS #{detalhe.ordem_servico.numero_os}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Vinculada automaticamente à ocorrência #{chamado?.numero || '—'}.</div>
+                    </div>
+                    <span className="rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase">{String(detalhe.ordem_servico.status || 'pendente').replace(/_/g, ' ')}</span>
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-lg border bg-background/60 p-3"><div className="text-[9px] uppercase text-muted-foreground">Aberta</div><div className="mt-1 text-xs font-semibold">{dt(detalhe.ordem_servico.aberta_em)}</div></div>
+                    <div className="rounded-lg border bg-background/60 p-3"><div className="text-[9px] uppercase text-muted-foreground">Mecânico</div><div className="mt-1 text-xs font-semibold">{detalhe.ordem_servico.mecanico_nome || 'Aguardando aceite'}</div></div>
+                    <div className="rounded-lg border bg-background/60 p-3"><div className="text-[9px] uppercase text-muted-foreground">Início</div><div className="mt-1 text-xs font-semibold">{dt(detalhe.ordem_servico.inicio_execucao_em)}</div></div>
+                    <div className="rounded-lg border bg-background/60 p-3"><div className="text-[9px] uppercase text-muted-foreground">Conclusão</div><div className="mt-1 text-xs font-semibold">{dt(detalhe.ordem_servico.concluida_em)}</div></div>
+                  </div>
+                </section>
+              )}
               <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 sm:grid-cols-2">
                 <div><span className="text-[11px] uppercase text-muted-foreground">Solicitante no cliente</span><p className="font-semibold">{chamado?.solicitante_nome || 'Não informado'}</p><p className="text-xs text-muted-foreground">{chamado?.solicitante_contato || ''}</p></div>
                 <div><span className="text-[11px] uppercase text-muted-foreground">Registrado por</span><p className="font-semibold">{chamado?.operador_abertura_nome || 'Registro anterior ao novo fluxo'}</p><p className="text-xs text-muted-foreground">{dt(chamado?.created_at)}</p></div>
