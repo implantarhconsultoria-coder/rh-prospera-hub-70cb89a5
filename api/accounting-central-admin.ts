@@ -142,6 +142,121 @@ export default async function handler(req:any, res?:any) {
       return sendJson(res, { ok:true, ...result });
     }
 
+    if (action === 'reply_uploads_bulk') {
+      const responseText = clean(body.text).slice(0, 5000);
+      const uploadIds = Array.from(new Set((Array.isArray(body.upload_ids) ? body.upload_ids : []).map((id:any) => clean(id)).filter(Boolean))) as string[];
+      if (!responseText) return sendJson(res, { ok:false, error:'resposta_obrigatoria' }, 400);
+      if (!uploadIds.length) return sendJson(res, { ok:false, error:'documentos_obrigatorios' }, 400);
+
+      const { data:rows, error:rowsError } = await service.from('contabilidade_portal_uploads').select('*').in('id', uploadIds);
+      if (rowsError) throw rowsError;
+      if (!rows?.length) return sendJson(res, { ok:false, error:'documentos_nao_encontrados' }, 404);
+
+      const portalUserIds = Array.from(new Set(rows.map((r:any) => r.portal_user_id).filter(Boolean)));
+      const companyIds = Array.from(new Set(rows.map((r:any) => r.empresa_id).filter(Boolean)));
+      const [{ data:portalUsers }, { data:companies }] = await Promise.all([
+        service.from('contabilidade_portal_usuarios').select('id,nome,email,portal').in('id', portalUserIds),
+        service.from('empresas').select('id,nome,codigo').in('id', companyIds),
+      ]);
+      const userMap = new Map((portalUsers || []).map((u:any) => [u.id, u]));
+      const companyMap = new Map((companies || []).map((c:any) => [c.id, c]));
+      const resendKey = clean(process.env.RESEND_API_KEY);
+      if (!resendKey) return sendJson(res, { ok:false, error:'email_nao_configurado' }, 500);
+      const from = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>');
+      const adminUser = await validateAdmin(req, service);
+
+      // Agrupa por remetente da Contabilidade + empresa + competência.
+      // Assim um clique pode responder muitos documentos sem misturar destinatários ou competências.
+      const groups = new Map<string, any[]>();
+      for (const row of rows) {
+        const key = [row.portal_user_id, row.empresa_id, row.competencia || ''].join('|');
+        groups.set(key, [...(groups.get(key) || []), row]);
+      }
+
+      let sent = 0;
+      const failures:any[] = [];
+      for (const groupRows of groups.values()) {
+        const first:any = groupRows[0];
+        const portalUser:any = userMap.get(first.portal_user_id);
+        const company:any = companyMap.get(first.empresa_id);
+        if (!portalUser?.email || !company) {
+          failures.push({ ids:groupRows.map((r:any)=>r.id), error:'destinatario_nao_encontrado' });
+          continue;
+        }
+
+        const to = unique([String(portalUser.email)]);
+        const counterpart = portalUser.portal === 'principal' ? counterpartFor(String(portalUser.email || '')) : '';
+        const cc = unique([ROBSON_EMAIL, ADM_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
+        const requestedSubject = `[TOPAC RH PRO] Retorno do RH · ${company.nome}${first.competencia ? ` · Competência ${first.competencia}` : ''}`;
+        const threadKey = first.competencia ? buildAccountingThreadKey(company.id, first.competencia) : '';
+        const thread = threadKey
+          ? await prepareAccountingThread(service, { threadKey, subject: requestedSubject })
+          : { subject: requestedSubject, headers: {}, current: null as any };
+        const subject = thread.subject;
+        const files = groupRows.map((r:any) => `- ${r.arquivo_nome}`).join('\n');
+
+        const text = [
+          'Prezados,','',
+          responseText,'',
+          'Documentos relacionados:',
+          files,'',
+          'Atenciosamente,',
+          'RH TOPAC',
+        ].join('\n');
+        const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.6;max-width:720px"><p>${htmlEscape(responseText).replace(/\n/g,'<br/>')}</p><p><b>Documentos relacionados:</b></p><ul>${groupRows.map((r:any)=>`<li>${htmlEscape(r.arquivo_nome)}</li>`).join('')}</ul></div>`;
+
+        try {
+          const response = await fetch('https://api.resend.com/emails', {
+            method:'POST',
+            headers:{ Authorization:`Bearer ${resendKey}`, 'Content-Type':'application/json' },
+            body:JSON.stringify({ from, to, cc, reply_to:ADM_EMAIL, subject, text, html, ...(Object.keys(thread.headers).length ? { headers:thread.headers } : {}) }),
+          });
+          const detail = await response.text().catch(() => '');
+          if (!response.ok) throw new Error(detail.slice(0,500) || 'erro_envio_email');
+
+          const provider = detail ? JSON.parse(detail) : {};
+          const providerEmailId = provider?.id || null;
+          if (threadKey) {
+            const messageId = await fetchResendMessageId(resendKey, providerEmailId);
+            await saveAccountingThread(service, { threadKey, empresaId:company.id, competencia:first.competencia, subject, providerEmailId, messageId, close:false });
+          }
+
+          const now = new Date().toISOString();
+          const ids = groupRows.map((r:any) => r.id);
+          await service.from('contabilidade_portal_uploads').update({
+            rh_resposta:responseText,
+            rh_resposta_em:now,
+            rh_resposta_por:adminUser.id,
+            updated_at:now,
+          }).in('id', ids);
+
+          await service.from('email_envios_log').insert({
+            user_id:adminUser.id,
+            usuario_nome:adminUser.email || 'Administrador',
+            email_corporativo_usado:ADM_EMAIL,
+            email_remetente:from,
+            reply_to:ADM_EMAIL,
+            provider:'resend',
+            modulo_origem:'central_contabilidade_retorno_massa',
+            documento_id:null,
+            documento_nome:`${ids.length} documentos`,
+            destinatarios:to.join(', '),
+            cc:cc.join(', '),
+            assunto:subject,
+            status:'enviado',
+            erro:null,
+            enviado_em:now,
+          });
+          sent += ids.length;
+        } catch (e:any) {
+          failures.push({ ids:groupRows.map((r:any)=>r.id), error:String(e?.message || e) });
+        }
+      }
+
+      if (!sent && failures.length) return sendJson(res, { ok:false, error:'nenhum_envio_concluido', failures }, 502);
+      return sendJson(res, { ok:true, sent, failures });
+    }
+
     if (action === 'reply_upload') {
       const responseText = clean(body.text).slice(0, 5000);
       if (!responseText) return sendJson(res, { ok:false, error:'resposta_obrigatoria' }, 400);
