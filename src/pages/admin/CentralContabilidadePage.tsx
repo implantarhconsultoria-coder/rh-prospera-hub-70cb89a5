@@ -28,6 +28,7 @@ type Upload = {
   arquivo_nome:string; tamanho_bytes?:number|null; status:string;
   formalizacao_email_status?:string|null; formalizacao_email_em?:string|null;
   formalizacao_destinos?:string[]|null; origem_tipo?:string|null; origem_id?:string|null; created_at:string;
+  rh_resposta?:string|null; rh_resposta_em?:string|null; rh_resposta_por?:string|null;
 };
 type PortalUser = { id:string; nome:string; email?:string|null; portal:string };
 
@@ -60,6 +61,8 @@ const CentralContabilidadePage: React.FC = () => {
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [replyUploadId, setReplyUploadId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
 
   const moduleParam = searchParams.get('modulo') || '';
   const activeModule: ModuleKey | null = MODULE_KEYS.includes(moduleParam as ModuleKey) ? moduleParam as ModuleKey : null;
@@ -124,12 +127,12 @@ const CentralContabilidadePage: React.FC = () => {
     return data.session.access_token;
   };
 
-  const chamarCentralAdmin = async (action:string, uploadId:string) => {
+  const chamarCentralAdmin = async (action:string, uploadId:string, extra:Record<string, unknown> = {}) => {
     const token = await authToken();
     const response = await fetch('/api/accounting-central-admin', {
       method:'POST',
       headers:{ 'content-type':'application/json', authorization:`Bearer ${token}` },
-      body:JSON.stringify({ action, upload_id:uploadId }),
+      body:JSON.stringify({ action, upload_id:uploadId, ...extra }),
     });
     const data = await response.json();
     if (!response.ok || !data?.ok) throw new Error(data?.message || data?.error || 'Operação não concluída.');
@@ -169,6 +172,23 @@ const CentralContabilidadePage: React.FC = () => {
       window.open(data.url, '_blank', 'noopener,noreferrer');
     } catch (e:any) {
       toast.error(e?.message || 'Este movimento não possui documento disponível.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const responderUpload = async (u:Upload) => {
+    const text = replyText.trim();
+    if (!text) return toast.error('Escreva a resposta antes de enviar.');
+    setBusyId(u.id);
+    try {
+      await chamarCentralAdmin('reply_upload', u.id, { text });
+      toast.success('Resposta enviada para a Contabilidade e registrada no histórico.');
+      setReplyUploadId(null);
+      setReplyText('');
+      await carregar(true);
+    } catch (e:any) {
+      toast.error(e?.message || 'Não foi possível enviar a resposta.');
     } finally {
       setBusyId(null);
     }
@@ -316,7 +336,64 @@ const CentralContabilidadePage: React.FC = () => {
         </Panel>
       ) : (
         <Panel title="Documentos enviados pela contabilidade para o RH" icon={UploadCloud}>
-          {uploads.length===0 ? <Empty text="Nenhum documento recebido."/> : <div className="space-y-2">{uploads.map((u)=><div key={u.id} className="grid gap-3 rounded-lg border border-[#24212a] bg-[#080a0e] p-4 lg:grid-cols-[1.5fr_.8fr_.8fr_.8fr_auto] lg:items-center"><div className="min-w-0"><div className="truncate text-sm font-bold text-white">{u.arquivo_nome}</div><div className="mt-1 text-xs text-zinc-500">{tipoLabel(u.tipo_documento)}{u.funcionario_nome?` · ${u.funcionario_nome}`:''}</div></div><Info label="Empresa" value={companyMap.get(u.empresa_id)||'—'}/><Info label="Enviado por" value={userMap.get(u.portal_user_id)?.nome||'Contabilidade'}/><div><div className="text-[10px] uppercase text-zinc-600">Formalização</div><div className="mt-1"><StatusBadge value={u.formalizacao_email_status||'—'}/></div></div><div className="flex gap-2 lg:justify-end"><button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200">Abrir PDF</button>{!emailOk(u.formalizacao_email_status)&&<button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">Reenviar e-mail</button>}</div></div>)}</div>}
+          {uploads.length===0 ? <Empty text="Nenhum documento recebido."/> : (
+            <div className="space-y-3">
+              {uploads.map((u) => {
+                const sender = userMap.get(u.portal_user_id);
+                const replying = replyUploadId === u.id;
+                return (
+                  <div key={u.id} className="rounded-lg border border-[#24212a] bg-[#080a0e]">
+                    <div className="grid gap-3 p-4 lg:grid-cols-[1.5fr_.8fr_.8fr_.8fr_auto] lg:items-center">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-white">{u.arquivo_nome}</div>
+                        <div className="mt-1 text-xs text-zinc-500">{tipoLabel(u.tipo_documento)}{u.funcionario_nome?` · ${u.funcionario_nome}`:''}</div>
+                        {u.observacao && <div className="mt-2 rounded-md border border-[#30283a] bg-[#06080c] p-2 text-xs text-zinc-300"><b className="text-zinc-500">Mensagem da Contabilidade:</b> {u.observacao}</div>}
+                      </div>
+                      <Info label="Empresa" value={companyMap.get(u.empresa_id)||'—'}/>
+                      <div>
+                        <Info label="Enviado por" value={sender?.nome||'Contabilidade'}/>
+                        {sender?.email && <div className="mt-1 text-[10px] text-zinc-600">{sender.email}</div>}
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase text-zinc-600">Formalização</div>
+                        <div className="mt-1"><StatusBadge value={u.formalizacao_email_status||'—'}/></div>
+                        <div className="mt-2 text-[10px] text-zinc-600">{brDateTime(u.created_at)}</div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 lg:justify-end">
+                        <button onClick={()=>void abrirUpload(u)} disabled={busyId===u.id} className="rounded-md border border-[#423051] px-3 py-2 text-xs font-bold text-zinc-200">Ver o que enviou</button>
+                        <button onClick={()=>{setReplyUploadId(replying?null:u.id);setReplyText(u.rh_resposta||'');}} className="rounded-md bg-[#7c24d6] px-3 py-2 text-xs font-bold text-white">{u.rh_resposta_em?'Ver / responder novamente':'Responder'}</button>
+                        {!emailOk(u.formalizacao_email_status)&&<button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="rounded-md border border-amber-500/30 px-3 py-2 text-xs font-bold text-amber-200">Reenviar formalização</button>}
+                      </div>
+                    </div>
+
+                    {u.rh_resposta_em && (
+                      <div className="mx-4 mb-3 rounded-md border border-emerald-500/20 bg-emerald-500/[.035] p-3">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-emerald-300">Último retorno do RH · {brDateTime(u.rh_resposta_em)}</div>
+                        <div className="mt-1 whitespace-pre-wrap text-xs text-zinc-300">{u.rh_resposta}</div>
+                      </div>
+                    )}
+
+                    {replying && (
+                      <div className="border-t border-[#27222e] p-4">
+                        <div className="mb-2 text-xs font-bold text-white">Responder para {sender?.nome||'Contabilidade'}{sender?.email?` · ${sender.email}`:''}</div>
+                        <textarea
+                          value={replyText}
+                          onChange={(e)=>setReplyText(e.target.value)}
+                          rows={5}
+                          placeholder="Escreva aqui seu retorno para a Contabilidade..."
+                          className="w-full rounded-lg border border-[#3a2c48] bg-[#05070b] p-3 text-sm text-white outline-none focus:border-violet-500"
+                        />
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={()=>void responderUpload(u)} disabled={busyId===u.id || !replyText.trim()} className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{busyId===u.id?<Loader2 className="h-4 w-4 animate-spin"/>:<Send className="h-4 w-4"/>}Enviar retorno</button>
+                          <button onClick={()=>{setReplyUploadId(null);setReplyText('');}} className="rounded-md border border-[#423051] px-4 py-2 text-xs font-bold text-zinc-300">Cancelar</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Panel>
       )}
     </div>
