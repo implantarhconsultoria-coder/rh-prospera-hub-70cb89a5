@@ -114,59 +114,78 @@ export default function ContabilidadeProcessReturn({
 
   useEffect(() => { void loadDocs(); }, [loadDocs]);
 
-  const upload = async (file?: File | null) => {
-    if (!file) return;
-    if (!(file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) {
-      return toast.error('Selecione um arquivo PDF.');
-    }
-    if (file.size <= 0 || file.size > 50 * 1024 * 1024) {
-      return toast.error('O PDF deve ter até 50 MB.');
-    }
+  const upload = async (files: File[]) => {
+    if (!files.length) return;
+
+    const invalidType = files.find(file => !(file.type === 'application/pdf' || /\.pdf$/i.test(file.name)));
+    if (invalidType) return toast.error(`${invalidType.name} não é um PDF válido.`);
+
+    const invalidSize = files.find(file => file.size <= 0 || file.size > 50 * 1024 * 1024);
+    if (invalidSize) return toast.error(`${invalidSize.name} deve ter até 50 MB.`);
 
     setUploading(true);
+    let uploaded = 0;
+    let pendingEmail = 0;
+    const failed: string[] = [];
+
     try {
-      const prepared = await postJson({
-        action: 'prepare',
-        portal,
-        token,
-        empresa_id: evento.empresa_id,
-        arquivo_nome: file.name,
-        tamanho_bytes: file.size,
-      });
+      for (const file of files) {
+        try {
+          const prepared = await postJson({
+            action: 'prepare',
+            portal,
+            token,
+            empresa_id: evento.empresa_id,
+            arquivo_nome: file.name,
+            tamanho_bytes: file.size,
+          });
 
-      const { error: storageError } = await (supabase.storage.from(prepared.bucket) as any).uploadToSignedUrl(
-        prepared.path,
-        prepared.upload_token,
-        file,
-        { contentType: 'application/pdf', upsert: false },
-      );
-      if (storageError) throw storageError;
+          const { error: storageError } = await (supabase.storage.from(prepared.bucket) as any).uploadToSignedUrl(
+            prepared.path,
+            prepared.upload_token,
+            file,
+            { contentType: 'application/pdf', upsert: false },
+          );
+          if (storageError) throw storageError;
 
-      const finalized = await postJson({
-        action: 'finalize',
-        portal,
-        token,
-        empresa_id: evento.empresa_id,
-        origem_tipo: evento.origem_tipo,
-        origem_id: evento.origem_id,
-        tipo_documento: documentTypeFor(evento),
-        competencia: competenceFor(evento),
-        funcionario_nome: evento.funcionario_nome || null,
-        observacao: `Retorno da Contabilidade - ${evento.titulo}`,
-        arquivo_nome: file.name,
-        tamanho_bytes: file.size,
-        storage_path: prepared.path,
-      });
+          const finalized = await postJson({
+            action: 'finalize',
+            portal,
+            token,
+            empresa_id: evento.empresa_id,
+            origem_tipo: evento.origem_tipo,
+            origem_id: evento.origem_id,
+            tipo_documento: documentTypeFor(evento),
+            competencia: competenceFor(evento),
+            funcionario_nome: evento.funcionario_nome || null,
+            observacao: `Retorno da Contabilidade - ${evento.titulo}`,
+            arquivo_nome: file.name,
+            tamanho_bytes: file.size,
+            storage_path: prepared.path,
+          });
+
+          uploaded += 1;
+          if (finalized?.email_status !== 'enviado') pendingEmail += 1;
+        } catch (error: any) {
+          console.error('[contabilidade-process-return][bulk-upload]', file.name, error);
+          failed.push(file.name);
+        }
+      }
 
       await loadDocs();
-      if (finalized?.email_status !== 'enviado') {
-        toast.warning('PDF salvo. O envio do e-mail ficou pendente e pode ser reenviado abaixo.');
+
+      if (uploaded && !failed.length && !pendingEmail) {
+        toast.success(`${uploaded} PDF(s) salvos e enviados na mesma conversa de e-mail.`);
+      } else if (uploaded) {
+        const details = [
+          `${uploaded} PDF(s) salvos`,
+          pendingEmail ? `${pendingEmail} com e-mail pendente` : '',
+          failed.length ? `${failed.length} com falha` : '',
+        ].filter(Boolean).join(' · ');
+        toast.warning(details);
       } else {
-        toast.success('PDF salvo e e-mail de retorno enviado na mesma conversa.');
+        toast.error('Nenhum PDF foi enviado.');
       }
-    } catch (error: any) {
-      console.error('[contabilidade-process-return]', error);
-      toast.error(error?.message || 'Não foi possível anexar o PDF.');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -252,9 +271,10 @@ export default function ContabilidadeProcessReturn({
         ref={inputRef}
         type="file"
         accept="application/pdf,.pdf"
+        multiple
         className="hidden"
         disabled={uploading}
-        onChange={(event) => void upload(event.target.files?.[0])}
+        onChange={(event) => void upload(Array.from(event.target.files || []))}
       />
 
       <Button
@@ -264,7 +284,7 @@ export default function ContabilidadeProcessReturn({
         className="mt-3 bg-violet-600 text-white hover:bg-violet-500"
       >
         {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileUp className="mr-2 h-4 w-4" />}
-        {uploading ? 'Subindo PDF...' : 'Subir PDF e responder'}
+        {uploading ? 'Subindo PDFs...' : 'Subir vários PDFs e responder'}
       </Button>
 
       <div className="mt-4 border-t border-white/[.06] pt-3">
