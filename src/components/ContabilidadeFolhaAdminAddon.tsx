@@ -14,6 +14,7 @@ type Cycle = {
   id:string; empresa_id:string; competencia:string; tipo:ProcessType; status:string;
   apontamento_liberado_em?:string|null; contabilidade_recebeu_em?:string|null;
   enviado_em?:string|null; conferido_em?:string|null; observacao?:string|null;
+  rh_recebeu_em?:string|null; rh_recebeu_por?:string|null;
   email_envio_status?:string|null; email_retorno_status?:string|null;
 };
 type Doc = { id:string; ciclo_id:string; classificacao:string; status:string; payroll_document_id?:string|null };
@@ -204,6 +205,21 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     }
   };
 
+  const ackReturn = async (cycle:Cycle) => {
+    setBusy(cycle.id);
+    try {
+      const result = await api('admin_ack_return', { ciclo_id:cycle.id });
+      toast.success(result.already_confirmed ? 'Retorno já estava marcado como recebido.' : 'Retorno da Contabilidade recebido e registrado.');
+      await load(true);
+    } catch (error:any) {
+      toast.error(error?.message === 'retorno_contabilidade_nao_encontrado'
+        ? 'Ainda não há arquivo de retorno enviado pela Contabilidade.'
+        : error?.message || 'Não foi possível confirmar o recebimento.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const markPending = async (cycle:Cycle) => {
     if (!issueText.trim()) return toast.error('Descreva a pendência.');
     setBusy(cycle.id);
@@ -280,6 +296,7 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
                   const company = companyMap.get(cycle.empresa_id);
                   const docs = (state?.documents||[]).filter(doc => doc.ciclo_id===cycle.id);
                   const uploads = (state?.uploads||[]).filter(upload => upload.ciclo_id===cycle.id);
+                  const accountingUploads = uploads.filter(upload => upload.origem_tipo!=='rh_apontamento');
                   const identified = docs.filter(doc => doc.classificacao==='identificado').length;
                   const review = docs.filter(doc => ['revisao','erro'].includes(doc.classificacao)).length;
                   const closingPending = cycle.tipo==='pagamento' && !cycle.apontamento_liberado_em;
@@ -293,11 +310,14 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
                       <div className="mt-3 grid grid-cols-3 gap-2"><Mini label="PDFs" value={uploads.length}/><Mini label="Reconhecidos" value={identified}/><Mini label="Revisar" value={review}/></div>
                       {cycle.email_envio_status==='enviado' && <div className="mt-3 inline-flex items-center gap-2 rounded-md border border-cyan-500/20 bg-cyan-500/[.04] px-2.5 py-1.5 text-[10px] font-bold text-cyan-200"><MailCheck className="h-3.5 w-3.5"/>E-mail de recebimento enviado</div>}
                       {cycle.email_retorno_status==='enviado' && <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[.04] px-2.5 py-1.5 text-[10px] font-bold text-emerald-200"><MailCheck className="h-3.5 w-3.5"/>E-mail de OK enviado</div>}
+                      {cycle.rh_recebeu_em && <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[.04] px-2.5 py-1.5 text-[10px] font-bold text-emerald-200"><CheckCircle2 className="h-3.5 w-3.5"/>Retorno recebido pelo RH em {new Date(cycle.rh_recebeu_em).toLocaleString('pt-BR')}</div>}
                       {cycle.observacao && <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/[.035] p-2.5 text-[11px] text-amber-200">{cycle.observacao}</div>}
 
-                      {uploads.length>0 && <div className="mt-3 flex flex-wrap gap-2">{uploads.slice(0,6).map(upload => <button key={upload.id} onClick={()=>void openUpload(upload)} disabled={busy===upload.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#3a3044] bg-[#0a0c11] px-2.5 py-1.5 text-[10px] font-bold text-zinc-300 hover:border-violet-500/50">{busy===upload.id?<Loader2 className="h-3 w-3 animate-spin"/>:<Eye className="h-3 w-3"/>}{upload.origem_tipo==='rh_apontamento'?'Apontamento RH':(upload.arquivo_nome.length>25?`${upload.arquivo_nome.slice(0,22)}...`:upload.arquivo_nome)}</button>)}</div>}
+                      {uploads.length>0 && <div className="mt-3"><div className="mb-2 text-[10px] font-black uppercase tracking-[.14em] text-zinc-600">Histórico de arquivos do processo</div><div className="flex flex-wrap gap-2">{uploads.map(upload => <button key={upload.id} onClick={()=>void openUpload(upload)} disabled={busy===upload.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#3a3044] bg-[#0a0c11] px-2.5 py-1.5 text-[10px] font-bold text-zinc-300 hover:border-violet-500/50">{busy===upload.id?<Loader2 className="h-3 w-3 animate-spin"/>:<Eye className="h-3 w-3"/>}{upload.origem_tipo==='rh_apontamento'?'Apontamento RH':(upload.arquivo_nome.length>25?`${upload.arquivo_nome.slice(0,22)}...`:upload.arquivo_nome)}</button>)}</div></div>}
 
                       <div className="mt-4 flex flex-wrap gap-2">
+                        {accountingUploads.length>0 && !cycle.rh_recebeu_em && <Button size="sm" onClick={()=>void ackReturn(cycle)} disabled={busy===cycle.id} className="bg-cyan-600 text-white hover:bg-cyan-500">{busy===cycle.id?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<MailCheck className="mr-2 h-4 w-4"/>}Receber retorno</Button>}
+                        {cycle.rh_recebeu_em && <span className="inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[.04] px-3 py-2 text-[11px] font-bold text-emerald-300"><CheckCircle2 className="h-4 w-4"/>Recebido e mantido no histórico</span>}
                         {closingPending && cycle.tipo==='pagamento' && <Button size="sm" onClick={()=>openClosing(cycle)} className="bg-cyan-600 text-white hover:bg-cyan-500"><FileCheck2 className="mr-2 h-4 w-4"/>Abrir fechamento</Button>}
                         {cycle.status==='aguardando_conferencia' && <><Button size="sm" onClick={()=>void approve(cycle)} disabled={busy===cycle.id} className="bg-emerald-600 text-white hover:bg-emerald-500">{busy===cycle.id?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<CheckCircle2 className="mr-2 h-4 w-4"/>}Conferir e dar OK</Button><Button size="sm" variant="outline" onClick={()=>{setIssueCycle(cycle.id);setIssueText('');}} className="border-rose-500/30 bg-rose-500/[.04] text-rose-200"><AlertTriangle className="mr-2 h-4 w-4"/>Pendência</Button></>}
                         {cycle.status==='conferido' && <span className="inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[.04] px-3 py-2 text-[11px] font-bold text-emerald-300"><CheckCircle2 className="h-4 w-4"/>OK finalizado</span>}
