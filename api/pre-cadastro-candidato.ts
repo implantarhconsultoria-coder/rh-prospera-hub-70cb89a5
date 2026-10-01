@@ -163,10 +163,14 @@ export default async function handler(req:any, res?:any) {
       if (!clean(pre.empresa_nome) || !clean(pre.funcao)) return sendJson(res, { ok:false, error:'salve_empresa_funcao_antes_do_link' }, 400);
       const telefone = digits(body.telefone || pre.celular);
       if (telefone.length < 10) return sendJson(res, { ok:false, error:'celular_candidato_obrigatorio' }, 400);
-      const { data: existing, error: existingError } = await service.from('pre_cadastro_solicitacoes_documentos').select('*').eq('pre_cadastro_id', pre.id).maybeSingle();
+      const { data: existingRows, error: existingError } = await service.from('pre_cadastro_solicitacoes_documentos')
+        .select('*')
+        .eq('pre_cadastro_id', pre.id)
+        .order('updated_at', { ascending: false })
+        .limit(1);
       if (existingError) throw existingError;
       const now = new Date().toISOString();
-      let request:any = existing;
+      let request:any = existingRows?.[0] || null;
       if (!request) {
         const { data, error } = await service.from('pre_cadastro_solicitacoes_documentos').insert({
           pre_cadastro_id: pre.id, token: randomToken(), telefone, status: 'pendente', requisitos: DEFAULT_REQUIREMENTS,
