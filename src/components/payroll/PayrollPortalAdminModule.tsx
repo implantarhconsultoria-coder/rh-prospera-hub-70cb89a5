@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Clock3, Copy, ExternalLink, FileArchive, FileSignature, FileUp, Loader2, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
+import { Clock3, Copy, Download, ExternalLink, FileArchive, FileSignature, FileUp, Loader2, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
@@ -723,7 +723,7 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
     page.drawText('Após esta capa seguem somente os recibos desta empresa.', { x:48, y:55, size:8, font:regular });
   };
 
-  const printReceiptPack = async (scope:'empresa'|'todas') => {
+  const printReceiptPack = async (scope:'empresa'|'todas', action:'abrir'|'salvar' = 'abrir') => {
     setPrintingReceipts(true);
     try {
       const targets = scope === 'empresa'
@@ -744,6 +744,8 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
         for (const row of printableRows) {
           const urls = await adminArchiveUrls(String(row.document_id || ''), target.id);
           if (urls.holerite_url) {
+            // Copia as páginas originais sem remontar o recibo em HTML.
+            // Assim o arquivo salvo mantém exatamente o mesmo layout do PDF emitido.
             await appendPdfFromUrl(output, urls.holerite_url);
             totalReceipts += 1;
           }
@@ -752,22 +754,40 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
 
       if (!totalReceipts || !output.getPageCount()) return toast.info('Nenhum recibo disponível nesta competência.');
 
-      output.setTitle(scope === 'todas' ? `RECIBOS_TODAS_EMPRESAS_${competencia}` : `RECIBOS_${company?.name || 'EMPRESA'}_${competencia}`);
+      const fileName = scope === 'todas'
+        ? `RECIBOS_TODAS_EMPRESAS_${competencia}.pdf`
+        : `RECIBOS_${safeFile(company?.name || 'EMPRESA')}_${competencia}.pdf`;
+
+      output.setTitle(fileName.replace(/\.pdf$/i, ''));
       output.setCreator('TOPAC RH PRO');
       const bytes = await output.save({ addDefaultPage:false, useObjectStreams:false });
       const blob = new Blob([bytes as any], { type:'application/pdf' });
       const url = URL.createObjectURL(blob);
-      const opened = window.open(url, '_blank', 'noopener,noreferrer');
-      if (!opened) {
+
+      if (action === 'salvar') {
         const link = document.createElement('a');
         link.href = url;
-        link.download = scope === 'todas'
-          ? `RECIBOS_TODAS_EMPRESAS_${competencia}.pdf`
-          : `RECIBOS_${safeFile(company?.name || 'EMPRESA')}_${competencia}.pdf`;
+        link.download = fileName;
+        document.body.appendChild(link);
         link.click();
+        link.remove();
+        toast.success(`${totalReceipts} recibo(s) salvos no PDF original, sem alterar o layout.`);
+      } else {
+        const opened = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!opened) {
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          toast.info('O navegador bloqueou a nova aba. O PDF original foi baixado.');
+        } else {
+          toast.success(`${totalReceipts} recibo(s) abertos no layout original.`);
+        }
       }
+
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      toast.success(`${totalReceipts} recibo(s) preparados para impressão.`);
     } catch (error:any) {
       console.error('[temporary-receipt-print]', error);
       toast.error(error?.message || 'Não foi possível montar os recibos para impressão.');
@@ -851,17 +871,25 @@ Quem estiver com pendência indicada acima precisa regularizar a assinatura pelo
           <p className="mt-1 text-xs text-muted-foreground">Imprime somente os recibos da competência. Não inclui comprovantes bancários nem certificados.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={printingReceipts} onClick={()=>void printReceiptPack('empresa')}>
+          <Button variant="outline" disabled={printingReceipts} onClick={()=>void printReceiptPack('empresa','abrir')}>
             {printingReceipts?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<FileArchive className="mr-2 h-4 w-4"/>}
-            Imprimir {company?.name || 'empresa'}
+            Abrir / imprimir {company?.name || 'empresa'}
           </Button>
-          <Button disabled={printingReceipts} onClick={()=>void printReceiptPack('todas')} className="bg-amber-500 text-black hover:bg-amber-400">
+          <Button variant="outline" disabled={printingReceipts} onClick={()=>void printReceiptPack('empresa','salvar')}>
+            <Download className="mr-2 h-4 w-4"/>
+            Salvar PDF idêntico
+          </Button>
+          <Button disabled={printingReceipts} onClick={()=>void printReceiptPack('todas','abrir')} className="bg-amber-500 text-black hover:bg-amber-400">
             {printingReceipts?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<FileArchive className="mr-2 h-4 w-4"/>}
-            Imprimir todas as empresas
+            Abrir / imprimir todas
+          </Button>
+          <Button variant="outline" disabled={printingReceipts} onClick={()=>void printReceiptPack('todas','salvar')}>
+            <Download className="mr-2 h-4 w-4"/>
+            Salvar todas em PDF
           </Button>
         </div>
       </div>
-      <div className="mt-3 text-[11px] text-amber-100/70">Ao imprimir todas, o PDF é organizado por empresa e recebe uma capa de separação antes de cada bloco, com quantidade de recibos, total líquido e relação dos funcionários.</div>
+      <div className="mt-3 text-[11px] text-amber-100/70">O PDF salvo copia as páginas originais dos recibos sem remontar o conteúdo. Ao imprimir pelo Chrome, use 1 página por folha para não juntar dois recibos na mesma A4. Ao imprimir todas, permanece uma capa de separação antes de cada empresa.</div>
     </div>
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border p-3"><FileArchive className="h-4 w-4"/><b className="text-xs">SALVAR PDF CONSOLIDADO</b><select value={consolidatedFilter} onChange={e=>setConsolidatedFilter(e.target.value as any)} className="rounded border bg-background px-2 py-1.5 text-xs"><option value="assinados">Somente assinados</option><option value="todos">Todos</option><option value="pendentes">Somente pendentes</option></select><Button size="sm" variant="outline" onClick={()=>void consolidated()}>Salvar consolidado</Button></div>
