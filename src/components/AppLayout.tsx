@@ -241,9 +241,9 @@ const AppLayout: React.FC = () => {
                       <span><strong className="block text-xs text-white">Equipe Operacional</strong><span className="mt-1 block text-[10px] text-zinc-500">Tela compartilhada da operação</span></span>
                     </button>
 
-                    <button onClick={() => { navigate('/admin/app-mecanico'); setUserMenuOpen(false); }} className="flex min-h-[82px] items-center gap-3 rounded-xl border border-fuchsia-500/20 bg-[#0b0d13] p-3 text-left transition hover:border-fuchsia-400/45 hover:bg-[#14101b]">
+                    <button onClick={() => { navigate('/campo'); setUserMenuOpen(false); }} className="flex min-h-[82px] items-center gap-3 rounded-xl border border-fuchsia-500/20 bg-[#0b0d13] p-3 text-left transition hover:border-fuchsia-400/45 hover:bg-[#14101b]">
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/[.06] text-fuchsia-400"><User className="h-5 w-5"/></span>
-                      <span><strong className="block text-xs text-white">App Mecânicos</strong><span className="mt-1 block text-[10px] text-zinc-500">Escolher funcionário e abrir a tela real do app</span></span>
+                      <span><strong className="block text-xs text-white">Equipe de Campo</strong><span className="mt-1 block text-[10px] text-zinc-500">Visão do técnico em campo</span></span>
                     </button>
 
                   </div>
