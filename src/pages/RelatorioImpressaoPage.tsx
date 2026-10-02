@@ -525,52 +525,70 @@ const RelatorioImpressaoPage: React.FC = () => {
           .apontamento-table { min-width: 1180px; }
         }
         @media print {
-          html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           body * { visibility: hidden !important; }
           #fech-print-area, #fech-print-area * { visibility: visible !important; }
           #fech-print-area {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
-            max-width: none !important;
-            margin: 0 !important;
+            width: 100% !important;
+            max-width: 297mm !important;
+            margin: 0 auto !important;
             padding: 0 !important;
           }
           .no-print, .no-print *, iframe, nav, aside,
           [role="dialog"], [aria-modal="true"], [class*="lovable"], [id*="lovable"] {
             display: none !important;
           }
-          .report-company { break-after: page; page-break-after: always; }
+
+          /* IMPRESSAO = PRE-VISUALIZACAO.
+             Nao reduz fonte, cards, cabecalho ou tabela na hora de imprimir/salvar. */
+          .report-company {
+            break-after: page;
+            page-break-after: always;
+            margin: 0 !important;
+          }
           .report-company:last-of-type { break-after: auto; page-break-after: auto; }
-          .report-header { grid-template-columns: 55mm 1fr 63mm; gap: 4mm; margin-bottom: 3mm; }
-          .report-brand-topac { font-size: 21px; }
-          .report-brand-rh { font-size: 18px; }
-          .report-brand-sub { font-size: 7.5px; }
-          .report-brand-line { height: 3px; width: 46px; margin-top: 3px; }
-          .report-company-name { font-size: 18.5px; }
-          .report-title { font-size: 12.5px; }
-          .report-meta { margin-top: 4px; font-size: 7.8px; }
-          .report-meta span { padding: 0 5px; }
-          .period-card { padding: 6px 8px; gap: 7px; }
-          .period-icon { width: 27px; height: 27px; font-size: 13px; }
-          .period-label { font-size: 6.8px; }
-          .period-range { font-size: 8.4px; }
-          .period-days { font-size: 7.2px; }
-          .summary-grid { gap: 2mm; margin-bottom: 2.5mm; }
-          .summary-card { min-height: 14.5mm; padding: 2mm 2.5mm; gap: 2mm; }
-          .summary-icon { width: 8.2mm; height: 8.2mm; border-radius: 2mm; font-size: 11px; }
-          .summary-label { font-size: 6.7px; }
-          .summary-value { font-size: 12px; }
+          .report-header {
+            grid-template-columns: minmax(220px, .85fr) minmax(460px, 1.85fr) minmax(245px, .85fr) !important;
+            gap: 18px !important;
+            margin-bottom: 15px !important;
+          }
+          .report-brand { padding-right: 18px !important; border-right: 1px solid #8ea7c5 !important; border-bottom: 0 !important; }
+          .report-brand-topac { font-size: 32px !important; }
+          .report-brand-rh { font-size: 27px !important; }
+          .report-brand-sub { font-size: 11px !important; }
+          .report-brand-line { height: 5px !important; width: 72px !important; margin-top: 5px !important; }
+          .report-company-name { font-size: 27px !important; }
+          .report-title { font-size: 18px !important; }
+          .report-meta { margin-top: 8px !important; font-size: 11px !important; }
+          .report-meta span { padding: 0 12px !important; }
+          .period-card { padding: 12px 14px !important; gap: 12px !important; }
+          .period-icon { width: 38px !important; height: 38px !important; font-size: 20px !important; }
+          .period-label { font-size: 10px !important; }
+          .period-range { font-size: 14px !important; }
+          .period-days { font-size: 11px !important; }
+          .summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: 9px !important; margin-bottom: 12px !important; }
+          .summary-card { min-height: 72px !important; padding: 11px 13px !important; gap: 11px !important; }
+          .summary-icon { width: 40px !important; height: 40px !important; border-radius: 11px !important; font-size: 18px !important; }
+          .summary-label { font-size: 10px !important; }
+          .summary-value { font-size: 21px !important; }
           .report-table-wrap { overflow: visible !important; }
-          .apontamento-table { min-width: 0 !important; font-size: 7.2px; }
-          .group-row th { padding: 3.2px 2px; font-size: 6.9px; }
-          .subhead-row th { padding: 3px 2px; font-size: 6.3px; }
-          .employee-row td { padding: 3.5px 2.5px; }
-          .employee-name { font-size: 7.2px; }
-          .employee-role { font-size: 6.5px; }
-          .observation-cell { font-size: 6.5px; }
-          .totals-row td { padding: 3.5px 2.5px; font-size: 6.7px; }
+          .apontamento-table { min-width: 0 !important; width: 100% !important; font-size: 11.5px !important; }
+          .group-row th { padding: 8px 6px !important; font-size: 11px !important; }
+          .subhead-row th { padding: 7px 5px !important; font-size: 10.5px !important; }
+          .employee-row td { padding: 8px 6px !important; }
+          .employee-name { font-size: 11.5px !important; }
+          .employee-role { font-size: 10.5px !important; }
+          .observation-cell { font-size: 10.5px !important; }
+          .totals-row td { padding: 8px 6px !important; font-size: 10.5px !important; }
         }
       `}</style>
 
