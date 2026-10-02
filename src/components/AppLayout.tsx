@@ -2,14 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Outlet, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AppSidebar from '@/components/AppSidebar';
 import AdminMobileLayout from '@/components/AdminMobileLayout';
-import AssistenteFab from '@/components/assistente/AssistenteFab';
 import EmployeeSmartEditOverlay from '@/components/EmployeeSmartEditOverlay';
 import EpiSemestralAlert from '@/components/EpiSemestralAlert';
 import ArchiveCoverDialog from '@/components/ArchiveCoverDialog';
 import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';
 import CabinetLabelsAddon from '@/components/CabinetLabelsAddon';
-import SupportCenter from '@/components/SupportCenter';
-import ContabilidadeAdminInboxAddon from '@/components/ContabilidadeAdminInboxAddon';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -117,7 +114,6 @@ const AppLayout: React.FC = () => {
     return (
       <div className="topac-neon-skin min-h-screen bg-[#020609] text-zinc-100">
         <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>
-        <SupportCenter />
       </div>
     );
   }
@@ -248,12 +244,10 @@ const AppLayout: React.FC = () => {
         </div>
       )}
 
-      {userRole === 'admin' && <ContabilidadeAdminInboxAddon />}\n      <FechamentoEtiquetasAddon />
+      <FechamentoEtiquetasAddon />
       <CabinetLabelsAddon />
-      <SupportCenter />
       <ArchiveCoverDialog open={archiveCoverOpen} onOpenChange={setArchiveCoverOpen} />
       <EmployeeSmartEditOverlay />
-      <AssistenteFab />
     </div>
   );
 };
