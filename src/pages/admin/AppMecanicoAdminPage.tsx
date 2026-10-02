@@ -25,123 +25,6 @@ const duration = (minutes?: number | null) => {
   return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}min`;
 };
 
-const escapeHtml = (value: unknown) => String(value ?? '')
-  .replaceAll('&', '&amp;')
-  .replaceAll('<', '&lt;')
-  .replaceAll('>', '&gt;')
-  .replaceAll('"', '&quot;')
-  .replaceAll("'", '&#039;');
-
-const printHtmlReport = (html: string) => {
-  const frame = document.createElement('iframe');
-  frame.setAttribute('aria-hidden', 'true');
-  frame.style.position = 'fixed';
-  frame.style.right = '0';
-  frame.style.bottom = '0';
-  frame.style.width = '1px';
-  frame.style.height = '1px';
-  frame.style.opacity = '0';
-  frame.style.border = '0';
-  frame.style.pointerEvents = 'none';
-  document.body.appendChild(frame);
-
-  const target = frame.contentWindow;
-  const doc = target?.document;
-  if (!target || !doc) {
-    frame.remove();
-    toast.error('Não foi possível preparar a impressão.');
-    return;
-  }
-
-  doc.open();
-  doc.write(html);
-  doc.close();
-
-  window.setTimeout(() => {
-    try {
-      target.focus();
-      target.print();
-    } finally {
-      window.setTimeout(() => frame.remove(), 1200);
-    }
-  }, 180);
-};
-
-const mechanicStatusLabel = (row: MecanicoRow) =>
-  row.ponto.status === 'fechado' ? 'Jornada fechada'
-    : row.ponto.status === 'aberto' ? 'Em jornada'
-      : 'Sem jornada iniciada';
-
-const buildMechanicReportHtml = (row: MecanicoRow) => `<!doctype html>
-<html><head><meta charset="utf-8"><title>Relatório - ${escapeHtml(row.nome)}</title>
-<style>
-@page{size:A4 portrait;margin:12mm}
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:12px}
-.header{border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:16px}
-.brand{font-size:20px;font-weight:800}.sub{font-size:11px;color:#555;margin-top:3px}
-h1{font-size:18px;margin:14px 0 4px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
-.box{border:1px solid #ccc;border-radius:6px;padding:9px}.label{font-size:9px;color:#666;text-transform:uppercase;font-weight:700}.value{font-size:13px;font-weight:700;margin-top:3px}
-table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f2f2f2;font-size:10px;text-transform:uppercase}
-.footer{margin-top:24px;padding-top:10px;border-top:1px solid #bbb;color:#666;font-size:9px}
-</style></head><body>
-<div class="header"><div class="brand">TOPAC RH PRO</div><div class="sub">Relatório Operacional do App Mecânicos</div></div>
-<h1>${escapeHtml(row.nome)}</h1>
-<div class="sub">${escapeHtml(row.funcao || 'Mecânico')} · ${escapeHtml(row.empresa)} · ${escapeHtml(row.filial || '')}</div>
-<div class="meta">
-  <div class="box"><div class="label">Situação de acesso</div><div class="value">${row.liberado ? (row.online ? 'Online' : 'Liberado') : 'Bloqueado'}</div></div>
-  <div class="box"><div class="label">Último acesso</div><div class="value">${escapeHtml(dateTime(row.ultimo_acesso_em))}</div></div>
-  <div class="box"><div class="label">Ponto de hoje</div><div class="value">${escapeHtml(mechanicStatusLabel(row))}</div></div>
-  <div class="box"><div class="label">Batidas</div><div class="value">${row.ponto.batidas || 0}</div></div>
-</div>
-<table><thead><tr><th>Entrada</th><th>Saída almoço</th><th>Retorno almoço</th><th>Saída</th></tr></thead>
-<tbody><tr><td>${escapeHtml(onlyTime(row.ponto.entrada))}</td><td>${escapeHtml(onlyTime(row.ponto.almoco_inicio))}</td><td>${escapeHtml(onlyTime(row.ponto.almoco_fim))}</td><td>${escapeHtml(onlyTime(row.ponto.saida))}</td></tr></tbody></table>
-<table><thead><tr><th>Veículo</th><th>KM saída</th><th>KM chegada</th><th>KM rodado</th></tr></thead>
-<tbody><tr><td>${escapeHtml(row.km.placa || row.km.veiculo || '—')}</td><td>${escapeHtml(row.km.saida ?? '—')}</td><td>${escapeHtml(row.km.chegada ?? '—')}</td><td>${escapeHtml(numberBr(row.km.total))} km</td></tr></tbody></table>
-<table><thead><tr><th>Abastecimentos hoje</th><th>Litros</th><th>Valor</th><th>Pendentes</th></tr></thead>
-<tbody><tr><td>${row.abastecimento.hoje || 0}</td><td>${escapeHtml(numberBr(row.abastecimento.litros))} L</td><td>${escapeHtml(money(row.abastecimento.valor))}</td><td>${row.abastecimento.pendentes || 0}</td></tr></tbody></table>
-<div class="footer">Emitido em ${escapeHtml(new Date().toLocaleString('pt-BR', { timeZone: TZ }))} · TOPAC RH PRO</div>
-</body></html>`;
-
-const buildAllMechanicsReportHtml = (rows: MecanicoRow[], stats: DashboardStats) => `<!doctype html>
-<html><head><meta charset="utf-8"><title>Relatório App Mecânicos</title>
-<style>
-@page{size:A4 landscape;margin:9mm}
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10px}
-.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #111;padding-bottom:8px;margin-bottom:12px}
-.brand{font-size:20px;font-weight:800}.sub{font-size:10px;color:#555;margin-top:3px}
-.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0 14px}
-.box{border:1px solid #ccc;border-radius:5px;padding:7px}.label{font-size:8px;color:#666;text-transform:uppercase;font-weight:700}.value{font-size:14px;font-weight:800;margin-top:2px}
-table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px;text-align:left;vertical-align:top}th{background:#f2f2f2;font-size:8px;text-transform:uppercase}
-tr{page-break-inside:avoid}.footer{margin-top:10px;color:#666;font-size:8px}
-</style></head><body>
-<div class="header"><div><div class="brand">TOPAC RH PRO</div><div class="sub">Relatório Geral — App Mecânicos</div></div><div class="sub">${escapeHtml(new Date().toLocaleString('pt-BR', { timeZone: TZ }))}</div></div>
-<div class="summary">
-  <div class="box"><div class="label">Mecânicos</div><div class="value">${stats.mecanicos}</div></div>
-  <div class="box"><div class="label">Online</div><div class="value">${stats.online}</div></div>
-  <div class="box"><div class="label">Ponto hoje</div><div class="value">${stats.ponto_hoje}</div></div>
-  <div class="box"><div class="label">Abastecimentos</div><div class="value">${stats.abastecimentos_hoje}</div></div>
-  <div class="box"><div class="label">KM hoje</div><div class="value">${escapeHtml(numberBr(stats.km_total_hoje))}</div></div>
-</div>
-<table><thead><tr><th>Mecânico</th><th>Empresa / Filial</th><th>Ponto</th><th>Entrada</th><th>Almoço</th><th>Retorno</th><th>Saída</th><th>Veículo</th><th>KM</th><th>Abast.</th><th>Valor</th><th>Acesso</th></tr></thead>
-<tbody>
-${rows.map(row => `<tr>
-<td><b>${escapeHtml(row.nome)}</b><br><span>${escapeHtml(row.funcao || '')}</span></td>
-<td>${escapeHtml(row.empresa)}<br>${escapeHtml(row.filial || '')}</td>
-<td>${escapeHtml(mechanicStatusLabel(row))}</td>
-<td>${escapeHtml(onlyTime(row.ponto.entrada))}</td>
-<td>${escapeHtml(onlyTime(row.ponto.almoco_inicio))}</td>
-<td>${escapeHtml(onlyTime(row.ponto.almoco_fim))}</td>
-<td>${escapeHtml(onlyTime(row.ponto.saida))}</td>
-<td>${escapeHtml(row.km.placa || row.km.veiculo || '—')}</td>
-<td>${escapeHtml(numberBr(row.km.total))} km</td>
-<td>${row.abastecimento.hoje || 0}</td>
-<td>${escapeHtml(money(row.abastecimento.valor))}</td>
-<td>${row.liberado ? (row.online ? 'Online' : 'Liberado') : 'Bloqueado'}</td>
-</tr>`).join('')}
-</tbody></table>
-<div class="footer">Relatório emitido pelo TOPAC RH PRO.</div>
-</body></html>`;
-
 type Tab = 'ponto' | 'abastecimento' | 'km' | 'fechamento' | 'rastreamento';
 
 type DashboardStats = {
@@ -242,7 +125,7 @@ function MiniStatus({ label, value, tone = 'text-zinc-300' }: { label: string; v
   return <div className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-2"><span className="block text-[8px] font-bold uppercase tracking-wider text-zinc-600">{label}</span><strong className={`mt-1 block truncate text-[11px] ${tone}`}>{value}</strong></div>;
 }
 
-function MechanicCard({ row, tab, onOpen, onPrint }: { row: MecanicoRow; tab: Tab; onOpen: (id: string) => void; onPrint: (row: MecanicoRow) => void }) {
+function MechanicCard({ row, tab, onOpen }: { row: MecanicoRow; tab: Tab; onOpen: (id: string) => void }) {
   const initials = row.nome.split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
   const pointTone = row.ponto.status === 'fechado' ? 'text-emerald-400' : row.ponto.status === 'aberto' ? 'text-amber-400' : 'text-zinc-500';
   const closeTone = row.fechamento.status === 'completo' ? 'text-emerald-400' : row.fechamento.status === 'pendente' ? 'text-amber-400' : 'text-zinc-500';
@@ -254,15 +137,7 @@ function MechanicCard({ row, tab, onOpen, onPrint }: { row: MecanicoRow; tab: Ta
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2"><h3 className="truncate text-sm font-black text-white">{row.nome}</h3><AccessBadge row={row} /></div>
           <p className="mt-0.5 truncate text-[10px] text-zinc-500">{row.funcao || 'Mecânico'} · {row.filial || row.empresa}</p>
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p>
-            <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={() => onPrint(row)}>
-                <Printer className="mr-1 h-3 w-3" />Relatório
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={() => onOpen(row.id)}>Ficha</Button>
-            </div>
-          </div>
+          <div className="mt-1 flex items-center justify-between gap-2"><p className="flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p><Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={() => onOpen(row.id)}><ExternalLink className="mr-1 h-3 w-3" />Abrir ficha</Button></div>
         </div>
       </div>
 
@@ -381,11 +256,7 @@ export default function AppMecanicoAdminPage() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-4">
         <div><div className="flex items-center gap-2"><Wrench className="h-5 w-5 text-amber-400" /><h1 className="text-lg font-black text-white">App Mecânicos — Controle Operacional</h1><Badge variant="secondary">{stats.mecanicos} ativos</Badge></div><p className="mt-1 text-xs text-zinc-500">Acompanhamento em tempo real por empresa. Mecânicos não possuem edição ou exclusão de registros; a administração possui ficha completa.</p></div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Atualizar</Button>
-          <Button variant="outline" size="sm" onClick={() => printHtmlReport(buildAllMechanicsReportHtml(rows, stats))} disabled={!rows.length}><Printer className="mr-2 h-4 w-4" />Imprimir relatório</Button>
-          <Button size="sm" asChild><a href="/mecanicos" target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Link dos mecânicos</a></Button>
-        </div>
+        <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Atualizar</Button><Button size="sm" asChild><a href="/mecanicos" target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Link dos mecânicos</a></Button></div>
       </header>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
@@ -408,7 +279,7 @@ export default function AppMecanicoAdminPage() {
             {grouped.map(([empresa, mecanicos]) => (
               <div key={empresa} className="space-y-2.5">
                 <div className="flex items-center gap-2 border-b border-fuchsia-500/10 pb-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-fuchsia-500/10 text-fuchsia-400"><Building2 className="h-4 w-4" /></span><h2 className="text-sm font-black uppercase tracking-wide text-white">{empresa}</h2><Badge variant="outline" className="text-[10px]">{mecanicos.length}</Badge><span className="ml-auto text-[10px] text-zinc-600">{mecanicos.filter((m) => m.online).length} online</span></div>
-                <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">{mecanicos.map((row) => <MechanicCard key={row.id} row={row} tab={tab} onOpen={setSelectedId} onPrint={(item) => printHtmlReport(buildMechanicReportHtml(item))} />)}</div>
+                <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">{mecanicos.map((row) => <MechanicCard key={row.id} row={row} tab={tab} onOpen={setSelectedId} />)}</div>
               </div>
             ))}
             {!rows.length && !loading && <div className="rounded-xl border border-dashed p-10 text-center text-zinc-500">Nenhum mecânico encontrado.</div>}
