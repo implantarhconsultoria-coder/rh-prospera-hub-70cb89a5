@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import AppSidebar from '@/components/AppSidebar';
 import AdminMobileLayout from '@/components/AdminMobileLayout';
@@ -13,12 +13,12 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import {
   Archive, Search, RefreshCw, X, Building2, User, FileText,
-  Moon, Menu, ChevronDown,
+  Moon, Menu, ChevronDown, LayoutGrid,
 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import StableLoading from '@/components/StableLoading';
-import ModuleSwitcher from '@/components/ModuleSwitcher';
+import { ADMIN_MODULE_GROUPS } from '@/data/adminModules';
 import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
 import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
@@ -31,6 +31,9 @@ const AppLayout: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [archiveCoverOpen, setArchiveCoverOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [moduleMenuQuery, setModuleMenuQuery] = useState('');
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const { session, userRole, userRoles, roleLoading, companies, employees, refreshData, refreshEntries } = useApp();
   const isMobile = useIsMobile();
   const location = useLocation();
@@ -68,6 +71,21 @@ const AppLayout: React.FC = () => {
     return [...moduleResults, ...companyResults, ...employeeResults].slice(0, 20);
   }, [searchQuery, companies, employees, canViewFrota]);
 
+  const accessGroups = useMemo(() => {
+    const q = moduleMenuQuery.trim().toLowerCase();
+    return ADMIN_MODULE_GROUPS
+      .map(group => ({
+        ...group,
+        items: group.items.filter(item => {
+          if (!canViewFrota && ['/admin/documentos-ativos','/admin/monitoramento'].includes(item.path)) return false;
+          if (isDirector && !isDirectorRouteAllowed(item.path)) return false;
+          if (!q) return true;
+          return `${item.label} ${item.description} ${item.path}`.toLowerCase().includes(q);
+        }),
+      }))
+      .filter(group => group.items.length > 0);
+  }, [moduleMenuQuery, canViewFrota, isDirector]);
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -78,6 +96,24 @@ const AppLayout: React.FC = () => {
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
   }, []);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const closeOnOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setUserMenuOpen(false);
+    };
+    window.addEventListener('mousedown', closeOnOutside);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('mousedown', closeOnOutside);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [userMenuOpen]);
 
   useEffect(() => {
     document.body.classList.add('topac-neon-body');
@@ -174,16 +210,125 @@ const AppLayout: React.FC = () => {
 
             <div className="mx-1 h-8 w-px bg-[#25212a]" />
 
-            <div className="flex items-center gap-3 pr-1">
-              <div className="grid h-10 w-10 place-items-center rounded-full border border-[#7f2bc2] bg-[#17101e] text-[13px] font-semibold text-white">{initials}</div>
-              <div className="hidden min-w-0 xl:block">
-                <div className="max-w-[150px] truncate text-[12px] font-semibold text-white">{displayName}</div>
-                <div className="mt-0.5 text-[10px] text-zinc-500">{isDirector ? 'Diretor' : 'Administrador'}</div>
-              </div>
-              <ChevronDown className="hidden h-4 w-4 text-zinc-500 xl:block" />
-            </div>
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen(open => !open)}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-1.5 py-1 pr-2 transition hover:bg-white/[0.04]',
+                  userMenuOpen && 'bg-white/[0.05]',
+                )}
+                aria-expanded={userMenuOpen}
+                aria-label="Abrir acessos e módulos"
+              >
+                <div className="grid h-10 w-10 place-items-center rounded-full border border-[#7f2bc2] bg-[#17101e] text-[13px] font-semibold text-white">{initials}</div>
+                <div className="hidden min-w-0 xl:block text-left">
+                  <div className="max-w-[165px] truncate text-[12px] font-semibold text-white">{displayName}</div>
+                  <div className="mt-0.5 text-[10px] text-zinc-500">{isDirector ? 'Diretor' : 'Administrador'} · acessos</div>
+                </div>
+                <ChevronDown className={cn('hidden h-4 w-4 text-zinc-500 transition-transform xl:block', userMenuOpen && 'rotate-180')} />
+              </button>
 
-            <div className="ml-2"><ModuleSwitcher /></div>
+              {userMenuOpen && (
+                <div className="absolute right-0 top-[48px] z-[80] w-[min(820px,82vw)] overflow-hidden rounded-2xl border border-[#4d2a61] bg-[#06080d]/98 shadow-[0_28px_100px_rgba(0,0,0,.78),0_0_40px_rgba(126,34,206,.12)] backdrop-blur-xl">
+                  <div className="flex items-start justify-between gap-4 border-b border-white/[.06] p-4">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[.14em] text-fuchsia-400">Acessos rápidos</div>
+                      <div className="mt-1 text-base font-black text-white">Portais e módulos da plataforma</div>
+                      <div className="mt-1 text-[10px] text-zinc-500">Tudo concentrado na seta do administrador.</div>
+                    </div>
+                    <div className="relative w-[270px]">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-600" />
+                      <input
+                        value={moduleMenuQuery}
+                        onChange={event => setModuleMenuQuery(event.target.value)}
+                        placeholder="Filtrar módulos..."
+                        className="h-9 w-full rounded-lg border border-[#302637] bg-[#090b10] pl-9 pr-3 text-xs text-white outline-none placeholder:text-zinc-600 focus:border-fuchsia-500/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="max-h-[72vh] overflow-y-auto p-4">
+                    {!moduleMenuQuery.trim() && (
+                      <div className="mb-5">
+                        <div className="mb-2 px-1 text-[9px] font-black uppercase tracking-[.14em] text-zinc-600">Portais</div>
+                        <div className="grid grid-cols-2 gap-2 xl:grid-cols-5">
+                          <button onClick={() => { navigate('/admin'); setUserMenuOpen(false); }} className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/[.05] p-3 text-left transition hover:border-fuchsia-400/45 hover:bg-fuchsia-500/[.09]">
+                            <LayoutGrid className="mb-2 h-4 w-4 text-fuchsia-400" />
+                            <strong className="block text-xs text-white">Administração</strong>
+                            <span className="mt-1 block text-[9px] text-zinc-600">Painel principal</span>
+                          </button>
+                          <button onClick={() => { sessionStorage.setItem('admin_filial_preview_codigo','topac-pg'); navigate('/filial'); setUserMenuOpen(false); }} className="rounded-xl border border-fuchsia-500/20 bg-[#0b0910] p-3 text-left transition hover:border-fuchsia-400/45">
+                            <Building2 className="mb-2 h-4 w-4 text-fuchsia-400" />
+                            <strong className="block text-xs text-white">Praia Grande</strong>
+                            <span className="mt-1 block text-[9px] text-zinc-600">Portal da filial</span>
+                          </button>
+                          <button onClick={() => { sessionStorage.setItem('admin_filial_preview_codigo','topac-gyn'); navigate('/filial'); setUserMenuOpen(false); }} className="rounded-xl border border-fuchsia-500/20 bg-[#0b0910] p-3 text-left transition hover:border-fuchsia-400/45">
+                            <Building2 className="mb-2 h-4 w-4 text-fuchsia-400" />
+                            <strong className="block text-xs text-white">Goiânia</strong>
+                            <span className="mt-1 block text-[9px] text-zinc-600">Portal da filial</span>
+                          </button>
+                          <button onClick={() => { navigate('/almoxarifado'); setUserMenuOpen(false); }} className="rounded-xl border border-fuchsia-500/20 bg-[#0b0910] p-3 text-left transition hover:border-fuchsia-400/45">
+                            <Archive className="mb-2 h-4 w-4 text-fuchsia-400" />
+                            <strong className="block text-xs text-white">Almoxarifado</strong>
+                            <span className="mt-1 block text-[9px] text-zinc-600">Portal operacional</span>
+                          </button>
+                          <button onClick={() => { navigate('/operacional'); setUserMenuOpen(false); }} className="rounded-xl border border-fuchsia-500/20 bg-[#0b0910] p-3 text-left transition hover:border-fuchsia-400/45">
+                            <FileText className="mb-2 h-4 w-4 text-fuchsia-400" />
+                            <strong className="block text-xs text-white">Operacional</strong>
+                            <span className="mt-1 block text-[9px] text-zinc-600">Portal compartilhado</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      {accessGroups.map(group => (
+                        <section key={group.id}>
+                          <div className="mb-2 flex items-end justify-between gap-2 px-1">
+                            <div>
+                              <div className="text-[10px] font-black uppercase tracking-[.12em] text-zinc-400">{group.title}</div>
+                              <div className="mt-0.5 text-[9px] text-zinc-700">{group.subtitle}</div>
+                            </div>
+                            <div className="text-[9px] text-zinc-700">{group.items.length} acesso(s)</div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
+                            {group.items.map(item => {
+                              const Icon = item.icon;
+                              const active = location.pathname === item.path || (item.path !== '/admin' && location.pathname.startsWith(item.path + '/'));
+                              return (
+                                <button
+                                  key={item.path}
+                                  type="button"
+                                  onClick={() => { navigate(item.path); setUserMenuOpen(false); setModuleMenuQuery(''); }}
+                                  className={cn(
+                                    'flex min-h-[66px] items-center gap-3 rounded-xl border p-3 text-left transition',
+                                    active
+                                      ? 'border-fuchsia-400/40 bg-fuchsia-500/[.09]'
+                                      : 'border-white/[.06] bg-[#090b10] hover:border-fuchsia-500/25 hover:bg-fuchsia-500/[.04]',
+                                  )}
+                                >
+                                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-fuchsia-500/15 bg-fuchsia-500/[.06] text-fuchsia-400">
+                                    <Icon className="h-4 w-4" />
+                                  </span>
+                                  <span className="min-w-0">
+                                    <strong className="block truncate text-[11px] text-white">{item.label}</strong>
+                                    <span className="mt-0.5 block line-clamp-2 text-[9px] leading-relaxed text-zinc-600">{item.description}</span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                      {accessGroups.length === 0 && (
+                        <div className="py-10 text-center text-xs text-zinc-600">Nenhum módulo encontrado para esse filtro.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={handleRefresh}
