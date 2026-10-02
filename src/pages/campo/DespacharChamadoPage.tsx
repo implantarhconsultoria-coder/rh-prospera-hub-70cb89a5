@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, ArrowRightLeft, BellRing, Building2, ClipboardList, Edit2, Eye,
-  FileText, KeyRound, Loader2, Send, ShieldCheck, User, Wrench, XCircle,
+  FileText, KeyRound, Loader2, Printer, Send, ShieldCheck, User, Wrench, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -290,6 +290,95 @@ const DespacharChamadoPage: React.FC = () => {
   const nomeTecnico = (funcionarioId: string | null) =>
     tecnicos.find((t) => t.user_id === funcionarioId)?.nome_completo || '-';
 
+  const escapeHtml = (value: unknown) => String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+
+  const imprimirRelatorioOperacional = () => {
+    const emitidoEm = new Date().toLocaleString('pt-BR');
+    const rows = chamados.map((chamado) => {
+      const data = chamado.created_at ? new Date(chamado.created_at).toLocaleString('pt-BR') : '—';
+      const equipamento = [chamado.patrimonio_snapshot, chamado.placa_snapshot].filter(Boolean).join(' / ') || '—';
+      const detalheFinal = chamado.status === 'concluido'
+        ? (chamado.descricao_conclusao || chamado.info_adicional || chamado.observacoes || '—')
+        : chamado.status === 'cancelado'
+          ? (chamado.cancelamento_motivo || chamado.observacoes || '—')
+          : (chamado.info_adicional || chamado.observacoes || '—');
+
+      return `<tr>
+        <td>${escapeHtml(chamado.numero ? '#' + chamado.numero : '—')}<br><span class="muted">${escapeHtml(data)}</span></td>
+        <td><b>${escapeHtml(chamado.cliente || '—')}</b><br><span class="muted">${escapeHtml(chamado.local_servico || '—')}</span></td>
+        <td>${escapeHtml(equipamento)}</td>
+        <td>${escapeHtml(chamado.tipo_servico || '—')}</td>
+        <td>${escapeHtml(chamado.solicitante_nome || '—')}</td>
+        <td>${escapeHtml(nomeTecnico(chamado.colaborador_id))}</td>
+        <td>${escapeHtml(statusLabel[chamado.status] || chamado.status || '—')}</td>
+        <td>${escapeHtml(detalheFinal)}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>Relatório Operacional TOPAC</title>
+<style>
+@page{size:A4 landscape;margin:9mm}
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:9px}
+.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #111;padding-bottom:8px;margin-bottom:10px}
+.brand{font-size:20px;font-weight:800}.title{font-size:13px;font-weight:800;margin-top:3px}.meta{font-size:9px;color:#666}
+.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0 12px}
+.box{border:1px solid #bbb;border-radius:5px;padding:7px}.label{font-size:7px;color:#666;text-transform:uppercase;font-weight:700}.value{font-size:15px;font-weight:800;margin-top:2px}
+table{width:100%;border-collapse:collapse}th,td{border:1px solid #c9c9c9;padding:5px;text-align:left;vertical-align:top}th{background:#f0f0f0;font-size:7px;text-transform:uppercase}
+tr{page-break-inside:avoid}.muted{color:#666;font-size:8px}.footer{margin-top:10px;color:#666;font-size:8px}
+</style></head><body>
+<div class="header"><div><div class="brand">TOPAC RH PRO</div><div class="title">RELATÓRIO OPERACIONAL</div></div><div class="meta">Emitido em ${escapeHtml(emitidoEm)}</div></div>
+<div class="summary">
+  <div class="box"><div class="label">Total de ocorrências</div><div class="value">${chamados.length}</div></div>
+  <div class="box"><div class="label">Aguardando aceite</div><div class="value">${metricas.novos}</div></div>
+  <div class="box"><div class="label">Em andamento</div><div class="value">${metricas.andamento}</div></div>
+  <div class="box"><div class="label">Adicionais pendentes</div><div class="value">${metricas.adicionais}</div></div>
+  <div class="box"><div class="label">Concluídos</div><div class="value">${metricas.concluidos}</div></div>
+</div>
+<table><thead><tr>
+<th>Ocorrência / Data</th><th>Cliente / Local</th><th>Patrimônio / Placa</th><th>Serviço</th><th>Solicitante</th><th>Mecânico</th><th>Status</th><th>Observação / Conclusão</th>
+</tr></thead><tbody>${rows || '<tr><td colspan="8">Nenhuma ocorrência registrada.</td></tr>'}</tbody></table>
+<div class="footer">TOPAC RH PRO · Central da Operação · relatório gerado diretamente da base operacional.</div>
+</body></html>`;
+
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '1px';
+    frame.style.height = '1px';
+    frame.style.opacity = '0';
+    frame.style.border = '0';
+    frame.style.pointerEvents = 'none';
+    document.body.appendChild(frame);
+
+    const win = frame.contentWindow;
+    const doc = win?.document;
+    if (!win || !doc) {
+      frame.remove();
+      toast.error('Não foi possível preparar o relatório.');
+      return;
+    }
+
+    doc.open();
+    doc.write(html);
+    doc.close();
+    window.setTimeout(() => {
+      try {
+        win.focus();
+        win.print();
+      } finally {
+        window.setTimeout(() => frame.remove(), 1200);
+      }
+    }, 180);
+  };
+
   const abrirEdicao = (chamado: any) => {
     setEditando(chamado);
     setEditForm({
@@ -403,15 +492,26 @@ const DespacharChamadoPage: React.FC = () => {
             <h1 className="mt-1 text-[20px] font-black tracking-[-.02em] text-white">Central da Operação</h1>
             <p className="mt-1 text-[11px] text-zinc-500">Clientes, ocorrências, movimentações e disponibilidade em um único fluxo.</p>
           </div>
-          {operatorBootstrap.operador && !hasAdminRole && (
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[.05] px-3 py-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              <div>
-                <div className="text-[10px] font-black text-emerald-300">Estação autorizada</div>
-                <div className="text-[9px] text-zinc-600">Código individual nas ações</div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={imprimirRelatorioOperacional}
+              className="h-9 bg-[#ffbf00] px-3 text-[10px] font-black text-black hover:bg-[#ffd24a]"
+            >
+              <Printer className="mr-1.5 h-4 w-4" />
+              Imprimir relatório
+            </Button>
+            {operatorBootstrap.operador && !hasAdminRole && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[.05] px-3 py-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                <div>
+                  <div className="text-[10px] font-black text-emerald-300">Estação autorizada</div>
+                  <div className="text-[9px] text-zinc-600">Código individual nas ações</div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
