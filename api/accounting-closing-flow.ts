@@ -474,7 +474,7 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
   return { bytes, filename, company };
 }
 
-async function sendAccountingEmail(service: any, input: { emails: string[]; cc: string[]; empresaId: string; companyName: string; competencia: string; filename: string; bytes: Uint8Array; retificationReason?: string }) {
+async function sendAccountingEmail(service: any, input: { portal: string; emails: string[]; cc: string[]; empresaId: string; companyName: string; competencia: string; filename: string; bytes: Uint8Array; retificationReason?: string }) {
   const key = clean(process.env.RESEND_API_KEY);
   if (!key || !input.emails.length) return { status: 'pendente', error: key ? 'destinatario_ausente' : 'RESEND_API_KEY ausente' };
   const configured = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM);
@@ -710,7 +710,7 @@ export default async function handler(req: any, res?: any) {
     let email: any = { status: 'pendente', error: null };
     try {
       email = await sendAccountingEmail(service, {
-        emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes,
+        portal, emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes,
         retificationReason: action === 'retify' ? retificationReason : undefined,
       });
     } catch (emailError: any) {
