@@ -21,9 +21,20 @@ export const useUserRole = (session: Session | null) => {
       return;
     }
 
-    setRole(null);
-    setRoles([]);
-    setLoading(true);
+    const email = session.user.email?.toLowerCase() || '';
+    const isBootstrapAdmin = BOOTSTRAP_ADMIN_EMAILS.has(email);
+
+    // A conta administrativa principal nao precisa esperar a sincronizacao
+    // remota para abrir o painel. Mantemos a sincronizacao em segundo plano.
+    if (isBootstrapAdmin) {
+      setRole('admin');
+      setRoles(['admin']);
+      setLoading(false);
+    } else {
+      setRole(null);
+      setRoles([]);
+      setLoading(true);
+    }
 
     const fetchRole = async () => {
       try {
@@ -43,7 +54,7 @@ export const useUserRole = (session: Session | null) => {
         if (error) throw error;
 
         const all = (data || []).map((r) => r.role as AppRole);
-        if (BOOTSTRAP_ADMIN_EMAILS.has(session.user.email?.toLowerCase() || '') && !all.includes('admin')) {
+        if (isBootstrapAdmin && !all.includes('admin')) {
           all.unshift('admin');
         }
 
@@ -53,10 +64,12 @@ export const useUserRole = (session: Session | null) => {
         setRole(primary);
       } catch (error) {
         console.error('Erro ao carregar perfil do usuario:', error);
-        setRoles([]);
-        setRole(null);
+        if (!isBootstrapAdmin) {
+          setRoles([]);
+          setRole(null);
+        }
       } finally {
-        setLoading(false);
+        if (!isBootstrapAdmin) setLoading(false);
       }
     };
 
