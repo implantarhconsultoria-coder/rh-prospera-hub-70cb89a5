@@ -45,6 +45,7 @@ type PaymentContext = {
   daysConsidered: number;
   alreadyPaid: number;
   sequence: number;
+  referenceDailyValue: number;
   docs: PaymentDoc[];
 };
 
@@ -116,7 +117,12 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
       const daysConsidered = Math.max(0, Number(reference?.extracted_data?.dias_finais || reference?.extracted_data?.dias_pagos || 0));
       const alreadyPaid = roundMoney(currentDocs.reduce((sum, row) => sum + Number(row.net_amount || 0), 0));
       const sequence = Math.max(0, ...currentDocs.map(row => Number(row.payment_sequence || 1)));
-      setContext({ competencia, daysConsidered, alreadyPaid, sequence, docs: currentDocs });
+      const referenceDailyValue = Math.max(0, Number(
+        reference?.extracted_data?.valor_diario_atualizado
+        ?? reference?.extracted_data?.valor_diario
+        ?? (daysConsidered > 0 ? Number(reference?.net_amount || 0) / daysConsidered : 0)
+      ));
+      setContext({ competencia, daysConsidered, alreadyPaid, sequence, referenceDailyValue, docs: currentDocs });
       const pendingFinance = currentDocs.find(row =>
         row.payment_kind === 'COMPLEMENTAR'
         && String(row.extracted_data?.origem || '') === 'EDICAO_BENEFICIOS'
@@ -146,7 +152,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
     () => context ? roundMoney(newEntitlement - context.alreadyPaid) : 0,
     [context, newEntitlement],
   );
-  const needsComplement = Boolean(valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference > 0.009);
+  const needsComplement = Boolean(context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference > 0.009);
   const hasOverpayment = Boolean(valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference < -0.009);
 
   const buildFinanceDraftFromDocument = (doc: PaymentDoc) => {
@@ -251,14 +257,16 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
 
   const save = async () => {
     if (!Number.isFinite(newDailyValue) || newDailyValue < 0) return toast.error('Informe um valor válido.');
-    if (!valueChanged) return toast.info('Altere o valor do benefício antes de salvar.');
+    if (!valueChanged && !needsComplement) return toast.info('Não há alteração nem diferença pendente para gerar.');
     if (needsComplement && !reason.trim()) return toast.error('Informe o motivo do pagamento complementar.');
     if (!actorId) return toast.error('Sessão administrativa expirada. Entre novamente.');
 
     setSaving(true);
     try {
-      const result = await onUpdateValue(newDailyValue);
-      if (result && result.ok === false) throw result.error || new Error('Não foi possível atualizar o benefício.');
+      if (valueChanged) {
+        const result = await onUpdateValue(newDailyValue);
+        if (result && result.ok === false) throw result.error || new Error('Não foi possível atualizar o benefício.');
+      }
 
       if (!needsComplement || !context || !company) {
         if (hasOverpayment) {
@@ -344,7 +352,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         extracted_data: {
           origem: 'EDICAO_BENEFICIOS',
           pagamento_tipo: 'COMPLEMENTAR',
-          valor_diario_anterior: storedDailyValue,
+          valor_diario_anterior: context.referenceDailyValue || storedDailyValue,
           valor_diario_atualizado: newDailyValue,
           dias_finais: context.daysConsidered,
           total_devido_atualizado: newEntitlement,
@@ -377,7 +385,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         },
         competencia: context.competencia,
         paymentDate: paymentDate || null,
-        previousDailyValue: storedDailyValue,
+        previousDailyValue: context.referenceDailyValue || storedDailyValue,
         dailyValue: newDailyValue,
         daysConsidered: context.daysConsidered,
         entitlementAmount: newEntitlement,
@@ -457,7 +465,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         extracted_data: {
           origem: 'EDICAO_BENEFICIOS',
           pagamento_tipo: 'COMPLEMENTAR',
-          valor_diario_anterior: storedDailyValue,
+          valor_diario_anterior: context.referenceDailyValue || storedDailyValue,
           valor_diario_atualizado: newDailyValue,
           dias_finais: context.daysConsidered,
           total_devido_atualizado: newEntitlement,
@@ -490,21 +498,21 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
           <label className="text-xs text-muted-foreground block mb-1">Valor Diário {benefitType}</label>
           <Input type="number" min="0" step="0.01" value={value} onChange={event => setValue(event.target.value)} />
         </div>
-        <Button type="button" onClick={save} disabled={saving || loading || !valueChanged}>
+        <Button type="button" onClick={save} disabled={saving || loading || (!valueChanged && !needsComplement)}>
           {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-          Salvar alteração
+          {!valueChanged && needsComplement ? 'Gerar diferença pendente' : 'Salvar alteração'}
         </Button>
       </div>
 
-      {valueChanged && loading && <p className="text-xs text-muted-foreground">Conferindo pagamento anterior...</p>}
+      {(valueChanged || needsComplement) && loading && <p className="text-xs text-muted-foreground">Conferindo pagamento anterior...</p>}
 
-      {!loading && valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && (
+      {!loading && (valueChanged || needsComplement) && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && (
         <div className="rounded-md border bg-background p-3 space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">Competência {competenciaPt(context.competencia)}</Badge>
             <span>Pagamento anterior: <strong>{formatCurrency(context.alreadyPaid)}</strong></span>
             <span>Novo total calculado: <strong>{formatCurrency(newEntitlement)}</strong></span>
-            {needsComplement && <Badge>Complemento: {formatCurrency(difference)}</Badge>}
+            {needsComplement && <Badge>Complemento pendente: {formatCurrency(difference)}</Badge>}
             {hasOverpayment && <Badge variant="destructive">Diferença negativa: {formatCurrency(Math.abs(difference))}</Badge>}
           </div>
 
@@ -523,7 +531,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
                 <Input type="date" value={paymentDate} onChange={event => setPaymentDate(event.target.value)} />
               </div>
               <p className="md:col-span-2 text-xs text-muted-foreground">
-                O pagamento anterior é preservado. Ao salvar a alteração, somente a diferença será criada como um novo recibo para assinatura.
+                O pagamento anterior é preservado. Ao salvar, somente a diferença será criada em um novo recibo e ficará pronta para formalização ao Financeiro.
               </p>
             </div>
           )}
