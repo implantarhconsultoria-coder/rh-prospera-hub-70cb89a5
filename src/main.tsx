@@ -28,7 +28,6 @@ const TicketVrReportPageAddon = lazy(() => import("@/components/TicketVrReportPa
 const FechamentoPagamentoAddon = lazy(() => import("@/components/FechamentoPagamentoAddon"));
 const PreCadastroFsePrintAddon = lazy(() => import("@/components/PreCadastroFsePrintAddon"));
 const PreCadastroFseButtonPlacement = lazy(() => import("@/components/PreCadastroFseButtonPlacement"));
-const ContabilidadeAdminInboxAddon = lazy(() => import("@/components/ContabilidadeAdminInboxAddon"));
 const ContabilidadeFolhaAdminAddon = lazy(() => import("@/components/ContabilidadeFolhaAdminAddon"));
 const ContabilidadeCorrectionPanel = lazy(() => import("@/components/ContabilidadeCorrectionPanel"));
 const PayrollAccountingSourceAddon = lazy(() => import("@/components/PayrollAccountingSourceAddon"));
@@ -128,7 +127,6 @@ const RouteEnhancers = () => {
       {isEpi && <EpiBulkPrintEnhancer />}
       {isPreCadastro && <PreCadastroFsePrintAddon />}
       {isPreCadastro && <PreCadastroFseButtonPlacement />}
-      {isContabilidadeAdmin && <ContabilidadeAdminInboxAddon />}
       {isContabilidadeCentral && <ContabilidadeFolhaAdminAddon />}
       {isContabilidadeCentral && <ContabilidadeCorrectionPanel mode="admin" />}
       {isAssinaturaDigital && <PayrollAccountingSourceAddon />}
