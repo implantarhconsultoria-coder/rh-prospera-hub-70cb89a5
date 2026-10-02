@@ -403,12 +403,12 @@ const DespacharChamadoPage: React.FC = () => {
             <h1 className="mt-1 text-[20px] font-black tracking-[-.02em] text-white">Central da Operação</h1>
             <p className="mt-1 text-[11px] text-zinc-500">Clientes, ocorrências, movimentações e disponibilidade em um único fluxo.</p>
           </div>
-          {operatorBootstrap.operador && (
+          {operatorBootstrap.operador && !hasAdminRole && (
             <div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[.05] px-3 py-2">
               <ShieldCheck className="h-4 w-4 text-emerald-400" />
               <div>
-                <div className="text-[10px] font-black text-emerald-300">{developerMode ? 'Modo administrativo' : 'Estação autorizada'}</div>
-                <div className="text-[9px] text-zinc-600">{developerMode ? 'Sem bloqueio de operador' : 'Código individual nas ações'}</div>
+                <div className="text-[10px] font-black text-emerald-300">Estação autorizada</div>
+                <div className="text-[9px] text-zinc-600">Código individual nas ações</div>
               </div>
             </div>
           )}
