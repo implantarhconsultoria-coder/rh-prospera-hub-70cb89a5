@@ -492,15 +492,26 @@ tr{page-break-inside:avoid}.muted{color:#666;font-size:8px}.footer{margin-top:10
             <h1 className="mt-1 text-[20px] font-black tracking-[-.02em] text-white">Central da Operação</h1>
             <p className="mt-1 text-[11px] text-zinc-500">Clientes, ocorrências, movimentações e disponibilidade em um único fluxo.</p>
           </div>
-          {operatorBootstrap.operador && !hasAdminRole && (
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[.05] px-3 py-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              <div>
-                <div className="text-[10px] font-black text-emerald-300">Estação autorizada</div>
-                <div className="text-[9px] text-zinc-600">Código individual nas ações</div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={imprimirRelatorioOperacional}
+              className="h-9 bg-[#ffbf00] px-3 text-[10px] font-black text-black hover:bg-[#ffd24a]"
+            >
+              <Printer className="mr-1.5 h-4 w-4" />
+              Imprimir relatório
+            </Button>
+            {operatorBootstrap.operador && !hasAdminRole && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[.05] px-3 py-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                <div>
+                  <div className="text-[10px] font-black text-emerald-300">Estação autorizada</div>
+                  <div className="text-[9px] text-zinc-600">Código individual nas ações</div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
