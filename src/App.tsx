@@ -167,9 +167,15 @@ const AdminHomeRoute = () => {
 };
 
 const MecanicoRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useApp();
+  const { isAuthenticated, loading, userRoles } = useApp();
+  const location = useLocation();
   if (loading) return <StableLoading label="Verificando acesso..." />;
-  if (isAuthenticated) return <Navigate to="/" replace />;
+
+  const adminPreview =
+    new URLSearchParams(location.search).get('preview') === 'admin'
+    && (userRoles.includes('admin') || userRoles.includes('diretor_geral'));
+
+  if (isAuthenticated && !adminPreview) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
