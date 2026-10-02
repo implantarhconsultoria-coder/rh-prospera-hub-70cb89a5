@@ -90,6 +90,13 @@ const EmployeeDetailPage: React.FC = () => {
   const portalPrefix = location.pathname.startsWith('/filial') ? '/filial'
     : location.pathname.startsWith('/admin') ? '/admin' : '';
 
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(location.search).get('tab');
+    if (requestedTab === 'historico') setActiveTab(5);
+    if (requestedTab === 'ferias') setActiveTab(3);
+    if (requestedTab === 'funcionais') setActiveTab(1);
+  }, [location.search, id]);
+
   if (!emp || !workingEmp) return <div className="p-8 text-center text-muted-foreground">Funcionário não encontrado</div>;
 
   const company = companies.find(c => c.id === workingEmp.companyId);
