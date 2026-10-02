@@ -471,9 +471,18 @@ export default function CombustivelQRAdminPage() {
         </TabsContent>
 
         <TabsContent value="detalhado">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between gap-3"><CardTitle>Relatório Detalhado</CardTitle><div className="flex gap-2"><Button variant="outline" onClick={exportDetailedCsv} disabled={!filteredRecords.length}>CSV</Button><Button variant="outline" onClick={() => openPdf('detalhado')} disabled={!filteredRecords.length}><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button><Button onClick={() => prepareEmail('detalhado')} disabled={!filteredRecords.length}><Mail className="mr-2 h-4 w-4" /> Enviar</Button></div></CardHeader>
-            <CardContent><DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} onCorrect={canCorrect ? openCorrection : undefined} /></CardContent>
+          <Card className="overflow-hidden">
+            <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 border-b bg-card/95 py-3 backdrop-blur">
+              <CardTitle>Relatório Detalhado</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={exportDetailedCsv} disabled={!filteredRecords.length}>CSV</Button>
+                <Button variant="outline" size="sm" onClick={() => openPdf('detalhado')} disabled={!filteredRecords.length}><Printer className="mr-2 h-4 w-4" /> Visualizar PDF</Button>
+                <Button size="sm" onClick={() => prepareEmail('detalhado')} disabled={!filteredRecords.length}><Mail className="mr-2 h-4 w-4" /> Enviar</Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <DetailedTable records={filteredRecords} onDelete={canDelete ? setDeleteRecord : undefined} onCorrect={canCorrect ? openCorrection : undefined} />
+            </CardContent>
           </Card>
         </TabsContent>
 
@@ -623,40 +632,49 @@ const DetailedTable = ({
 }) => {
   if (!records.length) return <p className="py-10 text-center text-sm text-muted-foreground">Nenhum abastecimento localizado.</p>;
 
-  return <div className="overflow-x-auto"><Table>
-    <TableHeader><TableRow>
-      <TableHead>Data</TableHead><TableHead>Empresa</TableHead><TableHead>Funcionário</TableHead><TableHead>Placa</TableHead>
-      <TableHead>Posto</TableHead><TableHead>Combustível</TableHead><TableHead className="text-right">Litros</TableHead>
-      <TableHead className="text-right">Valor</TableHead><TableHead className="text-right">KM</TableHead>
-      <TableHead>Leitura</TableHead><TableHead>Comprovantes</TableHead>{(onDelete || onCorrect) && <TableHead className="text-right">Ações</TableHead>}
+  return <div className="max-h-[calc(100vh-245px)] overflow-y-auto overflow-x-hidden">
+    <Table className="w-full table-fixed text-[10px]">
+    <TableHeader className="sticky top-0 z-20 bg-background shadow-sm"><TableRow>
+      <TableHead className="w-[8%] px-2 text-[9px]">Data</TableHead>
+      <TableHead className="w-[10%] px-2 text-[9px]">Empresa</TableHead>
+      <TableHead className="w-[13%] px-2 text-[9px]">Funcionário</TableHead>
+      <TableHead className="w-[6%] px-2 text-[9px]">Placa</TableHead>
+      <TableHead className="w-[10%] px-2 text-[9px]">Posto</TableHead>
+      <TableHead className="w-[7%] px-2 text-[9px]">Comb.</TableHead>
+      <TableHead className="w-[5%] px-2 text-right text-[9px]">Litros</TableHead>
+      <TableHead className="w-[6%] px-2 text-right text-[9px]">Valor</TableHead>
+      <TableHead className="w-[6%] px-2 text-right text-[9px]">KM</TableHead>
+      <TableHead className="w-[9%] px-2 text-[9px]">Leitura</TableHead>
+      <TableHead className="w-[12%] px-2 text-[9px]">Comprovantes</TableHead>
+      {(onDelete || onCorrect) && <TableHead className="w-[8%] px-2 text-right text-[9px]">Ações</TableHead>}
     </TableRow></TableHeader>
     <TableBody>{records.map((record) => {
       const manual = needsManualReview(record);
       return <TableRow key={record.id} className={manual ? 'bg-amber-500/5' : undefined}>
-        <TableCell className="whitespace-nowrap">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell>
-        <TableCell>{record.empresa_nome || record.empresa || record.filial || '-'}</TableCell>
-        <TableCell>{record.funcionario_nome}</TableCell>
-        <TableCell>{record.placa || '-'}</TableCell>
-        <TableCell>{record.posto_nome || '-'}</TableCell>
-        <TableCell>{record.combustivel || '-'}</TableCell>
-        <TableCell className="text-right">{Number(record.litros || 0) > 0 ? formatNumber(record.litros) : '—'}</TableCell>
-        <TableCell className="text-right font-medium">{Number(record.valor || 0) > 0 ? formatMoney(record.valor) : '—'}</TableCell>
-        <TableCell className="text-right">{record.km_atual == null || Number(record.km_atual) <= 0 ? '—' : formatNumber(record.km_atual, 0)}</TableCell>
-        <TableCell>{manual
+        <TableCell className="px-2 py-2 leading-tight">{formatDateBr(record.data)} {String(record.hora || '').slice(0, 5)}</TableCell>
+        <TableCell className="px-2 py-2 leading-tight break-words">{record.empresa_nome || record.empresa || record.filial || '-'}</TableCell>
+        <TableCell className="px-2 py-2 font-medium leading-tight break-words">{record.funcionario_nome}</TableCell>
+        <TableCell className="px-2 py-2 leading-tight">{record.placa || '-'}</TableCell>
+        <TableCell className="px-2 py-2 leading-tight break-words">{record.posto_nome || '-'}</TableCell>
+        <TableCell className="px-2 py-2 leading-tight break-words">{record.combustivel || '-'}</TableCell>
+        <TableCell className="px-2 py-2 text-right">{Number(record.litros || 0) > 0 ? formatNumber(record.litros) : '—'}</TableCell>
+        <TableCell className="px-2 py-2 text-right font-medium">{Number(record.valor || 0) > 0 ? formatMoney(record.valor) : '—'}</TableCell>
+        <TableCell className="px-2 py-2 text-right">{record.km_atual == null || Number(record.km_atual) <= 0 ? '—' : formatNumber(record.km_atual, 0)}</TableCell>
+        <TableCell className="px-2 py-2">{manual
           ? <Badge variant="destructive" className="whitespace-nowrap"><AlertTriangle className="mr-1 h-3 w-3" />REVISÃO MANUAL</Badge>
           : <Badge variant="secondary" className="whitespace-nowrap">{record.preenchimento === 'manual_corrigido' ? 'MANUAL CONFERIDO' : 'AUTOMÁTICO OK'}</Badge>}
         </TableCell>
-        <TableCell>
+        <TableCell className="px-2 py-2">
           <div className="flex flex-wrap gap-1">
-            {record.foto_bomba_url && <Button size="sm" variant="outline" asChild><a href={record.foto_bomba_url} target="_blank" rel="noreferrer">Bomba</a></Button>}
-            {record.foto_painel_url && <Button size="sm" variant="outline" asChild><a href={record.foto_painel_url} target="_blank" rel="noreferrer">KM</a></Button>}
-            {record.foto_recibo_url && <Button size="sm" variant="outline" asChild><a href={record.foto_recibo_url} target="_blank" rel="noreferrer"><ReceiptText className="mr-1 h-3.5 w-3.5" />Recibo</a></Button>}
+            {record.foto_bomba_url && <Button size="sm" variant="outline" className="h-7 px-2 text-[9px]" asChild><a href={record.foto_bomba_url} target="_blank" rel="noreferrer">Bomba</a></Button>}
+            {record.foto_painel_url && <Button size="sm" variant="outline" className="h-7 px-2 text-[9px]" asChild><a href={record.foto_painel_url} target="_blank" rel="noreferrer">KM</a></Button>}
+            {record.foto_recibo_url && <Button size="sm" variant="outline" className="h-7 px-2 text-[9px]" asChild><a href={record.foto_recibo_url} target="_blank" rel="noreferrer"><ReceiptText className="mr-1 h-3 w-3" />Recibo</a></Button>}
           </div>
         </TableCell>
-        {(onDelete || onCorrect) && <TableCell className="text-right">
-          <div className="flex justify-end gap-1">
-            {onCorrect && <Button size="sm" variant={manual ? 'default' : 'outline'} onClick={() => onCorrect(record)}>{manual ? 'Corrigir' : 'Conferir'}</Button>}
-            {onDelete && <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4" /></Button>}
+        {(onDelete || onCorrect) && <TableCell className="px-2 py-2 text-right">
+          <div className="flex flex-wrap justify-end gap-1">
+            {onCorrect && <Button size="sm" className="h-7 px-2 text-[9px]" variant={manual ? 'default' : 'outline'} onClick={() => onCorrect(record)}>{manual ? 'Corrigir' : 'Conferir'}</Button>}
+            {onDelete && <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" onClick={() => onDelete(record)}><Trash2 className="h-3.5 w-3.5" /></Button>}
           </div>
         </TableCell>}
       </TableRow>;
