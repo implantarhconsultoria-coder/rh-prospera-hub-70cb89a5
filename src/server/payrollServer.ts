@@ -325,6 +325,15 @@ const pdfSafe = (value: unknown) => String(value ?? '')
   .replace(/[^\x20-\x7E]/g, ' ')
   .replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 
+export const payrollBrazilDateTime = (value: unknown) => {
+  const date = new Date(String(value || ''));
+  if (Number.isNaN(date.getTime())) return 'Horario indisponivel';
+  return `${new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(date)} (America/Sao_Paulo)`;
+};
+
 export const buildCertificatePdf = (evidence: Record<string, any>) => {
   const lines = [
     'CERTIFICADO DE ASSINATURA ELETRONICA',
@@ -335,8 +344,10 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
     `CNPJ: ${evidence.company_cnpj || ''}`,
     `Competencia: ${evidence.competencia || ''}`,
     `ID da assinatura: ${evidence.signature_id || ''}`,
-    `Data/hora: ${evidence.signed_at || ''} (America/Sao_Paulo)`,
-    `Metodo: ${evidence.authentication_method || 'OTP'}`,
+    `Data/hora Brasilia: ${payrollBrazilDateTime(evidence.signed_at)}`,
+    `Data/hora UTC: ${evidence.signed_at ? new Date(evidence.signed_at).toISOString() : 'Indisponivel'}`,
+    `Metodo: ${evidence.authentication_method || 'Nao informado'}`,
+    `Evento de identificacao facial: ${evidence.face_event_id || 'Nao utilizado'}`,
     `Telefone: ${maskPhone(evidence.phone_used)}`,
     `IP: ${evidence.ip || ''}`,
     `Documento: ${evidence.document_id || ''} - versao ${evidence.document_version || ''}`,
@@ -344,6 +355,7 @@ export const buildCertificatePdf = (evidence: Record<string, any>) => {
     '',
     'Integridade: documento validado por hash SHA-256 e trilha de auditoria.',
     'Este certificado esta permanentemente associado ao registro de assinatura.',
+    'Comprovante de evidencias: nao e certificado ICP-Brasil.',
   ];
   const commands = ['BT', '/F1 15 Tf', '50 790 Td'];
   lines.forEach((line, index) => {
