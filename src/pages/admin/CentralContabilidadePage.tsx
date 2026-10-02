@@ -125,6 +125,18 @@ const CentralContabilidadePage: React.FC = () => {
 
   useEffect(() => { void carregar(); }, [carregar]);
   useEffect(() => {
+    const metric = searchParams.get('metric');
+    const requestedTab = searchParams.get('tab');
+    if (metric === 'pendencias') {
+      setMetricView('pendencias');
+      setTab('movimentacoes');
+    } else if (requestedTab === 'fechamento') {
+      setTab('fechamento');
+    }
+  }, [searchParams]);
+
+
+  useEffect(() => {
     const timer = window.setInterval(() => void carregar(true), 60_000);
     return () => window.clearInterval(timer);
   }, [carregar]);
