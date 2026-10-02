@@ -37,24 +37,28 @@ patchFile('src/components/AdminMobileLayout.tsx', (input) => input.replace(
 
 patchFile('src/components/AppLayout.tsx', (input) => {
   let source = input;
-  source = replaceOnce(
-    source,
-    "import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';",
-    "import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';\nimport CabinetLabelsAddon from '@/components/CabinetLabelsAddon';\nimport SupportCenter from '@/components/SupportCenter';",
-    'imports AppLayout',
-  );
-  source = replaceOnce(
-    source,
-    '        <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>\n      </div>',
-    '        <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>\n        <SupportCenter />\n      </div>',
-    'suporte mobile',
-  );
-  source = replaceOnce(
-    source,
-    '      <FechamentoEtiquetasAddon />\n      <ArchiveCoverDialog',
-    '      <FechamentoEtiquetasAddon />\n      <CabinetLabelsAddon />\n      <SupportCenter />\n      <ArchiveCoverDialog',
-    'addons desktop',
-  );
+
+  // Idempotente: CabinetLabelsAddon já pode existir no arquivo-base.
+  // Adicionamos somente o SupportCenter quando faltar, evitando import/render duplicado.
+  if (!source.includes("import SupportCenter from '@/components/SupportCenter';")) {
+    const importAnchor = source.includes("import CabinetLabelsAddon from '@/components/CabinetLabelsAddon';")
+      ? "import CabinetLabelsAddon from '@/components/CabinetLabelsAddon';"
+      : "import FechamentoEtiquetasAddon from '@/components/FechamentoEtiquetasAddon';";
+    source = source.replace(importAnchor, `${importAnchor}\nimport SupportCenter from '@/components/SupportCenter';`);
+  }
+
+  const mobileAnchor = '        <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>\n      </div>';
+  const mobileWithSupport = '        <ErrorBoundary><AdminMobileLayout /></ErrorBoundary>\n        <SupportCenter />\n      </div>';
+  if (!source.includes(mobileWithSupport) && source.includes(mobileAnchor)) {
+    source = source.replace(mobileAnchor, mobileWithSupport);
+  }
+
+  const desktopAnchor = '      <CabinetLabelsAddon />\n      <ArchiveCoverDialog';
+  const desktopWithSupport = '      <CabinetLabelsAddon />\n      <SupportCenter />\n      <ArchiveCoverDialog';
+  if (!source.includes(desktopWithSupport) && source.includes(desktopAnchor)) {
+    source = source.replace(desktopAnchor, desktopWithSupport);
+  }
+
   return source;
 });
 
