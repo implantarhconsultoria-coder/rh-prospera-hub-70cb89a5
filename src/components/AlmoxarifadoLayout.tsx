@@ -1,15 +1,13 @@
 import React from 'react';
-import { Navigate, Outlet, useNavigate } from 'react-router-dom';
-import { ArrowLeft, LogOut, Package, ShieldCheck } from 'lucide-react';
+import { Navigate, Outlet } from 'react-router-dom';
+import { LogOut, Package } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { useActivityTracker } from '@/hooks/useActivityTracker';
 import StableLoading from '@/components/StableLoading';
-import ModuleSwitcher from '@/components/ModuleSwitcher';
 import { useOperatorBootstrap } from '@/hooks/useOperatorBootstrap';
 
 const AlmoxarifadoLayout: React.FC = () => {
   const { session, userRoles, roleLoading, logout } = useApp();
-  const navigate = useNavigate();
   useActivityTracker(session);
   const canBootstrapOperator = Boolean(session?.user?.id) && (userRoles.includes('almoxarifado') || userRoles.includes('admin') || userRoles.includes('diretor_geral'));
   useOperatorBootstrap('almoxarifado', canBootstrapOperator);
@@ -18,49 +16,54 @@ const AlmoxarifadoLayout: React.FC = () => {
 
   const isAdminPreview = userRoles.includes('admin') || userRoles.includes('diretor_geral');
   const hasAccess = userRoles.includes('almoxarifado') || isAdminPreview;
-
   if (!hasAccess) return <Navigate to="/" replace />;
 
-  return <div className="min-h-screen bg-[#F7F8FC]">
-    <header className="sticky top-0 z-40 border-b border-violet-100 bg-white/95 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 w-full max-w-[1840px] items-center gap-4 px-5 lg:px-8">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-violet-700 to-fuchsia-500 text-white shadow-sm"><Package className="h-5 w-5"/></span>
-          <div className="min-w-0"><div className="truncate text-sm font-black text-slate-950">Dashboard • Almoxarifado</div><div className="truncate text-xs text-slate-500">{session?.user?.email || 'TOPAC RH PRO'}</div></div>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <ModuleSwitcher />
+  const themeVars = {
+    '--background': '225 38% 3%',
+    '--foreground': '0 0% 96%',
+    '--card': '225 28% 5%',
+    '--card-foreground': '0 0% 96%',
+    '--popover': '225 28% 5%',
+    '--popover-foreground': '0 0% 96%',
+    '--primary': '43 100% 50%',
+    '--primary-foreground': '230 45% 4%',
+    '--secondary': '269 35% 12%',
+    '--secondary-foreground': '0 0% 95%',
+    '--muted': '225 20% 10%',
+    '--muted-foreground': '230 8% 58%',
+    '--accent': '271 91% 60%',
+    '--accent-foreground': '0 0% 100%',
+    '--border': '270 35% 22%',
+    '--input': '230 18% 16%',
+    '--ring': '270 91% 60%',
+  } as React.CSSProperties;
+
+  return (
+    <div style={themeVars} className="topac-neon-skin min-h-screen bg-[#020609] text-zinc-100">
+      <header className="sticky top-0 z-40 border-b border-[#2b1c38] bg-[#030609]/95 backdrop-blur-xl">
+        <div className="mx-auto flex h-14 w-full max-w-[1840px] items-center gap-3 px-4 lg:px-6">
+          <span className="grid h-9 w-9 place-items-center rounded-[8px] border border-violet-500/25 bg-violet-500/10 text-[#ffb400]">
+            <Package className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[12px] font-black tracking-wide text-white">TOPAC RH PRO</div>
+            <div className="text-[9px] uppercase tracking-[.16em] text-zinc-600">Almoxarifado</div>
+          </div>
           {!isAdminPreview && (
-            <button type="button" onClick={async()=>{await logout();navigate('/');}} className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50" title="Sair"><LogOut className="h-4 w-4"/></button>
+            <button
+              type="button"
+              onClick={logout}
+              className="ml-auto grid h-9 w-9 place-items-center rounded-lg border border-[#30243d] text-zinc-500 transition hover:border-violet-500/40 hover:text-white"
+              title="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           )}
         </div>
-      </div>
-    </header>
-
-    {isAdminPreview && (
-      <div className="border-b border-violet-200 bg-violet-50">
-        <div className="mx-auto flex w-full max-w-[1840px] items-center justify-between gap-4 px-5 py-3 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-700 text-white"><ShieldCheck className="h-4 w-4" /></span>
-            <div className="min-w-0">
-              <div className="text-sm font-black text-slate-950">Visualização administrativa do Portal do Usuário</div>
-              <div className="text-xs text-slate-600">Você está vendo exatamente a área operacional, mantendo sua identidade de administrador.</div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('/admin/almoxarifado')}
-            className="flex shrink-0 items-center gap-2 rounded-lg border border-violet-300 bg-white px-4 py-2 text-xs font-bold text-violet-800 shadow-sm transition hover:bg-violet-100"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar ao painel administrativo
-          </button>
-        </div>
-      </div>
-    )}
-
-    <main><Outlet /></main>
-  </div>;
+      </header>
+      <main><Outlet /></main>
+    </div>
+  );
 };
 
 export default AlmoxarifadoLayout;
