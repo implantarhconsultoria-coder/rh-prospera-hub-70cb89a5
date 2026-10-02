@@ -100,19 +100,37 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { userRoles, isAuthenticated } = useApp();
+  const isAdmin = userRoles.includes("admin") || userRoles.includes("diretor_geral");
+  const requestedAdminPreview = new URLSearchParams(location.search).get("preview") === "admin";
   const adminPreview =
     isAuthenticated
-    && new URLSearchParams(location.search).get("preview") === "admin"
-    && (userRoles.includes("admin") || userRoles.includes("diretor_geral"));
+    && isAdmin
+    && Boolean(acessoId)
+    && (
+      requestedAdminPreview
+      || sessionStorage.getItem("topac_mecanico_admin_preview") === acessoId
+    );
+
+  useEffect(() => {
+    if (isAuthenticated && isAdmin && requestedAdminPreview && acessoId) {
+      sessionStorage.setItem("topac_mecanico_admin_preview", acessoId);
+    }
+  }, [isAuthenticated, isAdmin, requestedAdminPreview, acessoId]);
   const [mecanico, setMecanico] = useState<Mecanico | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   const sair = useCallback(() => {
+    if (adminPreview) {
+      sessionStorage.removeItem("topac_mecanico_admin_preview");
+      setMecanico(null);
+      navigate("/admin/app-mecanico", { replace: true });
+      return;
+    }
     limparSessao();
     setMecanico(null);
     navigate("/mecanicos", { replace: true });
-  }, [navigate]);
+  }, [navigate, adminPreview]);
 
   const carregar = useCallback(async () => {
     if (!acessoId) {
