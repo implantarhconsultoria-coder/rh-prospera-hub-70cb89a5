@@ -10,7 +10,6 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import ModuleSwitcher from '@/components/ModuleSwitcher';
 import { Button } from '@/components/ui/button';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
-import SupportCenter from '@/components/SupportCenter';
 
 const FilialLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -75,7 +74,6 @@ const FilialLayout: React.FC = () => {
         <div className="mx-auto max-w-[1680px] p-[18px] pt-20"><ErrorBoundary><Outlet /></ErrorBoundary></div>
       </main>
       <EmployeeSmartEditOverlay />
-      <SupportCenter />
     </div>
   );
 };
