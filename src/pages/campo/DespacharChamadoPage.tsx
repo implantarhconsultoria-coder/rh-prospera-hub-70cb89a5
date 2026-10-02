@@ -87,6 +87,7 @@ const DespacharChamadoPage: React.FC = () => {
   const [alocacoes, setAlocacoes] = useState<any[]>([]);
   const [chamados, setChamados] = useState<any[]>([]);
   const [adicionaisPendentes, setAdicionaisPendentes] = useState<any[]>([]);
+  const [itensRelatorioSelecionados, setItensRelatorioSelecionados] = useState<string[]>([]);
   const [form, setForm] = useState(emptyChamadoForm);
   const [editando, setEditando] = useState<any | null>(null);
   const [editForm, setEditForm] = useState(emptyChamadoForm);
@@ -298,15 +299,25 @@ const DespacharChamadoPage: React.FC = () => {
     .replaceAll("'", '&#039;');
 
   const imprimirRelatorioOperacional = () => {
-    const emitidoEm = new Date().toLocaleString('pt-BR');
+    if (!itensRelatorioSelecionados.length) {
+      toast.error('Selecione na lista exatamente o que deseja imprimir.');
+      setTab('clientes');
+      return;
+    }
 
-    const clientesRelatorio = clientes.map((cliente) => {
-      const alloc = alocacoes.filter((item) => item.cliente_id === cliente.id && item.ativo !== false);
+    const emitidoEm = new Date().toLocaleString('pt-BR');
+    const selectedSet = new Set(itensRelatorioSelecionados);
+    const alocacoesSelecionadas = alocacoes.filter((item) => selectedSet.has(item.id) && item.ativo !== false);
+    const clienteIdsSelecionados = new Set(alocacoesSelecionadas.map((item) => item.cliente_id));
+    const chamadosSelecionados = chamados.filter((item) => item.alocacao_id && selectedSet.has(item.alocacao_id));
+
+    const clientesRelatorio = clientes.filter((cliente) => clienteIdsSelecionados.has(cliente.id)).map((cliente) => {
+      const alloc = alocacoesSelecionadas.filter((item) => item.cliente_id === cliente.id);
       const localIds = Array.from(new Set(alloc.map((item) => item.cliente_local_id).filter(Boolean)));
       const semLocal = alloc.filter((item) => !item.cliente_local_id).length;
       const canteiros = localIds.length + (semLocal > 0 ? 1 : 0);
       const alertas = alloc.filter((item) => item.alerta_conferencia).length;
-      const ocorrenciasAbertas = chamados.filter((item) =>
+      const ocorrenciasAbertas = chamadosSelecionados.filter((item) =>
         item.cliente_id === cliente.id && !['concluido', 'cancelado'].includes(item.status)
       ).length;
 
@@ -364,7 +375,7 @@ const DespacharChamadoPage: React.FC = () => {
       </tr>`;
     }).join('');
 
-    const ocorrenciasRows = chamados.map((chamado) => {
+    const ocorrenciasRows = chamadosSelecionados.map((chamado) => {
       const data = chamado.created_at ? new Date(chamado.created_at).toLocaleString('pt-BR') : '—';
       const equipamento = [chamado.patrimonio_snapshot, chamado.placa_snapshot].filter(Boolean).join(' / ') || '—';
       const detalheFinal = chamado.status === 'concluido'
@@ -466,7 +477,7 @@ tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
     </tbody>
   </table>
 
-  ${chamados.length ? `
+  ${chamadosSelecionados.length ? `
     <div class="subsection">
       <h3>OCORRÊNCIAS REGISTRADAS</h3>
       <table>
@@ -642,7 +653,7 @@ tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
               className="h-9 bg-[#ffbf00] px-3 text-[10px] font-black text-black hover:bg-[#ffd24a]"
             >
               <Printer className="mr-1.5 h-4 w-4" />
-              Imprimir relatório
+              {itensRelatorioSelecionados.length ? `Imprimir selecionados (${itensRelatorioSelecionados.length})` : 'Selecionar para imprimir'}
             </Button>
             {operatorBootstrap.operador && !hasAdminRole && (
               <div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[.05] px-3 py-2">
@@ -690,6 +701,21 @@ tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
           busca={busca}
           onBuscaChange={setBusca}
           onAbrirChamado={abrirChamado}
+          selecionados={itensRelatorioSelecionados}
+          onToggleSelecionado={(alocacaoId) => {
+            setItensRelatorioSelecionados((current) =>
+              current.includes(alocacaoId)
+                ? current.filter((id) => id !== alocacaoId)
+                : [...current, alocacaoId]
+            );
+          }}
+          onToggleCliente={(alocacaoIds) => {
+            setItensRelatorioSelecionados((current) => {
+              const allSelected = alocacaoIds.every((id) => current.includes(id));
+              if (allSelected) return current.filter((id) => !alocacaoIds.includes(id));
+              return Array.from(new Set([...current, ...alocacaoIds]));
+            });
+          }}
         />
       )}
 
