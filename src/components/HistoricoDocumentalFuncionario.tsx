@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   DOCUMENTO_CATEGORIAS_PADRAO,
   DOCUMENTO_ORIGENS_PADRAO,
@@ -172,6 +173,7 @@ const safeFileName = (value: string) =>
 
 const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const { employees, companies, session } = useApp();
+  const [searchParams] = useSearchParams();
   const funcionario = employees.find((e) => e.id === funcionarioId);
   const company = companies.find((c) => c.id === funcionario?.companyId);
 
@@ -180,7 +182,10 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [uploading, setUploading] = useState(false);
   const [viewing, setViewing] = useState<{ source?: DocumentSource; sourceBlob?: Blob; titulo: string; filename: string } | null>(null);
   const [documentBusyId, setDocumentBusyId] = useState<string | null>(null);
-  const [activeGroup, setActiveGroup] = useState<HistoryGroupId>('pagamentos');
+  const [activeGroup, setActiveGroup] = useState<HistoryGroupId>(() => {
+    const requested = new URLSearchParams(window.location.search).get('grupo');
+    return HISTORY_GROUPS.some(group => group.id === requested) ? requested as HistoryGroupId : 'pagamentos';
+  });
   const [categoria, setCategoria] = useState('DOCUMENTACAO ADMISSIONAL');
   const [origem, setOrigem] = useState('upload_manual');
   const [descricao, setDescricao] = useState('');
@@ -209,6 +214,13 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     });
     return () => { active = false; };
   }, [funcionarioId]);
+
+  useEffect(() => {
+    const groupParam = searchParams.get('grupo');
+    if (HISTORY_GROUPS.some(group => group.id === groupParam)) {
+      setActiveGroup(groupParam as HistoryGroupId);
+    }
+  }, [searchParams]);
 
   const groupCounts = useMemo(() => {
     const counts: Record<HistoryGroupId, number> = {
@@ -631,7 +643,10 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             const protectedPayroll = doc.origem === 'payroll_portal';
 
             return (
-              <div key={`${activeGroup}-${doc.id}`} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
+              <div
+                key={`${activeGroup}-${doc.id}`}
+                className={`border rounded-lg p-3 hover:bg-muted/20 transition-colors ${searchParams.get('payroll') && String(doc.observacao || '').includes('payroll_document_id:' + searchParams.get('payroll')) ? 'border-amber-400 bg-amber-400/[.08] ring-2 ring-amber-400/20' : ''}`}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <FileText className="w-4 h-4 text-primary shrink-0" />
@@ -642,7 +657,13 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                     </div>
                   </div>
                   <Badge className={protectedPayroll ? 'bg-primary/10 text-primary' : doc.status_envio === 'enviado' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}>
-                    {protectedPayroll ? 'Protegido' : doc.status_envio === 'enviado' ? 'Enviado' : ORIGEM_LABEL[origemDoc] || origemDoc}
+                    {protectedPayroll && doc.status_envio === 'gerado'
+                      ? 'Aguardando assinatura'
+                      : protectedPayroll
+                        ? 'Protegido'
+                        : doc.status_envio === 'enviado'
+                          ? 'Enviado'
+                          : ORIGEM_LABEL[origemDoc] || origemDoc}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{doc.descricao || doc.observacao}</p>

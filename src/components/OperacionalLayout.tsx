@@ -1,15 +1,13 @@
 import React from 'react';
-import { Outlet, Navigate, NavLink, useLocation } from 'react-router-dom';
-import { ClipboardList, LogOut } from 'lucide-react';
+import { Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ClipboardList, Loader2, LogOut, ShieldCheck } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
 const OperacionalLayout: React.FC = () => {
-  const { userRole, roleLoading, logout } = useApp();
-  const location = useLocation();
+  const { userRole, userRoles, roleLoading, logout } = useApp();
+  const navigate = useNavigate();
 
   if (roleLoading) {
     return (
@@ -21,11 +19,13 @@ const OperacionalLayout: React.FC = () => {
 
   if (!userRole) return <AguardandoAcesso />;
 
-  if (userRole !== 'operacional') {
-    const redirect = userRole === 'admin' ? '/'
-      : userRole === 'tecnico_campo' ? '/campo'
-      : userRole?.startsWith('filial_') ? '/filial'
-      : '/';
+  const isAdminPreview = userRoles.includes('admin') || userRoles.includes('diretor_geral');
+  if (userRole !== 'operacional' && !isAdminPreview) {
+    const redirect = userRole === 'tecnico_campo'
+      ? '/campo'
+      : userRole?.startsWith('filial_')
+        ? '/filial'
+        : '/';
     return <Navigate to={redirect} replace />;
   }
 
@@ -38,10 +38,30 @@ const OperacionalLayout: React.FC = () => {
           </div>
           <h1 className="text-sm font-bold text-foreground font-display">Topac Operacional</h1>
         </div>
-        <button onClick={logout} className="p-2 rounded-lg hover:bg-muted text-muted-foreground">
-          <LogOut className="w-4 h-4" />
-        </button>
+        {isAdminPreview ? (
+          <button
+            type="button"
+            onClick={() => navigate('/admin/operacional')}
+            className="flex items-center gap-2 rounded-lg border border-orange-500/20 px-3 py-2 text-xs font-bold text-orange-300 hover:bg-orange-500/10"
+          >
+            <ArrowLeft className="w-4 h-4" /> Voltar ao painel
+          </button>
+        ) : (
+          <button onClick={logout} className="p-2 rounded-lg hover:bg-muted text-muted-foreground">
+            <LogOut className="w-4 h-4" />
+          </button>
+        )}
       </header>
+
+      {isAdminPreview && (
+        <div className="border-b border-orange-500/15 bg-orange-500/[.05] px-4 py-2 text-xs text-orange-200">
+          <div className="mx-auto flex max-w-[1200px] items-center gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            Visualização administrativa da tela usada pela equipe operacional.
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 overflow-y-auto">
         <div className="p-6 max-w-[1200px] mx-auto">
           <ErrorBoundary><Outlet /></ErrorBoundary>

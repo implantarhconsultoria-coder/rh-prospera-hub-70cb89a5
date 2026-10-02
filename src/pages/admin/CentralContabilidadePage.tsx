@@ -125,6 +125,28 @@ const CentralContabilidadePage: React.FC = () => {
 
   useEffect(() => { void carregar(); }, [carregar]);
   useEffect(() => {
+    const metric = searchParams.get('metric');
+    const requestedTab = searchParams.get('tab');
+    if (metric === 'pendencias') {
+      setMetricView('pendencias');
+      setTab('movimentacoes');
+    } else if (requestedTab === 'fechamento') {
+      setTab('fechamento');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const reviewId = searchParams.get('review');
+    if (!reviewId || loading) return;
+    window.setTimeout(() => {
+      const row = document.getElementById(`review-${reviewId}`);
+      row?.scrollIntoView({ behavior:'smooth', block:'center' });
+      row?.classList.add('bg-amber-500/10');
+    }, 120);
+  }, [searchParams, loading, revisoes]);
+
+
+  useEffect(() => {
     const timer = window.setInterval(() => void carregar(true), 60_000);
     return () => window.clearInterval(timer);
   }, [carregar]);
@@ -562,7 +584,7 @@ const CentralContabilidadePage: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left text-xs">
                 <thead className="border-b border-[#29242f] text-[10px] uppercase text-zinc-500"><tr><th className="px-3 py-3">Movimento</th><th className="px-3 py-3">Empresa</th><th className="px-3 py-3">Contabilidade</th><th className="px-3 py-3">Data / hora</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Documento</th><th className="px-3 py-3">Observação</th></tr></thead>
-                <tbody>{filteredRevisoes.map((r)=><tr key={r.id} className="border-b border-[#1b1c21]"><td className="px-3 py-3 font-bold text-zinc-200">{String(r.origem_tipo||'Movimentação').replace(/_/g,' ')}</td><td className="px-3 py-3 text-zinc-400">{companyMap.get(r.empresa_id)||'—'}</td><td className="px-3 py-3 text-zinc-400">{r.revisor_nome||'—'}</td><td className="px-3 py-3 text-zinc-400">{brDateTime(r.revisado_em||r.created_at)}</td><td className="px-3 py-3"><StatusBadge value={r.status}/></td><td className="px-3 py-3">{reviewHasDocument(r)?<button onClick={()=>void abrirDocumentoRevisao(r)} disabled={busyId===r.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#423051] px-2.5 py-1.5 font-bold text-zinc-200 hover:border-[#8b22ff] disabled:opacity-50">{busyId===r.id?<Loader2 className="h-3.5 w-3.5 animate-spin"/>:<Eye className="h-3.5 w-3.5"/>}Abrir</button>:<span className="text-zinc-700">—</span>}</td><td className="max-w-[340px] px-3 py-3 text-zinc-400">{r.observacao||'—'}</td></tr>)}</tbody>
+                <tbody>{filteredRevisoes.map((r)=><tr id={`review-${r.id}`} key={r.id} className="border-b border-[#1b1c21]"><td className="px-3 py-3 font-bold text-zinc-200">{String(r.origem_tipo||'Movimentação').replace(/_/g,' ')}</td><td className="px-3 py-3 text-zinc-400">{companyMap.get(r.empresa_id)||'—'}</td><td className="px-3 py-3 text-zinc-400">{r.revisor_nome||'—'}</td><td className="px-3 py-3 text-zinc-400">{brDateTime(r.revisado_em||r.created_at)}</td><td className="px-3 py-3"><StatusBadge value={r.status}/></td><td className="px-3 py-3">{reviewHasDocument(r)?<button onClick={()=>void abrirDocumentoRevisao(r)} disabled={busyId===r.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#423051] px-2.5 py-1.5 font-bold text-zinc-200 hover:border-[#8b22ff] disabled:opacity-50">{busyId===r.id?<Loader2 className="h-3.5 w-3.5 animate-spin"/>:<Eye className="h-3.5 w-3.5"/>}Abrir</button>:<span className="text-zinc-700">—</span>}</td><td className="max-w-[340px] px-3 py-3 text-zinc-400">{r.observacao||'—'}</td></tr>)}</tbody>
               </table>
             </div>
           )}

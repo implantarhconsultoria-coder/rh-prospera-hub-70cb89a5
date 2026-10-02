@@ -250,6 +250,10 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   };
 
   useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    const preId = new URLSearchParams(window.location.search).get('pre');
+    if (preId && rows.some(row => row.id === preId)) setSelectedId(preId);
+  }, [rows]);
   useEffect(() => { const selected = rows.find(r => r.id === selectedId); if (selected) { setForm(selected); setOcrResult((selected.dados_extraidos as OcrResult) || null); carregarDocumentos(selected); } }, [rows, selectedId]);
   useEffect(() => () => { if (lastAsoGuide?.url) URL.revokeObjectURL(lastAsoGuide.url); }, [lastAsoGuide?.url]);
 

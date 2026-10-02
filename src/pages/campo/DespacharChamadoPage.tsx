@@ -156,6 +156,16 @@ const DespacharChamadoPage: React.FC = () => {
     concluidos: chamados.filter((c) => c.status === 'concluido').length,
   }), [chamados, adicionaisPendentes]);
 
+  useEffect(() => {
+    const chamadoId = new URLSearchParams(location.search).get('chamado');
+    if (!chamadoId || !chamados.length) return;
+    const alvo = chamados.find((item) => item.id === chamadoId);
+    if (alvo) {
+      setTab('lista');
+      setDetail(alvo);
+    }
+  }, [location.search, chamados]);
+
   const selecionarCliente = (clienteId: string) => {
     const c = clientes.find((x) => x.id === clienteId);
     setForm((f) => ({

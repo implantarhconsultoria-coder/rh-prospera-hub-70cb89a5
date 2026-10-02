@@ -103,7 +103,7 @@ export default function AdminRequestNotifications() {
           .order('updated_at',{ascending:false})
           .limit(20),
         (supabase as any).from('aso_agendamentos')
-          .select('id,funcionario_nome,empresa,data_exame,status,updated_at')
+          .select('id,funcionario_id,funcionario_nome,empresa,data_exame,status,updated_at')
           .eq('status','pendente')
           .order('updated_at',{ascending:false})
           .limit(30),
@@ -123,7 +123,7 @@ export default function AdminRequestNotifications() {
           .order('updated_at',{ascending:false})
           .limit(20),
         (supabase as any).from('payroll_documents')
-          .select('id,employee_id,company_id,competencia,document_type,net_amount,payment_reason,payment_kind,is_current,extracted_data,updated_at')
+          .select('id,employee_id,company_id,competencia,document_type,net_amount,payment_reason,payment_kind,is_current,status,extracted_data,updated_at')
           .eq('payment_kind','COMPLEMENTAR')
           .eq('is_current',true)
           .order('updated_at',{ascending:false})
@@ -153,7 +153,7 @@ export default function AdminRequestNotifications() {
           title:`${companyName(cycle.empresa_id)} · ${typeLabel}`,
           detail:`${cycle.competencia} · ${statusLabel}${cycle.observacao ? ` · ${cycle.observacao}` : ''}`,
           createdAt:cycle.updated_at,
-          path:'/admin/central-contabilidade',
+          path:`/admin/central-contabilidade?tab=fechamento&cycle=${cycle.id}&empresa=${cycle.empresa_id}&competencia=${cycle.competencia}`,
           tone:'attention',
           icon:'accounting',
         });
@@ -166,7 +166,7 @@ export default function AdminRequestNotifications() {
           title:`Pendência / retificação · ${companyName(review.empresa_id)}`,
           detail:review.observacao || 'Existe uma revisão da Contabilidade aguardando tratamento.',
           createdAt:review.updated_at,
-          path:'/admin/central-contabilidade',
+          path:`/admin/central-contabilidade?metric=pendencias&review=${review.id}`,
           tone:'attention',
           icon:'accounting',
         });
@@ -179,7 +179,7 @@ export default function AdminRequestNotifications() {
           title:'Solicitação de EPI aguardando aprovação',
           detail:epi.observacoes || (epi.criado_por_nome ? `Solicitado por ${epi.criado_por_nome}` : 'Existe uma solicitação pendente de aprovação.'),
           createdAt:epi.updated_at || epi.created_at,
-          path:'/admin/epi',
+          path:`/admin/epi?solicitacao=${epi.id}`,
           tone:'attention',
           icon:'epi',
         });
@@ -192,7 +192,7 @@ export default function AdminRequestNotifications() {
           title:`${aso.funcionario_nome || 'Funcionário'} · ASO pendente`,
           detail:`${aso.empresa || 'Empresa'}${aso.data_exame ? ` · exame em ${new Date(aso.data_exame + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''}`,
           createdAt:aso.updated_at,
-          path:'/admin/aso',
+          path:aso.funcionario_id ? `/admin/aso?funcionario=${aso.funcionario_id}&agendamento=${aso.id}` : `/admin/aso?agendamento=${aso.id}`,
           tone:'attention',
           icon:'aso',
         });
@@ -205,7 +205,7 @@ export default function AdminRequestNotifications() {
           title:`${employeeName(salary.funcionario_id)} · alteração salarial`,
           detail:`${companyName(salary.empresa_id)} · competência ${salary.competencia || 'pendente'} · ${String(salary.status || '').replaceAll('_',' ')}`,
           createdAt:salary.updated_at,
-          path:'/admin/central-contabilidade',
+          path:salary.funcionario_id ? `/admin/funcionarios/${salary.funcionario_id}?tab=funcionais&alteracao=${salary.id}` : '/admin/central-contabilidade',
           tone:'attention',
           icon:'finance',
         });
@@ -218,7 +218,7 @@ export default function AdminRequestNotifications() {
           title:`${pre.nome || 'Candidato'} · pré-cadastro pendente`,
           detail:`${pre.empresa_nome || 'Empresa'} · ${String(pre.status || 'em andamento').replaceAll('_',' ')}`,
           createdAt:pre.updated_at,
-          path:'/admin/pre-cadastro-admissional',
+          path:`/admin/pre-cadastro-admissional?pre=${pre.id}`,
           tone:'attention',
           icon:'admission',
         });
@@ -231,7 +231,7 @@ export default function AdminRequestNotifications() {
           title:`Chamado #${call.numero || '—'} requer atenção`,
           detail:`${call.cliente || 'Cliente'} · ${String(call.status || '').replaceAll('_',' ')}`,
           createdAt:call.updated_at,
-          path:'/admin/operacional',
+          path:`/admin/operacional?chamado=${call.id}`,
           tone:'attention',
           icon:'operation',
         });
@@ -239,14 +239,19 @@ export default function AdminRequestNotifications() {
 
       for (const doc of complementsResult.data || []) {
         const financeStatus = String(doc.extracted_data?.financeiro_formalizacao_status || '').toUpperCase();
-        if (financeStatus === 'ENVIADO') continue;
+        const signaturePending = String(doc.status || '').toUpperCase() === 'AGUARDANDO_ASSINATURA';
+        if (financeStatus === 'ENVIADO' && !signaturePending) continue;
+        const benefitLabel = doc.document_type === 'BENEFICIO_VT' ? 'VT' : 'VR';
+        const pendingLabel = financeStatus !== 'ENVIADO'
+          ? 'formalização ao Financeiro pendente'
+          : 'formalização enviada · assinatura do funcionário pendente';
         next.push({
           id:`benefit-finance:${doc.id}`,
-          source:'Financeiro',
-          title:`${employeeName(doc.employee_id)} · diferença de benefício`,
-          detail:`${companyName(doc.company_id)} · ${doc.document_type === 'BENEFICIO_VT' ? 'VT' : 'VR'} · ${money(doc.net_amount)} pendente de formalização`,
+          source:financeStatus !== 'ENVIADO' ? 'Financeiro' : 'Assinatura',
+          title:`${employeeName(doc.employee_id)} · diferença de ${benefitLabel}`,
+          detail:`${companyName(doc.company_id)} · ${money(doc.net_amount)} · ${pendingLabel}`,
           createdAt:doc.updated_at,
-          path:`/admin/funcionarios/${doc.employee_id}`,
+          path:`/admin/funcionarios/${doc.employee_id}?tab=historico&grupo=${benefitLabel.toLowerCase()}&payroll=${doc.id}`,
           tone:'attention',
           icon:'finance',
         });
@@ -261,7 +266,7 @@ export default function AdminRequestNotifications() {
           title:`${employeeName(vacation.funcionario_id)} · pagamento de férias`,
           detail:`${companyName(vacation.empresa_id)} · prazo ${vacation.prazo_pagamento ? new Date(vacation.prazo_pagamento + 'T12:00:00').toLocaleDateString('pt-BR') : 'a conferir'}`,
           createdAt:vacation.updated_at,
-          path:'/admin/aviso-ferias',
+          path:`/admin/funcionarios/${vacation.funcionario_id}?tab=ferias&ferias=${vacation.id}`,
           tone:'attention',
           icon:'finance',
         });
@@ -274,7 +279,7 @@ export default function AdminRequestNotifications() {
           title:`${fuel.funcionario_nome || 'Funcionário'} · abastecimento liberado`,
           detail:`${fuel.placa || 'Sem placa'} · ${fuel.combustivel || 'Combustível'} · ${fuel.posto_nome || 'Posto'}`,
           createdAt:fuel.autorizado_em || fuel.solicitado_em,
-          path:'/admin/app-mecanico',
+          path:`/admin/app-mecanico?abastecimento=${fuel.id}`,
           tone:'success',
           icon:'fuel',
         });
