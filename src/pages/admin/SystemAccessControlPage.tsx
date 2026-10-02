@@ -52,9 +52,9 @@ const SystemAccessControlPage: React.FC = () => {
             {globalRestricted ? <LockKeyhole className="h-6 w-6" /> : <Power className="h-6 w-6" />}
           </div>
           <div>
-            <div className="text-[10px] font-black uppercase tracking-[.18em] text-zinc-500">Owner Control</div>
-            <h1 className="mt-1 text-xl font-black">Controle de Acesso</h1>
-            <p className="mt-1 text-[11px] text-zinc-500">{globalRestricted ? 'Todos os acessos estão restritos.' : 'Sistema com acesso geral liberado.'}</p>
+            <div className="text-[10px] font-black uppercase tracking-[.18em] text-zinc-500">Status geral</div>
+            <h1 className="mt-1 text-lg font-black">{globalRestricted ? 'Acessos restritos' : 'Acessos liberados'}</h1>
+            <p className="mt-1 text-[11px] text-zinc-500">{globalRestricted ? 'Todos os acessos externos estão temporariamente bloqueados.' : 'Os acessos da plataforma estão disponíveis normalmente.'}</p>
           </div>
         </div>
       </section>
@@ -67,8 +67,8 @@ const SystemAccessControlPage: React.FC = () => {
           className="min-h-[92px] rounded-2xl border border-red-500/35 bg-red-500/[.09] p-4 text-left disabled:opacity-40"
         >
           <ShieldAlert className="h-6 w-6 text-red-300" />
-          <strong className="mt-3 block text-sm">RESTRICT ALL</strong>
-          <span className="mt-1 block text-[10px] text-red-200/60">Restringir todos os acessos</span>
+          <strong className="mt-3 block text-sm">RESTRINGIR TUDO</strong>
+          <span className="mt-1 block text-[10px] text-red-200/60">Bloquear todos os acessos controlados</span>
         </button>
 
         <button
@@ -78,8 +78,8 @@ const SystemAccessControlPage: React.FC = () => {
           className="min-h-[92px] rounded-2xl border border-emerald-500/30 bg-emerald-500/[.08] p-4 text-left disabled:opacity-40"
         >
           <RotateCcw className="h-6 w-6 text-emerald-300" />
-          <strong className="mt-3 block text-sm">RESTORE ALL</strong>
-          <span className="mt-1 block text-[10px] text-emerald-200/60">Liberar tudo novamente</span>
+          <strong className="mt-3 block text-sm">LIBERAR TUDO</strong>
+          <span className="mt-1 block text-[10px] text-emerald-200/60">Restaurar todos os acessos</span>
         </button>
       </div>
 
@@ -108,7 +108,7 @@ const SystemAccessControlPage: React.FC = () => {
                   <span className="mt-1 block text-[9px] leading-4 text-zinc-500">{item.detail}</span>
                 </span>
                 <span className={`rounded-full border px-2 py-1 text-[8px] font-black uppercase tracking-[.08em] ${restricted ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-emerald-500/25 bg-emerald-500/[.07] text-emerald-300'}`}>
-                  {restricted ? 'Restricted' : 'Active'}
+                  {restricted ? 'Restrito' : 'Ativo'}
                 </span>
               </button>
             );
