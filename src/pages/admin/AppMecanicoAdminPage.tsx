@@ -257,11 +257,6 @@ function MechanicCard({ row, tab, onOpen, onPrint }: { row: MecanicoRow; tab: Ta
           <div className="mt-1 flex items-center justify-between gap-2">
             <p className="flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p>
             <div className="flex items-center gap-1.5">
-              <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" asChild>
-                <a href={`/app-mecanico/${row.id}?preview=admin`}>
-                  <ExternalLink className="mr-1 h-3 w-3" />Ver tela
-                </a>
-              </Button>
               <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={() => onPrint(row)}>
                 <Printer className="mr-1 h-3 w-3" />Relatório
               </Button>
