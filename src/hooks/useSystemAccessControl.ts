@@ -72,18 +72,22 @@ export const useSystemAccessControl = () => {
       [key]: { ...prev[key], restricted, updated_at: new Date().toISOString(), updated_by: userId || null },
     }));
 
-    const { error } = await table()
+    const { data, error } = await table()
       .update({
         restricted,
         updated_at: new Date().toISOString(),
         updated_by: userId || null,
       })
-      .eq('module_key', key);
+      .eq('module_key', key)
+      .select('module_key,label,restricted,updated_at,updated_by')
+      .maybeSingle();
 
-    if (error) {
+    if (error || !data) {
       setControls(prev => ({ ...prev, [key]: previous }));
-      throw error;
+      throw error || new Error('A alteração não foi gravada no servidor.');
     }
+
+    setControls(prev => ({ ...prev, [key]: data as SystemAccessControl }));
   }, [controls]);
 
   const restoreAll = useCallback(async (userId?: string | null) => {
@@ -92,18 +96,24 @@ export const useSystemAccessControl = () => {
       Object.entries(prev).map(([key, row]) => [key, { ...row, restricted: false }]),
     ) as Record<SystemAccessKey, SystemAccessControl>);
 
-    const { error } = await table()
+    const expectedKeys = ['global', ...SYSTEM_ACCESS_MODULES.map(item => item.key)];
+    const { data, error } = await table()
       .update({
         restricted: false,
         updated_at: new Date().toISOString(),
         updated_by: userId || null,
       })
-      .in('module_key', ['global', ...SYSTEM_ACCESS_MODULES.map(item => item.key)]);
+      .in('module_key', expectedKeys)
+      .select('module_key,label,restricted,updated_at,updated_by');
 
-    if (error) {
+    if (error || !Array.isArray(data) || data.length !== expectedKeys.length) {
       setControls(previous);
-      throw error;
+      throw error || new Error('Nem todos os módulos foram liberados no servidor.');
     }
+
+    const restored = { ...controls };
+    for (const row of data as SystemAccessControl[]) restored[row.module_key] = row;
+    setControls(restored);
   }, [controls]);
 
   return { controls, loading, restrictedKeys, load, setRestricted, restoreAll };
