@@ -160,10 +160,21 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         ?? (daysConsidered > 0 ? Number(reference?.net_amount || 0) / daysConsidered : 0)
       ));
       setContext({ competencia, daysConsidered, alreadyPaid, sequence, referenceDailyValue, docs: currentDocs });
-      const pendingFinance = currentDocs.find(row =>
+      const complementDocs = currentDocs.filter(row =>
         row.payment_kind === 'COMPLEMENTAR'
         && String(row.extracted_data?.origem || '') === 'EDICAO_BENEFICIOS'
-        && String(row.extracted_data?.financeiro_formalizacao_status || '').toUpperCase() !== 'ENVIADO'
+      );
+
+      for (const complementDoc of complementDocs) {
+        try {
+          await ensureComplementHistory(complementDoc);
+        } catch (historyError) {
+          console.error('[benefit-complement-history]', historyError);
+        }
+      }
+
+      const pendingFinance = complementDocs.find(row =>
+        String(row.extracted_data?.financeiro_formalizacao_status || '').toUpperCase() !== 'ENVIADO'
       ) || null;
       setPendingFinanceDoc(pendingFinance);
     } catch (error: any) {
@@ -405,10 +416,17 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         confirmed_at: new Date().toISOString(),
         confirmed_by: actorId,
         created_by: actorId,
-      }).select('id').single();
+      }).select('id,competencia,net_amount,is_current,status,payment_event_id,payment_kind,payment_sequence,entitlement_amount,prior_paid_amount,payment_reason,payment_state,extracted_data,original_filename,storage_bucket,storage_path,created_at').single();
       if (insertError) {
         await supabase.storage.from(PAYROLL_BUCKET).remove([path]);
         throw insertError;
+      }
+
+      try {
+        await ensureComplementHistory(insertedDocument as PaymentDoc);
+      } catch (historyError) {
+        console.error('[benefit-complement-history-create]', historyError);
+        toast.warning('O recibo foi gerado e será sincronizado com o histórico documental.');
       }
 
       const financeBlob = buildBenefitComplementFinanceRequestPdfBlob({
