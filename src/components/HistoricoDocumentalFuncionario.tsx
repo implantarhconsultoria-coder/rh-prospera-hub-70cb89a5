@@ -643,7 +643,10 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             const protectedPayroll = doc.origem === 'payroll_portal';
 
             return (
-              <div key={`${activeGroup}-${doc.id}`} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
+              <div
+                key={`${activeGroup}-${doc.id}`}
+                className={`border rounded-lg p-3 hover:bg-muted/20 transition-colors ${searchParams.get('payroll') && String(doc.observacao || '').includes('payroll_document_id:' + searchParams.get('payroll')) ? 'border-amber-400 bg-amber-400/[.08] ring-2 ring-amber-400/20' : ''}`}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <FileText className="w-4 h-4 text-primary shrink-0" />
