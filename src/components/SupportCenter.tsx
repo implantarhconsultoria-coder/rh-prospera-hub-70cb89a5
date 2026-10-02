@@ -57,16 +57,6 @@ const SupportCenter: React.FC = () => {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="no-print fixed bottom-5 left-4 z-[55] flex h-10 items-center gap-2 rounded-full border border-violet-500/35 bg-[#070a0f]/95 px-3 text-xs font-semibold text-zinc-200 shadow-xl backdrop-blur transition hover:border-violet-400 hover:text-white"
-        aria-label="Abrir suporte TOPAC RH PRO"
-      >
-        <Headphones className="h-4 w-4 text-violet-400" />
-        Suporte
-      </button>
-
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto border-violet-400/30 bg-[#05080d] text-zinc-100">
           <DialogHeader>

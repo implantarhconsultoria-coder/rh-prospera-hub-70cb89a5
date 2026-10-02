@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, CheckCircle2, ChevronRight, Clock3, Eye, FileCheck2,
-  Loader2, MailCheck, RefreshCw, WalletCards,
+  Loader2, MailCheck, Printer, RefreshCw, WalletCards,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +28,13 @@ type Summary = { ok:number; attention:number; waiting:number; locked:number };
 
 const VIEW_STATE_KEY = 'topac:view-state:v1:fechamento:principal';
 const monthLabel = (value:string) => { const [y,m] = String(value||'').split('-'); return y&&m ? `${m}/${y}` : value; };
+const currentCompetence = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone:'America/Sao_Paulo', year:'numeric', month:'2-digit' })
+    .formatToParts(new Date()).reduce<Record<string,string>>((acc, part) => { acc[part.type] = part.value; return acc; }, {});
+  return `${parts.year}-${parts.month}`;
+};
+const escapeHtml = (value:unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 const statusLabel = (value:string) => ({
   aguardando_envio:'Aguardando Contabilidade',
   aguardando_apontamento:'Fechamento pendente',
@@ -49,6 +56,7 @@ const statusClass = (value:string) => value === 'conferido'
 const ContabilidadeFolhaAdminAddon: React.FC = () => {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [state, setState] = useState<AdminState | null>(null);
+  const [competence, setCompetence] = useState(currentCompetence());
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<ProcessType | null>(null);
@@ -99,7 +107,7 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const result = await api('admin_state');
+      const result = await api('admin_state', { competencia:competence });
       const nextState: AdminState = {
         competence:String(result.competence||''),
         companies:result.companies||[],
@@ -112,12 +120,12 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
       // Autocura segura: ciclo de Pagamento já liberado, mas sem o apontamento
       // automático gravado. Isso cobre fechamentos que ficaram pela metade em
       // versões antigas sem bloquear a Contabilidade.
-      const missingGenerated = nextState.cycles.filter((cycle) =>
+      const missingGenerated = nextState.competence === currentCompetence() ? nextState.cycles.filter((cycle) =>
         cycle.tipo === 'pagamento'
         && Boolean(cycle.apontamento_liberado_em)
         && !nextState.uploads.some((upload) => upload.ciclo_id === cycle.id && upload.origem_tipo === 'rh_apontamento')
         && !repairTriedRef.current.has(cycle.id),
-      );
+      ) : [];
       for (const cycle of missingGenerated) {
         repairTriedRef.current.add(cycle.id);
         try {
@@ -140,7 +148,7 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [api, authToken]);
+  }, [api, authToken, competence]);
 
   useEffect(() => { if (host) void load(); }, [host, load]);
   useEffect(() => {
@@ -248,6 +256,25 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     }
   };
 
+  const printCompetence = () => {
+    if (!state) return;
+    const rowsFor = (type:ProcessType) => cyclesFor(type).map(cycle => {
+      const company = companyMap.get(cycle.empresa_id);
+      const docs = (state.documents||[]).filter(doc => doc.ciclo_id === cycle.id);
+      const uploads = (state.uploads||[]).filter(upload => upload.ciclo_id === cycle.id);
+      const identified = docs.filter(doc => doc.classificacao === 'identificado').length;
+      const review = docs.filter(doc => ['revisao','erro'].includes(doc.classificacao)).length;
+      return `<tr><td>${escapeHtml(company?.nome || 'Empresa')}</td><td>${escapeHtml(statusLabel(cycle.status))}</td><td>${uploads.length}</td><td>${identified}</td><td>${review}</td></tr>`;
+    }).join('') || '<tr><td colspan="5">Nenhum registro nesta competência.</td></tr>';
+
+    const win = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=800');
+    if (!win) return toast.error('O navegador bloqueou a janela de impressão. Libere pop-ups para imprimir.');
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Fechamento ${escapeHtml(monthLabel(state.competence))}</title><style>body{font-family:Arial,sans-serif;color:#111;margin:28px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}p{margin:0 0 18px;color:#555}table{width:100%;border-collapse:collapse;margin-bottom:22px}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:12px}th{background:#f3f4f6}.meta{font-size:12px;color:#555}@media print{body{margin:10mm}}</style></head><body><h1>Fluxo da Contabilidade</h1><p class="meta">Competência: ${escapeHtml(monthLabel(state.competence))}</p><h2>Adiantamento</h2><table><thead><tr><th>Empresa</th><th>Status</th><th>PDFs</th><th>Reconhecidos</th><th>Revisar</th></tr></thead><tbody>${rowsFor('adiantamento')}</tbody></table><h2>Pagamento</h2><table><thead><tr><th>Empresa</th><th>Status</th><th>PDFs</th><th>Reconhecidos</th><th>Revisar</th></tr></thead><tbody>${rowsFor('pagamento')}</tbody></table></body></html>`);
+    win.document.close();
+    win.focus();
+    window.setTimeout(() => { win.print(); win.close(); }, 250);
+  };
+
   const openClosing = (cycle:Cycle) => {
     let current:any = {};
     try { current = JSON.parse(window.sessionStorage.getItem(VIEW_STATE_KEY) || '{}'); } catch { current = {}; }
@@ -268,9 +295,23 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
           <h2 className="mt-1 text-xl font-black text-white">Fluxo da Contabilidade</h2>
           <p className="mt-1 text-xs text-zinc-500">Tudo fica aqui: Adiantamento para conferir e Pagamento ligado ao fechamento e ao apontamento.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} className="border-[#3c2d49] bg-[#090b10] text-zinc-300">
-          {loading?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<RefreshCw className="mr-2 h-4 w-4"/>}Atualizar
-        </Button>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-[150px] text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+            Competência
+            <input
+              type="month"
+              value={competence}
+              onChange={(event) => { setCompetence(event.target.value || currentCompetence()); setSelectedType(null); }}
+              className="mt-1 h-9 w-full rounded-md border border-[#3c2d49] bg-[#090b10] px-3 text-xs font-bold text-zinc-200 outline-none focus:border-violet-500"
+            />
+          </label>
+          <Button variant="outline" size="sm" onClick={printCompetence} disabled={loading || !state} className="border-[#3c2d49] bg-[#090b10] text-zinc-300">
+            <Printer className="mr-2 h-4 w-4"/>Imprimir mês
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading} className="border-[#3c2d49] bg-[#090b10] text-zinc-300">
+            {loading?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<RefreshCw className="mr-2 h-4 w-4"/>}Atualizar
+          </Button>
+        </div>
       </div>
 
       {loading && !state ? (
