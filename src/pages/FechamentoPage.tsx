@@ -66,6 +66,13 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   }, [companies, empresaDoLinkAplicada, searchParams]);
 
   useEffect(() => {
+    const fromLink = searchParams.get('competencia');
+    if (fromLink && fromLink.length === 7 && fromLink !== competencia) {
+      setCompetencia(fromLink);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
   }, [selectedCompany, competencia, getOrCreateEntries]);
 
