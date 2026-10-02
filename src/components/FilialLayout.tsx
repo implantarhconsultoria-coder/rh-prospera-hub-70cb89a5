@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils';
 import { Loader2, LogOut } from 'lucide-react';
 import AguardandoAcesso from '@/components/AguardandoAcesso';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import ModuleSwitcher from '@/components/ModuleSwitcher';
 import { Button } from '@/components/ui/button';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
 
@@ -66,10 +65,11 @@ const FilialLayout: React.FC = () => {
   return (
     <div style={themeVars} className="topac-neon-skin min-h-screen bg-[#020609] text-zinc-100">
       <FilialModernSidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-      <div className="fixed right-3 top-3 z-50 flex items-center gap-2 no-print">
-        {userRoles.includes('admin') && <ModuleSwitcher />}
-        {!userRoles.includes('admin') && <Button type="button" variant="outline" size="sm" onClick={trocarUsuario} className="gap-2 shadow-md"><LogOut className="h-4 w-4" />Trocar usuário</Button>}
-      </div>
+      {!userRoles.includes('admin') && !userRoles.includes('diretor_geral') && (
+        <div className="fixed right-3 top-3 z-50 no-print">
+          <Button type="button" variant="outline" size="sm" onClick={trocarUsuario} className="gap-2 shadow-md"><LogOut className="h-4 w-4" />Trocar usuário</Button>
+        </div>
+      )}
       <main className={cn('min-h-screen transition-[margin] duration-300', collapsed ? 'ml-[72px]' : 'ml-[270px]')}>
         <div className="mx-auto max-w-[1680px] p-[18px] pt-20"><ErrorBoundary><Outlet /></ErrorBoundary></div>
       </main>
