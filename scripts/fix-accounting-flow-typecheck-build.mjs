@@ -16,6 +16,31 @@ const patchPayroll = () => {
   let source = fs.readFileSync(payrollPath, 'utf8');
   if (source.includes('const accountingPortalForCompany = async')) return;
 
+  const modernAdminMarker = 'const adminState = async (service: any, competenceInput?: unknown) => {';
+  if (source.includes(modernAdminMarker)) {
+    const helper = `const accountingPortalForCompany = async (service: any, companyId: string) => {
+  const { data: access, error: accessError } = await service.from('contabilidade_portal_acesso_empresas')
+    .select('portal_user_id').eq('empresa_id', companyId);
+  if (accessError) throw accessError;
+  const userIds = Array.from(new Set((access || []).map((row: any) => String(row.portal_user_id || '')).filter(Boolean))) as string[];
+  const { data: users, error: userError } = userIds.length
+    ? await service.from('contabilidade_portal_usuarios').select('id,portal').in('id', userIds).eq('ativo', true)
+    : { data: [], error: null } as any;
+  if (userError) throw userError;
+  if ((users || []).some((row: any) => String(row.portal || '') === 'goiania')) return 'goiania';
+  if ((users || []).some((row: any) => String(row.portal || '') === 'principal')) return 'principal';
+  throw Object.assign(new Error('contabilidade_sem_portal_ativo'), { status: 409 });
+};`;
+    source = source.replace(modernAdminMarker, `${helper}\n\n${modernAdminMarker}`);
+    source = source.replace(
+      "const cycle = await ensureCycle(service, { portal: 'principal', companyId, competence, type: 'pagamento' });",
+      "const portal = await accountingPortalForCompany(service, companyId);\n        const cycle = await ensureCycle(service, { portal, companyId, competence, type: 'pagamento' });",
+    );
+    fs.writeFileSync(payrollPath, source, 'utf8');
+    console.log('[goiania-central] admin_state moderno preservado; helper de portal aplicado');
+    return;
+  }
+
   const oldAdmin = /const adminState = async \(service: any(?:, competenceInput\?: unknown)?\) => \{[\s\S]*?\n\};\n\nexport default async function handler/;
   if (!oldAdmin.test(source)) throw new Error('[goiania-central] adminState não encontrado');
 
