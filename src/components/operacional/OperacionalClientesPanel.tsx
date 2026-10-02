@@ -9,6 +9,9 @@ type Props = {
   busca: string;
   onBuscaChange: (value: string) => void;
   onAbrirChamado: (clienteId: string, alocacaoId?: string) => void;
+  selecionados?: string[];
+  onToggleSelecionado?: (alocacaoId: string) => void;
+  onToggleCliente?: (alocacaoIds: string[]) => void;
 };
 
 const OperacionalClientesPanel: React.FC<Props> = ({
@@ -18,6 +21,9 @@ const OperacionalClientesPanel: React.FC<Props> = ({
   busca,
   onBuscaChange,
   onAbrirChamado,
+  selecionados = [],
+  onToggleSelecionado,
+  onToggleCliente,
 }) => {
   const rows = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -68,14 +74,25 @@ const OperacionalClientesPanel: React.FC<Props> = ({
         {rows.map((row) => (
           <div key={row.cliente.id} className="card-premium space-y-4 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="flex items-center gap-2 text-lg font-bold">
-                  <Building2 className="h-5 w-5 text-primary" />
-                  {row.cliente.razao_social}
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {row.cliente.cnpj_cpf || 'CNPJ ainda não informado'}
-                </p>
+              <div className="flex items-start gap-3">
+                {onToggleCliente && row.total > 0 && (
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-amber-400"
+                    checked={row.groups.flatMap((g) => g.items).every((item: any) => selecionados.includes(item.id))}
+                    onChange={() => onToggleCliente(row.groups.flatMap((g) => g.items).map((item: any) => item.id))}
+                    title="Selecionar este cliente para o relatório"
+                  />
+                )}
+                <div>
+                  <h2 className="flex items-center gap-2 text-lg font-bold">
+                    <Building2 className="h-5 w-5 text-primary" />
+                    {row.cliente.razao_social}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {row.cliente.cnpj_cpf || 'CNPJ ainda não informado'}
+                  </p>
+                </div>
               </div>
               <Button size="sm" onClick={() => onAbrirChamado(row.cliente.id)}>
                 <Wrench className="mr-1 h-4 w-4" /> Abrir chamado
@@ -102,7 +119,16 @@ const OperacionalClientesPanel: React.FC<Props> = ({
                     </div>
                     <div className="space-y-2">
                       {group.items.map((item: any) => (
-                        <div key={item.id} className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3">
+                        <div key={item.id} className={`flex flex-wrap items-center gap-3 rounded-lg border p-3 ${selecionados.includes(item.id) ? 'border-amber-400/50 bg-amber-400/[.07]' : 'bg-card'}`}>
+                          {onToggleSelecionado && (
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-amber-400"
+                              checked={selecionados.includes(item.id)}
+                              onChange={() => onToggleSelecionado(item.id)}
+                              title="Incluir este item no relatório"
+                            />
+                          )}
                           <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
                             <Package className="h-4 w-4" />
                           </span>
