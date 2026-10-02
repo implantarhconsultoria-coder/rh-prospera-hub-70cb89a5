@@ -318,8 +318,9 @@ const portalState = async (service: any, user: any, portal: string) => {
   return { competence, companies, cycles: cycles || [], employees: employees || [], documents: docs || [] };
 };
 
-const adminState = async (service: any) => {
-  const competence = competenceNow();
+const adminState = async (service: any, competenceInput?: unknown) => {
+  const competence = validateCompetence(competenceInput);
+  const shouldEnsureCycles = competence === competenceNow();
 
   // A Central do RH precisa enxergar os dois portais. Antes, o painel administrativo
   // carregava somente o portal principal e os ciclos de Goiânia ficavam invisíveis
@@ -354,9 +355,11 @@ const adminState = async (service: any) => {
     scopes.push({ portal: portal as 'principal' | 'goiania', companyId });
   }
 
-  for (const scope of scopes) {
-    await ensureCycle(service, { portal: scope.portal, companyId: scope.companyId, competence, type: 'adiantamento' });
-    await ensureCycle(service, { portal: scope.portal, companyId: scope.companyId, competence, type: 'pagamento' });
+  if (shouldEnsureCycles) {
+    for (const scope of scopes) {
+      await ensureCycle(service, { portal: scope.portal, companyId: scope.companyId, competence, type: 'adiantamento' });
+      await ensureCycle(service, { portal: scope.portal, companyId: scope.companyId, competence, type: 'pagamento' });
+    }
   }
 
   const companyIds = Array.from(new Set(scopes.map((scope) => scope.companyId)));
@@ -407,7 +410,7 @@ export default async function handler(req: any, res?: any) {
     if (action.startsWith('admin_')) {
       const { user } = await requireAdmin(req);
 
-      if (action === 'admin_state') return sendJson(res, { ok: true, ...(await adminState(service)) });
+      if (action === 'admin_state') return sendJson(res, { ok: true, ...(await adminState(service, body.competencia)) });
 
       if (action === 'admin_release_payment') {
         const companyId = clean(body.empresa_id);
