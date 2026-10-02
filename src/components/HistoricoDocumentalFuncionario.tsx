@@ -215,6 +215,13 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
     return () => { active = false; };
   }, [funcionarioId]);
 
+  useEffect(() => {
+    const groupParam = searchParams.get('grupo');
+    if (HISTORY_GROUPS.some(group => group.id === groupParam)) {
+      setActiveGroup(groupParam as HistoryGroupId);
+    }
+  }, [searchParams]);
+
   const groupCounts = useMemo(() => {
     const counts: Record<HistoryGroupId, number> = {
       pagamentos: 0,
