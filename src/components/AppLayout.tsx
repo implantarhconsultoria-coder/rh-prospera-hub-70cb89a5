@@ -246,10 +246,6 @@ const AppLayout: React.FC = () => {
                       <span><strong className="block text-xs text-white">Equipe de Campo</strong><span className="mt-1 block text-[10px] text-zinc-500">Visão do técnico em campo</span></span>
                     </button>
 
-                    <button onClick={() => { navigate('/estoque-interno'); setUserMenuOpen(false); }} className="flex min-h-[82px] items-center gap-3 rounded-xl border border-fuchsia-500/20 bg-[#0b0d13] p-3 text-left transition hover:border-fuchsia-400/45 hover:bg-[#14101b]">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/[.06] text-fuchsia-400"><Archive className="h-5 w-5"/></span>
-                      <span><strong className="block text-xs text-white">Tela da Equipe</strong><span className="mt-1 block text-[10px] text-zinc-500">Estoque interno como os colaboradores veem</span></span>
-                    </button>
                   </div>
                 </div>
               )}            </div>
