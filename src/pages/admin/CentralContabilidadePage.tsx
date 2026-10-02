@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type TabKey = 'visao' | 'movimentacoes' | 'documentos' | 'fechamento';
+type MetricView = 'pendencias' | 'conferidos' | 'documentos' | 'hoje' | null;
 type ModuleKey = 'pre-cadastro' | 'rescisao' | 'ferias' | 'aso' | 'clinicas';
 type Revisao = {
   id:string; origem_tipo:string; origem_id:string; empresa_id:string; status:string;
@@ -59,6 +60,7 @@ const CentralContabilidadePage: React.FC = () => {
   const location = useLocation();
   const abrirInteligente = location.pathname === '/admin/apontamento-inteligente' || searchParams.get('inteligente') === '1';
   const [tab, setTab] = useState<TabKey>(() => abrirInteligente ? 'fechamento' : 'visao');
+  const [metricView, setMetricView] = useState<MetricView>(null);
   const [revisoes, setRevisoes] = useState<Revisao[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
@@ -175,13 +177,60 @@ const CentralContabilidadePage: React.FC = () => {
 
   const errosEmail = useMemo(() => pendingReceivedUploads.filter((u) => !!u.formalizacao_email_status && !emailOk(u.formalizacao_email_status)), [pendingReceivedUploads]);
   const selectedUploads = useMemo(() => pendingReceivedUploads.filter((u) => selectedUploadIds.includes(u.id)), [pendingReceivedUploads, selectedUploadIds]);
-  const hoje = useMemo(() => {
-    const key = new Date().toLocaleDateString('en-CA');
-    return uploads.filter((u) => new Date(u.created_at).toLocaleDateString('en-CA') === key).length
-      + revisoes.filter((r) => new Date(r.updated_at || r.created_at).toLocaleDateString('en-CA') === key).length;
-  }, [uploads, revisoes]);
+  const hojeKey = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+  const todayMovements = useMemo(() => {
+    const reviewItems = revisoes
+      .filter((r) => new Date(r.updated_at || r.created_at).toLocaleDateString('en-CA') === hojeKey)
+      .map((r) => ({
+        id:`review:${r.id}`,
+        kind:'review' as const,
+        at:r.updated_at || r.revisado_em || r.created_at,
+        companyId:r.empresa_id,
+        title:String(r.origem_tipo || 'Movimentação').replace(/_/g,' '),
+        subtitle:r.revisor_nome || 'Contabilidade',
+        status:r.status,
+        review:r,
+      }));
+    const uploadItems = uploads
+      .filter((u) => new Date(u.created_at).toLocaleDateString('en-CA') === hojeKey)
+      .map((u) => ({
+        id:`upload:${u.id}`,
+        kind:'upload' as const,
+        at:u.created_at,
+        companyId:u.empresa_id,
+        title:u.arquivo_nome,
+        subtitle:userMap.get(u.portal_user_id)?.nome || 'Contabilidade',
+        status:u.status || 'recebido',
+        upload:u,
+      }));
+    return [...reviewItems, ...uploadItems].sort((a,b) =>
+      new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime()
+    );
+  }, [revisoes, uploads, hojeKey, userMap]);
+  const hoje = todayMovements.length;
+
+  const filteredRevisoes = useMemo(() => {
+    if (metricView === 'pendencias') return pendencias;
+    if (metricView === 'conferidos') return conferidos;
+    return revisoes;
+  }, [metricView, pendencias, conferidos, revisoes]);
+
+  const movementTitle = metricView === 'pendencias'
+    ? 'Pendências / retificações'
+    : metricView === 'conferidos'
+      ? 'Conferidos'
+      : 'Conferências feitas pela contabilidade';
+
+  const openMetric = (view:Exclude<MetricView, null>) => {
+    setMetricView(view);
+    if (view === 'documentos') setTab('documentos');
+    else if (view === 'hoje') setTab('visao');
+    else setTab('movimentacoes');
+    window.setTimeout(() => window.scrollTo({ top: 360, behavior:'smooth' }), 40);
+  };
 
   const openModule = (key: ModuleKey) => {
+    setMetricView(null);
     const next = new URLSearchParams(searchParams);
     next.set('modulo', key);
     setSearchParams(next);
@@ -192,6 +241,7 @@ const CentralContabilidadePage: React.FC = () => {
     const next = new URLSearchParams(searchParams);
     next.delete('modulo');
     setSearchParams(next);
+    setMetricView(null);
     setTab('visao');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -394,10 +444,10 @@ const CentralContabilidadePage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
-          <MetricCard icon={AlertTriangle} label="Pendências / retificações" value={pendencias.length} tone="amber" />
-          <MetricCard icon={CheckCircle2} label="Conferidos" value={conferidos.length} tone="green" />
-          <MetricCard icon={FileText} label="Documentos recebidos" value={receivedUploads.length} tone="purple" />
-          <MetricCard icon={Clock3} label="Movimentações hoje" value={hoje} tone="blue" />
+          <MetricCard icon={AlertTriangle} label="Pendências / retificações" value={pendencias.length} tone="amber" active={metricView==='pendencias'} onClick={()=>openMetric('pendencias')} />
+          <MetricCard icon={CheckCircle2} label="Conferidos" value={conferidos.length} tone="green" active={metricView==='conferidos'} onClick={()=>openMetric('conferidos')} />
+          <MetricCard icon={FileText} label="Documentos recebidos" value={receivedUploads.length} tone="purple" active={metricView==='documentos'} onClick={()=>openMetric('documentos')} />
+          <MetricCard icon={Clock3} label="Movimentações hoje" value={hoje} tone="blue" active={metricView==='hoje'} onClick={()=>openMetric('hoje')} />
         </div>
 
         <div className="border-t border-[#211b28] bg-[#07090d] p-4">
@@ -420,7 +470,7 @@ const CentralContabilidadePage: React.FC = () => {
 
         {!activeModule && <div className="flex gap-1 overflow-x-auto border-t border-[#211b28] bg-[#07090d] px-3 py-2">
           {tabs.map(({key,label,icon:Icon}) => (
-            <button key={key} onClick={() => setTab(key)} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-bold ${tab===key?'bg-[#25123d] text-white ring-1 ring-[#7131a8]':'text-zinc-500 hover:bg-white/[.035] hover:text-zinc-200'}`}>
+            <button key={key} onClick={() => { setMetricView(null); setTab(key); }} className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-xs font-bold ${tab===key && !metricView?'bg-[#25123d] text-white ring-1 ring-[#7131a8]':'text-zinc-500 hover:bg-white/[.035] hover:text-zinc-200'}`}>
               <Icon className={`h-4 w-4 ${tab===key?'text-[#ffc400]':'text-[#8b22ff]'}`} />{label}
             </button>
           ))}
@@ -444,6 +494,31 @@ const CentralContabilidadePage: React.FC = () => {
         </section>
       ) : loading ? (
         <div className="flex min-h-[260px] items-center justify-center rounded-xl border border-[#27222e] bg-[#05070b]"><Loader2 className="h-6 w-6 animate-spin text-[#a855f7]" /></div>
+      ) : metricView === 'hoje' ? (
+        <Panel title="Movimentações de hoje" icon={Clock3}>
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-sky-500/15 bg-sky-500/[.035] px-4 py-3">
+            <div className="text-xs font-bold text-sky-200">{hoje} movimentação(ões) registrada(s) hoje</div>
+            <button type="button" onClick={()=>{setMetricView(null);setTab('visao');}} className="rounded-md border border-[#423051] px-3 py-1.5 text-[11px] font-bold text-zinc-300 hover:border-violet-500">Voltar à visão geral</button>
+          </div>
+          {todayMovements.length===0 ? <Empty text="Nenhuma movimentação registrada hoje."/> : (
+            <div className="space-y-2">
+              {todayMovements.map((item) => (
+                <div key={item.id} className="flex flex-col gap-3 rounded-lg border border-[#24212a] bg-[#080a0e] p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-black text-zinc-100">{item.title}</div>
+                    <div className="mt-1 text-xs text-zinc-500">{companyMap.get(item.companyId)||'Empresa'} · {item.subtitle} · {brDateTime(item.at)}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <StatusBadge value={item.status}/>
+                    {item.kind==='upload'
+                      ? <button onClick={()=>void abrirUpload(item.upload)} disabled={busyId===item.upload.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#423051] px-2.5 py-1.5 text-[11px] font-bold text-zinc-200 hover:border-[#8b22ff] disabled:opacity-50"><Eye className="h-3.5 w-3.5"/>Abrir</button>
+                      : reviewHasDocument(item.review) && <button onClick={()=>void abrirDocumentoRevisao(item.review)} disabled={busyId===item.review.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#423051] px-2.5 py-1.5 text-[11px] font-bold text-zinc-200 hover:border-[#8b22ff] disabled:opacity-50"><Eye className="h-3.5 w-3.5"/>Abrir</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
       ) : tab === 'fechamento' ? (
         <FechamentoPage abrirInteligente={abrirInteligente} />
       ) : tab === 'visao' ? (
@@ -476,12 +551,18 @@ const CentralContabilidadePage: React.FC = () => {
           {errosEmail.length>0&&<div className="xl:col-span-2"><Panel title="Formalizações de e-mail com falha" icon={AlertTriangle}><div className="grid gap-2 lg:grid-cols-2">{errosEmail.slice(0,12).map((u)=><div key={u.id} className="rounded-lg border border-rose-500/20 bg-rose-500/[.045] p-3"><div className="text-sm font-bold text-white">{u.arquivo_nome}</div><div className="mt-1 text-xs text-zinc-500">{companyMap.get(u.empresa_id)||'Empresa'} · {brDateTime(u.created_at)}</div><div className="mt-3 flex items-center justify-between gap-2"><StatusBadge value={u.formalizacao_email_status||'erro_envio_email'}/><button onClick={()=>void reenviarFormalizacao(u)} disabled={busyId===u.id} className="inline-flex items-center gap-2 rounded-md bg-[#7c24d6] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{busyId===u.id?<Loader2 className="h-3.5 w-3.5 animate-spin"/>:<Send className="h-3.5 w-3.5"/>}Reenviar formalização</button></div></div>)}</div></Panel></div>}
         </div>
       ) : tab === 'movimentacoes' ? (
-        <Panel title="Conferências feitas pela contabilidade" icon={Users}>
-          {revisoes.length===0 ? <Empty text="Nenhuma conferência registrada."/> : (
+        <Panel title={movementTitle} icon={Users}>
+          {(metricView==='pendencias'||metricView==='conferidos') && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#2b2631] bg-[#080a0e] px-4 py-3">
+              <div className="text-xs font-bold text-zinc-300">Filtro ativo: <span className="text-white">{movementTitle}</span> · {filteredRevisoes.length} registro(s)</div>
+              <button type="button" onClick={()=>setMetricView(null)} className="rounded-md border border-[#423051] px-3 py-1.5 text-[11px] font-bold text-zinc-300 hover:border-violet-500">Ver todas</button>
+            </div>
+          )}
+          {filteredRevisoes.length===0 ? <Empty text={metricView==='pendencias'?'Nenhuma pendência ou retificação.':metricView==='conferidos'?'Nenhuma conferência concluída.':'Nenhuma conferência registrada.'}/> : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left text-xs">
                 <thead className="border-b border-[#29242f] text-[10px] uppercase text-zinc-500"><tr><th className="px-3 py-3">Movimento</th><th className="px-3 py-3">Empresa</th><th className="px-3 py-3">Contabilidade</th><th className="px-3 py-3">Data / hora</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Documento</th><th className="px-3 py-3">Observação</th></tr></thead>
-                <tbody>{revisoes.map((r)=><tr key={r.id} className="border-b border-[#1b1c21]"><td className="px-3 py-3 font-bold text-zinc-200">{String(r.origem_tipo||'Movimentação').replace(/_/g,' ')}</td><td className="px-3 py-3 text-zinc-400">{companyMap.get(r.empresa_id)||'—'}</td><td className="px-3 py-3 text-zinc-400">{r.revisor_nome||'—'}</td><td className="px-3 py-3 text-zinc-400">{brDateTime(r.revisado_em||r.created_at)}</td><td className="px-3 py-3"><StatusBadge value={r.status}/></td><td className="px-3 py-3">{reviewHasDocument(r)?<button onClick={()=>void abrirDocumentoRevisao(r)} disabled={busyId===r.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#423051] px-2.5 py-1.5 font-bold text-zinc-200 hover:border-[#8b22ff] disabled:opacity-50">{busyId===r.id?<Loader2 className="h-3.5 w-3.5 animate-spin"/>:<Eye className="h-3.5 w-3.5"/>}Abrir</button>:<span className="text-zinc-700">—</span>}</td><td className="max-w-[340px] px-3 py-3 text-zinc-400">{r.observacao||'—'}</td></tr>)}</tbody>
+                <tbody>{filteredRevisoes.map((r)=><tr key={r.id} className="border-b border-[#1b1c21]"><td className="px-3 py-3 font-bold text-zinc-200">{String(r.origem_tipo||'Movimentação').replace(/_/g,' ')}</td><td className="px-3 py-3 text-zinc-400">{companyMap.get(r.empresa_id)||'—'}</td><td className="px-3 py-3 text-zinc-400">{r.revisor_nome||'—'}</td><td className="px-3 py-3 text-zinc-400">{brDateTime(r.revisado_em||r.created_at)}</td><td className="px-3 py-3"><StatusBadge value={r.status}/></td><td className="px-3 py-3">{reviewHasDocument(r)?<button onClick={()=>void abrirDocumentoRevisao(r)} disabled={busyId===r.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#423051] px-2.5 py-1.5 font-bold text-zinc-200 hover:border-[#8b22ff] disabled:opacity-50">{busyId===r.id?<Loader2 className="h-3.5 w-3.5 animate-spin"/>:<Eye className="h-3.5 w-3.5"/>}Abrir</button>:<span className="text-zinc-700">—</span>}</td><td className="max-w-[340px] px-3 py-3 text-zinc-400">{r.observacao||'—'}</td></tr>)}</tbody>
               </table>
             </div>
           )}
@@ -703,7 +784,7 @@ const CentralContabilidadePage: React.FC = () => {
 const Panel=({title,icon:Icon,children}:{title:string;icon:React.ElementType;children:React.ReactNode})=><section className="rounded-xl border border-[#27222e] bg-[#05070b] p-5"><div className="mb-4 flex items-center gap-2"><Icon className="h-4 w-4 text-[#ffc400]"/><h2 className="text-sm font-black uppercase tracking-wide text-white">{title}</h2></div>{children}</section>;
 const Empty=({text}:{text:string})=><div className="py-10 text-center text-sm text-zinc-600">{text}</div>;
 const Info=({label,value}:{label:string;value:string})=><div><div className="text-[10px] uppercase text-zinc-600">{label}</div><div className="mt-1 text-xs font-semibold text-zinc-300">{value}</div></div>;
-const MetricCard=({icon:Icon,label,value,tone}:{icon:React.ElementType;label:string;value:number;tone:'amber'|'green'|'purple'|'blue'})=>{const tones={amber:'text-amber-300 border-amber-500/20 bg-amber-500/[.055]',green:'text-emerald-300 border-emerald-500/20 bg-emerald-500/[.055]',purple:'text-violet-300 border-violet-500/20 bg-violet-500/[.055]',blue:'text-sky-300 border-sky-500/20 bg-sky-500/[.055]'};return <div className={`rounded-lg border p-4 ${tones[tone]}`}><div className="flex items-center justify-between"><div className="text-[10px] font-bold uppercase tracking-wider opacity-70">{label}</div><Icon className="h-4 w-4"/></div><div className="mt-2 text-2xl font-black text-white">{value}</div></div>};
+const MetricCard=({icon:Icon,label,value,tone,onClick,active=false}:{icon:React.ElementType;label:string;value:number;tone:'amber'|'green'|'purple'|'blue';onClick:()=>void;active?:boolean})=>{const tones={amber:'text-amber-300 border-amber-500/20 bg-amber-500/[.055]',green:'text-emerald-300 border-emerald-500/20 bg-emerald-500/[.055]',purple:'text-violet-300 border-violet-500/20 bg-violet-500/[.055]',blue:'text-sky-300 border-sky-500/20 bg-sky-500/[.055]'};return <button type="button" onClick={onClick} aria-pressed={active} className={`group rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:brightness-125 focus:outline-none focus:ring-2 focus:ring-violet-500/60 ${tones[tone]} ${active?'ring-2 ring-violet-500/70 shadow-[0_0_24px_rgba(139,34,255,.12)]':''}`}><div className="flex items-center justify-between"><div className="text-[10px] font-bold uppercase tracking-wider opacity-70">{label}</div><Icon className="h-4 w-4"/></div><div className="mt-2 flex items-end justify-between gap-3"><div className="text-2xl font-black text-white">{value}</div><span className="text-[10px] font-black uppercase tracking-wide opacity-0 transition group-hover:opacity-80">Abrir →</span></div></button>};
 const StatusBadge=({value}:{value?:string|null})=>{const v=String(value||'—');const cls=v==='conferido'||v==='enviado'?'border-emerald-500/25 bg-emerald-500/10 text-emerald-300':v.includes('erro')||v==='pendencia'?'border-rose-500/25 bg-rose-500/10 text-rose-300':v==='retificacao'?'border-violet-500/25 bg-violet-500/10 text-violet-300':'border-amber-500/25 bg-amber-500/10 text-amber-300';return <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${cls}`}>{statusLabel(v)}</span>};
 
 export default CentralContabilidadePage;
