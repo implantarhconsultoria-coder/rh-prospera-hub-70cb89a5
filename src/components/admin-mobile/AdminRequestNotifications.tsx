@@ -123,7 +123,7 @@ export default function AdminRequestNotifications() {
           .order('updated_at',{ascending:false})
           .limit(20),
         (supabase as any).from('payroll_documents')
-          .select('id,employee_id,company_id,competencia,document_type,net_amount,payment_reason,payment_kind,is_current,extracted_data,updated_at')
+          .select('id,employee_id,company_id,competencia,document_type,net_amount,payment_reason,payment_kind,is_current,status,extracted_data,updated_at')
           .eq('payment_kind','COMPLEMENTAR')
           .eq('is_current',true)
           .order('updated_at',{ascending:false})
@@ -239,14 +239,19 @@ export default function AdminRequestNotifications() {
 
       for (const doc of complementsResult.data || []) {
         const financeStatus = String(doc.extracted_data?.financeiro_formalizacao_status || '').toUpperCase();
-        if (financeStatus === 'ENVIADO') continue;
+        const signaturePending = String(doc.status || '').toUpperCase() === 'AGUARDANDO_ASSINATURA';
+        if (financeStatus === 'ENVIADO' && !signaturePending) continue;
+        const benefitLabel = doc.document_type === 'BENEFICIO_VT' ? 'VT' : 'VR';
+        const pendingLabel = financeStatus !== 'ENVIADO'
+          ? 'formalização ao Financeiro pendente'
+          : 'formalização enviada · assinatura do funcionário pendente';
         next.push({
           id:`benefit-finance:${doc.id}`,
-          source:'Financeiro',
-          title:`${employeeName(doc.employee_id)} · diferença de benefício`,
-          detail:`${companyName(doc.company_id)} · ${doc.document_type === 'BENEFICIO_VT' ? 'VT' : 'VR'} · ${money(doc.net_amount)} pendente de formalização`,
+          source:financeStatus !== 'ENVIADO' ? 'Financeiro' : 'Assinatura',
+          title:`${employeeName(doc.employee_id)} · diferença de ${benefitLabel}`,
+          detail:`${companyName(doc.company_id)} · ${money(doc.net_amount)} · ${pendingLabel}`,
           createdAt:doc.updated_at,
-          path:`/admin/funcionarios/${doc.employee_id}?tab=historico&grupo=${doc.document_type === 'BENEFICIO_VT' ? 'vt' : 'vr'}&payroll=${doc.id}`,
+          path:`/admin/funcionarios/${doc.employee_id}?tab=historico&grupo=${benefitLabel.toLowerCase()}&payroll=${doc.id}`,
           tone:'attention',
           icon:'finance',
         });
