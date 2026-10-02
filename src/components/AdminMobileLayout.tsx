@@ -6,8 +6,6 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
-import VoiceCommandFab from '@/components/admin-mobile/VoiceCommandFab';
-import AssistenteFab from '@/components/assistente/AssistenteFab';
 import GlobalSearch, { SearchModule } from '@/components/admin-mobile/GlobalSearch';
 import AdminHomeCards from '@/components/AdminHomeCards';
 import AdminRequestNotifications from '@/components/admin-mobile/AdminRequestNotifications';
@@ -235,12 +233,6 @@ const AdminMobileLayout: React.FC = () => {
         </div>
       )}
 
-      {!isHome && (
-        <>
-          <VoiceCommandFab />
-          <AssistenteFab />
-        </>
-      )}
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} query={searchQ} onQuery={setSearchQ} modules={searchModules} />
     </div>
