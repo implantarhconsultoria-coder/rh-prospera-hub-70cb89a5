@@ -59,6 +59,13 @@ const ASOPage: React.FC = () => {
   const [vinculosPendentes, setVinculosPendentes] = useState<Record<string, string>>({});
   const [vinculandoPendente, setVinculandoPendente] = useState('');
 
+  useEffect(() => {
+    const funcionarioDoAlerta = new URLSearchParams(window.location.search).get('funcionario');
+    if (funcionarioDoAlerta && employees.some(item => item.id === funcionarioDoAlerta)) {
+      setSelectedEmpId(funcionarioDoAlerta);
+    }
+  }, [employees]);
+
   const getNomeUsuarioAtual = async () => {
     if (!session?.user) return '';
     const profile = await supabase.from('profiles').select('nome_completo').eq('user_id', session.user.id).single();
