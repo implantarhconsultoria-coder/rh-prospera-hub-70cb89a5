@@ -39,14 +39,14 @@ const statusLabel: Record<string, string> = {
 };
 
 const statusClass: Record<string, string> = {
-  pendente: 'bg-amber-100 text-amber-800',
-  aceito: 'bg-blue-100 text-blue-800',
-  em_deslocamento: 'bg-violet-100 text-violet-800',
-  no_local: 'bg-indigo-100 text-indigo-800',
-  em_execucao: 'bg-orange-100 text-orange-800',
-  em_atendimento: 'bg-orange-100 text-orange-800',
-  concluido: 'bg-emerald-100 text-emerald-800',
-  cancelado: 'bg-red-100 text-red-800',
+  pendente: 'border border-amber-500/25 bg-amber-500/10 text-amber-300',
+  aceito: 'border border-sky-500/25 bg-sky-500/10 text-sky-300',
+  em_deslocamento: 'border border-violet-500/25 bg-violet-500/10 text-violet-300',
+  no_local: 'border border-indigo-500/25 bg-indigo-500/10 text-indigo-300',
+  em_execucao: 'border border-orange-500/25 bg-orange-500/10 text-orange-300',
+  em_atendimento: 'border border-orange-500/25 bg-orange-500/10 text-orange-300',
+  concluido: 'border border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
+  cancelado: 'border border-rose-500/25 bg-rose-500/10 text-rose-300',
 };
 
 const emptyChamadoForm = {
@@ -70,8 +70,9 @@ const DespacharChamadoPage: React.FC = () => {
   const { session, userRoles } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
-  const isAdmin = userRoles.includes('admin') || userRoles.includes('diretor_geral');
-  const canBootstrapOperator = Boolean(session?.user?.id) && (isAdmin || userRoles.includes('operacional'));
+  const hasAdminRole = userRoles.includes('admin') || userRoles.includes('diretor_geral');
+  const showAdminTools = hasAdminRole && location.pathname.startsWith('/admin/operacional');
+  const canBootstrapOperator = Boolean(session?.user?.id) && (hasAdminRole || userRoles.includes('operacional'));
   const operatorBootstrap = useOperatorBootstrap('operacional', canBootstrapOperator);
   const { developerMode } = useDeveloperMode();
 
@@ -388,49 +389,55 @@ const DespacharChamadoPage: React.FC = () => {
     { key: 'lista', label: 'Ocorrências', alert: metricas.adicionais },
     { key: 'historico', label: 'Histórico' },
     { key: 'movimentacoes', label: 'Movimentações' },
-    ...(isAdmin ? [{ key: 'operadores' as Tab, label: 'Operadores' }] : []),
+    ...(showAdminTools ? [{ key: 'operadores' as Tab, label: 'Operadores' }] : []),
   ];
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold font-display">
-            <ClipboardList className="h-6 w-6 text-primary" /> Operacional
-          </h1>
-          <p className="text-sm text-muted-foreground">Clientes, locações, movimentações e manutenção em uma única linha operacional.</p>
-        </div>
-        {operatorBootstrap.operador && (
-          <div className="rounded-xl border bg-card px-3 py-2 text-right">
-            <div className="flex items-center justify-end gap-1 text-xs font-bold"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> {developerMode ? 'Modo desenvolvedor' : 'Estação autorizada'}</div>
-            <div className="text-[10px] text-muted-foreground">{developerMode ? 'Acesso administrativo sem bloqueio de operador' : 'Operações exigem código individual'}</div>
+    <div className="space-y-3 animate-fade-in text-zinc-100">
+      <section className="rounded-[10px] border border-[#2c2235] bg-[#05080b] p-4 shadow-[0_12px_35px_rgba(0,0,0,.24)]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.16em] text-violet-400">
+              <ClipboardList className="h-4 w-4 text-[#ffb400]" /> Operacional
+            </div>
+            <h1 className="mt-1 text-[20px] font-black tracking-[-.02em] text-white">Central da Operação</h1>
+            <p className="mt-1 text-[11px] text-zinc-500">Clientes, ocorrências, movimentações e disponibilidade em um único fluxo.</p>
           </div>
-        )}
-      </div>
+          {operatorBootstrap.operador && (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[.05] px-3 py-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              <div>
+                <div className="text-[10px] font-black text-emerald-300">{developerMode ? 'Modo administrativo' : 'Estação autorizada'}</div>
+                <div className="text-[9px] text-zinc-600">{developerMode ? 'Sem bloqueio de operador' : 'Código individual nas ações'}</div>
+              </div>
+            </div>
+          )}
+        </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <button type="button" onClick={() => setTab('lista')} className="rounded-2xl border bg-card p-4 text-left">
-          <p className="text-xs text-muted-foreground">Aguardando aceite</p><strong className="mt-1 block text-2xl">{metricas.novos}</strong>
-        </button>
-        <button type="button" onClick={() => setTab('lista')} className="rounded-2xl border bg-card p-4 text-left">
-          <p className="text-xs text-muted-foreground">Em andamento</p><strong className="mt-1 block text-2xl">{metricas.andamento}</strong>
-        </button>
-        <button type="button" onClick={() => setTab('lista')} className={`rounded-2xl border p-4 text-left ${metricas.adicionais ? 'border-amber-300 bg-amber-50' : 'bg-card'}`}>
-          <p className="flex items-center gap-1 text-xs text-muted-foreground"><BellRing className="h-3.5 w-3.5" /> Adicionais pendentes</p><strong className="mt-1 block text-2xl">{metricas.adicionais}</strong>
-        </button>
-        <button type="button" onClick={() => setTab('lista')} className="rounded-2xl border bg-card p-4 text-left">
-          <p className="text-xs text-muted-foreground">Concluídos</p><strong className="mt-1 block text-2xl">{metricas.concluidos}</strong>
-        </button>
-      </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <button type="button" onClick={() => setTab('lista')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-600">Aguardando aceite</p><strong className="mt-1 block text-xl text-white">{metricas.novos}</strong>
+          </button>
+          <button type="button" onClick={() => setTab('lista')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-600">Em andamento</p><strong className="mt-1 block text-xl text-white">{metricas.andamento}</strong>
+          </button>
+          <button type="button" onClick={() => setTab('lista')} className={`rounded-[9px] border p-3 text-left transition ${metricas.adicionais ? 'border-amber-500/30 bg-amber-500/[.07]' : 'border-[#2b2631] bg-[#080b10]'}`}>
+            <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-zinc-600"><BellRing className="h-3 w-3" /> Adicionais</p><strong className={`mt-1 block text-xl ${metricas.adicionais ? 'text-amber-300' : 'text-white'}`}>{metricas.adicionais}</strong>
+          </button>
+          <button type="button" onClick={() => setTab('historico')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-600">Concluídos</p><strong className="mt-1 block text-xl text-white">{metricas.concluidos}</strong>
+          </button>
+        </div>
+      </section>
 
-      <div className="flex flex-wrap gap-1 rounded-xl border bg-card p-1">
+      <div className="flex flex-wrap gap-1 rounded-[10px] border border-[#2c2235] bg-[#05080b] p-1.5">
         {tabs.map((item) => (
-          <Button key={item.key} variant={tab === item.key ? 'default' : 'ghost'} size="sm" onClick={() => setTab(item.key)} className="relative">
+          <Button key={item.key} variant="ghost" size="sm" onClick={() => setTab(item.key)} className={`relative h-8 rounded-[7px] px-3 text-[10px] font-bold ${tab === item.key ? 'bg-violet-500/15 text-white ring-1 ring-violet-500/30' : 'text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200'}`}>
             {item.label}
             {!!item.alert && item.alert > 0 && <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[10px] text-white">{item.alert}</span>}
           </Button>
         ))}
-        {canShowProtocolo && <Button variant="ghost" size="sm" onClick={abrirProtocolo}>Protocolo</Button>}
+        {canShowProtocolo && <Button variant="ghost" size="sm" onClick={abrirProtocolo} className="h-8 rounded-[7px] px-3 text-[10px] font-bold text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200">Protocolo</Button>}
       </div>
 
       {tab === 'clientes' && (
@@ -447,7 +454,7 @@ const DespacharChamadoPage: React.FC = () => {
       {tab === 'disponibilidade' && <OperacionalDisponibilidadePlacas />}
 
       {tab === 'novo' && (
-        <div className="card-premium space-y-4 p-5">
+        <div className="space-y-4 rounded-[10px] border border-[#2c2235] bg-[#05080b] p-5">
           <div>
             <h2 className="font-bold">Nova ocorrência de manutenção</h2>
             <p className="text-xs text-muted-foreground">Registre quem pediu no cliente e depois identifique o operador TOPAC pelo código individual.</p>
@@ -532,7 +539,7 @@ const DespacharChamadoPage: React.FC = () => {
       {tab === 'lista' && (
         <div className="space-y-3">
           {adicionaisPendentes.length > 0 && (
-            <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+            <div className="flex items-center gap-3 rounded-[10px] border border-amber-500/25 bg-amber-500/[.07] p-4 text-amber-200">
               <AlertTriangle className="h-5 w-5" />
               <div><p className="font-bold">Há {adicionaisPendentes.length} adicional(is) aguardando ciência do Operacional.</p><p className="text-xs">Abra o chamado destacado para ver o que o mecânico encontrou e utilizou.</p></div>
             </div>
@@ -541,7 +548,7 @@ const DespacharChamadoPage: React.FC = () => {
           {chamados.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma ocorrência</p> : chamados.map((c) => {
             const temAdicional = adicionaisPendentes.some((a) => a.chamado_id === c.id);
             return (
-              <div key={c.id} className={`card-premium space-y-2 p-4 ${temAdicional ? 'border-amber-300 bg-amber-50/40' : ''}`}>
+              <div key={c.id} className={`space-y-2 rounded-[10px] border border-[#2c2235] bg-[#05080b] p-4 transition hover:border-violet-500/25 ${temAdicional ? 'border-amber-500/30 bg-amber-500/[.05]' : ''}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -582,7 +589,7 @@ const DespacharChamadoPage: React.FC = () => {
       )}
 
       {tab === 'movimentacoes' && <OperacionalMovimentacoesPanel equipamentos={equipamentos} clientes={clientes} />}
-      {tab === 'operadores' && isAdmin && <OperadoresOperacaoPanel />}
+      {tab === 'operadores' && showAdminTools && <OperadoresOperacaoPanel />}
 
       <Dialog open={!!editando} onOpenChange={(open) => { if (!open && !savingEdit) setEditando(null); }}>
         <DialogContent className="max-w-2xl">
