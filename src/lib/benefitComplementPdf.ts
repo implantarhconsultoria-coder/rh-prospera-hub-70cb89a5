@@ -108,3 +108,95 @@ export const buildBenefitComplementReceiptPdfBlob = (input: BenefitComplementPdf
 
   return doc.output('blob');
 };
+
+
+export type BenefitComplementFinanceRequestPdfInput = BenefitComplementPdfInput & {
+  previousDailyValue: number;
+};
+
+export const buildBenefitComplementFinanceRequestPdfBlob = (input: BenefitComplementFinanceRequestPdfInput) => {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const left = 18;
+  const right = 192;
+  const width = right - left;
+  const benefitName = input.benefitType === 'VT' ? 'VALE-TRANSPORTE (VT)' : 'VALE-REFEIÇÃO (VR)';
+
+  doc.setTextColor(0, 0, 0);
+  doc.setDrawColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('TOPAC RH PRO', left, 20);
+  doc.setFontSize(12);
+  doc.text('PEDIDO DE PAGAMENTO DE DIFERENÇA', left, 30);
+  doc.setFontSize(10);
+  doc.text(benefitName, left, 37);
+  doc.line(left, 43, right, 43);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('EMPRESA', left, 52);
+  doc.setFont('helvetica', 'normal');
+  doc.text(safe(input.company.name).toUpperCase(), left, 58);
+  doc.text(`CNPJ: ${safe(input.company.cnpj) || '—'}`, left, 64);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('FUNCIONÁRIO', left, 75);
+  doc.setFont('helvetica', 'normal');
+  doc.text(safe(input.employee.name), left, 81);
+  doc.text(`CPF: ${safe(input.employee.cpf) || '—'}`, left, 87);
+  doc.text(`Cargo: ${safe(input.employee.cargo) || '—'}`, 100, 87);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('REFERÊNCIA', left, 99);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Competência: ${competenciaLabel(input.competencia)}`, left, 105);
+  doc.text(`Data prevista do pagamento complementar: ${dataBr(input.paymentDate)}`, 100, 105);
+
+  const y = 116;
+  doc.setFillColor(229, 231, 235);
+  doc.rect(left, y, width, 8, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.text('DEMONSTRATIVO DA DIFERENÇA', left + 2, y + 5.5);
+
+  const rows: Array<[string, string, boolean?]> = [
+    ['Valor diário anterior', formatCurrency(input.previousDailyValue)],
+    ['Valor diário atualizado', formatCurrency(input.dailyValue)],
+    ['Dias considerados', String(input.daysConsidered)],
+    ['Valor já pago', formatCurrency(input.priorPaidAmount)],
+    ['Novo total devido', formatCurrency(input.entitlementAmount)],
+    ['DIFERENÇA A PAGAR', formatCurrency(input.complementAmount), true],
+  ];
+  rows.forEach(([label, value, strong], index) => {
+    const top = y + 8 + index * 9;
+    doc.rect(left, top, width, 9);
+    doc.setFont('helvetica', strong ? 'bold' : 'normal');
+    doc.text(label, left + 3, top + 6);
+    doc.text(value, right - 3, top + 6, { align: 'right' });
+  });
+
+  const reasonY = y + 8 + rows.length * 9 + 10;
+  doc.setFont('helvetica', 'bold');
+  doc.text('MOTIVO DO PEDIDO', left, reasonY);
+  doc.setFont('helvetica', 'normal');
+  const reasonLines = doc.splitTextToSize(safe(input.reason), width - 4);
+  doc.text(reasonLines.slice(0, 6), left + 2, reasonY + 7);
+
+  const formalY = reasonY + 40;
+  doc.setFillColor(245, 247, 250);
+  doc.roundedRect(left, formalY, width, 28, 1, 1, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.text('SOLICITAÇÃO AO FINANCEIRO', left + 4, formalY + 7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    `Solicita-se a formalização e o pagamento da diferença de ${formatCurrency(input.complementAmount)} referente a ${benefitName.toLowerCase()}, mantendo preservado o pagamento anterior já realizado.`,
+    left + 4,
+    formalY + 14,
+    { maxWidth: width - 8 },
+  );
+
+  doc.setFontSize(8);
+  doc.text('Documento gerado automaticamente pelo TOPAC RH PRO.', left, 266);
+  doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, left, 272);
+
+  return doc.output('blob');
+};
