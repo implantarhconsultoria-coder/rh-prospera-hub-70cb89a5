@@ -154,24 +154,53 @@ const PdfDocumentViewer: React.FC<PdfDocumentViewerProps> = ({
       return;
     }
 
-    const w = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!w) {
-      setError('Pop-ups bloqueados. Libere para imprimir.');
-      return;
-    }
+    setError('');
 
-    try {
-      w.addEventListener('load', () => {
+    // Imprime dentro da própria página, sem depender de window.open/pop-up.
+    // Mantemos o iframe visível tecnicamente (1px) para o visualizador PDF
+    // conseguir inicializar antes de chamar o diálogo nativo de impressão.
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '1px';
+    frame.style.height = '1px';
+    frame.style.border = '0';
+    frame.style.opacity = '0.01';
+    frame.style.pointerEvents = 'none';
+
+    const cleanup = () => {
+      window.setTimeout(() => frame.remove(), 1500);
+    };
+
+    frame.onload = () => {
+      window.setTimeout(() => {
         try {
-          w.focus();
-          w.print();
-        } catch {
-          // O visualizador nativo continua aberto para impressão manual.
+          const target = frame.contentWindow;
+          if (!target) throw new Error('Janela de impressão indisponível.');
+          target.focus();
+          target.print();
+          cleanup();
+        } catch (err: any) {
+          frame.remove();
+          setError(err?.message || 'Não foi possível abrir a impressão.');
         }
-      });
-    } catch {
-      // O visualizador nativo continua aberto para impressão manual.
-    }
+      }, 350);
+    };
+
+    frame.onerror = () => {
+      frame.remove();
+      setError('Não foi possível preparar o documento para impressão.');
+    };
+
+    document.body.appendChild(frame);
+    frame.src = url;
+
+    // Segurança: remove o frame caso o navegador não dispare load/error.
+    window.setTimeout(() => {
+      if (document.body.contains(frame)) frame.remove();
+    }, 60000);
   };
 
   if (!effectiveSource && !sourceBlob) {
