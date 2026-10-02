@@ -267,12 +267,41 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
       return `<tr><td>${escapeHtml(company?.nome || 'Empresa')}</td><td>${escapeHtml(statusLabel(cycle.status))}</td><td>${uploads.length}</td><td>${identified}</td><td>${review}</td></tr>`;
     }).join('') || '<tr><td colspan="5">Nenhum registro nesta competência.</td></tr>';
 
-    const win = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=800');
-    if (!win) return toast.error('O navegador bloqueou a janela de impressão. Libere pop-ups para imprimir.');
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Fechamento ${escapeHtml(monthLabel(state.competence))}</title><style>body{font-family:Arial,sans-serif;color:#111;margin:28px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}p{margin:0 0 18px;color:#555}table{width:100%;border-collapse:collapse;margin-bottom:22px}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:12px}th{background:#f3f4f6}.meta{font-size:12px;color:#555}@media print{body{margin:10mm}}</style></head><body><h1>Fluxo da Contabilidade</h1><p class="meta">Competência: ${escapeHtml(monthLabel(state.competence))}</p><h2>Adiantamento</h2><table><thead><tr><th>Empresa</th><th>Status</th><th>PDFs</th><th>Reconhecidos</th><th>Revisar</th></tr></thead><tbody>${rowsFor('adiantamento')}</tbody></table><h2>Pagamento</h2><table><thead><tr><th>Empresa</th><th>Status</th><th>PDFs</th><th>Reconhecidos</th><th>Revisar</th></tr></thead><tbody>${rowsFor('pagamento')}</tbody></table></body></html>`);
-    win.document.close();
-    win.focus();
-    window.setTimeout(() => { win.print(); win.close(); }, 250);
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Fechamento ${escapeHtml(monthLabel(state.competence))}</title><style>body{font-family:Arial,sans-serif;color:#111;margin:28px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:24px 0 8px}p{margin:0 0 18px;color:#555}table{width:100%;border-collapse:collapse;margin-bottom:22px}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:12px}th{background:#f3f4f6}.meta{font-size:12px;color:#555}@page{size:A4 portrait;margin:10mm}@media print{body{margin:0}}</style></head><body><h1>Fluxo da Contabilidade</h1><p class="meta">Competência: ${escapeHtml(monthLabel(state.competence))}</p><h2>Adiantamento</h2><table><thead><tr><th>Empresa</th><th>Status</th><th>PDFs</th><th>Reconhecidos</th><th>Revisar</th></tr></thead><tbody>${rowsFor('adiantamento')}</tbody></table><h2>Pagamento</h2><table><thead><tr><th>Empresa</th><th>Status</th><th>PDFs</th><th>Reconhecidos</th><th>Revisar</th></tr></thead><tbody>${rowsFor('pagamento')}</tbody></table></body></html>`;
+
+    // Imprime em um iframe invisível. Isso evita a janela branca/pop-up bloqueada
+    // que alguns navegadores criam quando window.open é usado com noopener.
+    const frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '1px';
+    frame.style.height = '1px';
+    frame.style.opacity = '0';
+    frame.style.pointerEvents = 'none';
+    document.body.appendChild(frame);
+
+    const printWindow = frame.contentWindow;
+    const printDocument = printWindow?.document;
+    if (!printWindow || !printDocument) {
+      frame.remove();
+      return toast.error('Não foi possível preparar a impressão.');
+    }
+
+    printDocument.open();
+    printDocument.write(html);
+    printDocument.close();
+
+    const executePrint = () => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } finally {
+        window.setTimeout(() => frame.remove(), 1500);
+      }
+    };
+    window.setTimeout(executePrint, 180);
   };
 
   const startRetification = async (cycle:Cycle) => {
