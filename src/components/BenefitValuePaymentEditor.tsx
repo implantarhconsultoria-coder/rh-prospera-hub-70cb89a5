@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Mail, Save } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency } from '@/lib/calculations';
 import { sha256Browser } from '@/lib/payrollDocuments';
-import { buildBenefitComplementReceiptPdfBlob } from '@/lib/benefitComplementPdf';
+import { buildBenefitComplementFinanceRequestPdfBlob, buildBenefitComplementReceiptPdfBlob } from '@/lib/benefitComplementPdf';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 
 const PAYROLL_BUCKET = 'payroll-private';
 const roundMoney = (value: number) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
@@ -70,6 +71,8 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
   const [context, setContext] = useState<PaymentContext | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [financeDraft, setFinanceDraft] = useState<EmailPdfDraft | null>(null);
+  const [financeEmailOpen, setFinanceEmailOpen] = useState(false);
 
   const documentType = benefitType === 'VT' ? 'BENEFICIO_VT' : 'BENEFICIO_VR';
 
@@ -210,7 +213,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
       );
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await (supabase as any).from('payroll_documents').insert({
+      const { data: insertedDocument, error: insertError } = await (supabase as any).from('payroll_documents').insert({
         company_id: employee.companyId,
         employee_id: employee.id,
         competencia: context.competencia,
@@ -233,6 +236,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         extracted_data: {
           origem: 'EDICAO_BENEFICIOS',
           pagamento_tipo: 'COMPLEMENTAR',
+          valor_diario_anterior: storedDailyValue,
           valor_diario_atualizado: newDailyValue,
           dias_finais: context.daysConsidered,
           total_devido_atualizado: newEntitlement,
@@ -240,6 +244,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
           valor_complementar: liveDifference,
           motivo: reason.trim(),
           data_pagamento: paymentDate || null,
+          financeiro_formalizacao_status: 'PENDENTE',
         },
         match_confidence: 100,
         status: 'AGUARDANDO_ASSINATURA',
@@ -247,13 +252,87 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
         confirmed_at: new Date().toISOString(),
         confirmed_by: actorId,
         created_by: actorId,
-      });
+      }).select('id').single();
       if (insertError) {
         await supabase.storage.from(PAYROLL_BUCKET).remove([path]);
         throw insertError;
       }
 
-      toast.success(`Pagamento complementar de ${benefitType} criado: ${formatCurrency(liveDifference)}. O recibo anterior foi preservado.`);
+      const financeBlob = buildBenefitComplementFinanceRequestPdfBlob({
+        benefitType,
+        company: { name: company.name || '', cnpj: company.cnpj || '' },
+        employee: {
+          name: employee.name || '',
+          cpf: employee.cpf || '',
+          cargo: employee.cargo || '',
+          registro: employee.registro || '',
+        },
+        competencia: context.competencia,
+        paymentDate: paymentDate || null,
+        previousDailyValue: storedDailyValue,
+        dailyValue: newDailyValue,
+        daysConsidered: context.daysConsidered,
+        entitlementAmount: newEntitlement,
+        priorPaidAmount: livePaid,
+        complementAmount: liveDifference,
+        reason: reason.trim(),
+      });
+      const financeFileName = `PEDIDO_DIFERENCA_${benefitType}_${safeFile(employee.name || 'FUNCIONARIO')}_${context.competencia}.pdf`;
+      const subject = `PEDIDO DE DIFERENÇA DE ${benefitType} - ${employee.name} - ${company.name || ''} - ${competenciaPt(context.competencia)}`;
+      const body = [
+        'Prezados,',
+        '',
+        `Encaminho para formalização o pedido de pagamento complementar de ${benefitType} do funcionário abaixo.`,
+        '',
+        `Funcionário: ${employee.name || '—'}`,
+        `CPF: ${employee.cpf || '—'}`,
+        `Empresa: ${company.name || '—'}`,
+        `Competência: ${competenciaPt(context.competencia)}`,
+        '',
+        `Valor já pago: ${formatCurrency(livePaid)}`,
+        `Novo total devido: ${formatCurrency(newEntitlement)}`,
+        `Diferença a pagar: ${formatCurrency(liveDifference)}`,
+        `Data prevista do novo pagamento: ${paymentDate ? paymentDate.split('-').reverse().join('/') : 'não informada'}`,
+        '',
+        `Motivo: ${reason.trim()}`,
+        '',
+        'O pedido formal de diferença segue anexo em PDF. Por gentileza, providenciar a formalização do pagamento e confirmar o processamento.',
+        '',
+        'Atenciosamente,',
+        'TOPAC RH PRO',
+      ].join('\n');
+
+      setFinanceDraft({
+        to: ['financeiro@topac.com.br'],
+        cc: ['robson@topac.com.br', 'adm.matriz@topac.com.br'],
+        subject,
+        body,
+        attachmentBlob: financeBlob,
+        attachmentName: financeFileName,
+        moduleOrigin: 'beneficio_complemento_financeiro',
+        documentId: String(insertedDocument?.id || ''),
+        documentName: financeFileName,
+        afterSend: async () => {
+          if (!insertedDocument?.id) return;
+          const { data: currentDoc } = await (supabase as any)
+            .from('payroll_documents')
+            .select('extracted_data')
+            .eq('id', insertedDocument.id)
+            .maybeSingle();
+          await (supabase as any).from('payroll_documents').update({
+            extracted_data: {
+              ...(currentDoc?.extracted_data || {}),
+              financeiro_formalizacao_status: 'ENVIADO',
+              financeiro_formalizacao_em: new Date().toISOString(),
+              financeiro_email_to: 'financeiro@topac.com.br',
+              financeiro_email_cc: ['robson@topac.com.br', 'adm.matriz@topac.com.br'],
+            },
+          }).eq('id', insertedDocument.id);
+        },
+      });
+      setFinanceEmailOpen(true);
+
+      toast.success(`Diferença de ${benefitType} criada: ${formatCurrency(liveDifference)}. Pedido para o Financeiro pronto para envio.`);
       setReason('');
       setPaymentDate('');
       await loadContext();
@@ -311,6 +390,24 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
           )}
         </div>
       )}
+
+      {financeDraft && (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+          <div>
+            <p className="text-xs font-bold text-emerald-300">Pedido de diferença gerado</p>
+            <p className="text-xs text-muted-foreground">Financeiro: financeiro@topac.com.br · CC: Robson e ADM Matriz.</p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => setFinanceEmailOpen(true)}>
+            <Mail className="mr-2 h-4 w-4" /> Enviar ao Financeiro
+          </Button>
+        </div>
+      )}
+
+      <EmailPdfModal
+        open={financeEmailOpen}
+        draft={financeDraft}
+        onOpenChange={setFinanceEmailOpen}
+      />
     </div>
   );
 };
