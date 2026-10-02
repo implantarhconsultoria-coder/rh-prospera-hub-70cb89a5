@@ -62,6 +62,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
   const [loadingEmployee, setLoadingEmployee] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [options, setOptions] = useState<CoverOptions>(defaultOptions);
+  const [coverPurpose, setCoverPurpose] = useState('CAPA PARA ARQUIVAR');
   const [customTitle, setCustomTitle] = useState('');
   const [customText, setCustomText] = useState('');
   const [customFooter, setCustomFooter] = useState('');
@@ -105,6 +106,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
     setLoadingEmployee(false);
     setPrinting(false);
     setOptions(defaultOptions);
+    setCoverPurpose('CAPA PARA ARQUIVAR');
     setCustomTitle('');
     setCustomText('');
     setCustomFooter('');
@@ -163,7 +165,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
 
     return `
       <section class="page">
-        <div class="top"><small>TOPAC RH PRO</small><h1>CAPA PARA ARQUIVAR</h1></div>
+        <div class="top"><small>TOPAC RH PRO</small><h1>${escapeHtml(coverPurpose.trim() || 'CAPA PARA ARQUIVAR')}</h1></div>
         <div class="name-wrap"><h2 class="name">${escapeHtml(employee.name)}</h2></div>
         <div class="details">${detailRows}</div>
         <div class="footer">ARQUIVO DO FUNCIONÁRIO</div>
@@ -196,14 +198,14 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
         .footer { position: absolute; bottom: 16mm; left: 18mm; right: 18mm; text-align: center; color: #6b7280; font-size: 9pt; letter-spacing: .8px; }
       </style>
       <section class="page">
-        <div class="top"><small>TOPAC RH PRO</small><h1>CAPA PARA ARQUIVAR</h1></div>
+        <div class="top"><small>TOPAC RH PRO</small><h1>${escapeHtml(coverPurpose.trim() || 'CAPA PARA ARQUIVAR')}</h1></div>
         <div class="custom-wrap">
           ${title ? `<h2 class="custom-title">${escapeHtml(title)}</h2>` : ''}
           ${text ? `<div class="custom-text">${safeText}</div>` : ''}
         </div>
         <div class="footer">${escapeHtml(footer || 'ARQUIVO TOPAC RH')}</div>
       </section>
-    `, `Capa - ${title || 'Personalizada'}`);
+    `, `${coverPurpose.trim() || 'Capa'} - ${title || 'Personalizada'}`);
   };
 
   const printCover = async () => {
@@ -245,11 +247,12 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
 
       const ordered = [...targetEmployees].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
       const pages = ordered.map((employee) => buildCoverPage(employee, dismissalById)).join('');
+      const purposeName = coverPurpose.trim() || 'Capa';
       const title = mode === 'employee'
-        ? `Capa - ${ordered[0]?.name || 'Funcionário'}`
+        ? `${purposeName} - ${ordered[0]?.name || 'Funcionário'}`
         : mode === 'company'
-          ? `Capas - ${companies.find((company) => company.id === selectedCompanyId)?.name || 'Empresa'}`
-          : 'Capas - Todos os funcionários';
+          ? `${purposeName} - ${companies.find((company) => company.id === selectedCompanyId)?.name || 'Empresa'}`
+          : `${purposeName} - Todos os funcionários`;
 
       printInPage(`
         <style>
@@ -293,6 +296,18 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
             <ModeButton active={mode === 'company'} icon={Building2} title="Por empresa" subtitle="Uma capa para cada funcionário" onClick={() => changeMode('company')} />
             <ModeButton active={mode === 'all'} icon={Layers3} title="Todas" subtitle="Todos os funcionários do RH" onClick={() => changeMode('all')} />
             <ModeButton active={mode === 'custom'} icon={PencilLine} title="Capa livre" subtitle="Escrever o que quiser" onClick={() => changeMode('custom')} />
+          </div>
+          <div className="rounded-xl border p-4">
+            <div className="mb-2">
+              <p className="text-sm font-semibold">Nome / finalidade da capa</p>
+              <p className="text-xs text-muted-foreground">Troque “Capa para Arquivar” por qualquer finalidade. Ex.: Pasta Funcional, Documentação Admissional, Rescisão, Férias, Atestados.</p>
+            </div>
+            <Input
+              className={lightFieldClass}
+              value={coverPurpose}
+              onChange={(event) => setCoverPurpose(event.target.value)}
+              placeholder="Ex.: DOCUMENTAÇÃO ADMISSIONAL"
+            />
           </div>
 
           {mode === 'employee' && (
@@ -353,7 +368,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
               <div className="rounded-xl border bg-white p-6 text-slate-950 shadow-sm">
                 <div className="border-b-2 border-slate-900 pb-4 text-center">
                   <div className="text-[9px] font-bold tracking-[.22em] text-slate-500">TOPAC RH PRO</div>
-                  <div className="mt-1 text-sm font-extrabold tracking-wide">CAPA PARA ARQUIVAR</div>
+                  <div className="mt-1 text-sm font-extrabold tracking-wide">{coverPurpose.trim() || 'CAPA PARA ARQUIVAR'}</div>
                 </div>
                 <div className="flex min-h-[330px] flex-col items-center justify-center px-3 py-10 text-center">
                   {customTitle.trim() && <div className="break-words text-3xl font-black uppercase leading-tight md:text-5xl">{customTitle}</div>}
@@ -370,7 +385,7 @@ const ArchiveCoverDialog: React.FC<ArchiveCoverDialogProps> = ({ open, onOpenCha
               <div className="rounded-xl border bg-white p-6 text-slate-950 shadow-sm">
                 <div className="border-b-2 border-slate-900 pb-4 text-center">
                   <div className="text-[9px] font-bold tracking-[.22em] text-slate-500">TOPAC RH PRO</div>
-                  <div className="mt-1 text-sm font-extrabold tracking-wide">CAPA PARA ARQUIVAR</div>
+                  <div className="mt-1 text-sm font-extrabold tracking-wide">{coverPurpose.trim() || 'CAPA PARA ARQUIVAR'}</div>
                 </div>
                 <div className="flex min-h-40 items-center justify-center px-3 py-8"><div className="break-words text-center text-3xl font-black uppercase leading-tight md:text-5xl">{selectedEmployee.name}</div></div>
                 <div className="divide-y border-y text-sm">
