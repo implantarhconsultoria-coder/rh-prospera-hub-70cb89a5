@@ -80,7 +80,7 @@ const CampoLayout: React.FC = () => {
                   active ? "text-[#ffb400]" : "text-zinc-600"
                 )}>
                 <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center mb-0.5 transition-all", active && "border border-violet-500/25 bg-violet-500/10")}>
-                  <tab.icon className={cn("w-4.5 h-4.5", active ? "text-[#ffb400]" : "text-zinc-600")} />
+                  <tab.icon className={cn("w-4 h-4", active ? "text-[#ffb400]" : "text-zinc-600")} />
                 </div>
                 {tab.label}
               </NavLink>
