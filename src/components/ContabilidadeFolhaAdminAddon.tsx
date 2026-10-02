@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle, CheckCircle2, ChevronRight, Clock3, Eye, FileCheck2,
-  Loader2, MailCheck, Printer, RefreshCw, WalletCards,
+  Loader2, MailCheck, Printer, RefreshCw, RotateCcw, WalletCards,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -275,6 +275,43 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
     window.setTimeout(() => { win.print(); win.close(); }, 250);
   };
 
+  const startRetification = async (cycle:Cycle) => {
+    const motivo = window.prompt(
+      'Descreva exatamente o que será retificado. Este texto será enviado no corpo do e-mail para a Contabilidade:',
+      '',
+    )?.trim();
+    if (!motivo) return;
+
+    setBusy(cycle.id);
+    try {
+      const token = await authToken();
+      const response = await fetch('/api/accounting-closing-flow', {
+        method:'POST',
+        headers:{ 'content-type':'application/json', authorization:`Bearer ${token}` },
+        body:JSON.stringify({
+          action:'reopen',
+          empresa_id:cycle.empresa_id,
+          competencia:cycle.competencia,
+          retificacao_motivo:motivo,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.ok) throw new Error(result?.message || result?.error || 'Não foi possível abrir a retificação.');
+
+      window.sessionStorage.setItem(
+        `topac:fechamento-retificacao:${cycle.empresa_id}:${cycle.competencia}`,
+        motivo,
+      );
+      toast.success('Apontamento reaberto para retificação.');
+      await load(true);
+      openClosing(cycle);
+    } catch (error:any) {
+      toast.error(error?.message || 'Não foi possível abrir a retificação.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const openClosing = (cycle:Cycle) => {
     let current:any = {};
     try { current = JSON.parse(window.sessionStorage.getItem(VIEW_STATE_KEY) || '{}'); } catch { current = {}; }
@@ -354,12 +391,15 @@ const ContabilidadeFolhaAdminAddon: React.FC = () => {
                       {cycle.rh_recebeu_em && <div className="mt-2 inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[.04] px-2.5 py-1.5 text-[10px] font-bold text-emerald-200"><CheckCircle2 className="h-3.5 w-3.5"/>Retorno recebido pelo RH em {new Date(cycle.rh_recebeu_em).toLocaleString('pt-BR')}</div>}
                       {cycle.observacao && <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/[.035] p-2.5 text-[11px] text-amber-200">{cycle.observacao}</div>}
 
-                      {uploads.length>0 && <div className="mt-3"><div className="mb-2 text-[10px] font-black uppercase tracking-[.14em] text-zinc-600">Histórico de arquivos do processo</div><div className="flex flex-wrap gap-2">{uploads.map(upload => <button key={upload.id} onClick={()=>void openUpload(upload)} disabled={busy===upload.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#3a3044] bg-[#0a0c11] px-2.5 py-1.5 text-[10px] font-bold text-zinc-300 hover:border-violet-500/50">{busy===upload.id?<Loader2 className="h-3 w-3 animate-spin"/>:<Eye className="h-3 w-3"/>}{upload.origem_tipo==='rh_apontamento'?'Apontamento RH':(upload.arquivo_nome.length>25?`${upload.arquivo_nome.slice(0,22)}...`:upload.arquivo_nome)}</button>)}</div></div>}
+                      {uploads.length>0 && <div className="mt-3"><div className="mb-2 text-[10px] font-black uppercase tracking-[.14em] text-zinc-600">Histórico de arquivos do processo</div><div className="flex flex-wrap gap-2">{uploads.map(upload => <button key={upload.id} onClick={()=>void openUpload(upload)} disabled={busy===upload.id} className="inline-flex items-center gap-1.5 rounded-md border border-[#3a3044] bg-[#0a0c11] px-2.5 py-1.5 text-[10px] font-bold text-zinc-300 hover:border-violet-500/50">{busy===upload.id?<Loader2 className="h-3 w-3 animate-spin"/>:<Eye className="h-3 w-3"/>}{upload.origem_tipo==='rh_apontamento'
+  ? (/RETIFICACAO/i.test(upload.arquivo_nome || '') ? 'Retificação RH' : 'Apontamento RH')
+  : (upload.arquivo_nome.length>25?`${upload.arquivo_nome.slice(0,22)}...`:upload.arquivo_nome)}</button>)}</div></div>}
 
                       <div className="mt-4 flex flex-wrap gap-2">
                         {accountingUploads.length>0 && !cycle.rh_recebeu_em && <Button size="sm" onClick={()=>void ackReturn(cycle)} disabled={busy===cycle.id} className="bg-cyan-600 text-white hover:bg-cyan-500">{busy===cycle.id?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<MailCheck className="mr-2 h-4 w-4"/>}Receber retorno</Button>}
                         {cycle.rh_recebeu_em && <span className="inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[.04] px-3 py-2 text-[11px] font-bold text-emerald-300"><CheckCircle2 className="h-4 w-4"/>Recebido e mantido no histórico</span>}
                         {closingPending && cycle.tipo==='pagamento' && <Button size="sm" onClick={()=>openClosing(cycle)} className="bg-cyan-600 text-white hover:bg-cyan-500"><FileCheck2 className="mr-2 h-4 w-4"/>Abrir fechamento</Button>}
+                        {!closingPending && cycle.tipo==='pagamento' && <Button size="sm" variant="outline" onClick={()=>void startRetification(cycle)} disabled={busy===cycle.id} className="border-rose-500/30 bg-rose-500/[.04] text-rose-200 hover:bg-rose-500/[.08]"><RotateCcw className="mr-2 h-4 w-4"/>Retificar apontamento</Button>}
                         {cycle.status==='aguardando_conferencia' && <><Button size="sm" onClick={()=>void approve(cycle)} disabled={busy===cycle.id} className="bg-emerald-600 text-white hover:bg-emerald-500">{busy===cycle.id?<Loader2 className="mr-2 h-4 w-4 animate-spin"/>:<CheckCircle2 className="mr-2 h-4 w-4"/>}Conferir e dar OK</Button><Button size="sm" variant="outline" onClick={()=>{setIssueCycle(cycle.id);setIssueText('');}} className="border-rose-500/30 bg-rose-500/[.04] text-rose-200"><AlertTriangle className="mr-2 h-4 w-4"/>Pendência</Button></>}
                         {cycle.status==='conferido' && <span className="inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/[.04] px-3 py-2 text-[11px] font-bold text-emerald-300"><CheckCircle2 className="h-4 w-4"/>OK finalizado</span>}
                         {!closingPending && !['aguardando_conferencia','conferido'].includes(cycle.status) && <span className="inline-flex items-center gap-2 rounded-md border border-amber-500/15 px-3 py-2 text-[11px] text-amber-200"><Clock3 className="h-4 w-4"/>{cycle.tipo==='pagamento'?'Aguardando Contabilidade':'Aguardando envio da Contabilidade'}</span>}

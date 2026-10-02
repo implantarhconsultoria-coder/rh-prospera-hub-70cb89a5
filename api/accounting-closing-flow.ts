@@ -92,7 +92,7 @@ async function accountingRecipients(service: any, companyId: string): Promise<{ 
   return { owner, emails, cc };
 }
 
-async function buildClosingPdf(service: any, companyId: string, competencia: string) {
+async function buildClosingPdf(service: any, companyId: string, competencia: string, retificationReason = '') {
   const [
     { data: company, error: companyError },
     { data: employees, error: employeeError },
@@ -325,7 +325,7 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
 
     const titleX = margin + 195;
     drawFit(page, String(company.nome || '').toUpperCase(), titleX, top - 19, 395, { font:bold, size:18.5, min:12.5, color:'#071633' });
-    drawFit(page, `Relatório de Apontamento - ${competenciaFull}`, titleX, top - 38, 395, { font:bold, size:10.8, min:8, color:'#0f2450' });
+    drawFit(page, `Relatório de Apontamento - ${competenciaFull}${retificationReason ? ' - RETIFICAÇÃO' : ''}`, titleX, top - 38, 395, { font:bold, size:10.8, min:8, color:retificationReason ? '#9b2831' : '#0f2450' });
     drawFit(page, `CNPJ: ${company.cnpj || '-'}   |   Competência: ${competenciaFull}   |   Dias úteis: ${diasUteis}`, titleX, top - 52, 395, { size:6.7, min:5.5, color:C.meta });
 
     const periodX = pageWidth - margin - 190;
@@ -339,7 +339,13 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
 
     let tableTop:number;
     if (pageIndex === 0) {
-      const cardsY = top - 120;
+      let cardsY = top - 120;
+      if (retificationReason) {
+        page.drawRectangle({ x:margin, y:top-92, width:contentWidth, height:24, color:color('#fff0f1'), borderColor:color('#d99aa0'), borderWidth:0.6 });
+        drawFit(page, 'RETIFICAÇÃO', margin+8, top-83, 78, { font:bold, size:7.2, min:6, color:'#9b2831' });
+        drawFit(page, retificationReason, margin+88, top-83, contentWidth-96, { font:bold, size:6.6, min:5.2, color:'#7f1f29' });
+        cardsY = top - 148;
+      }
       const gap = 7;
       const cardW = (contentWidth - gap * 4) / 5;
       drawCard(page, margin, cardsY, cardW, 48, C.soft, 'Funcionários', String(rows.length), C.navy3, 'P');
@@ -464,11 +470,11 @@ async function buildClosingPdf(service: any, companyId: string, competencia: str
   chunks.forEach((chunk, idx) => renderPage(chunk, idx, chunks.length));
 
   const bytes = await pdf.save({ useObjectStreams:false });
-  const filename = `${safePdfText(company.nome).replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}_-_APONTAMENTO_-_REF_${competencia}.pdf`;
+  const filename = `${safePdfText(company.nome).replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}_-_${retificationReason ? 'RETIFICACAO_' : ''}APONTAMENTO_-_REF_${competencia}.pdf`;
   return { bytes, filename, company };
 }
 
-async function sendAccountingEmail(service: any, input: { emails: string[]; cc: string[]; empresaId: string; companyName: string; competencia: string; filename: string; bytes: Uint8Array }) {
+async function sendAccountingEmail(service: any, input: { portal: string; emails: string[]; cc: string[]; empresaId: string; companyName: string; competencia: string; filename: string; bytes: Uint8Array; retificationReason?: string }) {
   const key = clean(process.env.RESEND_API_KEY);
   if (!key || !input.emails.length) return { status: 'pendente', error: key ? 'destinatario_ausente' : 'RESEND_API_KEY ausente' };
   const configured = clean(process.env.EMAIL_FROM || process.env.MAIL_FROM);
@@ -476,16 +482,29 @@ async function sendAccountingEmail(service: any, input: { emails: string[]; cc: 
   const threadKey = buildAccountingThreadKey(input.empresaId, input.competencia);
   const baseSubject = `[TOPAC RH PRO] FECHAMENTO DA FOLHA - ${input.companyName} - ${competenceLabel(input.competencia)}`;
   const thread = await prepareAccountingThread(service, { threadKey, subject: baseSubject });
-  const text = [
-    'Prezadas,', '',
-    'Fica formalizado o início do processo de fechamento da folha desta competência.', '',
-    `Empresa: ${input.companyName}`,
-    `Competência: ${competenceLabel(input.competencia)}`, '',
-    'O PDF do apontamento segue anexo e o processo já está liberado no Portal da Contabilidade.', '',
-    'A partir deste e-mail, toda pendência, correção, confirmação e o retorno da folha fechada deverão permanecer nesta mesma conversa.', '',
-    'Após receber, confirmem o recebimento no portal e sigam com o processamento.', '',
-    'TOPAC RH PRO',
-  ].join('\n');
+  const isRetification = Boolean(clean(input.retificationReason));
+  const text = isRetification
+    ? [
+        'Prezadas,', '',
+        'Segue RETIFICAÇÃO do apontamento do fechamento da folha.', '',
+        `Empresa: ${input.companyName}`,
+        `Competência: ${competenceLabel(input.competencia)}`, '',
+        'O que foi retificado:',
+        clean(input.retificationReason), '',
+        'O PDF completo e atualizado segue anexo. Considerem este arquivo como a versão válida para o processamento.', '',
+        'A retificação também foi registrada no Portal da Contabilidade e permanece vinculada ao histórico desta competência.', '',
+        'TOPAC RH PRO',
+      ].join('\n')
+    : [
+        'Prezadas,', '',
+        'Fica formalizado o início do processo de fechamento da folha desta competência.', '',
+        `Empresa: ${input.companyName}`,
+        `Competência: ${competenceLabel(input.competencia)}`, '',
+        'O PDF do apontamento segue anexo e o processo já está liberado no Portal da Contabilidade.', '',
+        'A partir deste e-mail, toda pendência, correção, confirmação e o retorno da folha fechada deverão permanecer nesta mesma conversa.', '',
+        'Após receber, confirmem o recebimento no portal e sigam com o processamento.', '',
+        'TOPAC RH PRO',
+      ].join('\n');
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -496,7 +515,9 @@ async function sendAccountingEmail(service: any, input: { emails: string[]; cc: 
       reply_to: ACCOUNTING_REPLY_MAILBOX,
       subject: thread.subject,
       text,
-      html: `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827"><p>Prezadas,</p><p><strong>Fica formalizado o início do processo de fechamento da folha desta competência.</strong></p><p><strong>Empresa:</strong> ${safePdfText(input.companyName)}<br><strong>Competência:</strong> ${competenceLabel(input.competencia)}</p><p>O PDF do apontamento segue anexo e o processo já está liberado no Portal da Contabilidade.</p><p>A partir deste e-mail, toda pendência, correção, confirmação e o retorno da folha fechada deverão permanecer nesta mesma conversa.</p><p>TOPAC RH PRO</p></div>`,
+      html: isRetification
+        ? `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827"><p>Prezadas,</p><p><strong>Segue RETIFICAÇÃO do apontamento do fechamento da folha.</strong></p><p><strong>Empresa:</strong> ${safePdfText(input.companyName)}<br><strong>Competência:</strong> ${competenceLabel(input.competencia)}</p><p style="padding:12px;border:1px solid #fecaca;background:#fff1f2"><strong>O que foi retificado:</strong><br>${safePdfText(input.retificationReason)}</p><p>O PDF completo e atualizado segue anexo. Considerem este arquivo como a versão válida para o processamento.</p><p>A retificação também foi registrada no Portal da Contabilidade e permanece vinculada ao histórico desta competência.</p><p>TOPAC RH PRO</p></div>`
+        : `<div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827"><p>Prezadas,</p><p><strong>Fica formalizado o início do processo de fechamento da folha desta competência.</strong></p><p><strong>Empresa:</strong> ${safePdfText(input.companyName)}<br><strong>Competência:</strong> ${competenceLabel(input.competencia)}</p><p>O PDF do apontamento segue anexo e o processo já está liberado no Portal da Contabilidade.</p><p>A partir deste e-mail, toda pendência, correção, confirmação e o retorno da folha fechada deverão permanecer nesta mesma conversa.</p><p>TOPAC RH PRO</p></div>`,
       ...(Object.keys(thread.headers).length ? { headers: thread.headers } : {}),
       attachments: [{ filename: input.filename, content: Buffer.from(input.bytes).toString('base64') }],
     }),
@@ -524,11 +545,41 @@ export default async function handler(req: any, res?: any) {
     const service = getServiceClient();
     const body = readBody(req);
     const action = clean(body.action || 'finalize');
-    if (action !== 'finalize') return sendJson(res, { ok: false, error: 'action_invalid' }, 400);
+    if (!['finalize','retify','reopen'].includes(action)) return sendJson(res, { ok: false, error: 'action_invalid' }, 400);
 
     const companyId = clean(body.empresa_id);
     const competencia = clean(body.competencia);
+    const retificationReason = clean(body.retificacao_motivo || body.motivo || '');
     if (!companyId || !/^\d{4}-\d{2}$/.test(competencia)) return sendJson(res, { ok: false, error: 'empresa_competencia_invalidas' }, 400);
+
+    if (action === 'reopen') {
+      if (!retificationReason) return sendJson(res, { ok:false, error:'retificacao_motivo_obrigatorio', message:'Informe o que será retificado.' }, 400);
+      const { data: reopened, error: reopenError } = await service.from('fechamentos_filial')
+        .update({ status:'reaberto' })
+        .eq('company_id', companyId)
+        .eq('competencia', competencia)
+        .select('id,status')
+        .maybeSingle();
+      if (reopenError) throw reopenError;
+      if (!reopened) return sendJson(res, { ok:false, error:'fechamento_nao_encontrado' }, 404);
+
+      const cycle = await getOrCreatePaymentCycle(service, companyId, competencia);
+      const now = new Date().toISOString();
+      await service.from('contabilidade_folha_ciclos').update({
+        status:'aguardando_apontamento',
+        observacao:`Retificação aberta pelo RH: ${retificationReason}`,
+        contabilidade_recebeu_em:null,
+        conferido_em:null,
+        email_retorno_status:null,
+        updated_at:now,
+      }).eq('id', cycle.id);
+
+      return sendJson(res, { ok:true, reopened:true, fechamento:reopened, ciclo_id:cycle.id, retificacao_motivo:retificationReason });
+    }
+
+    if (action === 'retify' && !retificationReason) {
+      return sendJson(res, { ok:false, error:'retificacao_motivo_obrigatorio', message:'Informe o que foi retificado antes de reenviar.' }, 400);
+    }
 
     const { data: fechamento, error: fechamentoError } = await service.from('fechamentos_filial')
       .select('id,status,fechado_em')
@@ -557,7 +608,7 @@ export default async function handler(req: any, res?: any) {
       .maybeSingle();
     if (existingGeneratedError) throw existingGeneratedError;
 
-    if (existingGenerated) {
+    if (existingGenerated && action !== 'retify') {
       let stableCycle = cycle;
       if (!cycle.apontamento_liberado_em) {
         const stableNow = new Date().toISOString();
@@ -581,20 +632,22 @@ export default async function handler(req: any, res?: any) {
       });
     }
 
-    const { bytes, filename, company } = await buildClosingPdf(service, companyId, competencia);
+    const { bytes, filename, company } = await buildClosingPdf(service, companyId, competencia, action === 'retify' ? retificationReason : '');
 
-    const { data: prior, error: priorError } = await service.from('contabilidade_portal_uploads')
-      .select('id,storage_bucket,storage_path')
-      .eq('ciclo_id', cycle.id)
-      .eq('origem_tipo', 'rh_apontamento');
-    if (priorError) throw priorError;
-    for (const row of prior || []) {
-      if (row.storage_path) await service.storage.from(row.storage_bucket || INBOX_BUCKET).remove([row.storage_path]).catch(() => null);
-    }
-    if ((prior || []).length) {
-      const ids = (prior || []).map((row: any) => row.id);
-      const { error: deleteError } = await service.from('contabilidade_portal_uploads').delete().in('id', ids);
-      if (deleteError) throw deleteError;
+    if (action !== 'retify') {
+      const { data: prior, error: priorError } = await service.from('contabilidade_portal_uploads')
+        .select('id,storage_bucket,storage_path')
+        .eq('ciclo_id', cycle.id)
+        .eq('origem_tipo', 'rh_apontamento');
+      if (priorError) throw priorError;
+      for (const row of prior || []) {
+        if (row.storage_path) await service.storage.from(row.storage_bucket || INBOX_BUCKET).remove([row.storage_path]).catch(() => null);
+      }
+      if ((prior || []).length) {
+        const ids = (prior || []).map((row: any) => row.id);
+        const { error: deleteError } = await service.from('contabilidade_portal_uploads').delete().in('id', ids);
+        if (deleteError) throw deleteError;
+      }
     }
 
     const storagePath = `apontamentos-rh/principal/${competencia}/${companyId}/${Date.now()}-${filename}`;
@@ -621,7 +674,13 @@ export default async function handler(req: any, res?: any) {
       formalizacao_email_em: null,
       formalizacao_destinos: Array.from(new Set([...emails, ...cc])),
       processamento_status: 'processado',
-      processamento_detalhes: { origem: 'fechamento_rh', fechamento_id: fechamento.id, gerado_automaticamente: true },
+      processamento_detalhes: {
+        origem: 'fechamento_rh',
+        fechamento_id: fechamento.id,
+        gerado_automaticamente: true,
+        retificacao: action === 'retify',
+        retificacao_motivo: action === 'retify' ? retificationReason : null,
+      },
       origem_tipo: 'rh_apontamento',
       origem_id: fechamento.id,
       created_at: now,
@@ -633,11 +692,14 @@ export default async function handler(req: any, res?: any) {
     }
 
     const { data: updatedCycle, error: cycleError } = await service.from('contabilidade_folha_ciclos').update({
-      apontamento_liberado_em: cycle.apontamento_liberado_em || now,
-      apontamento_liberado_por: cycle.apontamento_liberado_por || user.id,
-      contabilidade_recebeu_em: cycle.contabilidade_recebeu_em || null,
-      status: cycle.contabilidade_recebeu_em ? 'recebido' : 'liberado',
-      observacao: 'Apontamento gerado automaticamente no fechamento. Formalização por e-mail é independente da liberação operacional.',
+      apontamento_liberado_em: action === 'retify' ? now : (cycle.apontamento_liberado_em || now),
+      apontamento_liberado_por: user.id,
+      contabilidade_recebeu_em: action === 'retify' ? null : (cycle.contabilidade_recebeu_em || null),
+      conferido_em: action === 'retify' ? null : (cycle.conferido_em || null),
+      status: action === 'retify' ? 'liberado' : (cycle.contabilidade_recebeu_em ? 'recebido' : 'liberado'),
+      observacao: action === 'retify'
+        ? `Retificação enviada pelo RH: ${retificationReason}`
+        : 'Apontamento gerado automaticamente no fechamento. Formalização por e-mail é independente da liberação operacional.',
       email_envio_status: 'pendente',
       updated_at: now,
     }).eq('id', cycle.id).select('*').single();
@@ -648,7 +710,8 @@ export default async function handler(req: any, res?: any) {
     let email: any = { status: 'pendente', error: null };
     try {
       email = await sendAccountingEmail(service, {
-        emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes,
+        portal, emails, cc, empresaId: companyId, companyName: company.nome, competencia, filename, bytes,
+        retificationReason: action === 'retify' ? retificationReason : undefined,
       });
     } catch (emailError: any) {
       email = { status: 'erro', error: clean(emailError?.message || emailError).slice(0, 1000) };
@@ -665,9 +728,13 @@ export default async function handler(req: any, res?: any) {
     await service.from('contabilidade_folha_ciclos').update({
       email_envio_status: email.status,
       email_envio_em: email.status === 'enviado' ? emailNow : null,
-      observacao: email.status === 'enviado'
-        ? 'Apontamento gerado automaticamente no fechamento e formalizado por e-mail.'
-        : 'Apontamento liberado normalmente. Formalização por e-mail pendente, sem bloqueio operacional.',
+      observacao: action === 'retify'
+        ? (email.status === 'enviado'
+          ? `Retificação enviada e formalizada por e-mail: ${retificationReason}`
+          : `Retificação liberada no portal; e-mail pendente: ${retificationReason}`)
+        : (email.status === 'enviado'
+          ? 'Apontamento gerado automaticamente no fechamento e formalizado por e-mail.'
+          : 'Apontamento liberado normalmente. Formalização por e-mail pendente, sem bloqueio operacional.'),
       updated_at: emailNow,
     }).eq('id', cycle.id);
 
@@ -679,12 +746,14 @@ export default async function handler(req: any, res?: any) {
         email_remetente: clean(process.env.EMAIL_FROM || process.env.MAIL_FROM || 'TOPAC RH PRO <no-reply@topacrh.pro>'),
         reply_to: ACCOUNTING_REPLY_MAILBOX,
         provider: 'resend',
-        modulo_origem: 'contabilidade_fechamento',
+        modulo_origem: action === 'retify' ? 'contabilidade_fechamento_retificacao' : 'contabilidade_fechamento',
         documento_id: null,
         documento_nome: filename,
         destinatarios: emails.join('; '),
         cc: cc.join('; '),
-        assunto: `[TOPAC RH PRO] FECHAMENTO DA FOLHA - ${company.nome} - ${competenceLabel(competencia)}`,
+        assunto: action === 'retify'
+          ? `[TOPAC RH PRO] RETIFICAÇÃO DO FECHAMENTO - ${company.nome} - ${competenceLabel(competencia)}`
+          : `[TOPAC RH PRO] FECHAMENTO DA FOLHA - ${company.nome} - ${competenceLabel(competencia)}`,
         status: email.status === 'enviado' ? 'enviado' : 'erro',
         erro: email.status === 'enviado' ? null : (email.error || null),
         enviado_em: emailNow,
@@ -701,6 +770,8 @@ export default async function handler(req: any, res?: any) {
       email_status: email.status,
       email_error: email.error || null,
       operation_released: true,
+      retificacao: action === 'retify',
+      retificacao_motivo: action === 'retify' ? retificationReason : null,
     });
   } catch (error: any) {
     console.error('[accounting-closing-flow]', error);
