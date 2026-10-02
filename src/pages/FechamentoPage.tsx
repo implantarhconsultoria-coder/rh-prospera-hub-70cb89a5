@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Bus, FileText, Lock, RefreshCw, Save, Table, UtensilsCrossed } from 'lucide-react';
+import { Bus, FileText, Lock, RefreshCw, RotateCcw, Save, Table, UtensilsCrossed } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual, getHoraExtraSemanalPercentual } from '@/lib/calculations';
@@ -47,6 +47,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   const setDiasUteisManual = (value: number) => setViewState((current) => ({ ...current, diasUteisManual: value }));
   const setDomingosFeriados = (value: number) => setViewState((current) => ({ ...current, domingosFeriados: value }));
   const [saving, setSaving] = useState(false);
+  const [retificationReason, setRetificationReason] = useState('');
   const saveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
 
   useEffect(() => {
@@ -68,9 +69,19 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
     if (selectedCompany && competencia) getOrCreateEntries(selectedCompany, competencia);
   }, [selectedCompany, competencia, getOrCreateEntries]);
 
+  useEffect(() => {
+    if (!retificationStorageKey) {
+      setRetificationReason('');
+      return;
+    }
+    const saved = window.sessionStorage.getItem(retificationStorageKey) || '';
+    setRetificationReason(saved);
+  }, [retificationStorageKey]);
+
   const compEmps = employees.filter((employee) => employee.companyId === selectedCompany && employee.status === 'ativo' && employee.categoria === 'operacional');
   const compEntries = entries.filter((entry) => entry.companyId === selectedCompany && entry.competencia === competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
+  const retificationStorageKey = selectedCompany && competencia ? `topac:fechamento-retificacao:${selectedCompany}:${competencia}` : '';
   const selectedCompanyData = companies.find((company) => company.id === selectedCompany);
   const comissaoPct = getComissaoPercentual(selectedCompanyData);
   const heSemanalPct = 50;
@@ -168,8 +179,16 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
     setSaving(true);
     try {
       await persistAllEntries();
-      const result = await updateFechamento(selectedCompany, competencia, { status: 'em_conferencia', observacoes: fechamento.observacoes, ...fechamentoTotals });
+      const result = await updateFechamento(selectedCompany, competencia, {
+        status: retificationReason.trim() ? 'reaberto' : 'em_conferencia',
+        observacoes: fechamento.observacoes,
+        ...fechamentoTotals,
+      });
       if (!result.ok) throw result.error || new Error('Falha ao salvar fechamento.');
+      if (isRetification) {
+        if (retificationStorageKey) window.sessionStorage.removeItem(retificationStorageKey);
+        setRetificationReason('');
+      }
       await refreshEntries();
       toast.success('Fechamento e lançamentos salvos no banco.');
     } catch (error) {
@@ -180,8 +199,47 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
     }
   };
 
+  const handleRetificarFechamento = async () => {
+    if (saving || fechamento.status !== 'fechado') return;
+    const motivo = window.prompt(
+      'Descreva exatamente o que será retificado. Este texto será enviado no corpo do e-mail para a Contabilidade:',
+      '',
+    )?.trim();
+    if (!motivo) return;
+
+    setSaving(true);
+    try {
+      const token = session?.access_token || (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) throw new Error('Sessão administrativa indisponível.');
+
+      const response = await fetch('/api/accounting-closing-flow', {
+        method:'POST',
+        headers:{ 'content-type':'application/json', authorization:`Bearer ${token}` },
+        body:JSON.stringify({
+          action:'reopen',
+          empresa_id:selectedCompany,
+          competencia,
+          retificacao_motivo:motivo,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.ok) throw new Error(data?.message || data?.error || 'Não foi possível abrir a retificação.');
+
+      if (retificationStorageKey) window.sessionStorage.setItem(retificationStorageKey, motivo);
+      setRetificationReason(motivo);
+      await updateFechamento(selectedCompany, competencia, { status:'reaberto' });
+      toast.success('Apontamento reaberto para retificação. Faça os ajustes e conclua para reenviar.');
+    } catch (error:any) {
+      console.error('Erro ao abrir retificação:', error);
+      toast.error(error?.message || 'Não foi possível abrir a retificação.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleMarcarFechado = async () => {
     if (saving) return;
+    const isRetification = Boolean(retificationReason.trim());
     setSaving(true);
     try {
       await persistAllEntries();
@@ -203,7 +261,12 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
           const response = await fetch('/api/accounting-closing-flow', {
             method: 'POST',
             headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-            body: JSON.stringify({ action: 'finalize', empresa_id: selectedCompany, competencia }),
+            body: JSON.stringify({
+              action: isRetification ? 'retify' : 'finalize',
+              empresa_id: selectedCompany,
+              competencia,
+              ...(isRetification ? { retificacao_motivo:retificationReason.trim() } : {}),
+            }),
           });
           const accounting = await response.json().catch(() => ({}));
           if (!response.ok || !accounting?.ok) {
@@ -211,9 +274,13 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
           }
 
           if (accounting.email_status === 'enviado') {
-            toast.success('Fechamento concluído. Apontamento liberado e formalizado para a Contabilidade.');
+            toast.success(isRetification
+              ? 'Retificação concluída. Novo apontamento enviado à Contabilidade com a descrição da alteração.'
+              : 'Fechamento concluído. Apontamento liberado e formalizado para a Contabilidade.');
           } else {
-            toast.warning('Fechamento concluído e apontamento liberado. O e-mail ficou pendente, sem bloquear a operação.');
+            toast.warning(isRetification
+              ? 'Retificação concluída e liberada. O e-mail ficou pendente, sem bloquear o processo.'
+              : 'Fechamento concluído e apontamento liberado. O e-mail ficou pendente, sem bloquear a operação.');
           }
         } catch (accountingError) {
           console.error('Fechamento salvo; integração contábil pendente:', accountingError);
@@ -347,7 +414,27 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
       <section className="card-premium space-y-3 p-4">
         <label className="text-xs font-semibold text-muted-foreground">Observação geral do fechamento</label>
         <textarea value={fechamento.observacoes} onChange={(event) => updateFechamento(selectedCompany, competencia, { observacoes: event.target.value }, { persist: false })} className="min-h-[72px] w-full rounded-lg border border-violet-400/20 bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-violet-400/60" placeholder="Observações gerais da competência..." />
-        <div className="flex flex-wrap gap-3"><Button disabled={saving} onClick={handleSalvarFechamento} className="gradient-primary text-primary-foreground"><Save className="mr-2 h-4 w-4" /> {saving ? 'Salvando...' : 'Salvar Fechamento'}</Button><Button disabled={saving} onClick={handleMarcarFechado} variant="outline"><Lock className="mr-2 h-4 w-4" /> Marcar como Fechado</Button><Button onClick={openPdf} variant="outline"><FileText className="mr-2 h-4 w-4" /> Gerar PDF</Button><Button onClick={exportApontamentoCsv} variant="outline"><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button></div>
+        {retificationReason.trim() && (
+          <div className="rounded-lg border border-rose-500/25 bg-rose-500/[.055] p-3 text-xs text-rose-100">
+            <div className="font-black uppercase tracking-wide text-rose-300">Retificação em andamento</div>
+            <div className="mt-1"><b>Motivo / alteração informada:</b> {retificationReason}</div>
+            <div className="mt-1 text-rose-200/80">Ao concluir, será gerado um novo PDF completo e um novo e-mail para a Contabilidade informando esta retificação. O PDF anterior permanece no histórico.</div>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3">
+          {fechamento.status === 'fechado' ? (
+            <Button disabled={saving} onClick={handleRetificarFechamento} className="bg-rose-600 text-white hover:bg-rose-500">
+              <RotateCcw className="mr-2 h-4 w-4" /> Retificar apontamento
+            </Button>
+          ) : (
+            <>
+              <Button disabled={saving} onClick={handleSalvarFechamento} className="gradient-primary text-primary-foreground"><Save className="mr-2 h-4 w-4" /> {saving ? 'Salvando...' : (retificationReason.trim() ? 'Salvar retificação' : 'Salvar Fechamento')}</Button>
+              <Button disabled={saving} onClick={handleMarcarFechado} variant="outline"><Lock className="mr-2 h-4 w-4" /> {retificationReason.trim() ? 'Concluir retificação e reenviar' : 'Marcar como Fechado'}</Button>
+            </>
+          )}
+          <Button onClick={openPdf} variant="outline"><FileText className="mr-2 h-4 w-4" /> Gerar PDF</Button>
+          <Button onClick={exportApontamentoCsv} variant="outline"><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button>
+        </div>
       </section>
     </div>
   );
