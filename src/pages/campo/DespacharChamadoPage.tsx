@@ -299,7 +299,72 @@ const DespacharChamadoPage: React.FC = () => {
 
   const imprimirRelatorioOperacional = () => {
     const emitidoEm = new Date().toLocaleString('pt-BR');
-    const rows = chamados.map((chamado) => {
+
+    const clientesRelatorio = clientes.map((cliente) => {
+      const alloc = alocacoes.filter((item) => item.cliente_id === cliente.id && item.ativo !== false);
+      const localIds = Array.from(new Set(alloc.map((item) => item.cliente_local_id).filter(Boolean)));
+      const semLocal = alloc.filter((item) => !item.cliente_local_id).length;
+      const canteiros = localIds.length + (semLocal > 0 ? 1 : 0);
+      const alertas = alloc.filter((item) => item.alerta_conferencia).length;
+      const ocorrenciasAbertas = chamados.filter((item) =>
+        item.cliente_id === cliente.id && !['concluido', 'cancelado'].includes(item.status)
+      ).length;
+
+      const locaisResumo = localIds
+        .map((id) => locais.find((local) => local.id === id)?.nome)
+        .filter(Boolean);
+
+      if (semLocal > 0) locaisResumo.push('Local não informado');
+
+      const equipamentosResumo = alloc.length
+        ? alloc.map((item) => {
+            const patrimonio = item.patrimonio || 'Sem patrimônio';
+            const placa = item.placa || 'Sem placa';
+            const localNome = item.cliente_local_id
+              ? (locais.find((local) => local.id === item.cliente_local_id)?.nome || 'Local não informado')
+              : 'Local não informado';
+            const conferir = item.alerta_conferencia ? ' • CONFERIR' : '';
+            return `<div class="equip"><b>${escapeHtml(patrimonio)}</b> · ${escapeHtml(placa)}<span class="muted"> · ${escapeHtml(localNome)}</span>${conferir ? '<span class="warn">' + conferir + '</span>' : ''}</div>`;
+          }).join('')
+        : '<span class="muted">Sem equipamento alocado</span>';
+
+      return {
+        cliente,
+        canteiros,
+        total: alloc.length,
+        alertas,
+        ocorrenciasAbertas,
+        locaisResumo,
+        equipamentosResumo,
+      };
+    });
+
+    const totalCanteiros = clientesRelatorio.reduce((sum, row) => sum + row.canteiros, 0);
+    const totalAlocados = clientesRelatorio.reduce((sum, row) => sum + row.total, 0);
+    const totalConferir = clientesRelatorio.reduce((sum, row) => sum + row.alertas, 0);
+    const totalAbertas = clientesRelatorio.reduce((sum, row) => sum + row.ocorrenciasAbertas, 0);
+
+    const listaRows = clientesRelatorio.map((row) => {
+      const rowClass = row.alertas > 0 ? 'class="attention"' : '';
+      const statusConferencia = row.alertas > 0
+        ? `<span class="pill warn-pill">${row.alertas} PARA CONFERIR</span>`
+        : '<span class="pill ok-pill">OK</span>';
+
+      return `<tr ${rowClass}>
+        <td>
+          <div class="client-name">${escapeHtml(row.cliente.razao_social || row.cliente.nome_fantasia || 'Cliente')}</div>
+          <div class="muted">${escapeHtml(row.cliente.cnpj_cpf || 'CNPJ não informado')}</div>
+          ${row.locaisResumo.length ? '<div class="subline">' + row.locaisResumo.map((local) => escapeHtml(local)).join(' · ') + '</div>' : ''}
+        </td>
+        <td class="center"><b>${row.canteiros}</b></td>
+        <td>${row.equipamentosResumo}</td>
+        <td class="center"><b>${row.total}</b></td>
+        <td class="center">${statusConferencia}</td>
+        <td class="center"><b>${row.ocorrenciasAbertas}</b></td>
+      </tr>`;
+    }).join('');
+
+    const ocorrenciasRows = chamados.map((chamado) => {
       const data = chamado.created_at ? new Date(chamado.created_at).toLocaleString('pt-BR') : '—';
       const equipamento = [chamado.patrimonio_snapshot, chamado.placa_snapshot].filter(Boolean).join(' / ') || '—';
       const detalheFinal = chamado.status === 'concluido'
@@ -313,7 +378,6 @@ const DespacharChamadoPage: React.FC = () => {
         <td><b>${escapeHtml(chamado.cliente || '—')}</b><br><span class="muted">${escapeHtml(chamado.local_servico || '—')}</span></td>
         <td>${escapeHtml(equipamento)}</td>
         <td>${escapeHtml(chamado.tipo_servico || '—')}</td>
-        <td>${escapeHtml(chamado.solicitante_nome || '—')}</td>
         <td>${escapeHtml(nomeTecnico(chamado.colaborador_id))}</td>
         <td>${escapeHtml(statusLabel[chamado.status] || chamado.status || '—')}</td>
         <td>${escapeHtml(detalheFinal)}</td>
@@ -321,30 +385,108 @@ const DespacharChamadoPage: React.FC = () => {
     }).join('');
 
     const html = `<!doctype html>
-<html><head><meta charset="utf-8"><title>Relatório Operacional TOPAC</title>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Relatório Consolidado Operacional - TOPAC</title>
 <style>
-@page{size:A4 landscape;margin:9mm}
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:9px}
-.header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #111;padding-bottom:8px;margin-bottom:10px}
-.brand{font-size:20px;font-weight:800}.title{font-size:13px;font-weight:800;margin-top:3px}.meta{font-size:9px;color:#666}
-.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0 12px}
-.box{border:1px solid #bbb;border-radius:5px;padding:7px}.label{font-size:7px;color:#666;text-transform:uppercase;font-weight:700}.value{font-size:15px;font-weight:800;margin-top:2px}
-table{width:100%;border-collapse:collapse}th,td{border:1px solid #c9c9c9;padding:5px;text-align:left;vertical-align:top}th{background:#f0f0f0;font-size:7px;text-transform:uppercase}
-tr{page-break-inside:avoid}.muted{color:#666;font-size:8px}.footer{margin-top:10px;color:#666;font-size:8px}
-</style></head><body>
-<div class="header"><div><div class="brand">TOPAC RH PRO</div><div class="title">RELATÓRIO OPERACIONAL</div></div><div class="meta">Emitido em ${escapeHtml(emitidoEm)}</div></div>
-<div class="summary">
-  <div class="box"><div class="label">Total de ocorrências</div><div class="value">${chamados.length}</div></div>
-  <div class="box"><div class="label">Aguardando aceite</div><div class="value">${metricas.novos}</div></div>
-  <div class="box"><div class="label">Em andamento</div><div class="value">${metricas.andamento}</div></div>
-  <div class="box"><div class="label">Adicionais pendentes</div><div class="value">${metricas.adicionais}</div></div>
-  <div class="box"><div class="label">Concluídos</div><div class="value">${metricas.concluidos}</div></div>
+@page{size:A4 landscape;margin:8mm}
+*{box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;color:#172235;margin:0;background:#fff;font-size:9px}
+.hero{background:#172235;color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:flex-start}
+.hero h1{font-size:24px;letter-spacing:.4px;margin:0;font-weight:900}
+.hero p{margin:5px 0 0;color:#d8dfeb;font-size:10px}
+.badge{background:#fff;color:#172235;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:900}
+.content{padding:14px 18px}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.section-head h2{margin:0;font-size:14px;font-weight:900}
+.section-head p{margin:3px 0 0;color:#637083;font-size:9px}
+.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:10px 0 14px}
+.box{border:1px solid #cfd7e3;border-radius:8px;padding:8px;background:#fff}
+.box.alert{background:#fff8df;border-color:#e9be39}
+.label{font-size:7px;color:#637083;text-transform:uppercase;font-weight:800}
+.value{font-size:16px;font-weight:900;margin-top:3px}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{background:#172235;color:#fff;padding:7px 6px;text-align:left;font-size:7px;text-transform:uppercase;letter-spacing:.2px}
+td{border:1px solid #d4dbe5;padding:7px 6px;vertical-align:top}
+tbody tr:nth-child(even){background:#f5f7fa}
+tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
+.client-name{font-size:10px;font-weight:900;text-transform:uppercase}
+.muted{color:#6d7888;font-size:7.5px}
+.subline{margin-top:4px;color:#4e5b6d;font-size:7.5px}
+.equip{padding:2px 0;border-bottom:1px dotted #d8dee8}
+.equip:last-child{border-bottom:0}
+.warn{color:#9a6a00;font-weight:900}
+.center{text-align:center;vertical-align:middle}
+.pill{display:inline-block;border-radius:999px;padding:3px 6px;font-size:7px;font-weight:900;white-space:nowrap}
+.ok-pill{background:#e7f6ee;color:#16794b}
+.warn-pill{background:#ffe89a;color:#7b5500}
+.subsection{margin-top:16px;page-break-before:auto}
+.subsection h3{font-size:12px;margin:0 0 7px}
+.footer{margin-top:12px;border-top:1px solid #d8dee8;padding-top:7px;color:#687486;font-size:7.5px}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div>
+    <h1>RELATÓRIO CONSOLIDADO - OPERACIONAL</h1>
+    <p>Clientes, canteiros, equipamentos, pendências e ocorrências</p>
+  </div>
+  <div class="badge">RELATÓRIO</div>
 </div>
-<table><thead><tr>
-<th>Ocorrência / Data</th><th>Cliente / Local</th><th>Patrimônio / Placa</th><th>Serviço</th><th>Solicitante</th><th>Mecânico</th><th>Status</th><th>Observação / Conclusão</th>
-</tr></thead><tbody>${rows || '<tr><td colspan="8">Nenhuma ocorrência registrada.</td></tr>'}</tbody></table>
-<div class="footer">TOPAC RH PRO · Central da Operação · relatório gerado diretamente da base operacional.</div>
-</body></html>`;
+<div class="content">
+  <div class="section-head">
+    <div>
+      <h2>TOPAC · OPERAÇÃO</h2>
+      <p>Emitido em ${escapeHtml(emitidoEm)}</p>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="box"><div class="label">Clientes</div><div class="value">${clientesRelatorio.length}</div></div>
+    <div class="box"><div class="label">Canteiros / Locais</div><div class="value">${totalCanteiros}</div></div>
+    <div class="box"><div class="label">Equipamentos alocados</div><div class="value">${totalAlocados}</div></div>
+    <div class="box ${totalConferir ? 'alert' : ''}"><div class="label">Para conferir</div><div class="value">${totalConferir}</div></div>
+    <div class="box"><div class="label">Ocorrências abertas</div><div class="value">${totalAbertas}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">Cliente / CNPJ / Locais</th>
+        <th style="width:7%">Canteiros</th>
+        <th style="width:42%">Equipamentos / Patrimônio / Placa</th>
+        <th style="width:8%">Alocados</th>
+        <th style="width:11%">Conferência</th>
+        <th style="width:10%">Ocorrências abertas</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${listaRows || '<tr><td colspan="6">Nenhum cliente cadastrado.</td></tr>'}
+    </tbody>
+  </table>
+
+  ${chamados.length ? `
+    <div class="subsection">
+      <h3>OCORRÊNCIAS REGISTRADAS</h3>
+      <table>
+        <thead><tr>
+          <th style="width:10%">Nº / Data</th>
+          <th style="width:22%">Cliente / Local</th>
+          <th style="width:14%">Patrimônio / Placa</th>
+          <th style="width:16%">Serviço</th>
+          <th style="width:14%">Mecânico</th>
+          <th style="width:10%">Status</th>
+          <th style="width:14%">Observação</th>
+        </tr></thead>
+        <tbody>${ocorrenciasRows}</tbody>
+      </table>
+    </div>` : ''}
+
+  <div class="footer">TOPAC RH PRO · Central da Operação · relação completa gerada diretamente da base operacional.</div>
+</div>
+</body>
+</html>`;
 
     const frame = document.createElement('iframe');
     frame.setAttribute('aria-hidden', 'true');
