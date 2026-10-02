@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Archive, Building2, ChevronDown, ClipboardList, FileText, Home,
-  LockKeyhole, Menu, Package, Search, Settings, Shirt, Users, Wrench, X,
+  ArrowLeft, Building2, ClipboardList, Home,
+  LockKeyhole, Menu, Search, Settings, Users, Wrench, X,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
@@ -60,24 +60,10 @@ const AdminMobileLayout: React.FC = () => {
   const [moreOpen, setMoreOpen] = useState(false);
   const { allowed: canViewFrota } = usePrivateModuleAccess('frota_ipva');
 
-  const [moduleOpen,setModuleOpen] = useState(Boolean((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'));
-  const isNativeCardModule = ['/admin/estoque-interno','/admin/uniformes','/admin/epi','/admin/system-control']
-    .some(path=>location.pathname===path || location.pathname.startsWith(path+'/'));
   const moduleItem = [...SEARCH_ITEMS].filter(item=>item.path.startsWith('/admin/')
     && (location.pathname===item.path || location.pathname.startsWith(item.path+'/')))
     .sort((a,b)=>b.path.length-a.path.length)[0];
   const moduleLabel=location.pathname==='/admin/system-control'?'Controle de Acesso':moduleItem?.label||location.pathname.split('/').filter(Boolean).slice(1).join(' / ').replace(/-/g,' ')||'Módulo';
-  const moduleKey=moduleItem?.path||location.pathname;
-  const lastModule=useRef(moduleKey);
-
-  useEffect(()=>{
-    if(lastModule.current!==moduleKey){
-      lastModule.current=moduleKey;
-      setModuleOpen(Boolean((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'));
-    }else if((location.state as any)?.openMobileModule || location.pathname === '/admin/apontamento-inteligente'){
-      setModuleOpen(true);
-    }
-  },[moduleKey,location.key,location.state]);
 
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
   const isHome = location.pathname === '/admin';
@@ -114,13 +100,8 @@ const AdminMobileLayout: React.FC = () => {
 
   const moreItems = [
     ...(session?.user?.id === SYSTEM_OWNER_USER_ID ? [{ label:'Controle de Acesso', detail:'Restringir ou liberar módulos', path:'/admin/system-control', icon:LockKeyhole }] : []),
-    { label:'Empresas', detail:'Empresas e filiais', path:'/admin/empresas', icon:Building2 },
     { label:'Filial Praia Grande', detail:'Abrir portal da unidade', path:'/filial', icon:Building2, previewCodigo:'topac-pg' },
     { label:'Filial Goiânia', detail:'Abrir portal da unidade', path:'/filial', icon:Building2, previewCodigo:'topac-gyn' },
-    { label:'Documentos', detail:'Holerites e assinaturas', path:'/admin/folha-pagamento', icon:FileText },
-    { label:'Uniformes', detail:'Estoque e entrega', path:'/admin/uniformes', icon:Shirt },
-    { label:'Estoque', detail:'Materiais internos', path:'/admin/estoque-interno', icon:Archive },
-    { label:'App Mecânico', detail:'Gestão do aplicativo', path:'/admin/app-mecanico', icon:Wrench },
     { label:'Configurações', detail:'Preferências administrativas', path:'/admin/configuracoes', icon:Settings },
   ];
 
@@ -151,19 +132,7 @@ const AdminMobileLayout: React.FC = () => {
             : <div className="mobile-admin-home-shell">
                 <div className="px-3 pt-[calc(18px+env(safe-area-inset-top))]"><AdminHomeCards /></div>
               </div>
-        ) : isNativeCardModule ? <Outlet /> : <div className="space-y-3">
-          <button type="button" aria-expanded={moduleOpen} aria-controls="topac-mobile-module-content"
-            onClick={()=>setModuleOpen(open=>!open)}
-            className={`flex w-full min-h-[78px] items-center gap-3 rounded-xl border p-3 text-left transition active:scale-[.99] ${moduleOpen?'border-fuchsia-500/40 bg-[#13091b]':'border-fuchsia-500/20 bg-[#07070d]'}`}>
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-fuchsia-500/10 text-fuchsia-400"><Package className="h-5 w-5"/></span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-black capitalize text-white">{moduleLabel}</span>
-              <span className="mt-1 block text-[10px] text-zinc-500">{moduleOpen?'Toque para recolher':'Toque para abrir as informações'}</span>
-            </span>
-            <ChevronDown className={`h-5 w-5 shrink-0 text-fuchsia-400 transition-transform ${moduleOpen?'rotate-180':''}`}/>
-          </button>
-          {moduleOpen&&<div id="topac-mobile-module-content" className="min-w-0"><Outlet /></div>}
-        </div>}
+        ) : <div className="min-w-0"><Outlet /></div>}
       </main>
 
       {moreOpen && (

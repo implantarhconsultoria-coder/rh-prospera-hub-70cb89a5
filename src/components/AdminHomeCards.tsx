@@ -61,13 +61,26 @@ const AdminHomeCards:React.FC=()=>{
   },[]);
 
   const normalized=query.trim().toLocaleLowerCase('pt-BR');
+  const featuredPaths = useMemo(() => new Set([
+    '/admin/funcionarios',
+    '/admin/empresas',
+    '/admin/central-contabilidade',
+    '/admin/fechamento-ponto',
+    '/admin/folha-pagamento',
+    '/admin/uniformes',
+    '/admin/estoque-interno',
+    '/admin/almoxarifado',
+    '/admin/operacional',
+  ]), []);
+
   const groups=useMemo(()=>ADMIN_MODULE_GROUPS.map(group=>({
     ...group,items:group.items.filter(item=>{
       const privateFleet=item.path==='/admin/documentos-ativos'||item.path==='/admin/monitoramento';
       if(privateFleet&&!canViewFrota)return false;
+      if(featuredPaths.has(item.path)) return false;
       return (item.label+' '+item.description+' '+group.title).toLocaleLowerCase('pt-BR').includes(normalized);
     }),
-  })).filter(group=>group.items.length),[normalized,canViewFrota]);
+  })).filter(group=>group.items.length),[normalized,canViewFrota,featuredPaths]);
 
   const go=(path:string)=>nav(path,{state:{openMobileModule:true}});
   const toggle=(id:string)=>setOpenGroups(old=>old.includes(id)?old.filter(x=>x!==id):[...old,id]);
