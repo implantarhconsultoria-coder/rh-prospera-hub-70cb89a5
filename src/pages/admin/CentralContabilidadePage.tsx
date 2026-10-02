@@ -135,6 +135,16 @@ const CentralContabilidadePage: React.FC = () => {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    const reviewId = searchParams.get('review');
+    if (!reviewId || loading) return;
+    window.setTimeout(() => {
+      const row = document.getElementById(`review-${reviewId}`);
+      row?.scrollIntoView({ behavior:'smooth', block:'center' });
+      row?.classList.add('bg-amber-500/10');
+    }, 120);
+  }, [searchParams, loading, revisoes]);
+
 
   useEffect(() => {
     const timer = window.setInterval(() => void carregar(true), 60_000);
