@@ -73,6 +73,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
   const [saving, setSaving] = useState(false);
   const [financeDraft, setFinanceDraft] = useState<EmailPdfDraft | null>(null);
   const [financeEmailOpen, setFinanceEmailOpen] = useState(false);
+  const [pendingFinanceDoc, setPendingFinanceDoc] = useState<PaymentDoc | null>(null);
 
   const documentType = benefitType === 'VT' ? 'BENEFICIO_VT' : 'BENEFICIO_VR';
 
@@ -99,6 +100,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
       const rows = (data || []) as PaymentDoc[];
       if (!rows.length) {
         setContext(null);
+        setPendingFinanceDoc(null);
         return;
       }
 
@@ -115,6 +117,12 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
       const alreadyPaid = roundMoney(currentDocs.reduce((sum, row) => sum + Number(row.net_amount || 0), 0));
       const sequence = Math.max(0, ...currentDocs.map(row => Number(row.payment_sequence || 1)));
       setContext({ competencia, daysConsidered, alreadyPaid, sequence, docs: currentDocs });
+      const pendingFinance = currentDocs.find(row =>
+        row.payment_kind === 'COMPLEMENTAR'
+        && String(row.extracted_data?.origem || '') === 'EDICAO_BENEFICIOS'
+        && String(row.extracted_data?.financeiro_formalizacao_status || '').toUpperCase() !== 'ENVIADO'
+      ) || null;
+      setPendingFinanceDoc(pendingFinance);
     } catch (error: any) {
       console.error('[benefit-payment-context]', error);
       toast.error(`Não foi possível conferir os pagamentos de ${benefitType}: ${error?.message || error}`);
@@ -140,6 +148,106 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
   );
   const needsComplement = Boolean(valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference > 0.009);
   const hasOverpayment = Boolean(valueChanged && context && context.alreadyPaid > 0 && context.daysConsidered > 0 && difference < -0.009);
+
+  const buildFinanceDraftFromDocument = (doc: PaymentDoc) => {
+    if (!company || !employee) return null;
+    const extra = doc.extracted_data || {};
+    const priorPaid = roundMoney(Number(doc.prior_paid_amount ?? extra.valor_pago_anteriormente ?? 0));
+    const complementAmount = roundMoney(Number(doc.net_amount ?? extra.valor_complementar ?? 0));
+    const entitlementAmount = roundMoney(Number(doc.entitlement_amount ?? extra.total_devido_atualizado ?? (priorPaid + complementAmount)));
+    const updatedDailyValue = Math.max(0, Number(extra.valor_diario_atualizado ?? currentValue ?? 0));
+    const previousDailyValue = Math.max(0, Number(extra.valor_diario_anterior ?? updatedDailyValue));
+    const days = Math.max(0, Number(extra.dias_finais ?? extra.dias_pagos ?? 0));
+    const paymentReason = String(doc.payment_reason || extra.motivo || 'Pagamento complementar de benefício').trim();
+    const requestedPaymentDate = String(extra.data_pagamento || '').trim() || null;
+
+    const financeBlob = buildBenefitComplementFinanceRequestPdfBlob({
+      benefitType,
+      company: { name: company.name || '', cnpj: company.cnpj || '' },
+      employee: {
+        name: employee.name || '',
+        cpf: employee.cpf || '',
+        cargo: employee.cargo || '',
+        registro: employee.registro || '',
+      },
+      competencia: doc.competencia,
+      paymentDate: requestedPaymentDate,
+      previousDailyValue,
+      dailyValue: updatedDailyValue,
+      daysConsidered: days,
+      entitlementAmount,
+      priorPaidAmount: priorPaid,
+      complementAmount,
+      reason: paymentReason,
+    });
+    const financeFileName = `PEDIDO_DIFERENCA_${benefitType}_${safeFile(employee.name || 'FUNCIONARIO')}_${doc.competencia}.pdf`;
+    const subject = `PEDIDO DE DIFERENÇA DE ${benefitType} - ${employee.name} - ${company.name || ''} - ${competenciaPt(doc.competencia)}`;
+    const body = [
+      'Prezados,',
+      '',
+      `Encaminho para formalização o pedido de pagamento complementar de ${benefitType} do funcionário abaixo.`,
+      '',
+      `Funcionário: ${employee.name || '—'}`,
+      `CPF: ${employee.cpf || '—'}`,
+      `Empresa: ${company.name || '—'}`,
+      `Competência: ${competenciaPt(doc.competencia)}`,
+      '',
+      `Valor já pago: ${formatCurrency(priorPaid)}`,
+      `Novo total devido: ${formatCurrency(entitlementAmount)}`,
+      `Diferença a pagar: ${formatCurrency(complementAmount)}`,
+      `Data prevista do novo pagamento: ${requestedPaymentDate ? requestedPaymentDate.split('-').reverse().join('/') : 'não informada'}`,
+      '',
+      `Motivo: ${paymentReason}`,
+      '',
+      'O pedido formal de diferença segue anexo em PDF. Por gentileza, providenciar a formalização do pagamento e confirmar o processamento.',
+      '',
+      'Atenciosamente,',
+      'TOPAC RH PRO',
+    ].join('\n');
+
+    return {
+      to: ['financeiro@topac.com.br'],
+      cc: ['robson@topac.com.br', 'adm.matriz@topac.com.br'],
+      subject,
+      body,
+      attachmentBlob: financeBlob,
+      attachmentName: financeFileName,
+      moduleOrigin: 'beneficio_complemento_financeiro',
+      documentId: String(doc.id || ''),
+      documentName: financeFileName,
+      afterSend: async () => {
+        const { data: currentDoc } = await (supabase as any)
+          .from('payroll_documents')
+          .select('extracted_data')
+          .eq('id', doc.id)
+          .maybeSingle();
+        await (supabase as any).from('payroll_documents').update({
+          extracted_data: {
+            ...(currentDoc?.extracted_data || {}),
+            financeiro_formalizacao_status: 'ENVIADO',
+            financeiro_formalizacao_em: new Date().toISOString(),
+            financeiro_email_to: 'financeiro@topac.com.br',
+            financeiro_email_cc: ['robson@topac.com.br', 'adm.matriz@topac.com.br'],
+          },
+        }).eq('id', doc.id);
+        setPendingFinanceDoc(null);
+        setFinanceDraft(null);
+        await loadContext();
+      },
+    } satisfies EmailPdfDraft;
+  };
+
+  useEffect(() => {
+    if (!pendingFinanceDoc || !company || !employee) return;
+    setFinanceDraft(buildFinanceDraftFromDocument(pendingFinanceDoc));
+  }, [pendingFinanceDoc?.id, company?.id, employee?.id]);
+
+  const openFinanceRequestPdf = () => {
+    if (!financeDraft?.attachmentBlob) return;
+    const url = URL.createObjectURL(financeDraft.attachmentBlob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(url), 120000);
+  };
 
   const save = async () => {
     if (!Number.isFinite(newDailyValue) || newDailyValue < 0) return toast.error('Informe um valor válido.');
@@ -328,7 +436,38 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
               financeiro_email_cc: ['robson@topac.com.br', 'adm.matriz@topac.com.br'],
             },
           }).eq('id', insertedDocument.id);
+          setPendingFinanceDoc(null);
+          setFinanceDraft(null);
+          await loadContext();
         },
+      });
+      setPendingFinanceDoc({
+        id: String(insertedDocument?.id || ''),
+        competencia: context.competencia,
+        net_amount: liveDifference,
+        is_current: true,
+        status: 'AGUARDANDO_ASSINATURA',
+        payment_event_id: eventId,
+        payment_kind: 'COMPLEMENTAR',
+        payment_sequence: nextSequence,
+        entitlement_amount: newEntitlement,
+        prior_paid_amount: livePaid,
+        payment_reason: reason.trim(),
+        payment_state: 'GERADO',
+        extracted_data: {
+          origem: 'EDICAO_BENEFICIOS',
+          pagamento_tipo: 'COMPLEMENTAR',
+          valor_diario_anterior: storedDailyValue,
+          valor_diario_atualizado: newDailyValue,
+          dias_finais: context.daysConsidered,
+          total_devido_atualizado: newEntitlement,
+          valor_pago_anteriormente: livePaid,
+          valor_complementar: liveDifference,
+          motivo: reason.trim(),
+          data_pagamento: paymentDate || null,
+          financeiro_formalizacao_status: 'PENDENTE',
+        },
+        created_at: new Date().toISOString(),
       });
       setFinanceEmailOpen(true);
 
@@ -392,14 +531,22 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
       )}
 
       {financeDraft && (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
-          <div>
-            <p className="text-xs font-bold text-emerald-300">Pedido de diferença gerado</p>
-            <p className="text-xs text-muted-foreground">Financeiro: financeiro@topac.com.br · CC: Robson e ADM Matriz.</p>
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/[.07] p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-black text-amber-300">PAGAMENTO DE DIFERENÇA PENDENTE DE FORMALIZAÇÃO</p>
+              <p className="mt-1 text-xs text-muted-foreground">O pedido em PDF está gerado e permanece disponível mesmo após atualizar a página.</p>
+              <p className="mt-1 text-xs font-semibold text-zinc-200">Para: financeiro@topac.com.br · CC: robson@topac.com.br e adm.matriz@topac.com.br</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={openFinanceRequestPdf}>
+                Abrir pedido PDF
+              </Button>
+              <Button type="button" onClick={() => setFinanceEmailOpen(true)} className="bg-amber-500 text-black hover:bg-amber-400">
+                <Mail className="mr-2 h-4 w-4" /> Enviar diferença ao Financeiro
+              </Button>
+            </div>
           </div>
-          <Button type="button" variant="outline" onClick={() => setFinanceEmailOpen(true)}>
-            <Mail className="mr-2 h-4 w-4" /> Enviar ao Financeiro
-          </Button>
         </div>
       )}
 
