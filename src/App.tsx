@@ -169,11 +169,22 @@ const AdminHomeRoute = () => {
 const MecanicoRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading, userRoles } = useApp();
   const location = useLocation();
+  const { acessoId } = useParams<{ acessoId: string }>();
   if (loading) return <StableLoading label="Verificando acesso..." />;
 
-  const adminPreview =
-    new URLSearchParams(location.search).get('preview') === 'admin'
-    && (userRoles.includes('admin') || userRoles.includes('diretor_geral'));
+  const isAdmin = userRoles.includes('admin') || userRoles.includes('diretor_geral');
+  const requestedPreview = new URLSearchParams(location.search).get('preview') === 'admin';
+
+  if (isAdmin && requestedPreview && acessoId) {
+    sessionStorage.setItem('topac_mecanico_admin_preview', acessoId);
+  }
+
+  const persistedPreview =
+    isAdmin
+    && Boolean(acessoId)
+    && sessionStorage.getItem('topac_mecanico_admin_preview') === acessoId;
+
+  const adminPreview = isAdmin && (requestedPreview || persistedPreview);
 
   if (isAuthenticated && !adminPreview) return <Navigate to="/" replace />;
   return <>{children}</>;
