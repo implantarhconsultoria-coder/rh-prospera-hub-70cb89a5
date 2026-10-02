@@ -9,6 +9,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { sha256Browser } from '@/lib/payrollDocuments';
 import { buildBenefitComplementFinanceRequestPdfBlob, buildBenefitComplementReceiptPdfBlob } from '@/lib/benefitComplementPdf';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import { registrarDocumento } from '@/lib/documentoHistorico';
 
 const PAYROLL_BUCKET = 'payroll-private';
 const roundMoney = (value: number) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
@@ -37,6 +38,9 @@ type PaymentDoc = {
   payment_reason?: string | null;
   payment_state?: 'GERADO' | 'PAGO' | null;
   extracted_data?: any;
+  original_filename?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
   created_at: string;
 };
 
@@ -90,7 +94,7 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
     try {
       const { data, error } = await (supabase as any)
         .from('payroll_documents')
-        .select('id,competencia,net_amount,is_current,status,payment_event_id,payment_kind,payment_sequence,entitlement_amount,prior_paid_amount,payment_reason,payment_state,extracted_data,created_at')
+        .select('id,competencia,net_amount,is_current,status,payment_event_id,payment_kind,payment_sequence,entitlement_amount,prior_paid_amount,payment_reason,payment_state,extracted_data,original_filename,storage_bucket,storage_path,created_at')
         .eq('company_id', employee.companyId)
         .eq('employee_id', employee.id)
         .eq('document_type', documentType)
