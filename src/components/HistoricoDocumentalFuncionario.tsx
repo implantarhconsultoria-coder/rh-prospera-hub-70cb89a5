@@ -654,7 +654,13 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
                     </div>
                   </div>
                   <Badge className={protectedPayroll ? 'bg-primary/10 text-primary' : doc.status_envio === 'enviado' ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'}>
-                    {protectedPayroll ? 'Protegido' : doc.status_envio === 'enviado' ? 'Enviado' : ORIGEM_LABEL[origemDoc] || origemDoc}
+                    {protectedPayroll && doc.status_envio === 'gerado'
+                      ? 'Aguardando assinatura'
+                      : protectedPayroll
+                        ? 'Protegido'
+                        : doc.status_envio === 'enviado'
+                          ? 'Enviado'
+                          : ORIGEM_LABEL[origemDoc] || origemDoc}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{doc.descricao || doc.observacao}</p>
