@@ -137,7 +137,17 @@ function MechanicCard({ row, tab, onOpen }: { row: MecanicoRow; tab: Tab; onOpen
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2"><h3 className="truncate text-sm font-black text-white">{row.nome}</h3><AccessBadge row={row} /></div>
           <p className="mt-0.5 truncate text-[10px] text-zinc-500">{row.funcao || 'Mecânico'} · {row.filial || row.empresa}</p>
-          <div className="mt-1 flex items-center justify-between gap-2"><p className="flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p><Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={() => onOpen(row.id)}><ExternalLink className="mr-1 h-3 w-3" />Abrir ficha</Button></div>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1 text-[9px] text-zinc-600"><LogIn className="h-3 w-3" /> Último acesso: {dateTime(row.ultimo_acesso_em)}</p>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" asChild>
+                <a href={`/app-mecanico/${row.id}?preview=admin`}>
+                  <ExternalLink className="mr-1 h-3 w-3" />Ver tela
+                </a>
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-[10px]" onClick={() => onOpen(row.id)}>Ficha</Button>
+            </div>
+          </div>
         </div>
       </div>
 
