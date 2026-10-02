@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Loader2, AlertCircle } from "lucide-react";
+import { useApp } from "@/context/AppContext";
 
 export interface Mecanico {
   acesso_id: string;
@@ -97,21 +98,43 @@ const limparSessao = () => {
 export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const { acessoId } = useParams<{ acessoId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { userRoles, isAuthenticated } = useApp();
+  const isAdmin = userRoles.includes("admin") || userRoles.includes("diretor_geral");
+  const requestedAdminPreview = new URLSearchParams(location.search).get("preview") === "admin";
+  const adminPreview =
+    isAuthenticated
+    && isAdmin
+    && Boolean(acessoId)
+    && (
+      requestedAdminPreview
+      || sessionStorage.getItem("topac_mecanico_admin_preview") === acessoId
+    );
+
+  useEffect(() => {
+    if (isAuthenticated && isAdmin && requestedAdminPreview && acessoId) {
+      sessionStorage.setItem("topac_mecanico_admin_preview", acessoId);
+    }
+  }, [isAuthenticated, isAdmin, requestedAdminPreview, acessoId]);
   const [mecanico, setMecanico] = useState<Mecanico | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   const sair = useCallback(() => {
+    if (adminPreview) {
+      sessionStorage.removeItem("topac_mecanico_admin_preview");
+      setMecanico(null);
+      navigate("/admin/app-mecanico", { replace: true });
+      return;
+    }
     limparSessao();
     setMecanico(null);
     navigate("/mecanicos", { replace: true });
-  }, [navigate]);
+  }, [navigate, adminPreview]);
 
   const carregar = useCallback(async () => {
-    const sessao = lerSessao();
-    if (!acessoId || !sessao || sessao.accessId !== acessoId) {
-      limparSessao();
-      setErro("Sessão encerrada ou pertencente a outro usuário. Entre novamente pelo PIN.");
+    if (!acessoId) {
+      setErro("Acesso não informado.");
       setMecanico(null);
       setLoading(false);
       return;
@@ -121,6 +144,50 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
     setErro(null);
 
     try {
+      if (adminPreview) {
+        const { data, error } = await mecanicoRpc.rpc("admin_app_mecanico_historico", { p_acesso_id: acessoId });
+        const result = data as {
+          ok?: boolean;
+          error?: string;
+          mecanico?: {
+            id?: string;
+            funcionario_id?: string | null;
+            nome?: string;
+            empresa?: string | null;
+            filial?: string | null;
+            funcao?: string | null;
+          };
+        } | null;
+
+        const mecanicoPreview = normalizarMecanico(result?.mecanico ? {
+          acesso_id: result.mecanico.id || acessoId,
+          funcionario_id: result.mecanico.funcionario_id || null,
+          nome: result.mecanico.nome || "Mecânico",
+          empresa: result.mecanico.empresa || "",
+          filial: result.mecanico.filial || "",
+          funcao: result.mecanico.funcao || "",
+          perfil_acesso: "mecanico_externo",
+        } : null);
+
+        if (error || !result?.ok || !mecanicoPreview || mecanicoPreview.acesso_id !== acessoId) {
+          console.error("Erro ao abrir preview do app mecânico:", error || result?.error || data);
+          setErro("Não foi possível abrir a tela deste mecânico.");
+          setMecanico(null);
+          return;
+        }
+
+        setMecanico(mecanicoPreview);
+        return;
+      }
+
+      const sessao = lerSessao();
+      if (!sessao || sessao.accessId !== acessoId) {
+        limparSessao();
+        setErro("Sessão encerrada ou pertencente a outro usuário. Entre novamente pelo PIN.");
+        setMecanico(null);
+        return;
+      }
+
       const { data, error } = await mecanicoRpc.rpc("app_mecanico_validar_acesso", { p_acesso_id: acessoId });
       const result = data as ValidarAcessoResult | null;
       const mecanicoNormalizado = normalizarMecanico(result?.mecanico);
@@ -145,12 +212,12 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
     } finally {
       setLoading(false);
     }
-  }, [acessoId]);
+  }, [acessoId, adminPreview]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
   useEffect(() => {
-    if (!mecanico?.acesso_id) return;
+    if (!mecanico?.acesso_id || adminPreview) return;
     let active = true;
     const heartbeat = async () => {
       if (!active || document.visibilityState === "hidden") return;
@@ -176,7 +243,7 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [mecanico?.acesso_id, sair]);
+  }, [mecanico?.acesso_id, sair, adminPreview]);
 
   if (loading) {
     return (
