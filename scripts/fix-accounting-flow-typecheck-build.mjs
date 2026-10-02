@@ -16,7 +16,7 @@ const patchPayroll = () => {
   let source = fs.readFileSync(payrollPath, 'utf8');
   if (source.includes('const accountingPortalForCompany = async')) return;
 
-  const oldAdmin = /const adminState = async \(service: any\) => \{[\s\S]*?\n\};\n\nexport default async function handler/;
+  const oldAdmin = /const adminState = async \(service: any(?:, competenceInput\?: unknown)?\) => \{[\s\S]*?\n\};\n\nexport default async function handler/;
   if (!oldAdmin.test(source)) throw new Error('[goiania-central] adminState não encontrado');
 
   const replacement = `const accountingPortalForCompany = async (service: any, companyId: string) => {
@@ -33,8 +33,9 @@ const patchPayroll = () => {
   throw Object.assign(new Error('contabilidade_sem_portal_ativo'), { status: 409 });
 };
 
-const adminState = async (service: any) => {
-  const competence = competenceNow();
+const adminState = async (service: any, competenceInput?: unknown) => {
+  const competence = validateCompetence(competenceInput);
+  const shouldEnsureCycles = competence === competenceNow();
   const { data: portalUsers, error: userError } = await service.from('contabilidade_portal_usuarios')
     .select('id,portal').in('portal', ['principal','goiania']).eq('ativo', true);
   if (userError) throw userError;
@@ -52,10 +53,12 @@ const adminState = async (service: any) => {
     if (!companyPortal.has(companyId) || portal === 'goiania') companyPortal.set(companyId, portal);
   }
   const companyIds = Array.from(companyPortal.keys());
-  for (const companyId of companyIds) {
-    const portal = companyPortal.get(companyId) || 'principal';
-    await ensureCycle(service, { portal, companyId, competence, type: 'adiantamento' });
-    await ensureCycle(service, { portal, companyId, competence, type: 'pagamento' });
+  if (shouldEnsureCycles) {
+    for (const companyId of companyIds) {
+      const portal = companyPortal.get(companyId) || 'principal';
+      await ensureCycle(service, { portal, companyId, competence, type: 'adiantamento' });
+      await ensureCycle(service, { portal, companyId, competence, type: 'pagamento' });
+    }
   }
   const [{ data: companies, error: companyError }, { data: allCycles, error: cycleError }] = await Promise.all([
     companyIds.length ? service.from('empresas').select('id,nome,codigo,cnpj').in('id', companyIds).order('nome') : Promise.resolve({ data: [], error: null }),
@@ -67,7 +70,7 @@ const adminState = async (service: any) => {
   const cycleIds = cycles.map((row: any) => row.id);
   const [{ data: docs, error: docError }, { data: uploads, error: uploadError }] = await Promise.all([
     cycleIds.length ? service.from('contabilidade_folha_documentos').select('*').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
-    cycleIds.length ? service.from('contabilidade_portal_uploads').select('id,ciclo_id,empresa_id,arquivo_nome,processo_tipo,processamento_status,processamento_detalhes,formalizacao_email_status,created_at,storage_bucket,storage_path').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
+    cycleIds.length ? service.from('contabilidade_portal_uploads').select('id,ciclo_id,empresa_id,arquivo_nome,processo_tipo,processamento_status,processamento_detalhes,formalizacao_email_status,created_at,storage_bucket,storage_path,origem_tipo').in('ciclo_id', cycleIds).order('created_at') : Promise.resolve({ data: [], error: null }),
   ] as any);
   if (docError) throw docError;
   if (uploadError) throw uploadError;
