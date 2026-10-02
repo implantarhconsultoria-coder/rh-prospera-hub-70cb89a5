@@ -185,10 +185,6 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
         ...fechamentoTotals,
       });
       if (!result.ok) throw result.error || new Error('Falha ao salvar fechamento.');
-      if (isRetification) {
-        if (retificationStorageKey) window.sessionStorage.removeItem(retificationStorageKey);
-        setRetificationReason('');
-      }
       await refreshEntries();
       toast.success('Fechamento e lançamentos salvos no banco.');
     } catch (error) {
@@ -240,6 +236,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   const handleMarcarFechado = async () => {
     if (saving) return;
     const isRetification = Boolean(retificationReason.trim());
+    let accountingCompleted = !isRetification;
     setSaving(true);
     try {
       await persistAllEntries();
@@ -273,6 +270,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
             throw new Error(accounting?.message || accounting?.error || 'Falha na integração com a Contabilidade.');
           }
 
+          accountingCompleted = true;
           if (accounting.email_status === 'enviado') {
             toast.success(isRetification
               ? 'Retificação concluída. Novo apontamento enviado à Contabilidade com a descrição da alteração.'
@@ -290,6 +288,10 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
         toast.success('Fechamento marcado como fechado.');
       }
 
+      if (isRetification && accountingCompleted) {
+        if (retificationStorageKey) window.sessionStorage.removeItem(retificationStorageKey);
+        setRetificationReason('');
+      }
       await refreshEntries();
     } catch (error) {
       console.error('Erro ao marcar fechamento como fechado:', error);
