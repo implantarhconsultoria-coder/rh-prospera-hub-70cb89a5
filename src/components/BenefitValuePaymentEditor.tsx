@@ -82,6 +82,39 @@ const BenefitValuePaymentEditor: React.FC<Props> = ({
 
   const documentType = benefitType === 'VT' ? 'BENEFICIO_VT' : 'BENEFICIO_VR';
 
+  const ensureComplementHistory = async (doc: PaymentDoc) => {
+    if (!doc?.id || doc.payment_kind !== 'COMPLEMENTAR' || !employee?.id || !company?.id || !actorId) return;
+    const historyMarker = `payroll_document_id:${doc.id}`;
+    const { data: existing } = await (supabase as any)
+      .from('documentos_funcionario')
+      .select('id')
+      .eq('funcionario_id', employee.id)
+      .eq('observacao', historyMarker)
+      .maybeSingle();
+    if (existing?.id) return;
+
+    await registrarDocumento({
+      funcionarioId: employee.id,
+      funcionarioNome: employee.name || 'Funcionário',
+      companyId: company.id,
+      empresaNome: company.name || 'Empresa',
+      tipoDocumento: benefitType === 'VT' ? 'Recibo VT - Complemento' : 'Recibo VR - Complemento',
+      categoria: benefitType,
+      origem: 'payroll_portal',
+      competencia: doc.competencia,
+      descricao: `Recibo complementar de ${benefitType} — ${formatCurrency(Number(doc.net_amount || 0))} — aguardando assinatura do funcionário`,
+      observacao: historyMarker,
+      arquivoUrl: doc.storage_path || '',
+      storageBucket: doc.storage_bucket || PAYROLL_BUCKET,
+      storagePath: doc.storage_path || '',
+      nomeArquivo: doc.original_filename || `RECIBO_${benefitType}_COMPLEMENTAR.pdf`,
+      dataDocumento: doc.created_at || new Date().toISOString(),
+      geradoPorUserId: actorId,
+      geradoPorNome: 'TOPAC RH PRO',
+      unidade: company.name || '',
+    });
+  };
+
   useEffect(() => {
     setValue(String(Number(currentValue || 0)));
     setReason('');
