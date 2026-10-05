@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Loader2, ShieldCheck, Smartphone, UserRound } from 'lucide-react';
+import { ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useApp } from '@/context/AppContext';
+import { lovable } from '@/integrations/lovable/index';
 import { supabase } from '@/integrations/supabase/client';
+
+const LOGIN_ALIASES: Record<string, string> = {
+  fat: 'fat@topac.local',
+  fin: 'fin@topac.local',
+};
 
 const ROLE_REDIRECTS: Record<string, string> = {
   admin: '/admin',
@@ -32,12 +39,10 @@ const OPERATIONAL_STATS = [
   { label: 'STATUS', value: 'OK' },
 ];
 
-const onlyDigits = (value: string) => value.replace(/\D/g, '');
-
 const LoginPage: React.FC = () => {
   const { isAuthenticated, userRoles, roleLoading, session } = useApp();
-  const [cpf, setCpf] = useState('');
-  const [phoneLast4, setPhoneLast4] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -47,52 +52,37 @@ const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const cpfDigits = onlyDigits(cpf);
-    const phoneDigits = onlyDigits(phoneLast4);
-
-    if (cpfDigits.length !== 11) {
-      toast.error('Informe um CPF com 11 dígitos.');
-      return;
-    }
-    if (phoneDigits.length !== 4) {
-      toast.error('Informe os 4 últimos dígitos do celular cadastrado.');
-      return;
-    }
-
     setLoading(true);
-    try {
-      await supabase.auth.signOut({ scope: 'local' });
-
-      const { data, error } = await supabase.functions.invoke('topac-cpf-login', {
-        body: { cpf: cpfDigits, phoneLast4: phoneDigits },
-      });
-
-      if (error || !data?.ok || !data?.token_hash) {
-        console.error('Falha no login CPF TOPAC:', error || data);
-        toast.error(data?.message || 'CPF, celular ou acesso não conferem.');
-        return;
-      }
-
-      const { error: verifyError } = await supabase.auth.verifyOtp({
-        token_hash: data.token_hash,
-        type: 'magiclink',
-      });
-
-      if (verifyError) {
-        console.error('Falha ao criar sessão TOPAC:', verifyError);
-        toast.error('Não foi possível abrir sua sessão. Tente novamente.');
-        return;
-      }
-
-      toast.success('Acesso confirmado.');
-      window.location.assign('/');
-    } catch (error) {
-      console.error('Erro inesperado no login TOPAC:', error);
-      toast.error('Não foi possível concluir o acesso. Tente novamente.');
-    } finally {
+    const raw = email.trim().toLowerCase();
+    const pin = raw.replace(/\D/g, '');
+    const isCpfOrPinAttempt = /^[\d.\-\s]+$/.test(raw) && (pin.length === 4 || pin.length === 11) && !password.trim();
+    if (isCpfOrPinAttempt) {
+      toast.info('CPF/PIN e exclusivo do App dos Mecanicos. Use o link /acesso-mecanico.');
       setLoading(false);
+      return;
     }
+    const finalEmail = LOGIN_ALIASES[raw] || raw;
+    const { error } = await supabase.auth.signInWithPassword({ email: finalEmail, password });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message === 'Invalid login credentials' ? 'Email ou senha invalidos' : error.message);
+      return;
+    }
+    window.location.assign('/');
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    const result = await lovable.auth.signInWithOAuth('google', {
+      redirect_uri: `${window.location.origin}/`,
+    });
+    if (result.error) {
+      toast.error('Erro ao entrar com Google');
+      setLoading(false);
+      return;
+    }
+    if (result.redirected) return;
+    window.location.assign('/');
   };
 
   return (
@@ -104,15 +94,15 @@ const LoginPage: React.FC = () => {
       <div className="absolute left-6 right-6 top-4 z-20 hidden items-center justify-between text-xs text-slate-400 lg:flex">
         <div className="flex items-center gap-3">
           <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span>Núcleo TOPAC online</span>
-          <span className="text-slate-600">•</span>
+          <span>Nucleo TOPAC online</span>
+          <span className="text-slate-600">.</span>
           <span>central-rh</span>
-          <span className="text-slate-600">•</span>
-          <span>acesso seguro</span>
+          <span className="text-slate-600">.</span>
+          <span>v2.4.1</span>
         </div>
         <div className="flex items-center gap-5">
-          <span className="text-emerald-300">ONLINE</span>
-          <span className="text-cyan-300">Supabase</span>
+          <span className="text-emerald-300">SLA 99.98%</span>
+          <span className="text-cyan-300">Cluster OK</span>
           <span className="text-fuchsia-300">sync</span>
         </div>
       </div>
@@ -134,8 +124,8 @@ const LoginPage: React.FC = () => {
           <h1 className="text-6xl font-black tracking-tight bg-gradient-to-r from-cyan-300 via-blue-300 to-fuchsia-300 bg-clip-text text-transparent">
             TOPAC RH PRO
           </h1>
-          <p className="mt-5 text-2xl text-slate-100">Multiempresas</p>
-          <p className="mt-8 max-w-xl text-slate-300">Acesse sua central com a identificação já cadastrada na TOPAC.</p>
+          <p className="mt-5 text-2xl text-slate-100">Inteligencia Operacional</p>
+          <p className="mt-8 max-w-xl text-slate-300">Acesse sua central operacional.</p>
 
           <div className="mt-16 grid grid-cols-3 gap-3 max-w-xl">
             {OPERATIONAL_STATS.map((stat) => (
@@ -155,53 +145,49 @@ const LoginPage: React.FC = () => {
             className="w-full max-w-md mx-4 relative z-10 rounded-2xl border border-cyan-400/15 bg-[#101829]/88 p-8 shadow-[0_0_55px_rgba(34,211,238,.13)] backdrop-blur-xl"
           >
             <div className="mb-8">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-300">
-                  <ShieldCheck className="h-6 w-6" />
-                </div>
-                <div>
-                  <p className="font-black text-white">TOPAC RH PRO</p>
-                  <p className="text-xs font-semibold text-fuchsia-300">Multiempresas</p>
-                </div>
-              </div>
-              <h2 className="text-2xl font-bold font-display text-white">Entrar</h2>
-              <p className="text-sm text-slate-400 mt-1">CPF e os 4 últimos dígitos do celular cadastrado.</p>
+              <p className="text-xs font-bold tracking-[0.32em] text-cyan-300 uppercase">Acesso seguro</p>
+              <h2 className="mt-3 text-2xl font-bold font-display text-white">Entrar na central</h2>
+              <p className="text-sm text-slate-400 mt-1">Use suas credenciais corporativas.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-[0.28em] text-slate-400 uppercase">CPF</label>
+                <label className="text-[10px] font-bold tracking-[0.28em] text-slate-400 uppercase">
+                  Email
+                </label>
                 <div className="relative">
-                  <UserRound className="absolute left-3 top-3 w-4 h-4 text-cyan-300" />
+                  <Mail className="absolute left-3 top-3 w-4 h-4 text-cyan-300" />
                   <Input
                     type="text"
-                    inputMode="numeric"
-                    placeholder="00000000000"
-                    value={cpf}
-                    onChange={(e) => setCpf(onlyDigits(e.target.value).slice(0, 11))}
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500"
                     required
-                    autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold tracking-[0.28em] text-slate-400 uppercase">4 últimos dígitos do celular</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold tracking-[0.28em] text-slate-400 uppercase">Senha</label>
+                  <Link to="/recuperar-senha" className="text-xs font-semibold text-cyan-300 hover:text-cyan-200">
+                    Esqueci minha senha
+                  </Link>
+                </div>
                 <div className="relative">
-                  <Smartphone className="absolute left-3 top-3 w-4 h-4 text-cyan-300" />
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-cyan-300" />
                   <Input
                     type="password"
-                    inputMode="numeric"
-                    placeholder="0000"
-                    value={phoneLast4}
-                    onChange={(e) => setPhoneLast4(onlyDigits(e.target.value).slice(0, 4))}
-                    className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500 tracking-[0.3em]"
-                    required
-                    autoComplete="current-password"
+                    placeholder="********"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10 border-cyan-400/20 bg-slate-900/70 text-white placeholder:text-slate-500"
                   />
                 </div>
-                <p className="text-[11px] text-slate-500">A validação acontece no servidor. Nenhuma chave administrativa é enviada ao navegador.</p>
+                <p className="text-[11px] text-slate-500">Acesso web por e-mail e senha. CPF/PIN de campo fica somente no link /acesso-mecanico.</p>
               </div>
 
               <Button
@@ -210,13 +196,38 @@ const LoginPage: React.FC = () => {
                 disabled={loading}
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {loading ? 'Conferindo acesso...' : 'Entrar'}
+                Entrar na plataforma
                 {!loading ? <ArrowRight className="ml-2 h-4 w-4" /> : null}
               </Button>
+
+              <div className="relative py-2">
+                <div className="absolute inset-x-0 top-1/2 h-px bg-white/10" />
+                <span className="relative mx-auto block w-fit bg-[#101829] px-3 text-[10px] text-slate-500 tracking-[0.3em]">
+                  OU
+                </span>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="group w-full border-white/10 bg-slate-900/45 text-slate-200 shadow-[inset_0_1px_0_rgba(255,255,255,.05)] hover:border-cyan-300/35 hover:bg-slate-800/80 hover:text-white"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+              >
+                <span className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-white text-base font-black shadow-[0_0_18px_rgba(255,255,255,.12)]">
+                  <span className="bg-gradient-to-r from-[#4285f4] via-[#34a853] to-[#fbbc05] bg-clip-text text-transparent">G</span>
+                </span>
+                <span className="font-semibold">Entrar com Google</span>
+              </Button>
+
+              <div className="flex justify-center text-sm text-slate-400">
+                <span>Ainda nao tem conta? </span>
+                <Link to="/cadastro" className="ml-1 font-semibold text-cyan-300 hover:text-cyan-200">Criar conta</Link>
+              </div>
             </form>
 
             <p className="mt-8 text-center text-[10px] tracking-[0.25em] text-slate-600 uppercase">
-              TOPAC RH PRO • Central RH • Acesso restrito
+              TOPAC RH PRO - Central RH - Acesso restrito
             </p>
           </motion.div>
         </section>
