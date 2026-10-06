@@ -1,5 +1,17 @@
 import fs from 'node:fs';
 
+const preCadastroFile = 'src/pages/PreCadastroAdmissionalOcrPage.tsx';
+if (fs.existsSync(preCadastroFile)) {
+  const preBefore = fs.readFileSync(preCadastroFile, 'utf8');
+  let preAfter = preBefore;
+  preAfter = preAfter.replace(
+    "`${saudacaoCapitalizada()}${primeiroNome ? , ${primeiroNome} : ''}!`,",
+    "saudacaoCapitalizada() + (primeiroNome ? ', ' + primeiroNome : '') + '!',",
+  );
+  if (preAfter !== preBefore) fs.writeFileSync(preCadastroFile, preAfter);
+  console.log('[platform-visual] sintaxe da mensagem ASO ao candidato validada');
+}
+
 const file = 'src/components/AppLayout.tsx';
 if (!fs.existsSync(file)) throw new Error(`[platform-visual] arquivo ausente: ${file}`);
 
