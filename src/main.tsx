@@ -32,9 +32,11 @@ const ContabilidadeFolhaAdminAddon = lazy(() => import("@/components/Contabilida
 const ContabilidadeCorrectionPanel = lazy(() => import("@/components/ContabilidadeCorrectionPanel"));
 const PayrollAccountingSourceAddon = lazy(() => import("@/components/PayrollAccountingSourceAddon"));
 const PayrollSignaturePublicPage = lazy(() => import("@/pages/PayrollSignaturePublicPage"));
+const PreCadastroPublicoPage = lazy(() => import("@/pages/PreCadastroPublicoPage"));
 
 const currentPath = window.location.pathname;
 const isPayrollPublicPortal = /^\/holerite(?:\/[^/]+)?\/?$/i.test(currentPath);
+const isPreCadastroPublicPortal = /^\/pre-cadastro(?:\/|$)/i.test(currentPath);
 const isMecanicoPublicPortal = /^\/(?:mecanicos|acesso-mecanico|app-mecanico(?:\/|$)|mecanico-ext(?:\/|$))/i.test(currentPath);
 const isContabilidadePublicPortal = /^\/(?:acesso-contabilidade(?:-goiania)?|contabilidade(?:-goiania)?)\/?$/i.test(currentPath);
 // Nova versão do app administrativo instalado, sem alterar a versão estável do app dos mecânicos.
@@ -70,7 +72,7 @@ async function clearLegacyMobileCache() {
   }
 }
 
-if (!isPayrollPublicPortal && !isContabilidadePublicPortal) {
+if (!isPayrollPublicPortal && !isContabilidadePublicPortal && !isPreCadastroPublicPortal) {
   void clearLegacyMobileCache();
 }
 
@@ -176,7 +178,16 @@ const ContabilidadePublicPortal = () => (
 );
 
 const root = createRoot(document.getElementById("root")!);
-if (isPayrollPublicPortal) {
+if (isPreCadastroPublicPortal) {
+  root.render(
+    <ErrorBoundary>
+      <GlobalFormContrastGuard />
+      <Suspense fallback={<div className="min-h-screen bg-slate-50 text-slate-700 flex items-center justify-center">Carregando pré-cadastro...</div>}>
+        <PreCadastroPublicoPage />
+      </Suspense>
+    </ErrorBoundary>
+  );
+} else if (isPayrollPublicPortal) {
   root.render(
     <ErrorBoundary>
       <GlobalFormContrastGuard />
