@@ -255,28 +255,38 @@ const PreCadastroFseButtonPlacement = () => {
 
       const completed = rows.filter(row => !!row.public_completed_at && row.status !== 'cadastro_em_preenchimento');
       const unread = completed.filter(row => !row.public_seen_at);
-      toolbar.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div>
-            <div style="font-size:13px;font-weight:800">LINK DE PRÉ-CADASTRO DO CANDIDATO</div>
-            <div style="margin-top:2px;font-size:12px;color:hsl(var(--muted-foreground))">Envie este mesmo link. O candidato preenche primeiro; empresa, cargo e salário ficam para o RH.</div>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button id="topac-copy-public-link" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-semibold hover:bg-accent">Copiar link</button>
-            <button id="topac-open-latest-public" type="button" class="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90" ${unread.length ? '' : 'disabled'}>${unread.length ? `${unread.length} novo${unread.length > 1 ? 's' : ''} recebido${unread.length > 1 ? 's' : ''}` : 'Nenhum novo'}</button>
-          </div>
-        </div>`;
+      const toolbarRenderKey = JSON.stringify({
+        unread: unread.map(row => row.id),
+        completed: completed.length,
+      });
+      if (toolbar.dataset.renderKey !== toolbarRenderKey) {
+        toolbar.dataset.renderKey = toolbarRenderKey;
+        toolbar.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:13px;font-weight:800">LINK DE PRÉ-CADASTRO DO CANDIDATO</div>
+              <div style="margin-top:2px;font-size:12px;color:hsl(var(--muted-foreground))">Envie este mesmo link. O candidato preenche primeiro; empresa, cargo e salário ficam para o RH.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="topac-copy-public-link" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-4 text-sm font-semibold hover:bg-accent">Copiar link</button>
+              <button id="topac-open-latest-public" type="button" class="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-90" ${unread.length ? '' : 'disabled'}>${unread.length ? `${unread.length} novo${unread.length > 1 ? 's' : ''} recebido${unread.length > 1 ? 's' : ''}` : 'Nenhum novo'}</button>
+            </div>
+          </div>`;
+      }
 
-      toolbar.querySelector<HTMLButtonElement>('#topac-copy-public-link')!.onclick = async () => {
+      const copyButton = toolbar.querySelector<HTMLButtonElement>('#topac-copy-public-link');
+      if (copyButton) copyButton.onclick = async () => {
         await copyText(GENERAL_LINK);
         toast.success('Link do pré-cadastro copiado.');
       };
       const latestButton = toolbar.querySelector<HTMLButtonElement>('#topac-open-latest-public');
-      if (latestButton && unread.length) latestButton.onclick = async () => {
-        const latest = unread[0];
-        try { await markSeen(latest.id); } catch (error: any) { toast.error(error?.message || 'Não foi possível registrar a leitura.'); }
-        window.location.href = `/admin/pre-cadastro-admissional?pre=${encodeURIComponent(latest.id)}`;
-      };
+      if (latestButton) {
+        latestButton.onclick = unread.length ? async () => {
+          const latest = unread[0];
+          try { await markSeen(latest.id); } catch (error: any) { toast.error(error?.message || 'Não foi possível registrar a leitura.'); }
+          window.location.href = `/admin/pre-cadastro-admissional?pre=${encodeURIComponent(latest.id)}`;
+        } : null;
+      }
     };
 
     const hideIncompletePublicDrafts = () => {
@@ -311,31 +321,48 @@ const PreCadastroFseButtonPlacement = () => {
       const pending = Array.isArray(row.pendencias_documentais) ? row.pendencias_documentais : [];
       const correctionOpen = row.status === 'correcao_solicitada';
       const awaitingAso = row.status === 'aguardando_aso';
-      summary.innerHTML = `
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <div><div style="font-size:14px;font-weight:800">DADOS RECEBIDOS PELO CANDIDATO</div><div style="font-size:12px;color:hsl(var(--muted-foreground));margin-top:2px">Finalizado em ${esc(formatDateTime(row.public_completed_at))}. O RH completa empresa + cargo/vaga + salário.</div></div>
-          <span style="font-size:11px;font-weight:700;border-radius:999px;padding:5px 9px;background:${correctionOpen ? 'rgba(245,158,11,.12)' : awaitingAso ? 'rgba(59,130,246,.12)' : 'rgba(16,185,129,.12)'};color:${correctionOpen ? '#b45309' : awaitingAso ? '#1d4ed8' : '#047857'}">${correctionOpen ? 'CORREÇÃO SOLICITADA' : awaitingAso ? 'AGUARDANDO ASO' : 'PRÉ-CADASTRO RECEBIDO'}</span>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:14px">
-          <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Banco / PIX</div><div style="font-size:13px;margin-top:5px"><b>${esc(b.banco || '-')}</b><br>Ag. ${esc(b.agencia || '-')} · Conta ${esc(b.conta || '-')}${b.digito ? '-' + esc(b.digito) : ''}<br>PIX: ${esc(b.pix || '-')}</div></div>
-          <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">CTPS</div><div style="font-size:13px;margin-top:5px"><b>${esc(row.ctps_tipo || 'Não informado')}</b><br>${esc(c.pis ? `PIS/NIS: ${c.pis}` : 'PIS/NIS não informado')}</div></div>
-          <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Vale-transporte</div><div style="font-size:13px;margin-top:5px">${t.usa_vt === false ? '<b>Não utiliza VT</b>' : `<b>IDA:</b> ${esc(transportLine(t.ida))}<br><b>VOLTA:</b> ${esc(transportLine(t.volta))}`}</div></div>
-          <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Pendências permitidas</div><div style="font-size:13px;margin-top:5px">${pending.length ? pending.map((item: any) => esc(item?.label || item?.tipo || item)).join('<br>') : '<b>Nenhuma</b>'}</div></div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-          <button id="topac-confirm-admission-aso" type="button" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50" ${correctionOpen ? 'disabled' : ''}>${awaitingAso ? 'Gerar guia ASO novamente' : 'Confirmar empresa/cargo/salário + gerar ASO'}</button>
-          <button id="topac-copy-candidate-link" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-3 text-xs font-semibold hover:bg-accent">Copiar link deste candidato</button>
-          <button id="topac-request-correction" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100">Solicitar correção</button>
-        </div>`;
+      const summaryRenderKey = JSON.stringify({
+        id: row.id,
+        status: row.status,
+        publicToken: row.public_token,
+        completedAt: row.public_completed_at,
+        seenAt: row.public_seen_at,
+        ctpsTipo: row.ctps_tipo,
+        candidato: c,
+        banco: b,
+        transporte: t,
+        pendencias: pending,
+      });
+      if (summary.dataset.renderKey !== summaryRenderKey) {
+        summary.dataset.renderKey = summaryRenderKey;
+        summary.innerHTML = `
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div><div style="font-size:14px;font-weight:800">DADOS RECEBIDOS PELO CANDIDATO</div><div style="font-size:12px;color:hsl(var(--muted-foreground));margin-top:2px">Finalizado em ${esc(formatDateTime(row.public_completed_at))}. O RH completa empresa + cargo/vaga + salário.</div></div>
+            <span style="font-size:11px;font-weight:700;border-radius:999px;padding:5px 9px;background:${correctionOpen ? 'rgba(245,158,11,.12)' : awaitingAso ? 'rgba(59,130,246,.12)' : 'rgba(16,185,129,.12)'};color:${correctionOpen ? '#b45309' : awaitingAso ? '#1d4ed8' : '#047857'}">${correctionOpen ? 'CORREÇÃO SOLICITADA' : awaitingAso ? 'AGUARDANDO ASO' : 'PRÉ-CADASTRO RECEBIDO'}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:14px">
+            <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Banco / PIX</div><div style="font-size:13px;margin-top:5px"><b>${esc(b.banco || '-')}</b><br>Ag. ${esc(b.agencia || '-')} · Conta ${esc(b.conta || '-')}${b.digito ? '-' + esc(b.digito) : ''}<br>PIX: ${esc(b.pix || '-')}</div></div>
+            <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">CTPS</div><div style="font-size:13px;margin-top:5px"><b>${esc(row.ctps_tipo || 'Não informado')}</b><br>${esc(c.pis ? `PIS/NIS: ${c.pis}` : 'PIS/NIS não informado')}</div></div>
+            <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Vale-transporte</div><div style="font-size:13px;margin-top:5px">${t.usa_vt === false ? '<b>Não utiliza VT</b>' : `<b>IDA:</b> ${esc(transportLine(t.ida))}<br><b>VOLTA:</b> ${esc(transportLine(t.volta))}`}</div></div>
+            <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Pendências permitidas</div><div style="font-size:13px;margin-top:5px">${pending.length ? pending.map((item: any) => esc(item?.label || item?.tipo || item)).join('<br>') : '<b>Nenhuma</b>'}</div></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            <button id="topac-confirm-admission-aso" type="button" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50" ${correctionOpen ? 'disabled' : ''}>${awaitingAso ? 'Gerar guia ASO novamente' : 'Confirmar empresa/cargo/salário + gerar ASO'}</button>
+            <button id="topac-copy-candidate-link" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-3 text-xs font-semibold hover:bg-accent">Copiar link deste candidato</button>
+            <button id="topac-request-correction" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100">Solicitar correção</button>
+          </div>`;
+      }
 
       const confirmButton = summary.querySelector<HTMLButtonElement>('#topac-confirm-admission-aso');
-      if (confirmButton && !correctionOpen) confirmButton.onclick = () => void confirmAdmissionAndGenerateAso(row).catch((error: any) => toast.error(error?.message || 'Não foi possível confirmar a admissão.'));
-      summary.querySelector<HTMLButtonElement>('#topac-copy-candidate-link')!.onclick = async () => {
+      if (confirmButton) confirmButton.onclick = !correctionOpen ? () => void confirmAdmissionAndGenerateAso(row).catch((error: any) => toast.error(error?.message || 'Não foi possível confirmar a admissão.')) : null;
+      const copyCandidateButton = summary.querySelector<HTMLButtonElement>('#topac-copy-candidate-link');
+      if (copyCandidateButton) copyCandidateButton.onclick = async () => {
         if (!row.public_token) return toast.error('Token deste candidato não foi encontrado.');
         await copyText(`${GENERAL_LINK}?token=${encodeURIComponent(row.public_token)}`);
         toast.success('Link individual do candidato copiado.');
       };
-      summary.querySelector<HTMLButtonElement>('#topac-request-correction')!.onclick = () => void requestCorrection(row).catch((error: any) => toast.error(error?.message || 'Não foi possível solicitar a correção.'));
+      const correctionButton = summary.querySelector<HTMLButtonElement>('#topac-request-correction');
+      if (correctionButton) correctionButton.onclick = () => void requestCorrection(row).catch((error: any) => toast.error(error?.message || 'Não foi possível solicitar a correção.'));
 
       if (!row.public_seen_at) void markSeen(row.id).then(() => injectToolbar()).catch(() => undefined);
     };
@@ -371,7 +398,13 @@ const PreCadastroFseButtonPlacement = () => {
     };
 
     void loadRows();
-    const observer = new MutationObserver(enhance);
+    const observer = new MutationObserver((mutations) => {
+      const hasExternalMutation = mutations.some((mutation) => {
+        const target = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+        return !target?.closest(`#${PUBLIC_TOOLBAR_ID},#${PUBLIC_SUMMARY_ID}`);
+      });
+      if (hasExternalMutation) enhance();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     const refreshTimer = window.setInterval(() => void loadRows(), 15000);
     const enhanceTimer = window.setInterval(enhance, 800);
