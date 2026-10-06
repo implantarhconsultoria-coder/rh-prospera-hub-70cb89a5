@@ -137,6 +137,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('ASO') || normalizado.includes('EXAME')) return 'ASO';
   if (/DOCUMENTACAO[_ ]UNIFICADA|DOCUMENTOS[_ ]UNIFICADOS|ARQUIVO[_ ]UNICO/.test(normalizado)) return 'DOCUMENTACAO UNIFICADA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
+  if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') || normalizado.includes('DADOS CADASTRAIS') || normalizado.includes('DOCUMENTACAO ADMISSIONAL')) return 'FICHA/DOCUMENTACAO';
   if (normalizado.includes('CONTRATO')) return 'CONTRATO';
   return 'NAO RECONHECIDO';
