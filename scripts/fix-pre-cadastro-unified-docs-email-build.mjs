@@ -8,7 +8,10 @@ let changed = false;
 
 const replaceOnce = (from, to, label) => {
   if (source.includes(to)) return;
-  if (!source.includes(from)) throw new Error(`[pre-cadastro-unified] trecho nao encontrado: ${label}`);
+  if (!source.includes(from)) {
+    console.warn(`[pre-cadastro-unified] trecho ja evoluiu ou nao se aplica: ${label}`);
+    return;
+  }
   source = source.replace(from, to);
   changed = true;
 };
