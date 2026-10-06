@@ -40,8 +40,66 @@ patch('src/pages/PreCadastroAdmissionalOcrPage.tsx',(source)=>{
 `;
     text=text.slice(0,start)+replacement+text.slice(end);
   }
+
+  if(!text.includes("const [asoExamDate, setAsoExamDate] = useState('');")){
+    text=text.replace(
+      "  const [lastAsoGuide, setLastAsoGuide] = useState<GeneratedAsoGuide | null>(null);",
+      "  const [lastAsoGuide, setLastAsoGuide] = useState<GeneratedAsoGuide | null>(null);\n  const [asoExamDate, setAsoExamDate] = useState('');",
+    );
+  }
+
+  if(!text.includes("setForm(selected); setAsoExamDate(''); setOcrResult")){
+    text=text.replace('setForm(selected); setOcrResult', "setForm(selected); setAsoExamDate(''); setOcrResult");
+  }
+
+  text=text.replace(
+    "const novo = () => { setSelectedId(''); setForm(initialForm); setOcrResult(null); setLastFichaFile(null); setLastAsoGuide(null); setDocumentos([]); };",
+    "const novo = () => { setSelectedId(''); setForm(initialForm); setOcrResult(null); setLastFichaFile(null); setLastAsoGuide(null); setAsoExamDate(''); setDocumentos([]); };",
+  );
+  text=text.replace(
+    "setSelectedId(''); setSearch(''); setOcrResult(null); setLastFichaFile(null); setLastAsoGuide(null); setDocumentos([]);",
+    "setSelectedId(''); setSearch(''); setOcrResult(null); setLastFichaFile(null); setLastAsoGuide(null); setAsoExamDate(''); setDocumentos([]);",
+  );
+
+  if(!text.includes("toast.error('Selecione a data do exame antes de gerar a guia ASO.')")){
+    text=text.replace(
+      '  const buildGuiaAsoPdf = () => { if (!form.nome',
+      "  const buildGuiaAsoPdf = () => { if (!asoExamDate) { toast.error('Selecione a data do exame antes de gerar a guia ASO.'); return null; } if (!form.nome",
+    );
+  }
+  text=text.replace('dataExame: new Date().toISOString().slice(0, 10)', 'dataExame: asoExamDate');
+
+  if(!text.includes('Data do exame / ASO')){
+    const actionNeedle='<Button onClick={salvar} disabled={saving}><Save className="w-4 h-4 mr-2" />Salvar</Button><Button onClick={gerarGuiaAso} variant="outline">';
+    const actionReplacement='<Button onClick={salvar} disabled={saving}><Save className="w-4 h-4 mr-2" />Salvar</Button><div className="min-w-[180px]"><label className="text-xs text-muted-foreground">Data do exame / ASO</label><Input type="date" value={asoExamDate} onChange={e => { setAsoExamDate(e.target.value); setLastAsoGuide(null); }} /></div><Button onClick={gerarGuiaAso} variant="outline">';
+    text=text.replace(actionNeedle,actionReplacement);
+  }
+
   return text;
-},'pré-cadastro identifica ID e ASO retornado segue automaticamente para contabilidade');
+},'pré-cadastro identifica ID, exige data escolhida para guia ASO e ASO retornado segue automaticamente para contabilidade');
+
+patch('src/components/PreCadastroFseButtonPlacement.tsx',(source)=>{
+  let text=source;
+  if(!text.includes("findControlByLabel('Data do exame / ASO')")){
+    text=text.replace(
+      "      const salaryControl = findControlByLabel('Salario') as HTMLInputElement | null;\n      const companyId = clean(companyControl?.value);\n      const role = clean(roleControl?.value);\n      const salary = Number(salaryControl?.value || 0);",
+      "      const salaryControl = findControlByLabel('Salario') as HTMLInputElement | null;\n      const examDateControl = findControlByLabel('Data do exame / ASO') as HTMLInputElement | null;\n      const companyId = clean(companyControl?.value);\n      const role = clean(roleControl?.value);\n      const salary = Number(salaryControl?.value || 0);\n      const examDate = clean(examDateControl?.value);",
+    );
+    text=text.replace(
+      "      if (!companyId || !role || !(salary > 0)) {\n        toast.error('Antes de confirmar, selecione EMPRESA + CARGO/VAGA e informe o SALÁRIO.');",
+      "      if (!companyId || !role || !(salary > 0) || !examDate) {\n        toast.error('Antes de confirmar, selecione EMPRESA + CARGO/VAGA + DATA DO EXAME e informe o SALÁRIO.');",
+    );
+    text=text.replace(
+      "            salario: salary,\n            beneficios: savedRow.beneficios || '',",
+      "            salario: salary,\n            data_exame: examDate,\n            beneficios: savedRow.beneficios || '',",
+    );
+    text=text.replace(
+      "        dados: { empresa_id: companyId, funcao: role, salario: salary, beneficios: savedRow.beneficios || '', insalubridade: savedRow.insalubridade || '' },",
+      "        dados: { empresa_id: companyId, funcao: role, salario: salary, data_exame: examDate, beneficios: savedRow.beneficios || '', insalubridade: savedRow.insalubridade || '' },",
+    );
+  }
+  return text;
+},'confirmação do pré-cadastro também exige a data escolhida para a guia ASO');
 
 await import('./fix-platform-visual-consistency-build.mjs');
 await import('./fix-abastecimento-auto-liberacao-build.mjs');
