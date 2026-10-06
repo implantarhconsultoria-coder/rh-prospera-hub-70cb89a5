@@ -109,3 +109,4 @@ if (next !== source) fs.writeFileSync(path, next, 'utf8');
 console.log('[signature-share-message] mensagem inteligente aplicada');
 
 await import('./fix-payroll-dossier-build.mjs');
+await import('./fix-physical-signature-reminder-build.mjs');
