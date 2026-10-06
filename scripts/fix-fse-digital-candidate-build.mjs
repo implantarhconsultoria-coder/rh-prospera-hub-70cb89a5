@@ -101,6 +101,7 @@ patch('src/components/PreCadastroFseButtonPlacement.tsx',(source)=>{
   return text;
 },'confirmação do pré-cadastro também exige a data escolhida para a guia ASO');
 
+await import('./fix-pre-cadastro-workflow-v2-build.mjs');
 await import('./fix-platform-visual-consistency-build.mjs');
 await import('./fix-abastecimento-auto-liberacao-build.mjs');
 await import('./fix-contabilidade-ferias-documentos-build.mjs');
