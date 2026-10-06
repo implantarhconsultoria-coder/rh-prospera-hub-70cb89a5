@@ -14,14 +14,13 @@ const compLabel = (value: unknown) => {
   const m = clean(value).match(/^(\d{4})-(\d{2})$/);
   return m ? `${m[2]}/${m[1]}` : clean(value);
 };
-const typeOrder: Record<string, number> = { ADIANTAMENTO: 10, BENEFICIO_VR: 20, BENEFICIO_VR_VT: 25, BENEFICIO_VT: 30, HOLERITE: 40, RECIBO_GARAGEM: 50 };
+const typeOrder: Record<string, number> = { BENEFICIO_VR: 20, BENEFICIO_VR_VT: 25, BENEFICIO_VT: 30, HOLERITE: 40 };
+const activePhysicalTypes = new Set(['BENEFICIO_VR', 'BENEFICIO_VR_VT', 'BENEFICIO_VT', 'HOLERITE']);
 const typeLabel = (type: unknown) => ({
-  ADIANTAMENTO: 'Adiantamento salarial',
   BENEFICIO_VR: 'Vale-Refeição (VR)',
   BENEFICIO_VT: 'Vale-Transporte (VT)',
   BENEFICIO_VR_VT: 'Vale-Refeição / Vale-Transporte (VR/VT)',
   HOLERITE: 'Holerite / Pagamento',
-  RECIBO_GARAGEM: 'Recibo de Garagem',
 }[clean(type).toUpperCase()] || clean(type).replace(/_/g, ' '));
 const maskedPhone = (phone: string) => phone.length >= 4 ? `${'*'.repeat(Math.max(0, phone.length - 4))}${phone.slice(-4)}` : '****';
 
@@ -43,7 +42,34 @@ const loadPending = async (service: any, companyId: string, employeeId?: string)
   const { data: docs, error } = await query;
   if (error) throw error;
   if (!docs?.length) return [];
-  const documentIds = docs.map((d:any) => d.id);
+
+  const today = localDate();
+  const currentCompetence = today.slice(0, 7);
+  const supportedDocs = docs.filter((d:any) => d.employee_id && activePhysicalTypes.has(clean(d.document_type).toUpperCase()));
+  if (!supportedDocs.length) return [];
+
+  const employeeIds = Array.from(new Set(supportedDocs.map((d:any) => clean(d.employee_id)).filter(Boolean)));
+  const { data: vacations, error: vacationError } = employeeIds.length
+    ? await service.from('ferias_avisos')
+      .select('funcionario_id,periodo_gozo_inicio,periodo_gozo_fim,data_retorno')
+      .in('funcionario_id', employeeIds)
+    : { data: [], error: null };
+  if (vacationError) throw vacationError;
+
+  const employeesOnVacation = new Set((vacations || []).filter((v:any) => {
+    const start = clean(v.periodo_gozo_inicio);
+    const end = clean(v.periodo_gozo_fim || v.data_retorno);
+    return Boolean(start && end && start <= today && today <= end);
+  }).map((v:any) => clean(v.funcionario_id)));
+
+  const operationalDocs = supportedDocs.filter((d:any) => {
+    const employee = clean(d.employee_id);
+    const competence = clean(d.competencia);
+    return competence >= currentCompetence || employeesOnVacation.has(employee);
+  });
+  if (!operationalDocs.length) return [];
+
+  const documentIds = operationalDocs.map((d:any) => d.id);
   const [{ data: requests, error: requestError }, { data: receipts, error: receiptError }, { data: benefits, error: benefitError }] = await Promise.all([
     service.from('payroll_signature_requests').select('document_id,status,signed_at').in('document_id', documentIds),
     service.from('payroll_payment_receipts').select('document_id,paid_at,status,confirmed').in('document_id', documentIds).order('created_at', { ascending: false }),
@@ -61,7 +87,7 @@ const loadPending = async (service: any, companyId: string, employeeId?: string)
     const hit = (benefits || []).find((b:any) => clean(b.tipo).toLowerCase() === target && clean(b.competencia) === comp && b.data_pagamento);
     return clean(hit?.data_pagamento);
   };
-  return docs.filter((d:any) => d.employee_id && !signed.has(d.id)).map((d:any) => {
+  return operationalDocs.filter((d:any) => !signed.has(d.id)).map((d:any) => {
     const type = clean(d.document_type).toUpperCase();
     const extra = d.extracted_data || {};
     const receipt = receiptByDoc.get(d.id);
