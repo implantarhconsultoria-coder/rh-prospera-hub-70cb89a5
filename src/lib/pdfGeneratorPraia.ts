@@ -10,6 +10,8 @@ export type { FichaASOData, AvisoFeriasData } from './pdfGenerator';
 export {
   makeDocumentFileName,
   gerarFichaASOPdf,
+  gerarFichaSolicitacaoEmpregoPdf,
+  getAsoClinicCommunicationInfo,
   gerarAvisoFeriasPdf,
   downloadPdf,
 } from './pdfGenerator';
