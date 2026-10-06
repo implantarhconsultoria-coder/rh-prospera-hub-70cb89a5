@@ -70,12 +70,19 @@ const findHeading = (text: string) => Array.from(document.querySelectorAll('h1,h
   node => clean(node.textContent).toLowerCase() === text.toLowerCase(),
 ) as HTMLElement | undefined;
 
+const findControlByLabel = (text: string) => {
+  const label = Array.from(document.querySelectorAll('label')).find(node => clean(node.textContent).toLowerCase() === text.toLowerCase());
+  return label?.parentElement?.querySelector('input,select,textarea') as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
+};
+
 const selectedPreCadastroId = () => {
   const fromQuery = new URLSearchParams(window.location.search).get('pre');
   if (fromQuery) return fromQuery;
   const selected = document.querySelector('button[data-pre-cadastro-id].border-primary') as HTMLElement | null;
   return selected?.getAttribute('data-pre-cadastro-id') || '';
 };
+
+const delay = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
 const PreCadastroFseButtonPlacement = () => {
   useEffect(() => {
@@ -118,7 +125,7 @@ const PreCadastroFseButtonPlacement = () => {
   useEffect(() => {
     let disposed = false;
     let rows: PublicRow[] = [];
-    let notifiedIds = new Set<string>();
+    const notifiedIds = new Set<string>();
     let enhancing = false;
 
     const markSeen = async (id: string) => {
@@ -146,6 +153,91 @@ const PreCadastroFseButtonPlacement = () => {
       const personalLink = `${GENERAL_LINK}?token=${encodeURIComponent(row.public_token || '')}`;
       await copyText(personalLink);
       toast.success('Correção solicitada. O link do candidato foi copiado para você enviar.');
+      enhance();
+    };
+
+    const confirmAdmissionAndGenerateAso = async (row: PublicRow) => {
+      const companyControl = findControlByLabel('Empresa contratante') as HTMLSelectElement | null;
+      const roleControl = findControlByLabel('Funcao') as HTMLSelectElement | null;
+      const salaryControl = findControlByLabel('Salario') as HTMLInputElement | null;
+      const companyId = clean(companyControl?.value);
+      const role = clean(roleControl?.value);
+      const salary = Number(salaryControl?.value || 0);
+
+      if (!companyId || !role || !(salary > 0)) {
+        toast.error('Antes de confirmar, selecione EMPRESA + CARGO/VAGA e informe o SALÁRIO.');
+        return;
+      }
+
+      const saveButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => clean(button.textContent) === 'Salvar');
+      const asoButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(button => clean(button.textContent).includes('Gerar Guia ASO'));
+      if (!saveButton || !asoButton) {
+        toast.error('Não encontrei os controles de Salvar/Gerar ASO desta ficha.');
+        return;
+      }
+
+      const toastId = toast.loading('Confirmando admissão e gerando a guia ASO...');
+
+      // Os dois cliques acontecem dentro do gesto do usuário. Assim a guia ASO consegue abrir
+      // normalmente no navegador, enquanto o salvamento e a auditoria continuam em segundo plano.
+      saveButton.click();
+      asoButton.click();
+
+      let savedRow: any = null;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await delay(250);
+        const { data, error } = await (supabase as any)
+          .from('pre_cadastros_admissionais')
+          .select('empresa_id,funcao,salario,status,beneficios,insalubridade,historico')
+          .eq('id', row.id)
+          .maybeSingle();
+        if (error) continue;
+        if (data && clean(data.empresa_id) === companyId && clean(data.funcao) === role && Number(data.salario || 0) === salary) {
+          savedRow = data;
+          break;
+        }
+      }
+
+      if (!savedRow) {
+        toast.error('A guia foi solicitada, mas não consegui confirmar o salvamento dos dados. Confira a ficha antes de continuar.', { id: toastId });
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const history = Array.isArray(savedRow.historico) ? savedRow.historico : [];
+      const { data: auth } = await supabase.auth.getUser();
+      const { error: statusError } = await (supabase as any)
+        .from('pre_cadastros_admissionais')
+        .update({
+          status: 'aguardando_aso',
+          historico: [...history, {
+            em: now,
+            acao: 'admissao_confirmada_guia_aso_gerada',
+            empresa_id: companyId,
+            funcao: role,
+            salario: salary,
+            beneficios: savedRow.beneficios || '',
+            insalubridade: savedRow.insalubridade || '',
+            por: auth.user?.id || null,
+          }],
+          updated_at: now,
+        })
+        .eq('id', row.id);
+      if (statusError) {
+        toast.error(`Guia ASO gerada, mas não consegui atualizar o status: ${statusError.message}`, { id: toastId });
+        return;
+      }
+
+      await (supabase as any).from('pre_cadastro_eventos').insert({
+        pre_cadastro_id: row.id,
+        tipo: 'aguardando_aso',
+        descricao: 'Empresa, cargo e salário confirmados pelo RH; guia ASO gerada.',
+        dados: { empresa_id: companyId, funcao: role, salario: salary, beneficios: savedRow.beneficios || '', insalubridade: savedRow.insalubridade || '' },
+        created_by: auth.user?.id || null,
+      });
+
+      rows = rows.map(item => item.id === row.id ? { ...item, status: 'aguardando_aso' } : item);
+      toast.success('Admissão confirmada. Benefícios/regras aplicados e guia ASO gerada. Status: AGUARDANDO ASO.', { id: toastId });
       enhance();
     };
 
@@ -218,10 +310,11 @@ const PreCadastroFseButtonPlacement = () => {
       const t = row.transporte || {};
       const pending = Array.isArray(row.pendencias_documentais) ? row.pendencias_documentais : [];
       const correctionOpen = row.status === 'correcao_solicitada';
+      const awaitingAso = row.status === 'aguardando_aso';
       summary.innerHTML = `
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
           <div><div style="font-size:14px;font-weight:800">DADOS RECEBIDOS PELO CANDIDATO</div><div style="font-size:12px;color:hsl(var(--muted-foreground));margin-top:2px">Finalizado em ${esc(formatDateTime(row.public_completed_at))}. O RH completa empresa + cargo/vaga + salário.</div></div>
-          <span style="font-size:11px;font-weight:700;border-radius:999px;padding:5px 9px;background:${correctionOpen ? 'rgba(245,158,11,.12)' : 'rgba(16,185,129,.12)'};color:${correctionOpen ? '#b45309' : '#047857'}">${correctionOpen ? 'CORREÇÃO SOLICITADA' : 'PRÉ-CADASTRO RECEBIDO'}</span>
+          <span style="font-size:11px;font-weight:700;border-radius:999px;padding:5px 9px;background:${correctionOpen ? 'rgba(245,158,11,.12)' : awaitingAso ? 'rgba(59,130,246,.12)' : 'rgba(16,185,129,.12)'};color:${correctionOpen ? '#b45309' : awaitingAso ? '#1d4ed8' : '#047857'}">${correctionOpen ? 'CORREÇÃO SOLICITADA' : awaitingAso ? 'AGUARDANDO ASO' : 'PRÉ-CADASTRO RECEBIDO'}</span>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:14px">
           <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Banco / PIX</div><div style="font-size:13px;margin-top:5px"><b>${esc(b.banco || '-')}</b><br>Ag. ${esc(b.agencia || '-')} · Conta ${esc(b.conta || '-')}${b.digito ? '-' + esc(b.digito) : ''}<br>PIX: ${esc(b.pix || '-')}</div></div>
@@ -230,10 +323,13 @@ const PreCadastroFseButtonPlacement = () => {
           <div style="border:1px solid hsl(var(--border));border-radius:10px;padding:11px;background:hsl(var(--background))"><div style="font-size:10px;font-weight:700;color:hsl(var(--muted-foreground));text-transform:uppercase">Pendências permitidas</div><div style="font-size:13px;margin-top:5px">${pending.length ? pending.map((item: any) => esc(item?.label || item?.tipo || item)).join('<br>') : '<b>Nenhuma</b>'}</div></div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
-          <button id="topac-copy-candidate-link" type="button" class="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-xs font-semibold hover:bg-accent">Copiar link deste candidato</button>
-          <button id="topac-request-correction" type="button" class="inline-flex h-9 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100">Solicitar correção</button>
+          <button id="topac-confirm-admission-aso" type="button" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 disabled:opacity-50" ${correctionOpen ? 'disabled' : ''}>${awaitingAso ? 'Gerar guia ASO novamente' : 'Confirmar empresa/cargo/salário + gerar ASO'}</button>
+          <button id="topac-copy-candidate-link" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-input bg-background px-3 text-xs font-semibold hover:bg-accent">Copiar link deste candidato</button>
+          <button id="topac-request-correction" type="button" class="inline-flex h-10 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-800 hover:bg-amber-100">Solicitar correção</button>
         </div>`;
 
+      const confirmButton = summary.querySelector<HTMLButtonElement>('#topac-confirm-admission-aso');
+      if (confirmButton && !correctionOpen) confirmButton.onclick = () => void confirmAdmissionAndGenerateAso(row).catch((error: any) => toast.error(error?.message || 'Não foi possível confirmar a admissão.'));
       summary.querySelector<HTMLButtonElement>('#topac-copy-candidate-link')!.onclick = async () => {
         if (!row.public_token) return toast.error('Token deste candidato não foi encontrado.');
         await copyText(`${GENERAL_LINK}?token=${encodeURIComponent(row.public_token)}`);
