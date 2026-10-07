@@ -146,6 +146,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
+  if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') || normalizado.includes('DADOS CADASTRAIS') || normalizado.includes('DOCUMENTACAO ADMISSIONAL')) return 'FICHA/DOCUMENTACAO';
   if (normalizado.includes('CONTRATO')) return 'CONTRATO';
   return 'NAO RECONHECIDO';
@@ -571,7 +572,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
       '',
       'Recomendamos chegar com antecedência devido à demanda de pessoas, para agilizar seu atendimento.',
       '',
-      `Guia do exame: ${guia.arquivo_url}`,
+      'Guia ASO: PDF anexado.',
       '',
       'TOPAC RH PRO',
     ].join('\n');
