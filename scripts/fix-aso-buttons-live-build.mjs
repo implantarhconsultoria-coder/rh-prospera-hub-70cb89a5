@@ -29,15 +29,14 @@ if (!source.includes('data-topac-aso-buttons-live')) {
 }
 
 if (!source.includes('data-topac-aso-pdf-share')) {
-  replaceOnce(
-    "      `Guia do exame: ${guia.arquivo_url}`,",
-    "      'Guia ASO: PDF anexado.',",
-    'remove public PDF link from WhatsApp message',
-  );
+  const oldPublicLink = "      `Guia do exame: ${guia.arquivo_url}`,";
+  if (source.includes(oldPublicLink)) source = source.replace(oldPublicLink, "      'Guia ASO: PDF anexado.',");
 
-  replaceOnce(
-    "    const numero = telefone.startsWith('55') ? telefone : `55${telefone}`;\n    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`, '_blank', 'noopener,noreferrer');",
-    `    const numero = telefone.startsWith('55') ? telefone : \`55\${telefone}\`;
+  const oldOpen = "    const numero = telefone.startsWith('55') ? telefone : `55${telefone}`;\n    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`, '_blank', 'noopener,noreferrer');";
+  if (source.includes(oldOpen)) {
+    source = source.replace(
+      oldOpen,
+      `    const numero = telefone.startsWith('55') ? telefone : \`55\${telefone}\`;
     try {
       const nomeArquivo = String(guia.nome_arquivo || \`GUIA ASO - \${form.nome || 'FUNCIONARIO'}.pdf\`).replace(/[^a-zA-Z0-9À-ÿ ._()-]/g, '_');
       let pdfBlob: Blob;
@@ -81,8 +80,10 @@ if (!source.includes('data-topac-aso-pdf-share')) {
       toast.error(error?.message || 'Não foi possível preparar o PDF para envio.');
     }
     void 'data-topac-aso-pdf-share';`,
-    'share actual PDF file',
-  );
+    );
+  } else {
+    console.log('[ASO buttons live] compartilhamento ASO já evoluiu; patch legado de PDF ignorado.');
+  }
 }
 
 fs.writeFileSync(file, source);
