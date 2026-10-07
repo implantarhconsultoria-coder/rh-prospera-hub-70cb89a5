@@ -21,7 +21,12 @@ export const openAssistedWhatsApp = (phoneValue: unknown, message: string) => {
   if (typeof window === 'undefined') return { ok: false as const, reason: 'browser_unavailable' as const };
 
   const url = buildAssistedWhatsAppUrl(phone, message);
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!opened) return { ok: false as const, reason: 'open_blocked' as const, phone, url };
-  return { ok: true as const, phone, url };
+  try {
+    // Mantém o mesmo mecanismo já usado pela TOPAC. Com noopener alguns navegadores
+    // retornam null mesmo abrindo o app/janela, por isso a abertura é tratada como tentativa conhecida.
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return { ok: true as const, phone, url };
+  } catch {
+    return { ok: false as const, reason: 'open_failed' as const, phone, url };
+  }
 };
