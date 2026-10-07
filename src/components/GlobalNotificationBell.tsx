@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bell, CheckCircle2, ChevronRight, CircleAlert, Info, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
@@ -16,6 +16,30 @@ type GlobalNotification = {
   actionUrl: string | null;
   status: string;
   isRead: boolean;
+};
+
+const CRITICAL_CYCLES = [
+  { minutes: 8 * 60 + 30, label: '08:30' },
+  { minutes: 11 * 60 + 30, label: '11:30' },
+  { minutes: 14 * 60 + 30, label: '14:30' },
+  { minutes: 17 * 60, label: '17:00' },
+] as const;
+
+const getOperationalCycleKey = (now = new Date()): string | null => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const currentMinutes = Number(values.hour || 0) * 60 + Number(values.minute || 0);
+  const currentCycle = [...CRITICAL_CYCLES].reverse().find((cycle) => currentMinutes >= cycle.minutes);
+  if (!currentCycle) return null;
+  return `${values.year}-${values.month}-${values.day}:${currentCycle.label}`;
 };
 
 const normalizeSeverity = (value: unknown): AlertSeverity => {
@@ -47,6 +71,11 @@ const SeverityIcon = ({ severity }: { severity: AlertSeverity }) => {
   return <Info className="h-4 w-4" />;
 };
 
+const isActiveCritical = (row: GlobalNotification) => {
+  if (row.severity !== 'critica') return false;
+  return !['resolvido', 'resolvida', 'encerrado', 'encerrada', 'inativo', 'inativa'].includes(row.status.toLowerCase());
+};
+
 export default function GlobalNotificationBell() {
   const navigate = useNavigate();
   const { session } = useApp();
@@ -55,6 +84,9 @@ export default function GlobalNotificationBell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [cycleKey, setCycleKey] = useState<string | null>(() => getOperationalCycleKey());
+  const [criticalModalRows, setCriticalModalRows] = useState<GlobalNotification[]>([]);
+  const presentationCheckRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -96,7 +128,7 @@ export default function GlobalNotificationBell() {
         severity: normalizeSeverity(row.nivel),
         createdAt: row.created_at || null,
         actionUrl: row.acao_url || null,
-        status: row.status || (row.resolvido_em ? 'resolvido' : 'ativo'),
+        status: row.resolvido_em ? 'resolvido' : (row.status || 'ativo'),
         isRead: readIds.has(row.id) || row.lido === true,
       })));
     } catch (error: any) {
@@ -124,6 +156,72 @@ export default function GlobalNotificationBell() {
     };
   }, [load, userId]);
 
+  useEffect(() => {
+    const syncCycle = () => setCycleKey(getOperationalCycleKey());
+    syncCycle();
+    const timer = window.setInterval(syncCycle, 30000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') syncCycle();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', syncCycle);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', syncCycle);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!userId || !cycleKey || criticalModalRows.length > 0 || presentationCheckRef.current) return;
+    const activeCritical = rows.filter(isActiveCritical);
+    if (activeCritical.length === 0) return;
+
+    let cancelled = false;
+    const checkPresentations = async () => {
+      presentationCheckRef.current = true;
+      try {
+        const ids = activeCritical.map((row) => row.id);
+        const { data: shown, error: shownError } = await (supabase as any)
+          .from('alertas_filial_apresentacoes')
+          .select('alerta_id')
+          .eq('user_id', userId)
+          .eq('ciclo', cycleKey)
+          .in('alerta_id', ids);
+        if (shownError) throw shownError;
+
+        const shownIds = new Set((shown || []).map((item: any) => item.alerta_id));
+        const pending = activeCritical.filter((row) => !shownIds.has(row.id));
+        if (pending.length === 0) return;
+
+        const { error: persistError } = await (supabase as any)
+          .from('alertas_filial_apresentacoes')
+          .upsert(
+            pending.map((row) => ({
+              alerta_id: row.id,
+              user_id: userId,
+              ciclo: cycleKey,
+              apresentado_em: new Date().toISOString(),
+            })),
+            { onConflict: 'alerta_id,user_id,ciclo', ignoreDuplicates: true },
+          );
+        if (persistError) throw persistError;
+
+        if (!cancelled) {
+          setDrawerOpen(false);
+          setCriticalModalRows(pending);
+        }
+      } catch (error) {
+        console.error('Erro ao controlar apresentação de alerta crítico:', error);
+      } finally {
+        presentationCheckRef.current = false;
+      }
+    };
+
+    void checkPresentations();
+    return () => { cancelled = true; };
+  }, [rows, userId, cycleKey, criticalModalRows.length]);
+
   const markRead = useCallback(async (notificationId: string) => {
     if (!userId) return false;
     const { error } = await (supabase as any)
@@ -147,6 +245,11 @@ export default function GlobalNotificationBell() {
     setDrawerOpen(false);
     if (row.actionUrl?.startsWith('/')) navigate(row.actionUrl);
   }, [markRead, navigate]);
+
+  const openCriticalNotification = useCallback(async (row: GlobalNotification) => {
+    setCriticalModalRows([]);
+    await openNotification(row);
+  }, [openNotification]);
 
   const unread = useMemo(() => rows.filter((row) => !row.isRead), [rows]);
   const read = useMemo(() => rows.filter((row) => row.isRead), [rows]);
@@ -252,6 +355,45 @@ export default function GlobalNotificationBell() {
             </div>
           </section>
         </>
+      )}
+
+      {criticalModalRows.length > 0 && (
+        <div className="fixed inset-0 z-[110] grid place-items-center bg-black/80 p-4 backdrop-blur-md">
+          <section className="w-full max-w-xl overflow-hidden rounded-2xl border border-red-500/35 bg-[#09080d] shadow-[0_30px_120px_rgba(0,0,0,.9),0_0_55px_rgba(239,68,68,.16)]">
+            <div className="border-b border-red-500/20 bg-red-500/[.055] p-5">
+              <div className="flex items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-red-400/30 bg-red-500/[.1] text-red-300"><CircleAlert className="h-5 w-5" /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-black uppercase tracking-[.16em] text-red-400">Alerta crítico</div>
+                  <h2 className="mt-1 text-lg font-black text-white">
+                    {criticalModalRows.length === 1 ? 'Existe uma pendência crítica ativa' : `Você possui ${criticalModalRows.length} alertas críticos`}
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">Fechar este aviso não resolve a pendência. Ela permanecerá ativa até a origem informar a regularização.</p>
+                </div>
+                <button type="button" onClick={() => setCriticalModalRows([])} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-zinc-500 hover:bg-white/[.05] hover:text-white" aria-label="Fechar alerta crítico"><X className="h-5 w-5" /></button>
+              </div>
+            </div>
+
+            <div className="max-h-[58vh] space-y-2 overflow-y-auto p-4">
+              {criticalModalRows.map((row) => (
+                <button key={row.id} type="button" onClick={() => void openCriticalNotification(row)} className="flex w-full items-center gap-3 rounded-xl border border-red-500/15 bg-[#0c0a10] p-3 text-left transition hover:border-red-400/35 hover:bg-red-500/[.035]">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-red-400/30 bg-red-500/[.08] text-red-300"><CircleAlert className="h-4 w-4" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[9px] font-black uppercase tracking-wide text-red-400/70">{row.source}</span>
+                    <span className="mt-0.5 block text-xs font-black text-white">{row.title}</span>
+                    <span className="mt-1 block text-[10px] leading-relaxed text-zinc-500">{row.message}</span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-zinc-700" />
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-white/[.06] p-4">
+              <span className="text-[9px] text-zinc-600">Ciclo operacional {cycleKey?.split(':').slice(-2).join(':') || ''}</span>
+              <button type="button" onClick={() => setCriticalModalRows([])} className="rounded-lg border border-white/[.08] bg-white/[.03] px-4 py-2 text-xs font-bold text-zinc-300 transition hover:bg-white/[.06]">Fechar por agora</button>
+            </div>
+          </section>
+        </div>
       )}
     </>
   );
