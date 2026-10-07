@@ -139,6 +139,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
+  if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') || normalizado.includes('DADOS CADASTRAIS') || normalizado.includes('DOCUMENTACAO ADMISSIONAL')) return 'FICHA/DOCUMENTACAO';
   if (normalizado.includes('CONTRATO')) return 'CONTRATO';
   return 'NAO RECONHECIDO';
@@ -260,7 +261,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     const preId = new URLSearchParams(window.location.search).get('pre');
     if (preId && rows.some(row => row.id === preId)) setSelectedId(preId);
   }, [rows]);
-  useEffect(() => { const selected = rows.find(r => r.id === selectedId); if (selected) { setForm(selected); setAsoExamDate(''); setOcrResult((selected.dados_extraidos as OcrResult) || null); carregarDocumentos(selected); } }, [rows, selectedId]);
+  useEffect(() => { const selected = rows.find(r => r.id === selectedId); if (selected) { setForm(selected); setAsoExamDate(String((selected.conferencia as any)?.aso_agendamento?.data_exame || '')); setOcrResult((selected.dados_extraidos as OcrResult) || null); carregarDocumentos(selected); } }, [rows, selectedId]);
   useEffect(() => () => { if (lastAsoGuide?.url) URL.revokeObjectURL(lastAsoGuide.url); }, [lastAsoGuide?.url]);
 
   const filtered = useMemo(() => { const q = search.toLowerCase(); return rows.filter(r => !q || `${r.nome} ${r.cpf} ${r.empresa_nome} ${r.status} ${r.funcao}`.toLowerCase().includes(q)); }, [rows, search]);
@@ -426,6 +427,41 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     espacoConfinado: false, toxicologico: !!form.exige_toxicologico, responsavelContato: form.responsavel_contato || 'ROBSON CHAFI SERVILIO - CEL 11 94292-0385',
   });
   const asoClinicInfo = getAsoClinicCommunicationInfo(dadosAsoAtuais());
+  const asoConfirmacao = (((form.conferencia as any)?.aso_agendamento || {}) as Record<string, any>);
+  const asoAgendamentoConfirmado = Boolean(
+    asoConfirmacao.confirmado &&
+    asoConfirmacao.data_exame &&
+    asoConfirmacao.data_exame === asoExamDate
+  );
+
+  const confirmarAgendamentoAso = async () => {
+    if (!form.id) return toast.error('Selecione e salve o pré-cadastro primeiro.');
+    if (!asoExamDate) return toast.error('Informe a data confirmada do exame.');
+    if (!asoClinicInfo.local) return toast.error('O endereço da clínica não está disponível na ficha.');
+
+    const conferenciaAtual = ((form.conferencia || {}) as Record<string, any>);
+    const conferenciaAtualizada = {
+      ...conferenciaAtual,
+      aso_agendamento: {
+        ...(conferenciaAtual.aso_agendamento || {}),
+        confirmado: true,
+        confirmado_em: new Date().toISOString(),
+        data_exame: asoExamDate,
+        local: asoClinicInfo.local,
+        horarios: asoClinicInfo.horarios,
+      },
+    };
+
+    const { error } = await (supabase as any)
+      .from('pre_cadastros_admissionais')
+      .update({ conferencia: conferenciaAtualizada })
+      .eq('id', form.id);
+
+    if (error) return toast.error(`Erro ao confirmar agendamento: ${error.message}`);
+    setForm(prev => ({ ...prev, conferencia: conferenciaAtualizada }));
+    toast.success('Agendamento confirmado. Envio ao funcionário liberado.');
+    await carregar();
+  };
 
   const gerarFichaPreenchida = async () => {
     if (fichaFseArquivada?.url) { window.open(fichaFseArquivada.url, '_blank', 'noopener,noreferrer'); return; }
@@ -444,6 +480,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
 
   const enviarAsoCandidato = async () => {
     if (!form.id) return toast.error('Selecione e salve o pré-cadastro primeiro.');
+    if (!asoAgendamentoConfirmado) return toast.error('Confirme o agendamento da clínica antes de enviar ao funcionário.');
     const telefone = onlyDigits(form.celular);
     if (telefone.length < 10) return toast.error('Informe o celular/WhatsApp do candidato.');
     const { data: guia, error } = await (supabase as any).from('pre_cadastro_documentos')
@@ -454,14 +491,27 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     const tipoNormalizado = normalizeRole(form.tipo_admissao);
     const tipoTexto = tipoNormalizado.includes('DEMISSIONAL') ? 'demissional' : tipoNormalizado.includes('PERIOD') ? 'periódico' : tipoNormalizado.includes('RETORNO') ? 'de retorno ao trabalho' : tipoNormalizado.includes('MUDANCA') ? 'de mudança de função' : 'admissional';
     const primeiroNome = String(form.nome || '').trim().split(/\s+/)[0];
-    const horario = asoClinicInfo.horarios.join(' ');
+    const dataConfirmada = String(asoConfirmacao.data_exame || asoExamDate || '');
+    const enderecoConfirmado = String(asoConfirmacao.local || asoClinicInfo.local || '').trim();
+    const horariosConfirmados = Array.isArray(asoConfirmacao.horarios) && asoConfirmacao.horarios.length
+      ? asoConfirmacao.horarios
+      : asoClinicInfo.horarios;
+    const horario = horariosConfirmados
+      .filter((linha: string) => !normalizeRole(linha).includes('ORDEM DE CHEGADA'))
+      .join(' ');
+    if (!dataConfirmada || !enderecoConfirmado || !horario) {
+      return toast.error('Faltam data, endereço ou horário do agendamento. Confira a ficha antes de enviar.');
+    }
     const mensagem = [
       saudacaoCapitalizada() + (primeiroNome ? ', ' + primeiroNome : '') + '!',
       '',
       `Segue a ficha de agendamento do exame ${tipoTexto}.`,
-      asoExamDate ? `Data: ${formatDateEmail(asoExamDate)}` : '',
-      `Endereço: ${asoClinicInfo.local}`,
+      `Data: ${formatDateEmail(dataConfirmada)}`,
+      `Endereço: ${enderecoConfirmado}`,
       `Horário de atendimento: ${horario}`,
+      '',
+      'O atendimento é realizado por ordem de chegada.',
+      'Aconselhamos chegar cedo devido à demanda de pessoas, para um atendimento mais rápido.',
       '',
       `Guia do exame: ${guia.arquivo_url}`,
       '',
@@ -518,8 +568,8 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
 
         <section className="card-premium p-5 space-y-4">
           <div><div className="text-xs font-bold uppercase tracking-wider text-primary">3. ASO e comunicação</div><h3 className="mt-1 text-base font-bold">Guia do exame</h3><p className="text-xs text-muted-foreground">A guia usa a data escolhida acima e pode ser enviada à clínica e ao candidato.</p></div>
-          <div className="grid gap-3 lg:grid-cols-[1.2fr_.8fr]"><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clínica / atendimento</div><div className="mt-2 text-sm font-semibold">{asoClinicInfo.local}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground">{asoClinicInfo.horarios.map((linha, i) => <div key={i}>{linha}</div>)}</div></div><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mensagem ao candidato</div><p className="mt-2 text-sm text-muted-foreground">Saudação automática por horário + tipo do exame + endereço + horário. O candidato recebe o link da própria guia e confirma com um OK após o atendimento.</p></div></div>
-          <div className="flex flex-wrap gap-2"><Button onClick={gerarGuiaAso}><FileSearch className="mr-2 h-4 w-4" />Gerar Guia ASO</Button><Button onClick={enviarGuiaAso} variant="outline"><Mail className="mr-2 h-4 w-4" />Enviar guia à clínica</Button><Button onClick={() => void enviarAsoCandidato()} variant="outline"><MessageCircle className="mr-2 h-4 w-4" />Enviar ASO ao candidato</Button></div>
+          <div className="grid gap-3 lg:grid-cols-[1.2fr_.8fr]"><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clínica / atendimento</div><div className="mt-2 text-sm font-semibold">{asoClinicInfo.local}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground">{asoClinicInfo.horarios.map((linha, i) => <div key={i}>{linha}</div>)}</div></div><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mensagem ao funcionário</div><p className="mt-2 text-sm text-muted-foreground">Depois da confirmação da clínica, o WhatsApp é liberado com saudação automática, data, endereço e horário exatos da ficha, orientação de ordem de chegada e chegada antecipada.</p></div></div>
+          <div className="flex flex-wrap gap-2"><Button onClick={gerarGuiaAso}><FileSearch className="mr-2 h-4 w-4" />Gerar Guia ASO</Button><Button onClick={enviarGuiaAso} variant="outline"><Mail className="mr-2 h-4 w-4" />Enviar guia à clínica</Button><Button onClick={() => void confirmarAgendamentoAso()} variant="outline" disabled={!form.id || !asoExamDate || asoAgendamentoConfirmado}><CheckCircle2 className="mr-2 h-4 w-4" />{asoAgendamentoConfirmado ? 'Agendamento confirmado' : 'Confirmar agendamento'}</Button><Button onClick={() => void enviarAsoCandidato()} variant="outline" disabled={!asoAgendamentoConfirmado}><MessageCircle className="mr-2 h-4 w-4" />Enviar agendamento ao funcionário</Button></div>{!asoAgendamentoConfirmado && <p className="text-xs text-muted-foreground">Após receber a confirmação da clínica, clique em <strong>Confirmar agendamento</strong>. O envio ao funcionário será liberado em seguida.</p>}
         </section>
 
         <section className="card-premium p-5 space-y-4">
