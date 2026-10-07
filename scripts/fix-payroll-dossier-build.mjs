@@ -11,7 +11,7 @@ if (signedUrlsStart < 0 || deleteEntryStart < 0) {
 }
 
 const apiReplacement = `    if (action === 'signed-urls') {
-      const doc = await loadDocument(service, String(body.document_id || ''));
+      const doc = await loadDocument(service, isAdmin, String(body.document_id || ''));
       const { data: receipt } = await service.from('payroll_payment_receipts').select('*').eq('document_id', doc.id).eq('status', 'PAGAMENTO_CONFIRMADO').maybeSingle();
       const { data: requestRow } = await service.from('payroll_signature_requests').select('id').eq('document_id', doc.id).maybeSingle();
       const { data: signature } = requestRow
@@ -27,7 +27,7 @@ const apiReplacement = `    if (action === 'signed-urls') {
     }
 
     if (action === 'dossier-url') {
-      const doc = await loadDocument(service, String(body.document_id || ''));
+      const doc = await loadDocument(service, isAdmin, String(body.document_id || ''));
       if (!doc.employee_id) return sendJson(res, { ok: false, error: 'document_without_employee' }, 409);
       const complete = await buildCompleteDossier(service, doc);
       return sendJson(res, {
@@ -79,4 +79,4 @@ const dossierReplacement = `  const dossier = async (row: any) => {
 ui = ui.slice(0, dossierStart) + dossierReplacement + ui.slice(dossierEnd);
 fs.writeFileSync(uiPath, ui, 'utf8');
 
-console.log('[dossier-direct] signed-urls restaurado; dossiê separado e download direto aplicado');
+console.log('[dossier-direct] signed-urls restaurado com escopo admin; dossiê separado e download direto aplicado');
