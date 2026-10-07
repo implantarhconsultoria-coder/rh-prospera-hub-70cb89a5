@@ -1,0 +1,24 @@
+name: QA Assisted WhatsApp
+
+on:
+  push:
+    branches:
+      - qa-assisted-whatsapp-20261007
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --legacy-peer-deps
+      - name: Unit tests
+        run: npm test
+      - name: Lint
+        run: npm run lint
+      - name: Production build
+        run: npm run build
