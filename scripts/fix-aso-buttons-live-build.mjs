@@ -87,3 +87,5 @@ if (!source.includes('data-topac-aso-pdf-share')) {
 
 fs.writeFileSync(file, source);
 console.log('[ASO buttons live] Date persistence + active button feedback + real PDF sharing applied.');
+
+await import('./fix-assisted-whatsapp-build.mjs');
