@@ -12,9 +12,11 @@ import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel, isMotoboyRole } from '@/lib/employeeRoleRules';
 import { registrarDocumento } from '@/lib/documentoHistorico';
+import { INVALID_ASSISTED_WHATSAPP_PHONE_MESSAGE, openAssistedWhatsApp } from '@/lib/assistedWhatsApp';
 
 type PreCadastro = {
   id: string;
+  public_token?: string | null;
   status: string;
   empresa_id: string | null;
   empresa_nome: string | null;
@@ -136,6 +138,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('GUIA') && normalizado.includes('ASO')) return 'GUIA ASO';
   if (normalizado.includes('ASO') || normalizado.includes('EXAME')) return 'ASO';
   if (/DOCUMENTACAO[_ ]UNIFICADA|DOCUMENTOS[_ ]UNIFICADOS|ARQUIVO[_ ]UNICO/.test(normalizado)) return 'DOCUMENTACAO UNIFICADA';
+  if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
@@ -499,90 +502,92 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     } catch (error: any) { toast.error(error?.message || 'Não foi possível gerar a ficha preenchida.'); }
   };
 
+  const registrarEventoWhatsAppPreCadastro = async (tipo: string, descricao: string, dados: Record<string, unknown>) => {
+    if (!form.id) return;
+    try {
+      const { error } = await (supabase as any).from('pre_cadastro_eventos').insert({
+        pre_cadastro_id: form.id,
+        tipo,
+        descricao,
+        dados: { ...dados, assisted: true, provider_confirmation: false },
+        created_by: session?.user?.id || null,
+      });
+      if (error) console.warn('[pre-cadastro-whatsapp-event]', error);
+    } catch (error) {
+      console.warn('[pre-cadastro-whatsapp-event]', error);
+    }
+  };
+
+  const enviarDocumentosAoCandidato = async () => {
+    if (!form.id) return toast.error('Selecione e salve o pré-cadastro primeiro.');
+    const token = String(form.public_token || '').trim();
+    if (!token) return toast.error('Não foi possível localizar o link individual deste pré-cadastro.');
+    const link = `https://topacrh.pro/pre-cadastro?token=${encodeURIComponent(token)}`;
+    const nome = String(form.nome || 'Candidato').trim();
+    const mensagem = [
+      `Olá, ${nome}.`,
+      '',
+      'Segue o link para preenchimento e envio dos seus documentos admissionais:',
+      '',
+      link,
+      '',
+      'TOPAC RH PRO',
+    ].join('\n');
+    const result = openAssistedWhatsApp(form.celular, mensagem);
+    if (!result.ok) {
+      return toast.error(result.reason === 'invalid_phone' ? INVALID_ASSISTED_WHATSAPP_PHONE_MESSAGE : 'Não foi possível abrir o WhatsApp neste navegador. Tente novamente.');
+    }
+    void registrarEventoWhatsAppPreCadastro('whatsapp_aberto_documentos_candidato', 'WhatsApp aberto com link individual do pré-cadastro preparado para envio manual.', { link, telefone: result.phone });
+    toast.info('WhatsApp aberto com a mensagem e o link do candidato prontos para envio.');
+  };
+
+  // ASSISTED_WHATSAPP_ASO_V1
   const enviarAsoCandidato = async () => {
     if (!form.id) return toast.error('Selecione e salve o pré-cadastro primeiro.');
-    if (!asoAgendamentoConfirmado) return toast.error('Confirme o agendamento da clínica antes de enviar ao funcionário.');
-    const telefone = onlyDigits(form.celular);
-    if (telefone.length < 10) return toast.error('Informe o celular/WhatsApp do candidato.');
+    if (!asoAgendamentoConfirmado || !asoConfirmacao.data_exame) return toast.error('Confirme e salve a data do agendamento antes de enviar ao funcionário.');
+
+    const dataConfirmada = String(asoConfirmacao.data_exame || '').trim();
+    const enderecoConfirmado = String(asoConfirmacao.local || '').trim();
+    if (!dataConfirmada) return toast.error('A data confirmada do exame não está persistida. Confirme o agendamento antes de enviar.');
+    if (!enderecoConfirmado) return toast.error('O endereço do agendamento não está disponível na ficha confirmada.');
+
     const { data: guia, error } = await (supabase as any).from('pre_cadastro_documentos')
       .select('arquivo_url,nome_arquivo,created_at').eq('pre_cadastro_id', form.id).eq('tipo_documento', 'guia_aso')
       .order('created_at', { ascending: false }).limit(1).maybeSingle();
     if (error) return toast.error(`Não foi possível localizar a guia ASO: ${error.message}`);
-    if (!guia?.arquivo_url) return toast.error('Gere a Guia ASO antes de enviar ao candidato.');
-    const tipoNormalizado = normalizeRole(form.tipo_admissao);
-    const tipoTexto = tipoNormalizado.includes('DEMISSIONAL') ? 'demissional' : tipoNormalizado.includes('PERIOD') ? 'periódico' : tipoNormalizado.includes('RETORNO') ? 'de retorno ao trabalho' : tipoNormalizado.includes('MUDANCA') ? 'de mudança de função' : 'admissional';
-    const primeiroNome = String(form.nome || '').trim().split(/\s+/)[0];
-    const dataConfirmada = String(asoConfirmacao.data_exame || asoExamDate || '');
-    const enderecoConfirmado = String(asoConfirmacao.local || asoClinicInfo.local || '').trim();
-    const horariosConfirmados = Array.isArray(asoConfirmacao.horarios) && asoConfirmacao.horarios.length
-      ? asoConfirmacao.horarios
-      : asoClinicInfo.horarios;
-    const horario = horariosConfirmados
-      .filter((linha: string) => !normalizeRole(linha).includes('ORDEM DE CHEGADA'))
-      .join(' ');
-    if (!dataConfirmada || !enderecoConfirmado || !horario) {
-      return toast.error('Faltam data, endereço ou horário do agendamento. Confira a ficha antes de enviar.');
-    }
+    if (!guia?.arquivo_url) return toast.error('Gere a Guia ASO antes de enviar ao funcionário.');
+
+    const nome = String(form.nome || 'Funcionário').trim();
     const mensagem = [
-      saudacaoCapitalizada() + (primeiroNome ? ', ' + primeiroNome : '') + '!',
+      `${saudacaoCapitalizada()}, ${nome}.`,
       '',
-      `Segue a ficha de agendamento do exame ${tipoTexto}.`,
+      'Segue a ficha de agendamento do seu exame admissional.',
+      '',
       `Data: ${formatDateEmail(dataConfirmada)}`,
-      `Endereço: ${enderecoConfirmado}`,
-      `Horário de atendimento: ${horario}`,
+      'Horário: 07h30',
+      `Local: ${enderecoConfirmado}`,
       '',
       'O atendimento é realizado por ordem de chegada.',
-      'Aconselhamos chegar cedo devido à demanda de pessoas, para um atendimento mais rápido.',
       '',
-      'Guia ASO: PDF anexado.',
+      'Recomendamos chegar com antecedência devido à demanda de pessoas, para agilizar seu atendimento.',
       '',
-      'Após realizar o exame, por favor, me dê um OK por aqui para agilizarmos o processo.',
-      'Não precisa retirar o resultado/ASO na clínica; a própria clínica nos envia diretamente.',
-    ].filter(Boolean).join('\n');
-    const numero = telefone.startsWith('55') ? telefone : `55${telefone}`;
-    try {
-      const nomeArquivo = String(guia.nome_arquivo || `GUIA ASO - ${form.nome || 'FUNCIONARIO'}.pdf`).replace(/[^a-zA-Z0-9À-ÿ ._()-]/g, '_');
-      let pdfBlob: Blob;
+      `Guia do exame: ${guia.arquivo_url}`,
+      '',
+      'TOPAC RH PRO',
+    ].join('\n');
 
-      if (lastAsoGuide?.blob) {
-        pdfBlob = lastAsoGuide.blob;
-      } else {
-        const respostaPdf = await fetch(guia.arquivo_url, { cache: 'no-store' });
-        if (!respostaPdf.ok) throw new Error(`Não foi possível carregar o PDF da guia (${respostaPdf.status}).`);
-        pdfBlob = await respostaPdf.blob();
-      }
-
-      const arquivoPdf = new File([pdfBlob], nomeArquivo, { type: 'application/pdf' });
-      const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
-      const podeCompartilharArquivo = typeof nav.share === 'function' && (!nav.canShare || nav.canShare({ files: [arquivoPdf] }));
-
-      if (podeCompartilharArquivo) {
-        await nav.share({
-          title: `Guia ASO - ${form.nome || ''}`,
-          text: mensagem,
-          files: [arquivoPdf],
-        });
-        toast.success('PDF da guia ASO aberto para envio.');
-        return;
-      }
-
-      const blobUrl = URL.createObjectURL(arquivoPdf);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = nomeArquivo;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-
-      try { await navigator.clipboard?.writeText(mensagem); } catch { /* sem clipboard */ }
-      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`, '_blank', 'noopener,noreferrer');
-      toast.info('O PDF foi baixado. Anexe o arquivo no WhatsApp aberto.');
-    } catch (error: any) {
-      if (error?.name === 'AbortError') return;
-      toast.error(error?.message || 'Não foi possível preparar o PDF para envio.');
+    const result = openAssistedWhatsApp(form.celular, mensagem);
+    if (!result.ok) {
+      return toast.error(result.reason === 'invalid_phone' ? INVALID_ASSISTED_WHATSAPP_PHONE_MESSAGE : 'Não foi possível abrir o WhatsApp neste navegador. Tente novamente.');
     }
-    void 'data-topac-aso-pdf-share';
+    void registrarEventoWhatsAppPreCadastro('whatsapp_aberto_agendamento_aso', 'WhatsApp aberto com o agendamento ASO preparado para envio manual.', {
+      telefone: result.phone,
+      data_exame: dataConfirmada,
+      horario: '07h30',
+      local: enderecoConfirmado,
+      guia_url: guia.arquivo_url,
+    });
+    toast.info('WhatsApp aberto com o agendamento pronto para envio.');
   };
 
   return <div className="space-y-4 animate-fade-in pb-8">
@@ -626,13 +631,13 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
 
         <section className="card-premium p-5 space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><div className="text-xs font-bold uppercase tracking-wider text-primary">2. Ficha do candidato</div><h3 className="mt-1 text-base font-bold">Ficha FSE-2026 preenchida</h3><p className="text-xs text-muted-foreground">Ao concluir pelo link, a ficha vira PDF e fica arquivada junto aos documentos. Também pode ser aberta para impressão.</p></div><div id="topac-pre-cadastro-fse-slot" className="min-w-[210px]" /></div>
-          <div className="flex flex-wrap gap-2"><Button onClick={() => void gerarFichaPreenchida()} variant="outline" disabled={!Object.keys(fseDigital).length && !fichaFseArquivada}><Printer className="mr-2 h-4 w-4" />Abrir / imprimir ficha preenchida</Button>{fichaFseArquivada && <Badge className="bg-emerald-500/10 text-emerald-600">PDF arquivado</Badge>}{!fichaFseArquivada && Object.keys(fseDigital).length > 0 && <Badge variant="outline">Ficha pronta para gerar</Badge>}</div>
+          <div className="flex flex-wrap gap-2"><Button onClick={() => void gerarFichaPreenchida()} variant="outline" disabled={!Object.keys(fseDigital).length && !fichaFseArquivada}><Printer className="mr-2 h-4 w-4" />Abrir / imprimir ficha preenchida</Button><Button type="button" onClick={() => void enviarDocumentosAoCandidato()} variant="outline"><MessageCircle className="mr-2 h-4 w-4" />Enviar documentos ao candidato</Button>{fichaFseArquivada && <Badge className="bg-emerald-500/10 text-emerald-600">PDF arquivado</Badge>}{!fichaFseArquivada && Object.keys(fseDigital).length > 0 && <Badge variant="outline">Ficha pronta para gerar</Badge>}</div>
         </section>
 
         <section className="card-premium p-5 space-y-4">
           <div><div className="text-xs font-bold uppercase tracking-wider text-primary">3. ASO e comunicação</div><h3 className="mt-1 text-base font-bold">Guia do exame</h3><p className="text-xs text-muted-foreground">A guia usa a data escolhida acima e pode ser enviada à clínica e ao candidato.</p></div>
           <div className="grid gap-3 lg:grid-cols-[1.2fr_.8fr]"><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clínica / atendimento</div><div className="mt-2 text-sm font-semibold">{asoClinicInfo.local}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground">{asoClinicInfo.horarios.map((linha, i) => <div key={i}>{linha}</div>)}</div></div><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mensagem ao funcionário</div><p className="mt-2 text-sm text-muted-foreground">Depois da confirmação da clínica, o WhatsApp é liberado com saudação automática, data, endereço e horário exatos da ficha, orientação de ordem de chegada e chegada antecipada.</p></div></div>
-          <div className="flex flex-wrap gap-2"><Button type="button" onClick={gerarGuiaAso}><FileSearch className="mr-2 h-4 w-4" />Gerar Guia ASO</Button><Button type="button" onClick={enviarGuiaAso} variant="outline"><Mail className="mr-2 h-4 w-4" />Enviar guia à clínica</Button><Button type="button" onClick={() => void confirmarAgendamentoAso()} variant="outline"><CheckCircle2 className="mr-2 h-4 w-4" />{asoAgendamentoConfirmado ? 'Agendamento confirmado' : 'Confirmar agendamento'}</Button><Button type="button" onClick={() => void enviarAsoCandidato()} variant="outline"><MessageCircle className="mr-2 h-4 w-4" />Enviar agendamento ao funcionário</Button></div>{!asoAgendamentoConfirmado && <p className="text-xs text-muted-foreground">Após receber a confirmação da clínica, clique em <strong>Confirmar agendamento</strong>. Se faltar data ou confirmação, o sistema exibirá o motivo em vez de deixar o botão sem resposta.</p>}
+          <div className="flex flex-wrap gap-2"><Button type="button" onClick={gerarGuiaAso}><FileSearch className="mr-2 h-4 w-4" />Gerar Guia ASO</Button><Button type="button" onClick={enviarGuiaAso} variant="outline"><Mail className="mr-2 h-4 w-4" />Enviar guia à clínica</Button><Button type="button" onClick={() => void confirmarAgendamentoAso()} variant="outline"><CheckCircle2 className="mr-2 h-4 w-4" />{asoAgendamentoConfirmado ? 'Agendamento confirmado' : 'Confirmar agendamento'}</Button><Button type="button" onClick={() => void enviarAsoCandidato()} variant="outline" disabled={!asoAgendamentoConfirmado || !asoConfirmacao.data_exame}><MessageCircle className="mr-2 h-4 w-4" />Enviar agendamento ao funcionário</Button></div>{!asoAgendamentoConfirmado && <p className="text-xs text-muted-foreground">Informe a data do exame e clique em <strong>Confirmar agendamento</strong>. O envio ao funcionário só é liberado depois que a data e o endereço estiverem persistidos.</p>}
         </section>
 
         <section className="card-premium p-5 space-y-4">
