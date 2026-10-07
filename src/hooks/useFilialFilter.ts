@@ -1,35 +1,41 @@
 import { useApp } from '@/context/AppContext';
 
-const ROLE_CODIGO_MAP: Record<string, string> = {
-  filial_matriz: 'topac-matriz',
-  filial_praia: 'topac-pg',
-  filial_goiania: 'topac-gyn',
-};
-
-const CODIGOS_FILIAIS = new Set(Object.values(ROLE_CODIGO_MAP));
+const CODIGOS_FILIAIS = new Set(['topac-matriz', 'topac-pg', 'topac-gyn']);
+const FILIAL_ROLES = new Set(['filial_matriz', 'filial_praia', 'filial_goiania']);
 
 /**
- * Filters data by company for filial users and for admin preview mode.
- * Admin preview is selected from the module switcher and reuses the current session.
+ * Reaproveita o escopo de empresas já autorizado pelo AppContext.
+ * A autorização real não é decidida aqui: ela vem das funções oficiais do banco.
+ * O código de preview administrativo é apenas uma seleção visual da sessão global.
  */
 export const useFilialFilter = () => {
-  const { userRole, userRoles, companies } = useApp();
+  const { userRoles, companies } = useApp();
   const isAdmin = userRoles.includes('admin');
-  const roleCodigo = userRole ? ROLE_CODIGO_MAP[userRole] : undefined;
+  const isFilialUser = userRoles.some((role) => FILIAL_ROLES.has(role));
   const previewCodigo = typeof window !== 'undefined'
     ? sessionStorage.getItem('admin_filial_preview_codigo')
     : null;
-  const codigoFilial = roleCodigo || (isAdmin && previewCodigo && CODIGOS_FILIAIS.has(previewCodigo) ? previewCodigo : null);
-  const isFilial = Boolean(codigoFilial);
-
-  const filialCompanyId = codigoFilial
-    ? companies.find(company => company.codigo === codigoFilial)?.id || null
+  const adminPreviewCodigo = isAdmin && previewCodigo && CODIGOS_FILIAIS.has(previewCodigo)
+    ? previewCodigo
     : null;
+
+  const authorizedFilialCompany = isFilialUser && companies.length === 1 ? companies[0] : null;
+  const codigoFilial = authorizedFilialCompany?.codigo || adminPreviewCodigo || null;
+  const filialCompanyId = codigoFilial
+    ? companies.find((company) => company.codigo === codigoFilial)?.id || null
+    : null;
+  const isFilial = Boolean(codigoFilial);
 
   const getCompanyFilter = (selectedCompanyId?: string): string | null => {
     if (isFilial) return filialCompanyId;
     return selectedCompanyId || null;
   };
 
-  return { isFilial, filialCompanyId, getCompanyFilter, filialCodigo: codigoFilial, isAdminPreview: isAdmin && !roleCodigo && Boolean(codigoFilial) };
+  return {
+    isFilial,
+    filialCompanyId,
+    getCompanyFilter,
+    filialCodigo: codigoFilial,
+    isAdminPreview: Boolean(adminPreviewCodigo),
+  };
 };

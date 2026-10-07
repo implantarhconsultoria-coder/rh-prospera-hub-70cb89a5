@@ -8,6 +8,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { AppContext, defaultConfig, type AppConfig } from '@/context/AppContextValue';
 import { useApp } from '@/hooks/useApp';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
+import { resolveFilialAccessScope } from '@/lib/filialAccessScope';
 
 // Re-export para compatibilidade
 export { useApp };
@@ -29,18 +30,6 @@ const missingColumnFromError = (error: any): string | null => {
   return match?.[1] || null;
 };
 
-const FILIAL_ROLE_TO_COMPANY_CODE: Record<string, string> = {
-  filial_matriz: 'topac-matriz',
-  filial_praia: 'topac-pg',
-  filial_goiania: 'topac-gyn',
-};
-
-const getFilialCompanyIds = (companies: Company[], role: string | null) => {
-  const code = role ? FILIAL_ROLE_TO_COMPANY_CODE[role] : null;
-  if (!code) return null;
-  return new Set(companies.filter((company) => company.codigo === code).map((company) => company.id));
-};
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +46,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ref sempre com a versao mais nova das entries (evita closure stale em updateEntry)
   const entriesRef = useRef<MonthlyEntry[]>([]);
   useEffect(() => { entriesRef.current = entries; }, [entries]);
+
+  // Escopo autorizado pelo banco; reutilizado em refreshes para evitar regra paralela por role.
+  const allowedCompanyIdsRef = useRef<Set<string>>(new Set());
 
   // Lock para evitar getOrCreateEntries duplicado (race ao montar tela)
   const creatingRef = useRef<Set<string>>(new Set());
@@ -101,6 +93,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchData = useCallback(async () => {
     if (!session) {
       setCompanies([]); setEmployees([]); setEntries([]); setFechamentos([]);
+      allowedCompanyIdsRef.current = new Set();
       setDataLoading(false);
       return;
     }
@@ -120,18 +113,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (fechamentosRes.error && !isMissingSchema(fechamentosRes.error)) console.error('Erro ao carregar fechamentos:', fechamentosRes.error);
 
       const mappedCompanies = (companiesRes.data || []).map(mapCompany);
-      const filialCompanyIds = getFilialCompanyIds(mappedCompanies, userRole);
-      const visibleCompanies = filialCompanyIds
-        ? mappedCompanies.filter((company) => filialCompanyIds.has(company.id))
-        : mappedCompanies;
       const mappedEmployees = (employeesRes.data || []).map(mapEmployee);
-      const visibleEmployees = filialCompanyIds
-        ? mappedEmployees.filter((employee) => filialCompanyIds.has(employee.companyId))
-        : mappedEmployees;
+      const accessScope = await resolveFilialAccessScope({
+        supabase,
+        userId: session.user.id,
+        companies: mappedCompanies,
+        employees: mappedEmployees,
+      });
+      allowedCompanyIdsRef.current = accessScope.allowedCompanyIds;
+
+      const visibleCompanies = mappedCompanies.filter((company) => accessScope.allowedCompanyIds.has(company.id));
+      const visibleEmployees = mappedEmployees.filter((employee) => accessScope.allowedEmployeeIds.has(employee.id));
       const mappedFechamentos = fechamentosRes.error ? [] : ((fechamentosRes.data || []).map(mapFechamento));
-      const visibleFechamentos = filialCompanyIds
-        ? mappedFechamentos.filter((fechamento) => filialCompanyIds.has(fechamento.companyId))
-        : mappedFechamentos;
+      const visibleFechamentos = mappedFechamentos.filter((fechamento) => accessScope.allowedCompanyIds.has(fechamento.companyId));
 
       setCompanies(visibleCompanies);
       setEmployees(visibleEmployees);
@@ -150,14 +144,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else {
         const mappedEntries = (entriesRes.data || []).map(mapEntry);
-        setEntries(filialCompanyIds ? mappedEntries.filter((entry) => filialCompanyIds.has(entry.companyId)) : mappedEntries);
+        setEntries(mappedEntries.filter((entry) => accessScope.allowedCompanyIds.has(entry.companyId)));
       }
     } catch (err) {
       console.error('Error fetching data:', err);
+      setCompanies([]);
+      setEmployees([]);
+      setEntries([]);
+      setFechamentos([]);
+      allowedCompanyIdsRef.current = new Set();
     } finally {
       setDataLoading(false);
     }
-  }, [session, roleLoading, userRole]);
+  }, [session, roleLoading]);
 
   useEffect(() => {
     if (session && !roleLoading) fetchData();
@@ -388,11 +387,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .is('apagado_em', null);
     if (error) { console.error('refreshEntries falhou:', error); return; }
     if (data) {
-      const filialCompanyIds = getFilialCompanyIds(companies, userRole);
       const mappedEntries = data.map(mapEntry);
-      setEntries(filialCompanyIds ? mappedEntries.filter((entry) => filialCompanyIds.has(entry.companyId)) : mappedEntries);
+      setEntries(mappedEntries.filter((entry) => allowedCompanyIdsRef.current.has(entry.companyId)));
     }
-  }, [companies, userRole]);
+  }, []);
 
   const getFechamento = useCallback((companyId: string, competencia: string): Fechamento => {
     const f = fechamentos.find(f => f.companyId === companyId && f.competencia === competencia);

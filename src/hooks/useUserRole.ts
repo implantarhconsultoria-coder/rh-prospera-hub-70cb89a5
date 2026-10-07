@@ -4,7 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 
 export type AppRole = 'admin' | 'diretor_geral' | 'filial_matriz' | 'filial_praia' | 'filial_goiania' | 'almoxarifado' | 'usuario' | 'tecnico_campo' | 'operacional' | 'faturamento' | 'financeiro';
 
-// Prioridade: admin sempre vence (usuÃ¡rio pode ter mÃºltiplas roles, ex: admin + tecnico_campo de teste)
+// Prioridade: admin sempre vence (usuario pode ter multiplas roles, ex: admin + tecnico_campo de teste)
 const ROLE_PRIORITY: AppRole[] = ['admin', 'diretor_geral', 'operacional', 'filial_matriz', 'filial_praia', 'filial_goiania', 'almoxarifado', 'faturamento', 'financeiro', 'tecnico_campo', 'usuario'];
 const BOOTSTRAP_ADMIN_EMAILS = new Set(['adm.matriz@topac.com.br']);
 
@@ -24,17 +24,16 @@ export const useUserRole = (session: Session | null) => {
     const email = session.user.email?.toLowerCase() || '';
     const isBootstrapAdmin = BOOTSTRAP_ADMIN_EMAILS.has(email);
 
-    // A conta administrativa principal nao precisa esperar a sincronizacao
-    // remota para abrir o painel. Mantemos a sincronizacao em segundo plano.
+    // A role administrativa pode ser exibida imediatamente, mas os dados aguardam
+    // a sincronizacao no banco para que o escopo nunca dependa de bypass local.
     if (isBootstrapAdmin) {
       setRole('admin');
       setRoles(['admin']);
-      setLoading(false);
     } else {
       setRole(null);
       setRoles([]);
-      setLoading(true);
     }
+    setLoading(true);
 
     const fetchRole = async () => {
       try {
@@ -69,7 +68,7 @@ export const useUserRole = (session: Session | null) => {
           setRole(null);
         }
       } finally {
-        if (!isBootstrapAdmin) setLoading(false);
+        setLoading(false);
       }
     };
 
