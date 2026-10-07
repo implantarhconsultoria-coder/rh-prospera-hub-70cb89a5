@@ -141,6 +141,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
+  if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') || normalizado.includes('DADOS CADASTRAIS') || normalizado.includes('DOCUMENTACAO ADMISSIONAL')) return 'FICHA/DOCUMENTACAO';
   if (normalizado.includes('CONTRATO')) return 'CONTRATO';
   return 'NAO RECONHECIDO';
@@ -532,13 +533,55 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
       'O atendimento é realizado por ordem de chegada.',
       'Aconselhamos chegar cedo devido à demanda de pessoas, para um atendimento mais rápido.',
       '',
-      `Guia do exame: ${guia.arquivo_url}`,
+      'Guia ASO: PDF anexado.',
       '',
       'Após realizar o exame, por favor, me dê um OK por aqui para agilizarmos o processo.',
       'Não precisa retirar o resultado/ASO na clínica; a própria clínica nos envia diretamente.',
     ].filter(Boolean).join('\n');
     const numero = telefone.startsWith('55') ? telefone : `55${telefone}`;
-    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`, '_blank', 'noopener,noreferrer');
+    try {
+      const nomeArquivo = String(guia.nome_arquivo || `GUIA ASO - ${form.nome || 'FUNCIONARIO'}.pdf`).replace(/[^a-zA-Z0-9À-ÿ ._()-]/g, '_');
+      let pdfBlob: Blob;
+
+      if (lastAsoGuide?.blob) {
+        pdfBlob = lastAsoGuide.blob;
+      } else {
+        const respostaPdf = await fetch(guia.arquivo_url, { cache: 'no-store' });
+        if (!respostaPdf.ok) throw new Error(`Não foi possível carregar o PDF da guia (${respostaPdf.status}).`);
+        pdfBlob = await respostaPdf.blob();
+      }
+
+      const arquivoPdf = new File([pdfBlob], nomeArquivo, { type: 'application/pdf' });
+      const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+      const podeCompartilharArquivo = typeof nav.share === 'function' && (!nav.canShare || nav.canShare({ files: [arquivoPdf] }));
+
+      if (podeCompartilharArquivo) {
+        await nav.share({
+          title: `Guia ASO - ${form.nome || ''}`,
+          text: mensagem,
+          files: [arquivoPdf],
+        });
+        toast.success('PDF da guia ASO aberto para envio.');
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(arquivoPdf);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = nomeArquivo;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+
+      try { await navigator.clipboard?.writeText(mensagem); } catch { /* sem clipboard */ }
+      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`, '_blank', 'noopener,noreferrer');
+      toast.info('O PDF foi baixado. Anexe o arquivo no WhatsApp aberto.');
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
+      toast.error(error?.message || 'Não foi possível preparar o PDF para envio.');
+    }
+    void 'data-topac-aso-pdf-share';
   };
 
   return <div className="space-y-4 animate-fade-in pb-8">
