@@ -140,6 +140,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
+  if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') || normalizado.includes('DADOS CADASTRAIS') || normalizado.includes('DOCUMENTACAO ADMISSIONAL')) return 'FICHA/DOCUMENTACAO';
   if (normalizado.includes('CONTRATO')) return 'CONTRATO';
   return 'NAO RECONHECIDO';
@@ -434,6 +435,24 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
     asoConfirmacao.data_exame === asoExamDate
   );
 
+  const atualizarDataAso = async (value: string) => {
+    setAsoExamDate(value);
+    setLastAsoGuide(null);
+    if (!form.id) return;
+    const conferenciaAtual = ((form.conferencia || {}) as Record<string, any>);
+    const conferenciaAtualizada = {
+      ...conferenciaAtual,
+      aso_agendamento: {
+        ...(conferenciaAtual.aso_agendamento || {}),
+        data_exame: value,
+        confirmado: false,
+      },
+    };
+    setForm(prev => ({ ...prev, conferencia: conferenciaAtualizada }));
+    const { error } = await (supabase as any).from('pre_cadastros_admissionais').update({ conferencia: conferenciaAtualizada }).eq('id', form.id);
+    if (error) toast.error(`Não foi possível salvar a data do exame: ${error.message}`);
+  };
+
   const confirmarAgendamentoAso = async () => {
     if (!form.id) return toast.error('Selecione e salve o pré-cadastro primeiro.');
     if (!asoExamDate) return toast.error('Informe a data confirmada do exame.');
@@ -551,7 +570,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
             <div><label className="text-xs text-muted-foreground">Funcao</label><select value={form.funcao || ''} onChange={e => setFuncaoComPadroes(e.target.value)} className="w-full rounded-lg border bg-background px-3 py-2"><option value="">Selecionar cargo</option>{roleOptions.map(r => <option key={r.cargo} value={r.cargo}>{r.cargo}</option>)}</select></div>
             <div><label className="text-xs text-muted-foreground">Salario</label><Input type="number" value={form.salario || ''} onChange={e => setForm(p => ({ ...p, salario: Number(e.target.value) || null }))} /></div>
             <DateField label="Data admissao" value={form.data_admissao} onChange={v => setForm(p => ({ ...p, data_admissao: v }))} />
-            <div><label className="text-xs text-muted-foreground">Data do exame / ASO</label><Input type="date" value={asoExamDate} onChange={e => { setAsoExamDate(e.target.value); setLastAsoGuide(null); }} /></div>
+            <div data-topac-aso-buttons-live="true"><label className="text-xs text-muted-foreground">Data do exame / ASO</label><Input type="date" value={asoExamDate} onChange={e => void atualizarDataAso(e.target.value)} /></div>
             <Field label="Tipo admissao" value={form.tipo_admissao} onChange={v => setForm(p => ({ ...p, tipo_admissao: v }))} />
             <Field label="Nome" value={form.nome} onChange={v => setForm(p => ({ ...p, nome: v }))} /><Field label="CPF" value={form.cpf} onChange={v => setForm(p => ({ ...p, cpf: v }))} /><Field label="RG" value={form.rg} onChange={v => setForm(p => ({ ...p, rg: v }))} />
             <DateField label="Data nascimento" value={form.data_nascimento} onChange={v => setForm(p => ({ ...p, data_nascimento: v }))} /><Field label="E-mail" value={form.email} onChange={v => setForm(p => ({ ...p, email: v }))} /><Field label="Celular / WhatsApp" value={form.celular} onChange={v => setForm(p => ({ ...p, celular: v }))} />
@@ -569,7 +588,7 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
         <section className="card-premium p-5 space-y-4">
           <div><div className="text-xs font-bold uppercase tracking-wider text-primary">3. ASO e comunicação</div><h3 className="mt-1 text-base font-bold">Guia do exame</h3><p className="text-xs text-muted-foreground">A guia usa a data escolhida acima e pode ser enviada à clínica e ao candidato.</p></div>
           <div className="grid gap-3 lg:grid-cols-[1.2fr_.8fr]"><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Clínica / atendimento</div><div className="mt-2 text-sm font-semibold">{asoClinicInfo.local}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground">{asoClinicInfo.horarios.map((linha, i) => <div key={i}>{linha}</div>)}</div></div><div className="rounded-xl border bg-muted/15 p-4"><div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mensagem ao funcionário</div><p className="mt-2 text-sm text-muted-foreground">Depois da confirmação da clínica, o WhatsApp é liberado com saudação automática, data, endereço e horário exatos da ficha, orientação de ordem de chegada e chegada antecipada.</p></div></div>
-          <div className="flex flex-wrap gap-2"><Button onClick={gerarGuiaAso}><FileSearch className="mr-2 h-4 w-4" />Gerar Guia ASO</Button><Button onClick={enviarGuiaAso} variant="outline"><Mail className="mr-2 h-4 w-4" />Enviar guia à clínica</Button><Button onClick={() => void confirmarAgendamentoAso()} variant="outline" disabled={!form.id || !asoExamDate || asoAgendamentoConfirmado}><CheckCircle2 className="mr-2 h-4 w-4" />{asoAgendamentoConfirmado ? 'Agendamento confirmado' : 'Confirmar agendamento'}</Button><Button onClick={() => void enviarAsoCandidato()} variant="outline" disabled={!asoAgendamentoConfirmado}><MessageCircle className="mr-2 h-4 w-4" />Enviar agendamento ao funcionário</Button></div>{!asoAgendamentoConfirmado && <p className="text-xs text-muted-foreground">Após receber a confirmação da clínica, clique em <strong>Confirmar agendamento</strong>. O envio ao funcionário será liberado em seguida.</p>}
+          <div className="flex flex-wrap gap-2"><Button type="button" onClick={gerarGuiaAso}><FileSearch className="mr-2 h-4 w-4" />Gerar Guia ASO</Button><Button type="button" onClick={enviarGuiaAso} variant="outline"><Mail className="mr-2 h-4 w-4" />Enviar guia à clínica</Button><Button type="button" onClick={() => void confirmarAgendamentoAso()} variant="outline"><CheckCircle2 className="mr-2 h-4 w-4" />{asoAgendamentoConfirmado ? 'Agendamento confirmado' : 'Confirmar agendamento'}</Button><Button type="button" onClick={() => void enviarAsoCandidato()} variant="outline"><MessageCircle className="mr-2 h-4 w-4" />Enviar agendamento ao funcionário</Button></div>{!asoAgendamentoConfirmado && <p className="text-xs text-muted-foreground">Após receber a confirmação da clínica, clique em <strong>Confirmar agendamento</strong>. Se faltar data ou confirmação, o sistema exibirá o motivo em vez de deixar o botão sem resposta.</p>}
         </section>
 
         <section className="card-premium p-5 space-y-4">
