@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileCheck2, FolderOpen, Loader2, RefreshCw, UploadCloud } from 'lucide-react';
+import { FileCheck2, FolderOpen, Loader2, MessageCircle, RefreshCw, UploadCloud } from 'lucide-react';
 import { toast } from 'sonner';
 import { useFilialFilter } from '@/hooks/useFilialFilter';
 import { useAcessoExternoFiltro } from '@/hooks/useAcessoExternoFiltro';
@@ -26,12 +26,22 @@ const detectarDocumento = (name:string) => {
   return { tipo:'OUTROS', categoria:'OUTROS' };
 };
 
+const normalizeWhatsApp = (value:string) => {
+  let phone = value.replace(/\D/g,'');
+  if (!phone) return '';
+  if (phone.startsWith('55') && phone.length >= 12) return phone;
+  if (phone.length === 10 || phone.length === 11) return `55${phone}`;
+  return phone;
+};
+
 const FilialDocumentosPage: React.FC = () => {
   const filial = useFilialFilter();
   const ext = useAcessoExternoFiltro();
   const companyId = ext.isExterno ? ext.empresaIds?.[0] || '' : filial.filialCompanyId || '';
   const [employees,setEmployees]=useState<any[]>([]);
   const [employeeId,setEmployeeId]=useState('');
+  const [whatsapp,setWhatsapp]=useState('');
+  const [avisoTipo,setAvisoTipo]=useState('PAGAMENTO');
   const [file,setFile]=useState<File|null>(null);
   const [tipo,setTipo]=useState('OUTROS');
   const [categoria,setCategoria]=useState('OUTROS');
@@ -70,6 +80,15 @@ const FilialDocumentosPage: React.FC = () => {
     setCategoria(found.categoria);
   };
 
+  const avisarAssinatura = () => {
+    if (!employee) return toast.error('Selecione o funcionário.');
+    const phone = normalizeWhatsApp(whatsapp);
+    if (!phone) return toast.error('Informe o WhatsApp do funcionário.');
+    const item = avisoTipo === 'FERIAS' ? 'FÉRIAS' : avisoTipo;
+    const mensagem = `${employee.nome}, seus documentos de ${item}, recibos/holerite estão disponíveis. Por favor, venha até o escritório para realizar a assinatura.`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mensagem)}`,'_blank','noopener,noreferrer');
+  };
+
   const enviar = async () => {
     if (!file || !employeeId || !companyId) return toast.error('Selecione funcionário e arquivo.');
     setUploading(true);
@@ -91,7 +110,30 @@ const FilialDocumentosPage: React.FC = () => {
     <div className="rounded-xl border border-[#3b2850] bg-[#05080b] p-5">
       <div className="flex items-center gap-3">
         <div className="grid h-11 w-11 place-items-center rounded-lg border border-violet-500/30 bg-violet-500/10"><FolderOpen className="h-5 w-5 text-[#ffc400]"/></div>
-        <div><h1 className="text-xl font-black text-white">Documentos</h1><p className="text-xs text-zinc-500">Envie qualquer documento. O sistema identifica a categoria e arquiva na pasta do funcionário.</p></div>
+        <div><h1 className="text-xl font-black text-white">Documentos</h1><p className="text-xs text-zinc-500">Documentos da filial e aviso rápido de assinatura ao funcionário.</p></div>
+      </div>
+    </div>
+
+    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4">
+      <div className="mb-3 flex items-center gap-2"><MessageCircle className="h-5 w-5 text-emerald-400"/><div><h2 className="font-black text-white">Avisar funcionário para assinar</h2><p className="text-xs text-zinc-500">Não depende dos documentos cadastrados. Escolha o funcionário, o assunto e envie.</p></div></div>
+      <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_.9fr_auto]">
+        <select value={employeeId} onChange={e=>setEmployeeId(e.target.value)} className="h-10 rounded-md border border-[#274337] bg-[#090b10] px-3 text-sm text-white">
+          <option value="">Selecione o funcionário</option>
+          {employees.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}
+        </select>
+        <Input value={whatsapp} onChange={e=>setWhatsapp(e.target.value)} placeholder="WhatsApp do funcionário" className="border-[#274337] bg-[#090b10]"/>
+        <select value={avisoTipo} onChange={e=>setAvisoTipo(e.target.value)} className="h-10 rounded-md border border-[#274337] bg-[#090b10] px-3 text-sm text-white">
+          <option value="ADIANTAMENTO">Adiantamento</option>
+          <option value="VR">VR</option>
+          <option value="VT">VT</option>
+          <option value="PAGAMENTO">Pagamento / Holerite</option>
+          <option value="RESCISAO">Rescisão</option>
+          <option value="FERIAS">Férias</option>
+        </select>
+        <Button onClick={avisarAssinatura} disabled={!employeeId} className="bg-emerald-500 font-black text-black hover:bg-emerald-400"><MessageCircle className="mr-2 h-4 w-4"/>Enviar WhatsApp</Button>
+      </div>
+      <div className="mt-3 rounded-lg border border-[#274337] bg-black/20 p-3 text-xs text-zinc-400">
+        <b className="text-zinc-200">Mensagem:</b> {employee?.nome || 'FULANO'}, seus documentos de {avisoTipo === 'FERIAS' ? 'FÉRIAS' : avisoTipo}, recibos/holerite estão disponíveis. Por favor, venha até o escritório para realizar a assinatura.
       </div>
     </div>
 
