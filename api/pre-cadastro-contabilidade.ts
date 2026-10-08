@@ -4,7 +4,7 @@ import { buildAccountingProcessThreadKey, fetchResendMessageId, prepareAccountin
 const clean = (value:unknown) => String(value ?? '').trim();
 const getHeader = (req:any, name:string) => typeof req?.headers?.get === 'function' ? req.headers.get(name) : req?.headers?.[name] || req?.headers?.[name.toLowerCase()] || '';
 const getBearer = (req:any) => String(getHeader(req,'authorization')||'').match(/^Bearer\s+(.+)$/i)?.[1] || '';
-const esc = (v:unknown) => clean(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c] || c));
+const esc = (v:unknown) => clean(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c] || c));
 const formatDate = (value:unknown) => { const s=clean(value); const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[3]}/${m[2]}/${m[1]}`:s; };
 const formatMoney = (value:unknown) => Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const safeFileName = (value:unknown) => clean(value).replace(/[^a-zA-Z0-9À-ÿ_.() -]+/g,'_').slice(0,140) || 'documento';
@@ -36,6 +36,26 @@ export default async function handler(req:any,res?:any){
     const {data:docs,error:docsError}=await service.from('pre_cadastro_documentos').select('tipo_documento,nome_arquivo,arquivo_url,status,created_at').eq('pre_cadastro_id',id).order('created_at',{ascending:true}); if(docsError) throw docsError;
     const aso=(docs||[]).find((d:any)=>String(d.tipo_documento).toLowerCase()==='aso') || (pre.arquivo_aso_url?{tipo_documento:'aso',nome_arquivo:'ASO.pdf',arquivo_url:pre.arquivo_aso_url}:null);
     if(!aso?.arquivo_url) return sendJson(res,{ok:false,error:'aso_nao_encontrado'},400);
+
+    const manualSubject=`Documentação admissional - ${clean(pre.nome)} - ${clean(pre.empresa_nome)}`;
+    const {data:manualEmail,error:manualEmailError}=await service
+      .from('email_envios_log')
+      .select('id,enviado_em,status,assunto')
+      .eq('modulo_origem','pre-cadastro admissional')
+      .eq('status','enviado')
+      .eq('assunto',manualSubject)
+      .gte('enviado_em',pre.created_at)
+      .order('enviado_em',{ascending:false})
+      .limit(1)
+      .maybeSingle();
+    if(manualEmailError) throw manualEmailError;
+    if(manualEmail){
+      const now=new Date().toISOString(); const history=Array.isArray(pre.historico)?pre.historico:[];
+      const alreadySuppressed=history.some((item:any)=>clean(item?.acao)==='documentacao_admissional_email_automatico_suprimido_duplicidade');
+      const nextHistory=alreadySuppressed?history:[...history,{em:now,acao:'documentacao_admissional_email_automatico_suprimido_duplicidade',email_log_id:manualEmail.id,por:user.id}];
+      const {error:updateError}=await service.from('pre_cadastros_admissionais').update({status:'documentacao_completa',email_contabilidade_preparado_em:manualEmail.enviado_em||now,historico:nextHistory,updated_at:now}).eq('id',id); if(updateError) throw updateError;
+      return sendJson(res,{ok:true,duplicate_prevented:true,email_log_id:manualEmail.id,status:'documentacao_completa'});
+    }
 
     const isGoiania=/GOIANIA|GOIÂNIA/i.test(clean(pre.empresa_nome)) || clean(pre.empresa_id)==='c7a040f2-34b3-42a6-8a3a-f4bb64140ec6';
     const to=isGoiania?['requisicao@incocontabilidade.com.br']:['dp@aatconsultoria.com.br','marisa@aatconsultoria.com.br'];
