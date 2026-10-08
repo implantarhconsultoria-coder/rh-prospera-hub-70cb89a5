@@ -79,7 +79,6 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.setFont('helvetica', 'normal');
   doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
   doc.text(`Nome: ${safe(row.emp.name)}`, 105, assinaturaY + 12, { align: 'center' });
-  doc.text('Data: ____/____/________', 105, assinaturaY + 18, { align: 'center' });
 
   return doc.output('blob');
 };
