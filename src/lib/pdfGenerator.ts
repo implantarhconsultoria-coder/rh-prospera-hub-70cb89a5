@@ -129,6 +129,8 @@ const getAsoClinicDefaults = (d: FichaASOData) => {
   };
 };
 
+export const getAsoClinicCommunicationInfo = (d: FichaASOData) => getAsoClinicDefaults(d);
+
 const drawHeader = (doc: jsPDF, empresa: string, cnpj: string, titulo: string) => {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
@@ -199,6 +201,119 @@ const drawSignatures = (doc: jsPDF, y: number) => {
   doc.setFont('helvetica', 'normal');
   doc.text('Assinatura do Colaborador', 57, y + 5, { align: 'center' });
   doc.text('Assinatura do Responsavel', 152, y + 5, { align: 'center' });
+};
+
+export interface FichaSolicitacaoEmpregoData {
+  empresa?: string;
+  funcao?: string;
+  fse: Record<string, unknown>;
+}
+
+export const gerarFichaSolicitacaoEmpregoPdf = (d: FichaSolicitacaoEmpregoData): { blob: Blob; fileName: string } => {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const f = d.fse;
+  const records = (value: unknown): Record<string, unknown>[] => Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === 'object' && !Array.isArray(entry))
+    : [];
+  let y = 14;
+  const left = 14;
+  const width = 182;
+  const bottom = 282;
+  const value = (v: unknown) => cleanText(String(v ?? '').trim()) || '-';
+  const date = (v: unknown) => fmtBR(String(v || ''));
+  const ensure = (needed = 18) => { if (y + needed > bottom) { doc.addPage(); y = 14; } };
+  const section = (title: string, rows: Array<[string, unknown]>) => {
+    const visible = rows.filter(([, v]) => String(v ?? '').trim() !== '');
+    if (!visible.length) return;
+    ensure(14 + visible.length * 7);
+    doc.setFillColor(244, 244, 245);
+    doc.setDrawColor(210);
+    doc.roundedRect(left, y, width, 8, 1.2, 1.2, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(45);
+    doc.text(cleanText(title).toUpperCase(), left + 3, y + 5.3);
+    y += 11;
+    for (const [label, raw] of visible) {
+      const content = value(raw);
+      const lines = doc.splitTextToSize(content, 128);
+      const h = Math.max(6, lines.length * 4.4);
+      ensure(h + 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.6);
+      doc.setTextColor(105);
+      doc.text(cleanText(label) + ':', left + 2, y);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(20);
+      doc.text(lines, left + 49, y);
+      y += h;
+    }
+    y += 3;
+  };
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(20);
+  doc.text('FICHA DE SOLICITACAO DE EMPREGO', 105, y, { align: 'center' });
+  y += 6;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100);
+  doc.text('FSE-2026 • Ficha preenchida digitalmente pelo candidato', 105, y, { align: 'center' });
+  y += 8;
+
+  section('Vaga pretendida', [
+    ['Empresa', d.empresa || 'TOPAC'], ['Cargo pretendido', d.funcao || f.cargo_pretendido], ['Data do preenchimento', date(f.data_preenchimento)],
+  ]);
+  section('Dados pessoais', [
+    ['Nome completo', f.nome], ['Pai', f.pai], ['Mae', f.mae], ['Estado civil', f.estado_civil], ['Data de nascimento', date(f.data_nascimento)],
+    ['Naturalidade', f.naturalidade], ['UF nascimento', f.uf_nascimento], ['Nacionalidade', f.nacionalidade], ['Dependentes', f.dependentes],
+    ['Filhos menores de 18', records(f.filhos).filter((x)=>x?.nome).map((x)=>`${x.nome} (${date(x.nascimento)})`).join(' | ')],
+  ]);
+  section('Documentos', [
+    ['CPF', f.cpf], ['RG / CIN', f.rg], ['UF RG', f.rg_uf], ['CTPS', f.ctps], ['Serie CTPS', f.ctps_serie], ['PIS / NIS', f.pis],
+    ['Reservista', f.reservista], ['Titulo de eleitor', f.titulo_eleitor], ['Zona', f.zona], ['Secao', f.secao], ['CNH', f.cnh],
+    ['UF CNH', f.cnh_uf], ['Validade CNH', date(f.cnh_validade)], ['Categoria CNH', f.cnh_categoria], ['1a habilitacao', date(f.cnh_primeira_habilitacao)],
+    ['Observacao', f.observacao_documentos],
+  ]);
+  section('Endereco e contato', [
+    ['Endereco', [f.logradouro, f.numero, f.bairro, f.cidade, f.estado, f.cep && `CEP ${f.cep}`].filter(Boolean).join(' - ')],
+    ['Fone / recados', f.fone_recados], ['Celular / WhatsApp', f.celular], ['E-mail', f.email],
+  ]);
+  section('Formacao escolar', [
+    ['Escolaridade', f.escolaridade_nivel], ['Ano', f.escolaridade_ano], ['Estuda atualmente', f.estuda], ['Horario', f.horario_estudo], ['Curso / Instituicao', f.curso_instituicao],
+  ]);
+  section('Formacao tecnica', [
+    ['Cursos', records(f.formacao_tecnica).filter((x)=>x?.curso).map((x)=>[x.curso, x.ano].filter(Boolean).join(' - ')).join(' | ')],
+  ]);
+
+  const experiencias = records(f.experiencias).filter(x => x.empresa);
+  experiencias.forEach((x, i) => section(`Experiencia profissional ${i + 1}`, [
+    ['Empresa', x.empresa], ['Cidade/UF', [x.cidade, x.uf].filter(Boolean).join('/')], ['Fone', x.fone], ['Cargo', x.cargo],
+    ['Admissao', date(x.admissao)], ['Demissao', date(x.demissao)], ['Ultimo salario', x.salario], ['Saiu por iniciativa propria', x.iniciativa_propria], ['Justificativa', x.justificativa],
+  ]));
+
+  section('Referencias pessoais', [
+    ['Referencias', records(f.referencias).filter((x)=>x?.nome).map((x)=>[x.nome, x.fone].filter(Boolean).join(' - ')).join(' | ')],
+  ]);
+  section('Dados para EPI', [['Camisa', f.epi_camisa], ['Calca', f.epi_calca], ['Bota', f.epi_bota]]);
+  section('Principais atribuicoes', [['Atividades', f.atribuicoes]]);
+  section('Outras informacoes', [['Observacoes', f.outras_informacoes]]);
+  section('Declaracao e confirmacao', [
+    ['Local / UF', f.local_uf], ['Data', date(f.data_declaracao)], ['Confirmacao', f.declaracao_aceita ? 'Confirmado digitalmente pelo candidato' : 'Nao confirmada'],
+  ]);
+
+  const pages = doc.getNumberOfPages();
+  for (let page = 1; page <= pages; page += 1) {
+    doc.setPage(page);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(125);
+    doc.text(`TOPAC RH PRO • FSE-2026 • Pagina ${page} de ${pages}`, 105, 292, { align: 'center' });
+  }
+
+  const fileName = makeDocumentFileName('FICHA_FSE_2026', d.empresa || 'TOPAC', String(f.nome || 'CANDIDATO'), String(f.data_preenchimento || localIsoDate()));
+  return { blob: doc.output('blob'), fileName };
 };
 
 export const gerarFichaASOPdf = (d: FichaASOData): { blob: Blob; fileName: string } => {

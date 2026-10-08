@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDown,
@@ -24,6 +24,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/context/AppContext';
 import AlmoxarifadoFechamentoOperacional from '@/components/almoxarifado/AlmoxarifadoFechamentoOperacional';
 import RetiradaInteligentePanel from '@/components/almoxarifado/RetiradaInteligentePanel';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { printDocumentInPage } from '@/lib/printInPage';
+import { withdrawalReceiptHtml, type WithdrawalReceipt } from '@/lib/almoxarifadoWithdrawalReceipt';
 
 const db = supabase as any;
 const START = '2026-09-16';
@@ -90,6 +93,10 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   const [entFile, setEntFile] = useState<File | null>(null);
   const [from, setFrom] = useState(START);
   const [to, setTo] = useState(today());
+  const [receipt, setReceipt] = useState<WithdrawalReceipt | null>(null);
+  const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
+  const withdrawalInFlight = useRef(false);
+  const receiptHtml = useMemo(() => receipt ? withdrawalReceiptHtml(receipt) : '', [receipt]);
 
   const company = (employee: any) =>
     companies.find((companyItem: any) => companyItem.id === (employee.companyId || employee.company_id || employee.empresa_id));
@@ -202,13 +209,26 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   };
 
   const saveWithdrawal = async () => {
+    if (withdrawalInFlight.current) return;
     if (!personId || !cart.length) return toast.error('Selecione funcionário e materiais.');
     if (smart.trim()) return toast.error('Confira e adicione a descrição inteligente ou limpe o campo antes de confirmar.');
     if (cart.some((row) => !Number.isFinite(row.quantidade) || row.quantidade <= 0 || row.quantidade > Number(itemMap.get(row.item_id)?.saldo || 0)))
       return toast.error('Revise as quantidades e os saldos antes de confirmar.');
+    withdrawalInFlight.current = true;
     setBusy(true);
     try {
       const observations = note.trim();
+      const person = employees.find((employee: any) => employee.id === personId);
+      const employeeCompany = person ? company(person) : null;
+      const user = session?.user;
+      const responsibleName = user?.user_metadata?.nome_completo || user?.user_metadata?.full_name || user?.user_metadata?.name;
+      const snapshot = {
+        employee: person ? name(person) : 'Funcionário',
+        company: employeeCompany?.name || employeeCompany?.nome || 'Não informada',
+        responsible: [responsibleName, user?.email].filter(Boolean).join(' — ') || 'Não informado',
+        note: observations,
+        items: cart.map(item => ({ codigo: item.codigo, nome: item.nome, quantidade: item.quantidade })),
+      };
       const { data, error } = await db.rpc('almoxarifado_criar_carga_v2', {
         p_tipo: 'retirada',
         p_funcionario_id: personId,
@@ -218,6 +238,25 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
         p_observacoes: observations || null,
       });
       if (error) throw error;
+      // A RPC já confirmou a baixa: falhas de leitura da ficha nunca repetem a retirada.
+      const savedReceipt: WithdrawalReceipt = {
+        ...snapshot,
+        id: data.id,
+        protocol: data.protocolo,
+        employee: data.funcionario || snapshot.employee,
+        company: data.empresa_destino || snapshot.company,
+        createdAt: data.created_at || null,
+      };
+      setReceipt(savedReceipt);
+      try {
+        const registered = await db.from('almoxarifado_cargas').select('created_at').eq('id', data.id).single();
+        if (registered.error || !registered.data?.created_at) throw registered.error || new Error('Horário não encontrado');
+        setReceipt(current => current?.id === savedReceipt.id
+          ? { ...current, createdAt: registered.data.created_at }
+          : current);
+      } catch {
+        toast.warning('Retirada registrada. Não foi possível consultar o horário; reabra a ficha pelo histórico antes de imprimir.');
+      }
       toast.success(`Retirada ${data?.protocolo || ''} registrada e estoque baixado.`);
       setCart([]);
       setPersonId('');
@@ -228,7 +267,44 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     } catch (error: any) {
       toast.error(error?.message || 'Erro ao registrar retirada.');
     } finally {
+      withdrawalInFlight.current = false;
       setBusy(false);
+    }
+  };
+
+  const openWithdrawalReceipt = async (row: any) => {
+    setOpeningReceipt(row.id);
+    try {
+      const [itemsResult, responsibleResult] = await Promise.all([
+        db.from('almoxarifado_carga_itens')
+          .select('item_id, quantidade_entregue, almoxarifado_itens(codigo_topac, nome)').eq('carga_id', row.id),
+        db.from('almoxarifado_saidas').select('responsavel_liberacao')
+          .eq('motivo', `Retirada - ${row.protocolo}`).eq('user_id', row.user_id).limit(1).maybeSingle(),
+      ]);
+      if (itemsResult.error) throw itemsResult.error;
+      if (responsibleResult.error) throw responsibleResult.error;
+      if (!itemsResult.data?.length) throw new Error('Materiais da retirada não encontrados.');
+      const person = employees.find((employee: any) => employee.id === row.funcionario_id);
+      const destination = companies.find((entry: any) => entry.id === row.destino_company_id) || (person ? company(person) : null);
+      setReceipt({
+        id: row.id,
+        protocol: row.protocolo,
+        createdAt: row.created_at,
+        employee: row.funcionario_nome || (person ? name(person) : 'Não informado'),
+        company: destination?.name || destination?.nome || 'Não informada',
+        // Nunca atribuir uma retirada antiga ao usuário que está reimprimindo.
+        responsible: responsibleResult.data?.responsavel_liberacao || 'Não informado no registro',
+        note: row.observacoes || '',
+        items: itemsResult.data.map((entry: any) => ({
+          codigo: entry.almoxarifado_itens?.codigo_topac || itemMap.get(entry.item_id)?.codigo_topac || '—',
+          nome: entry.almoxarifado_itens?.nome || itemMap.get(entry.item_id)?.nome || 'Material não disponível',
+          quantidade: Number(entry.quantidade_entregue),
+        })),
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível abrir a ficha da retirada.');
+    } finally {
+      setOpeningReceipt(null);
     }
   };
 
@@ -364,7 +440,7 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     popup.print();
   };
 
-  if (loading)
+  if (loading && !receipt)
     return (
       <div className="almox-v3 grid min-h-[480px] place-items-center">
         <div className="flex gap-2 text-white">
@@ -559,6 +635,17 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
 
   return (
     <div className="almox-v3 p-4 md:p-6">
+      <Dialog open={!!receipt} onOpenChange={(open) => { if (!open) setReceipt(null); }}>
+        <DialogContent className="max-w-4xl border-slate-200 bg-white text-slate-950" aria-describedby={undefined}>
+          <DialogTitle>Ficha de retirada de materiais</DialogTitle>
+          <iframe title="Visualização da ficha de retirada" srcDoc={receiptHtml} sandbox="allow-same-origin"
+            className="h-[65vh] w-full border border-slate-200 bg-white" />
+          <div className="flex justify-end gap-3">
+            <Button disabled={!receipt?.createdAt} onClick={() => printDocumentInPage(receiptHtml)}>IMPRIMIR FICHA</Button>
+            <Button variant="outline" onClick={() => setReceipt(null)}>FECHAR</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {mode === 'home' && (isAdmin ? renderAdminHome() : renderTeamHome())}
 
       {mode === 'retirada' && (
@@ -744,6 +831,12 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
             {historyRows.map((row: any) => (
               <div key={row.id} className="border-b border-slate-700 py-3">
                 <b>{row.funcionario_nome || 'Funcionário'}</b> • {br(row.created_at)} • {row.protocolo || '—'}
+                {row.tipo === 'retirada' && (
+                  <Button className="ml-3" variant="outline" disabled={openingReceipt !== null}
+                    onClick={() => void openWithdrawalReceipt(row)}>
+                    {openingReceipt === row.id ? 'Abrindo...' : 'Ver / imprimir ficha'}
+                  </Button>
+                )}
               </div>
             ))}
             {!historyRows.length && <div className="py-6 text-sm text-slate-500">Nenhuma movimentação encontrada.</div>}
