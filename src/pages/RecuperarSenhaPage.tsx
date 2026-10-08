@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
 const PASSWORD_RECOVERY_URL = 'https://topacrh.pro/redefinir-senha';
+const RECOVERY_SEND_ERROR = 'Não foi possível enviar o e-mail de recuperação agora. Entre em contato com o administrador.';
 
 const RecuperarSenhaPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -17,14 +18,19 @@ const RecuperarSenhaPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: PASSWORD_RECOVERY_URL,
-    });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-    } else {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: PASSWORD_RECOVERY_URL,
+      });
+      if (error) {
+        toast.error(RECOVERY_SEND_ERROR);
+        return;
+      }
       setSent(true);
+    } catch {
+      toast.error(RECOVERY_SEND_ERROR);
+    } finally {
+      setLoading(false);
     }
   };
 
