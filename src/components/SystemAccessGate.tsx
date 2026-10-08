@@ -12,6 +12,10 @@ const SystemAccessGate: React.FC<{ children: React.ReactNode }> = ({ children })
   const { session } = useApp();
   const { controls, loading } = useSystemAccessControl();
 
+  // O pré-cadastro do candidato é um fluxo público protegido pelo token individual.
+  // Ele não pode ser bloqueado pelo controle interno de módulos do painel.
+  if (location.pathname === '/pre-cadastro') return <>{children}</>;
+
   // Detecta o viewport imediatamente no primeiro render para o iPhone/PWA
   // nao passar pela tela intermediaria de verificacao.
   const mobileViewport = typeof window !== 'undefined'
