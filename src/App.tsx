@@ -36,6 +36,7 @@ import EmpresasPage from "@/pages/EmpresasPage";
 import BaseMestraPage from "@/pages/BaseMestraPage";
 import ASOPage from "@/pages/ASOPage";
 import PreCadastroAdmissionalPage from "@/pages/PreCadastroAdmissionalPage";
+import PreCadastroPublicoPage from "@/pages/PreCadastroPublicoPage";
 import PrestadoresPage from "@/pages/PrestadoresPage";
 import FuncionariosPage from "@/pages/FuncionariosPage";
 import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
@@ -179,6 +180,7 @@ const AuthGate = () => {
   if (!isAuthenticated) {
     return (
       <Routes>
+        <Route path="/pre-cadastro" element={<PreCadastroPublicoPage />} />
         <Route path="/estoque-interno" element={<EstoqueInternoLoginPage />} />
         <Route path="/cadastro" element={<CadastroPage />} />
         <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
