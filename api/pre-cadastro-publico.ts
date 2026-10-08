@@ -15,6 +15,18 @@ const queryValue = (req: any, key: string) => {
   return Array.isArray(value) ? clean(value[0]) : clean(value);
 };
 
+const headerValue = (req: any, key: string) => clean(req?.headers?.[key] || req?.headers?.get?.(key));
+
+const tokenFromReferer = (req: any) => {
+  const referer = headerValue(req, 'referer');
+  if (!referer) return '';
+  try {
+    return clean(new URL(referer).searchParams.get('token'));
+  } catch {
+    return '';
+  }
+};
+
 const requestOrigin = (req: any) => {
   const proto = clean(req?.headers?.['x-forwarded-proto'] || req?.headers?.get?.('x-forwarded-proto') || 'https').split(',')[0];
   const host = clean(req?.headers?.['x-forwarded-host'] || req?.headers?.host || req?.headers?.get?.('host'));
@@ -135,6 +147,8 @@ export default async function handler(req: any, res?: any) {
     const action = clean(body.action).toLowerCase();
 
     if (action === 'start') {
+      const explicitToken = tokenFromReferer(req);
+      if (explicitToken) return sendJson(res, { ok: false, error: 'link_invalido_ou_inexistente' }, 404);
       const now = new Date().toISOString();
       const { data, error } = await service.from('pre_cadastros_admissionais').insert({
         status: 'cadastro_em_preenchimento', origem_cadastro: 'link_publico', public_started_at: now, public_last_saved_at: now,
@@ -150,6 +164,23 @@ export default async function handler(req: any, res?: any) {
     if (!pre) return sendJson(res, { ok: false, error: 'cadastro_nao_encontrado' }, 404);
 
     if (action === 'load') {
+      const now = new Date().toISOString();
+      const patch: Record<string, any> = {};
+      if (!pre.public_seen_at) patch.public_seen_at = now;
+      if (!pre.public_started_at) patch.public_started_at = now;
+      if (Object.keys(patch).length) {
+        patch.updated_at = now;
+        const { error: patchError } = await service.from('pre_cadastros_admissionais').update(patch).eq('id', pre.id);
+        if (patchError) throw patchError;
+        if (!pre.public_seen_at) {
+          await service.from('pre_cadastro_eventos').insert({
+            pre_cadastro_id: pre.id,
+            tipo: 'link_acessado',
+            descricao: 'Candidato acessou o link individual de pré-cadastro.',
+            dados: { canal: 'link_publico' },
+          });
+        }
+      }
       const data = await loadCandidate(service, token);
       return sendJson(res, { ok: true, data });
     }
@@ -163,14 +194,24 @@ export default async function handler(req: any, res?: any) {
       const etapa = Math.min(5, Math.max(1, Number(body.etapa || pre.candidato_etapa || 1)));
       const endereco = [candidato.rua, candidato.numero, candidato.complemento, candidato.bairro, candidato.cidade, candidato.estado, candidato.cep].map(clean).filter(Boolean).join(', ');
       const filiacao = [candidato.nome_mae ? `Mãe: ${clean(candidato.nome_mae)}` : '', candidato.nome_pai ? `Pai: ${clean(candidato.nome_pai)}` : ''].filter(Boolean).join(' | ');
+      const now = new Date().toISOString();
       const update = {
         candidato_dados: candidato, dados_bancarios: banco, transporte, candidato_etapa: etapa,
         ctps_tipo: clean(body.ctpsTipo), nome: clean(candidato.nome), cpf: clean(candidato.cpf), rg: clean(candidato.rg),
         data_nascimento: clean(candidato.data_nascimento) || null, email: clean(candidato.email) || null, celular: clean(candidato.celular) || null,
-        endereco, filiacao, vale_transporte: transporte.usa_vt !== false, public_last_saved_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        endereco, filiacao, vale_transporte: transporte.usa_vt !== false, public_started_at: pre.public_started_at || now,
+        public_last_saved_at: now, updated_at: now,
       };
       const { error } = await service.from('pre_cadastros_admissionais').update(update).eq('id', pre.id);
       if (error) throw error;
+      if (!pre.public_last_saved_at) {
+        await service.from('pre_cadastro_eventos').insert({
+          pre_cadastro_id: pre.id,
+          tipo: 'preenchimento_iniciado',
+          descricao: 'Candidato iniciou o preenchimento dos dados admissionais.',
+          dados: { etapa },
+        });
+      }
       return sendJson(res, { ok: true });
     }
 
@@ -199,6 +240,12 @@ export default async function handler(req: any, res?: any) {
       const downloadUrl = `${requestOrigin(req)}/api/pre-cadastro-publico?download=${encodeURIComponent(doc.id)}&token=${encodeURIComponent(token)}`;
       await service.from('pre_cadastro_documentos').update({ arquivo_url: downloadUrl }).eq('id', doc.id);
       await service.from('pre_cadastros_admissionais').update({ pendencias_documentais: pendencias, public_last_saved_at: new Date().toISOString() }).eq('id', pre.id);
+      await service.from('pre_cadastro_eventos').insert({
+        pre_cadastro_id: pre.id,
+        tipo: 'documentos_enviados',
+        descricao: 'Candidato enviou documento pelo pré-cadastro público.',
+        dados: { tipo_documento: tipo },
+      });
       return sendJson(res, { ok: true, id: doc.id, url: downloadUrl });
     }
 
