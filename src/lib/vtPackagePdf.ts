@@ -174,7 +174,6 @@ const addReceipt = (doc: jsPDF, block: VTPackageBlock, row: BenefitReportRow, op
   doc.setFont('helvetica', 'normal');
   doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
   doc.text(`Nome: ${safe(row.emp.name)}`, 105, assinaturaY + 12, { align: 'center' });
-  doc.text('Data: ____/____/________', 105, assinaturaY + 18, { align: 'center' });
 };
 
 export const buildVTReceiptPdfBlob = (block: VTPackageBlock, row: BenefitReportRow, options: PackageOptions) => {
