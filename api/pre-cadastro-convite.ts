@@ -63,8 +63,10 @@ const loadDocumentCounts = async (service: any, ids: string[]) => {
 };
 
 const deriveInviteStatus = (row: any, events: any[], documentCount: number) => {
+  const internalStatus = clean(row?.status);
   if (isCompleted(row)) return 'CONCLUÍDO';
-  if (row.public_completed_at) return 'EM ANÁLISE';
+  if (['aguardando_aso', 'documentacao_completa', 'pronto_para_registro'].includes(internalStatus)) return 'EM ANÁLISE';
+  if (row.public_completed_at) return 'PREENCHIDO';
   if (documentCount > 0) return 'DOCUMENTOS ENVIADOS';
   if (Number(row.candidato_etapa || 1) > 1 && row.public_last_saved_at) return 'AGUARDANDO FINALIZAÇÃO';
   if (row.public_last_saved_at) return 'PREENCHIMENTO INICIADO';
