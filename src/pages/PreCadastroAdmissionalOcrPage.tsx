@@ -12,7 +12,9 @@ import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { extractPdfText, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { employeeHasInsalubridade, getPericulosidadeAplicavel, isMotoboyRole } from '@/lib/employeeRoleRules';
 import { registrarDocumento } from '@/lib/documentoHistorico';
-import { INVALID_ASSISTED_WHATSAPP_PHONE_MESSAGE, openAssistedWhatsApp } from '@/lib/assistedWhatsApp';
+import { INVALID_ASSISTED_WHATSAPP_PHONE_MESSAGE, normalizeAssistedWhatsAppPhone, openAssistedWhatsApp } from '@/lib/assistedWhatsApp';
+import AdmissionWelcomeDialog from '@/components/AdmissionWelcomeDialog';
+import { admissionWelcomeEventData, buildAdmissionWelcome, isAdmissionWelcomeEligible, type AdmissionWelcomeSummary } from '@/lib/admissionWelcome';
 
 type PreCadastro = {
   id: string;
@@ -51,6 +53,9 @@ type PreCadastro = {
   dados_extraidos?: Record<string, unknown> | null;
   conferencia?: Record<string, unknown> | null;
   historico?: unknown[] | null;
+  aprovado_em?: string | null;
+  aprovado_por?: string | null;
+  funcionario_id?: string | null;
   created_at: string;
 };
 
@@ -161,6 +166,7 @@ const categoriaPreCadastro = (tipo?: string | null) => {
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
+  if (normalizado.includes('FICHA') && normalizado.includes('FSE')) return 'FICHA PREENCHIDA';
   if (normalizado.includes('FICHA') || normalizado.includes('DADOS CADASTRAIS') || normalizado.includes('DOCUMENTACAO ADMISSIONAL')) return 'FICHA/DOCUMENTACAO';
   if (normalizado.includes('CONTRATO')) return 'CONTRATO';
   return 'NAO RECONHECIDO';
@@ -233,6 +239,10 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   const [lastAsoGuide, setLastAsoGuide] = useState<GeneratedAsoGuide | null>(null);
   const [asoExamDate, setAsoExamDate] = useState('');
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [welcomeSummary, setWelcomeSummary] = useState<AdmissionWelcomeSummary | null>(null);
+  const [welcomeError, setWelcomeError] = useState<string | null>(null);
+  const [welcomePhone, setWelcomePhone] = useState('');
   const [migrationEmployeeId, setMigrationEmployeeId] = useState('');
   const [migrationCompanyId, setMigrationCompanyId] = useState('');
   const [documentos, setDocumentos] = useState<DocumentoConferencia[]>([]);
@@ -436,7 +446,98 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
   };
 
   const migrarDocumentosPreCadastro = async (funcionarioId: string) => { if (!form.id || !funcionarioId || !form.empresa_id) return 0; const empresa = companies.find(c => c.id === form.empresa_id); const { data: docs } = await (supabase as any).from('pre_cadastro_documentos').select('*').eq('pre_cadastro_id', form.id); let migrados = 0; for (const doc of docs || []) { if (!doc.arquivo_url) continue; await registrarDocumento({ funcionarioId, funcionarioNome: form.nome || 'Funcionario', companyId: form.empresa_id, empresaNome: empresa?.name || form.empresa_nome || '', tipoDocumento: categoriaPreCadastro(doc.tipo_documento), categoria: categoriaPreCadastro(doc.tipo_documento), origem: 'pre_cadastro', descricao: doc.nome_arquivo || '', arquivoUrl: doc.arquivo_url, nomeArquivo: doc.nome_arquivo || '', dataDocumento: doc.created_at || new Date().toISOString(), geradoPorUserId: session?.user?.id || ZERO_UUID, geradoPorNome: session?.user?.email || 'Sistema', unidade: empresa?.name || form.empresa_nome || '' }); migrados += 1; } return migrados; };
-  const aprovarOficial = async () => { if (!form.id || !form.empresa_id || !form.nome) return; const { data: funcionarioId, error } = await (supabase as any).rpc('admin_pre_cadastro_aprovar_oficial', { p_id: form.id }); if (error) return toast.error(error.message); await migrarDocumentosPreCadastro(String(funcionarioId || '')); await Promise.all([carregar(), refreshData()]); };
+  const registrarBoasVindasEvento = async (tipo: 'boas_vindas_preparada' | 'boas_vindas_whatsapp_aberto' | 'boas_vindas_copiada', summary: AdmissionWelcomeSummary) => {
+    const userId = session?.user?.id || null;
+    const { error } = await (supabase as any).from('pre_cadastro_eventos').insert({
+      pre_cadastro_id: summary.preCadastroId,
+      tipo,
+      descricao: tipo === 'boas_vindas_preparada' ? 'Mensagem de boas-vindas preparada pelo RH.' : tipo === 'boas_vindas_whatsapp_aberto' ? 'WhatsApp assistido aberto com a mensagem de boas-vindas.' : 'Mensagem de boas-vindas copiada pelo RH.',
+      dados: admissionWelcomeEventData(summary, userId),
+      created_by: userId,
+    });
+    if (error) console.error('[admission-welcome] falha ao registrar histórico', error);
+  };
+
+  const prepararBoasVindas = async (preCadastroId: string) => {
+    if (!preCadastroId) return;
+    const { data: pre, error: preError } = await (supabase as any).from('pre_cadastros_admissionais')
+      .select('id,nome,empresa_id,empresa_nome,celular,jornada,data_admissao,aprovado_em,funcionario_id')
+      .eq('id', preCadastroId).maybeSingle();
+    if (preError || !pre) { toast.error(preError?.message || 'Pré-cadastro não encontrado.'); return; }
+    if (!isAdmissionWelcomeEligible(pre.aprovado_em, pre.funcionario_id)) { toast.error('As boas-vindas só ficam disponíveis após a aprovação oficial e vínculo ao funcionário.'); return; }
+
+    const { data: employee, error: employeeError } = await (supabase as any).from('funcionarios')
+      .select('id,nome,empresa_id,company_id,celular,telefone,data_admissao,vr_ativo,vr_diario,vt_ativo,vt_diario')
+      .eq('id', pre.funcionario_id).maybeSingle();
+    if (employeeError || !employee) { toast.error(employeeError?.message || 'Funcionário oficial não encontrado.'); return; }
+
+    const companyName = companies.find(c => c.id === (employee.empresa_id || employee.company_id || pre.empresa_id))?.name || pre.empresa_nome || 'TOPAC';
+    const result = buildAdmissionWelcome({
+      preCadastroId: pre.id,
+      candidateName: employee.nome || pre.nome || '',
+      companyName,
+      dataAdmissao: employee.data_admissao || pre.data_admissao || '',
+      jornada: pre.jornada,
+      vrAtivo: Boolean(employee.vr_ativo),
+      vrDiario: Number(employee.vr_diario || 0),
+      vtAtivo: Boolean(employee.vt_ativo),
+      vtDiario: Number(employee.vt_diario || 0),
+    });
+
+    setWelcomeOpen(true);
+    if (!result.ok) {
+      setWelcomeSummary(null);
+      setWelcomePhone('');
+      setWelcomeError(result.error);
+      toast.error(result.error);
+      return;
+    }
+
+    const phoneCandidates = [employee.celular, employee.telefone, pre.celular].filter(Boolean);
+    const validPhone = phoneCandidates.find((value: unknown) => normalizeAssistedWhatsAppPhone(value)) || phoneCandidates[0] || '';
+    setWelcomeSummary(result.summary);
+    setWelcomeError(null);
+    setWelcomePhone(String(validPhone || ''));
+    await registrarBoasVindasEvento('boas_vindas_preparada', result.summary);
+  };
+
+  const enviarBoasVindasWhatsApp = async () => {
+    if (!welcomeSummary) return;
+    const result = openAssistedWhatsApp(welcomePhone, welcomeSummary.message);
+    if (!result.ok) {
+      toast.error(result.reason === 'invalid_phone' ? INVALID_ASSISTED_WHATSAPP_PHONE_MESSAGE : 'Não foi possível abrir o WhatsApp.');
+      return;
+    }
+    await registrarBoasVindasEvento('boas_vindas_whatsapp_aberto', welcomeSummary);
+    toast.success('WhatsApp aberto com a mensagem de boas-vindas preparada.');
+  };
+
+  const copiarBoasVindas = async () => {
+    if (!welcomeSummary) return;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(welcomeSummary.message);
+      else {
+        const area = document.createElement('textarea');
+        area.value = welcomeSummary.message;
+        area.style.position = 'fixed'; area.style.opacity = '0';
+        document.body.appendChild(area); area.select();
+        const copied = document.execCommand('copy');
+        area.remove();
+        if (!copied) throw new Error('copy_failed');
+      }
+      await registrarBoasVindasEvento('boas_vindas_copiada', welcomeSummary);
+      toast.success('Mensagem de boas-vindas copiada.');
+    } catch { toast.error('Não foi possível copiar a mensagem.'); }
+  };
+
+  const aprovarOficial = async () => {
+    if (!form.id || !form.empresa_id || !form.nome) return;
+    const { data: funcionarioId, error } = await (supabase as any).rpc('admin_pre_cadastro_aprovar_oficial', { p_id: form.id });
+    if (error) return toast.error(error.message);
+    await migrarDocumentosPreCadastro(String(funcionarioId || ''));
+    await prepararBoasVindas(form.id);
+    await Promise.all([carregar(), refreshData()]);
+  };
 
   // pre-cadastro-workflow-v2
   const fseDigital = (((form.dados_extraidos as any)?.fse_digital || {}) as Record<string, any>);
@@ -666,10 +767,11 @@ const PreCadastroAdmissionalOcrPage: React.FC = () => {
 
         <section className="card-premium p-5 space-y-4">
           <div><div className="text-xs font-bold uppercase tracking-wider text-primary">5. Finalização</div><h3 className="mt-1 text-base font-bold">Contabilidade e cadastro oficial</h3><p className="text-xs text-muted-foreground">Revise a seleção dos documentos antes de concluir.</p></div>
-          <div className="flex flex-wrap gap-2"><Button onClick={enviarContabilidade} disabled={selectedDocs.length === 0} variant="outline"><ArrowRight className="mr-2 h-4 w-4" />E-mail contabilidade ({selectedDocs.length})</Button><Button onClick={aprovarOficial}><CheckCircle2 className="mr-2 h-4 w-4" />Aprovar cadastro oficial</Button></div>
+          <div className="flex flex-wrap gap-2"><Button onClick={enviarContabilidade} disabled={selectedDocs.length === 0} variant="outline"><ArrowRight className="mr-2 h-4 w-4" />E-mail contabilidade ({selectedDocs.length})</Button>{isAdmissionWelcomeEligible(form.aprovado_em, form.funcionario_id) ? <Button type="button" variant="outline" onClick={() => form.id && void prepararBoasVindas(form.id)}><MessageCircle className="mr-2 h-4 w-4" />REENVIAR BOAS-VINDAS</Button> : <Button onClick={aprovarOficial}><CheckCircle2 className="mr-2 h-4 w-4" />Aprovar cadastro oficial</Button>}</div>
         </section>
       </main>
     </div>
+    <AdmissionWelcomeDialog open={welcomeOpen} onOpenChange={setWelcomeOpen} summary={welcomeSummary} error={welcomeError} onWhatsApp={() => void enviarBoasVindasWhatsApp()} onCopy={() => void copiarBoasVindas()} />
     <EmailPdfModal open={!!emailPdfDraft} draft={emailPdfDraft} onOpenChange={open => { if (!open) setEmailPdfDraft(null); }} />
   </div>;
 };
