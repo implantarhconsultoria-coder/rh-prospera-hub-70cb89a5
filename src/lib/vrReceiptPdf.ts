@@ -3,15 +3,15 @@ import type { BenefitReportRow } from '@/lib/benefitReports';
 import { formatCurrency } from '@/lib/calculations';
 
 type Company = { id: string; name: string; cnpj?: string | null };
-type Options = { competencia: string; diasPagos: number; dataPagamento?: string };
+type Options = { competencia: string; diasPagos?: number; dataPagamento?: string };
 
 const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const competenciaLabel = (competencia: string) => {
   const [ano, mes] = String(competencia || '').split('-');
   return `${meses[Number(mes) - 1] || mes} / ${ano}`;
 };
-const dataBr = (value?: string) => {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+const dataBr = (value?: string | null) => {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : (value || '—');
 };
 const safe = (value: unknown) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
@@ -21,6 +21,7 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   const left = 18;
   const right = 192;
   const width = right - left;
+  const proportional = row.tipoCalculo === 'PROPORCIONAL_ADMISSAO';
 
   doc.setTextColor(0, 0, 0);
   doc.setDrawColor(0, 0, 0);
@@ -38,7 +39,7 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.text(`Pagamento: ${receiptPaymentDate ? dataBr(receiptPaymentDate) : '—'}`, right, 34, { align: 'right' });
   doc.line(left, 40, right, 40);
 
-  doc.roundedRect(left, 48, width, 24, 1, 1);
+  doc.roundedRect(left, 48, width, proportional ? 39 : 24, 1, 1);
   doc.setFont('helvetica', 'bold');
   doc.text('Nome:', 22, 55);
   doc.text('Cargo:', 112, 55);
@@ -50,9 +51,17 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.text(safe(row.emp.cargo).slice(0, 35), 124, 55);
   doc.text(safe(row.emp.cpf) || '—', 31, 62);
   doc.text(safe((row.emp as any).registro) || '—', 127, 62);
-  doc.text(String(options.diasPagos), 39, 69);
+  doc.text(String(row.diasFinais), 39, 69);
 
-  const y = 82;
+  if (proportional) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cálculo proporcional por admissão', 22, 76);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Admissão: ${dataBr(row.dataAdmissao)}`, 22, 82);
+    doc.text(`Período considerado: ${dataBr(row.periodoInicio)} a ${dataBr(row.periodoFim)}`, 88, 82);
+  }
+
+  const y = proportional ? 96 : 82;
   doc.setFillColor(229, 231, 235);
   doc.rect(left, y, width, 7, 'F');
   doc.setFont('helvetica', 'bold');
