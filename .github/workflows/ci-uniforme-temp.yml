@@ -1,0 +1,22 @@
+name: CI Uniforme Temp
+on:
+  push:
+    branches:
+      - fix/uniforme-estorno-data-20261013
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --legacy-peer-deps
+      - name: Aplicar patches de build
+        run: node scripts/fix-vr-employee-shortcut-build.mjs
+      - name: Teste de data
+        run: npx vitest run src/lib/__tests__/formatDate.test.ts
+      - name: Typecheck
+        run: npx tsc --noEmit --pretty false
+      - name: Lint do escopo alterado
+        run: npx eslint src/pages/UniformePage.tsx src/pages/EntregaImpressaoPage.tsx src/lib/calculations.ts src/lib/dateFormat.ts src/lib/__tests__/formatDate.test.ts
