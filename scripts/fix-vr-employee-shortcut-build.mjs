@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 await import('./fix-uniform-cancellation-date-build.mjs');
+await import('./fix-admission-welcome-build.mjs');
 
 const file = 'src/pages/EmployeeDetailPage.tsx';
 let source = fs.readFileSync(file, 'utf8');
