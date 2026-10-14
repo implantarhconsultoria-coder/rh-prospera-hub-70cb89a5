@@ -1,0 +1,50 @@
+name: TOPAC assinatura - verificacao isolada
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'api/payroll-admin.ts'
+      - 'api/payroll-public.ts'
+      - 'src/server/payrollSigningEvidence.ts'
+      - 'src/server/payrollServer.ts'
+      - 'src/server/__tests__/payrollSigningEvidence.test.ts'
+      - 'src/components/payroll/PayrollPortalAdminModule.tsx'
+      - 'src/pages/PayrollSignaturePublicPage.tsx'
+      - '.github/workflows/payroll-signature-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: payroll-signature-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar sem modificar o lock (a main possui lock defasado)
+        run: npm install --no-package-lock --no-audit --no-fund
+      - name: Lint somente assinatura
+        run: >-
+          npx eslint
+          api/payroll-admin.ts
+          api/payroll-public.ts
+          src/server/payrollSigningEvidence.ts
+          src/server/payrollServer.ts
+          src/server/__tests__/payrollSigningEvidence.test.ts
+          src/components/payroll/PayrollPortalAdminModule.tsx
+          src/pages/PayrollSignaturePublicPage.tsx
+          --rule '@typescript-eslint/no-explicit-any: off'
+          --rule 'react-hooks/exhaustive-deps: off'
+          --rule 'no-useless-escape: off'
+      - name: Testes de autoria e certificado
+        run: npx vitest run src/server/__tests__/payrollSigningEvidence.test.ts
+      - name: Build do projeto em runner sem credenciais de producao
+        run: npm run build

@@ -71,6 +71,7 @@ const errorText = (error: any) => {
     document_integrity_failed: 'O documento não passou na validação de integridade. A assinatura foi bloqueada.',
     document_not_acknowledged: 'Confirme primeiro que leu e conferiu o documento.',
     signature_confirmation_required: 'Confirme a assinatura para continuar.',
+    signature_face_verification_required: 'Sua verificacao facial expirou ou nao esta vinculada a este documento. Refaca a leitura do rosto antes de confirmar a assinatura.',
     signature_confirmation_pending: 'A assinatura foi enviada, mas a confirmação do servidor ainda não foi carregada. Atualize a visualização segura antes de tentar novamente.',
   };
   return map[code] || 'Não foi possível concluir esta etapa. Tente novamente.';
