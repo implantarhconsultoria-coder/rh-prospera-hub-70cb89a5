@@ -40,6 +40,7 @@ export type EmailPdfDraft = {
 
 type EmailAttachment = NonNullable<EmailPdfDraft['attachments']>[number];
 type EmailPdfModalProps = { open: boolean; draft: EmailPdfDraft | null; onOpenChange: (open: boolean) => void };
+type SendFailure = 'infrastructure' | 'recoverable' | null;
 
 const ATESTADO_TO = ['marisa@aatconsultoria.com.br', '', 'dp@aatconsultoria.com.br'];
 const ATESTADO_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'];
@@ -123,11 +124,16 @@ const downloadAttachmentFallback = (attachment: { attachmentBlob: Blob; attachme
   window.setTimeout(() => URL.revokeObjectURL(url), 120000);
 };
 
-const getFriendlyEmailError = (message?: string) => {
+const classifyEmailError = (message?: string): { failure: Exclude<SendFailure, null>; message: string } => {
   const value = String(message || '').trim();
-  if (!value || value === 'email_send_failed') return 'O envio automático pelo servidor não foi concluído.';
-  if (value === 'pdf_anexo_vazio') return 'O anexo não foi gerado corretamente.';
-  return value;
+  const infrastructureError = /DEPLOYMENT_DISABLED|payment required|\b402\b|grpc|billing|quota|temporarily unavailable|service unavailable/i.test(value);
+  if (infrastructureError) {
+    return { failure: 'infrastructure', message: 'Envio automático temporariamente indisponível.' };
+  }
+  if (value === 'pdf_anexo_vazio') {
+    return { failure: 'recoverable', message: 'O anexo não foi gerado corretamente.' };
+  }
+  return { failure: 'recoverable', message: 'Não foi possível enviar o e-mail. Tente novamente.' };
 };
 
 export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpenChange }) => {
@@ -136,6 +142,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendFailure, setSendFailure] = useState<SendFailure>(null);
 
   const preparedAttachments = useMemo(() => {
     const source = draft?.attachments?.length
@@ -159,7 +166,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     if (!draft || !open) return;
     const atestado = isAtestadoSubject(draft.subject || '');
     const admissional = isAdmissionalSubject(draft.subject || '');
-    const baseBody = atestado ? buildAtestadoBody(draft.body || '') : draft.body || '';
+    const baseBody = atestado ? buildAtestadoBody(draft.body || '') : admissional ? buildAdmissionalBody(draft.body || '') : draft.body || '';
     const baseCc = atestado ? ATESTADO_CC : draft.cc || [];
     const policy = applyTopacEmailPolicy({
       subject: draft.subject,
@@ -173,6 +180,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     setCc(formatEmails(policy.cc));
     setSubject(draft.subject || '');
     setBody(policy.body);
+    setSendFailure(null);
   }, [draft, open, preparedAttachments]);
 
   const getPreparedEmail = () => {
@@ -203,15 +211,16 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       attachmentContentTypes: attachments.map((item) => item.attachmentContentType || item.attachmentBlob.type),
     });
     attachments.forEach(downloadAttachmentFallback);
-    if (showToast) toast.success('E-mail manual aberto e anexos baixados. Anexe os arquivos antes de enviar.');
+    if (showToast) toast.success('PDF preparado. Anexe o arquivo ao e-mail antes de enviar.');
     return true;
   };
 
   const handleSend = async () => {
-    if (!draft) return;
+    if (!draft || sending) return;
     const { toList, ccList, preparedBody, attachments } = getPreparedEmail();
     if (!validate(attachments)) return;
     setSending(true);
+    setSendFailure(null);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData.session;
@@ -236,11 +245,13 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
         console.error('E-mail enviado, mas houve erro ao atualizar histórico:', historyError);
         toast.warning('E-mail enviado, mas o histórico não foi atualizado automaticamente.');
       }
-      toast.success('E-mail enviado com anexos.');
+      toast.success('E-mail enviado com sucesso.');
       onOpenChange(false);
     } catch (error: any) {
-      const friendlyMessage = getFriendlyEmailError(error?.message);
-      toast.error(`${friendlyMessage} Nenhuma janela ou download foi aberto automaticamente. Use \"Abrir e-mail manual\" somente se desejar.`);
+      console.error('Falha no envio automático de e-mail:', error);
+      const classified = classifyEmailError(error?.message);
+      setSendFailure(classified.failure);
+      toast.error(classified.message);
     } finally {
       setSending(false);
     }
@@ -258,9 +269,26 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
 
           {!!draft?.missingWarnings?.length && <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800"><div className="mb-1 flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Atenção</div>{draft.missingWarnings.map((warning) => <div key={warning}>• {warning}</div>)}</div>}
           {!!draft?.checklistItems?.length && <div className="space-y-1 rounded-md border p-3 text-xs">{draft.checklistItems.map((item) => <div key={item.label} className="flex items-start gap-2">{item.found ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />}<div><div>{item.label}</div>{item.detail && <div className="text-muted-foreground">{item.detail}</div>}</div></div>)}</div>}
+
+          {sendFailure && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <div className="space-y-2">
+                  <div className="font-medium">{sendFailure === 'infrastructure' ? 'Não foi possível enviar automaticamente neste momento.' : 'Não foi possível enviar o e-mail.'}</div>
+                  <div className="text-muted-foreground">Você pode abrir o e-mail preenchido manualmente ou tentar novamente.</div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" onClick={handleSend} disabled={sending}>Tentar novamente</Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => handleManualSend()} disabled={sending}>Abrir e-mail manual</Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1 rounded-md border p-3 text-xs"><div className="mb-1 font-semibold">Anexos ({preparedAttachments.length})</div>{preparedAttachments.map((attachment) => <div key={`${attachment.attachmentName}-${attachment.attachmentBlob.size}`} className="flex items-center gap-2"><FileText className="h-4 w-4" /> {attachment.attachmentName}</div>)}</div>
         </div>
-        <DialogFooter className="gap-2 sm:gap-0"><Button variant="outline" onClick={() => handleManualSend()} disabled={sending}>Abrir e-mail manual</Button><Button onClick={handleSend} disabled={sending}>{sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Enviar pela plataforma</Button></DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0"><Button variant="outline" onClick={() => handleManualSend()} disabled={sending}>Abrir e-mail manual</Button><Button onClick={handleSend} disabled={sending}>{sending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {sending ? 'Enviando…' : 'Enviar pela plataforma'}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
