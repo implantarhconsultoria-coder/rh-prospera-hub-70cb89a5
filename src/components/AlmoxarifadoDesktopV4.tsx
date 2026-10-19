@@ -49,6 +49,10 @@ type DashboardMovement = {
   operatorId?: string | null;
 };
 
+const escapeForPrint = (text: unknown) => String(text ?? '').replace(/[&<>"']/g, ch => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[ch] || ch));
+
 const numberValue = (...values: any[]) => {
   const found = values.find((value) => value !== undefined && value !== null && value !== '');
   const parsed = Number(found ?? 0);
@@ -504,13 +508,13 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     if (!rows.length) return;
     const popup = window.open('', '_blank');
     if (!popup) return;
-    popup.document.write(`<html><head><title>Retiradas - ${name(person)}</title><style>body{font-family:Arial;padding:28px}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:8px;text-align:left}.sign{margin-top:60px;border-top:1px solid #111;padding-top:6px;width:360px}</style></head><body><h1>TOPAC — Relatório diário de retiradas</h1><p><b>Funcionário:</b> ${name(person)}<br/><b>Data:</b> ${br(today())}<br/><b>Operador:</b> ${session?.user?.email || 'Almoxarifado'}</p><table><tr><th>Hora</th><th>Protocolo</th><th>Registro</th></tr>${rows
+    popup.document.write(`<html><head><title>Retiradas - ${escapeForPrint(name(person))}</title><style>body{font-family:Arial;padding:28px}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:8px;text-align:left}.sign{margin-top:60px;border-top:1px solid #111;padding-top:6px;width:360px}</style></head><body><h1>TOPAC — Relatório diário de retiradas</h1><p><b>Funcionário:</b> ${escapeForPrint(name(person))}<br/><b>Data:</b> ${br(today())}<br/><b>Operador:</b> ${escapeForPrint(session?.user?.email || 'Almoxarifado')}</p><table><tr><th>Hora</th><th>Protocolo</th><th>Registro</th></tr>${rows
       .map(
         (row: any) =>
           `<tr><td>${new Date(row.created_at).toLocaleTimeString('pt-BR', {
             hour: '2-digit',
             minute: '2-digit',
-          })}</td><td>${row.protocolo || '—'}</td><td>${row.observacoes || (row.tipo === 'livre' ? 'Carga livre — não movimenta o estoque' : 'Retirada registrada no estoque')}</td></tr>`
+          })}</td><td>${escapeForPrint(row.protocolo || '—')}</td><td>${escapeForPrint(row.observacoes || (row.tipo === 'livre' ? 'Carga livre — não movimenta o estoque' : 'Retirada registrada no estoque'))}</td></tr>`
       )
       .join('')}</table><div class='sign'>Assinatura do funcionário</div></body></html>`);
     popup.document.close();
