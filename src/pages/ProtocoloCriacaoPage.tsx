@@ -5,7 +5,7 @@ import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { renderPdfPagesToDataUrls } from '@/lib/pdf';
+import { fetchPdfBytes, renderPdfPagesToDataUrls } from '@/lib/pdf';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { supabase } from '@/integrations/supabase/client';
 import { registrarAcao } from '@/lib/acoesLog';
@@ -408,7 +408,7 @@ const ProtocoloPage: React.FC = () => {
       </section>`;
   };
 
-  const persistProtocols = async (operador: { id: string; nome: string }, { silent = false }: { silent?: boolean } = {}) => {
+  const persistProtocols = async (operador: { id: string; nome: string }, { silent = false, documentsValidated = false }: { silent?: boolean; documentsValidated?: boolean } = {}) => {
     if (!readiness.ready) {
       toast.error('Não é possível salvar/imprimir enquanto houver Cliente, Local ou Documento pendente.');
       return null;
@@ -420,6 +420,26 @@ const ProtocoloPage: React.FC = () => {
 
     setSaving(true);
     try {
+      // Evita salvar protocolos que apontam para documentos removidos do Storage.
+      // Na impressão, os PDFs já foram integralmente renderizados e validados.
+      if (!documentsValidated) {
+        const documents = new Map<string, string>();
+        for (const item of groups.flatMap((group) => group.itens)) {
+          const url = pdfOf(item.ativo);
+          if (url) documents.set(url, normalizePlate(item.ativo?.placa || item.placa) || item.patrimonio || 'sem identificação');
+        }
+        for (const [url, vehicle] of documents) {
+          try {
+            const bytes = await fetchPdfBytes(url);
+            if (new TextDecoder().decode(bytes.subarray(0, 1024)).indexOf('%PDF-') === -1) {
+              throw new Error('O arquivo não é um PDF válido');
+            }
+          } catch {
+            throw new Error(`Documento indisponível para ${vehicle}. Reenvie o PDF na Frota antes de salvar o protocolo.`);
+          }
+        }
+      }
+
       const loteId = crypto.randomUUID();
       const payload = groups.flatMap((group) => group.itens.map((item) => {
         const asset = item.ativo!;
@@ -476,7 +496,7 @@ const ProtocoloPage: React.FC = () => {
       if (!silent) toast.success(`${groups.length} protocolo(s) salvo(s) no Supabase.`);
       return ids;
     } catch (error: any) {
-      toast.error(`Falha ao salvar os protocolos no Supabase: ${error?.message || error}`);
+      toast.error(`Não foi possível salvar os protocolos: ${error?.message || error}`);
       return null;
     } finally {
       setSaving(false);
@@ -491,7 +511,23 @@ const ProtocoloPage: React.FC = () => {
 
     setPrinting(true);
     try {
-      const saved = await persistProtocols(operador, { silent: true });
+      // Pré-renderiza os documentos ANTES de persistir, enviar e-mails ou alterar a
+      // disponibilidade. Um PDF 404 jamais pode formalizar uma locação incompleta.
+      const validatedPages = new Map<string, string[]>();
+      for (const item of groups.flatMap((group) => group.itens)) {
+        const url = pdfOf(item.ativo);
+        if (!url || validatedPages.has(url)) continue;
+        const vehicle = normalizePlate(item.ativo?.placa || item.placa) || item.patrimonio || 'não identificado';
+        try {
+          const { pageUrls } = await renderPdfPagesToDataUrls(url, 1.55);
+          if (!pageUrls.length) throw new Error('PDF sem páginas');
+          validatedPages.set(url, pageUrls);
+        } catch {
+          throw new Error(`PDF da Frota indisponível para ${vehicle}. Atualize o documento no cadastro da Frota e confira o vínculo antes de imprimir.`);
+        }
+      }
+
+      const saved = await persistProtocols(operador, { silent: true, documentsValidated: true });
       if (!saved) return;
 
       try {
@@ -536,7 +572,7 @@ const ProtocoloPage: React.FC = () => {
         });
 
         for (const [url, documentName] of uniqueDocs) {
-          const { pageUrls } = await renderPdfPagesToDataUrls(url, 1.55);
+          const pageUrls = validatedPages.get(url) || [];
           if (!pageUrls.length) {
             throw new Error(`O documento ${documentName} não possui páginas renderizáveis.`);
           }
