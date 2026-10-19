@@ -23,6 +23,7 @@ import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
 import { toast } from 'sonner';
 import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
+import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath } from '@/lib/adminRhRestrictions';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -41,6 +42,7 @@ const AppLayout: React.FC = () => {
   useActivityTracker(session);
 
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
+  const restrictedRh = isAdminRhRestrito(session?.user?.email);
   const legacyRemoved = location.pathname.startsWith('/admin/faturamento') || location.pathname.startsWith('/admin/financeiro');
 
   const globalResults = useMemo(() => {
@@ -53,7 +55,7 @@ const AppLayout: React.FC = () => {
       ...(canViewFrota ? [['Frota / Documentos', '/admin/documentos-ativos']] : []), ['Almoxarifado', '/admin/almoxarifado'], ['Estoque Interno', '/admin/estoque-interno'],
       ['Relatório de Abastecimento', '/admin/abastecimento-qrcode'], ['Assinatura Digital', '/admin/folha-pagamento'],
     ]
-      .filter(([label, path]) => `${label} ${path}`.toLowerCase().includes(q))
+      .filter(([label, path]) => (!restrictedRh || !isAssinaturaDigitalBlockedPath(path)) && `${label} ${path}`.toLowerCase().includes(q))
       .map(([label, path]) => ({ label, subtitle: 'Módulo', path, icon: FileText }));
 
     const companyResults = companies
@@ -67,7 +69,7 @@ const AppLayout: React.FC = () => {
       .map(e => ({ label: e.name, subtitle: `${e.cpf || 'CPF pendente'} • ${companies.find(c => c.id === e.companyId)?.name || ''}`, path: `/admin/funcionarios/${e.id}`, icon: User }));
 
     return [...moduleResults, ...companyResults, ...employeeResults].slice(0, 20);
-  }, [searchQuery, companies, employees, canViewFrota]);
+  }, [searchQuery, companies, employees, canViewFrota, restrictedRh]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -106,6 +108,8 @@ const AppLayout: React.FC = () => {
   if (roleLoading) return <StableLoading label="Carregando permissão do usuário..." />;
   if (!userRole) return <AguardandoAcesso />;
   if (legacyRemoved) return <Navigate to="/admin" replace />;
+  // Protege a rota também contra URL direta, em desktop e celular.
+  if (restrictedRh && isAssinaturaDigitalBlockedPath(location.pathname)) return <Navigate to="/admin" replace />;
 
   const handleRefresh = async () => {
     setRefreshing(true);
