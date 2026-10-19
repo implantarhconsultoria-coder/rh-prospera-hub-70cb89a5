@@ -1,0 +1,37 @@
+name: TOPAC Daphine — ADM restrito
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/lib/adminRhRestrictions*'
+      - 'src/components/AppLayout.tsx'
+      - 'src/components/AppSidebar.tsx'
+      - 'src/components/AdminHomeCards.tsx'
+      - 'src/components/AdminMobileLayout.tsx'
+      - 'supabase/migrations/*admin_rh_restricoes*'
+      - '.github/workflows/topac-rh-restrito-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restricted-admin-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar dependências do projeto sem modificar lockfile legado
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Executar testes do bloqueio de tela
+        run: npx vitest run src/lib/adminRhRestrictions.test.ts
+      - name: Validar lint do controle de rota
+        run: npx eslint src/lib/adminRhRestrictions.ts src/lib/adminRhRestrictions.test.ts
+      - name: Compilar aplicação
+        run: npm run build

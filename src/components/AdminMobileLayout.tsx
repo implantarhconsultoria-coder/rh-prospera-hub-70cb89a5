@@ -13,6 +13,7 @@ import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
 import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
 import { SYSTEM_OWNER_USER_ID } from '@/lib/systemAccessControl';
+import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath } from '@/lib/adminRhRestrictions';
 
 type SearchItem = { label: string; path: string };
 
@@ -66,6 +67,7 @@ const AdminMobileLayout: React.FC = () => {
   const moduleLabel=location.pathname==='/admin/system-control'?'Controle de Acesso':moduleItem?.label||location.pathname.split('/').filter(Boolean).slice(1).join(' / ').replace(/-/g,' ')||'Módulo';
 
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
+  const restrictedRh = isAdminRhRestrito(session?.user?.email);
   const isHome = location.pathname === '/admin';
   const isPeople = location.pathname.startsWith('/admin/funcionarios') || location.pathname.startsWith('/admin/empresas');
   const isAccounting = location.pathname.startsWith('/admin/central-contabilidade')
@@ -86,9 +88,9 @@ const AdminMobileLayout: React.FC = () => {
 
   const searchModules: SearchModule[] = useMemo(
     () => SEARCH_ITEMS
-      .filter(item => canViewFrota || !['/admin/documentos-ativos','/admin/monitoramento'].includes(item.path))
+      .filter(item => (!restrictedRh || !isAssinaturaDigitalBlockedPath(item.path)) && (canViewFrota || !['/admin/documentos-ativos','/admin/monitoramento'].includes(item.path)))
       .map(item => ({ label: item.label, path: item.path })),
-    [canViewFrota],
+    [canViewFrota, restrictedRh],
   );
 
   if (isDirector && !isDirectorRouteAllowed(location.pathname)) return <DirectorBlocked />;
