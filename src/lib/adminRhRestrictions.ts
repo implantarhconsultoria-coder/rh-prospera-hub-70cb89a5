@@ -7,3 +7,7 @@ export const isAdminRhRestrito = (email: string | null | undefined): boolean =>
 export const isAssinaturaDigitalBlockedPath = (pathname: string): boolean =>
   pathname === '/admin/folha-pagamento' ||
   pathname.startsWith('/admin/folha-pagamento/');
+
+/** Dashboard executivo separado exibe faturamento e custos; impede URL direta. */
+export const isDashboardFinanceiroBlockedPath = (pathname: string): boolean =>
+  pathname === '/admin/diretoria' || pathname.startsWith('/admin/diretoria/');
