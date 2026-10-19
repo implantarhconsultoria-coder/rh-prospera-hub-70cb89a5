@@ -9,6 +9,7 @@ import {useApp} from '@/context/AppContext';
 import {supabase} from '@/integrations/supabase/client';
 import {ADMIN_MODULE_GROUPS} from '@/data/adminModules';
 import FuncionariosMoneyOverview from '@/components/FuncionariosMoneyOverview';
+import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath } from '@/lib/adminRhRestrictions';
 import {usePrivateModuleAccess} from '@/hooks/usePrivateModuleAccess';
 
 const fmt=(n:number)=>new Intl.NumberFormat('pt-BR').format(n);
@@ -24,6 +25,7 @@ type QuickCard = {
 const AdminHomeCards:React.FC=()=>{
   const nav=useNavigate();
   const {employees,companies,session}=useApp();
+  const restrictedRh = isAdminRhRestrito(session?.user?.email);
   const [query,setQuery]=useState('');
   const [openGroups,setOpenGroups]=useState<string[]>(['frequentes']);
   const [stockAlert,setStockAlert]=useState<number|null>(null);
@@ -77,10 +79,11 @@ const AdminHomeCards:React.FC=()=>{
     ...group,items:group.items.filter(item=>{
       const privateFleet=item.path==='/admin/documentos-ativos'||item.path==='/admin/monitoramento';
       if(privateFleet&&!canViewFrota)return false;
+      if(restrictedRh && isAssinaturaDigitalBlockedPath(item.path)) return false;
       if(featuredPaths.has(item.path)) return false;
       return (item.label+' '+item.description+' '+group.title).toLocaleLowerCase('pt-BR').includes(normalized);
     }),
-  })).filter(group=>group.items.length),[normalized,canViewFrota,featuredPaths]);
+  })).filter(group=>group.items.length),[normalized,canViewFrota,featuredPaths,restrictedRh]);
 
   const go=(path:string)=>nav(path,{state:{openMobileModule:true}});
   const toggle=(id:string)=>setOpenGroups(old=>old.includes(id)?old.filter(x=>x!==id):[...old,id]);
@@ -119,7 +122,7 @@ const AdminHomeCards:React.FC=()=>{
         <span className="text-[9px] font-semibold uppercase tracking-[.14em] text-fuchsia-400">Operação</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {quick.map(card=>{
+        {quick.filter(card => !restrictedRh || !isAssinaturaDigitalBlockedPath(card.path)).map(card=>{
           const Icon=card.icon;
           return <button key={card.path} type="button" onClick={()=>go(card.path)}
             className="grid min-h-[108px] grid-cols-[42px_1fr_14px] items-center gap-2 rounded-xl border border-fuchsia-500/20 bg-[#07070d] p-2.5 text-left text-white transition active:scale-[.985]">
@@ -160,14 +163,14 @@ const AdminHomeCards:React.FC=()=>{
       </div>
     </section>
 
-    <section>
+    {!restrictedRh && <section>
       <div className="mb-2 flex items-center justify-between px-1">
         <h2 className="flex items-center gap-2 text-[12px] font-extrabold text-white"><WalletCards className="h-4 w-4 text-amber-400"/> VALORES E BASE</h2>
         <span className="text-[8px] text-zinc-600">Mantidos no painel</span>
       </div>
       <FuncionariosMoneyOverview employees={employees} companies={companies}
         onCompanySelect={(companyId)=>go('/admin/funcionarios?empresa='+encodeURIComponent(companyId))}/>
-    </section>
+    </section>}
 
     <label className="flex h-12 items-center gap-3 rounded-xl border border-fuchsia-500/25 bg-[#07070d] px-4 text-sm focus-within:border-fuchsia-400">
       <Search className="h-5 w-5 text-fuchsia-400"/>
