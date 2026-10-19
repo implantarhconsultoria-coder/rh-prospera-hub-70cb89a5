@@ -1,0 +1,35 @@
+name: TOPAC Mecanicos — auth security tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/app-mecanico/**"
+      - "src/integrations/supabase/client.ts"
+      - "src/test/mecanicoSecureSession.test.ts"
+      - "supabase/migrations/*app_mecanico_sessoes*.sql"
+      - ".github/workflows/topac-mecanicos-security.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mecanicos-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install (package-lock legado divergente)
+        run: npm install --package-lock=false --no-audit --no-fund
+      - name: Teste unitario — sessao individual
+        run: npx vitest run src/test/mecanicoSecureSession.test.ts
+      - name: Lint escopo mecanicos
+        run: npx eslint src/app-mecanico/lib/secureSession.ts src/app-mecanico/AcessoMecanicoPage.tsx src/app-mecanico/MecanicoAppContext.tsx src/test/mecanicoSecureSession.test.ts
+      - name: Build Vite
+        run: npm run build
