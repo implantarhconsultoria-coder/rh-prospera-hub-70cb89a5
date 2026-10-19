@@ -94,7 +94,7 @@ BEGIN
     )
   );
 END;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.app_mecanico_abastecimento_contexto(p_acesso_id uuid)
  RETURNS jsonb
@@ -196,6 +196,6 @@ begin
     'solicitacao_ativa',v_active
   );
 end;
-$function$
+$function$;
 
 COMMIT;
