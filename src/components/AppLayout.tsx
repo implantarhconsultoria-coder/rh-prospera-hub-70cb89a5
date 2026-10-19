@@ -23,7 +23,7 @@ import DirectorBlocked from '@/components/DirectorBlocked';
 import { isDirectorRole, isDirectorRouteAllowed } from '@/lib/directorPermissions';
 import { toast } from 'sonner';
 import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
-import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath } from '@/lib/adminRhRestrictions';
+import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath, isDashboardFinanceiroBlockedPath } from '@/lib/adminRhRestrictions';
 
 const AppLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -109,7 +109,7 @@ const AppLayout: React.FC = () => {
   if (!userRole) return <AguardandoAcesso />;
   if (legacyRemoved) return <Navigate to="/admin" replace />;
   // Protege a rota também contra URL direta, em desktop e celular.
-  if (restrictedRh && isAssinaturaDigitalBlockedPath(location.pathname)) return <Navigate to="/admin" replace />;
+  if (restrictedRh && (isAssinaturaDigitalBlockedPath(location.pathname) || isDashboardFinanceiroBlockedPath(location.pathname))) return <Navigate to="/admin" replace />;
 
   const handleRefresh = async () => {
     setRefreshing(true);
