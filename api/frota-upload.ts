@@ -273,16 +273,6 @@ const mergeExtraction = (localData: any, aiData: any, clientData: any) => {
   };
 };
 
-const storagePathFromUrl = (value: unknown) => {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  const marker = `/${BUCKET}/`;
-  const markerIndex = raw.indexOf(marker);
-  if (markerIndex >= 0) return decodeURIComponent(raw.slice(markerIndex + marker.length));
-  if (!/^https?:\/\//i.test(raw)) return raw.replace(/^\/+/, '');
-  return '';
-};
-
 const removeStoragePath = async (supabase: ReturnType<typeof getSupabase>, path: string) => {
   if (!path) return;
   const { error } = await supabase.storage.from(BUCKET).remove([path]);
@@ -467,7 +457,6 @@ export default async function handler(req: any, res: any) {
     }
 
     if (existing?.id) {
-      const oldPath = storagePathFromUrl(existing.documento_url || existing.arquivo_url);
       const { data, error } = await supabase
         .from('ativos')
         .update({ ...record, updated_at: now } as any)
@@ -481,7 +470,9 @@ export default async function handler(req: any, res: any) {
         return sendJson(res, 500, { ok: false, error: friendlyDbError(error) });
       }
 
-      if (oldPath && oldPath !== storagePath) await removeStoragePath(supabase, oldPath);
+      // Preserva o documento anterior para protocolos e histórico já emitidos.
+      // A remoção do Storage só é permitida para limpar o upload novo quando
+      // a gravação do cadastro falhar.
       console.log('[frota-upload] atualizado', JSON.stringify({ id: data.id, placa: data.placa, patrimonio: data.patrimonio }));
       return sendJson(res, 200, { ok: true, action: 'updated', asset: data, extracted, storagePath });
     }
