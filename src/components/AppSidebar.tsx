@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { cn } from '@/lib/utils';
+import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath } from '@/lib/adminRhRestrictions';
 import { isDirectorRole } from '@/lib/directorPermissions';
 import { usePrivateModuleAccess } from '@/hooks/usePrivateModuleAccess';
 
@@ -69,12 +70,13 @@ const savedModuleRoute = (basePath: string) => {
 interface Props { collapsed: boolean; onToggle: () => void }
 
 const AppSidebar: React.FC<Props> = ({ collapsed, onToggle }) => {
-  const { logout, userRoles } = useApp();
+  const { logout, userRoles, session } = useApp();
   const location = useLocation();
   const { allowed: canViewFrota } = usePrivateModuleAccess('frota_ipva');
   const isDirector = isDirectorRole(userRoles) && !userRoles.includes('admin');
   const visibleOperationalItems = operationalItems.filter(item => canViewFrota || !PRIVATE_FLEET_PATHS.has(item.path));
-  const items = isDirector ? directorItems : [...menuItems, ...visibleOperationalItems];
+  const items = (isDirector ? directorItems : [...menuItems, ...visibleOperationalItems])
+    .filter(item => !isAdminRhRestrito(session?.user?.email) || !isAssinaturaDigitalBlockedPath(item.path));
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
