@@ -11,13 +11,13 @@ revoke all on public.topac_admin_restricoes from public,anon,authenticated;
 -- O cliente não tem permissão nem para ler nem para modificar as restrições.
 -- O servidor é a autoridade para permitir operações sensíveis.
 
-create or replace function public.topac_operador_restrito(p_recurso text, p_user uuid default auth.uid())
+create or replace function public.topac_operador_restrito(p_recurso text)
 returns boolean language sql stable security definer
 set search_path to 'public'
 as $fn$
   select exists(
     select 1 from public.topac_admin_restricoes r
-    where r.user_id = p_user
+    where r.user_id = auth.uid()
       and (case p_recurso
         when 'assinatura_digital' then r.bloquear_assinatura_digital
         when 'dashboard_valores' then r.ocultar_valores_dashboard
@@ -25,15 +25,15 @@ as $fn$
       end)
   );
 $fn$;
-revoke all on function public.topac_operador_restrito(text,uuid) from public,anon;
-grant execute on function public.topac_operador_restrito(text,uuid) to authenticated;
+revoke all on function public.topac_operador_restrito(text) from public,anon;
+grant execute on function public.topac_operador_restrito(text) to authenticated;
 
 create or replace function public.topac_minhas_restricoes()
 returns jsonb language sql stable security definer set search_path to 'public'
 as $fn$
   select jsonb_build_object(
-    'assinatura_digital', public.topac_operador_restrito('assinatura_digital', auth.uid()),
-    'dashboard_valores', public.topac_operador_restrito('dashboard_valores', auth.uid())
+    'assinatura_digital', public.topac_operador_restrito('assinatura_digital'),
+    'dashboard_valores', public.topac_operador_restrito('dashboard_valores')
   ) where auth.uid() is not null;
 $fn$;
 revoke all on function public.topac_minhas_restricoes() from public,anon;
@@ -44,7 +44,7 @@ grant execute on function public.topac_minhas_restricoes() to authenticated;
 create or replace function public._topac_admin_usuario_autorizado()
 returns boolean language sql stable security definer set search_path to 'public','auth'
 as $fn$
-  select not public.topac_operador_restrito('assinatura_digital',auth.uid())
+  select not public.topac_operador_restrito('assinatura_digital')
    and (
     public.has_role(auth.uid(),'admin')
     or exists(
@@ -59,7 +59,7 @@ $fn$;
 create or replace function public.payroll_admin_authorized(p_company_id uuid)
 returns boolean language sql stable security definer set search_path to 'public'
 as $fn$
-  select not public.topac_operador_restrito('assinatura_digital',auth.uid())
+  select not public.topac_operador_restrito('assinatura_digital')
   and exists (
     select 1 from public.payroll_module_company_config c
     join public.empresas e on e.id=c.company_id
