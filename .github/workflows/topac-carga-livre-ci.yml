@@ -28,7 +28,7 @@ jobs:
       - name: Instalar sem alterar lockfile legado
         run: npm install --package-lock=false --no-audit --no-fund
       - name: Testar interpretação e ficha
-        run: npx vitest run src/lib/almoxarifadoCargaLivre.test.ts src/test/AlmoxarifadoWithdrawalReceipt.test.tsx
+        run: npx vitest run src/lib/almoxarifadoCargaLivre.test.ts src/lib/almoxarifadoWithdrawalReceiptLivre.test.ts
       - name: Lint da lógica nova
         run: npx eslint src/lib/almoxarifadoCargaLivre.ts src/lib/almoxarifadoCargaLivre.test.ts src/lib/almoxarifadoWithdrawalReceipt.ts
       - name: Build completo
