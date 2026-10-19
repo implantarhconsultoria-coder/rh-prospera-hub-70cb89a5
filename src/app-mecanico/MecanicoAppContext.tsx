@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useParams } from "react-router-dom";
 import { Loader2, AlertCircle } from "lucide-react";
+import { clearMechanicSession, readMechanicSession } from "./lib/secureSession";
 
 export interface Mecanico {
   acesso_id: string;
@@ -23,16 +24,7 @@ interface MecanicoAppCtx {
   recarregar: () => Promise<void>;
 }
 
-interface MechanicSession {
-  version: number;
-  accessId: string;
-  nonce: string;
-  issuedAt: number;
-  expiresAt: number;
-}
-
 const Ctx = createContext<MecanicoAppCtx | null>(null);
-const SESSION_KEY = "topac_mecanico_session_v2";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const useMecanicoApp = () => {
@@ -65,34 +57,8 @@ const normalizarMecanico = (input: Partial<Mecanico> | undefined | null): Mecani
   };
 };
 
-const lerSessao = (): MechanicSession | null => {
-  try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<MechanicSession>;
-    if (
-      value.version !== 2
-      || !value.accessId
-      || !value.nonce
-      || !Number.isFinite(value.issuedAt)
-      || !Number.isFinite(value.expiresAt)
-      || Number(value.expiresAt) <= Date.now()
-    ) {
-      sessionStorage.removeItem(SESSION_KEY);
-      return null;
-    }
-    return value as MechanicSession;
-  } catch {
-    sessionStorage.removeItem(SESSION_KEY);
-    return null;
-  }
-};
-
-const limparSessao = () => {
-  sessionStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem("app_mecanico_acesso_id");
-  localStorage.removeItem("acesso_externo");
-};
+const lerSessao = readMechanicSession;
+const limparSessao = clearMechanicSession;
 
 export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const { acessoId } = useParams<{ acessoId: string }>();
@@ -102,6 +68,8 @@ export const MecanicoAppProvider = ({ children }: ProviderProps) => {
   const [erro, setErro] = useState<string | null>(null);
 
   const sair = useCallback(() => {
+    const token = lerSessao()?.token;
+    if (token) void mecanicoRpc.rpc("app_mecanico_encerrar_sessao", { p_token: token });
     limparSessao();
     setMecanico(null);
     navigate("/mecanicos", { replace: true });
