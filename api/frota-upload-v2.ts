@@ -215,13 +215,6 @@ const mergeExtraction = (serverData: any, clientData: any, fileName: string) => 
   };
 };
 
-const storagePathFromUrl = (value: unknown) => {
-  const raw = String(value || '').trim();
-  const marker = `/${BUCKET}/`;
-  const index = raw.indexOf(marker);
-  return index >= 0 ? decodeURIComponent(raw.slice(index + marker.length)) : '';
-};
-
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Método não permitido.' });
   const accessToken = bearer(req);
@@ -328,10 +321,8 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 422, { ok: false, error: `PDF lido, mas o ativo não foi gravado: ${result.error?.message || 'erro desconhecido'}`, extracted });
   }
 
-  if (existing?.id) {
-    const oldPath = storagePathFromUrl(existing.documento_url || existing.arquivo_url);
-    if (oldPath && oldPath !== storagePath) await supabase.storage.from(BUCKET).remove([oldPath]);
-  }
+  // Arquivos substituídos permanecem no Storage: protocolos já emitidos e
+  // histórico documental dependem da URL original como evidência imutável.
 
   return sendJson(res, 200, {
     ok: true,
