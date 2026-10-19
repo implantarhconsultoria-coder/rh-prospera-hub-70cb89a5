@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath } from './adminRhRestrictions';
+import { isAdminRhRestrito, isAssinaturaDigitalBlockedPath, isDashboardFinanceiroBlockedPath } from './adminRhRestrictions';
 
 describe('restrições da administradora de RH', () => {
  it('identifica só o login individual da Daphine',()=>{
@@ -12,5 +12,8 @@ describe('restrições da administradora de RH', () => {
    expect(isAssinaturaDigitalBlockedPath('/admin/folha-pagamento/documento')).toBe(true);
    expect(isAssinaturaDigitalBlockedPath('/admin/funcionarios')).toBe(false);
    expect(isAssinaturaDigitalBlockedPath('/admin/folha-pagamento-outro')).toBe(false);
+   expect(isDashboardFinanceiroBlockedPath('/admin/diretoria')).toBe(true);
+   expect(isDashboardFinanceiroBlockedPath('/admin/diretoria/financeiro')).toBe(true);
+   expect(isDashboardFinanceiroBlockedPath('/admin/funcionarios')).toBe(false);
  });
 });
