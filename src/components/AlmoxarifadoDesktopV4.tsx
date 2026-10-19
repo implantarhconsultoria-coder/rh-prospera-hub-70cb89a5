@@ -27,6 +27,7 @@ import RetiradaInteligentePanel from '@/components/almoxarifado/RetiradaIntelige
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { printDocumentInPage } from '@/lib/printInPage';
 import { withdrawalReceiptHtml, type WithdrawalReceipt } from '@/lib/almoxarifadoWithdrawalReceipt';
+import { validarCargaLivre } from '@/lib/almoxarifadoCargaLivre';
 
 const db = supabase as any;
 const START = '2026-09-16';
@@ -41,12 +42,16 @@ type Props = { isAdmin?: boolean };
 type DashboardMovement = {
   id: string;
   date: string;
-  type: 'Entrada' | 'Retirada';
+  type: 'Entrada' | 'Retirada' | 'Carga livre';
   label: string;
   person: string;
   quantity: number | null;
   operatorId?: string | null;
 };
+
+const escapeForPrint = (text: unknown) => String(text ?? '').replace(/[&<>"']/g, ch => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[ch] || ch));
 
 const numberValue = (...values: any[]) => {
   const found = values.find((value) => value !== undefined && value !== null && value !== '');
@@ -85,6 +90,10 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   const [cart, setCart] = useState<Cart[]>([]);
   const [note, setNote] = useState('');
   const [smart, setSmart] = useState('');
+  const [withdrawalMode, setWithdrawalMode] = useState<'livre' | 'estoque'>('livre');
+  const [freeText, setFreeText] = useState('');
+  const [freeNote, setFreeNote] = useState('');
+  const freeItems = useMemo(() => validarCargaLivre(freeText), [freeText]);
   const [entItem, setEntItem] = useState('');
   const [entQty, setEntQty] = useState('');
   const [entSupplier, setEntSupplier] = useState('');
@@ -96,6 +105,7 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
   const [receipt, setReceipt] = useState<WithdrawalReceipt | null>(null);
   const [openingReceipt, setOpeningReceipt] = useState<string | null>(null);
   const withdrawalInFlight = useRef(false);
+  const freeInFlight = useRef(false);
   const receiptHtml = useMemo(() => receipt ? withdrawalReceiptHtml(receipt) : '', [receipt]);
 
   const company = (employee: any) =>
@@ -272,9 +282,80 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     }
   };
 
+
+  // Carga livre é um registro documental separado: não chama RPCs de saída
+  // e não cria item nem altera a quantidade do inventário.
+  const saveFreeLoad = async () => {
+    if (freeInFlight.current || busy) return;
+    if (!personId) return toast.error('Selecione o funcionário.');
+    if (freeItems.erro) return toast.error(freeItems.erro);
+    freeInFlight.current = true;
+    setBusy(true);
+    try {
+      const { data, error } = await db.rpc('almoxarifado_criar_carga_livre', {
+        p_funcionario_id: personId,
+        p_texto: freeText,
+        p_itens: freeItems.items,
+        p_observacoes: freeNote.trim() || null,
+      });
+      if (error || !data?.ok || !data?.id || !data?.protocolo) {
+        throw error || new Error(data?.error || 'Não foi possível registrar a carga livre.');
+      }
+      const employee = employees.find((entry: any) => entry.id === personId);
+      const destination = employee ? company(employee) : null;
+      const user = session?.user;
+      const responsible = user?.user_metadata?.nome_completo || user?.user_metadata?.full_name || user?.email || 'Responsável não identificado';
+      const document: WithdrawalReceipt = {
+        kind: 'livre',
+        id: data.id,
+        protocol: data.protocolo,
+        createdAt: data.created_at || new Date().toISOString(),
+        employee: data.funcionario || (employee ? name(employee) : 'Funcionário'),
+        company: data.empresa_destino || destination?.name || 'Empresa não informada',
+        responsible,
+        note: freeNote.trim(),
+        originalText: freeText,
+        items: freeItems.items.map(item => ({ codigo: 'LIVRE', nome: item.nome, quantidade: item.quantidade })),
+      };
+      setReceipt(document);
+      toast.success(`Carga livre ${data.protocolo} salva. Nenhuma baixa de estoque realizada.`);
+      setFreeText('');
+      setFreeNote('');
+      setPersonId('');
+      await fetchData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao registrar a carga livre.');
+    } finally {
+      freeInFlight.current = false;
+      setBusy(false);
+    }
+  };
+
   const openWithdrawalReceipt = async (row: any) => {
     setOpeningReceipt(row.id);
     try {
+      if (row.tipo === 'livre') {
+        const { data: free, error: freeError } = await db.from('almoxarifado_cargas_livres')
+          .select('texto_original, itens').eq('carga_id', row.id).single();
+        if (freeError || !free) throw freeError || new Error('Itens livres não encontrados.');
+        const person = employees.find((employee: any) => employee.id === row.funcionario_id);
+        const destination = companies.find((entry: any) => entry.id === row.destino_company_id) || (person ? company(person) : null);
+        setReceipt({
+          kind: 'livre',
+          id: row.id,
+          protocol: row.protocolo,
+          createdAt: row.created_at,
+          employee: row.funcionario_nome || (person ? name(person) : 'Não informado'),
+          company: destination?.name || destination?.nome || 'Não informada',
+          responsible: 'Conforme registro de emissão',
+          note: row.observacoes || '',
+          originalText: free.texto_original || '',
+          items: (Array.isArray(free.itens) ? free.itens : []).map((item: any) => ({
+            codigo: 'LIVRE', nome: String(item.nome || ''), quantidade: Number(item.quantidade || 0),
+          })),
+        });
+        return;
+      }
       const [itemsResult, responsibleResult] = await Promise.all([
         db.from('almoxarifado_carga_itens')
           .select('item_id, quantidade_entregue, almoxarifado_itens(codigo_topac, nome)').eq('carga_id', row.id),
@@ -403,8 +484,8 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     const loadRows: DashboardMovement[] = loads.map((row: any) => ({
       id: `r-${row.id}`,
       date: row.created_at || row.datahora || '',
-      type: 'Retirada',
-      label: row.material_nome || row.item_nome || row.protocolo || 'Retirada de materiais',
+      type: row.tipo === 'livre' ? 'Carga livre' : 'Retirada',
+      label: row.tipo === 'livre' ? `Carga livre • ${row.protocolo || ''}` : (row.material_nome || row.item_nome || row.protocolo || 'Retirada de materiais'),
       person: row.funcionario_nome || row.destinatario_nome || row.observacoes || 'Funcionário',
       quantity: numberValue(row.quantidade_total, row.total_itens, row.quantidade) || null,
       operatorId: row.user_id || row.operador_id || row.created_by || null,
@@ -427,13 +508,13 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     if (!rows.length) return;
     const popup = window.open('', '_blank');
     if (!popup) return;
-    popup.document.write(`<html><head><title>Retiradas - ${name(person)}</title><style>body{font-family:Arial;padding:28px}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:8px;text-align:left}.sign{margin-top:60px;border-top:1px solid #111;padding-top:6px;width:360px}</style></head><body><h1>TOPAC — Relatório diário de retiradas</h1><p><b>Funcionário:</b> ${name(person)}<br/><b>Data:</b> ${br(today())}<br/><b>Operador:</b> ${session?.user?.email || 'Almoxarifado'}</p><table><tr><th>Hora</th><th>Protocolo</th><th>Registro</th></tr>${rows
+    popup.document.write(`<html><head><title>Retiradas - ${escapeForPrint(name(person))}</title><style>body{font-family:Arial;padding:28px}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:8px;text-align:left}.sign{margin-top:60px;border-top:1px solid #111;padding-top:6px;width:360px}</style></head><body><h1>TOPAC — Relatório diário de retiradas</h1><p><b>Funcionário:</b> ${escapeForPrint(name(person))}<br/><b>Data:</b> ${br(today())}<br/><b>Operador:</b> ${escapeForPrint(session?.user?.email || 'Almoxarifado')}</p><table><tr><th>Hora</th><th>Protocolo</th><th>Registro</th></tr>${rows
       .map(
         (row: any) =>
           `<tr><td>${new Date(row.created_at).toLocaleTimeString('pt-BR', {
             hour: '2-digit',
             minute: '2-digit',
-          })}</td><td>${row.protocolo || '—'}</td><td>${row.observacoes || 'Retirada registrada no estoque'}</td></tr>`
+          })}</td><td>${escapeForPrint(row.protocolo || '—')}</td><td>${escapeForPrint(row.observacoes || (row.tipo === 'livre' ? 'Carga livre — não movimenta o estoque' : 'Retirada registrada no estoque'))}</td></tr>`
       )
       .join('')}</table><div class='sign'>Assinatura do funcionário</div></body></html>`);
     popup.document.close();
@@ -637,7 +718,7 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
     <div className="almox-v3 p-4 md:p-6">
       <Dialog open={!!receipt} onOpenChange={(open) => { if (!open) setReceipt(null); }}>
         <DialogContent className="max-w-4xl border-slate-200 bg-white text-slate-950" aria-describedby={undefined}>
-          <DialogTitle>Ficha de retirada de materiais</DialogTitle>
+          <DialogTitle>{receipt?.kind === 'livre' ? 'Ficha de carga livre' : 'Ficha de retirada de materiais'}</DialogTitle>
           <iframe title="Visualização da ficha de retirada" srcDoc={receiptHtml} sandbox="allow-same-origin"
             className="h-[65vh] w-full border border-slate-200 bg-white" />
           <div className="flex justify-end gap-3">
@@ -651,72 +732,136 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
       {mode === 'retirada' && (
         <>
           {back}
-          <h2 className="mb-4 text-2xl font-black text-white">Retirada por funcionário</h2>
-          <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
-            <div className="almox-panel p-5">
-              <label className="almox-label">Funcionário</label>
-              <select className="almox-control mt-2" value={personId} onChange={(event) => setPersonId(event.target.value)}>
-                <option value="">Selecionar...</option>
-                {people.map((person: any) => (
-                  <option key={person.id} value={person.id}>
-                    {name(person)}
-                  </option>
-                ))}
-              </select>
-              <RetiradaInteligentePanel
-                value={smart}
-                onChange={setSmart}
-                stock={stock}
-                cart={cart}
-                onAdd={setCart}
-                busy={busy}
-              />
-              <Textarea
-                className="almox-textarea mt-3"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                placeholder="Observação opcional"
-              />
-            </div>
-            <div className="almox-panel p-5">
-              <div className="mb-3">
-                <Input value={withdrawalSearch} onChange={(event) => setWithdrawalSearch(event.target.value)}
-                  placeholder="Buscar material pelo nome ou código em todo o Almoxarifado" />
-                <p className="mt-1 text-xs text-slate-400">
-                  {withdrawalOptions.length} material(is) para selecionar • catálogo completo: {stock.length}.
-                  Só materiais com saldo positivo podem sair.
-                </p>
-              </div>
-              <div className="grid gap-2 md:grid-cols-[1fr_110px_auto]">
-                <select className="almox-control" value={itemId} onChange={(event) => setItemId(event.target.value)}>
-                  <option value="">Material...</option>
-                  {withdrawalOptions.map((item: any) => (
-                    <option key={item.id} value={item.id}>
-                      {item.codigo_topac} — {item.nome} — saldo {item.saldo}
-                    </option>
-                  ))}
-                </select>
-                <Input value={qty} onChange={(event) => setQty(event.target.value)} type="number" min="1" />
-                <Button onClick={add}>Adicionar</Button>
-              </div>
-              {withdrawalSearch.trim() && withdrawalOptions.length === 0 && (
-                <p className="mt-2 text-sm text-amber-300">Nenhum material com saldo disponível corresponde à busca. Consulte o estoque geral ou registre a entrada se o material estiver fisicamente disponível.</p>
-              )}
-              <div className="mt-4 space-y-2">
-                {cart.map((item) => (
-                  <div key={item.item_id} className="flex justify-between rounded-xl border border-slate-700 p-3 text-white">
-                    <span>
-                      {item.codigo} — {item.nome}
-                    </span>
-                    <b>{item.quantidade}</b>
-                  </div>
-                ))}
-              </div>
-              <Button className="mt-5 w-full" disabled={busy || !personId || !cart.length || !!smart.trim()} onClick={saveWithdrawal}>
-                {busy ? 'Registrando...' : 'Confirmar retirada e baixar estoque'}
-              </Button>
-            </div>
+          <h2 className="mb-2 text-2xl font-black text-white">Retirada por funcionário</h2>
+          <div className="mb-5 flex flex-wrap gap-2">
+            <Button variant={withdrawalMode === 'livre' ? 'default' : 'outline'}
+              onClick={() => setWithdrawalMode('livre')}>Carga livre (sem estoque)</Button>
+            <Button variant={withdrawalMode === 'estoque' ? 'default' : 'outline'}
+              onClick={() => setWithdrawalMode('estoque')}>Retirada com baixa de estoque</Button>
           </div>
+          <div className="almox-panel mb-4 p-5">
+            <label className="almox-label" htmlFor="almox-funcionario-carga">Funcionário *</label>
+            <select id="almox-funcionario-carga" className="almox-control mt-2" value={personId}
+              onChange={(event) => setPersonId(event.target.value)}>
+              <option value="">Selecionar...</option>
+              {people.map((person: any) => (
+                <option key={person.id} value={person.id}>{name(person)}</option>
+              ))}
+            </select>
+          </div>
+
+          {withdrawalMode === 'livre' ? (
+            <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+              <div className="almox-panel p-5">
+                <h3 className="mb-2 text-lg font-bold text-white">Relação livre de materiais</h3>
+                <p className="mb-3 text-sm text-slate-300">
+                  Cole qualquer lista, mesmo com materiais não cadastrados ou sem saldo. Cada linha
+                  será registrada na carga do funcionário, sem alterar o estoque.
+                </p>
+                <Textarea
+                  aria-label="Cole a relação livre de materiais"
+                  className="almox-textarea min-h-[240px]"
+                  rows={11}
+                  maxLength={16000}
+                  value={freeText}
+                  onChange={(event) => setFreeText(event.target.value)}
+                  placeholder={'1 chave de fenda\n2 chaves Phillips\n3 parafusos 6x15\n1 material fora do estoque'}
+                />
+                <label className="almox-label mt-4 block" htmlFor="almox-carga-livre-nota">Observação opcional</label>
+                <Textarea
+                  id="almox-carga-livre-nota"
+                  aria-label="Observação da carga livre"
+                  className="almox-textarea mt-2"
+                  maxLength={4000}
+                  value={freeNote}
+                  onChange={(event) => setFreeNote(event.target.value)}
+                  placeholder="Informações adicionais para constar na ficha"
+                />
+              </div>
+              <div className="almox-panel flex flex-col p-5">
+                <h3 className="mb-2 text-lg font-bold text-white">Prévia da carga</h3>
+                <p className="mb-4 text-xs text-slate-400">
+                  {freeItems.items.length} material(is) • independente do catálogo • sem baixa de saldo
+                </p>
+                <div className="max-h-[330px] flex-1 space-y-2 overflow-y-auto">
+                  {freeItems.items.map((item, index) => (
+                    <div key={index} className="flex items-start justify-between gap-3 rounded-xl border border-slate-700 p-3 text-sm text-white">
+                      <span className="min-w-0 break-words">{item.nome}</span>
+                      <b className="shrink-0">{item.quantidade.toLocaleString('pt-BR')}</b>
+                    </div>
+                  ))}
+                  {!freeItems.items.length && <p className="text-sm text-slate-400">Cole materiais para montar a carga.</p>}
+                </div>
+                {freeText.trim() && freeItems.erro && (
+                  <p role="alert" className="mt-3 text-sm text-amber-300">{freeItems.erro}</p>
+                )}
+                <p className="my-3 text-xs text-slate-400">
+                  O sistema registrará um protocolo e abrirá a ficha para impressão. Não será
+                  criada entrada, saída ou saldo fictício no almoxarifado.
+                </p>
+                <Button className="w-full" disabled={busy || !personId || !freeText.trim() || !!freeItems.erro}
+                  onClick={() => void saveFreeLoad()}>
+                  {busy ? 'Criando carga...' : 'Criar carga livre e emitir ficha'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
+              <div className="almox-panel p-5">
+                <RetiradaInteligentePanel
+                  value={smart}
+                  onChange={setSmart}
+                  stock={stock}
+                  cart={cart}
+                  onAdd={setCart}
+                  busy={busy}
+                />
+                <Textarea className="almox-textarea mt-3" value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="Observação opcional" />
+              </div>
+              <div className="almox-panel p-5">
+                <div className="mb-3">
+                  <Input value={withdrawalSearch} onChange={(event) => setWithdrawalSearch(event.target.value)}
+                    placeholder="Buscar material pelo nome ou código em todo o Almoxarifado" />
+                  <p className="mt-1 text-xs text-slate-400">
+                    {withdrawalOptions.length} material(is) para selecionar • catálogo completo: {stock.length}.
+                    Só materiais com saldo positivo podem sair.
+                  </p>
+                </div>
+                <div className="grid gap-2 md:grid-cols-[1fr_110px_auto]">
+                  <select className="almox-control" value={itemId} onChange={(event) => setItemId(event.target.value)}>
+                    <option value="">Material...</option>
+                    {withdrawalOptions.map((item: any) => (
+                      <option key={item.id} value={item.id}>
+                        {item.codigo_topac} — {item.nome} — saldo {item.saldo}
+                      </option>
+                    ))}
+                  </select>
+                  <Input value={qty} onChange={(event) => setQty(event.target.value)} type="number" min="1" />
+                  <Button onClick={add}>Adicionar</Button>
+                </div>
+                {withdrawalSearch.trim() && withdrawalOptions.length === 0 && (
+                  <p className="mt-2 text-sm text-amber-300">
+                    Nenhum material com saldo disponível corresponde à busca.
+                    Consulte o estoque geral ou registre a entrada se o material estiver fisicamente disponível.
+                  </p>
+                )}
+                <div className="mt-4 space-y-2">
+                  {cart.map((item) => (
+                    <div key={item.item_id} className="flex justify-between rounded-xl border border-slate-700 p-3 text-white">
+                      <span>{item.codigo} — {item.nome}</span>
+                      <b>{item.quantidade}</b>
+                    </div>
+                  ))}
+                </div>
+                <Button className="mt-5 w-full" disabled={busy || !personId || !cart.length || !!smart.trim()}
+                  onClick={saveWithdrawal}>
+                  {busy ? 'Registrando...' : 'Confirmar retirada e baixar estoque'}
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -831,7 +976,7 @@ const AlmoxarifadoDesktopV4: React.FC<Props> = ({ isAdmin = false }) => {
             {historyRows.map((row: any) => (
               <div key={row.id} className="border-b border-slate-700 py-3">
                 <b>{row.funcionario_nome || 'Funcionário'}</b> • {br(row.created_at)} • {row.protocolo || '—'}
-                {row.tipo === 'retirada' && (
+                {(row.tipo === 'retirada' || row.tipo === 'livre') && (
                   <Button className="ml-3" variant="outline" disabled={openingReceipt !== null}
                     onClick={() => void openWithdrawalReceipt(row)}>
                     {openingReceipt === row.id ? 'Abrindo...' : 'Ver / imprimir ficha'}

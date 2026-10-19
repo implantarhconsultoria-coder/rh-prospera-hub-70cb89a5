@@ -1,5 +1,7 @@
 export type WithdrawalReceipt = {
   id: string;
+  kind?: 'estoque' | 'livre';
+  originalText?: string;
   protocol: string;
   createdAt: string | null;
   employee: string;
@@ -14,12 +16,13 @@ const escape = (value: string) => String(value).replace(/[&<>"']/g, char => ({
 }[char]!));
 
 export const withdrawalReceiptHtml = (receipt: WithdrawalReceipt) => {
+  const free = receipt.kind === "livre";
   const date = receipt.createdAt ? new Date(receipt.createdAt) : null;
   const validDate = date && !Number.isNaN(date.getTime());
   const options = { timeZone: 'America/Sao_Paulo' };
   const day = validDate ? date.toLocaleDateString('pt-BR', options) : 'Indisponível';
   const time = validDate ? date.toLocaleTimeString('pt-BR', options) : 'Indisponível';
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ficha de retirada ${escape(receipt.protocol)}</title>
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${free ? "Carga livre" : "Ficha de retirada"} ${escape(receipt.protocol)}</title>
 <style>
 @page { size: A4 portrait; margin: 15mm; }
 * { box-sizing: border-box; }
@@ -37,15 +40,17 @@ thead { display: table-header-group; } tr { break-inside: avoid; }
 .signature strong { display: block; font-size: 11px; margin-bottom: 8px; }
 @media screen { main { padding: 12mm 6mm; } }
 </style></head><body><main>
-<header><div class="brand">TOPAC RH PRO</div><div>ALMOXARIFADO</div><h1>FICHA DE RETIRADA DE MATERIAIS</h1></header>
+<header><div class="brand">TOPAC RH PRO</div><div>ALMOXARIFADO</div><h1>${free ? "FICHA DE CARGA LIVRE" : "FICHA DE RETIRADA DE MATERIAIS"}</h1></header>
 <div class="metadata"><p><b>PROTOCOLO:</b> ${escape(receipt.protocol)}<br>
 <b>DATA:</b> ${day} &nbsp; <b>HORA:</b> ${time}<br>
 <b>FUNCIONÁRIO:</b> ${escape(receipt.employee)}<br>
 <b>EMPRESA:</b> ${escape(receipt.company)}<br>
-<b>RESPONSÁVEL PELA ENTREGA:</b> ${escape(receipt.responsible)}</p></div>
+<b>${free ? "RESPONSÁVEL PELO REGISTRO" : "RESPONSÁVEL PELA ENTREGA"}:</b> ${escape(receipt.responsible)}</p></div>
+${free ? '<p><b>CARGA LIVRE:</b> Documento independente do cadastro e do saldo de estoque. Esta emissão não efetua baixa nem comprova entrega física sem assinatura de recebimento.</p>' : ''}
 <table><thead><tr><th>Código</th><th>Material</th><th>Quantidade</th></tr></thead><tbody>${receipt.items.map(item => `<tr><td>${escape(item.codigo)}</td><td>${escape(item.nome)}</td><td>${item.quantidade.toLocaleString('pt-BR')}</td></tr>`).join('')}</tbody></table>
 ${receipt.note ? `<p class="note"><b>OBSERVAÇÃO:</b> ${escape(receipt.note)}</p>` : ''}
+${free && receipt.originalText ? `<p class="note"><b>TEXTO ORIGINAL DA SOLICITAÇÃO:</b> ${escape(receipt.originalText)}</p>` : ''}
 <div class="signatures"><div class="signature"><strong>ASSINATURA DO FUNCIONÁRIO</strong>${escape(receipt.employee)}</div>
-<div class="signature"><strong>RESPONSÁVEL PELA ENTREGA</strong>${escape(receipt.responsible)}</div></div>
+<div class="signature"><strong>${free ? "RESPONSÁVEL PELA ENTREGA / CONFERÊNCIA" : "RESPONSÁVEL PELA ENTREGA"}</strong>${escape(receipt.responsible)}</div></div>
 </main></body></html>`;
 };
