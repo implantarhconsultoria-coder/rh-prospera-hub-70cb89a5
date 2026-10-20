@@ -131,20 +131,69 @@ jobs:
           path: /tmp/rh-test.log
 
       - name: Tests changed scope
-        run: >-
-          npx vitest run
-          src/lib/__tests__/bankingParser.test.ts
-          src/lib/__tests__/abastecimentoReports.test.ts
-          src/lib/__tests__/emailPolicy.test.ts
-          src/lib/__tests__/emailAttachmentTransport.test.ts
-          src/lib/__tests__/pdfStandardization.test.ts
-          src/lib/__tests__/rescisaoCalc.test.ts
-          src/lib/__tests__/rescisaoIntegration.test.ts
-          src/lib/__tests__/smartTextParser.test.ts
-          src/lib/__tests__/vehicleSync.test.ts
-          src/lib/__tests__/protocoloFrotaSource.test.ts
-          src/lib/__tests__/epiRules.test.ts
-          src/test/HistoricoDocumentalFuncionario.test.tsx
+        run: |
+          set -o pipefail
+          FORCE_COLOR=0 npx vitest run src/lib/__tests__/bankingParser.test.ts src/lib/__tests__/abastecimentoReports.test.ts src/lib/__tests__/emailPolicy.test.ts src/lib/__tests__/emailAttachmentTransport.test.ts src/lib/__tests__/pdfStandardization.test.ts src/lib/__tests__/rescisaoCalc.test.ts src/lib/__tests__/rescisaoIntegration.test.ts src/lib/__tests__/smartTextParser.test.ts src/lib/__tests__/vehicleSync.test.ts src/lib/__tests__/protocoloFrotaSource.test.ts src/lib/__tests__/epiRules.test.ts src/test/HistoricoDocumentalFuncionario.test.tsx 2>&1 | tee /tmp/legacy-tests.log
+
+      - name: Diagnosticar falhas legadas (temporário)
+        if: always()
+        id: legacy
+        run: |
+          touch /tmp/legacy-tests.log
+          for label in summary one two three four error; do
+            case "$label" in
+              summary) line=$(grep -m1 -E 'Test Files|Tests ' /tmp/legacy-tests.log || true);;
+              one) line=$(grep -E '^ *FAIL ' /tmp/legacy-tests.log | sed -n '1p' || true);;
+              two) line=$(grep -E '^ *FAIL ' /tmp/legacy-tests.log | sed -n '2p' || true);;
+              three) line=$(grep -E '^ *FAIL ' /tmp/legacy-tests.log | sed -n '3p' || true);;
+              four) line=$(grep -E '^ *FAIL ' /tmp/legacy-tests.log | sed -n '4p' || true);;
+              error) line=$(grep -m1 -Ei '^ *(AssertionError:|Error:|TypeError:|ReferenceError:|Cannot find|Failed to)' /tmp/legacy-tests.log || true);;
+            esac
+            normalized=$(printf '%s' "$line" | tr -c '[:alnum:] _.,()=+-' '_' | cut -c1-170)
+            echo "${label}=legacy-${label}-${normalized:-sem_resultado}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Legado summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.legacy.outputs.summary }}
+          path: /tmp/legacy-tests.log
+
+      - name: Legado one
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.legacy.outputs.one }}
+          path: /tmp/legacy-tests.log
+
+      - name: Legado two
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.legacy.outputs.two }}
+          path: /tmp/legacy-tests.log
+
+      - name: Legado three
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.legacy.outputs.three }}
+          path: /tmp/legacy-tests.log
+
+      - name: Legado four
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.legacy.outputs.four }}
+          path: /tmp/legacy-tests.log
+
+      - name: Legado error
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.legacy.outputs.error }}
+          path: /tmp/legacy-tests.log
 
       - name: Build
         run: npm run build
