@@ -61,10 +61,10 @@ export const normalizeTopacRecipients = (emails: readonly string[] = []): string
       .map((email) => email === EMAIL_GOIANIA_ANTIGO ? EMAIL_GOIANIA : email),
   ));
 
-export const openEmailClient = ({ to, cc, subject, body, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
+export const openEmailClient = ({ to, cc, subject, body, senderEmail, moduleOrigin, attachmentNames, attachmentContentTypes }: EmailParams) => {
   const normalizedTo = normalizeTopacRecipients(to);
   const normalizedCc = normalizeTopacRecipients(cc || []);
-  const policy = applyTopacEmailPolicy({ to: normalizedTo, subject, body, cc: normalizedCc, moduleOrigin, attachmentNames, attachmentContentTypes });
+  const policy = applyTopacEmailPolicy({ to: normalizedTo, subject, body, cc: normalizedCc, senderEmail, moduleOrigin, attachmentNames, attachmentContentTypes });
   const enc = encodeURIComponent;
   const params: string[] = [];
   if (policy.cc.length) params.push(`cc=${policy.cc.map(enc).join(',')}`);
@@ -220,6 +220,8 @@ export const sendEmailWithPdfAttachment = async ({
     subject,
     body,
     cc: normalizedCc,
+    // Identidade lida da sessão real, não dos dados editáveis do formulário.
+    senderEmail: session?.user?.email,
     moduleOrigin,
     attachmentNames: rawAttachments.map((item) => item.attachmentName),
     attachmentContentTypes: rawAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type || PDF_CONTENT_TYPE),
