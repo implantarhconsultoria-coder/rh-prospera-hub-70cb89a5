@@ -3,6 +3,7 @@ import * as tls from 'node:tls';
 import { createDecipheriv, createHash } from 'node:crypto';
 import { createClient, type User } from '@supabase/supabase-js';
 import { fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
+import { applyTopacEmailPolicy, DAPHINE_RH_EMAIL } from '../src/lib/emailPolicy.js';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -177,8 +178,13 @@ const resolveSenderContext = async (body: any, provider: string, supabase: Supab
     supabase.from('profiles').select('nome_completo,email,email_corporativo').eq('user_id', user.id).maybeSingle(),
     supabase.from('user_email_settings').select('email_corporativo,provider_type,smtp_user,smtp_pass_encrypted').eq('user_id', user.id).maybeSingle(),
   ]);
-  senderName = senderName || cleanName((profile as any)?.nome_completo);
-  corporateEmail = cleanList((settings as any)?.email_corporativo || (profile as any)?.email_corporativo || corporateEmail || (profile as any)?.email || user.email)[0] || corporateEmail;
+  // Confere o UUID autenticado e a identidade corporativa registrada no servidor.
+  const isDaphineRh = user.id === 'cee7debb-4ba5-4e69-a93e-2ff8ad0c38c6'
+    && cleanList((profile as any)?.email).includes(DAPHINE_RH_EMAIL);
+  senderName = isDaphineRh ? cleanName((profile as any)?.nome_completo) : senderName || cleanName((profile as any)?.nome_completo);
+  corporateEmail = isDaphineRh
+    ? DAPHINE_RH_EMAIL
+    : cleanList((settings as any)?.email_corporativo || (profile as any)?.email_corporativo || corporateEmail || (profile as any)?.email || user.email)[0] || corporateEmail;
   providerType = String((settings as any)?.provider_type || 'global');
   if (providerType === 'smtp_individual' && (settings as any)?.smtp_user && (settings as any)?.smtp_pass_encrypted) {
     smtpPass = decryptPassword((settings as any).smtp_pass_encrypted);
@@ -195,6 +201,7 @@ const resolveSenderContext = async (body: any, provider: string, supabase: Supab
   }
   return {
     senderUserId: user.id,
+    isDaphineRh,
     senderName: fromName,
     senderCorporateEmail: corporateEmail,
     providerType,
@@ -502,6 +509,21 @@ export default async function handler(req: any, res?: any) {
       documentName: String(body.documentName || body.documentoNome || senderContext.documentName || attachments[0]?.documentName || attachmentNames || '').trim(),
     };
     payload.cc = payload.cc.filter((email: string) => !payload.to.includes(email));
+    if (senderContext.isDaphineRh) {
+      // O servidor aplica a assinatura a partir da sessão, inclusive para chamadas diretas à API.
+      const policy = applyTopacEmailPolicy({
+        to: payload.to,
+        cc: payload.cc,
+        subject: payload.subject,
+        body: payload.body,
+        senderEmail: senderContext.senderCorporateEmail,
+        moduleOrigin: payload.moduleOrigin,
+        attachmentNames: attachments.map((item) => item.attachmentName),
+        attachmentContentTypes: attachments.map((item) => item.attachmentContentType),
+      });
+      payload.body = policy.body;
+      payload.cc = policy.cc.filter((email: string) => !payload.to.includes(email));
+    }
     if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length) throw new EmailRequestError('dados_invalidos', 'Informe destinatário, assunto, mensagem e anexos antes de enviar.', 400);
 
     const result = provider === 'resend'
