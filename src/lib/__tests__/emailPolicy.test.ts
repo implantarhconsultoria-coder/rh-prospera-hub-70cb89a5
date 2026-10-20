@@ -4,6 +4,8 @@ import {
   TOPAC_REPORT_CC,
   TOPAC_REPORT_SIGNATURE,
   DAPHINE_RH_SIGNATURE,
+  DAPHINE_RH_EMAIL,
+  withDaphineCc,
 } from '@/lib/emailPolicy';
 
 describe('applyTopacEmailPolicy', () => {
@@ -50,7 +52,7 @@ describe('applyTopacEmailPolicy', () => {
     expect(result.cc).toContain('adm.matriz@topac.com.br');
   });
 
-  it('não altera e-mails que não sejam de planilha ou relatório', () => {
+  it('adiciona Daphine em CC também no e-mail operacional enviado por outra pessoa', () => {
     const result = applyTopacEmailPolicy({
       subject: 'Mensagem operacional',
       body: 'Conteúdo operacional',
@@ -60,8 +62,19 @@ describe('applyTopacEmailPolicy', () => {
     expect(result).toEqual({
       to: [],
       body: 'Conteúdo operacional',
-      cc: ['operacao@topac.com.br'],
+      cc: ['operacao@topac.com.br', DAPHINE_RH_EMAIL],
       institutional: false,
     });
+  });
+
+  it('mantém CC sem duplicidade quando Daphine já estava copiada', () => {
+    const result = withDaphineCc(['contabilidade@exemplo.com'], [DAPHINE_RH_EMAIL, 'adm.matriz@topac.com.br']);
+    expect(result).toEqual([DAPHINE_RH_EMAIL, 'adm.matriz@topac.com.br']);
+  });
+
+  it('não duplica Daphine em CC quando ela própria é destinatária principal', () => {
+    expect(withDaphineCc([DAPHINE_RH_EMAIL], ['robson@topac.com.br'])).toEqual(['robson@topac.com.br']);
+    const result = applyTopacEmailPolicy({ to: [DAPHINE_RH_EMAIL], cc: [], subject: 'Aviso', body: 'Olá.' });
+    expect(result.cc).not.toContain(DAPHINE_RH_EMAIL);
   });
 });
