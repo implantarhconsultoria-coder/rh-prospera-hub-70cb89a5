@@ -1,4 +1,5 @@
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
+import { DAPHINE_RH_EMAIL } from '../src/lib/emailPolicy.js';
 import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
@@ -55,6 +56,7 @@ const retryEmail = async (service:any, uploadId:string) => {
   const isFolhaFinal = upload.tipo_documento === 'folha_processada';
   const cc = unique([
     ROBSON_EMAIL,
+    DAPHINE_RH_EMAIL,
     ...(counterpart ? [counterpart] : []),
     ...(isPraiaGrande && isFolhaFinal ? [ANTONIO_CARLOS_PRAIA_EMAIL] : []),
   ]);
@@ -194,7 +196,7 @@ export default async function handler(req:any, res?:any) {
 
         const to = unique([String(portalUser.email)]);
         const counterpart = portalUser.portal === 'principal' ? counterpartFor(String(portalUser.email || '')) : '';
-        const cc = unique([ROBSON_EMAIL, ADM_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
+        const cc = unique([ROBSON_EMAIL, ADM_EMAIL, DAPHINE_RH_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
         const requestedSubject = `[TOPAC RH PRO] Retorno do RH · ${company.nome}${first.competencia ? ` · Competência ${first.competencia}` : ''}`;
         const threadKey = first.competencia ? buildAccountingThreadKey(company.id, first.competencia) : '';
         const thread = threadKey
@@ -284,7 +286,7 @@ export default async function handler(req:any, res?:any) {
       const from = getPlatformFrom();
       const to = unique([String(portalUser.email)]);
       const counterpart = portalUser.portal === 'principal' ? counterpartFor(String(portalUser.email || '')) : '';
-      const cc = unique([ROBSON_EMAIL, ADM_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
+      const cc = unique([ROBSON_EMAIL, ADM_EMAIL, DAPHINE_RH_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
 
       const requestedSubject = `[TOPAC RH PRO] Retorno do RH · ${company.nome}${upload.competencia ? ` · Competência ${upload.competencia}` : ''}`;
       const threadKey = upload.competencia ? buildAccountingThreadKey(company.id, upload.competencia) : '';

@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, CheckCircle2, FileUp, Loader2, RefreshCw } from 'lucide-react';
+import { Building2, CheckCircle2, FileUp, Loader2, Mail, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
+import { DAPHINE_RH_EMAIL } from '@/lib/emailPolicy';
 import { Badge } from '@/components/ui/badge';
 import { extractCpf, extractPdfFilesFromZip, extractPdfPages, readBlobBytes, sha256Browser } from '@/lib/payrollDocuments';
 import { safeUuid } from '@/lib/payrollPageDocuments';
@@ -27,6 +29,9 @@ const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: strin
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [emailDraft, setEmailDraft] = useState<EmailPdfDraft | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [preparingEmailId, setPreparingEmailId] = useState<string | null>(null);
 
   const employeeMap = useMemo(() => new Map(
     employees.filter(item => item.companyId === companyId).map(item => [digits(item.cpf), item]),
@@ -155,6 +160,45 @@ const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: strin
     }
   };
 
+  // Prepara o recibo existente como anexo; nunca envia sem a confirmação explícita no modal.
+  const emailReceipt = async (row: any) => {
+    if (!row?.storage_path || !row?.id) return toast.error('Recibo de garagem indisponível para envio.');
+    setPreparingEmailId(String(row.id));
+    try {
+      const { data: file, error } = await supabase.storage.from(BUCKET).download(row.storage_path);
+      if (error || !file) throw error || new Error('Não foi possível recuperar o PDF do recibo de garagem.');
+      if (file.size === 0) throw new Error('O PDF do recibo de garagem está vazio.');
+      const employee = employees.find(item => item.id === row.employee_id);
+      const employeeName = employee?.name || 'Funcionário';
+      const companyName = company?.name || 'Empresa';
+      const attachmentName = row.original_filename || `Recibo_Garagem_${safeFile(employeeName)}_${competencia}.pdf`;
+      setEmailDraft({
+        to: [], // O operador informa o destinatário; nenhum recibo sigiloso é encaminhado sem conferência.
+        cc: [DAPHINE_RH_EMAIL],
+        subject: `Recibo de garagem - ${employeeName} - ${companyName} - ${competencia}`,
+        body: [
+          'Prezados,', '',
+          'Encaminho, em anexo, o recibo de garagem para conferência.',
+          `Funcionário: ${employeeName}`,
+          `Empresa: ${companyName}`,
+          `Competência: ${competencia}`,
+          'Situação: documento disponibilizado para assinatura; a assinatura não foi confirmada neste envio.',
+          '', 'Atenciosamente,', 'Recursos Humanos — TOPAC',
+        ].join('\n'),
+        attachmentBlob: file,
+        attachmentName,
+        moduleOrigin: 'recibo_garagem',
+        documentId: row.id,
+        documentName: attachmentName,
+      });
+      setEmailOpen(true);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível preparar o envio do recibo de garagem.');
+    } finally {
+      setPreparingEmailId(null);
+    }
+  };
+
   const openReceipt = async (row: any) => {
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(row.storage_path, 600);
     if (error || !data?.signedUrl) return toast.error('Não foi possível abrir o recibo.');
@@ -188,13 +232,14 @@ const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: strin
           <tbody>
             {rows.map(row => {
               const employee = employees.find(item => item.id === row.employee_id);
-              return <tr key={row.id} className="border-t"><td className="px-3 py-3 font-semibold">{employee?.name || 'Funcionário'}</td><td className="px-3 py-3">{row.competencia}</td><td className="px-3 py-3">{referenceDate}</td><td className="px-3 py-3"><Badge variant="outline" className="border-violet-400/30 text-violet-300">AGUARDANDO ASSINATURA</Badge></td><td className="px-3 py-3"><Button size="sm" variant="ghost" onClick={() => void openReceipt(row)}>Abrir PDF</Button></td></tr>;
+              return <tr key={row.id} className="border-t"><td className="px-3 py-3 font-semibold">{employee?.name || 'Funcionário'}</td><td className="px-3 py-3">{row.competencia}</td><td className="px-3 py-3">{referenceDate}</td><td className="px-3 py-3"><Badge variant="outline" className="border-violet-400/30 text-violet-300">AGUARDANDO ASSINATURA</Badge></td><td className="px-3 py-3"><div className="flex items-center gap-1"><Button size="sm" variant="ghost" onClick={() => void openReceipt(row)}>Abrir PDF</Button><Button size="sm" variant="outline" onClick={() => void emailReceipt(row)} disabled={preparingEmailId === String(row.id)}>{preparingEmailId === String(row.id) ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Mail className="mr-1 h-3.5 w-3.5" />}Enviar e-mail</Button></div></td></tr>;
             })}
             {!rows.length && <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">Nenhum recibo de garagem lançado para {company?.name || 'esta empresa'} nesta competência. Isso não bloqueia nenhuma finalização.</td></tr>}
           </tbody>
         </table>
       </div>
       {uploading && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Importando recibos e vinculando pelo CPF do funcionário...</div>}
+      <EmailPdfModal open={emailOpen} draft={emailDraft} onOpenChange={setEmailOpen} />
     </section>
   );
 };

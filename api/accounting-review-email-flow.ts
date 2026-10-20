@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { withDaphineCc } from '../src/lib/emailPolicy.js';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
 import { buildAccountingProcessThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
@@ -196,13 +197,13 @@ const routingFor = async (service: any, portal: string, senderEmail: string) => 
   const sender = clean(senderEmail).toLowerCase();
   if (portal === 'principal') {
     const counterpart = sender === VANESSA_EMAIL ? MARISA_EMAIL : sender === MARISA_EMAIL ? VANESSA_EMAIL : '';
-    return { to: [TOPAC_CENTRAL_EMAIL], cc: unique([TOPAC_ROBSON_EMAIL, counterpart]).filter((email) => email !== sender) };
+    return { to: [TOPAC_CENTRAL_EMAIL], cc: withDaphineCc([TOPAC_CENTRAL_EMAIL], unique([TOPAC_ROBSON_EMAIL, counterpart]).filter((email) => email !== sender)) };
   }
   const { data: config } = await service.from('contabilidade_portal_config')
     .select('formalizacao_destinos,ativo').eq('portal', portal).maybeSingle();
   const configured = config?.ativo ? validEmails(config?.formalizacao_destinos) : [];
   const primary = configured[0] || TOPAC_GOIANIA_EMAIL;
-  return { to: [primary], cc: configured.slice(1).filter((email) => email !== sender && email !== primary) };
+  return { to: [primary], cc: withDaphineCc([primary], configured.slice(1).filter((email) => email !== sender && email !== primary)) };
 };
 
 const buildPrepared = async (service: any, input: any) => {
@@ -309,7 +310,7 @@ export default async function handler(req: any, res?: any) {
     if (action !== 'send') return sendJson(res, { ok: false, error: 'action_invalid' }, 400);
 
     const to = validEmails(input.to).length ? validEmails(input.to) : prepared.routing.to;
-    const cc = validEmails(input.cc).filter((email) => !to.includes(email));
+    const cc = withDaphineCc(to, validEmails(input.cc));
     const requestedSubject = clean(input.subject) || prepared.subject;
     const competenciaThread = /^\d{4}-\d{2}$/.test(clean(prepared.movement.reference)) ? clean(prepared.movement.reference) : '';
     const threadKey = buildAccountingProcessThreadKey({

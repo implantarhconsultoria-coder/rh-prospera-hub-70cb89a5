@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { withDaphineCc } from '../src/lib/emailPolicy.js';
 import { randomUUID } from 'node:crypto';
 import { addEvent, getServiceClient, PAYROLL_BUCKET, readBody, requireAdmin, sendJson, sha256 } from '../src/server/payrollServer.js';
 import { loadPdfJsNode } from '../src/server/pdfJsNode.js';
@@ -169,7 +170,7 @@ const sendResend = async (input: { to: string[]; cc?: string[]; replyTo?: string
   const resendKey = clean(process.env.RESEND_API_KEY);
   if (!resendKey) return { status: 'erro', error: 'RESEND_API_KEY ausente' };
   const to = uniqueEmails(input.to);
-  const cc = uniqueEmails(input.cc || []).filter(email => !to.includes(email));
+  const cc = withDaphineCc(to, uniqueEmails(input.cc || []));
   if (!to.length) return { status: 'erro', error: 'destinatario_ausente' };
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.6;max-width:720px">${input.body.split('\n').map(line => line ? `<p style="margin:5px 0">${htmlEscape(line)}</p>` : '<div style="height:8px"></div>').join('')}</div>`;
   const response = await fetch('https://api.resend.com/emails', {
@@ -201,9 +202,9 @@ const sendSubmissionEmail = async (service: any, cycle: any, user: any, identifi
   // principal. Em Goiânia, Robson, ADM Goiânia e a própria Contabilidade ficam
   // copiados para manter o mesmo rastro formal do restante do fluxo.
   const to = [TOPAC_CENTRAL_EMAIL];
-  const cc = cycle.portal === 'goiania'
-    ? uniqueEmails([TOPAC_ROBSON_EMAIL, TOPAC_GOIANIA_EMAIL, clean(user.email)]).filter(email => !to.includes(email))
-    : uniqueEmails([TOPAC_ROBSON_EMAIL, clean(user.email), counterpart]).filter(email => !to.includes(email));
+  const cc = withDaphineCc(to, cycle.portal === 'goiania'
+    ? uniqueEmails([TOPAC_ROBSON_EMAIL, TOPAC_GOIANIA_EMAIL, clean(user.email)])
+    : uniqueEmails([TOPAC_ROBSON_EMAIL, clean(user.email), counterpart]));
   const processLabel = cycle.tipo === 'adiantamento' ? 'Adiantamento' : 'Pagamento';
   const names = uploads.map((row: any) => `• ${row.arquivo_nome}`).join('\n');
   const body = [
@@ -258,9 +259,9 @@ const sendApprovalEmail = async (service: any, cycle: any, documentsReleased: nu
   const to = cycle.portal === 'goiania'
     ? uniqueEmails([uploaderEmail || GOIANIA_ACCOUNTING_EMAIL])
     : uniqueEmails([uploaderEmail || VANESSA_EMAIL]);
-  const cc = cycle.portal === 'goiania'
-    ? uniqueEmails([TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL, TOPAC_GOIANIA_EMAIL]).filter(email => !to.includes(email))
-    : uniqueEmails([counterpart, TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL]).filter(email => !to.includes(email));
+  const cc = withDaphineCc(to, cycle.portal === 'goiania'
+    ? uniqueEmails([TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL, TOPAC_GOIANIA_EMAIL])
+    : uniqueEmails([counterpart, TOPAC_CENTRAL_EMAIL, TOPAC_ROBSON_EMAIL]));
   const body = [
     'Prezados,', '',
     `O ${processLabel} enviado para ${companyName} foi conferido e aprovado pelo RH.`, '',
