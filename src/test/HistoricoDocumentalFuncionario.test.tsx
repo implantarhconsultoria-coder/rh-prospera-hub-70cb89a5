@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import HistoricoDocumentalFuncionario from '@/components/HistoricoDocumentalFuncionario';
 import { buscarHistoricoFuncionario, marcarComoEnviado, registrarDocumento, uploadDocumentoArquivo } from '@/lib/documentoHistorico';
 import { getDocumentUrl } from '@/lib/documentUrl';
@@ -84,7 +85,7 @@ describe('HistoricoDocumentalFuncionario', () => {
   afterEach(cleanup);
 
   it('mantém exatamente os espaços digitados na descrição', async () => {
-    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
 
     const descricao = await screen.findByLabelText('Descrição/nome do documento');
     const texto = 'CARTA DEMISSIONAL ILMA MENDES GOIANIA';
@@ -94,7 +95,7 @@ describe('HistoricoDocumentalFuncionario', () => {
   });
 
   it('mantém espaços e quebras de linha na observação durante a digitação', async () => {
-    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
 
     const observacao = await screen.findByLabelText('Observação do documento');
     const texto = 'Primeira linha com espaços\nSegunda linha preservada';
@@ -104,7 +105,7 @@ describe('HistoricoDocumentalFuncionario', () => {
   });
 
   it('salva descrição com espaços e observação com quebra de linha', async () => {
-    const { container } = render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    const { container } = render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
     await screen.findByLabelText('Descrição/nome do documento');
 
     const arquivo = new File(['pdf'], 'carta demissional.pdf', { type: 'application/pdf' });
@@ -148,7 +149,7 @@ describe('HistoricoDocumentalFuncionario', () => {
       blob: vi.fn().mockResolvedValue(new Blob(['imagem'], { type: 'image/jpeg' })),
     }));
 
-    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: /^Atestados\b/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Enviar para contabilidade' }));
 
@@ -191,7 +192,7 @@ describe('HistoricoDocumentalFuncionario', () => {
       data_documento: '2026-09-18T11:00:00.000Z',
     }] as any);
 
-    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
     fireEvent.click(await screen.findByRole('button', { name: /^EPI\b/ }));
     expect(await screen.findByRole('button', { name: 'Visualizar' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Baixar' })).toBeInTheDocument();
@@ -205,7 +206,7 @@ describe('HistoricoDocumentalFuncionario', () => {
     expect(await screen.findByTestId('documento-preview')).toHaveTextContent('Via reconstruída disponível');
   });
   it('permite selecionar e registrar três documentos independentes em um único envio', async () => {
-    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
     const input = await screen.findByLabelText('Arquivos') as HTMLInputElement;
     expect(input.multiple).toBe(true);
     const arquivos = [
@@ -249,7 +250,7 @@ describe('HistoricoDocumentalFuncionario', () => {
       }
       return `funcionario-1/outros/${nome}`;
     });
-    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
     const input = await screen.findByLabelText('Arquivos');
     fireEvent.change(input, { target: { files: [
       new File(['a'], 'ok-1.pdf', { type: 'application/pdf' }),
@@ -272,7 +273,7 @@ describe('HistoricoDocumentalFuncionario', () => {
   });
 
   it('não envia arquivos vazios ou com extensão não permitida e mantém o restante do lote', async () => {
-    render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    render(<MemoryRouter><HistoricoDocumentalFuncionario funcionarioId="funcionario-1" /></MemoryRouter>);
     const input = await screen.findByLabelText('Arquivos');
     fireEvent.change(input, { target: { files: [
       new File(['ok'], 'documento.pdf', { type: 'application/pdf' }),
