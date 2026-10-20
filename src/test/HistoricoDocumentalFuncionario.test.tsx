@@ -149,6 +149,7 @@ describe('HistoricoDocumentalFuncionario', () => {
     }));
 
     render(<HistoricoDocumentalFuncionario funcionarioId="funcionario-1" />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Atestados\b/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Enviar para contabilidade' }));
 
     const draft = await screen.findByTestId('email-draft');
@@ -156,11 +157,11 @@ describe('HistoricoDocumentalFuncionario', () => {
     expect(draft).toHaveTextContent('responsavel@empresa.com.br');
     expect(draft).toHaveTextContent('copia@empresa.com.br');
     expect(draft).toHaveTextContent('ATESTADO - Ilma Mendes');
-    expect(draft).toHaveTextContent('Funcionario: Ilma Mendes');
+    expect(draft).toHaveTextContent('Funcionário: Ilma Mendes');
     expect(draft).toHaveTextContent('Empresa: TOPAC Goiânia');
     expect(draft).toHaveTextContent('Tipo do documento: ATESTADO');
     expect(draft).toHaveTextContent('Data do documento: 15/06/2026');
-    expect(draft).toHaveTextContent('Observacao/descricao: Afastamento por dois dias | Repouso conforme orientação médica');
+    expect(draft).toHaveTextContent('Observação/descrição: Afastamento por dois dias | Repouso conforme orientação médica');
     expect(draft).toHaveTextContent('O PDF/arquivo enviado segue em anexo.');
     expect(draft).toHaveTextContent('atestado-medico.jpg');
     expect(getDocumentUrl).toHaveBeenCalled();
