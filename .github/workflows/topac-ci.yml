@@ -75,6 +75,61 @@ jobs:
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
 
+      - name: Identificar falhas documentais (temporário)
+        id: diag
+        run: |
+          FORCE_COLOR=0 npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx --reporter=verbose > /tmp/rh-test.log 2>&1 || true
+          touch /tmp/rh-test.log
+          for label in fail first second third error testcase; do
+            case "$label" in
+              fail) line=$(grep -m1 -i -E 'test files|tests  |failed' /tmp/rh-test.log || true);;
+              first) line=$(grep -m1 -E '^ *FAIL +|^ *×' /tmp/rh-test.log || true);;
+              second) line=$(grep -E '^ *FAIL +|^ *×' /tmp/rh-test.log | sed -n '2p' || true);;
+              third) line=$(grep -E '^ *FAIL +|^ *×' /tmp/rh-test.log | sed -n '3p' || true);;
+              error) line=$(grep -m1 -Ei 'Error:|AssertionError:|TypeError:|Cannot find|Failed to|expected .* to' /tmp/rh-test.log || true);;
+              testcase) line=$(awk '/ FAIL / {found=1;next} found && NF {print;exit}' /tmp/rh-test.log);;
+            esac
+            normalized=$(printf '%s' "$line" | tr -c '[:alnum:] _.,()=+-' '_' | cut -c1-175)
+            echo "${label}=rh-${label}-${normalized:-sem_resultado}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Diagnóstico RH falha
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.fail }}
+          path: /tmp/rh-test.log
+      - name: Diagnóstico RH primeira
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.first }}
+          path: /tmp/rh-test.log
+      - name: Diagnóstico RH segunda
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.second }}
+          path: /tmp/rh-test.log
+      - name: Diagnóstico RH terceira
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.third }}
+          path: /tmp/rh-test.log
+      - name: Diagnóstico RH erro
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.error }}
+          path: /tmp/rh-test.log
+      - name: Diagnóstico RH caso
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.testcase }}
+          path: /tmp/rh-test.log
+
       - name: Tests changed scope
         run: >-
           npx vitest run
