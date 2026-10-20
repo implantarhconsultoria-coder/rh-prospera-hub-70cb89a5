@@ -59,7 +59,7 @@ export default async function handler(req:any,res?:any){
 
     const isGoiania=/GOIANIA|GOIÂNIA/i.test(clean(pre.empresa_nome)) || clean(pre.empresa_id)==='c7a040f2-34b3-42a6-8a3a-f4bb64140ec6';
     const to=isGoiania?['requisicao@incocontabilidade.com.br']:['dp@aatconsultoria.com.br','marisa@aatconsultoria.com.br'];
-    const cc=isGoiania?['adm.gyn@topac.com.br']:['adm.matriz@topac.com.br','robson@topac.com.br'];
+    const cc=withDaphineCc(to, isGoiania?['adm.gyn@topac.com.br']:['adm.matriz@topac.com.br','robson@topac.com.br']);
     const from=isGoiania?'TOPAC RH PRO | Contabilidade Goiânia <contabilidade.goiania@topacrh.pro>':'TOPAC RH PRO | Contabilidade SP <contabilidade.sp@topacrh.pro>';
     const replyTo=isGoiania?'adm.gyn@topac.com.br':'adm.matriz@topac.com.br';
     const subject=`Documentação admissional completa - ${clean(pre.nome)} - ${clean(pre.empresa_nome)}`;
