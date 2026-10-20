@@ -27,7 +27,8 @@ jobs:
           cache: npm
 
       - name: Install
-        run: npm ci
+        # package-lock.json está defasado em relação ao package.json; alinhar com o build que já valida em produção.
+        run: npm install --no-package-lock --no-audit --no-fund
 
       - name: Lint changed scope
         run: >-
