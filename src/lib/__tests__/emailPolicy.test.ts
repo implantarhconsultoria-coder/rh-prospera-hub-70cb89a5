@@ -58,6 +58,7 @@ describe('applyTopacEmailPolicy', () => {
     });
 
     expect(result).toEqual({
+      to: [],
       body: 'Conteúdo operacional',
       cc: ['operacao@topac.com.br'],
       institutional: false,
