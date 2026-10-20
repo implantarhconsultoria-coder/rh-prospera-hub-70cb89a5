@@ -183,7 +183,7 @@ const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: strin
           `Empresa: ${companyName}`,
           `Competência: ${competencia}`,
           'Situação: documento disponibilizado para assinatura; a assinatura não foi confirmada neste envio.',
-          '', 'Atenciosamente,',
+          '', 'Atenciosamente,', 'Recursos Humanos — TOPAC',
         ].join('\n'),
         attachmentBlob: file,
         attachmentName,
