@@ -69,6 +69,8 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/components/HistoricoDocumentalFuncionario.tsx
+          src/test/HistoricoDocumentalFuncionario.test.tsx
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
@@ -87,6 +89,7 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/test/HistoricoDocumentalFuncionario.test.tsx
 
       - name: Build
         run: npm run build
