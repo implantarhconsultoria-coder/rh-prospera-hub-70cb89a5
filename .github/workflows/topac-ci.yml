@@ -140,7 +140,7 @@ jobs:
         id: legacy
         run: |
           touch /tmp/legacy-tests.log
-          sed -E 's/\\x1B\\[[0-9;]*[A-Za-z]//g' /tmp/legacy-clean.log > /tmp/legacy-clean.log
+          sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g' /tmp/legacy-tests.log > /tmp/legacy-clean.log
           for label in summary one two three four error; do
             case "$label" in
               summary) line=$(grep -m1 -E 'Test Files|Tests ' /tmp/legacy-clean.log || true);;
