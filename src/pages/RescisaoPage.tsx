@@ -283,7 +283,7 @@ const RescisaoPage: React.FC = () => {
         valor: Number(entry?.descontosDiversos) || 0, observacao: `Importado do fechamento de ${competenciaFolha}.`, automatico: true,
       });
 
-      let benefitFound = { vr: false, vt: false };
+      const benefitFound = { vr: false, vt: false };
       try {
         const { data: generationRows, error: generationError } = await (supabase as any)
           .from('benefit_generations')
