@@ -1,5 +1,7 @@
 export const TOPAC_REPORT_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
 export const TOPAC_REPORT_SIGNATURE = 'Atenciosamente,\nAdministrador Topac RH PRO Multiempresas';
+export const DAPHINE_RH_EMAIL = 'adm1.matriz@topac.com.br' as const;
+export const DAPHINE_RH_SIGNATURE = 'Atenciosamente,\nDaphine Cristina Pasquareli Rocha\nRecursos Humanos — TOPAC Matriz';
 const EMAILS_REMOVIDOS = new Set(['lucilene' + '@aatconsultoria.com.br']);
 
 export const ACCOUNTING_VANESSA = 'dp@aatconsultoria.com.br' as const;
@@ -15,6 +17,8 @@ export type EmailPolicyInput = {
   moduleOrigin?: string;
   attachmentNames?: readonly string[];
   attachmentContentTypes?: readonly string[];
+  /** E-mail da conta autenticada que está operando, não do destinatário. */
+  senderEmail?: string;
 };
 
 const normalize = (value: unknown) => String(value || '')
@@ -90,12 +94,25 @@ export const applyTopacEmailPolicy = (input: EmailPolicyInput) => {
     ...(fechamentoOuApontamento ? [GOIANIA_ACCOUNTING_EMAIL] : []),
   ]);
   const accountingCc = accountingCcFor(policyTo);
+  const isDaphineRh = uniqueEmails([input.senderEmail || '']).includes(DAPHINE_RH_EMAIL);
   const mandatoryCc = uniqueEmails([
     ...(input.cc || []),
     ...accountingCc,
     ...(goiania ? [GOIANIA_ADMIN_EMAIL] : []),
     ...(report ? TOPAC_REPORT_CC : []),
+    ...(isDaphineRh ? ['adm.matriz@topac.com.br'] : []),
   ]);
+
+  if (isDaphineRh) {
+    const content = stripExistingSignature(String(input.body || ''));
+    return {
+      to: policyTo,
+      body: `${content}${content ? '\n\n' : ''}${DAPHINE_RH_SIGNATURE}`,
+      cc: mandatoryCc,
+      // Preserva a identidade de quem operou, mesmo em relatórios institucionais.
+      institutional: false,
+    };
+  }
 
   if (!report) {
     return {
