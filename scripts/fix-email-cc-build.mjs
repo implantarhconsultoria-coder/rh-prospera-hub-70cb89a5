@@ -28,12 +28,14 @@ patchFile('api/send-email-pdf.ts', (input) => {
     "      cc: cleanList([body.cc, ...MANDATORY_EMAIL_CC]),",
     'cc do payload',
   );
-  source = replaceOnce(
-    source,
-    "    };\n    if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length)",
-    "    };\n    payload.cc = payload.cc.filter((email: string) => !payload.to.includes(email));\n    if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length)",
-    'deduplicação de destinatários',
-  );
+  if (!source.includes("    payload.cc = payload.cc.filter((email: string) => !payload.to.includes(email));")) {
+    source = replaceOnce(
+      source,
+      "    };\n    if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length)",
+      "    };\n    payload.cc = payload.cc.filter((email: string) => !payload.to.includes(email));\n    if (!payload.to.length || !payload.subject || !payload.body || !payload.attachments.length)",
+      'deduplicação de destinatários',
+    );
+  }
   return source;
 });
 
