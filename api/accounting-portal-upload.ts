@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { withDaphineCc } from '../src/lib/emailPolicy.js';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
 import { buildAccountingProcessThreadKey, buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
@@ -95,8 +96,8 @@ const getEmailRouting = async (service: any, portal: string, userEmail: string) 
   if (portal === 'principal') {
     const counterpart = counterpartFor(senderEmail);
     const to = [TOPAC_CENTRAL_EMAIL];
-    const cc = uniqueEmails([TOPAC_ROBSON_EMAIL, ...(counterpart ? [counterpart] : [])])
-      .filter((email) => email !== senderEmail && !to.includes(email));
+    const cc = withDaphineCc(to, uniqueEmails([TOPAC_ROBSON_EMAIL, ...(counterpart ? [counterpart] : [])])
+      .filter((email) => email !== senderEmail));
     return { to, cc };
   }
 
@@ -108,7 +109,7 @@ const getEmailRouting = async (service: any, portal: string, userEmail: string) 
   const configured = config?.ativo ? cleanEmails(config?.formalizacao_destinos) : [];
   const primary = configured[0] || TOPAC_GOIANIA_EMAIL;
   const to = [primary];
-  const cc = uniqueEmails(configured.slice(1)).filter((email) => email !== senderEmail && email !== primary);
+  const cc = withDaphineCc(to, uniqueEmails(configured.slice(1)).filter((email) => email !== senderEmail));
   return { to, cc };
 };
 
@@ -199,7 +200,7 @@ const sendStoredPdfEmail = async (service: any, input: {
     body: JSON.stringify({
       from,
       to: input.to,
-      ...(input.cc.length ? { cc: input.cc } : {}),
+      ...(withDaphineCc(input.to, input.cc).length ? { cc: withDaphineCc(input.to, input.cc) } : {}),
       reply_to: replyTo,
       subject: thread.subject,
       text: input.body,
@@ -537,10 +538,10 @@ export default async function handler(req: any, res?: any) {
       }
       const to = cleanEmails(body.to).length ? cleanEmails(body.to) : routing.to;
       const requestedCc = cleanEmails(body.cc);
-      const cc = uniqueEmails([
+      const cc = withDaphineCc(to, uniqueEmails([
         ...(requestedCc.length ? requestedCc : routing.cc),
         ...(portal === 'principal' && isPraiaGrande && isFolhaFinal ? [ANTONIO_CARLOS_PRAIA_EMAIL] : []),
-      ]).filter((email) => !to.includes(email));
+      ]));
       const subject = String(body.subject || '').trim().slice(0, 240);
       const text = String(body.body || '').trim().slice(0, 12000);
       if (!to.length || !subject || !text) return sendJson(res, { ok: false, error: 'dados_email_invalidos', message: 'Destinatário, assunto e mensagem são obrigatórios.' }, 400);
