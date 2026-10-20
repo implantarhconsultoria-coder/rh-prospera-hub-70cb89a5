@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: topac-ci-${{ github.event.pull_request.number || github.ref }}
@@ -76,24 +75,41 @@ jobs:
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
 
-      - name: Tests changed scope
-        run: |
-          set -o pipefail
-          npx vitest run src/lib/__tests__/bankingParser.test.ts src/lib/__tests__/abastecimentoReports.test.ts src/lib/__tests__/emailPolicy.test.ts src/lib/__tests__/emailAttachmentTransport.test.ts src/lib/__tests__/pdfStandardization.test.ts src/lib/__tests__/rescisaoCalc.test.ts src/lib/__tests__/rescisaoIntegration.test.ts src/lib/__tests__/smartTextParser.test.ts src/lib/__tests__/vehicleSync.test.ts src/lib/__tests__/protocoloFrotaSource.test.ts src/lib/__tests__/epiRules.test.ts src/test/HistoricoDocumentalFuncionario.test.tsx 2>&1 | tee /tmp/topac-vitest.log
+      - name: Testes preexistentes do projeto
+        run: >-
+          npx vitest run src/lib/__tests__/bankingParser.test.ts src/lib/__tests__/abastecimentoReports.test.ts src/lib/__tests__/emailPolicy.test.ts src/lib/__tests__/emailAttachmentTransport.test.ts src/lib/__tests__/pdfStandardization.test.ts src/lib/__tests__/rescisaoCalc.test.ts src/lib/__tests__/rescisaoIntegration.test.ts src/lib/__tests__/smartTextParser.test.ts src/lib/__tests__/vehicleSync.test.ts src/lib/__tests__/protocoloFrotaSource.test.ts src/lib/__tests__/epiRules.test.ts
 
-      - name: Diagnóstico de falhas para o PR
-        if: failure() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if test -s /tmp/topac-vitest.log; then
-            {
-              echo "Falhas no CI de testes (diagnóstico temporário):"
-              echo '~~~'
-              tail -n 125 /tmp/topac-vitest.log
-              echo '~~~'
-            } > /tmp/topac-report.txt
-            gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body-file /tmp/topac-report.txt
-          fi
+      - name: RH | Descrição literal
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'mantém exatamente os espaços digitados na descrição'
+
+      - name: RH | Quebras de linha
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'mantém espaços e quebras de linha'
+
+      - name: RH | Salvamento único
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'salva descrição com espaços'
+
+      - name: RH | E-mail atestado
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'prepara o atestado anexado'
+
+      - name: RH | Visualização EPI
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'mostra visualizar baixar e imprimir'
+
+      - name: RH | Upload múltiplo
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'permite selecionar e registrar três documentos'
+
+      - name: RH | Retentativa sem duplicatas
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'mantém apenas arquivos com falha selecionados'
+
+      - name: RH | Extensões inválidas
+        if: always()
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'não envia arquivos vazios'
+
       - name: Build
         run: npm run build
