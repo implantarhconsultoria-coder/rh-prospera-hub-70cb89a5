@@ -35,7 +35,7 @@ const PROVIDER_RAW_LIMITS: Record<string, number> = {
 };
 const DEFAULT_EMAIL_FROM = 'TOPAC RH PRO <no-reply@topacrh.pro>';
 const DEFAULT_EMAIL_REPLY_TO = 'adm.matriz@topac.com.br';
-const MANDATORY_EMAIL_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'];
+const MANDATORY_EMAIL_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br', DAPHINE_RH_EMAIL];
 const TOPAC_DOMAIN_FALLBACK = 'topacrh.pro';
 const PDF_CONTENT_TYPE = 'application/pdf';
 
