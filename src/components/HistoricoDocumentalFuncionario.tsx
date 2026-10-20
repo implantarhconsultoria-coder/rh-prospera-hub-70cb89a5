@@ -279,7 +279,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       for (const [indice, arquivoAtual] of arquivosSelecionados.entries()) {
         setProgressoUpload({ atual: indice + 1, total: arquivosSelecionados.length, nome: arquivoAtual.name });
 
-        if (!/\\.(pdf|jpe?g|png|webp)$/i.test(arquivoAtual.name) || arquivoAtual.size === 0) {
+        if (!/\.(pdf|jpe?g|png|webp)$/i.test(arquivoAtual.name) || arquivoAtual.size === 0) {
           falhas.push({
             arquivo: arquivoAtual,
             motivo: arquivoAtual.size === 0 ? 'Arquivo vazio.' : 'Formato não permitido (PDF, JPG, PNG ou WEBP).',
@@ -645,7 +645,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
           </div>
         </div>
         <div aria-live="polite" className="space-y-1 text-xs text-muted-foreground">
-          <p>{arquivos.length} ${arquivos.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'}. Selecione vários de uma vez com Ctrl/Shift.</p>
+          <p>{arquivos.length} {arquivos.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'}. Selecione vários de uma vez com Ctrl/Shift.</p>
           {arquivos.length > 0 && (
             <ul className="list-disc pl-4">
               {arquivos.slice(0, 5).map((file, indice) => <li key={`${file.name}-${indice}`} className="truncate">{file.name}</li>)}
