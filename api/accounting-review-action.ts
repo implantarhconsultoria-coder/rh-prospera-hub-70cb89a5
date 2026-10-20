@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { withDaphineCc } from '../src/lib/emailPolicy.js';
 import { getServiceClient, readBody, sendJson } from '../src/server/payrollServer.js';
 
 const VANESSA_EMAIL = 'dp@aatconsultoria.com.br';
@@ -107,12 +108,12 @@ const routingFor = async (service:any, portal:string, senderEmail:string) => {
   const sender = clean(senderEmail).toLowerCase();
   if (portal === 'principal') {
     const counterpart = sender === VANESSA_EMAIL ? MARISA_EMAIL : sender === MARISA_EMAIL ? VANESSA_EMAIL : '';
-    return { to:[TOPAC_CENTRAL_EMAIL], cc:unique([TOPAC_ROBSON_EMAIL, counterpart]).filter((e) => e !== sender) };
+    return { to:[TOPAC_CENTRAL_EMAIL], cc:withDaphineCc([TOPAC_CENTRAL_EMAIL], unique([TOPAC_ROBSON_EMAIL, counterpart]).filter((e) => e !== sender)) };
   }
   const { data:config } = await service.from('contabilidade_portal_config').select('formalizacao_destinos,ativo').eq('portal', portal).maybeSingle();
   const configured = Array.isArray(config?.formalizacao_destinos) ? config.formalizacao_destinos.map(clean).filter(Boolean) : clean(config?.formalizacao_destinos).split(/[;,\s]+/).filter((v:string) => /@/.test(v));
   const primary = configured[0] || TOPAC_GOIANIA_EMAIL;
-  return { to:[primary], cc:unique(configured.slice(1)).filter((e) => e !== sender && e !== primary) };
+  return { to:[primary], cc:withDaphineCc([primary], unique(configured.slice(1)).filter((e) => e !== sender && e !== primary)) };
 };
 
 const resolveSignedUrl = async (service:any, movement:Movement) => {
