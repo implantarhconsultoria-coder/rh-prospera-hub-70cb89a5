@@ -1,6 +1,6 @@
-export const TOPAC_REPORT_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'] as const;
-export const TOPAC_REPORT_SIGNATURE = 'Atenciosamente,\nAdministrador Topac RH PRO Multiempresas';
 export const DAPHINE_RH_EMAIL = 'adm1.matriz@topac.com.br' as const;
+export const TOPAC_REPORT_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br', DAPHINE_RH_EMAIL] as const;
+export const TOPAC_REPORT_SIGNATURE = 'Atenciosamente,\nAdministrador Topac RH PRO Multiempresas';
 export const DAPHINE_RH_SIGNATURE = 'Atenciosamente,\nDaphine Cristina Pasquareli Rocha\nRecursos Humanos — TOPAC Matriz';
 const EMAILS_REMOVIDOS = new Set(['lucilene' + '@aatconsultoria.com.br']);
 
@@ -54,6 +54,12 @@ const uniqueEmails = (values: readonly string[] = []) => Array.from(new Set(
   values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean).filter((email) => !EMAILS_REMOVIDOS.has(email)),
 ));
 
+/** Adiciona Daphine em CC nos e-mails do TOPAC, preservando destinatários e removendo duplicidades. */
+export const withDaphineCc = (to: readonly string[] = [], cc: readonly string[] = []) => {
+  const recipients = uniqueEmails(to);
+  return uniqueEmails([...cc, DAPHINE_RH_EMAIL]).filter((email) => !recipients.includes(email));
+};
+
 const routingText = (input: EmailPolicyInput) => normalize([
   input.subject,
   input.body,
@@ -100,8 +106,9 @@ export const applyTopacEmailPolicy = (input: EmailPolicyInput) => {
     ...accountingCc,
     ...(goiania ? [GOIANIA_ADMIN_EMAIL] : []),
     ...(report ? TOPAC_REPORT_CC : []),
+    DAPHINE_RH_EMAIL,
     ...(isDaphineRh ? ['adm.matriz@topac.com.br'] : []),
-  ]);
+  ]).filter((email) => !policyTo.includes(email));
 
   if (isDaphineRh) {
     const content = stripExistingSignature(String(input.body || ''));
