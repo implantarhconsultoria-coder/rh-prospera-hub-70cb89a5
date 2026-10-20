@@ -75,126 +75,24 @@ jobs:
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
 
-      - name: Identificar falhas documentais (temporário)
-        id: diag
-        run: |
-          FORCE_COLOR=0 npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx --reporter=verbose > /tmp/rh-test.log 2>&1 || true
-          touch /tmp/rh-test.log
-          for label in fail first second third error testcase; do
-            case "$label" in
-              fail) line=$(grep -m1 -i -E 'test files|tests  |failed' /tmp/rh-test.log || true);;
-              first) line=$(grep -m1 -E '^ *FAIL +|^ *×' /tmp/rh-test.log || true);;
-              second) line=$(grep -E '^ *FAIL +|^ *×' /tmp/rh-test.log | sed -n '2p' || true);;
-              third) line=$(grep -E '^ *FAIL +|^ *×' /tmp/rh-test.log | sed -n '3p' || true);;
-              error) line=$(grep -m1 -Ei 'Error:|AssertionError:|TypeError:|Cannot find|Failed to|expected .* to' /tmp/rh-test.log || true);;
-              testcase) line=$(awk '/ FAIL / {found=1;next} found && NF {print;exit}' /tmp/rh-test.log);;
-            esac
-            normalized=$(printf '%s' "$line" | tr -c '[:alnum:] _.,()=+-' '_' | cut -c1-175)
-            echo "${label}=rh-${label}-${normalized:-sem_resultado}" >> "$GITHUB_OUTPUT"
-          done
-
-      - name: Diagnóstico RH falha
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.diag.outputs.fail }}
-          path: /tmp/rh-test.log
-      - name: Diagnóstico RH primeira
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.diag.outputs.first }}
-          path: /tmp/rh-test.log
-      - name: Diagnóstico RH segunda
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.diag.outputs.second }}
-          path: /tmp/rh-test.log
-      - name: Diagnóstico RH terceira
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.diag.outputs.third }}
-          path: /tmp/rh-test.log
-      - name: Diagnóstico RH erro
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.diag.outputs.error }}
-          path: /tmp/rh-test.log
-      - name: Diagnóstico RH caso
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.diag.outputs.testcase }}
-          path: /tmp/rh-test.log
+      - name: Validar upload múltiplo do histórico
+        run: npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx
 
       - name: Tests changed scope
-        run: |
-          set -o pipefail
-          FORCE_COLOR=0 npx vitest run src/lib/__tests__/bankingParser.test.ts src/lib/__tests__/abastecimentoReports.test.ts src/lib/__tests__/emailPolicy.test.ts src/lib/__tests__/emailAttachmentTransport.test.ts src/lib/__tests__/pdfStandardization.test.ts src/lib/__tests__/rescisaoCalc.test.ts src/lib/__tests__/rescisaoIntegration.test.ts src/lib/__tests__/smartTextParser.test.ts src/lib/__tests__/vehicleSync.test.ts src/lib/__tests__/protocoloFrotaSource.test.ts src/lib/__tests__/epiRules.test.ts src/test/HistoricoDocumentalFuncionario.test.tsx 2>&1 | tee /tmp/legacy-tests.log
-
-      - name: Diagnosticar falhas legadas (temporário)
-        if: always()
-        id: legacy
-        run: |
-          touch /tmp/legacy-tests.log
-          sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g' /tmp/legacy-tests.log > /tmp/legacy-clean.log
-          for label in summary one two three four error; do
-            case "$label" in
-              summary) line=$(grep -m1 -E 'Test Files|Tests ' /tmp/legacy-clean.log || true);;
-              one) line=$(grep -E '^ *FAIL ' /tmp/legacy-clean.log | sed -n '1p' || true);;
-              two) line=$(grep -E '^ *FAIL ' /tmp/legacy-clean.log | sed -n '2p' || true);;
-              three) line=$(grep -E '^ *FAIL ' /tmp/legacy-clean.log | sed -n '3p' || true);;
-              four) line=$(grep -E '^ *FAIL ' /tmp/legacy-clean.log | sed -n '4p' || true);;
-              error) line=$(grep -m1 -Ei '^ *(AssertionError:|Error:|TypeError:|ReferenceError:|Cannot find|Failed to)' /tmp/legacy-clean.log || true);;
-            esac
-            normalized=$(printf '%s' "$line" | tr -c '[:alnum:] _.,()=+-' '_' | cut -c1-170)
-            echo "${label}=legacy-${label}-${normalized:-sem_resultado}" >> "$GITHUB_OUTPUT"
-          done
-
-      - name: Legado summary
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.legacy.outputs.summary }}
-          path: /tmp/legacy-tests.log
-
-      - name: Legado one
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.legacy.outputs.one }}
-          path: /tmp/legacy-tests.log
-
-      - name: Legado two
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.legacy.outputs.two }}
-          path: /tmp/legacy-tests.log
-
-      - name: Legado three
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.legacy.outputs.three }}
-          path: /tmp/legacy-tests.log
-
-      - name: Legado four
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.legacy.outputs.four }}
-          path: /tmp/legacy-tests.log
-
-      - name: Legado error
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.legacy.outputs.error }}
-          path: /tmp/legacy-tests.log
+        run: >-
+          npx vitest run
+          src/lib/__tests__/bankingParser.test.ts
+          src/lib/__tests__/abastecimentoReports.test.ts
+          src/lib/__tests__/emailPolicy.test.ts
+          src/lib/__tests__/emailAttachmentTransport.test.ts
+          src/lib/__tests__/pdfStandardization.test.ts
+          src/lib/__tests__/rescisaoCalc.test.ts
+          src/lib/__tests__/rescisaoIntegration.test.ts
+          src/lib/__tests__/smartTextParser.test.ts
+          src/lib/__tests__/vehicleSync.test.ts
+          src/lib/__tests__/protocoloFrotaSource.test.ts
+          src/lib/__tests__/epiRules.test.ts
+          src/test/HistoricoDocumentalFuncionario.test.tsx
 
       - name: Build
         run: npm run build
