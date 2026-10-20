@@ -435,7 +435,7 @@ const sendWithSendGrid = async (payload: any, supabase: SupabaseServer) => {
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       personalizations: [{ to: payload.to.map((email: string) => ({ email })), cc: payload.cc.map((email: string) => ({ email })), subject: payload.subject, ...(payload.threadHeaders && Object.keys(payload.threadHeaders).length ? { headers: payload.threadHeaders } : {}) }],
-      from: { email: env('MAIL_FROM_EMAIL') || env('EMAIL_FROM_EMAIL') || parseEmailAddress(from), name: env('MAIL_FROM_NAME') || env('EMAIL_FROM_NAME') || parseEmailName(from) },
+      from: { email: env('MAIL_FROM_EMAIL') || env('EMAIL_FROM_EMAIL') || parseEmailAddress(from), name: payload.isDaphineRh ? payload.senderName : (env('MAIL_FROM_NAME') || env('EMAIL_FROM_NAME') || parseEmailName(from)) },
       reply_to: { email: parseEmailAddress(payload.replyTo || getEmailReplyTo()) },
       content: [{ type: 'text/plain', value: payload.body }],
       attachments: payload.attachments.map((attachment: ResolvedAttachment) => ({ content: attachment.attachmentBase64, filename: attachment.attachmentName, type: attachment.attachmentContentType, disposition: 'attachment' })),
