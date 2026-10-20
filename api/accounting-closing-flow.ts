@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { DAPHINE_RH_EMAIL, withDaphineCc } from '../src/lib/emailPolicy.js';
 import { getServiceClient, readBody, requireAdmin, sendJson } from '../src/server/payrollServer.js';
 import { buildAccountingThreadKey, fetchResendMessageId, prepareAccountingThread, saveAccountingThread } from '../src/server/accountingEmailThread.js';
 
@@ -86,6 +87,7 @@ async function accountingRecipients(service: any, companyId: string): Promise<{ 
   const cc = Array.from(new Set([
     'adm.matriz@topac.com.br',
     'robson@topac.com.br',
+    DAPHINE_RH_EMAIL,
     ...(isGoiania ? ['adm.gyn@topac.com.br'] : []),
   ])).filter((email) => !emails.includes(email));
 
@@ -511,7 +513,7 @@ async function sendAccountingEmail(service: any, input: { portal: string; emails
     body: JSON.stringify({
       from,
       to: Array.from(new Set(input.emails)),
-      cc: Array.from(new Set(input.cc)).filter((email) => !input.emails.includes(email)),
+      cc: withDaphineCc(input.emails, input.cc),
       reply_to: ACCOUNTING_REPLY_MAILBOX,
       subject: thread.subject,
       text,
