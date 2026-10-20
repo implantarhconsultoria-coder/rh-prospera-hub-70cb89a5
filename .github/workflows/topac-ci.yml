@@ -81,11 +81,13 @@ jobs:
         run: |
           npx vitest run src/test/HistoricoDocumentalFuncionario.test.tsx -t 'mantém exatamente os espaços digitados' > /tmp/vitest-diag.log 2>&1 || true
           touch /tmp/vitest-diag.log
-          for variant in first error fail; do
+          for variant in first error fail details cause; do
             case "$variant" in
               first) line=$(head -n 4 /tmp/vitest-diag.log | tail -n 1);;
-              error) line=$(grep -m1 -Ei 'error|failed|cannot|ERR_|exception' /tmp/vitest-diag.log || true);;
+              error) line=$(grep -m1 -Ei '(^Error[:[]|^TypeError:|^SyntaxError:|^ReferenceError:|Cannot find|Failed to resolve|Could not load|Caused by)' /tmp/vitest-diag.log || true);;
               fail) line=$(grep -m1 -E 'FAIL|Test Files|Failed to|TypeError|AssertionError|Error:' /tmp/vitest-diag.log || true);;
+              details) line=$(awk '/ FAIL / { found=1; next } found && NF { print; exit }' /tmp/vitest-diag.log);;
+              cause) line=$(grep -m1 -Ei 'Caused by:|^ *> .*src/|^ *> .*node_modules|^Error:|^TypeError:|^ReferenceError:' /tmp/vitest-diag.log || true);;
             esac
             normalized=$(printf '%s' "$line" | tr -c '[:alnum:] _.-' '_' | cut -c1-150)
             echo "${variant}=diagnostico-${variant}-${normalized:-sem_resultado}" >> "$GITHUB_OUTPUT"
@@ -110,6 +112,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.diag.outputs.fail }}
+          path: /tmp/vitest-diag.log
+
+
+      - name: Diagnóstico detalhado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.details }}
+          path: /tmp/vitest-diag.log
+
+      - name: Diagnóstico da causa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.diag.outputs.cause }}
           path: /tmp/vitest-diag.log
 
       - name: Build
