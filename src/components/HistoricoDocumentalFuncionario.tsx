@@ -591,6 +591,8 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             <button
               key={group.id}
               type="button"
+              aria-label={group.label}
+              aria-pressed={selected}
               onClick={() => setActiveGroup(group.id)}
               className={`rounded-xl border p-3 text-left transition-colors ${selected ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card hover:bg-muted/40'}`}
               title={group.label}
