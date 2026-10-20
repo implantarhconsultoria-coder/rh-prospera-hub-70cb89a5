@@ -1,5 +1,6 @@
 import { requireAdmin, readBody, sendJson } from '../src/server/payrollServer.js';
 import { accountingEmailProviderStatus } from '../src/server/accountingEmailProviders.js';
+import { withDaphineCc } from '../src/lib/emailPolicy.js';
 
 const TOPAC_CENTRAL_EMAIL = 'adm.matriz@topac.com.br';
 const ACCOUNTING_REPLY_MAILBOX = String(process.env.ACCOUNTING_RESEND_MAILBOX || 'centralrh@mleurob.resend.app').trim();
@@ -188,6 +189,7 @@ const sendReply = async (service: any, user: any, messageId: string, messageText
     body: JSON.stringify({
       from,
       to: [recipient],
+      cc: withDaphineCc([recipient]),
       reply_to: ACCOUNTING_REPLY_MAILBOX,
       subject,
       text,
