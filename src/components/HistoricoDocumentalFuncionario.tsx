@@ -191,6 +191,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [descricao, setDescricao] = useState('');
   const [observacao, setObservacao] = useState('');
   const [arquivos, setArquivos] = useState<File[]>([]);
+  const [selecionadoEmLote, setSelecionadoEmLote] = useState(false);
   const [progressoUpload, setProgressoUpload] = useState<{ atual: number; total: number; nome: string } | null>(null);
   const [falhasUpload, setFalhasUpload] = useState<Array<{ nome: string; motivo: string }>>([]);
   const [filtroOrigem, setFiltroOrigem] = useState('');
@@ -305,7 +306,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             categoria,
             origem,
             descricao: descricaoSalva
-              ? (arquivosSelecionados.length > 1 ? `${descricaoSalva} — ${arquivoAtual.name}` : descricaoSalva)
+              ? (selecionadoEmLote ? `${descricaoSalva} — ${arquivoAtual.name}` : descricaoSalva)
               : arquivoAtual.name,
             observacao: observacaoSalva,
             arquivoUrl: path,
@@ -341,6 +342,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
       if (!falhas.length) {
         setDescricao('');
         setObservacao('');
+        setSelecionadoEmLote(false);
         toast.success(`${enviados} documento(s) anexado(s) ao histórico do funcionário.`);
       } else {
         toast.error(`${enviados} enviado(s), ${falhas.length} com falha. Apenas os arquivos com falha permanecem selecionados para tentar novamente.`);
@@ -629,7 +631,9 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
               disabled={uploading}
               accept=".pdf,.jpg,.jpeg,.png,.webp"
               onChange={(e) => {
-                setArquivos(Array.from(e.currentTarget.files || []));
+                const selecionados = Array.from(e.currentTarget.files || []);
+                setArquivos(selecionados);
+                setSelecionadoEmLote(selecionados.length > 1);
                 setFalhasUpload([]);
                 e.currentTarget.value = '';
               }}
