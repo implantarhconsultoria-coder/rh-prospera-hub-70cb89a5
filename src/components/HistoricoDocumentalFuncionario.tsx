@@ -190,7 +190,10 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   const [origem, setOrigem] = useState('upload_manual');
   const [descricao, setDescricao] = useState('');
   const [observacao, setObservacao] = useState('');
-  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  const [selecionadoEmLote, setSelecionadoEmLote] = useState(false);
+  const [progressoUpload, setProgressoUpload] = useState<{ atual: number; total: number; nome: string } | null>(null);
+  const [falhasUpload, setFalhasUpload] = useState<Array<{ nome: string; motivo: string }>>([]);
   const [filtroOrigem, setFiltroOrigem] = useState('');
   const [filtroData, setFiltroData] = useState('');
   const [filtroEmpresa, setFiltroEmpresa] = useState('');
@@ -255,54 +258,99 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
   );
 
   const anexarDocumento = async () => {
+    if (uploading) return;
     if (!funcionario || !company) {
-      toast.error('Funcionário ou empresa não localizados para vincular o documento.');
+      toast.error('Funcionário ou empresa não localizados para vincular os documentos.');
       return;
     }
-    if (!arquivo) {
-      toast.error('Selecione um arquivo PDF, JPG, PNG ou WEBP.');
+    if (!arquivos.length) {
+      toast.error('Selecione um ou mais arquivos PDF, JPG, PNG ou WEBP.');
       return;
     }
 
+    const arquivosSelecionados = [...arquivos];
     const descricaoSalva = prepareDocumentTextForSave(descricao);
     const observacaoSalva = prepareDocumentTextForSave(observacao);
+    const falhas: Array<{ arquivo: File; motivo: string }> = [];
+    let enviados = 0;
 
     setUploading(true);
+    setFalhasUpload([]);
     try {
-      const path = await uploadDocumentoArquivo(
-        funcionario.id,
-        categoria,
-        arquivo,
-        arquivo.name,
-        funcionario.name,
-      );
-      await registrarDocumento({
-        funcionarioId: funcionario.id,
-        funcionarioNome: funcionario.name,
-        companyId: company.id,
-        empresaNome: company.name,
-        tipoDocumento: categoria,
-        categoria,
-        origem,
-        descricao: descricaoSalva || arquivo.name,
-        observacao: observacaoSalva,
-        arquivoUrl: path,
-        storageBucket: 'documentos-funcionarios',
-        storagePath: path,
-        nomeArquivo: arquivo.name,
-        dataDocumento: new Date().toISOString(),
-        geradoPorUserId: session?.user?.id || ZERO_UUID,
-        geradoPorNome: session?.user?.email || 'Sistema',
-        unidade: company.name,
-      });
-      setArquivo(null);
-      setDescricao('');
-      setObservacao('');
-      await carregar();
-      toast.success('Documento anexado ao histórico do funcionário.');
+      for (const [indice, arquivoAtual] of arquivosSelecionados.entries()) {
+        setProgressoUpload({ atual: indice + 1, total: arquivosSelecionados.length, nome: arquivoAtual.name });
+
+        if (!/\.(pdf|jpe?g|png|webp)$/i.test(arquivoAtual.name) || arquivoAtual.size === 0) {
+          falhas.push({
+            arquivo: arquivoAtual,
+            motivo: arquivoAtual.size === 0 ? 'Arquivo vazio.' : 'Formato não permitido (PDF, JPG, PNG ou WEBP).',
+          });
+          continue;
+        }
+
+        let path = '';
+        try {
+          path = await uploadDocumentoArquivo(
+            funcionario.id,
+            categoria,
+            arquivoAtual,
+            arquivoAtual.name,
+            funcionario.name,
+          );
+          await registrarDocumento({
+            funcionarioId: funcionario.id,
+            funcionarioNome: funcionario.name,
+            companyId: company.id,
+            empresaNome: company.name,
+            tipoDocumento: categoria,
+            categoria,
+            origem,
+            descricao: descricaoSalva
+              ? (selecionadoEmLote ? `${descricaoSalva} — ${arquivoAtual.name}` : descricaoSalva)
+              : arquivoAtual.name,
+            observacao: observacaoSalva,
+            arquivoUrl: path,
+            storageBucket: 'documentos-funcionarios',
+            storagePath: path,
+            nomeArquivo: arquivoAtual.name,
+            dataDocumento: new Date().toISOString(),
+            geradoPorUserId: session?.user?.id || ZERO_UUID,
+            geradoPorNome: session?.user?.email || 'Sistema',
+            unidade: company.name,
+          });
+          enviados += 1;
+        } catch (error: any) {
+          if (path) {
+            // Evita arquivos órfãos quando o storage aceita o upload, mas o cadastro falha.
+            try {
+              const { error: rollbackError } = await supabase.storage
+                .from('documentos-funcionarios')
+                .remove([path]);
+              if (rollbackError) console.error('Falha ao remover upload sem cadastro:', rollbackError);
+            } catch (rollbackError) {
+              console.error('Falha ao remover upload sem cadastro:', rollbackError);
+            }
+          }
+          falhas.push({ arquivo: arquivoAtual, motivo: error?.message || 'Não foi possível salvar.' });
+        }
+      }
+
+      setArquivos(falhas.map(({ arquivo }) => arquivo));
+      setFalhasUpload(falhas.map(({ arquivo, motivo }) => ({ nome: arquivo.name, motivo })));
+      if (enviados) await carregar();
+
+      if (!falhas.length) {
+        setDescricao('');
+        setObservacao('');
+        setSelecionadoEmLote(false);
+        toast.success(`${enviados} documento(s) anexado(s) ao histórico do funcionário.`);
+      } else {
+        toast.error(`${enviados} enviado(s), ${falhas.length} com falha. Apenas os arquivos com falha permanecem selecionados para tentar novamente.`);
+      }
     } catch (error: any) {
-      toast.error(error?.message || 'Não foi possível anexar o documento.');
+      toast.error(error?.message || 'Não foi possível concluir o envio dos documentos.');
     } finally {
+      setProgressoUpload(null);
       setUploading(false);
     }
   };
@@ -543,6 +591,8 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
             <button
               key={group.id}
               type="button"
+              aria-label={group.label}
+              aria-pressed={selected}
               onClick={() => setActiveGroup(group.id)}
               className={`rounded-xl border p-3 text-left transition-colors ${selected ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card hover:bg-muted/40'}`}
               title={group.label}
@@ -564,25 +614,61 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Tipo/categoria</label>
-            <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+            <select value={categoria} onChange={(e) => setCategoria(e.target.value)} disabled={uploading} className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
               {DOCUMENTO_CATEGORIAS_PADRAO.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Origem</label>
-            <select value={origem} onChange={(e) => setOrigem(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+            <select value={origem} onChange={(e) => setOrigem(e.target.value)} disabled={uploading} className="w-full border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
               {DOCUMENTO_ORIGENS_PADRAO.map((item) => <option key={item} value={item}>{ORIGEM_LABEL[item] || item}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">Arquivo</label>
-            <Input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(e) => setArquivo(e.target.files?.[0] || null)} />
+            <label htmlFor="historico-arquivos" className="text-xs text-muted-foreground block mb-1">Arquivos</label>
+            <Input
+              id="historico-arquivos"
+              type="file"
+              multiple
+              disabled={uploading}
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={(e) => {
+                const selecionados = Array.from(e.currentTarget.files || []);
+                setArquivos(selecionados);
+                setSelecionadoEmLote(selecionados.length > 1);
+                setFalhasUpload([]);
+                e.currentTarget.value = '';
+              }}
+            />
           </div>
           <div className="flex items-end">
-            <Button type="button" onClick={anexarDocumento} disabled={uploading || !arquivo} className="w-full">
-              {uploading ? 'Salvando...' : 'Anexar documento'}
+            <Button type="button" onClick={anexarDocumento} disabled={uploading || !arquivos.length} className="w-full">
+              {uploading && progressoUpload
+                ? `Enviando ${progressoUpload.atual}/${progressoUpload.total}...`
+                : falhasUpload.length ? `Tentar novamente (${arquivos.length})`
+                  : arquivos.length > 1 ? `Anexar ${arquivos.length} documentos` : 'Anexar documento'}
             </Button>
           </div>
+        </div>
+        <div aria-live="polite" className="space-y-1 text-xs text-muted-foreground">
+          <p>{arquivos.length} {arquivos.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'}. Selecione vários de uma vez com Ctrl/Shift.</p>
+          {arquivos.length > 0 && (
+            <ul className="list-disc pl-4">
+              {arquivos.slice(0, 5).map((file, indice) => <li key={`${file.name}-${indice}`} className="truncate">{file.name}</li>)}
+              {arquivos.length > 5 && <li>e mais {arquivos.length - 5} arquivo(s)</li>}
+            </ul>
+          )}
+          {uploading && progressoUpload && (
+            <p role="status">Processando {progressoUpload.atual} de {progressoUpload.total}: {progressoUpload.nome}</p>
+          )}
+          {falhasUpload.length > 0 && (
+            <div role="alert" className="text-destructive">
+              <p>{falhasUpload.length} arquivo(s) com falha; os demais já foram registrados.</p>
+              <ul className="list-disc pl-4">
+                {falhasUpload.map((falha, indice) => <li key={`${falha.nome}-${indice}`}>{falha.nome}: {falha.motivo}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
@@ -591,6 +677,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
               id="historico-documento-descricao"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
+              disabled={uploading}
               placeholder="Ex.: contrato, documento pessoal, recibo..."
             />
           </div>
@@ -600,6 +687,7 @@ const HistoricoDocumentalFuncionario: React.FC<Props> = ({ funcionarioId }) => {
               id="historico-documento-observacao"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
+              disabled={uploading}
               placeholder="Observação opcional"
               className="min-h-10"
             />
