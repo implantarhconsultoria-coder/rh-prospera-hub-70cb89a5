@@ -286,7 +286,7 @@ export default async function handler(req:any, res?:any) {
       const from = getPlatformFrom();
       const to = unique([String(portalUser.email)]);
       const counterpart = portalUser.portal === 'principal' ? counterpartFor(String(portalUser.email || '')) : '';
-      const cc = unique([ROBSON_EMAIL, ADM_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
+      const cc = unique([ROBSON_EMAIL, ADM_EMAIL, DAPHINE_RH_EMAIL, ...(counterpart ? [counterpart] : [])]).filter(email => !to.includes(email));
 
       const requestedSubject = `[TOPAC RH PRO] Retorno do RH · ${company.nome}${upload.competencia ? ` · Competência ${upload.competencia}` : ''}`;
       const threadKey = upload.competencia ? buildAccountingThreadKey(company.id, upload.competencia) : '';
