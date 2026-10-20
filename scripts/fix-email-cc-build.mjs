@@ -19,7 +19,7 @@ patchFile('api/send-email-pdf.ts', (input) => {
   source = replaceOnce(
     source,
     "const DEFAULT_EMAIL_REPLY_TO = 'adm.matriz@topac.com.br';",
-    "const DEFAULT_EMAIL_REPLY_TO = 'adm.matriz@topac.com.br';\nconst MANDATORY_EMAIL_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br'];",
+    "const DEFAULT_EMAIL_REPLY_TO = 'adm.matriz@topac.com.br';\nconst MANDATORY_EMAIL_CC = ['adm.matriz@topac.com.br', 'robson@topac.com.br', DAPHINE_RH_EMAIL];",
     'constante global',
   );
   source = replaceOnce(
