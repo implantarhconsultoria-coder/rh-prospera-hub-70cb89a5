@@ -135,7 +135,17 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
   const [cc, setCc] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [activeSenderEmail, setActiveSenderEmail] = useState('');
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!open) { setActiveSenderEmail(''); return; }
+    void supabase.auth.getSession()
+      .then(({ data }) => { if (mounted) setActiveSenderEmail(data.session?.user?.email || ''); })
+      .catch(() => { if (mounted) setActiveSenderEmail(''); });
+    return () => { mounted = false; };
+  }, [open]);
 
   const preparedAttachments = useMemo(() => {
     const source = draft?.attachments?.length
@@ -151,6 +161,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     body: bodyValue,
     cc: ccValues,
     moduleOrigin: draft?.moduleOrigin,
+    senderEmail: activeSenderEmail,
     attachmentNames: preparedAttachments.map((item) => item.attachmentName),
     attachmentContentTypes: preparedAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type),
   });
@@ -166,6 +177,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
       body: baseBody,
       cc: baseCc,
       moduleOrigin: draft.moduleOrigin,
+      senderEmail: activeSenderEmail,
       attachmentNames: preparedAttachments.map((item) => item.attachmentName),
       attachmentContentTypes: preparedAttachments.map((item) => item.attachmentContentType || item.attachmentBlob.type),
     });
@@ -173,7 +185,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     setCc(formatEmails(policy.cc));
     setSubject(draft.subject || '');
     setBody(policy.body);
-  }, [draft, open, preparedAttachments]);
+  }, [draft, open, preparedAttachments, activeSenderEmail]);
 
   const getPreparedEmail = () => {
     const atestado = isAtestadoSubject(subject);
@@ -199,6 +211,7 @@ export const EmailPdfModal: React.FC<EmailPdfModalProps> = ({ open, draft, onOpe
     openEmailClient({
       to: toList, cc: ccList, subject: subject.trim(), body: preparedBody,
       moduleOrigin: draft.moduleOrigin,
+      senderEmail: activeSenderEmail,
       attachmentNames: attachments.map((item) => item.attachmentName),
       attachmentContentTypes: attachments.map((item) => item.attachmentContentType || item.attachmentBlob.type),
     });
