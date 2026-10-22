@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
-import { buildVRReportRows, getPreviousCompetencia, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { buildVRReportRows, applyBenefitCorrection, getPreviousCompetencia, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useFeriados } from '@/hooks/useFeriados';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
@@ -145,19 +145,8 @@ const RelatorioVRImpressaoPage: React.FC = () => {
           e.companyId === company.id && (e.competencia === competencia || e.competencia === competenciaAnterior),
         );
         const rawRows = buildVRReportRows(compEmps, compEntries, diasUteis, competencia, feriadosDatas, medical.atestados);
-        const rows: BenefitReportRow[] = rawRows.map(r => {
-          const c = correcoes.findFor('vr', company.id, r.emp.id, competencia);
-          if (!c) return r;
-          return {
-            ...r,
-            valorDiario: Number(c.valor_diario_corrigido ?? r.valorDiario),
-            diasFinais: Number(c.dias_finais_corrigido ?? r.diasFinais),
-            valorTotal: Number(c.valor_total_corrigido ?? r.valorTotal),
-            corrigido: true,
-            correcaoMotivo: c.motivo,
-            correcaoObservacao: c.observacao,
-          };
-        });
+        const rows: BenefitReportRow[] = rawRows.map(r =>
+          applyBenefitCorrection(r, correcoes.findFor('vr', company.id, r.emp.id, competencia)));
         const total = sumBenefitRows(rows);
         return { company, diasUteis, dataFechamento: fech.dataFechamento || '', rows, total };
       });

@@ -279,6 +279,51 @@ export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[]
   );
 };
 
+export type BenefitCorrectionInput = {
+  valor_diario_corrigido?: number | null;
+  dias_finais_corrigido?: number | null;
+  valor_total_corrigido?: number | null;
+  motivo?: string | null;
+  observacao?: string | null;
+  data_pagamento?: string | null;
+};
+
+/**
+ * Uma correção autorizada substitui os dias finais, não adiciona o abatimento
+ * antigo. Mantém recibo, total e coluna de dias descontados matematicamente
+ * consistentes, preservando o apontamento original no fechamento.
+ */
+export const applyBenefitCorrection = (
+  row: BenefitReportRow,
+  correction?: BenefitCorrectionInput | null,
+): BenefitReportRow => {
+  if (!correction) return row;
+  const valorDiario = Number(correction.valor_diario_corrigido ?? row.valorDiario);
+  const diasFinais = Number(correction.dias_finais_corrigido ?? row.diasFinais);
+  const recalculado = Math.round((valorDiario * diasFinais + Number.EPSILON) * 100) / 100;
+  const valorTotal = Number(correction.valor_total_corrigido ?? recalculado);
+  if (![valorDiario, diasFinais, valorTotal].every(Number.isFinite) ||
+      valorDiario < 0 || diasFinais < 0 || diasFinais > row.diasPrevistos || valorTotal < 0) {
+    return row;
+  }
+  const diasDescontados = Math.max(0, row.diasPrevistos - diasFinais);
+  const motivo = String(correction.motivo || row.motivo || '');
+  return {
+    ...row,
+    valorDiario,
+    diasFinais,
+    diasDescontados,
+    valorTotal,
+    motivo,
+    corrigido: true,
+    correcaoMotivo: correction.motivo || null,
+    correcaoObservacao: correction.observacao || null,
+    ...(correction.data_pagamento
+      ? { dataPagamentoCorrecao: correction.data_pagamento }
+      : {}),
+  } as BenefitReportRow;
+};
+
 /** Uma ordem de pagamento nunca pode conter valores de benefícios diferentes. */
 export const onlyBenefitForPayment = <T extends { tipo: 'vr' | 'vt' }>(
   generations: T[],
