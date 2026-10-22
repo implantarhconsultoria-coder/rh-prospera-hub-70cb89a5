@@ -462,7 +462,7 @@ const RelatorioVRPage: React.FC = () => {
     const row = buildVRReportRows([individualEmployee], pool, individualDaysInMonth, individualCompetencia, [], individualMedical.atestados)[0];
     return row ? applyCorrection(row, individualEmployee.companyId, individualCompetencia) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [individualEmployee, individualAdmission?.eligible, individualCompetencia, individualDaysInMonth, entries, correcoes.data]);
+  }, [individualEmployee, individualAdmission?.eligible, individualCompetencia, individualDaysInMonth, entries, correcoes.data, individualMedical.atestados]);
 
   const handleIndividualCompanyChange = (companyId: string) => {
     setIndividualCompanyId(companyId);
@@ -480,6 +480,8 @@ const RelatorioVRPage: React.FC = () => {
   const handleIndividualGenerate = async () => {
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
     if (!individualEmployee) return toast.error('Selecione um funcionário.');
+    if (individualMedical.loading || individualMedical.error) return toast.error(individualMedical.error || 'Consultando atestados.');
+    if (individualMedical.documentosPendentes) return toast.error('Revise as datas dos atestados da competência anterior antes da emissão individual.');
     if (individualEmployee.status !== 'ativo' || !individualEmployee.vrAtivo) return toast.error('Funcionário não está ativo com VR habilitado.');
     const admission = getVRAdmissionCalculation(individualEmployee, individualCompetencia);
     if (!admission.eligible) return toast.info('Funcionário ainda não admitido nesta competência.');
@@ -489,6 +491,7 @@ const RelatorioVRPage: React.FC = () => {
       const pool = buildEntryPool([individualEmployee.companyId], individualCompetencia);
       const rowBase = buildVRReportRows([individualEmployee], pool, getWorkingDays(individualCompetencia), individualCompetencia, [], individualMedical.atestados)[0];
       if (!rowBase) return toast.info('Funcionário ainda não admitido nesta competência.');
+      if (rowBase.pendenciaConferencia) throw new Error('Faltas ainda não conferidas no ponto. Não é seguro emitir o recibo individual.');
       const row = applyCorrection(rowBase, individualEmployee.companyId, individualCompetencia);
       const company = companies.find(item => item.id === individualEmployee.companyId);
       if (!company) throw new Error('Empresa do funcionário não encontrada.');
