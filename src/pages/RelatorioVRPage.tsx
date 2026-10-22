@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, UtensilsCrossed } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { ExternalLink, UtensilsCrossed, ClipboardCheck, FileSpreadsheet } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -561,6 +561,37 @@ const RelatorioVRPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <section aria-label="Conferência e pagamentos de benefícios" className="rounded-2xl border border-violet-400/50 bg-violet-500/10 p-4 md:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-violet-300">Conferência VR + VT</p>
+            <h2 className="mt-1 text-lg font-semibold text-foreground">Atestados, faltas e relatório consolidado para pagamento</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Benefício de {competencia} · cruzamento com afastamentos de {getPreviousCompetencia(competencia)}.
+              {' '}{medical.loading ? 'Consultando atestados...' :
+                medical.error ? 'Atenção: falha ao consultar atestados.' :
+                medical.documentosPendentes > 0 ? `${medical.documentosPendentes} documento(s) aguardando validação de datas.` :
+                'Sem atestados documentais pendentes nesse período.'}
+            </p>
+          </div>
+          <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+            <Button asChild type="button" variant="outline" className="border-violet-400/60 font-semibold">
+              <Link to="/admin/conferencia-atestados-beneficios">
+                <ClipboardCheck className="mr-2 h-4 w-4" />Conferir atestados
+              </Link>
+            </Button>
+            <Button asChild type="button" className="bg-amber-400 font-semibold text-black hover:bg-amber-300">
+              <Link to={`/admin/consolidado-beneficios?competencia=${competencia}`}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />Consolidado para pagamento
+              </Link>
+            </Button>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Pagamentos só podem ser liberados após revisar datas dos atestados e faltas de ponto pendentes. Nenhum abatimento é confirmado sem conferência.
+        </p>
+      </section>
 
       <div className="rounded-2xl border border-border bg-card p-4">
         <div className="grid gap-3 lg:grid-cols-[1.2fr_.8fr_1fr_auto] lg:items-end">
