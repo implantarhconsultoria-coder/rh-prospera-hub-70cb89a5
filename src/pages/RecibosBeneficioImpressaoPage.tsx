@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays, getFirstBusinessDayOfNextMonth } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
-import { buildVRReportRows, buildVTReportRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { buildVRReportRows, buildVTReportRows, applyBenefitCorrection, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
@@ -27,18 +27,7 @@ const formatInputDateBr = (value: string) => {
   if (!match) return value;
   return `${match[3]}/${match[2]}/${match[1]}`;
 };
-const applyCorrecao = (r: BenefitReportRow, c: any | undefined): BenefitReportRow => {
-  if (!c) return r;
-  return {
-    ...r,
-    valorDiario: Number(c.valor_diario_corrigido ?? r.valorDiario),
-    diasFinais: Number(c.dias_finais_corrigido ?? r.diasFinais),
-    valorTotal: Number(c.valor_total_corrigido ?? r.valorTotal),
-    corrigido: true,
-    correcaoMotivo: c.motivo,
-    correcaoObservacao: c.observacao,
-  };
-};
+const applyCorrecao = applyBenefitCorrection;
 
 const sanitizeFileName = (value: string) =>
   (value || 'recibos')
