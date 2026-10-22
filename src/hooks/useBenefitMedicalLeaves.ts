@@ -94,6 +94,7 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
         if (!cancelled) setState({
           competencia, loading: false, error: error?.message || 'Erro ao consultar atestados.',
           atestados: [], documentosPendentes: 0,
+          pendentesPorEmpresa: {}, pendentesPorFuncionario: {},
         });
       }
     })();
