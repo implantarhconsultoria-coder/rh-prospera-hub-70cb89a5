@@ -223,8 +223,12 @@ const AuthGate = () => {
         <Route path="/admin/uniformes" element={<UniformePage />} />
         <Route path="/admin/relatorio-vr" element={<RelatorioVRPage />} />
         <Route path="/admin/relatorio-vt" element={<RelatorioVTPage />} />
-        <Route path="/admin/consolidado-beneficios" element={<ConsolidadoBeneficiosPage />} />
-        <Route path="/admin/conferencia-atestados-beneficios" element={<ConferenciaAtestadosBeneficiosPage />} />
+        <Route path="/admin/consolidado-vr" element={<ConsolidadoBeneficiosPage tipo="vr" />} />
+        <Route path="/admin/consolidado-vt" element={<ConsolidadoBeneficiosPage tipo="vt" />} />
+        <Route path="/admin/conferencia-atestados-vr" element={<ConferenciaAtestadosBeneficiosPage tipo="vr" />} />
+        <Route path="/admin/conferencia-atestados-vt" element={<ConferenciaAtestadosBeneficiosPage tipo="vt" />} />
+        <Route path="/admin/consolidado-beneficios" element={<Navigate to="/admin/consolidado-vr" replace />} />
+        <Route path="/admin/conferencia-atestados-beneficios" element={<Navigate to="/admin/conferencia-atestados-vr" replace />} />
         <Route path="/admin/historico" element={<HistoricoPage />} />
         <Route path="/admin/aso" element={<ASOPage />} />
         <Route path="/admin/pre-cadastro-admissional" element={<PreCadastroAdmissionalPage />} />

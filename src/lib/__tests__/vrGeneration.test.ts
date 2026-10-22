@@ -5,6 +5,7 @@ import {
   getVRAdmissionCalculation,
   getVrGenerationDestinations,
   mergeBenefitGenerationSnapshot,
+  onlyBenefitForPayment,
   medicalLeaveWorkingDays,
   shouldCreateVrPayrollDocument,
 } from '@/lib/benefitReports';
@@ -238,5 +239,31 @@ describe('conciliação auditável de atestados e benefícios', () => {
       status: 'confirmado', aplicarVR: true, aplicarVT: true };
     const row = buildVTReportRows([emp], [manual], 21, '2026-11', [atestado])[0];
     expect(row.diasDescontados).toBe(2);
+  });
+});
+
+describe('relatórios de pagamento independentes', () => {
+  it('consolidado VR não inclui lançamentos de VT, mesmo recebendo uma lista mista', () => {
+    const generated = [
+      { tipo: 'vr' as const, employee_id: 'a', valor_total: 651 },
+      { tipo: 'vt' as const, employee_id: 'a', valor_total: 210 },
+      { tipo: 'vr' as const, employee_id: 'b', valor_total: 682 },
+    ];
+    expect(onlyBenefitForPayment(generated, 'vr').map(r => r.valor_total)).toEqual([651, 682]);
+  });
+
+  it('consolidado VT não inclui lançamentos de VR', () => {
+    const generated = [
+      { tipo: 'vr' as const, valor_total: 651 },
+      { tipo: 'vt' as const, valor_total: 210 },
+      { tipo: 'vt' as const, valor_total: 180 },
+    ];
+    expect(onlyBenefitForPayment(generated, 'vt').map(r => r.valor_total)).toEqual([210, 180]);
+  });
+
+  it('VT e VR podem ser emitidos separadamente, mesmo sem o outro benefício', () => {
+    const generated = [{ tipo: 'vr' as const, valor_total: 100 }];
+    expect(onlyBenefitForPayment(generated, 'vr')).toHaveLength(1);
+    expect(onlyBenefitForPayment(generated, 'vt')).toHaveLength(0);
   });
 });

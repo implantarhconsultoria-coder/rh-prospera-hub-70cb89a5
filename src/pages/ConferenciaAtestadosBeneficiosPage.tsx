@@ -34,13 +34,14 @@ type AtestadoRegistrado = {
 
 type Revisao = { inicio: string; fim: string; aplicarVR: boolean; aplicarVT: boolean };
 
-const DEFAULT_REVIEW: Revisao = { inicio: '', fim: '', aplicarVR: false, aplicarVT: true };
+const DEFAULT_REVIEW: Revisao = { inicio: '', fim: '', aplicarVR: false, aplicarVT: false };
 const dateOnly = (value: string) => value?.slice(0, 10) || '';
 const uniqueKey = (doc: Arquivo) => `${doc.funcionario_id || 'sem-id'}|${doc.arquivo_url || doc.id}`;
 const daysInclusive = (inicio: string, fim: string) =>
   Math.floor((Date.parse(`${fim}T12:00:00Z`) - Date.parse(`${inicio}T12:00:00Z`)) / 86400000) + 1;
 
-const ConferenciaAtestadosBeneficiosPage: React.FC = () => {
+const ConferenciaAtestadosBeneficiosPage: React.FC<{ tipo: 'vr' | 'vt' }> = ({ tipo }) => {
+  const sigla = tipo.toUpperCase();
   const { employees, companies, session } = useApp();
   const [docs, setDocs] = useState<Arquivo[]>([]);
   const [confirmed, setConfirmed] = useState<AtestadoRegistrado[]>([]);
@@ -100,7 +101,7 @@ const ConferenciaAtestadosBeneficiosPage: React.FC = () => {
       fim: dateOnly(fromDb.data_fim || ''),
       aplicarVR: fromDb.aplicado_vr === true,
       aplicarVT: fromDb.aplicado_vt === true,
-    } : DEFAULT_REVIEW);
+    } : { ...DEFAULT_REVIEW, aplicarVT: tipo === 'vt' });
   };
   const changeReview = (doc: Arquivo, patch: Partial<Revisao>) =>
     setReview(prev => ({ ...prev, [doc.id]: { ...getReview(doc), ...patch } }));
@@ -121,9 +122,6 @@ const ConferenciaAtestadosBeneficiosPage: React.FC = () => {
     if (!Number.isFinite(dias) || dias <= 0 || dias > 365) {
       return toast.error('Intervalo inválido. Confira as datas no documento original.');
     }
-    if (!data.aplicarVR && !data.aplicarVT) {
-      return toast.error('Marque ao menos um benefício, ou mantenha o documento pendente.');
-    }
     setSavingId(doc.id);
     try {
       const original = getRegistered(doc);
@@ -139,8 +137,8 @@ const ConferenciaAtestadosBeneficiosPage: React.FC = () => {
         arquivo_url: doc.arquivo_url,
         arquivo_nome: doc.nome_arquivo || 'Atestado arquivado',
         status: 'confirmado',
-        aplicado_vr: data.aplicarVR,
-        aplicado_vt: data.aplicarVT,
+        aplicado_vr: tipo === 'vr' ? data.aplicarVR : original?.aplicado_vr === true,
+        aplicado_vt: tipo === 'vt' ? data.aplicarVT : original?.aplicado_vt === true,
         importado_por_user_id: session.user.id,
         importado_por_nome: session.user.email || '',
       };
@@ -149,7 +147,7 @@ const ConferenciaAtestadosBeneficiosPage: React.FC = () => {
         : supabase.from('atestados').insert(values);
       const { error } = await query;
       if (error) throw error;
-      toast.success('Intervalo conferido e registrado para o próximo fechamento VR/VT.');
+      toast.success(`Datas conferidas. Configuração do ${sigla} registrada de forma independente.`);
       setReload(n => n + 1);
     } catch (e: any) {
       toast.error(e?.message || 'Falha ao registrar atestado.');
@@ -162,15 +160,16 @@ const ConferenciaAtestadosBeneficiosPage: React.FC = () => {
     <section className="space-y-5 p-4 md:p-7">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Conferência de atestados — VR e VT</h1>
+          <h1 className="text-2xl font-bold">Conferência de atestados — {sigla}</h1>
           <p className="max-w-3xl text-sm text-muted-foreground">
-            Arquivos históricos do RH. Abra cada atestado e confirme as datas reais antes de autorizar abatimento.
-            A data do upload não representa necessariamente afastamento e não gera desconto.
+            Consulte os atestados históricos e confirme as datas antes do lançamento de {sigla}.
+            Esta conferência altera apenas {sigla}; não modifica a configuração do outro benefício.
+            A data do upload não representa necessariamente a data do afastamento.
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setReload(n => n + 1)}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
-          <Button variant="outline" asChild><Link to="/admin/consolidado-beneficios">Consolidado VR/VT</Link></Button>
+          <Button variant="outline" asChild><Link to={`/admin/consolidado-${tipo}`}>Consolidado {sigla}</Link></Button>
         </div>
       </header>
       <div className="flex flex-wrap gap-3 text-sm">
@@ -211,16 +210,19 @@ const ConferenciaAtestadosBeneficiosPage: React.FC = () => {
                 <label className="text-xs font-semibold">Fim do afastamento
                   <Input className="mt-1" type="date" value={values.fim} onChange={e => changeReview(doc, { fim: e.target.value })} />
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={values.aplicarVT} onCheckedChange={checked => changeReview(doc, { aplicarVT: checked === true })} />
-                  Ajustar VT (sem deslocamento)
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={values.aplicarVR} onCheckedChange={checked => changeReview(doc, { aplicarVR: checked === true })} />
-                  Ajustar VR (conforme regra contratual)
-                </label>
+                {tipo === 'vr' ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={values.aplicarVR} onCheckedChange={checked => changeReview(doc, { aplicarVR: checked === true })} />
+                    Aplicar abatimento no VR (somente se permitido pela regra contratual)
+                  </label>
+                ) : (
+                  <label className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={values.aplicarVT} onCheckedChange={checked => changeReview(doc, { aplicarVT: checked === true })} />
+                    Aplicar abatimento no VT (dias sem deslocamento)
+                  </label>
+                )}
                 <Button onClick={() => void save(doc)} disabled={savingId === doc.id || !doc.arquivo_url}>
-                  <CalendarCheck className="mr-2 h-4 w-4" />{savingId === doc.id ? 'Salvando...' : 'Validar datas'}
+                  <CalendarCheck className="mr-2 h-4 w-4" />{savingId === doc.id ? 'Salvando...' : `Validar datas — ${sigla}`}
                 </Button>
               </div>
             </article>
