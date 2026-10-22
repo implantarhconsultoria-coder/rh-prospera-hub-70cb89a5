@@ -299,6 +299,19 @@ const ProtocoloPage: React.FC = () => {
     const missingContext = groups.filter((group) => !group.cliente.trim() || !group.local.trim()).length;
     const missingDocs = items.filter((item) => !item.ativo || !pdfOf(item.ativo)).length;
     const vehicleItems = items.filter((item) => Boolean(normalizePlate(item.ativo?.placa || item.placa)));
+    // Não entregar documentação de um mesmo ativo a dois destinos no mesmo lote.
+    const assetDestinations = new Map<string, string>();
+    let conflictingDestinations = 0;
+    for (const group of groups) for (const item of group.itens) {
+      const assetKey = item.ativo?.id || normalizePlate(item.placa) || normalizePatrimonio(item.patrimonio);
+      const destinationKey = `${normalize(group.cliente)}|${normalize(group.local)}`;
+      if (assetKey && assetDestinations.has(assetKey) && assetDestinations.get(assetKey) !== destinationKey) {
+        conflictingDestinations += 1;
+      } else if (assetKey) assetDestinations.set(assetKey, destinationKey);
+    }
+    // Patrimônio contraditório não pode pegar PDF pela placa sem conferência.
+    const mismatchedAssets = items.filter(item => item.ativo?.patrimonio && item.patrimonio &&
+      normalizePatrimonio(item.ativo.patrimonio) !== normalizePatrimonio(item.patrimonio)).length;
     const vehicleFlowBlocked = vehicleItems.length > 0 && !isLocacaoFlow;
     const missingAvailability = isLocacaoFlow
       ? vehicleItems.filter((item) => {
@@ -313,8 +326,11 @@ const ProtocoloPage: React.FC = () => {
       missingContext,
       missingDocs,
       missingAvailability,
+      mismatchedAssets,
+      conflictingDestinations,
       vehicleFlowBlocked,
-      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0 && missingAvailability === 0 && !vehicleFlowBlocked,
+      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0 &&
+        mismatchedAssets === 0 && conflictingDestinations === 0 && missingAvailability === 0 && !vehicleFlowBlocked,
     };
   }, [groups, disponibilidades, isLocacaoFlow]);
 
@@ -733,7 +749,7 @@ const ProtocoloPage: React.FC = () => {
               <p className="text-xs text-muted-foreground">{readiness.totalGroups} destino(s) • {readiness.totalItems} protocolo(s) individuais • 2 vias por equipamento</p>
             </div>
             <Badge className={readiness.ready ? '' : 'border-destructive/40 bg-destructive/10 text-destructive'} variant="outline">
-              {readiness.ready ? 'Pronto para imprimir' : `${readiness.missingDocs + readiness.missingContext} pendência(s)`}
+              {readiness.ready ? 'Pronto para imprimir' : `${readiness.missingDocs + readiness.missingContext + readiness.mismatchedAssets + readiness.conflictingDestinations} pendência(s) de dados`}
             </Badge>
           </div>
 
@@ -874,6 +890,13 @@ const ProtocoloPage: React.FC = () => {
                   <p className="mt-1">Existem {readiness.missingDocs} ativo(s) sem PDF vinculado no Supabase. Cadastre o documento na Frota e clique em “Conferir documentos novamente”.</p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {(readiness.mismatchedAssets > 0 || readiness.conflictingDestinations > 0) && (
+            <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+              <p className="font-bold">IMPRESSÃO BLOQUEADA — DADOS DE EQUIPAMENTO OU DESTINO CONFLITANTES</p>
+              <p className="mt-1">{readiness.mismatchedAssets} patrimônio(s) divergente(s) da Frota e {readiness.conflictingDestinations} ativo(s) enviados a destinos distintos no mesmo pedido. Confira a mensagem e o cadastro antes de liberar.</p>
             </div>
           )}
 
