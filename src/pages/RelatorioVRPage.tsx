@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getWorkingDays } from '@/lib/workingDays';
 import {
   buildVRReportRows,
+  applyBenefitCorrection,
   getPreviousCompetencia,
   getVRAdmissionCalculation,
   getVrGenerationDestinations,
@@ -123,20 +124,8 @@ const RelatorioVRPage: React.FC = () => {
     });
   };
 
-  const applyCorrection = (row: BenefitReportRow, companyId: string, targetCompetencia: string): BenefitReportRow => {
-    const correction = correcoes.findFor('vr', companyId, row.emp.id, targetCompetencia);
-    if (!correction) return row;
-    return {
-      ...row,
-      valorDiario: Number(correction.valor_diario_corrigido ?? row.valorDiario),
-      diasFinais: Number(correction.dias_finais_corrigido ?? row.diasFinais),
-      valorTotal: Number(correction.valor_total_corrigido ?? row.valorTotal),
-      corrigido: true,
-      correcaoMotivo: correction.motivo || null,
-      correcaoObservacao: correction.observacao || null,
-      ...(correction.data_pagamento ? { dataPagamentoCorrecao: correction.data_pagamento } : {}),
-    } as BenefitReportRow;
-  };
+  const applyCorrection = (row: BenefitReportRow, companyId: string, targetCompetencia: string): BenefitReportRow =>
+    applyBenefitCorrection(row, correcoes.findFor('vr', companyId, row.emp.id, targetCompetencia));
 
   const buildEntryPool = (companyIds: string[], targetCompetencia: string) => {
     const previous = getPreviousCompetencia(targetCompetencia);
