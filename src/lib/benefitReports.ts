@@ -195,6 +195,10 @@ const buildBenefitRow = ({
     Number(descontoEntry.faltasDias || 0) > 0,
   );
   const faltasValidadas = pendenciaConferencia ? 0 : Math.max(0, Number(descontoEntry?.faltasDias || 0));
+  // Duas origens de abatimento sem datas de faltas não permitem identificar sobreposição.
+  // Manter o cálculo conservador e exigir conciliação humana antes de emitir pagamentos.
+  const pendenciaSobreposicao = faltasValidadas > 0 && diasAtestado > 0;
+  const pendenciaGeral = pendenciaConferencia || pendenciaSobreposicao;
   const diasPrevistos = getDiasPrevistos(entry, diasUteis, type);
   // Sem datas das faltas, usar o maior dos dois conjuntos evita abatimento duplicado.
   const diasDescontados = Math.min(Math.max(faltasValidadas, diasAtestado), diasPrevistos);
@@ -205,6 +209,7 @@ const buildBenefitRow = ({
     faltasValidadas > 0 ? `${faltasValidadas} falta(s) conferida(s) da competência anterior` : '',
     diasAtestado > 0 ? `${diasAtestado} dia(s) de atestado validado (sem duplicar falta)` : '',
     pendenciaConferencia ? 'PENDENTE: ausência de ponto sem conferência; desconto suspenso' : '',
+    pendenciaSobreposicao ? 'PENDENTE: verificar coincidência de datas entre faltas e atestados' : '',
   ].filter(Boolean).join(' | ');
 
   return {
@@ -215,7 +220,7 @@ const buildBenefitRow = ({
     diasPrevistos,
     diasDescontados,
     diasAtestado,
-    pendenciaConferencia,
+    pendenciaConferencia: pendenciaGeral,
     diasFinais,
     valorTotal,
     motivo,
