@@ -155,6 +155,8 @@ const RelatorioVTImpressaoPage: React.FC = () => {
   }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, feriadosDatas, correcoes, diasUteisManual, medical.atestados]);
 
   const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
+  const conferenciaPendente = medical.loading || Boolean(medical.error) || medical.documentosPendentes > 0 ||
+    blocks.some(b => b.rows.some(r => r.pendenciaConferencia));
 
   const handleSalvarPdf = async () => {
     try {
@@ -228,6 +230,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
         </div>
 
         <div id="vt-print-area" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
+          {conferenciaPendente && <div className="mb-4 border-2 border-red-700 p-3 text-red-700 font-bold text-sm">PRÉVIA: CONFERÊNCIA DE ATESTADOS/PONTO PENDENTE — NÃO UTILIZAR PARA PAGAMENTO.</div>}
           {blocks.map(b => (
             <EmpresaPagina key={b.company.id} block={b} competencia={competencia} consolidado={consolidado} />
           ))}
