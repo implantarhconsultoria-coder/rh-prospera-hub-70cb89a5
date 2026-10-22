@@ -8,6 +8,8 @@ type MedicalState = {
   error: string | null;
   atestados: BenefitMedicalLeave[];
   documentosPendentes: number;
+  pendentesPorEmpresa: Record<string, number>;
+  pendentesPorFuncionario: Record<string, number>;
 };
 
 const bounds = (competencia: string) => {
@@ -30,13 +32,15 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
     error: null,
     atestados: [],
     documentosPendentes: 0,
+    pendentesPorEmpresa: {},
+    pendentesPorFuncionario: {},
   });
 
   useEffect(() => {
     const anterior = getPreviousCompetencia(competencia);
     const period = bounds(anterior);
     if (!period) {
-      setState({ competencia, loading: false, error: null, atestados: [], documentosPendentes: 0 });
+      setState({ competencia, loading: false, error: null, atestados: [], documentosPendentes: 0, pendentesPorEmpresa: {}, pendentesPorFuncionario: {} });
       return;
     }
     let cancelled = false;
@@ -50,7 +54,7 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
             .lte('data_inicio', period.last)
             .gte('data_fim', period.first),
           supabase.from('documentos_funcionario')
-            .select('funcionario_id,arquivo_url')
+            .select('funcionario_id,company_id,arquivo_url')
             .ilike('tipo_documento', '%ATESTADO%')
             .gte('data_documento', `${period.first}T00:00:00-03:00`)
             .lt('data_documento', `${period.next}T00:00:00-03:00`),
@@ -62,8 +66,15 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
         const confirmedUrls = new Set(medicalRecords
           .filter(a => a.status === 'confirmado' && a.data_inicio && a.data_fim)
           .map(a => a.arquivo_url).filter(Boolean));
-        const pendingDocs = (documentsResult.data || [])
-          .filter(d => !d.arquivo_url || !confirmedUrls.has(d.arquivo_url)).length;
+        const pendingDocuments = (documentsResult.data || [])
+          .filter(d => !d.arquivo_url || !confirmedUrls.has(d.arquivo_url));
+        const pendingDocs = pendingDocuments.length;
+        const pendentesPorEmpresa: Record<string, number> = {};
+        const pendentesPorFuncionario: Record<string, number> = {};
+        pendingDocuments.forEach(d => {
+          if (d.company_id) pendentesPorEmpresa[d.company_id] = (pendentesPorEmpresa[d.company_id] || 0) + 1;
+          if (d.funcionario_id) pendentesPorFuncionario[d.funcionario_id] = (pendentesPorFuncionario[d.funcionario_id] || 0) + 1;
+        });
         const atestados: BenefitMedicalLeave[] = medicalRecords
           .filter(a => a.funcionario_id && a.company_id && a.data_inicio && a.data_fim)
           .map(a => ({
@@ -77,6 +88,7 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
           }));
         if (!cancelled) setState({
           competencia, loading: false, error: null, atestados, documentosPendentes: pendingDocs,
+          pendentesPorEmpresa, pendentesPorFuncionario,
         });
       } catch (error: any) {
         if (!cancelled) setState({
