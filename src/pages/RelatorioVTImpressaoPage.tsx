@@ -155,7 +155,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
   }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, feriadosDatas, correcoes, diasUteisManual, medical.atestados]);
 
   const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
-  const conferenciaPendente = medical.loading || Boolean(medical.error) || medical.documentosPendentes > 0 ||
+  const conferenciaPendente = medical.loading || Boolean(medical.error) || empresaIds.some(id => (medical.pendentesPorEmpresa[id] || 0) > 0) ||
     blocks.some(b => b.rows.some(r => r.pendenciaConferencia));
 
   const handleSalvarPdf = async () => {
