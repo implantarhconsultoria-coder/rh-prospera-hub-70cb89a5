@@ -19,6 +19,8 @@ const menuItems: MenuItem[] = [
   { label: 'Empresas', icon: Building2, path: '/admin/empresas' },
   { label: 'VR — Vale-refeição', icon: Receipt, path: '/admin/relatorio-vr' },
   { label: 'VT — Vale-transporte', icon: Receipt, path: '/admin/relatorio-vt' },
+  { label: 'Consolidado VR + VT', icon: Receipt, path: '/admin/consolidado-beneficios' },
+  { label: 'Conferir Atestados', icon: ClipboardCheck, path: '/admin/conferencia-atestados-beneficios' },
   { label: 'Assinatura Digital', icon: Receipt, path: '/admin/folha-pagamento' },
   { label: 'Central da Contabilidade', icon: ClipboardCheck, path: '/admin/central-contabilidade' },
   { label: 'Apontamento Inteligente', icon: ClipboardCheck, path: '/admin/apontamento-inteligente' },
