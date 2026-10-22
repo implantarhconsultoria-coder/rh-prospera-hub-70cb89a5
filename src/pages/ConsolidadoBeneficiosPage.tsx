@@ -156,6 +156,7 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
     .filter(tipo => !generations.some(g => g.company_id === c.id && g.tipo === tipo))
     .map(tipo => `${c.name}: ${tipo.toUpperCase()}`));
   const pendencias = rows.filter(r => r.pendente).length;
+  const atestadosPendentesSelecionados = companiesSelected.reduce((count, c) => count + (medical.pendentesPorEmpresa[c.id] || 0), 0);
   const stale = generations.some(g => (companyId === 'todas' || companyId === g.company_id)
     && absences.some(a => a.company_id === g.company_id && a.updated_at
       && new Date(a.updated_at).getTime() > new Date(g.generated_at).getTime()));
@@ -170,7 +171,7 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
   });
   const ready = !loading && !medical.loading && !error && !medical.error
     && missingGenerations.length === 0 && pendencias === 0 && !stale
-    && medical.documentosPendentes === 0 && rows.length > 0;
+    && atestadosPendentesSelecionados === 0 && rows.length > 0;
   const status = ready ? 'CONFERÊNCIA TÉCNICA SEM PENDÊNCIAS' : 'PRÉVIA — NÃO LIBERADA PARA PAGAMENTO';
   const days = getWorkingDays(competencia);
 
@@ -235,7 +236,7 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
         {missingGenerations.length > 0 && <p className="text-sm text-amber-500">Benefícios ainda não gerados: {missingGenerations.join('; ')}</p>}
         {pendencias > 0 && <p className="text-sm text-amber-500">{pendencias} funcionário(s) com lançamentos de ponto pendentes de conferência.</p>}
         {stale && <p className="text-sm text-amber-500">O fechamento foi alterado após a geração. Gere VR e VT novamente antes de pagar.</p>}
-        {medical.documentosPendentes > 0 && <p className="text-sm text-amber-500">{medical.documentosPendentes} atestado(s) sem intervalo validado na competência anterior.</p>}
+        {atestadosPendentesSelecionados > 0 && <p className="text-sm text-amber-500">{atestadosPendentesSelecionados} atestado(s) das empresas selecionadas sem intervalo validado na competência anterior.</p>}
         <p className="text-xs text-muted-foreground">Totais refletem os snapshots já gerados. Alterações na conferência exigem nova geração. Não substitui autorização financeira.</p>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
