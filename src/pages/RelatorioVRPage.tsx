@@ -181,6 +181,8 @@ const RelatorioVRPage: React.FC = () => {
     valor_diario: row.valorDiario,
     dias_previstos: row.diasPrevistos,
     dias_descontados: row.diasDescontados,
+    dias_atestado: row.diasAtestado || 0,
+    pendencia_conferencia: row.pendenciaConferencia || false,
     dias_finais: row.diasFinais,
     valor_total: row.valorTotal,
     motivo: row.motivo || null,
@@ -395,11 +397,14 @@ const RelatorioVRPage: React.FC = () => {
     if (!Number.isFinite(days) || days <= 0) return toast.error('Informe os dias pagos.');
     if (!selectedCompanyIds.length) return toast.error('Selecione ao menos uma empresa.');
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
+    if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
+    if (medical.documentosPendentes) return toast.error('Há atestados sem datas conferidas na competência anterior. Faça a revisão antes de gerar VR.');
 
     setGenerating(true);
     try {
       const entryPool = buildEntryPool(selectedCompanyIds, competencia);
       const blocks = buildBlocks(selectedCompanyIds, entryPool);
+      if (blocks.some(block => block.rows.some(row => row.pendenciaConferencia))) throw new Error('Faltas importadas do ponto sem conferência: revise o fechamento antes de gerar VR.');
       const candidateCount = employees.filter(employee => selectedCompanyIds.includes(employee.companyId)
         && employee.status === 'ativo'
         && employee.categoria === 'operacional'
