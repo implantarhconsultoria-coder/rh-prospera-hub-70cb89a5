@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVRReportRows,
+  applyBenefitCorrection,
   buildVTReportRows,
   getVRAdmissionCalculation,
   getVrGenerationDestinations,
@@ -265,5 +266,31 @@ describe('relatórios de pagamento independentes', () => {
     const generated = [{ tipo: 'vr' as const, valor_total: 100 }];
     expect(onlyBenefitForPayment(generated, 'vr')).toHaveLength(1);
     expect(onlyBenefitForPayment(generated, 'vt')).toHaveLength(0);
+  });
+});
+
+describe('Daphine — ajuste de 21 dias de VR sem descontar falta não confirmada', () => {
+  it('preserva fechamento original mas converte 20x31 em 21x31 e zero dia abatido', () => {
+    const emp = employee({ id: 'daphine', vrDiario: 31, dataAdmissao: '2026-10-13' });
+    const entries = [{ ...entry(emp.id, '2026-10', 1), statusConferencia: 'pendente' }];
+    const original = buildVRReportRows([emp], entries, 21, '2026-11')[0];
+    expect(original.diasFinais).toBe(20);
+    expect(original.valorTotal).toBe(620);
+    const corrigido = applyBenefitCorrection(original, {
+      valor_diario_corrigido: 31,
+      dias_finais_corrigido: 21,
+      valor_total_corrigido: 651,
+      motivo: 'Ajuste autorizado de VR',
+    });
+    expect(corrigido.diasPrevistos).toBe(21);
+    expect(corrigido.diasDescontados).toBe(0);
+    expect(corrigido.diasFinais).toBe(21);
+    expect(corrigido.valorTotal).toBe(651);
+    expect(corrigido.descontoEntry?.faltasDias).toBe(1);
+  });
+  it('não permite que uma correção exceda os dias previstos', () => {
+    const emp = employee({vrDiario:31});
+    const row = buildVRReportRows([emp], [], 21, '2026-11')[0];
+    expect(applyBenefitCorrection(row,{dias_finais_corrigido:22})).toBe(row);
   });
 });
