@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { getPreviousCompetencia } from '@/lib/benefitReports';
+import { getPreviousCompetencia, onlyBenefitForPayment } from '@/lib/benefitReports';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import { getWorkingDays } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
@@ -96,8 +96,8 @@ const ConsolidadoBeneficiosPage: React.FC<{ tipo: BenefitType }> = ({ tipo }) =>
 
   const absencesById = useMemo(() => new Map(absences.map(a => [a.funcionario_id, a])), [absences]);
   const rows = useMemo(() => {
-    const all = generations
-      .filter(g => g.tipo === tipo && (companyId === 'todas' || g.company_id === companyId))
+    const all = onlyBenefitForPayment(generations, tipo)
+      .filter(g => companyId === 'todas' || g.company_id === companyId)
       .flatMap(g => (g.report_snapshot || []).filter(r => Boolean(r?.employee_id)).map(r => {
         const employee = employees.find(e => e.id === r.employee_id);
         const imported = absencesById.get(r.employee_id);
