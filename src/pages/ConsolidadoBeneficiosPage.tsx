@@ -8,7 +8,6 @@ import { formatCurrency } from '@/lib/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertTriangle, Download, Printer, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
 
 type SnapshotRow = {
   employee_id: string;
@@ -162,6 +161,7 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
   const days = getWorkingDays(competencia);
 
   const exportCsv = () => {
+    if (!ready) return;
     const header = ['Empresa', 'Funcionário', 'CPF', 'Banco', 'Agência', 'Conta', 'PIX',
       'Competência', 'Dias VR', 'Desconto VR (dias)', 'VR (R$)', 'Dias VT', 'Desconto VT (dias)',
       'VT (R$)', 'Total (R$)', 'Situação', 'Motivos'];
@@ -191,11 +191,11 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
           <Button variant="outline" onClick={() => setReload(n => n + 1)}>
             <RefreshCw className="mr-2 h-4 w-4" />Atualizar
           </Button>
-          <Button variant="outline" disabled={!rows.length || loading} onClick={exportCsv}>
-            <Download className="mr-2 h-4 w-4" />CSV para pagamento
+          <Button variant="outline" disabled={!ready} onClick={exportCsv}>
+            <Download className="mr-2 h-4 w-4" />CSV após conferência
           </Button>
-          <Button variant="outline" disabled={!rows.length || loading} onClick={() => window.print()}>
-            <Printer className="mr-2 h-4 w-4" />Imprimir / PDF
+          <Button variant="outline" disabled={!ready} onClick={() => window.print()}>
+            <Printer className="mr-2 h-4 w-4" />PDF após conferência
           </Button>
         </div>
       </div>
