@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/context/AppContext';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { getPreviousCompetencia } from '@/lib/benefitReports';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
@@ -43,7 +44,11 @@ const safeName = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '_');
 
 const ConsolidadoBeneficiosPage: React.FC = () => {
   const { companies, employees } = useApp();
-  const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
+  const [searchParams] = useSearchParams();
+  const selectedMonth = searchParams.get('competencia');
+  const initialCompetencia = selectedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)
+    ? selectedMonth : new Date().toISOString().slice(0, 7);
+  const [competencia, setCompetencia] = useState(initialCompetencia);
   const [companyId, setCompanyId] = useState('todas');
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [absences, setAbsences] = useState<ImportedAbsence[]>([]);
