@@ -19,6 +19,7 @@ import {
   type BenefitReportRow,
 } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import { sha256Browser } from '@/lib/payrollDocuments';
 import { buildVRReceiptPdfBlob } from '@/lib/vrReceiptPdf';
 import { formatCurrency } from '@/lib/calculations';
@@ -75,6 +76,7 @@ const RelatorioVRPage: React.FC = () => {
   const defaultCompetencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
 
   const [competencia, setCompetencia] = useState(defaultCompetencia);
+  const medical = useBenefitMedicalLeaves(competencia);
   const [diasPagos, setDiasPagos] = useState(String(getWorkingDays(defaultCompetencia)));
   const [dataPagamento, setDataPagamento] = useState(searchParams.get('dataPagamento') || '');
   const [selectionMode, setSelectionMode] = useState<'all' | 'selected'>('all');
@@ -90,6 +92,7 @@ const RelatorioVRPage: React.FC = () => {
   const [individualCompanyId, setIndividualCompanyId] = useState(searchParams.get('empresa') || '');
   const [individualEmployeeId, setIndividualEmployeeId] = useState(searchParams.get('funcionario') || '');
   const [individualCompetencia, setIndividualCompetencia] = useState(defaultCompetencia);
+  const individualMedical = useBenefitMedicalLeaves(individualCompetencia);
   const [individualPaymentDate, setIndividualPaymentDate] = useState(searchParams.get('dataPagamento') || '');
   const [individualGenerating, setIndividualGenerating] = useState(false);
   const [lastIndividualUrl, setLastIndividualUrl] = useState('');
@@ -165,7 +168,7 @@ const RelatorioVRPage: React.FC = () => {
         const previous = getPreviousCompetencia(competencia);
         const companyEntries = entryPool.filter(entry => entry.companyId === company.id
           && (entry.competencia === competencia || entry.competencia === previous));
-        const rows = buildVRReportRows(companyEmployees, companyEntries, days, competencia)
+        const rows = buildVRReportRows(companyEmployees, companyEntries, days, competencia, [], medical.atestados)
           .map(row => applyCorrection(row, company.id, competencia));
         return { company, rows };
       });
@@ -178,6 +181,8 @@ const RelatorioVRPage: React.FC = () => {
     valor_diario: row.valorDiario,
     dias_previstos: row.diasPrevistos,
     dias_descontados: row.diasDescontados,
+    dias_atestado: row.diasAtestado || 0,
+    pendencia_conferencia: row.pendenciaConferencia || false,
     dias_finais: row.diasFinais,
     valor_total: row.valorTotal,
     motivo: row.motivo || null,
@@ -392,11 +397,14 @@ const RelatorioVRPage: React.FC = () => {
     if (!Number.isFinite(days) || days <= 0) return toast.error('Informe os dias pagos.');
     if (!selectedCompanyIds.length) return toast.error('Selecione ao menos uma empresa.');
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
+    if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
+    if (selectedCompanyIds.some(id => (medical.pendentesPorEmpresa[id] || 0) > 0)) return toast.error('Há atestados sem datas conferidas nas empresas selecionadas. Revise antes de gerar VR.');
 
     setGenerating(true);
     try {
       const entryPool = buildEntryPool(selectedCompanyIds, competencia);
       const blocks = buildBlocks(selectedCompanyIds, entryPool);
+      if (blocks.some(block => block.rows.some(row => row.pendenciaConferencia))) throw new Error('Faltas importadas do ponto sem conferência: revise o fechamento antes de gerar VR.');
       const candidateCount = employees.filter(employee => selectedCompanyIds.includes(employee.companyId)
         && employee.status === 'ativo'
         && employee.categoria === 'operacional'
@@ -451,10 +459,10 @@ const RelatorioVRPage: React.FC = () => {
     const previous = getPreviousCompetencia(individualCompetencia);
     const pool = entries.filter(entry => entry.companyId === individualEmployee.companyId
       && (entry.competencia === individualCompetencia || entry.competencia === previous));
-    const row = buildVRReportRows([individualEmployee], pool, individualDaysInMonth, individualCompetencia)[0];
+    const row = buildVRReportRows([individualEmployee], pool, individualDaysInMonth, individualCompetencia, [], individualMedical.atestados)[0];
     return row ? applyCorrection(row, individualEmployee.companyId, individualCompetencia) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [individualEmployee, individualAdmission?.eligible, individualCompetencia, individualDaysInMonth, entries, correcoes.data]);
+  }, [individualEmployee, individualAdmission?.eligible, individualCompetencia, individualDaysInMonth, entries, correcoes.data, individualMedical.atestados]);
 
   const handleIndividualCompanyChange = (companyId: string) => {
     setIndividualCompanyId(companyId);
@@ -472,6 +480,8 @@ const RelatorioVRPage: React.FC = () => {
   const handleIndividualGenerate = async () => {
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
     if (!individualEmployee) return toast.error('Selecione um funcionário.');
+    if (individualMedical.loading || individualMedical.error) return toast.error(individualMedical.error || 'Consultando atestados.');
+    if ((individualMedical.pendentesPorFuncionario[individualEmployee.id] || 0) > 0) return toast.error('Revise as datas dos atestados deste funcionário antes da emissão individual.');
     if (individualEmployee.status !== 'ativo' || !individualEmployee.vrAtivo) return toast.error('Funcionário não está ativo com VR habilitado.');
     const admission = getVRAdmissionCalculation(individualEmployee, individualCompetencia);
     if (!admission.eligible) return toast.info('Funcionário ainda não admitido nesta competência.');
@@ -479,8 +489,9 @@ const RelatorioVRPage: React.FC = () => {
     setIndividualGenerating(true);
     try {
       const pool = buildEntryPool([individualEmployee.companyId], individualCompetencia);
-      const rowBase = buildVRReportRows([individualEmployee], pool, getWorkingDays(individualCompetencia), individualCompetencia)[0];
+      const rowBase = buildVRReportRows([individualEmployee], pool, getWorkingDays(individualCompetencia), individualCompetencia, [], individualMedical.atestados)[0];
       if (!rowBase) return toast.info('Funcionário ainda não admitido nesta competência.');
+      if (rowBase.pendenciaConferencia) throw new Error('Faltas ainda não conferidas no ponto. Não é seguro emitir o recibo individual.');
       const row = applyCorrection(rowBase, individualEmployee.companyId, individualCompetencia);
       const company = companies.find(item => item.id === individualEmployee.companyId);
       if (!company) throw new Error('Empresa do funcionário não encontrada.');

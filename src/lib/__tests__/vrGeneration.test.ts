@@ -5,6 +5,7 @@ import {
   getVRAdmissionCalculation,
   getVrGenerationDestinations,
   mergeBenefitGenerationSnapshot,
+  medicalLeaveWorkingDays,
   shouldCreateVrPayrollDocument,
 } from '@/lib/benefitReports';
 import { getWorkingDays, getWorkingDaysBetween } from '@/lib/workingDays';
@@ -176,5 +177,66 @@ describe('VR proporcional por admissão', () => {
     expect(rows[0].diasDescontados).toBe(2);
     expect(rows[0].diasFinais).toBe(20);
     expect(rows[0].valorTotal).toBe(200);
+  });
+});
+
+
+describe('conciliação auditável de atestados e benefícios', () => {
+  it('não trata ausência de marcação automática não conferida como falta', () => {
+    const emp = employee();
+    const auto = {
+      ...entry(emp.id, '2026-10', 22),
+      origem: 'consolidado',
+      observacoes: '[PONTO_MECANICOS] 0 dias trabalhados; 22 faltas',
+      statusConferencia: 'pendente',
+    };
+    const vr = buildVRReportRows([emp], [auto], 21, '2026-11')[0];
+    const vt = buildVTReportRows([emp], [auto], 21, '2026-11')[0];
+    expect(vr.diasDescontados).toBe(0);
+    expect(vt.diasDescontados).toBe(0);
+    expect(vr.pendenciaConferencia).toBe(true);
+    expect(vt.pendenciaConferencia).toBe(true);
+  });
+
+  it('conserva falta comprovada após conferência do RH', () => {
+    const emp = employee();
+    const confirmado = {
+      ...entry(emp.id, '2026-10', 2),
+      observacoes: '[PONTO_MECANICOS] conferido pelo RH',
+      statusConferencia: 'conferido',
+    };
+    expect(buildVTReportRows([emp], [confirmado], 21, '2026-11')[0].diasDescontados).toBe(2);
+  });
+
+  it('abate somente dias úteis de atestado validado, sem repetir períodos sobrepostos', () => {
+    const emp = employee();
+    const a = { employeeId: emp.id, companyId: emp.companyId, dataInicio: '2026-10-05',
+      dataFim: '2026-10-07', status: 'confirmado', aplicarVR: false, aplicarVT: true };
+    const b = { ...a, dataInicio: '2026-10-07', dataFim: '2026-10-09' };
+    expect(medicalLeaveWorkingDays(emp, '2026-10', 'vt', [a, b])).toBe(5);
+    const row = buildVTReportRows([emp], [], 21, '2026-11', [a, b])[0];
+    expect(row.diasAtestado).toBe(5);
+    expect(row.diasDescontados).toBe(5);
+    expect(row.valorTotal).toBe(160);
+    expect(buildVRReportRows([emp], [], 21, '2026-11', [], [a, b])[0].diasDescontados).toBe(0);
+  });
+
+  it('atestado não validado ou sem datas confiáveis não gera abatimento', () => {
+    const emp = employee();
+    const invalid = { employeeId: emp.id, companyId: emp.companyId,
+      dataInicio: '2026-10-05', dataFim: '2026-10-06',
+      status: 'pendente', aplicarVR: true, aplicarVT: true };
+    expect(medicalLeaveWorkingDays(emp, '2026-10', 'vt', [invalid])).toBe(0);
+    expect(medicalLeaveWorkingDays(emp, '2026-10', 'vr', [{ ...invalid, status: 'confirmado', dataFim: '' }])).toBe(0);
+  });
+
+  it('não abate duas vezes falta validada e mesmo atestado', () => {
+    const emp = employee();
+    const manual = entry(emp.id, '2026-10', 2);
+    const atestado = { employeeId: emp.id, companyId: emp.companyId,
+      dataInicio: '2026-10-05', dataFim: '2026-10-06',
+      status: 'confirmado', aplicarVR: true, aplicarVT: true };
+    const row = buildVTReportRows([emp], [manual], 21, '2026-11', [atestado])[0];
+    expect(row.diasDescontados).toBe(2);
   });
 });

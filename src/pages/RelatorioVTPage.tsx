@@ -12,6 +12,7 @@ import { getWorkingDays } from '@/lib/workingDays';
 import { buildVTReportRows, getPreviousCompetencia, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { formatCurrency } from '@/lib/calculations';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 import { sha256Browser } from '@/lib/payrollDocuments';
 import { buildVTPackagePdfBlob, buildVTReceiptPdfBlob, type VTPackageBlock } from '@/lib/vtPackagePdf';
@@ -44,6 +45,7 @@ const RelatorioVTPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
+  const medical = useBenefitMedicalLeaves(competencia);
   const [diasPagos, setDiasPagos] = useState(String(getWorkingDays(new Date().toISOString().slice(0, 7))));
   const [dataPagamento, setDataPagamento] = useState('');
   const [selectionMode, setSelectionMode] = useState<'all' | 'selected'>('all');
@@ -106,7 +108,7 @@ const RelatorioVTPage: React.FC = () => {
         const previous = getPreviousCompetencia(competencia);
         const companyEntries = entryPool.filter(entry => entry.companyId === company.id
           && (entry.competencia === competencia || entry.competencia === previous));
-        const rows = buildVTReportRows(companyEmployees, companyEntries, days, competencia)
+        const rows = buildVTReportRows(companyEmployees, companyEntries, days, competencia, medical.atestados)
           .map(row => applyCorrection(row, company.id));
         return { company, rows } as VTPackageBlock;
       });
@@ -120,6 +122,8 @@ const RelatorioVTPage: React.FC = () => {
       valor_diario: row.valorDiario,
       dias_previstos: row.diasPrevistos,
       dias_descontados: row.diasDescontados,
+      dias_atestado: row.diasAtestado || 0,
+      pendencia_conferencia: row.pendenciaConferencia || false,
       dias_finais: row.diasFinais,
       valor_total: row.valorTotal,
       motivo: row.motivo || null,
@@ -248,6 +252,8 @@ const RelatorioVTPage: React.FC = () => {
     if (!Number.isFinite(days) || days <= 0) return toast.error('Informe os dias pagos.');
     if (!selectedCompanyIds.length) return toast.error('Selecione ao menos uma empresa.');
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
+    if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
+    if (selectedCompanyIds.some(id => (medical.pendentesPorEmpresa[id] || 0) > 0)) return toast.error('Há atestados sem datas conferidas nas empresas selecionadas. Revise antes de gerar VT.');
 
     setGenerating(true);
     try {
@@ -267,6 +273,7 @@ const RelatorioVTPage: React.FC = () => {
       });
 
       const blocks = buildBlocks(selectedCompanyIds, entryPool);
+      if (blocks.some(b => b.rows.some(r => r.pendenciaConferencia))) throw new Error('Faltas importadas do ponto sem conferência: revise o fechamento antes de gerar VT.');
       let receiptCount = 0;
       let signatureUnavailable = 0;
       for (const block of blocks) {

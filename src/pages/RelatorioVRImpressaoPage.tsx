@@ -7,6 +7,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, getPreviousCompetencia, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useFeriados } from '@/hooks/useFeriados';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
@@ -99,6 +100,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
+  const medical = useBenefitMedicalLeaves(competencia);
   const competenciaAnterior = useMemo(() => getPreviousCompetencia(competencia), [competencia]);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
   const dataPagamentoParam = searchParams.get('dataPagamento') || '';
@@ -142,7 +144,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
         const compEntries = entries.filter(e =>
           e.companyId === company.id && (e.competencia === competencia || e.competencia === competenciaAnterior),
         );
-        const rawRows = buildVRReportRows(compEmps, compEntries, diasUteis, competencia);
+        const rawRows = buildVRReportRows(compEmps, compEntries, diasUteis, competencia, feriadosDatas, medical.atestados);
         const rows: BenefitReportRow[] = rawRows.map(r => {
           const c = correcoes.findFor('vr', company.id, r.emp.id, competencia);
           if (!c) return r;
@@ -159,9 +161,11 @@ const RelatorioVRImpressaoPage: React.FC = () => {
         const total = sumBenefitRows(rows);
         return { company, diasUteis, dataFechamento: fech.dataFechamento || '', rows, total };
       });
-  }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, feriadosDatas, correcoes, diasUteisManual]);
+  }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, feriadosDatas, correcoes, diasUteisManual, medical.atestados]);
 
   const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
+  const conferenciaPendente = medical.loading || Boolean(medical.error) || empresaIds.some(id => (medical.pendentesPorEmpresa[id] || 0) > 0) ||
+    blocks.some(b => b.rows.some(r => r.pendenciaConferencia));
 
   const handleSalvarPdf = async () => {
     try {
@@ -235,6 +239,7 @@ const RelatorioVRImpressaoPage: React.FC = () => {
         </div>
 
         <div id="vr-print-area" className="max-w-[210mm] mx-auto px-8 py-6 print:px-6 print:py-4" style={{ fontSize: '11px' }}>
+          {conferenciaPendente && <div className="mb-4 border-2 border-red-700 p-3 text-red-700 font-bold text-sm">PRÉVIA: CONFERÊNCIA DE ATESTADOS/PONTO PENDENTE — NÃO UTILIZAR PARA PAGAMENTO.</div>}
           {blocks.map(b => (
             <EmpresaPagina key={b.company.id} block={b} competencia={competencia} consolidado={consolidado} dataPagamento={dataPagamento} />
           ))}

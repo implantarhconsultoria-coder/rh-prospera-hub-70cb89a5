@@ -55,6 +55,8 @@ import UniformePage from "@/pages/UniformePage";
 import EntregaImpressaoPage from "@/pages/EntregaImpressaoPage";
 import RelatorioVRPage from "@/pages/RelatorioVRPage";
 import RelatorioVTPage from "@/pages/RelatorioVTPage";
+import ConsolidadoBeneficiosPage from "@/pages/ConsolidadoBeneficiosPage";
+import ConferenciaAtestadosBeneficiosPage from "@/pages/ConferenciaAtestadosBeneficiosPage";
 import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
 import RelatorioVTImpressaoPage from "@/pages/RelatorioVTImpressaoPage";
 import RecibosBeneficioImpressaoPage from "@/pages/RecibosBeneficioImpressaoPage";
@@ -221,6 +223,8 @@ const AuthGate = () => {
         <Route path="/admin/uniformes" element={<UniformePage />} />
         <Route path="/admin/relatorio-vr" element={<RelatorioVRPage />} />
         <Route path="/admin/relatorio-vt" element={<RelatorioVTPage />} />
+        <Route path="/admin/consolidado-beneficios" element={<ConsolidadoBeneficiosPage />} />
+        <Route path="/admin/conferencia-atestados-beneficios" element={<ConferenciaAtestadosBeneficiosPage />} />
         <Route path="/admin/historico" element={<HistoricoPage />} />
         <Route path="/admin/aso" element={<ASOPage />} />
         <Route path="/admin/pre-cadastro-admissional" element={<PreCadastroAdmissionalPage />} />
