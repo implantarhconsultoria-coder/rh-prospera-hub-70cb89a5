@@ -33,6 +33,8 @@ type ImportedAbsence = {
   faltas_dias: number | null;
   status_conferencia: string | null;
   observacoes: string | null;
+  company_id?: string | null;
+  updated_at?: string | null;
 };
 
 const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
@@ -61,7 +63,7 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
             .select('company_id,tipo,competencia,report_snapshot,generated_at')
             .eq('competencia', competencia),
           supabase.from('lancamentos_mensais')
-            .select('funcionario_id,faltas_dias,status_conferencia,observacoes')
+            .select('funcionario_id,company_id,faltas_dias,status_conferencia,observacoes,updated_at')
             .eq('competencia', getPreviousCompetencia(competencia))
             .is('apagado_em', null),
         ]);
@@ -154,8 +156,20 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
     .filter(tipo => !generations.some(g => g.company_id === c.id && g.tipo === tipo))
     .map(tipo => `${c.name}: ${tipo.toUpperCase()}`));
   const pendencias = rows.filter(r => r.pendente).length;
+  const stale = generations.some(g => (companyId === 'todas' || companyId === g.company_id)
+    && absences.some(a => a.company_id === g.company_id && a.updated_at
+      && new Date(a.updated_at).getTime() > new Date(g.generated_at).getTime()));
+  const companyTotals = companiesSelected.map(c => {
+    const group = rows.filter(r => r.companyId === c.id);
+    return {
+      id: c.id, name: c.name, employees: group.length,
+      vr: group.reduce((n, r) => n + r.vr, 0),
+      vt: group.reduce((n, r) => n + r.vt, 0),
+      total: group.reduce((n, r) => n + r.total, 0),
+    };
+  });
   const ready = !loading && !medical.loading && !error && !medical.error
-    && missingGenerations.length === 0 && pendencias === 0
+    && missingGenerations.length === 0 && pendencias === 0 && !stale
     && medical.documentosPendentes === 0 && rows.length > 0;
   const status = ready ? 'CONFERÊNCIA TÉCNICA SEM PENDÊNCIAS' : 'PRÉVIA — NÃO LIBERADA PARA PAGAMENTO';
   const days = getWorkingDays(competencia);
@@ -220,6 +234,7 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
         {(error || medical.error) && <p className="text-red-500">Erro: {error || medical.error}</p>}
         {missingGenerations.length > 0 && <p className="text-sm text-amber-500">Benefícios ainda não gerados: {missingGenerations.join('; ')}</p>}
         {pendencias > 0 && <p className="text-sm text-amber-500">{pendencias} funcionário(s) com lançamentos de ponto pendentes de conferência.</p>}
+        {stale && <p className="text-sm text-amber-500">O fechamento foi alterado após a geração. Gere VR e VT novamente antes de pagar.</p>}
         {medical.documentosPendentes > 0 && <p className="text-sm text-amber-500">{medical.documentosPendentes} atestado(s) sem intervalo validado na competência anterior.</p>}
         <p className="text-xs text-muted-foreground">Totais refletem os snapshots já gerados. Alterações na conferência exigem nova geração. Não substitui autorização financeira.</p>
       </div>
@@ -227,6 +242,26 @@ const ConsolidadoBeneficiosPage: React.FC = () => {
         <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">VR consolidado</div><div className="text-xl font-bold">{formatCurrency(totals.vr)}</div></div>
         <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">VT consolidado</div><div className="text-xl font-bold">{formatCurrency(totals.vt)}</div></div>
         <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">Total geral</div><div className="text-xl font-bold">{formatCurrency(totals.total)}</div></div>
+      </div>
+      <div className="overflow-x-auto rounded-lg border">
+        <h2 className="px-3 py-2 font-semibold">Resumo por empresa</h2>
+        <table className="w-full text-left text-xs">
+          <thead className="bg-muted"><tr>
+            {['Empresa','Funcionários','VR','VT','Total a pagar'].map(name => <th key={name} className="border-b p-2">{name}</th>)}
+          </tr></thead>
+          <tbody>
+            {companyTotals.map(company => <tr key={company.id} className="border-b">
+              <td className="p-2">{company.name}</td><td className="p-2">{company.employees}</td>
+              <td className="p-2">{formatCurrency(company.vr)}</td>
+              <td className="p-2">{formatCurrency(company.vt)}</td>
+              <td className="p-2 font-bold">{formatCurrency(company.total)}</td>
+            </tr>)}
+            <tr className="font-bold"><td className="p-2" colSpan={2}>TOTAL GERAL</td>
+              <td className="p-2">{formatCurrency(totals.vr)}</td>
+              <td className="p-2">{formatCurrency(totals.vt)}</td>
+              <td className="p-2">{formatCurrency(totals.total)}</td></tr>
+          </tbody>
+        </table>
       </div>
       <div className="overflow-x-auto rounded-lg border print:overflow-visible">
         <table className="w-full text-left text-[11px]">
