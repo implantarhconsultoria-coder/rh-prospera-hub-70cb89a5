@@ -2,6 +2,15 @@ import type { Employee, MonthlyEntry } from '@/types/database';
 import { getWorkingDaysBetween } from '@/lib/workingDays';
 
 export type VrCalculationType = 'MENSAL' | 'PROPORCIONAL_ADMISSAO';
+export type BenefitMedicalLeave = {
+  employeeId: string;
+  companyId: string;
+  dataInicio: string;
+  dataFim: string;
+  status: string;
+  aplicarVR: boolean;
+  aplicarVT: boolean;
+};
 
 export type BenefitReportRow = {
   emp: Employee;
@@ -10,6 +19,8 @@ export type BenefitReportRow = {
   valorDiario: number;
   diasPrevistos: number;
   diasDescontados: number;
+  diasAtestado?: number;
+  pendenciaConferencia?: boolean;
   diasFinais: number;
   valorTotal: number;
   motivo: string;
@@ -105,6 +116,38 @@ export const getVRAdmissionCalculation = (
   };
 };
 
+export const medicalLeaveWorkingDays = (
+  employee: Pick<Employee, 'id' | 'companyId'>,
+  competenciaAnterior: string,
+  tipo: 'vr' | 'vt',
+  atestados: BenefitMedicalLeave[] = [],
+  feriados: string[] = [],
+): number => {
+  const bounds = getCompetenciaBounds(competenciaAnterior);
+  if (!bounds) return 0;
+  const uniqueDays = new Set<string>();
+  for (const atestado of atestados) {
+    if (atestado.employeeId !== employee.id || atestado.companyId !== employee.companyId ||
+        atestado.status !== 'confirmado' ||
+        !(tipo === 'vr' ? atestado.aplicarVR : atestado.aplicarVT)) continue;
+    const inicio = normalizeDateOnly(atestado.dataInicio);
+    const fim = normalizeDateOnly(atestado.dataFim);
+    if (!inicio || !fim || inicio > fim || inicio > bounds.last || fim < bounds.first) continue;
+    const from = inicio > bounds.first ? inicio : bounds.first;
+    const to = fim < bounds.last ? fim : bounds.last;
+    const date = new Date(`${from}T12:00:00Z`);
+    const last = new Date(`${to}T12:00:00Z`);
+    while (date <= last) {
+      const day = date.toISOString().slice(0, 10);
+      if (date.getUTCDay() !== 0 && date.getUTCDay() !== 6 && !feriados.includes(day)) {
+        uniqueDays.add(day);
+      }
+      date.setUTCDate(date.getUTCDate() + 1);
+    }
+  }
+  return uniqueDays.size;
+};
+
 const getCompleteEntries = (entries: MonthlyEntry[]) => {
   if (typeof window === 'undefined') return entries;
   const cached = (window as any).__topacMonthlyEntries;
@@ -133,25 +176,36 @@ const buildBenefitRow = ({
   descontoEntry,
   diasUteis,
   type,
+  diasAtestado = 0,
 }: {
   emp: Employee;
   entry?: MonthlyEntry;
   descontoEntry?: MonthlyEntry;
   diasUteis: number;
   type: 'vr' | 'vt';
+  diasAtestado?: number;
 }): BenefitReportRow => {
   // VR e VT são pagos antecipadamente. As faltas lançadas no mês anterior
   // são descontadas na competência atual. O lançamento do próprio mês não
   // pode reduzir o benefício que já está sendo pago agora.
-  const faltasCompetenciaAnterior = Math.max(0, Number(descontoEntry?.faltasDias || 0));
+  // Ponto não registrado não comprova ausência. Não abater importação não conferida.
+  const pendenciaConferencia = Boolean(
+    descontoEntry?.observacoes?.includes('[PONTO_MECANICOS]') &&
+    descontoEntry.statusConferencia !== 'conferido' &&
+    Number(descontoEntry.faltasDias || 0) > 0,
+  );
+  const faltasValidadas = pendenciaConferencia ? 0 : Math.max(0, Number(descontoEntry?.faltasDias || 0));
   const diasPrevistos = getDiasPrevistos(entry, diasUteis, type);
-  const diasDescontados = Math.min(faltasCompetenciaAnterior, diasPrevistos);
+  // Sem datas das faltas, usar o maior dos dois conjuntos evita abatimento duplicado.
+  const diasDescontados = Math.min(Math.max(faltasValidadas, diasAtestado), diasPrevistos);
   const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
   const valorDiario = Math.max(0, Number(type === 'vr' ? emp.vrDiario : emp.vtDiario) || 0);
   const valorTotal = roundCurrency(valorDiario * diasFinais);
-  const motivo = diasDescontados > 0
-    ? `${diasDescontados} falta(s) da competência anterior${descontoEntry?.competencia ? ` (${descontoEntry.competencia})` : ''}`
-    : '';
+  const motivo = [
+    faltasValidadas > 0 ? `${faltasValidadas} falta(s) conferida(s) da competência anterior` : '',
+    diasAtestado > 0 ? `${diasAtestado} dia(s) de atestado validado (sem duplicar falta)` : '',
+    pendenciaConferencia ? 'PENDENTE: ausência de ponto sem conferência; desconto suspenso' : '',
+  ].filter(Boolean).join(' | ');
 
   return {
     emp,
@@ -160,6 +214,8 @@ const buildBenefitRow = ({
     valorDiario: roundCurrency(valorDiario),
     diasPrevistos,
     diasDescontados,
+    diasAtestado,
+    pendenciaConferencia,
     diasFinais,
     valorTotal,
     motivo,
@@ -172,6 +228,7 @@ export const buildVRReportRows = (
   diasUteis: number,
   competencia?: string,
   feriados: string[] = [],
+  atestados: BenefitMedicalLeave[] = [],
 ) => {
   const currentCompetencia = inferCompetencia(entries, competencia);
   const previousCompetencia = getPreviousCompetencia(currentCompetencia);
@@ -189,6 +246,7 @@ export const buildVRReportRows = (
         : findEntryWithFallback(entries, emp.id, previousCompetencia),
       diasUteis: diasBase,
       type: 'vr',
+      diasAtestado: proportional ? 0 : medicalLeaveWorkingDays(emp, previousCompetencia, 'vr', atestados, feriados),
     });
     return [{
       ...row,
@@ -201,7 +259,7 @@ export const buildVRReportRows = (
   });
 };
 
-export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[], diasUteis: number, competencia?: string) => {
+export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[], diasUteis: number, competencia?: string, atestados: BenefitMedicalLeave[] = []) => {
   const currentCompetencia = inferCompetencia(entries, competencia);
   const previousCompetencia = getPreviousCompetencia(currentCompetencia);
   return employees.map((emp) =>
@@ -211,6 +269,7 @@ export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[]
       descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : undefined,
       diasUteis,
       type: 'vt',
+      diasAtestado: medicalLeaveWorkingDays(emp, previousCompetencia, 'vt', atestados),
     }),
   );
 };
