@@ -7,6 +7,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { buildVTReportRows, getPreviousCompetencia, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { useFeriados } from '@/hooks/useFeriados';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import { buildPdfFileName, competenciaPdfPart, saveElementAsPdf } from '@/lib/savePdf';
 import { toast } from 'sonner';
 
@@ -92,6 +93,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, getFechamento, dataLoading, isAuthenticated, loading } = useApp();
   const [searchParams] = useSearchParams();
   const competencia = searchParams.get('competencia') || new Date().toISOString().slice(0, 7);
+  const medical = useBenefitMedicalLeaves(competencia);
   const competenciaAnterior = useMemo(() => getPreviousCompetencia(competencia), [competencia]);
   const diasUteisManual = Number(searchParams.get('diasUteis') || 0);
   const empresasParam = searchParams.get('empresas') || '';
@@ -133,7 +135,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
         const compEntries = entries.filter(e =>
           e.companyId === company.id && (e.competencia === competencia || e.competencia === competenciaAnterior),
         );
-        const rawRows = buildVTReportRows(compEmps, compEntries, diasUteis, competencia);
+        const rawRows = buildVTReportRows(compEmps, compEntries, diasUteis, competencia, medical.atestados);
         const rows: BenefitReportRow[] = rawRows.map(r => {
           const c = correcoes.findFor('vt', company.id, r.emp.id, competencia);
           if (!c) return r;
@@ -150,7 +152,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
         const total = sumBenefitRows(rows);
         return { company, diasUteis, dataFechamento: fech.dataFechamento || '', rows, total };
       });
-  }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, feriadosDatas, correcoes, diasUteisManual]);
+  }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, feriadosDatas, correcoes, diasUteisManual, medical.atestados]);
 
   const totalGeral = useMemo(() => blocks.reduce((s, b) => s + b.total, 0), [blocks]);
 
