@@ -253,7 +253,7 @@ const RelatorioVTPage: React.FC = () => {
     if (!selectedCompanyIds.length) return toast.error('Selecione ao menos uma empresa.');
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
     if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
-    if (medical.documentosPendentes) return toast.error('Há atestados sem datas conferidas na competência anterior. Faça a revisão antes de gerar VT.');
+    if (selectedCompanyIds.some(id => (medical.pendentesPorEmpresa[id] || 0) > 0)) return toast.error('Há atestados sem datas conferidas nas empresas selecionadas. Revise antes de gerar VT.');
 
     setGenerating(true);
     try {
