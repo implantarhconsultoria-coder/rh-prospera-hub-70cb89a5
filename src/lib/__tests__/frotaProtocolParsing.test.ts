@@ -118,4 +118,58 @@ Empresa Outra Cliente canteiro Goiânia aos cuidados da Maria.
       'Outra Cliente|Goiânia',
     ]);
   });
+  it('pedido Apeng Penha: dois patrimônios e placas, um destino e dois protocolos independentes', () => {
+    const groups = parseProtocolMessage(`
+Bom dia Rodrigo e Daphine,
+Por favor, confeccionar os protocolos de documentos referentes aos compressores de patrimônios:
+A10.149 — placa CUI-4B29
+680.240 — placa CLJ-5C69
+A mesma será encaminhada a empresa Apeng canteiro de Penha aos cuidados do Diego.
+Atenciosamente,
+`);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      cliente: 'Apeng', local: 'Penha', responsavel: 'Diego',
+      itens: [
+        { patrimonio: 'A10.149', placa: 'CUI4B29' },
+        { patrimonio: '680.240', placa: 'CLJ5C69' },
+      ],
+    });
+  });
+
+  it('um pedido com equipamentos de clientes diferentes separa o destino de cada ativo', () => {
+    const groups = parseProtocolMessage(`
+A10.149 — placa CUI-4B29
+A mesma será encaminhada a empresa Apeng canteiro de Penha aos cuidados do Diego.
+680.240 — placa CLJ-5C69
+A mesma será encaminhada a empresa Cliente Sul canteiro de Santos aos cuidados da Maria.
+`);
+    expect(groups).toHaveLength(2);
+    expect(groups.map(g => [g.cliente, g.local, g.itens[0].patrimonio])).toEqual([
+      ['Apeng', 'Penha', 'A10.149'],
+      ['Cliente Sul', 'Santos', '680.240'],
+    ]);
+  });
+
+  it('interpreta dois patrimônios e placas na mesma linha sem descartar o segundo ativo', () => {
+    const groups = parseProtocolMessage(`
+A10.149 - placa CUI-4B29; 680.240 - placa CLJ-5C69
+Empresa Apeng canteiro Penha aos cuidados do Diego.
+`);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].itens).toHaveLength(2);
+    expect(groups[0].itens.map(x => x.patrimonio)).toEqual(['A10.149', '680.240']);
+  });
+
+  it('separa dois destinos distintos informados numa só linha da mensagem', () => {
+    const groups = parseProtocolMessage(
+      'A10.149 placa CUI-4B29 Cliente Apeng local Penha aos cuidados de Diego; 680.240 placa CLJ-5C69 Cliente Obra Sul local Santos aos cuidados de Maria',
+    );
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => [group.cliente, group.local, group.itens[0].patrimonio])).toEqual([
+      ['Apeng', 'Penha', 'A10.149'],
+      ['Obra Sul', 'Santos', '680.240'],
+    ]);
+  });
+
 });

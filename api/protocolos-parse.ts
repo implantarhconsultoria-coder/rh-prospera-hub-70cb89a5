@@ -68,7 +68,7 @@ export const parseProtocolItem = (line: string): ProtocolParsedItem | null => {
     raw.match(/\b(?:placa\s*[:\-]?\s*)?([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/i)?.[1] || '',
   );
   const patrimonio = normalizeProtocolPatrimonio(
-    raw.match(/\b(?:patrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*)?([A-Z]\d{1,3}\.\d{1,5})\b/i)?.[1] ||
+    raw.match(/\b(?:patrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*)?((?:[A-Z]\d{1,3}|\d{2,4})\.\d{1,5})\b/i)?.[1] ||
       raw.match(/\bpatrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*([A-Z0-9][A-Z0-9./-]{1,29})\b/i)?.[1] ||
       '',
   );
@@ -78,28 +78,33 @@ export const parseProtocolItem = (line: string): ProtocolParsedItem | null => {
   const descricao = cleanEntity(
     raw
       .replace(/\bplaca\s*[:\-]?\s*[A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2}\b/i, '')
-      .replace(/\b(?:patrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*)?[A-Z]\d{1,3}\.\d{1,5}\b/i, '')
+      .replace(/\b(?:patrim[oô]nio(?:s)?\s*(?:n[ºo.]*\s*)?[:\-]?\s*)?(?:[A-Z]\d{1,3}|\d{2,4})\.\d{1,5}\b/i, '')
+      .replace(/\b(?:empresa|cliente|canteiro|local|destino)\s*[:\-]?.*$/i, '')
       .replace(/^[\s\-–—:]+|[\s\-–—:]+$/g, ''),
   );
 
   return { placa, patrimonio, descricao };
 };
 
-const applyContext = (items: Item[], indexes: number[], context: Context) => {
-  for (const index of indexes) {
-    items[index] = {
-      ...items[index],
-      cliente: items[index].cliente || context.cliente,
-      local: items[index].local || context.local,
-      responsavel: items[index].responsavel || context.responsavel,
-    };
-  }
+// Interpreta vários ativos na mesma linha, preservando a relação patrimônio/placa.
+export const parseProtocolItemsFromLine = (line: string): ProtocolParsedItem[] => {
+  const paired = [...String(line || '').matchAll(
+    /\b((?:[A-Z]\d{1,3}|\d{2,4})\.\d{1,5})\b\s*[-–—]?\s*(?:placa\s*[:\-]?\s*)?([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/gi,
+  )];
+  if (paired.length > 1) return paired.map(match => ({
+    patrimonio: normalizeProtocolPatrimonio(match[1]),
+    placa: normalizeProtocolPlate(match[2]),
+    descricao: '',
+  }));
+  const one = parseProtocolItem(line);
+  return one ? [one] : [];
 };
 
-const incompleteIndexes = (items: Item[]) =>
-  items
-    .map((item, index) => (!item.cliente || !item.local || !item.responsavel ? index : -1))
-    .filter((index) => index >= 0);
+const appendContext = (base: Context, changes: Partial<Context>): Context => ({
+  cliente: changes.cliente || base.cliente,
+  local: changes.local || base.local,
+  responsavel: changes.responsavel || base.responsavel,
+});
 
 export const parseProtocolMessage = (rawText: string): ProtocolParsedGroup[] => {
   const text = String(rawText || '').replace(/\r/g, '').trim();
@@ -107,6 +112,9 @@ export const parseProtocolMessage = (rawText: string): ProtocolParsedGroup[] => 
 
   const lines = text
     .split(/\n+/)
+    // Uma solicitação pode incluir vários destinos na mesma linha, separados
+    // por ponto e vírgula; cada trecho conserva seu cliente/local.
+    .flatMap((line) => line.split(/\s*;\s*/))
     .map((line) => line.trim())
     .filter(Boolean);
 
@@ -116,52 +124,59 @@ export const parseProtocolMessage = (rawText: string): ProtocolParsedGroup[] => 
 
   for (const line of lines) {
     const foundContext = parseProtocolContext(line);
-    const item = parseProtocolItem(line);
-
-    if (item) {
-      const next: Item = { ...item, ...current };
-      items.push(next);
-      if (!next.cliente || !next.local || !next.responsavel) pending.push(items.length - 1);
+    const foundItems = parseProtocolItemsFromLine(line);
+    // Ponto de corte entre destinatários: um contexto explícito após as linhas
+    // de equipamentos deve ser atribuído somente aos ativos daquele bloco.
+    for (const item of foundItems) {
+      items.push({ ...item, ...current });
+      pending.push(items.length - 1);
     }
-
     if (foundContext.cliente || foundContext.local || foundContext.responsavel) {
-      current = {
-        cliente: foundContext.cliente || current.cliente,
-        local: foundContext.local || current.local,
-        responsavel: foundContext.responsavel || current.responsavel,
+      current = appendContext(current, foundContext);
+      // Sobrescreve o contexto herdado dos ativos imediatamente anteriores,
+      // inclusive quando o cliente seguinte é diferente do anterior.
+      for (const index of pending) items[index] = {
+        ...items[index],
+        ...appendContext({
+          cliente: items[index].cliente,
+          local: items[index].local,
+          responsavel: items[index].responsavel,
+        }, foundContext),
       };
-      if (pending.length) {
-        applyContext(items, pending, current);
-        pending = incompleteIndexes(items);
-      }
+      // O contexto completo encerra o lote de itens aguardando destinação.
+      if (current.cliente && current.local) pending = [];
     }
   }
 
+  // Contexto único depois da lista ou no corpo do e-mail.
   const compact = text.replace(/\s+/g, ' ');
   const globalContext = parseProtocolContext(compact);
-  current = {
-    cliente: globalContext.cliente || current.cliente,
-    local: globalContext.local || current.local,
-    responsavel: globalContext.responsavel || current.responsavel,
-  };
-
-  if (items.length && pending.length) applyContext(items, pending, current);
+  const fallbackContext = appendContext(current, globalContext);
+  for (const index of pending) {
+    const item = items[index];
+    items[index] = {
+      ...item,
+      cliente: item.cliente || fallbackContext.cliente,
+      local: item.local || fallbackContext.local,
+      responsavel: item.responsavel || fallbackContext.responsavel,
+    };
+  }
 
   if (!items.length) {
-    const pairRegex = /\b([A-Z]\d{1,3}\.\d{1,5})\b\s*[-–—]?\s*(?:placa\s*[:\-]?\s*)?([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/gi;
+    const pairRegex = /\b((?:[A-Z]\d{1,3}|\d{2,4})\.\d{1,5})\b\s*[-–—]?\s*(?:placa\s*[:\-]?\s*)?([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/gi;
     for (const match of compact.matchAll(pairRegex)) {
       items.push({
         patrimonio: normalizeProtocolPatrimonio(match[1]),
         placa: normalizeProtocolPlate(match[2]),
         descricao: '',
-        ...current,
+        ...fallbackContext,
       });
     }
   }
 
   if (!items.length) {
     for (const match of compact.matchAll(/\b([A-Z]{3}\s*-?\s*[0-9][A-Z0-9]\s*-?\s*[0-9]{2})\b/gi)) {
-      items.push({ placa: normalizeProtocolPlate(match[1]), patrimonio: '', descricao: '', ...current });
+      items.push({ placa: normalizeProtocolPlate(match[1]), patrimonio: '', descricao: '', ...fallbackContext });
     }
   }
 

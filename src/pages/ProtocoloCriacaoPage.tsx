@@ -13,6 +13,7 @@ import OperadorCodeDialog from '@/components/OperadorCodeDialog';
 import { formalizarOperacaoPorEmail } from '@/lib/operacionalFormalizacao';
 import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { toast } from 'sonner';
+import { createProtocolPrintJobs } from '@/lib/protocoloPrintPlan';
 
 interface AtivoDoc {
   id: string;
@@ -266,7 +267,7 @@ const ProtocoloPage: React.FC = () => {
         toast.error(`${missing} ativo(s) estão com Documento Faltando. A impressão foi bloqueada.`);
       } else {
         const inferredCount = nextGroups.filter((group) => group.substituicaoSaiId && group.substituicaoEntraId).length;
-        toast.success(`${nextGroups.length} grupo(s) processado(s) por Cliente + Local${inferredCount ? ` • ${inferredCount} substituição(ões) sugerida(s)` : ''}.`);
+        toast.success(`${nextGroups.reduce((total, group) => total + group.itens.length, 0)} protocolo(s) individual(is) em ${nextGroups.length} destino(s)${inferredCount ? ` • ${inferredCount} substituição(ões) sugerida(s)` : ''}.`);
       }
     } catch (error: any) {
       setGroups([]);
@@ -298,6 +299,19 @@ const ProtocoloPage: React.FC = () => {
     const missingContext = groups.filter((group) => !group.cliente.trim() || !group.local.trim()).length;
     const missingDocs = items.filter((item) => !item.ativo || !pdfOf(item.ativo)).length;
     const vehicleItems = items.filter((item) => Boolean(normalizePlate(item.ativo?.placa || item.placa)));
+    // Não entregar documentação de um mesmo ativo a dois destinos no mesmo lote.
+    const assetDestinations = new Map<string, string>();
+    let conflictingDestinations = 0;
+    for (const group of groups) for (const item of group.itens) {
+      const assetKey = item.ativo?.id || normalizePlate(item.placa) || normalizePatrimonio(item.patrimonio);
+      const destinationKey = `${normalize(group.cliente)}|${normalize(group.local)}`;
+      if (assetKey && assetDestinations.has(assetKey) && assetDestinations.get(assetKey) !== destinationKey) {
+        conflictingDestinations += 1;
+      } else if (assetKey) assetDestinations.set(assetKey, destinationKey);
+    }
+    // Patrimônio contraditório não pode pegar PDF pela placa sem conferência.
+    const mismatchedAssets = items.filter(item => item.ativo?.patrimonio && item.patrimonio &&
+      normalizePatrimonio(item.ativo.patrimonio) !== normalizePatrimonio(item.patrimonio)).length;
     const vehicleFlowBlocked = vehicleItems.length > 0 && !isLocacaoFlow;
     const missingAvailability = isLocacaoFlow
       ? vehicleItems.filter((item) => {
@@ -312,8 +326,11 @@ const ProtocoloPage: React.FC = () => {
       missingContext,
       missingDocs,
       missingAvailability,
+      mismatchedAssets,
+      conflictingDestinations,
       vehicleFlowBlocked,
-      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0 && missingAvailability === 0 && !vehicleFlowBlocked,
+      ready: groups.length > 0 && items.length > 0 && missingContext === 0 && missingDocs === 0 &&
+        mismatchedAssets === 0 && conflictingDestinations === 0 && missingAvailability === 0 && !vehicleFlowBlocked,
     };
   }, [groups, disponibilidades, isLocacaoFlow]);
 
@@ -331,17 +348,16 @@ const ProtocoloPage: React.FC = () => {
     return parts.join('\n');
   };
 
-  const buildObservationItems = (group: ProtocolGroup) => group.itens.map((item) => {
+  const buildObservationItem = (item: ProtocolItem) => {
     const asset = item.ativo;
     const patrimonio = asset?.patrimonio || item.patrimonio || '—';
     const placa = normalizePlate(asset?.placa || item.placa) || '—';
     const descricao = asset?.descricao || item.descricao || '';
     const complemento = descricao ? ` — ${descricao}` : '';
     return `<li><strong>${escapeHtml(patrimonio)}</strong> — placa ${escapeHtml(placa)}${escapeHtml(complemento)}</li>`;
-  }).join('');
+  };
 
-  const buildProtocolHtml = (group: ProtocolGroup, copyNumber: 1 | 2) => {
-    const primaryItem = group.itens[0];
+  const buildProtocolHtml = (group: ProtocolGroup, primaryItem: ProtocolItem, copyNumber: 1 | 2, sequence: number, count: number) => {
     const asset = primaryItem?.ativo;
     const placa = normalizePlate(asset?.placa || primaryItem?.placa) || '—';
     const patrimonio = asset?.patrimonio || primaryItem?.patrimonio || '—';
@@ -358,7 +374,7 @@ const ProtocoloPage: React.FC = () => {
 
     return `
       <section class="protocol-page">
-        <div class="page-number">Página ${copyNumber} de 2</div>
+        <div class="page-number">Protocolo ${sequence} de ${count} — Via ${copyNumber} de 2</div>
         <header class="protocol-header">
           <div class="company-block">
             <strong>${escapeHtml(topac?.name || 'TOPAC MATRIZ')}</strong>
@@ -395,8 +411,8 @@ const ProtocoloPage: React.FC = () => {
           <div class="observations-content">
             ${substitutionHtml}
             ${customObservationHtml}
-            <p>Por favor, acondicionar os protocolos de documentos referentes aos equipamentos/veículos e patrimônios:</p>
-            <ul>${buildObservationItems(group)}</ul>
+            <p>Documentos referentes exclusivamente ao equipamento identificado neste protocolo:</p>
+            <ul>${buildObservationItem(primaryItem)}</ul>
             <p>A remessa será encaminhada para <strong>${escapeHtml(destination || group.cliente)}</strong>${group.responsavel ? `, aos cuidados de <strong>${escapeHtml(group.responsavel)}</strong>` : ''}.</p>
           </div>
         </section>
@@ -455,7 +471,7 @@ const ProtocoloPage: React.FC = () => {
           placa: vehicleFields.placa || normalizePlate(item.placa) || null,
           patrimonio: vehicleFields.patrimonio || item.patrimonio || null,
           exercicio: new Date(`${dataEmissao}T12:00:00`).getFullYear().toString(),
-          observacoes: buildGroupObservationText(group),
+          observacoes: `${buildGroupObservationText(group)}\nPROTOCOLO INDIVIDUAL: ${itemLabel(item)}`,
           texto_original: textoColado,
           criado_por: session.user.id,
           operador_id: operador.id,
@@ -490,10 +506,10 @@ const ProtocoloPage: React.FC = () => {
           })),
           ids,
         },
-        observacao: `${groups.length} protocolo(s), regra Cliente + Local, ${payload.length} documento(s).`,
+        observacao: `${payload.length} protocolo(s) individual(is) em ${groups.length} destino(s), regra Cliente + Local.`,
       });
 
-      if (!silent) toast.success(`${groups.length} protocolo(s) salvo(s) no Supabase.`);
+      if (!silent) toast.success(`${payload.length} protocolo(s) individual(is) salvo(s) no Supabase.`);
       return ids;
     } catch (error: any) {
       toast.error(`Não foi possível salvar os protocolos: ${error?.message || error}`);
@@ -559,28 +575,24 @@ const ProtocoloPage: React.FC = () => {
       }
 
       let content = '';
-      for (const group of groups) {
-        content += buildProtocolHtml(group, 1);
-        content += buildProtocolHtml(group, 2);
-
-        const uniqueDocs = new Map<string, string>();
-        group.itens.forEach((item) => {
-          const url = pdfOf(item.ativo);
-          if (url && !uniqueDocs.has(url)) {
-            uniqueDocs.set(url, item.ativo?.documento_nome || item.ativo?.descricao || 'Documento');
-          }
-        });
-
-        for (const [url, documentName] of uniqueDocs) {
-          const pageUrls = validatedPages.get(url) || [];
-          if (!pageUrls.length) {
-            throw new Error(`O documento ${documentName} não possui páginas renderizáveis.`);
-          }
-          content += pageUrls.map((pageUrl, pageIndex) => `
-            <section class="document-page" data-document="${escapeHtml(documentName)}" data-page="${pageIndex + 1}">
-              <img src="${pageUrl}" alt="${escapeHtml(documentName)} — página ${pageIndex + 1}" loading="eager" decoding="sync" />
-            </section>`).join('');
+      const printJobs = createProtocolPrintJobs(groups);
+      for (const job of printJobs) {
+        // Cada via identifica apenas o seu próprio patrimônio, placa e dados.
+        for (const via of job.copies) {
+          content += buildProtocolHtml(job.group, job.item, via, job.sequence, job.count);
         }
+
+        // Anexar o PDF certo logo depois das vias daquele equipamento.
+        const url = pdfOf(job.item.ativo);
+        const documentName = job.item.ativo?.documento_nome || itemLabel(job.item);
+        const pageUrls = validatedPages.get(url) || [];
+        if (!pageUrls.length) {
+          throw new Error(`O documento de ${itemLabel(job.item)} não possui páginas renderizáveis.`);
+        }
+        content += pageUrls.map((pageUrl, pageIndex) => `
+          <section class="document-page" data-document="${escapeHtml(documentName)}" data-page="${pageIndex + 1}">
+            <img src="${pageUrl}" alt="${escapeHtml(documentName)} — página ${pageIndex + 1}" loading="eager" decoding="sync" />
+          </section>`).join('');
       }
 
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Protocolos TOPAC</title><style>
@@ -625,7 +637,7 @@ const ProtocoloPage: React.FC = () => {
       </style></head><body>${content}</body></html>`;
 
       printDocumentInPage(html);
-      toast.success('Impressão aberta: 2 vias no modelo detalhado + 1 via completa de cada documento vinculado.');
+      toast.success(`Impressão aberta: ${createProtocolPrintJobs(groups).length} protocolo(s) individual(is), 2 vias e documento específico de cada equipamento.`);
     } catch (error: any) {
       toast.error(`Não foi possível montar a impressão: ${error?.message || error}`);
     } finally {
@@ -690,7 +702,7 @@ const ProtocoloPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display">Protocolos Inteligentes</h1>
-            <p className="text-sm text-primary-foreground/70">IA para agrupar ativos por Cliente + Local e validar os documentos da Frota</p>
+            <p className="text-sm text-primary-foreground/70">Uma mensagem gera protocolos individuais por ativo, separados por cliente e local</p>
           </div>
         </div>
       </div>
@@ -701,7 +713,7 @@ const ProtocoloPage: React.FC = () => {
             <label htmlFor="protocol-smart-message" className="flex items-center gap-2 text-base font-bold text-foreground">
               <Sparkles className="h-5 w-5 text-primary" /> Processar Mensagem Inteligente (IA)
             </label>
-            <p className="mt-1 text-xs text-muted-foreground">Cole a mensagem completa. A IA separa automaticamente os ativos por Cliente + Local e cruza placa/patrimônio com o Supabase.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Cole uma única mensagem, mesmo com vários clientes e equipamentos. O sistema identifica o destino de cada ativo e prepara duas vias próprias por equipamento.</p>
           </div>
           <div className="flex gap-2">
             <Input type="date" value={dataEmissao} onChange={(event) => setDataEmissao(event.target.value)} className="w-40" />
@@ -721,7 +733,7 @@ const ProtocoloPage: React.FC = () => {
         <div className="flex flex-wrap gap-3">
           <Button size="lg" onClick={() => void processSmartMessage()} disabled={parsing || loadingAssets} className="min-w-[280px]">
             {parsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            {parsing ? 'Processando mensagem...' : 'Processar Mensagem e Agrupar Ativos'}
+            {parsing ? 'Processando mensagem...' : 'Identificar e preparar todos os protocolos'}
           </Button>
           <Button variant="outline" onClick={() => void relink()} disabled={!groups.length || loadingAssets}>
             <LinkIcon className="mr-2 h-4 w-4" /> Conferir documentos novamente
@@ -733,11 +745,11 @@ const ProtocoloPage: React.FC = () => {
         <section className="card-premium space-y-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold">Resultado do Agrupamento Inteligente</h2>
-              <p className="text-xs text-muted-foreground">{readiness.totalGroups} grupo(s) • {readiness.totalItems} ativo(s) • regra obrigatória: Cliente + Local</p>
+              <h2 className="text-lg font-bold">Protocolos individuais identificados</h2>
+              <p className="text-xs text-muted-foreground">{readiness.totalGroups} destino(s) • {readiness.totalItems} protocolo(s) individuais • 2 vias por equipamento</p>
             </div>
             <Badge className={readiness.ready ? '' : 'border-destructive/40 bg-destructive/10 text-destructive'} variant="outline">
-              {readiness.ready ? 'Pronto para imprimir' : `${readiness.missingDocs + readiness.missingContext} pendência(s)`}
+              {readiness.ready ? 'Pronto para imprimir' : `${readiness.missingDocs + readiness.missingContext + readiness.mismatchedAssets + readiness.conflictingDestinations} pendência(s) de dados`}
             </Badge>
           </div>
 
@@ -747,10 +759,10 @@ const ProtocoloPage: React.FC = () => {
               <section key={group.key} className="space-y-4 rounded-xl border border-border p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Protocolo {groupIndex + 1}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Destino {groupIndex + 1}</p>
                     <h3 className="text-base font-bold">{group.cliente || 'Cliente não identificado'} / {group.local || 'Local não identificado'}</h3>
                   </div>
-                  <Badge variant="outline">{group.itens.length} ativo(s)</Badge>
+                  <Badge variant="outline">{group.itens.length} protocolo(s) individual(is)</Badge>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -830,14 +842,14 @@ const ProtocoloPage: React.FC = () => {
                 <div className="overflow-x-auto rounded-lg border">
                   <table className="w-full min-w-[760px] text-sm">
                     <thead className="bg-muted/50">
-                      <tr><th className="px-3 py-2 text-left">Ativo / Equipamento</th><th className="px-3 py-2 text-left">Patrimônio</th><th className="px-3 py-2 text-left">Placa</th><th className="px-3 py-2 text-left">Documento</th></tr>
+                      <tr><th className="px-3 py-2 text-left">Protocolo por ativo / equipamento</th><th className="px-3 py-2 text-left">Patrimônio</th><th className="px-3 py-2 text-left">Placa</th><th className="px-3 py-2 text-left">Documento</th></tr>
                     </thead>
                     <tbody>
                       {group.itens.map((item, itemIndex) => {
                         const url = pdfOf(item.ativo);
                         return (
                           <tr key={`${group.key}-${itemIndex}`} className="border-t">
-                            <td className="px-3 py-3"><strong>{item.ativo?.descricao || item.descricao || 'Ativo não localizado'}</strong></td>
+                            <td className="px-3 py-3"><strong>{item.ativo?.descricao || item.descricao || 'Ativo não localizado'}</strong><div className="text-xs text-muted-foreground">Individual · 2 vias + documento próprio</div></td>
                             <td className="px-3 py-3">{item.ativo?.patrimonio || item.patrimonio || '—'}</td>
                             <td className="px-3 py-3">{normalizePlate(item.ativo?.placa || item.placa) || '—'}</td>
                             <td className="px-3 py-3">
@@ -881,6 +893,13 @@ const ProtocoloPage: React.FC = () => {
             </div>
           )}
 
+          {(readiness.mismatchedAssets > 0 || readiness.conflictingDestinations > 0) && (
+            <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
+              <p className="font-bold">IMPRESSÃO BLOQUEADA — DADOS DE EQUIPAMENTO OU DESTINO CONFLITANTES</p>
+              <p className="mt-1">{readiness.mismatchedAssets} patrimônio(s) divergente(s) da Frota e {readiness.conflictingDestinations} ativo(s) enviados a destinos distintos no mesmo pedido. Confira a mensagem e o cadastro antes de liberar.</p>
+            </div>
+          )}
+
           {readiness.missingContext > 0 && (
             <div className="rounded-xl border-2 border-destructive bg-destructive/10 p-4 text-sm text-destructive">
               <div className="flex items-start gap-3">
@@ -920,16 +939,16 @@ const ProtocoloPage: React.FC = () => {
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" size="lg" disabled={saving || !readiness.ready} onClick={() => pedirCodigo('save')}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileCheck className="mr-2 h-4 w-4" />}
-              {saving ? 'Salvando...' : 'Salvar Protocolos'}
+              {saving ? 'Salvando...' : `Salvar ${readiness.totalItems} protocolos`}
             </Button>
             <Button size="lg" disabled={printing || saving || !readiness.ready} onClick={() => pedirCodigo('print')} className="gradient-accent text-accent-foreground">
               {printing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Printer className="mr-2 h-4 w-4" />}
-              {printing ? 'Montando impressão...' : 'Imprimir Protocolo'}
+              {printing ? 'Montando impressão...' : `Imprimir todos (${readiness.totalItems})`}
             </Button>
             {lastSavedIds.length > 0 && <span className="self-center text-xs text-success">Arquivado no Supabase: {lastSavedIds.length} registro(s)</span>}
           </div>
 
-          <p className="text-xs text-muted-foreground">Impressão unificada: 2 vias no modelo detalhado do protocolo + 1 via completa de cada documento vinculado em sequência. A janela de impressão é aberta pelo navegador.</p>
+          <p className="text-xs text-muted-foreground">Uma única mensagem e uma única impressão do lote: cada equipamento sai em protocolo exclusivo, com 2 vias de seu protocolo e o respectivo PDF da Frota em seguida. Destinos diferentes nunca dividem o mesmo protocolo.</p>
         </section>
       )}
 
