@@ -279,6 +279,12 @@ export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[]
   );
 };
 
+/** Uma ordem de pagamento nunca pode conter valores de benefícios diferentes. */
+export const onlyBenefitForPayment = <T extends { tipo: 'vr' | 'vt' }>(
+  generations: T[],
+  tipo: 'vr' | 'vt',
+): T[] => generations.filter(generation => generation.tipo === tipo);
+
 export const sumBenefitRows = (rows: BenefitReportRow[]) =>
   roundCurrency(rows.reduce((sum, row) => sum + row.valorTotal, 0));
 
