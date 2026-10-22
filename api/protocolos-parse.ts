@@ -112,6 +112,9 @@ export const parseProtocolMessage = (rawText: string): ProtocolParsedGroup[] => 
 
   const lines = text
     .split(/\n+/)
+    // Uma solicitação pode incluir vários destinos na mesma linha, separados
+    // por ponto e vírgula; cada trecho conserva seu cliente/local.
+    .flatMap((line) => line.split(/\s*;\s*/))
     .map((line) => line.trim())
     .filter(Boolean);
 
