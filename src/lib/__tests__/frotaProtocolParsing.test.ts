@@ -161,4 +161,15 @@ Empresa Apeng canteiro Penha aos cuidados do Diego.
     expect(groups[0].itens.map(x => x.patrimonio)).toEqual(['A10.149', '680.240']);
   });
 
+  it('separa dois destinos distintos informados numa só linha da mensagem', () => {
+    const groups = parseProtocolMessage(
+      'A10.149 placa CUI-4B29 Cliente Apeng local Penha aos cuidados de Diego; 680.240 placa CLJ-5C69 Cliente Obra Sul local Santos aos cuidados de Maria',
+    );
+    expect(groups).toHaveLength(2);
+    expect(groups.map(group => [group.cliente, group.local, group.itens[0].patrimonio])).toEqual([
+      ['Apeng', 'Penha', 'A10.149'],
+      ['Obra Sul', 'Santos', '680.240'],
+    ]);
+  });
+
 });
