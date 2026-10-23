@@ -9,6 +9,8 @@ import { Lock, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock, Users, Pr
 import { toast } from 'sonner';
 import type { Employee, MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
+import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
+import { registrarAcao } from '@/lib/acoesLog';
 import {
   calcularResumoColaborador,
   formatarMinutos,
@@ -67,23 +69,32 @@ const roundHours = (minutos: number) => Math.round((minutos / 60) * 100) / 100;
 const contarTipos = (registros: RegistroPonto[], tipos: string[]) =>
   registros.filter((r) => tipos.includes(String(r.tipo))).length;
 
-const buildObservacoesPonto = (linha: LinhaResumo, anterior?: string) => {
+const buildObservacoesPonto = (linha: LinhaResumo, anterior: string | undefined, fonte: 'interno' | 'digital', operador: string) => {
   const marcador = '[PONTO_MECANICOS]';
   const resumo =
-    `${marcador} ${linha.diasTrabalhados} dia(s) trabalhado(s); ` +
+    `${marcador} [FONTE_PONTO:${fonte.toUpperCase()}] ${fonte === 'interno' ? 'Conferido pelo ponto interno; ' : ''}${linha.diasTrabalhados} dia(s) trabalhado(s); ` +
     `${linha.faltas} falta(s); ${roundHours(linha.atrasoTotalMin)}h atraso; ` +
     `${roundHours(linha.he50Min)}h HE50; ${roundHours(linha.he60Min)}h HE60; ${roundHours(linha.he100Min)}h HE100; ${linha.inconsistencias} pendencia(s).`;
   const limpo = String(anterior || '').replace(/\n?\[PONTO_MECANICOS\][^\n]*/g, '').trim();
-  return [limpo, resumo].filter(Boolean).join('\n');
+  return [limpo, `${resumo} Conferente: ${operador}.`].filter(Boolean).join('\n');
 };
 
 const FechamentoPontoPage: React.FC = () => {
   const { companies, employees, entries, refreshEntries } = useApp();
+  const operador = useOperatorIdentity();
+  const [fontesPonto, setFontesPonto] = useState<Record<string, 'interno' | 'digital'>>({});
   const [selectedCompany, setSelectedCompany] = useState<string>('todas');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [carregando, setCarregando] = useState(false);
   const [linhas, setLinhas] = useState<LinhaResumo[]>([]);
   const [executado, setExecutado] = useState(false);
+
+  const fontePonto = useCallback((linha: LinhaResumo): 'interno' | 'digital' => {
+    const id = linha.employeeId || linha.acessoId || linha.nome;
+    if (fontesPonto[id]) return fontesPonto[id];
+    const registrado = entries.find(e => e.employeeId === linha.employeeId && e.competencia === competencia);
+    return registrado?.observacoes?.includes('[FONTE_PONTO:INTERNO]') ? 'interno' : 'digital';
+  }, [competencia, entries, fontesPonto]);
 
   const empresasMap = useMemo(() => {
     const m = new Map<string, { name: string; codigo: string; city: string }>();
@@ -257,7 +268,11 @@ const FechamentoPontoPage: React.FC = () => {
   }, [competencia, companyMatchesAccess, employees, empresasMap, resolveEmployee, selectedCompany]);
 
   const persistirFechamento = useCallback(async (resumos: LinhaResumo[]) => {
-    const linhasComVinculo = resumos.filter((l) => l.employeeId && l.empresaId && l.registrosDigitais > 0 && l.entradasAntecipadas === 0);
+    const linhasComVinculo = resumos.filter((l) => {
+      if (!l.employeeId || !l.empresaId) return false;
+      if (fontePonto(l) === 'interno') return entries.some(e => e.employeeId === l.employeeId && e.competencia === competencia);
+      return l.registrosDigitais > 0 && l.entradasAntecipadas === 0;
+    });
 
     if (linhasComVinculo.length === 0) {
       toast.warning('Nenhum ponto digital seguro para gravar. Batidas ausentes ou entradas muito antecipadas permanecem pendentes, sem falta automática.');
@@ -269,6 +284,7 @@ const FechamentoPontoPage: React.FC = () => {
       const existente = entries.find(
         (entry) => entry.employeeId === linha.employeeId && entry.competencia === competencia,
       );
+      const fonte = fontePonto(linha);
 
       const base: Partial<MonthlyEntry> = {
         adiantamento: existente?.adiantamento ?? (emp ? Math.round(emp.salarioBase * 0.4 * 100) / 100 : 0),
@@ -286,9 +302,9 @@ const FechamentoPontoPage: React.FC = () => {
         competencia,
         faltas_dias: existente?.faltasDias ?? 0,
         atrasos: existente?.atrasos ?? 0,
-        he50: roundHours(linha.he50Min),
-        he60: roundHours(linha.he60Min),
-        he100: roundHours(linha.he100Min),
+        he50: fonte === 'interno' ? (existente?.he50 ?? 0) : roundHours(linha.he50Min),
+        he60: fonte === 'interno' ? (existente?.he60 ?? 0) : roundHours(linha.he60Min),
+        he100: fonte === 'interno' ? (existente?.he100 ?? 0) : roundHours(linha.he100Min),
         adiantamento: base.adiantamento,
         vr_aplicado: base.vrAplicado,
         vr_dias: base.vrDias,
@@ -296,9 +312,9 @@ const FechamentoPontoPage: React.FC = () => {
         vt_aplicado: base.vtAplicado,
         vt_desconto: base.vtDesconto,
         insalubridade_aplicada: base.insalubridadeAplicada,
-        status_conferencia: (linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0) ? 'pendente' : 'conferido',
-        observacoes: buildObservacoesPonto(linha, existente?.observacoes),
-        origem: 'consolidado',
+        status_conferencia: fonte === 'interno' ? 'conferido' : (linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0) ? 'pendente' : 'conferido',
+        observacoes: buildObservacoesPonto(linha, existente?.observacoes, fonte, operador.nome || 'Usuário autenticado'),
+        origem: existente?.origem || 'consolidado',
         updated_at: new Date().toISOString(),
       };
     });
@@ -309,9 +325,13 @@ const FechamentoPontoPage: React.FC = () => {
 
     if (error) throw error;
 
+    await Promise.all(linhasComVinculo.map(linha => registrarAcao({
+      modulo: 'ponto_mecanicos', entidade: 'lancamento_mensal', entidadeId: linha.employeeId,
+      acao: 'conferiu', observacao: `Competência ${competencia}; fonte ${fontePonto(linha)}; operador ${operador.nome || 'identidade pendente'}`,
+    })));
     await refreshEntries();
-    toast.success(`Fechamento dos mecânicos gravado no fechamento geral: ${payloads.length} funcionário(s).`);
-  }, [competencia, employeeById, entries, refreshEntries]);
+    toast.success(`Conferência salva: ${payloads.length} colaborador(es). Demais registros ficaram pendentes, sem desconto automático.`);
+  }, [competencia, employeeById, entries, refreshEntries, fontePonto, operador.nome]);
 
   const carregarMecanicos = useCallback(async (persistir = false, silencioso = false) => {
     setCarregando(true);
@@ -396,6 +416,7 @@ const FechamentoPontoPage: React.FC = () => {
         <td>${esc(linha.nome)}</td>
         <td>${esc(linha.empresaNome)}</td>
         <td>${esc(linha.cargo)}</td>
+        <td>${esc(fontePonto(linha) === 'interno' ? 'Interno' : 'Digital')}</td>
         <td>${linha.entradaCount || '-'}</td>
         <td>${linha.almocoInicioCount || '-'}</td>
         <td>${linha.almocoFimCount || '-'}</td>
@@ -455,7 +476,7 @@ const FechamentoPontoPage: React.FC = () => {
   <table>
     <thead>
       <tr>
-        <th>Mecânico</th><th>Empresa</th><th>Cargo</th><th>Entrada</th><th>Início almoço</th>
+        <th>Mecânico</th><th>Empresa</th><th>Cargo</th><th>Fonte</th><th>Entrada</th><th>Início almoço</th>
         <th>Retorno almoço</th><th>Saída</th><th>Faltas</th><th>Atraso</th>
         <th>HE 50%</th><th>HE 60%</th><th>HE 100%</th><th>Pendências</th>
       </tr>
@@ -463,12 +484,12 @@ const FechamentoPontoPage: React.FC = () => {
     <tbody>${rows}</tbody>
   </table>
 
-  <div class="footer">Relatório gerado a partir dos registros de ponto da plataforma TOPAC RH PRO.</div>
+  <div class="footer">Conferente: ${esc(operador.nome || "Usuário autenticado")} · CPF: ${esc(operador.cpf || "Pendente")}. Fonte individual na coluna específica. Ausência de batida não é falta.</div>
   <script>window.onload = () => setTimeout(() => window.print(), 250)<\/script>
 </body>
 </html>`);
     win.document.close();
-  }, [companies, competencia, linhas, selectedCompany, totais]);
+  }, [companies, competencia, linhas, selectedCompany, totais, fontePonto, operador.nome, operador.cpf]);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -588,6 +609,7 @@ const FechamentoPontoPage: React.FC = () => {
                     'Mecânico',
                     'Empresa',
                     'Cargo',
+                    'Fonte do ponto',
                     'Entrada',
                     'Início Almoço',
                     'Retorno Almoço',
@@ -611,6 +633,15 @@ const FechamentoPontoPage: React.FC = () => {
                     <td className="px-2 py-2 font-medium whitespace-nowrap text-xs">{l.nome}</td>
                     <td className="px-2 py-2 text-xs text-muted-foreground">{l.empresaNome}</td>
                     <td className="px-2 py-2 text-xs">{l.cargo}</td>
+                    <td className="px-2 py-2 text-xs">
+                      <select aria-label={`Fonte do ponto de ${l.nome}`}
+                        value={fontePonto(l)}
+                        onChange={e => setFontesPonto(prev => ({ ...prev, [l.employeeId || l.acessoId || l.nome]: e.target.value as 'interno' | 'digital' }))}
+                        className="rounded border border-border bg-background px-2 py-1 text-xs">
+                        <option value="digital">Ponto digital</option>
+                        <option value="interno">Ponto interno</option>
+                      </select>
+                    </td>
                     <td className="px-2 py-2 text-xs">{l.entradaCount || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.almocoInicioCount || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.almocoFimCount || '-'}</td>
@@ -635,7 +666,7 @@ const FechamentoPontoPage: React.FC = () => {
                 ))}
                 {linhas.length === 0 && (
                   <tr>
-                    <td colSpan={13} className="px-2 py-8 text-center text-muted-foreground text-sm">
+                    <td colSpan={14} className="px-2 py-8 text-center text-muted-foreground text-sm">
                       Nenhum mecânico vinculado encontrado para esta seleção.
                     </td>
                   </tr>
