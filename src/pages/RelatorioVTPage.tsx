@@ -429,7 +429,7 @@ const RelatorioVTPage: React.FC = () => {
             className="flex min-h-16 min-w-44 flex-col items-center justify-center rounded-xl border border-amber-400/60 bg-amber-400/10 px-4 py-2 text-sm font-bold text-amber-300 hover:bg-amber-400/20"
             onClick={() => setShowConsolidado(v => !v)}>
             <FileSpreadsheet className="mb-1 h-5 w-5" />
-            ${showConsolidado ? 'Ocultar' : 'Ver'} consolidado VT
+            {showConsolidado ? 'Ocultar' : 'Ver'} consolidado VT
           </button>
         </div>
       </section>
