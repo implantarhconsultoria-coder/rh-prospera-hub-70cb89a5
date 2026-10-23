@@ -125,7 +125,8 @@ const RelatorioVRPage: React.FC = () => {
   const toggleCompany = (id: string) => {
     setSelectedCompanies(previous => {
       const next = new Set(previous);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
