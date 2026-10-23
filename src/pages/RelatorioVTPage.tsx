@@ -14,6 +14,7 @@ import { formatCurrency } from '@/lib/calculations';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
+import { registrarAcao } from '@/lib/acoesLog';
 import ConsolidadoBeneficiosPage from '@/pages/ConsolidadoBeneficiosPage';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 import { sha256Browser } from '@/lib/payrollDocuments';
@@ -148,6 +149,7 @@ const RelatorioVTPage: React.FC = () => {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tipo,company_id,competencia' });
     if (error) throw error;
+    await registrarAcao({ modulo: 'beneficios_vt', entidade: 'benefit_generation', entidadeId: block.company.id, acao: 'gerou', observacao: `Competência ${competencia}; geração por ${operador.nome || 'usuário autenticado'}; CPF cadastrado: ${operador.cpf ? 'sim' : 'não'}` });
   };
 
   const syncPayrollDocument = async (block: VTPackageBlock, row: BenefitReportRow, actorId: string) => {
