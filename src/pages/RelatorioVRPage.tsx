@@ -21,6 +21,7 @@ import {
 } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
+import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
 import ConsolidadoBeneficiosPage from '@/pages/ConsolidadoBeneficiosPage';
 import { sha256Browser } from '@/lib/payrollDocuments';
 import { buildVRReceiptPdfBlob } from '@/lib/vrReceiptPdf';
@@ -79,6 +80,7 @@ const RelatorioVRPage: React.FC = () => {
 
   const [competencia, setCompetencia] = useState(defaultCompetencia);
   const medical = useBenefitMedicalLeaves(competencia);
+  const operador = useOperatorIdentity();
   const [showConsolidado, setShowConsolidado] = useState(false);
   const [diasPagos, setDiasPagos] = useState(String(getWorkingDays(defaultCompetencia)));
   const [dataPagamento, setDataPagamento] = useState(searchParams.get('dataPagamento') || '');
@@ -266,6 +268,7 @@ const RelatorioVRPage: React.FC = () => {
     const blob = buildVRReceiptPdfBlob(block.company, row, {
       competencia: targetCompetencia,
       dataPagamento: effectivePaymentDate,
+      operador,
     });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const hash = await sha256Browser(bytes);
