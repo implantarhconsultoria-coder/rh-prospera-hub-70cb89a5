@@ -149,7 +149,7 @@ const RelatorioVTPage: React.FC = () => {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tipo,company_id,competencia' });
     if (error) throw error;
-    await registrarAcao({ modulo: 'beneficios_vt', entidade: 'benefit_generation', entidadeId: block.company.id, acao: 'gerou', observacao: `Competência ${competencia}; geração por ${operador.nome || 'usuário autenticado'}; CPF cadastrado: ${operador.cpf ? 'sim' : 'não'}` });
+    await registrarAcao({ modulo: 'beneficios_vt', entidade: 'benefit_generation', entidadeId: block.company.id, acao: 'gerou', observacao: `Competência ${competencia}; geração por ${operador.nome || 'usuário autenticado'}` }, { userId: session?.user?.id, userEmail: session?.user?.email, funcionarioNome: operador.nome, cpf: operador.cpf, origem: 'admin' });
   };
 
   const syncPayrollDocument = async (block: VTPackageBlock, row: BenefitReportRow, actorId: string) => {
