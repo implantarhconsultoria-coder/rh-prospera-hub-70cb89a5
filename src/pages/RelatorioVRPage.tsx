@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, UtensilsCrossed, ClipboardCheck, FileSpreadsheet } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import {
 } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
+import ConsolidadoBeneficiosPage from '@/pages/ConsolidadoBeneficiosPage';
 import { sha256Browser } from '@/lib/payrollDocuments';
 import { buildVRReceiptPdfBlob } from '@/lib/vrReceiptPdf';
 import { formatCurrency } from '@/lib/calculations';
@@ -78,6 +79,7 @@ const RelatorioVRPage: React.FC = () => {
 
   const [competencia, setCompetencia] = useState(defaultCompetencia);
   const medical = useBenefitMedicalLeaves(competencia);
+  const [showConsolidado, setShowConsolidado] = useState(false);
   const [diasPagos, setDiasPagos] = useState(String(getWorkingDays(defaultCompetencia)));
   const [dataPagamento, setDataPagamento] = useState(searchParams.get('dataPagamento') || '');
   const [selectionMode, setSelectionMode] = useState<'all' | 'selected'>('all');
@@ -551,36 +553,27 @@ const RelatorioVRPage: React.FC = () => {
         </div>
       </div>
 
-      <section aria-label="Conferência e pagamentos de benefícios" className="rounded-2xl border border-violet-400/50 bg-violet-500/10 p-4 md:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold uppercase tracking-wider text-violet-300">Conferência VR</p>
-            <h2 className="mt-1 text-lg font-semibold text-foreground">Atestados, faltas e consolidado de pagamento do VR</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Benefício de {competencia} · cruzamento com afastamentos de {getPreviousCompetencia(competencia)}.
-              {' '}{medical.loading ? 'Consultando atestados...' :
-                medical.error ? 'Atenção: falha ao consultar atestados.' :
-                medical.documentosPendentes > 0 ? `${medical.documentosPendentes} documento(s) aguardando validação de datas.` :
-                'Sem atestados documentais pendentes nesse período.'}
+      <section aria-label="Conferência integrada de VR" className="rounded-xl border border-violet-400/30 bg-violet-500/5 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">Recibos e conferência de VR</p>
+            <p className="text-xs text-muted-foreground">
+              Atestados e faltas cruzados com o fechamento de {getPreviousCompetencia(competencia)}.
+              {' '}{medical.loading ? 'Verificando documentos...' :
+                medical.error ? 'Falha ao conferir os documentos médicos.' :
+                medical.documentosPendentes > 0 ? `${medical.documentosPendentes} documento(s) sem período comprovado — exigem validação antes do pagamento.` :
+                'Conferência documental atualizada.'}
             </p>
           </div>
-          <div className="flex w-full flex-wrap gap-2 lg:w-auto">
-            <Button asChild type="button" variant="outline" className="border-violet-400/60 font-semibold">
-              <Link to="/admin/conferencia-atestados-vr">
-                <ClipboardCheck className="mr-2 h-4 w-4" />Conferir atestados VR
-              </Link>
-            </Button>
-            <Button asChild type="button" className="bg-amber-400 font-semibold text-black hover:bg-amber-300">
-              <Link to={`/admin/consolidado-vr?competencia=${competencia}`}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />Consolidado VR para pagamento
-              </Link>
-            </Button>
-          </div>
+          <button type="button" aria-expanded={showConsolidado}
+            className="flex min-h-16 min-w-44 flex-col items-center justify-center rounded-xl border border-amber-400/60 bg-amber-400/10 px-4 py-2 text-sm font-bold text-amber-300 hover:bg-amber-400/20"
+            onClick={() => setShowConsolidado(v => !v)}>
+            <FileSpreadsheet className="mb-1 h-5 w-5" />
+            ${showConsolidado ? 'Ocultar' : 'Ver'} consolidado VR
+          </button>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Pagamentos só podem ser liberados após revisar datas dos atestados e faltas de ponto pendentes. Nenhum abatimento é confirmado sem conferência.
-        </p>
       </section>
+      {showConsolidado && <ConsolidadoBeneficiosPage key={`vr-${competencia}`} tipo="vr" embutido competenciaInicial={competencia} />}
 
       <div className="rounded-2xl border border-border bg-card p-4">
         <div className="grid gap-3 lg:grid-cols-[1.2fr_.8fr_1fr_auto] lg:items-end">
