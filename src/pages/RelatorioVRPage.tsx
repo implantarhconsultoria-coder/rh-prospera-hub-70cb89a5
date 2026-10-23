@@ -567,7 +567,7 @@ const RelatorioVRPage: React.FC = () => {
               {' '}{medical.loading ? 'Verificando documentos...' :
                 medical.error ? 'Falha ao conferir os documentos médicos.' :
                 medical.documentosPendentes > 0 ? `${medical.documentosPendentes} documento(s) sem período comprovado — exigem validação antes do pagamento.` :
-                'Conferência documental atualizada.'}
+                `Documentos médicos identificados: ${medical.documentosEmDias} com duração em dias, ${medical.documentosEmHoras} em horas, ${medical.documentosSemDuracao} sem duração explícita; ${medical.documentosContabilidade} referência(s) na contabilidade.`}
             </p>
           </div>
           <button type="button" aria-expanded={showConsolidado}
