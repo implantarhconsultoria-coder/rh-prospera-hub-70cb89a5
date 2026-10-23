@@ -386,10 +386,10 @@ const FechamentoPontoPage: React.FC = () => {
       t.he100Min += l.he100Min;
       t.hfMin += l.horasFaltantesMin;
       t.saldoMin += l.saldoMin;
-      t.inconsist += l.inconsistencias + (l.employeeId ? 0 : 1);
+      t.inconsist += (fontePonto(l) === 'digital' && l.pendencias.length > 0 ? 1 : 0) + (l.employeeId ? 0 : 1);
     });
     return t;
-  }, [linhas]);
+  }, [linhas, fontePonto]);
 
 
   const gerarRelatorioPonto = useCallback(() => {
@@ -426,7 +426,7 @@ const FechamentoPontoPage: React.FC = () => {
         <td>${linha.he50Min > 0 ? esc(formatarMinutos(linha.he50Min)) : '-'}</td>
         <td>${linha.he60Min > 0 ? esc(formatarMinutos(linha.he60Min)) : '-'}</td>
         <td>${linha.he100Min > 0 ? esc(formatarMinutos(linha.he100Min)) : '-'}</td>
-        <td>${esc(linha.pendencias.length ? linha.pendencias.join(' • ') : 'OK')}</td>
+        <td>${esc(fontePonto(linha) === 'interno' ? 'PONTO INTERNO SELECIONADO' : linha.pendencias.length ? linha.pendencias.join(' • ') : 'OK')}</td>
       </tr>
     `).join('');
 
@@ -652,7 +652,9 @@ const FechamentoPontoPage: React.FC = () => {
                     <td className="px-2 py-2 text-xs text-success">{l.he60Min > 0 ? formatarMinutos(l.he60Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.he100Min > 0 ? formatarMinutos(l.he100Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs">
-                      {l.pendencias.length > 0 ? (
+                      {fontePonto(l) === 'interno' ? (
+                        <Badge variant="outline" className="border-success text-success">Ponto interno — validar ao fechar</Badge>
+                      ) : l.pendencias.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {l.pendencias.slice(0, 3).map((p) => (
                             <Badge key={p} variant="outline" className="border-warning text-warning">{p}</Badge>
