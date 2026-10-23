@@ -409,7 +409,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
             <strong>PrÃ©-visualizaÃ§Ã£o:</strong> {recibos.length} recibo(s) â {recibos.length} pÃ¡gina(s) ({formatoLabel})
             {recibos.some((r) => r.vr?.corrigido || r.vt?.corrigido) && (
               <span className="ml-2 inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-0.5 text-xs">
-                â  Inclui recibo(s) com correÃ§Ã£o administrativa
+                Atenção: inclui recibo(s) com correção administrativa
               </span>
             )}
           </div>
