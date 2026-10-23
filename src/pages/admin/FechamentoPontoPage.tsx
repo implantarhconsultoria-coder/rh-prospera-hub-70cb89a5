@@ -83,6 +83,7 @@ const FechamentoPontoPage: React.FC = () => {
   const { companies, employees, entries, refreshEntries } = useApp();
   const operador = useOperatorIdentity();
   const [fontesPonto, setFontesPonto] = useState<Record<string, 'interno' | 'digital'>>({});
+  const [entradasConferidas, setEntradasConferidas] = useState<Record<string, boolean>>({});
   const [selectedCompany, setSelectedCompany] = useState<string>('todas');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [carregando, setCarregando] = useState(false);
@@ -222,6 +223,10 @@ const FechamentoPontoPage: React.FC = () => {
 
       const jornada = getJornada(empresaInfo?.codigo);
       const resumo = calcularResumoColaborador(acessoId || profileUserId || employeeId || nome, regs, competencia, jornada);
+      const todayBr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+      const diasSemBatidaAteHoje = resumo.dias.filter(d => d.diaUtil && !d.entrada && !d.saida && d.data <= todayBr).length;
       const [hh, mm] = jornada.entradaPadrao.split(':').map(Number);
       const limiteAntecipacao = hh * 60 + mm - 120;
       const entradasAntecipadas = resumo.dias.filter(d => {
@@ -231,7 +236,7 @@ const FechamentoPontoPage: React.FC = () => {
       }).length;
       const pendencias: string[] = [];
       if (!employeeId) pendencias.push('sem vínculo com funcionário');
-      if (resumo.diasSemRegistro > 0) pendencias.push(`${resumo.diasSemRegistro} dia(s) sem batida digital: não é falta`);
+      if (diasSemBatidaAteHoje > 0) pendencias.push(`${diasSemBatidaAteHoje} dia(s) sem batida digital: não é falta`);
       if (entradasAntecipadas) pendencias.push(`${entradasAntecipadas} entrada(s) 2h ou mais cedo: conferir serviço`);
       if (resumo.inconsistencias > 0) pendencias.push(`${resumo.inconsistencias} dia(s) inconsistente(s)`);
       // Não converter ausência de registros digitais em perdas de horas.
@@ -242,7 +247,7 @@ const FechamentoPontoPage: React.FC = () => {
         horasFaltantesMin: 0,
         saldoMin: 0,
         registrosDigitais: regs.length,
-        diasSemRegistroDigital: resumo.diasSemRegistro,
+        diasSemRegistroDigital: diasSemBatidaAteHoje,
         entradasAntecipadas,
         employeeId,
         acessoId,
@@ -268,10 +273,14 @@ const FechamentoPontoPage: React.FC = () => {
   }, [competencia, companyMatchesAccess, employees, empresasMap, resolveEmployee, selectedCompany]);
 
   const persistirFechamento = useCallback(async (resumos: LinhaResumo[]) => {
+    if (operador.loading || !operador.completo) {
+      toast.error('Fechamento requer nome completo e CPF cadastrados para auditoria.');
+      return;
+    }
     const linhasComVinculo = resumos.filter((l) => {
       if (!l.employeeId || !l.empresaId) return false;
       if (fontePonto(l) === 'interno') return entries.some(e => e.employeeId === l.employeeId && e.competencia === competencia);
-      return l.registrosDigitais > 0 && l.entradasAntecipadas === 0;
+      return l.registrosDigitais > 0 && (l.entradasAntecipadas === 0 || entradasConferidas[l.employeeId || l.acessoId || l.nome] === true);
     });
 
     if (linhasComVinculo.length === 0) {
@@ -302,9 +311,10 @@ const FechamentoPontoPage: React.FC = () => {
         competencia,
         faltas_dias: existente?.faltasDias ?? 0,
         atrasos: existente?.atrasos ?? 0,
-        he50: fonte === 'interno' ? (existente?.he50 ?? 0) : roundHours(linha.he50Min),
-        he60: fonte === 'interno' ? (existente?.he60 ?? 0) : roundHours(linha.he60Min),
-        he100: fonte === 'interno' ? (existente?.he100 ?? 0) : roundHours(linha.he100Min),
+        // Ponto digital parcial não sobrescreve horas extras que o RH já conferiu.
+        he50: fonte === 'interno' || linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0 ? (existente?.he50 ?? 0) : roundHours(linha.he50Min),
+        he60: fonte === 'interno' || linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0 ? (existente?.he60 ?? 0) : roundHours(linha.he60Min),
+        he100: fonte === 'interno' || linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0 ? (existente?.he100 ?? 0) : roundHours(linha.he100Min),
         adiantamento: base.adiantamento,
         vr_aplicado: base.vrAplicado,
         vr_dias: base.vrDias,
@@ -313,7 +323,9 @@ const FechamentoPontoPage: React.FC = () => {
         vt_desconto: base.vtDesconto,
         insalubridade_aplicada: base.insalubridadeAplicada,
         status_conferencia: fonte === 'interno' ? 'conferido' : (linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0) ? 'pendente' : 'conferido',
-        observacoes: buildObservacoesPonto(linha, existente?.observacoes, fonte, operador.nome || 'Usuário autenticado'),
+        observacoes: buildObservacoesPonto(linha, existente?.observacoes, fonte, operador.nome || 'Usuário autenticado')
+          + (linha.entradasAntecipadas > 0 && entradasConferidas[linha.employeeId || linha.acessoId || linha.nome]
+            ? '\\n[ENTRADA_ANTECIPADA_VALIDADA] Serviço diferenciado conferido pela administração.' : ''),
         origem: existente?.origem || 'consolidado',
         updated_at: new Date().toISOString(),
       };
@@ -331,7 +343,7 @@ const FechamentoPontoPage: React.FC = () => {
     }, { userId: operador.userId, funcionarioNome: operador.nome, cpf: operador.cpf, origem: 'admin' })));
     await refreshEntries();
     toast.success(`Conferência salva: ${payloads.length} colaborador(es). Demais registros ficaram pendentes, sem desconto automático.`);
-  }, [competencia, employeeById, entries, refreshEntries, fontePonto, operador.nome]);
+  }, [competencia, employeeById, entries, refreshEntries, fontePonto, operador.nome, operador.completo, operador.loading, entradasConferidas]);
 
   const carregarMecanicos = useCallback(async (persistir = false, silencioso = false) => {
     setCarregando(true);
@@ -389,7 +401,7 @@ const FechamentoPontoPage: React.FC = () => {
       t.inconsist += (fontePonto(l) === 'digital' && l.pendencias.length > 0 ? 1 : 0) + (l.employeeId ? 0 : 1);
     });
     return t;
-  }, [linhas, fontePonto]);
+  }, [linhas, fontePonto, entradasConferidas]);
 
 
   const gerarRelatorioPonto = useCallback(() => {
@@ -646,12 +658,20 @@ const FechamentoPontoPage: React.FC = () => {
                     <td className="px-2 py-2 text-xs">{l.almocoInicioCount || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.almocoFimCount || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.saidaCount || '-'}</td>
-                    <td className="px-2 py-2 text-xs text-destructive">{l.faltas || '-'}</td>
+                    <td className="px-2 py-2 text-xs text-emerald-500">Não presumida</td>
                     <td className="px-2 py-2 text-xs">{l.atrasoTotalMin > 0 ? formatarMinutos(l.atrasoTotalMin) : '-'}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.he50Min > 0 ? formatarMinutos(l.he50Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.he60Min > 0 ? formatarMinutos(l.he60Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.he100Min > 0 ? formatarMinutos(l.he100Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs">
+                      {fontePonto(l) === 'digital' && l.entradasAntecipadas > 0 && (
+                        <label className="mb-2 flex items-start gap-1 text-amber-400">
+                          <input type="checkbox"
+                            checked={Boolean(entradasConferidas[l.employeeId || l.acessoId || l.nome])}
+                            onChange={e => setEntradasConferidas(v => ({ ...v, [l.employeeId || l.acessoId || l.nome]: e.target.checked }))} />
+                          Serviço diferenciado de entrada antecipada conferido
+                        </label>
+                      )}
                       {fontePonto(l) === 'interno' ? (
                         <Badge variant="outline" className="border-success text-success">Ponto interno — validar ao fechar</Badge>
                       ) : l.pendencias.length > 0 ? (
