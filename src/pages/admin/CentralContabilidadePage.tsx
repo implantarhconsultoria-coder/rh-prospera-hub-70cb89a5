@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronRight, FileCheck2, RefreshCw, UserPlus, Users } from 'lucide-react';
+import { CheckCircle2, ChevronRight, ClipboardCheck, FileCheck2, FileText, RefreshCw, UserPlus, Users } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import FechamentoPage from '@/pages/FechamentoPage';
+import ContabilidadeFolhaAdminAddon from '@/components/ContabilidadeFolhaAdminAddon';
 
 type PreCadastro = {
   id: string;
@@ -19,6 +20,7 @@ type PreCadastro = {
 };
 
 type StageKey = 'pre-cadastro' | 'validacao' | 'contabilidade';
+type CentralTab = 'fechamento' | 'fluxo' | 'admissoes';
 
 const STAGES: Array<{
   key: StageKey;
@@ -55,6 +57,7 @@ const CentralContabilidadePage: React.FC = () => {
   const navigate = useNavigate();
   const [records, setRecords] = useState<PreCadastro[]>([]);
   const [stage, setStage] = useState<StageKey>('pre-cadastro');
+  const [tab, setTab] = useState<CentralTab>('fechamento');
   const [loading, setLoading] = useState(true);
   const [completedCount, setCompletedCount] = useState(0);
 
@@ -83,15 +86,16 @@ const CentralContabilidadePage: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { void loadQueue(); }, [loadQueue]);
+  useEffect(() => { if (tab === 'admissoes') void loadQueue(); }, [loadQueue, tab]);
 
   useEffect(() => {
+    if (tab !== 'admissoes') return;
     const channel = supabase
       .channel('central-contabilidade-pre-cadastro')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pre_cadastros_admissionais' }, () => void loadQueue(true))
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [loadQueue]);
+  }, [loadQueue, tab]);
 
   const activeStage = STAGES.find(item => item.key === stage) || STAGES[0];
   const stageRecords = useMemo(
@@ -110,8 +114,50 @@ const CentralContabilidadePage: React.FC = () => {
   // sem misturar o fechamento operacional com a fila sequencial de admissões.
   if (location.pathname === '/admin/apontamento-inteligente') return <FechamentoPage />;
 
+  const sections: Array<{ key: CentralTab; label: string; description: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { key: 'fechamento', label: 'Fechamento', description: 'Apontamentos, cálculos e envio', icon: ClipboardCheck },
+    { key: 'fluxo', label: 'Fluxo Contábil', description: 'Pagamento, adiantamento e retornos', icon: FileText },
+    { key: 'admissoes', label: 'Pré-cadastro', description: 'Admissões e documentação', icon: UserPlus },
+  ];
+  const navigation = (
+    <nav aria-label="Áreas da Central da Contabilidade" className="grid gap-3 md:grid-cols-3">
+      {sections.map(({ key, label, description, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => setTab(key)}
+          aria-current={tab === key ? 'page' : undefined}
+          className={`rounded-xl border p-4 text-left transition-colors ${tab === key ? 'border-violet-400 bg-violet-500/10' : 'border-border bg-card hover:border-violet-400/50'}`}
+        >
+          <div className="flex items-center gap-2 font-bold"><Icon className="h-5 w-5 text-violet-400" />{label}</div>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        </button>
+      ))}
+    </nav>
+  );
+
+  if (tab !== 'admissoes') return (
+    <div className="space-y-5 pb-12">
+      <div className="rounded-2xl border border-purple-500/30 bg-card p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-400">TOPAC RH PRO</p>
+        <h2 className="mt-1 text-2xl font-bold">Central da Contabilidade</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Fechamento mensal, envio à Contabilidade, conferência, retornos e admissões em um só lugar.</p>
+      </div>
+      {navigation}
+      {tab === 'fechamento'
+        ? <FechamentoPage />
+        : (
+          <div className="space-y-5 animate-fade-in">
+            <h1 className="sr-only">Central da Contabilidade</h1>
+            <ContabilidadeFolhaAdminAddon />
+          </div>
+        )}
+    </div>
+  );
+
   return (
     <div className="space-y-5 pb-12">
+      {navigation}
       <div className="rounded-2xl border border-purple-500/30 bg-card p-5 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
