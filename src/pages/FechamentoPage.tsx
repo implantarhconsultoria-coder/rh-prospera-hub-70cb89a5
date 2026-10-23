@@ -40,6 +40,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   });
   const selectedCompany = viewState.selectedCompany;
   const competencia = viewState.competencia || initialCompetencia;
+  const retificationStorageKey = selectedCompany && competencia ? `topac:fechamento-retificacao:${selectedCompany}:${competencia}` : '';
   const diasUteisManual = Number(viewState.diasUteisManual || 0);
   const domingosFeriados = Number(viewState.domingosFeriados || 0);
   const setSelectedCompany = (value: string) => setViewState((current) => ({ ...current, selectedCompany: value }));
@@ -88,7 +89,6 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   const compEmps = employees.filter((employee) => employee.companyId === selectedCompany && employee.status === 'ativo' && employee.categoria === 'operacional');
   const compEntries = entries.filter((entry) => entry.companyId === selectedCompany && entry.competencia === competencia);
   const fechamento = getFechamento(selectedCompany, competencia);
-  const retificationStorageKey = selectedCompany && competencia ? `topac:fechamento-retificacao:${selectedCompany}:${competencia}` : '';
   const selectedCompanyData = companies.find((company) => company.id === selectedCompany);
   const comissaoPct = getComissaoPercentual(selectedCompanyData);
   const heSemanalPct = 50;
