@@ -328,7 +328,7 @@ const FechamentoPontoPage: React.FC = () => {
     await Promise.all(linhasComVinculo.map(linha => registrarAcao({
       modulo: 'ponto_mecanicos', entidade: 'lancamento_mensal', entidadeId: linha.employeeId,
       acao: 'conferiu', observacao: `Competência ${competencia}; fonte ${fontePonto(linha)}; operador ${operador.nome || 'identidade pendente'}`,
-    })));
+    }, { userId: operador.userId, funcionarioNome: operador.nome, cpf: operador.cpf, origem: 'admin' })));
     await refreshEntries();
     toast.success(`Conferência salva: ${payloads.length} colaborador(es). Demais registros ficaram pendentes, sem desconto automático.`);
   }, [competencia, employeeById, entries, refreshEntries, fontePonto, operador.nome]);
