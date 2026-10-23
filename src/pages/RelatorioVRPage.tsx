@@ -22,6 +22,7 @@ import {
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
+import { registrarAcao } from '@/lib/acoesLog';
 import ConsolidadoBeneficiosPage from '@/pages/ConsolidadoBeneficiosPage';
 import { sha256Browser } from '@/lib/payrollDocuments';
 import { buildVRReceiptPdfBlob } from '@/lib/vrReceiptPdf';
@@ -206,6 +207,7 @@ const RelatorioVRPage: React.FC = () => {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'tipo,company_id,competencia' });
     if (error) throw error;
+    await registrarAcao({ modulo: 'beneficios_vr', entidade: 'benefit_generation', entidadeId: block.company.id, acao: 'gerou', observacao: `Competência ${competencia}; geração por ${operador.nome || 'usuário autenticado'}; CPF cadastrado: ${operador.cpf ? 'sim' : 'não'}` });
   };
 
   const persistIndividualGeneration = async (
