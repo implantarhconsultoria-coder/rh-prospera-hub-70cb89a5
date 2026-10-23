@@ -31,6 +31,12 @@ const bounds = (competencia: string) => {
  * O cálculo usa exclusivamente a tabela de atestados com datas, status e aplicação explícita.
  */
 export const useBenefitMedicalLeaves = (competencia: string) => {
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const onUpdate = () => setRevision(value => value + 1);
+    window.addEventListener('topac:medical-updated', onUpdate);
+    return () => window.removeEventListener('topac:medical-updated', onUpdate);
+  }, []);
   const [state, setState] = useState<MedicalState>({
     competencia: '',
     loading: true,
@@ -63,7 +69,7 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
             .lte('data_inicio', period.last)
             .gte('data_fim', period.first),
           supabase.from('documentos_funcionario')
-            .select('funcionario_id,company_id,arquivo_url,tipo_documento,descricao,observacao,data_documento,created_at')
+            .select('funcionario_id,company_id,arquivo_url,storage_bucket,storage_path,tipo_documento,descricao,observacao,data_documento,created_at')
             .or('tipo_documento.ilike.%ATESTADO%,tipo_documento.ilike.%DECLARA%')
             .gte('data_documento', `${period.first}T00:00:00-03:00`)
             // Recebimento até dois dias depois da competência exige revisão; nunca cria abatimento.
@@ -81,8 +87,12 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
         const confirmedUrls = new Set(medicalRecords
           .filter(a => a.status === 'confirmado' && a.data_inicio && a.data_fim)
           .map(a => a.arquivo_url).filter(Boolean));
-        const pendingDocuments = (documentsResult.data || [])
-          .filter(d => !d.arquivo_url || !confirmedUrls.has(d.arquivo_url));
+        // Documentos antigos só possuem o caminho privado no Storage, sem URL pública.
+        const pendingDocuments = (documentsResult.data || []).filter(d => {
+          const original = d.arquivo_url || (d.storage_bucket && d.storage_path
+            ? `storage://${d.storage_bucket}/${d.storage_path}` : '');
+          return !original || !confirmedUrls.has(original);
+        });
         const pendingDocs = pendingDocuments.length;
         const duracoes = pendingDocuments.map(d => detectarDuracaoAtestado([d.descricao, d.observacao].filter(Boolean).join(' ')));
         const documentosEmHoras = duracoes.filter(d => d.unidade === 'horas').length;
@@ -123,7 +133,7 @@ export const useBenefitMedicalLeaves = (competencia: string) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [competencia]);
+  }, [competencia, revision]);
 
   return {
     ...state,
