@@ -13,6 +13,7 @@ import { buildVTReportRows, getPreviousCompetencia, sumBenefitRows, type Benefit
 import { formatCurrency } from '@/lib/calculations';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
+import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
 import ConsolidadoBeneficiosPage from '@/pages/ConsolidadoBeneficiosPage';
 import ReciboCorrecaoModal from '@/components/ReciboCorrecaoModal';
 import { sha256Browser } from '@/lib/payrollDocuments';
@@ -47,6 +48,7 @@ const RelatorioVTPage: React.FC = () => {
 
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const medical = useBenefitMedicalLeaves(competencia);
+  const operador = useOperatorIdentity();
   const [showConsolidado, setShowConsolidado] = useState(false);
   const [diasPagos, setDiasPagos] = useState(String(getWorkingDays(new Date().toISOString().slice(0, 7))));
   const [dataPagamento, setDataPagamento] = useState('');
@@ -154,6 +156,7 @@ const RelatorioVTPage: React.FC = () => {
       competencia,
       diasPagos: Math.max(0, Number(diasPagos || 0)),
       dataPagamento: effectivePaymentDate,
+      operador,
     });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const hash = await sha256Browser(bytes);
@@ -311,6 +314,7 @@ const RelatorioVTPage: React.FC = () => {
     competencia,
     diasPagos: Math.max(0, Number(diasPagos || 0)),
     dataPagamento: dataPagamento || '',
+      operador,
   });
 
   const handlePreview = () => {
