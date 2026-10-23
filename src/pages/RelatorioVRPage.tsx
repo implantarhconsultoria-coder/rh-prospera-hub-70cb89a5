@@ -24,6 +24,7 @@ import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
 import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
 import { registrarAcao } from '@/lib/acoesLog';
 import ConsolidadoBeneficiosPage from '@/pages/ConsolidadoBeneficiosPage';
+import BenefitMedicalReview from '@/components/BenefitMedicalReview';
 import { sha256Browser } from '@/lib/payrollDocuments';
 import { buildVRReceiptPdfBlob } from '@/lib/vrReceiptPdf';
 import { formatCurrency } from '@/lib/calculations';
@@ -393,6 +394,7 @@ const RelatorioVRPage: React.FC = () => {
     if (!Number.isFinite(days) || days <= 0) return toast.error('Informe os dias pagos.');
     if (!selectedCompanyIds.length) return toast.error('Selecione ao menos uma empresa.');
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
+    if (operador.loading || !operador.completo) return toast.error('Para emitir o documento, atualize o nome completo e CPF do operador no cadastro administrativo.');
     if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
     if (selectedCompanyIds.some(id => (medical.pendentesPorEmpresa[id] || 0) > 0)) return toast.error('Há atestados sem datas conferidas nas empresas selecionadas. Revise antes de gerar VR.');
 
@@ -482,6 +484,7 @@ const RelatorioVRPage: React.FC = () => {
     const admission = getVRAdmissionCalculation(individualEmployee, individualCompetencia);
     if (!admission.eligible) return toast.info('Funcionário ainda não admitido nesta competência.');
 
+    if (operador.loading || !operador.completo) return toast.error('Operador sem nome completo e CPF no perfil.');
     setIndividualGenerating(true);
     try {
       const pool = buildEntryPool([individualEmployee.companyId], individualCompetencia);
@@ -578,6 +581,7 @@ const RelatorioVRPage: React.FC = () => {
           </button>
         </div>
       </section>
+      <BenefitMedicalReview tipo="vr" competencia={competencia} />
       {showConsolidado && <ConsolidadoBeneficiosPage key={`vr-${competencia}`} tipo="vr" embutido competenciaInicial={competencia} />}
 
       <div className="rounded-2xl border border-border bg-card p-4">
