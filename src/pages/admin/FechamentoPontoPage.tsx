@@ -43,6 +43,9 @@ interface LinhaResumo extends ResumoColaborador {
   almocoFimCount: number;
   saidaCount: number;
   pendencias: string[];
+  registrosDigitais: number;
+  diasSemRegistroDigital: number;
+  entradasAntecipadas: number;
 }
 
 const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
@@ -208,14 +211,28 @@ const FechamentoPontoPage: React.FC = () => {
 
       const jornada = getJornada(empresaInfo?.codigo);
       const resumo = calcularResumoColaborador(acessoId || profileUserId || employeeId || nome, regs, competencia, jornada);
+      const [hh, mm] = jornada.entradaPadrao.split(':').map(Number);
+      const limiteAntecipacao = hh * 60 + mm - 120;
+      const entradasAntecipadas = resumo.dias.filter(d => {
+        if (!d.entrada) return false;
+        const [h, m] = d.entrada.split(':').map(Number);
+        return h * 60 + m <= limiteAntecipacao;
+      }).length;
       const pendencias: string[] = [];
       if (!employeeId) pendencias.push('sem vínculo com funcionário');
-      if (resumo.faltas > 0) pendencias.push(`${resumo.faltas} falta(s)`);
+      if (resumo.diasSemRegistro > 0) pendencias.push(`${resumo.diasSemRegistro} dia(s) sem batida digital: não é falta`);
+      if (entradasAntecipadas) pendencias.push(`${entradasAntecipadas} entrada(s) 2h ou mais cedo: conferir serviço`);
       if (resumo.inconsistencias > 0) pendencias.push(`${resumo.inconsistencias} dia(s) inconsistente(s)`);
-      if (resumo.horasFaltantesMin > 0) pendencias.push(`${formatarMinutos(resumo.horasFaltantesMin)} faltante`);
+      // Não converter ausência de registros digitais em perdas de horas.
 
       return {
         ...resumo,
+        faltas: 0,
+        horasFaltantesMin: 0,
+        saldoMin: 0,
+        registrosDigitais: regs.length,
+        diasSemRegistroDigital: resumo.diasSemRegistro,
+        entradasAntecipadas,
         employeeId,
         acessoId,
         profileUserId,
@@ -240,10 +257,10 @@ const FechamentoPontoPage: React.FC = () => {
   }, [competencia, companyMatchesAccess, employees, empresasMap, resolveEmployee, selectedCompany]);
 
   const persistirFechamento = useCallback(async (resumos: LinhaResumo[]) => {
-    const linhasComVinculo = resumos.filter((l) => l.employeeId && l.empresaId);
+    const linhasComVinculo = resumos.filter((l) => l.employeeId && l.empresaId && l.registrosDigitais > 0 && l.entradasAntecipadas === 0);
 
     if (linhasComVinculo.length === 0) {
-      toast.warning('Nenhum mecânico vinculado a funcionário para alimentar o fechamento geral.');
+      toast.warning('Nenhum ponto digital seguro para gravar. Batidas ausentes ou entradas muito antecipadas permanecem pendentes, sem falta automática.');
       return;
     }
 
@@ -267,8 +284,8 @@ const FechamentoPontoPage: React.FC = () => {
         funcionario_id: linha.employeeId,
         company_id: linha.empresaId,
         competencia,
-        faltas_dias: linha.faltas,
-        atrasos: roundHours(linha.atrasoTotalMin),
+        faltas_dias: existente?.faltasDias ?? 0,
+        atrasos: existente?.atrasos ?? 0,
         he50: roundHours(linha.he50Min),
         he60: roundHours(linha.he60Min),
         he100: roundHours(linha.he100Min),
@@ -279,7 +296,7 @@ const FechamentoPontoPage: React.FC = () => {
         vt_aplicado: base.vtAplicado,
         vt_desconto: base.vtDesconto,
         insalubridade_aplicada: base.insalubridadeAplicada,
-        status_conferencia: linha.inconsistencias > 0 ? 'divergente' : 'pendente',
+        status_conferencia: (linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0) ? 'pendente' : 'conferido',
         observacoes: buildObservacoesPonto(linha, existente?.observacoes),
         origem: 'consolidado',
         updated_at: new Date().toISOString(),
@@ -459,7 +476,7 @@ const FechamentoPontoPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Ponto dos Mecânicos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Selecione empresa e competência para listar somente os mecânicos com acesso ativo ao app. O botão de fechamento grava faltas, atrasos e HE no fechamento geral.
+            Sem batida digital não há falta nem horas perdidas. Entrada 2h ou mais antes do horário exige conferência antes do fechamento.
           </p>
         </div>
       </div>
@@ -628,7 +645,7 @@ const FechamentoPontoPage: React.FC = () => {
           </Card>
 
           <p className="text-xs text-muted-foreground italic">
-            O fechamento grava automaticamente faltas, atrasos e HE 50% / 60% / 100% em lançamentos mensais, usando o mesmo fechamento geral dos funcionários.
+            O fechamento preserva faltas e atrasos já conferidos internamente, ignora colaboradores sem batidas digitais e não transforma ausência de uso do aplicativo em falta.
           </p>
         </>
       )}
