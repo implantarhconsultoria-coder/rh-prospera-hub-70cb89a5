@@ -69,6 +69,7 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/lib/medicalEvidence.test.ts
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
@@ -87,6 +88,7 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/lib/medicalEvidence.test.ts
 
       - name: Build
         run: npm run build
