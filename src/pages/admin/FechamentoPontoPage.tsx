@@ -9,6 +9,8 @@ import { Lock, Loader2, RefreshCw, AlertTriangle, CheckCircle2, Clock, Users, Pr
 import { toast } from 'sonner';
 import type { Employee, MonthlyEntry } from '@/types/database';
 import { employeeHasInsalubridade } from '@/lib/employeeRoleRules';
+import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
+import { registrarAcao } from '@/lib/acoesLog';
 import {
   calcularResumoColaborador,
   formatarMinutos,
@@ -43,6 +45,9 @@ interface LinhaResumo extends ResumoColaborador {
   almocoFimCount: number;
   saidaCount: number;
   pendencias: string[];
+  registrosDigitais: number;
+  diasSemRegistroDigital: number;
+  entradasAntecipadas: number;
 }
 
 const onlyDigits = (value: unknown) => String(value || '').replace(/\D/g, '');
@@ -64,23 +69,33 @@ const roundHours = (minutos: number) => Math.round((minutos / 60) * 100) / 100;
 const contarTipos = (registros: RegistroPonto[], tipos: string[]) =>
   registros.filter((r) => tipos.includes(String(r.tipo))).length;
 
-const buildObservacoesPonto = (linha: LinhaResumo, anterior?: string) => {
+const buildObservacoesPonto = (linha: LinhaResumo, anterior: string | undefined, fonte: 'interno' | 'digital', operador: string) => {
   const marcador = '[PONTO_MECANICOS]';
   const resumo =
-    `${marcador} ${linha.diasTrabalhados} dia(s) trabalhado(s); ` +
+    `${marcador} [FONTE_PONTO:${fonte.toUpperCase()}] ${fonte === 'interno' ? 'Conferido pelo ponto interno; ' : ''}${linha.diasTrabalhados} dia(s) trabalhado(s); ` +
     `${linha.faltas} falta(s); ${roundHours(linha.atrasoTotalMin)}h atraso; ` +
     `${roundHours(linha.he50Min)}h HE50; ${roundHours(linha.he60Min)}h HE60; ${roundHours(linha.he100Min)}h HE100; ${linha.inconsistencias} pendencia(s).`;
   const limpo = String(anterior || '').replace(/\n?\[PONTO_MECANICOS\][^\n]*/g, '').trim();
-  return [limpo, resumo].filter(Boolean).join('\n');
+  return [limpo, `${resumo} Conferente: ${operador}.`].filter(Boolean).join('\n');
 };
 
 const FechamentoPontoPage: React.FC = () => {
   const { companies, employees, entries, refreshEntries } = useApp();
+  const operador = useOperatorIdentity();
+  const [fontesPonto, setFontesPonto] = useState<Record<string, 'interno' | 'digital'>>({});
+  const [entradasConferidas, setEntradasConferidas] = useState<Record<string, boolean>>({});
   const [selectedCompany, setSelectedCompany] = useState<string>('todas');
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const [carregando, setCarregando] = useState(false);
   const [linhas, setLinhas] = useState<LinhaResumo[]>([]);
   const [executado, setExecutado] = useState(false);
+
+  const fontePonto = useCallback((linha: LinhaResumo): 'interno' | 'digital' => {
+    const id = linha.employeeId || linha.acessoId || linha.nome;
+    if (fontesPonto[id]) return fontesPonto[id];
+    const registrado = entries.find(e => e.employeeId === linha.employeeId && e.competencia === competencia);
+    return registrado?.observacoes?.includes('[FONTE_PONTO:INTERNO]') ? 'interno' : 'digital';
+  }, [competencia, entries, fontesPonto]);
 
   const empresasMap = useMemo(() => {
     const m = new Map<string, { name: string; codigo: string; city: string }>();
@@ -208,14 +223,32 @@ const FechamentoPontoPage: React.FC = () => {
 
       const jornada = getJornada(empresaInfo?.codigo);
       const resumo = calcularResumoColaborador(acessoId || profileUserId || employeeId || nome, regs, competencia, jornada);
+      const todayBr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+      const diasSemBatidaAteHoje = resumo.dias.filter(d => d.diaUtil && !d.entrada && !d.saida && d.data <= todayBr).length;
+      const [hh, mm] = jornada.entradaPadrao.split(':').map(Number);
+      const limiteAntecipacao = hh * 60 + mm - 120;
+      const entradasAntecipadas = resumo.dias.filter(d => {
+        if (!d.entrada) return false;
+        const [h, m] = d.entrada.split(':').map(Number);
+        return h * 60 + m <= limiteAntecipacao;
+      }).length;
       const pendencias: string[] = [];
       if (!employeeId) pendencias.push('sem vínculo com funcionário');
-      if (resumo.faltas > 0) pendencias.push(`${resumo.faltas} falta(s)`);
+      if (diasSemBatidaAteHoje > 0) pendencias.push(`${diasSemBatidaAteHoje} dia(s) sem batida digital: não é falta`);
+      if (entradasAntecipadas) pendencias.push(`${entradasAntecipadas} entrada(s) 2h ou mais cedo: conferir serviço`);
       if (resumo.inconsistencias > 0) pendencias.push(`${resumo.inconsistencias} dia(s) inconsistente(s)`);
-      if (resumo.horasFaltantesMin > 0) pendencias.push(`${formatarMinutos(resumo.horasFaltantesMin)} faltante`);
+      // Não converter ausência de registros digitais em perdas de horas.
 
       return {
         ...resumo,
+        faltas: 0,
+        horasFaltantesMin: 0,
+        saldoMin: 0,
+        registrosDigitais: regs.length,
+        diasSemRegistroDigital: diasSemBatidaAteHoje,
+        entradasAntecipadas,
         employeeId,
         acessoId,
         profileUserId,
@@ -240,10 +273,18 @@ const FechamentoPontoPage: React.FC = () => {
   }, [competencia, companyMatchesAccess, employees, empresasMap, resolveEmployee, selectedCompany]);
 
   const persistirFechamento = useCallback(async (resumos: LinhaResumo[]) => {
-    const linhasComVinculo = resumos.filter((l) => l.employeeId && l.empresaId);
+    if (operador.loading || !operador.completo) {
+      toast.error('Fechamento requer nome completo e CPF cadastrados para auditoria.');
+      return;
+    }
+    const linhasComVinculo = resumos.filter((l) => {
+      if (!l.employeeId || !l.empresaId) return false;
+      if (fontePonto(l) === 'interno') return entries.some(e => e.employeeId === l.employeeId && e.competencia === competencia);
+      return l.registrosDigitais > 0 && (l.entradasAntecipadas === 0 || entradasConferidas[l.employeeId || l.acessoId || l.nome] === true);
+    });
 
     if (linhasComVinculo.length === 0) {
-      toast.warning('Nenhum mecânico vinculado a funcionário para alimentar o fechamento geral.');
+      toast.warning('Nenhum ponto digital seguro para gravar. Batidas ausentes ou entradas muito antecipadas permanecem pendentes, sem falta automática.');
       return;
     }
 
@@ -252,6 +293,7 @@ const FechamentoPontoPage: React.FC = () => {
       const existente = entries.find(
         (entry) => entry.employeeId === linha.employeeId && entry.competencia === competencia,
       );
+      const fonte = fontePonto(linha);
 
       const base: Partial<MonthlyEntry> = {
         adiantamento: existente?.adiantamento ?? (emp ? Math.round(emp.salarioBase * 0.4 * 100) / 100 : 0),
@@ -267,11 +309,12 @@ const FechamentoPontoPage: React.FC = () => {
         funcionario_id: linha.employeeId,
         company_id: linha.empresaId,
         competencia,
-        faltas_dias: linha.faltas,
-        atrasos: roundHours(linha.atrasoTotalMin),
-        he50: roundHours(linha.he50Min),
-        he60: roundHours(linha.he60Min),
-        he100: roundHours(linha.he100Min),
+        faltas_dias: existente?.faltasDias ?? 0,
+        atrasos: existente?.atrasos ?? 0,
+        // Ponto digital parcial não sobrescreve horas extras que o RH já conferiu.
+        he50: fonte === 'interno' || linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0 ? (existente?.he50 ?? 0) : roundHours(linha.he50Min),
+        he60: fonte === 'interno' || linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0 ? (existente?.he60 ?? 0) : roundHours(linha.he60Min),
+        he100: fonte === 'interno' || linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0 ? (existente?.he100 ?? 0) : roundHours(linha.he100Min),
         adiantamento: base.adiantamento,
         vr_aplicado: base.vrAplicado,
         vr_dias: base.vrDias,
@@ -279,9 +322,11 @@ const FechamentoPontoPage: React.FC = () => {
         vt_aplicado: base.vtAplicado,
         vt_desconto: base.vtDesconto,
         insalubridade_aplicada: base.insalubridadeAplicada,
-        status_conferencia: linha.inconsistencias > 0 ? 'divergente' : 'pendente',
-        observacoes: buildObservacoesPonto(linha, existente?.observacoes),
-        origem: 'consolidado',
+        status_conferencia: fonte === 'interno' ? 'conferido' : (linha.inconsistencias > 0 || linha.diasSemRegistroDigital > 0) ? 'pendente' : 'conferido',
+        observacoes: buildObservacoesPonto(linha, existente?.observacoes, fonte, operador.nome || 'Usuário autenticado')
+          + (linha.entradasAntecipadas > 0 && entradasConferidas[linha.employeeId || linha.acessoId || linha.nome]
+            ? '\\n[ENTRADA_ANTECIPADA_VALIDADA] Serviço diferenciado conferido pela administração.' : ''),
+        origem: existente?.origem || 'consolidado',
         updated_at: new Date().toISOString(),
       };
     });
@@ -292,9 +337,13 @@ const FechamentoPontoPage: React.FC = () => {
 
     if (error) throw error;
 
+    await Promise.all(linhasComVinculo.map(linha => registrarAcao({
+      modulo: 'ponto_mecanicos', entidade: 'lancamento_mensal', entidadeId: linha.employeeId,
+      acao: 'conferiu', observacao: `Competência ${competencia}; fonte ${fontePonto(linha)}; operador ${operador.nome || 'identidade pendente'}`,
+    }, { userId: operador.userId, funcionarioNome: operador.nome, cpf: operador.cpf, origem: 'admin' })));
     await refreshEntries();
-    toast.success(`Fechamento dos mecânicos gravado no fechamento geral: ${payloads.length} funcionário(s).`);
-  }, [competencia, employeeById, entries, refreshEntries]);
+    toast.success(`Conferência salva: ${payloads.length} colaborador(es). Demais registros ficaram pendentes, sem desconto automático.`);
+  }, [competencia, employeeById, entries, refreshEntries, fontePonto, operador.nome, operador.completo, operador.loading, entradasConferidas]);
 
   const carregarMecanicos = useCallback(async (persistir = false, silencioso = false) => {
     setCarregando(true);
@@ -349,10 +398,10 @@ const FechamentoPontoPage: React.FC = () => {
       t.he100Min += l.he100Min;
       t.hfMin += l.horasFaltantesMin;
       t.saldoMin += l.saldoMin;
-      t.inconsist += l.inconsistencias + (l.employeeId ? 0 : 1);
+      t.inconsist += (fontePonto(l) === 'digital' && l.pendencias.length > 0 ? 1 : 0) + (l.employeeId ? 0 : 1);
     });
     return t;
-  }, [linhas]);
+  }, [linhas, fontePonto, entradasConferidas]);
 
 
   const gerarRelatorioPonto = useCallback(() => {
@@ -379,6 +428,7 @@ const FechamentoPontoPage: React.FC = () => {
         <td>${esc(linha.nome)}</td>
         <td>${esc(linha.empresaNome)}</td>
         <td>${esc(linha.cargo)}</td>
+        <td>${esc(fontePonto(linha) === 'interno' ? 'Interno' : 'Digital')}</td>
         <td>${linha.entradaCount || '-'}</td>
         <td>${linha.almocoInicioCount || '-'}</td>
         <td>${linha.almocoFimCount || '-'}</td>
@@ -388,7 +438,7 @@ const FechamentoPontoPage: React.FC = () => {
         <td>${linha.he50Min > 0 ? esc(formatarMinutos(linha.he50Min)) : '-'}</td>
         <td>${linha.he60Min > 0 ? esc(formatarMinutos(linha.he60Min)) : '-'}</td>
         <td>${linha.he100Min > 0 ? esc(formatarMinutos(linha.he100Min)) : '-'}</td>
-        <td>${esc(linha.pendencias.length ? linha.pendencias.join(' • ') : 'OK')}</td>
+        <td>${esc(fontePonto(linha) === 'interno' ? 'PONTO INTERNO SELECIONADO' : linha.pendencias.length ? linha.pendencias.join(' • ') : 'OK')}</td>
       </tr>
     `).join('');
 
@@ -438,7 +488,7 @@ const FechamentoPontoPage: React.FC = () => {
   <table>
     <thead>
       <tr>
-        <th>Mecânico</th><th>Empresa</th><th>Cargo</th><th>Entrada</th><th>Início almoço</th>
+        <th>Mecânico</th><th>Empresa</th><th>Cargo</th><th>Fonte</th><th>Entrada</th><th>Início almoço</th>
         <th>Retorno almoço</th><th>Saída</th><th>Faltas</th><th>Atraso</th>
         <th>HE 50%</th><th>HE 60%</th><th>HE 100%</th><th>Pendências</th>
       </tr>
@@ -446,12 +496,12 @@ const FechamentoPontoPage: React.FC = () => {
     <tbody>${rows}</tbody>
   </table>
 
-  <div class="footer">Relatório gerado a partir dos registros de ponto da plataforma TOPAC RH PRO.</div>
+  <div class="footer">Conferente: ${esc(operador.nome || "Usuário autenticado")} · CPF: ${esc(operador.cpf || "Pendente")}. Fonte individual na coluna específica. Ausência de batida não é falta.</div>
   <script>window.onload = () => setTimeout(() => window.print(), 250)<\/script>
 </body>
 </html>`);
     win.document.close();
-  }, [companies, competencia, linhas, selectedCompany, totais]);
+  }, [companies, competencia, linhas, selectedCompany, totais, fontePonto, operador.nome, operador.cpf]);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -459,7 +509,7 @@ const FechamentoPontoPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">Ponto dos Mecânicos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Selecione empresa e competência para listar somente os mecânicos com acesso ativo ao app. O botão de fechamento grava faltas, atrasos e HE no fechamento geral.
+            Sem batida digital não há falta nem horas perdidas. Entrada 2h ou mais antes do horário exige conferência antes do fechamento.
           </p>
         </div>
       </div>
@@ -571,6 +621,7 @@ const FechamentoPontoPage: React.FC = () => {
                     'Mecânico',
                     'Empresa',
                     'Cargo',
+                    'Fonte do ponto',
                     'Entrada',
                     'Início Almoço',
                     'Retorno Almoço',
@@ -594,17 +645,36 @@ const FechamentoPontoPage: React.FC = () => {
                     <td className="px-2 py-2 font-medium whitespace-nowrap text-xs">{l.nome}</td>
                     <td className="px-2 py-2 text-xs text-muted-foreground">{l.empresaNome}</td>
                     <td className="px-2 py-2 text-xs">{l.cargo}</td>
+                    <td className="px-2 py-2 text-xs">
+                      <select aria-label={`Fonte do ponto de ${l.nome}`}
+                        value={fontePonto(l)}
+                        onChange={e => setFontesPonto(prev => ({ ...prev, [l.employeeId || l.acessoId || l.nome]: e.target.value as 'interno' | 'digital' }))}
+                        className="rounded border border-border bg-background px-2 py-1 text-xs">
+                        <option value="digital">Ponto digital</option>
+                        <option value="interno">Ponto interno</option>
+                      </select>
+                    </td>
                     <td className="px-2 py-2 text-xs">{l.entradaCount || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.almocoInicioCount || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.almocoFimCount || '-'}</td>
                     <td className="px-2 py-2 text-xs">{l.saidaCount || '-'}</td>
-                    <td className="px-2 py-2 text-xs text-destructive">{l.faltas || '-'}</td>
+                    <td className="px-2 py-2 text-xs text-emerald-500">Não presumida</td>
                     <td className="px-2 py-2 text-xs">{l.atrasoTotalMin > 0 ? formatarMinutos(l.atrasoTotalMin) : '-'}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.he50Min > 0 ? formatarMinutos(l.he50Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.he60Min > 0 ? formatarMinutos(l.he60Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs text-success">{l.he100Min > 0 ? formatarMinutos(l.he100Min) : '-'}</td>
                     <td className="px-2 py-2 text-xs">
-                      {l.pendencias.length > 0 ? (
+                      {fontePonto(l) === 'digital' && l.entradasAntecipadas > 0 && (
+                        <label className="mb-2 flex items-start gap-1 text-amber-400">
+                          <input type="checkbox"
+                            checked={Boolean(entradasConferidas[l.employeeId || l.acessoId || l.nome])}
+                            onChange={e => setEntradasConferidas(v => ({ ...v, [l.employeeId || l.acessoId || l.nome]: e.target.checked }))} />
+                          Serviço diferenciado de entrada antecipada conferido
+                        </label>
+                      )}
+                      {fontePonto(l) === 'interno' ? (
+                        <Badge variant="outline" className="border-success text-success">Ponto interno — validar ao fechar</Badge>
+                      ) : l.pendencias.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {l.pendencias.slice(0, 3).map((p) => (
                             <Badge key={p} variant="outline" className="border-warning text-warning">{p}</Badge>
@@ -618,7 +688,7 @@ const FechamentoPontoPage: React.FC = () => {
                 ))}
                 {linhas.length === 0 && (
                   <tr>
-                    <td colSpan={13} className="px-2 py-8 text-center text-muted-foreground text-sm">
+                    <td colSpan={14} className="px-2 py-8 text-center text-muted-foreground text-sm">
                       Nenhum mecânico vinculado encontrado para esta seleção.
                     </td>
                   </tr>
@@ -628,7 +698,7 @@ const FechamentoPontoPage: React.FC = () => {
           </Card>
 
           <p className="text-xs text-muted-foreground italic">
-            O fechamento grava automaticamente faltas, atrasos e HE 50% / 60% / 100% em lançamentos mensais, usando o mesmo fechamento geral dos funcionários.
+            O fechamento preserva faltas e atrasos já conferidos internamente, ignora colaboradores sem batidas digitais e não transforma ausência de uso do aplicativo em falta.
           </p>
         </>
       )}

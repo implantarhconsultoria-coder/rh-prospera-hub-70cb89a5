@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { jsPDF } from 'jspdf';
+import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
 import { useApp } from '@/context/AppContext';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,12 +47,13 @@ const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""'
 const money = (value: number) => value.toFixed(2).replace('.', ',');
 const safeName = (value: string) => value.replace(/[^A-Za-z0-9_-]/g, '_');
 
-const ConsolidadoBeneficiosPage: React.FC<{ tipo: BenefitType }> = ({ tipo }) => {
+const ConsolidadoBeneficiosPage: React.FC<{ tipo: BenefitType; embutido?: boolean; competenciaInicial?: string }> = ({ tipo, embutido = false, competenciaInicial }) => {
   const { companies, employees } = useApp();
+  const operador = useOperatorIdentity();
   const tituloBeneficio = tipo === 'vr' ? 'Vale-Refeição' : 'Vale-Transporte';
   const sigla = tipo.toUpperCase();
   const [searchParams] = useSearchParams();
-  const selectedMonth = searchParams.get('competencia');
+  const selectedMonth = competenciaInicial || searchParams.get('competencia');
   const initialCompetencia = selectedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)
     ? selectedMonth : new Date().toISOString().slice(0, 7);
   const [competencia, setCompetencia] = useState(initialCompetencia);
@@ -176,12 +179,54 @@ const ConsolidadoBeneficiosPage: React.FC<{ tipo: BenefitType }> = ({ tipo }) =>
     URL.revokeObjectURL(url);
   };
 
+  const exportPdfConsolidado = () => {
+    if (!ready) return;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const esc = (s: string) => s.replace(/[\r\n]/g, ' ').slice(0, 70);
+    const desenharCabecalho = () => {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+      doc.text(`TOPAC RH PRO | CONSOLIDADO DE PAGAMENTO - ${sigla}`, 12, 16);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+      doc.text(`Competencia: ${competencia} | Emissao: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`, 12, 22);
+      doc.text(`Operador: ${esc(operador.nome || 'NAO IDENTIFICADO')} | CPF: ${operador.cpf || 'PENDENTE'}`, 12, 27);
+      doc.line(12, 31, 285, 31);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+      doc.text('EMPRESA', 12, 36); doc.text('FUNCIONARIO', 72, 36);
+      doc.text('CPF', 140, 36); doc.text('ABATIDOS', 188, 36);
+      doc.text('VALOR', 215, 36); doc.text('SITUACAO', 252, 36);
+      doc.setFont('helvetica', 'normal');
+    };
+    let y = 43;
+    desenharCabecalho();
+    for (const row of rows) {
+      if (y > 185) { doc.addPage('a4', 'landscape'); desenharCabecalho(); y = 43; }
+      doc.text(esc(row.empresa).slice(0, 33), 12, y);
+      doc.text(esc(row.nome).slice(0, 38), 72, y);
+      doc.text(row.cpf || '-', 140, y);
+      doc.text(String(row.diasDescontados), 188, y);
+      doc.text(formatCurrency(row.valor), 215, y);
+      doc.text(row.pendente ? 'PENDENTE' : 'CONFERIDO', 252, y);
+      doc.line(12, y + 2, 285, y + 2); y += 7;
+    }
+    if (y > 182) { doc.addPage('a4', 'landscape'); desenharCabecalho(); y = 43; }
+    doc.setFont('helvetica', 'bold');
+    doc.text(`TOTAL ${sigla}: ${formatCurrency(total)} | ${rows.length} funcionario(s) | ${diasAbatidos} dia(s) abatido(s)`, 12, y + 8);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text('Conferencia tecnica - nao substitui autorizacao do financeiro.', 12, y + 14);
+    const blobUrl = URL.createObjectURL(doc.output('blob'));
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `TOPAC_${sigla}_Consolidado_${safeName(competencia)}.pdf`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  };
+
   return (
-    <section className="space-y-5 p-4 md:p-7">
+    <section className={embutido ? "space-y-5 rounded-xl border border-border bg-card/40 p-3 md:p-5" : "space-y-5 p-4 md:p-7"}>
       <header className="print:hidden flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-violet-400">TOPAC RH PRO · {sigla}</p>
-          <h1 className="text-2xl font-bold">Relatório consolidado de pagamento — {sigla}</h1>
+          {embutido ? <h2 className="text-lg font-bold">Consolidado de pagamento — {sigla}</h2> : <h1 className="text-2xl font-bold">Relatório consolidado de pagamento — {sigla}</h1>}
           <p className="text-sm text-muted-foreground">{tituloBeneficio}: somente seus próprios lançamentos, abatimentos, valores e recibos.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -191,7 +236,7 @@ const ConsolidadoBeneficiosPage: React.FC<{ tipo: BenefitType }> = ({ tipo }) =>
           <Button variant="outline" disabled={!ready} onClick={exportCsv}>
             <Download className="mr-2 h-4 w-4" />CSV {sigla}
           </Button>
-          <Button variant="outline" disabled={!ready} onClick={() => window.print()}>
+          <Button variant="outline" disabled={!ready} onClick={embutido ? exportPdfConsolidado : () => window.print()}>
             <Printer className="mr-2 h-4 w-4" />PDF {sigla}
           </Button>
         </div>

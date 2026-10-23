@@ -1,9 +1,10 @@
 import { jsPDF } from 'jspdf';
+import type { OperatorIdentity } from '@/hooks/useOperatorIdentity';
 import type { BenefitReportRow } from '@/lib/benefitReports';
 import { formatCurrency } from '@/lib/calculations';
 
 type Company = { id: string; name: string; cnpj?: string | null };
-type Options = { competencia: string; diasPagos?: number; dataPagamento?: string };
+type Options = { competencia: string; diasPagos?: number; dataPagamento?: string; operador?: OperatorIdentity };
 
 const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const competenciaLabel = (competencia: string) => {
@@ -37,7 +38,8 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.text(`Competência: ${competenciaLabel(options.competencia)}`, right, 28, { align: 'right' });
   const receiptPaymentDate = (row as any).dataPagamentoCorrecao || options.dataPagamento;
   doc.text(`Pagamento: ${receiptPaymentDate ? dataBr(receiptPaymentDate) : '—'}`, right, 34, { align: 'right' });
-  doc.line(left, 40, right, 40);
+  doc.text(`Emissão: ${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`, right, 39, { align: 'right' });
+  doc.line(left, 43, right, 43);
 
   doc.roundedRect(left, 48, width, proportional ? 39 : 24, 1, 1);
   doc.setFont('helvetica', 'bold');
@@ -88,6 +90,8 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.setFont('helvetica', 'normal');
   doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
   doc.text(`Nome: ${safe(row.emp.name)}`, 105, assinaturaY + 12, { align: 'center' });
+  doc.setFontSize(7);
+  doc.text(`Operador administrativo: ${safe(options.operador?.nome) || 'NÃO IDENTIFICADO'} · CPF: ${safe(options.operador?.cpf) || 'PENDENTE'}`, left, 225);
 
   return doc.output('blob');
 };

@@ -7,6 +7,7 @@ import { getWorkingDays, getFirstBusinessDayOfNextMonth } from '@/lib/workingDay
 import { formatCurrency } from '@/lib/calculations';
 import { buildVRReportRows, buildVTReportRows, applyBenefitCorrection, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
+import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { buildPdfFileName, competenciaPdfPart, downloadPdfBlob } from '@/lib/savePdf';
 import { CC_OBRIGATORIO } from '@/lib/emailUtils';
@@ -56,6 +57,7 @@ const getEmailDestinoRecibo = (companyName: string) => {
 const RecibosBeneficioImpressaoPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, dataLoading, loading, session } = useApp();
   const [searchParams] = useSearchParams();
+  const operador = useOperatorIdentity();
   const [sendingEmail, setSendingEmail] = useState(false);
   const [savingPdf, setSavingPdf] = useState(false);
   const [emailPdfDraft, setEmailPdfDraft] = useState<EmailPdfDraft | null>(null);
@@ -242,7 +244,8 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       doc.setFontSize(8);
       doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
       doc.text(`Nome: ${emp.name || '-'}`, 105, assinaturaY + 12, { align: 'center' });
-      doc.text('Data: ____/____/________', 105, assinaturaY + 18, { align: 'center' });
+      doc.setFontSize(7);
+      doc.text(`Operador administrativo: ${operador.nome || 'NÃO IDENTIFICADO'} · CPF: ${operador.cpf || 'PENDENTE'}`, pageLeft, assinaturaY + 22);
 
       doc.setDrawColor(156, 163, 175);
       const footerY = Math.min(266, Math.max(assinaturaY + 28, isAmbos ? 252 : 236));
@@ -406,7 +409,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
             <strong>PrÃ©-visualizaÃ§Ã£o:</strong> {recibos.length} recibo(s) â {recibos.length} pÃ¡gina(s) ({formatoLabel})
             {recibos.some((r) => r.vr?.corrigido || r.vt?.corrigido) && (
               <span className="ml-2 inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-300 rounded px-2 py-0.5 text-xs">
-                â  Inclui recibo(s) com correÃ§Ã£o administrativa
+                Atenção: inclui recibo(s) com correção administrativa
               </span>
             )}
           </div>

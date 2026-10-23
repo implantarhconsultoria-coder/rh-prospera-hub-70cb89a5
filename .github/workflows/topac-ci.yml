@@ -30,6 +30,30 @@ jobs:
         # package-lock.json está defasado em relação ao package.json; alinhar com o build que já valida em produção.
         run: npm install --no-package-lock --no-audit --no-fund
 
+      - name: Lint TOPAC VR/VT and point changed files
+        run: >-
+          npx eslint
+          src/components/BenefitMedicalReview.tsx
+          src/hooks/useBenefitMedicalLeaves.ts
+          src/hooks/useOperatorIdentity.ts
+          src/pages/admin/FechamentoPontoPage.tsx
+          src/pages/ConsolidadoBeneficiosPage.tsx
+          src/pages/RelatorioVRPage.tsx
+          src/pages/RelatorioVTPage.tsx
+          src/pages/RecibosBeneficioImpressaoPage.tsx
+          src/lib/medicalEvidence.ts
+          src/lib/medicalEvidence.test.ts
+          --rule '@typescript-eslint/no-explicit-any: off'
+          --rule 'react-hooks/exhaustive-deps: off'
+          --rule 'no-useless-escape: off'
+
+      - name: Tests TOPAC medical evidence
+        run: npx vitest run src/lib/medicalEvidence.test.ts
+
+      - name: Type-check application (diagnostic)
+        run: npx tsc --noEmit -p tsconfig.app.json
+        continue-on-error: true
+
       - name: Lint changed scope
         run: >-
           npx eslint
@@ -69,6 +93,7 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/lib/medicalEvidence.test.ts
           --rule '@typescript-eslint/no-explicit-any: off'
           --rule 'react-hooks/exhaustive-deps: off'
           --rule 'no-useless-escape: off'
@@ -87,6 +112,7 @@ jobs:
           src/lib/__tests__/vehicleSync.test.ts
           src/lib/__tests__/protocoloFrotaSource.test.ts
           src/lib/__tests__/epiRules.test.ts
+          src/lib/medicalEvidence.test.ts
 
       - name: Build
         run: npm run build
