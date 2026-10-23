@@ -23,6 +23,8 @@ type Doc = {
   storage_path: string | null;
   descricao: string | null;
   observacao: string | null;
+  enviado_em: string | null;
+  status_envio: string | null;
 };
 type Ocr = {
   tipo_documento?: string;
@@ -83,7 +85,7 @@ const BenefitMedicalReview: React.FC<{ competencia: string; tipo: 'vr' | 'vt' }>
     try {
       const [d, a, c] = await Promise.all([
         supabase.from('documentos_funcionario')
-          .select('id,funcionario_id,funcionario_nome,company_id,nome_arquivo,tipo_documento,data_documento,arquivo_url,storage_bucket,storage_path,descricao,observacao')
+          .select('id,funcionario_id,funcionario_nome,company_id,nome_arquivo,tipo_documento,data_documento,arquivo_url,storage_bucket,storage_path,descricao,observacao,enviado_em,status_envio')
           .or('tipo_documento.ilike.%ATESTADO%,tipo_documento.ilike.%DECLARA%')
           .gte('data_documento', `${first}T00:00:00-03:00`)
           .lt('data_documento', until)
@@ -262,7 +264,7 @@ const BenefitMedicalReview: React.FC<{ competencia: string; tipo: 'vr' | 'vt' }>
       </button>
       {open && <div className="mt-3 rounded-xl border border-violet-400/30 p-3 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><p className="text-sm font-semibold">Atestados arquivados · {periodo}</p>
+          <div><p className="text-sm font-semibold">Atestados arquivados · {periodo} · {tipo.toUpperCase()}</p>
             <p className="text-xs text-muted-foreground">OCR do arquivo original, comparação com fechamento e contabilidade. Nada é descontado sem sua confirmação.</p></div>
           <Button size="sm" variant="outline" onClick={analyzeAll} disabled={loading || scanning || !pendentes.length}>
             {scanning ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <ScanText className="mr-1 h-4 w-4" />}
@@ -277,7 +279,7 @@ const BenefitMedicalReview: React.FC<{ competencia: string; tipo: 'vr' | 'vt' }>
             return <div key={doc.id} className="rounded-lg border border-border p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div><p className="text-sm font-medium">{doc.funcionario_nome || employees.find(e => e.id === doc.funcionario_id)?.name || 'Funcionário não vinculado'}</p>
-                  <p className="text-xs text-muted-foreground">{doc.nome_arquivo || doc.tipo_documento || 'Documento'} · {doc.data_documento?.slice(0, 10) || 'sem data de envio'} · Contabilidade: {accountingEmployees.has(doc.funcionario_id || '') ? 'referência encontrada' : 'sem documento correspondente'}</p></div>
+                  <p className="text-xs text-muted-foreground">{doc.nome_arquivo || doc.tipo_documento || 'Documento'} · {doc.data_documento?.slice(0, 10) || 'sem data de envio'} · Contabilidade: {accountingEmployees.has(doc.funcionario_id || '') || Boolean(doc.enviado_em) || /enviado/i.test(doc.status_envio || '') || /enviado para contabilidade/i.test(doc.observacao || '') ? 'referência encontrada' : 'a conferir'}</p></div>
                 <Button size="sm" variant="outline" disabled={scanning || savingId === doc.id} onClick={() => void analyze(doc)}>
                   <ScanText className="mr-1 h-4 w-4" />Ler arquivo
                 </Button>
