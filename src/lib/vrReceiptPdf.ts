@@ -33,7 +33,7 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.setFontSize(8);
   doc.text(`CNPJ: ${safe(company.cnpj) || '—'}`, left, 28);
   doc.setFont('helvetica', 'bold');
-  doc.text('RECIBO INDIVIDUAL DE VALE-REFEIÇÃO', right, 22, { align: 'right' });
+  doc.text('FICHA INDIVIDUAL DE BENEFÍCIOS', right, 22, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.text(`Competência: ${competenciaLabel(options.competencia)}`, right, 28, { align: 'right' });
   const receiptPaymentDate = (row as any).dataPagamentoCorrecao || options.dataPagamento;
@@ -67,7 +67,7 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.setFillColor(229, 231, 235);
   doc.rect(left, y, width, 7, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.text('VALE-REFEIÇÃO', 20, y + 5);
+  doc.text('VALE REFEIÇÃO (VR)', 20, y + 5);
   const lines = [
     ['Valor diário', formatCurrency(row.valorDiario)],
     ['Dias previstos', String(row.diasPrevistos)],
@@ -91,7 +91,7 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
   doc.text(`Nome: ${safe(row.emp.name)}`, 105, assinaturaY + 12, { align: 'center' });
   doc.setFontSize(7);
-  doc.text(`Operador administrativo: ${safe(options.operador?.nome) || 'NÃO IDENTIFICADO'} · CPF: ${safe(options.operador?.cpf) || 'PENDENTE'}`, left, 225);
+  doc.text(`Operador administrativo: ${safe(options.operador?.nome) || 'NÃO IDENTIFICADO'}`, left, 225);
 
   return doc.output('blob');
 };
