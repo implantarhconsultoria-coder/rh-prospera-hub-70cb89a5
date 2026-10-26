@@ -339,12 +339,14 @@ const RelatorioVTPage: React.FC = () => {
         .rpc('payroll_company_enabled', { p_company_id: company.id });
       if (enabledError) throw enabledError;
       if (enabled) await syncPayrollDocument(block, row, session.user.id);
-      const pdf = buildVTReceiptPdfBlob(block, row, {
-        competencia, diasPagos: days, dataPagamento: individualPaymentDate || '', operador,
+      // Usar a mesma Ficha Individual de Benefícios do VR para prévia,
+      // impressão, download e e-mail, sem alterar o template existente.
+      const params = new URLSearchParams({
+        formato: 'vt', competencia, empresas: company.id,
+        funcionarios: individualEmployee.id, diasUteis: String(days),
       });
-      if (individualReceiptUrl) URL.revokeObjectURL(individualReceiptUrl);
-      const url = URL.createObjectURL(pdf);
-      setIndividualReceiptUrl(url);
+      if (individualPaymentDate) params.set('dataPagamento', individualPaymentDate);
+      setIndividualReceiptUrl(`/recibos-beneficio?${params.toString()}`);
       await registrarAcao({ modulo: 'beneficios_vt', entidade: 'benefit_generation',
         entidadeId: company.id, acao: 'gerou',
         observacao: `Recibo individual de VT; competência ${competencia}; funcionário ${individualEmployee.name}` },
