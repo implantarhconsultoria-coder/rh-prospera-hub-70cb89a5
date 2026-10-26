@@ -37,8 +37,8 @@ const RelatorioBeneficioIndividualPage: React.FC = () => {
 
   const emissaoDate = getFirstBusinessDayOfNextMonth(competencia);
 
-  const vrData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vr' }), [emp, entry, descontoEntry, diasUteis]);
-  const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vt' }), [emp, entry, descontoEntry, diasUteis]);
+  const vrData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vr', competencia }), [emp, entry, descontoEntry, diasUteis, competencia]);
+  const vtData = useMemo(() => buildIndividualBenefitData({ emp, entry, descontoEntry, diasUteis, type: 'vt', competencia }), [emp, entry, descontoEntry, diasUteis]);
 
   const pdfFileName = buildTopacRhPdfFileName({
     tipo: 'Funcionario',
