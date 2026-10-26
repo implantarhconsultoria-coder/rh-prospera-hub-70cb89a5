@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, Loader2, RefreshCw, Save, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Copy, KeyRound, Loader2, Mail, RefreshCw, Save, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,6 +36,8 @@ const OperadoresOperacaoPanel: React.FC = () => {
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
+  const [codigoGerado, setCodigoGerado] = useState<{ nome: string; codigo: string } | null>(null);
+  const [confirmarTroca, setConfirmarTroca] = useState<{ operador: Operador; canal: 'tela' | 'email' } | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -65,6 +69,47 @@ const OperadoresOperacaoPanel: React.FC = () => {
     if (error || !data?.ok) return toast.error(data?.error || error?.message || 'Não foi possível salvar o e-mail.');
     toast.success('E-mail corporativo vinculado ao operador.');
     await carregar();
+  };
+
+  const gerarCodigo = async (operador: Operador) => {
+    setWorking(operador.id);
+    try {
+      // A autorização é validada pela RPC no banco, nunca apenas no navegador.
+      const { data, error } = await rpc.rpc('operador_operacao_emitir_codigo', {
+        p_operador_id: operador.id,
+      });
+      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Não foi possível gerar o código.');
+      const codigo = String(data.codigo || '');
+      if (!/^[0-9]{6}$/.test(codigo)) throw new Error('O servidor retornou um código inválido.');
+      setOperadores((current) => current.map((row) => row.id === operador.id
+        ? { ...row, codigo_emitido: true, codigo_hint: codigo.slice(-2) }
+        : row));
+      setCodigoGerado({ nome: operador.nome, codigo });
+      toast.success('Código individual gerado para o operador.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Falha ao gerar código.');
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const solicitarCodigo = (operador: Operador, canal: 'tela' | 'email') => {
+    if (operador.codigo_emitido) {
+      setConfirmarTroca({ operador, canal });
+      return;
+    }
+    if (canal === 'tela') void gerarCodigo(operador);
+    else void enviarCodigo(operador);
+  };
+
+  const copiarCodigo = async () => {
+    if (!codigoGerado) return;
+    try {
+      await navigator.clipboard.writeText(codigoGerado.codigo);
+      toast.success('Código copiado. Entregue somente ao operador identificado.');
+    } catch {
+      toast.error('Cópia indisponível. Selecione o código mostrado.');
+    }
   };
 
   const enviarCodigo = async (operador: Operador) => {
@@ -186,12 +231,20 @@ const OperadoresOperacaoPanel: React.FC = () => {
                 <div className="flex flex-wrap justify-end gap-2">
                   <Button
                     size="sm"
-                    variant="outline"
-                    disabled={working === operador.id || !emailDraft.trim()}
-                    onClick={() => void enviarCodigo(operador)}
+                    disabled={working !== null}
+                    onClick={() => solicitarCodigo(operador, 'tela')}
                   >
                     {working === operador.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}
-                    {operador.codigo_emitido ? 'Gerar novo código' : 'Enviar código'}
+                    {operador.codigo_emitido ? 'Gerar novo código' : 'Gerar código'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={working !== null || !emailDraft.trim()}
+                    onClick={() => solicitarCodigo(operador, 'email')}
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    {operador.codigo_emitido ? 'Enviar novo por e-mail' : 'Enviar por e-mail'}
                   </Button>
                   <Button
                     size="sm"
@@ -207,6 +260,62 @@ const OperadoresOperacaoPanel: React.FC = () => {
           </div>
         );
       })}
+
+      <AlertDialog open={!!confirmarTroca} onOpenChange={(open) => { if (!open) setConfirmarTroca(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Substituir código individual?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O código anterior de <strong>{confirmarTroca?.operador.nome}</strong> deixará de funcionar imediatamente.
+              {confirmarTroca?.canal === 'email'
+                ? ' Um novo código será gerado e enviado ao e-mail cadastrado.'
+                : ' O novo código será mostrado uma única vez para copiar e entregar ao operador.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              if (!confirmarTroca) return;
+              const { operador, canal } = confirmarTroca;
+              setConfirmarTroca(null);
+              if (canal === 'tela') void gerarCodigo(operador);
+              else void enviarCodigo(operador);
+            }}>Confirmar substituição</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={!!codigoGerado} onOpenChange={(open) => { if (!open) setCodigoGerado(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Código individual gerado
+            </DialogTitle>
+            <DialogDescription>
+              Operador: <strong>{codigoGerado?.nome}</strong>. Este código substitui qualquer código anterior.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div
+              aria-label="Código individual gerado"
+              className="select-text rounded-xl border border-primary/40 bg-primary/10 px-4 py-5 text-center font-mono text-3xl font-black tracking-[0.35em] text-foreground"
+            >
+              {codigoGerado?.codigo}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O código completo só aparece agora. Copie e entregue diretamente ao operador.
+              Ele será solicitado para confirmar operações e registrar a autoria no histórico.
+            </p>
+            <Button className="h-12 w-full font-bold" onClick={() => void copiarCodigo()}>
+              <Copy className="mr-2 h-4 w-4" /> Copiar código
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => setCodigoGerado(null)}>
+              Fechar e ocultar código
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
