@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bus, CheckCircle2, Eye, Pencil, Printer, Save, Settings2, ClipboardCheck, FileSpreadsheet } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Bus, CheckCircle2, Eye, Pencil, Printer, Save, Settings2, ClipboardCheck, FileSpreadsheet, ExternalLink } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getWorkingDays } from '@/lib/workingDays';
-import { buildVTReportRows, getPreviousCompetencia, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { buildVTReportRows, getPreviousCompetencia, mergeBenefitGenerationSnapshot, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { formatCurrency } from '@/lib/calculations';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
@@ -47,6 +47,7 @@ const RelatorioVTPage: React.FC = () => {
   const { companies, employees, entries, getOrCreateEntries, session } = useApp();
   const correcoes = useRecibosCorrecoes({ tipo: 'vt' });
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [competencia, setCompetencia] = useState(new Date().toISOString().slice(0, 7));
   const medical = useBenefitMedicalLeaves(competencia);
@@ -60,6 +61,15 @@ const RelatorioVTPage: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [editing, setEditing] = useState<{ block: VTPackageBlock; row: BenefitReportRow } | null>(null);
   const [adjustEmployeeKey, setAdjustEmployeeKey] = useState('');
+  const [individualCompanyId, setIndividualCompanyId] = useState(searchParams.get('empresa') || '');
+  const [individualEmployeeId, setIndividualEmployeeId] = useState(searchParams.get('funcionario') || '');
+  const [individualPaymentDate, setIndividualPaymentDate] = useState('');
+  const [individualGenerating, setIndividualGenerating] = useState(false);
+  const [individualReceiptUrl, setIndividualReceiptUrl] = useState('');
+  const individualEmployees = employees.filter(employee => employee.companyId === individualCompanyId &&
+    employee.status === 'ativo' && employee.categoria === 'operacional' &&
+    employee.vtAtivo && !isSignatureExcluded(employee)).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const individualEmployee = employees.find(employee => employee.id === individualEmployeeId);
 
   const selectedCompanyIds = useMemo(() => {
     if (selectionMode === 'all') return companies.map(company => company.id);
@@ -255,6 +265,86 @@ const RelatorioVTPage: React.FC = () => {
     return true;
   };
 
+  const handleIndividualGenerate = async () => {
+    if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
+    if (!individualEmployee || individualEmployee.companyId !== individualCompanyId ||
+        !individualEmployees.some(employee => employee.id === individualEmployee.id))
+      return toast.error('Selecione um funcionário ativo com VT habilitado.');
+    const days = Number(diasPagos);
+    if (!competencia || !Number.isInteger(days) || days <= 0) return toast.error('Informe competência e dias pagos válidos.');
+    if (operador.loading || !operador.completo) return toast.error('Complete o nome e CPF do operador.');
+    if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
+    if ((medical.pendentesPorFuncionario[individualEmployee.id] || 0) > 0)
+      return toast.error('Revise os atestados do funcionário antes da emissão.');
+    setIndividualGenerating(true);
+    try {
+      const company = companies.find(item => item.id === individualCompanyId);
+      if (!company) throw new Error('Empresa não encontrada.');
+      const previous = getPreviousCompetencia(competencia);
+      const pool = [...entries];
+      for (const period of [competencia, previous].filter(Boolean)) {
+        for (const item of getOrCreateEntries(company.id, period)) {
+          if (!pool.some(existing => existing.employeeId === item.employeeId && existing.competencia === item.competencia)) pool.push(item);
+        }
+      }
+      const employeeEntries = pool.filter(entry => entry.companyId === company.id &&
+        (entry.competencia === competencia || entry.competencia === previous));
+      const raw = buildVTReportRows([individualEmployee], employeeEntries, days, competencia, medical.atestados)[0];
+      if (!raw) throw new Error('Não foi possível calcular o VT para esta competência.');
+      if (raw.pendenciaConferencia) throw new Error('Há faltas sem conferência no ponto.');
+      const row = applyCorrection(raw, company.id);
+      const snapshotRow = {
+        employee_id: row.emp.id, employee_name: row.emp.name, cargo: row.emp.cargo,
+        valor_diario: row.valorDiario, dias_previstos: row.diasPrevistos,
+        dias_descontados: row.diasDescontados, dias_atestado: row.diasAtestado || 0,
+        pendencia_conferencia: false, dias_finais: row.diasFinais,
+        valor_total: row.valorTotal, motivo: row.motivo || null,
+        correcao_motivo: row.correcaoMotivo || null,
+        correcao_observacao: row.correcaoObservacao || null,
+        data_pagamento_individual: (row as any).dataPagamentoCorrecao || individualPaymentDate || null,
+      };
+      const { data: existing, error: readError } = await (supabase as any).from('benefit_generations')
+        .select('id,report_snapshot').eq('tipo', 'vt').eq('company_id', company.id)
+        .eq('competencia', competencia).maybeSingle();
+      if (readError) throw readError;
+      const snapshot = mergeBenefitGenerationSnapshot(existing?.report_snapshot || [], snapshotRow);
+      const total = Math.round(snapshot.reduce((sum: number, item: any) => sum + Number(item.valor_total || 0), 0) * 100) / 100;
+      const now = new Date().toISOString();
+      const payload = { report_snapshot: snapshot, total, generated_by: session.user.id, updated_at: now };
+      if (existing?.id) {
+        const { error } = await (supabase as any).from('benefit_generations').update(payload).eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from('benefit_generations').insert({
+          ...payload, tipo: 'vt', company_id: company.id, competencia,
+          dias_pagos: days, data_pagamento: individualPaymentDate || null, generated_at: now,
+        });
+        if (error) throw error;
+      }
+      const block: VTPackageBlock = { company, rows: [row] };
+      const { data: enabled, error: enabledError } = await (supabase as any)
+        .rpc('payroll_company_enabled', { p_company_id: company.id });
+      if (enabledError) throw enabledError;
+      if (enabled) await syncPayrollDocument(block, row, session.user.id);
+      const pdf = buildVTReceiptPdfBlob(block, row, {
+        competencia, diasPagos: days, dataPagamento: individualPaymentDate || '', operador,
+      });
+      if (individualReceiptUrl) URL.revokeObjectURL(individualReceiptUrl);
+      const url = URL.createObjectURL(pdf);
+      setIndividualReceiptUrl(url);
+      await registrarAcao({ modulo: 'beneficios_vt', entidade: 'benefit_generation',
+        entidadeId: company.id, acao: 'gerou',
+        observacao: `Recibo individual de VT; competência ${competencia}; funcionário ${individualEmployee.name}` },
+        { userId: session.user.id, userEmail: session.user.email, funcionarioNome: operador.nome, cpf: operador.cpf, origem: 'admin' });
+      toast.success(`VT individual emitido para ${individualEmployee.name}: ${formatCurrency(row.valorTotal)}.`);
+    } catch (error: any) {
+      console.error('[vt-individual-generation]', error);
+      toast.error(`Falha ao emitir VT individual: ${error?.message || error}`);
+    } finally {
+      setIndividualGenerating(false);
+    }
+  };
+
   const handleGenerate = async () => {
     const days = Number(diasPagos || 0);
     if (!competencia) return toast.error('Selecione o mês.');
@@ -439,6 +529,39 @@ const RelatorioVTPage: React.FC = () => {
         </div>
       </section>
       <BenefitMedicalReview tipo="vt" competencia={competencia} />
+      <section id="emissao-individual-vt" className="rounded-2xl border border-purple-500/25 bg-card p-4 space-y-4">
+        <div>
+          <h2 className="font-semibold">EMISSÃO INDIVIDUAL DE VT</h2>
+          <p className="text-xs text-muted-foreground">Emite apenas o funcionário escolhido, sem substituir o consolidado. Utiliza a competência e os dias pagos selecionados abaixo.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="space-y-1 text-xs text-muted-foreground">Empresa
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={individualCompanyId}
+              onChange={event => { setIndividualCompanyId(event.target.value); setIndividualEmployeeId(''); setIndividualReceiptUrl(''); }}>
+              <option value="">Selecione</option>
+              {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">Funcionário
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={individualEmployeeId}
+              disabled={!individualCompanyId} onChange={event => { setIndividualEmployeeId(event.target.value); setIndividualReceiptUrl(''); }}>
+              <option value="">Selecione</option>
+              {individualEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">Data de pagamento
+            <Input type="date" value={individualPaymentDate} onChange={event => { setIndividualPaymentDate(event.target.value); setIndividualReceiptUrl(''); }} />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={handleIndividualGenerate} disabled={individualGenerating || !individualEmployeeId}>
+            {individualGenerating ? 'EMITINDO...' : 'EMITIR RECIBO INDIVIDUAL'}
+          </Button>
+          {individualReceiptUrl && <Button variant="outline" onClick={() => window.open(individualReceiptUrl, '_blank', 'noopener,noreferrer')}>
+            <ExternalLink className="mr-2 h-4 w-4" />ABRIR RECIBO INDIVIDUAL
+          </Button>}
+        </div>
+      </section>
       {showConsolidado && <ConsolidadoBeneficiosPage key={`vt-${competencia}`} tipo="vt" embutido competenciaInicial={competencia} />}
 
       <div className="card-premium p-5 space-y-4">
