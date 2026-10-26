@@ -248,10 +248,18 @@ const normalizeAtivoForDisplay = (ativo: Ativo): Ativo => {
   };
 };
 
-const DocumentosVeiculosPage: React.FC = () => {
+type BuscaCompartilhadaProps = {
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+};
+
+const DocumentosVeiculosPage: React.FC<BuscaCompartilhadaProps> = ({ searchValue, onSearchChange }) => {
   const { session } = useApp();
   const [ativos, setAtivos] = useState<Ativo[]>([]);
-  const [search, setSearch] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
+  // Sincroniza a pesquisa do cadastro atual com a pesquisa geral da página.
+  const search = searchValue ?? localSearch;
+  const setSearch = onSearchChange ?? setLocalSearch;
   const [viewingPdf, setViewingPdf] = useState<{ url: string; descricao: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [filterType, setFilterType] = useState<FilterType>('todos');
@@ -581,9 +589,10 @@ const handleMultiUpload = async (files: FileList) => {
         list = list.filter(a =>
         (a.descricao || '').toLowerCase().includes(q) ||
         (a.placa || '').toLowerCase().includes(q) ||
-          (a.patrimonio || '').toLowerCase().includes(q) ||
-          (a.renavam || '').toLowerCase().includes(q) ||
-          (a.chassi || '').toLowerCase().includes(q)
+        (a.patrimonio || '').toLowerCase().includes(q) ||
+        (a.renavam || '').toLowerCase().includes(q) ||
+        (a.chassi || '').toLowerCase().includes(q) ||
+        (a.empresa || '').toLowerCase().includes(q)
       );
     }
     if (filterType === 'ipva_vencer') list = list.filter(a => getAlertStatus(a.vencimento_ipva) === 'a_vencer');
