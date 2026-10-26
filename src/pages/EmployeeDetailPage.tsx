@@ -148,12 +148,14 @@ const EmployeeDetailPage: React.FC = () => {
       ),
     ) as Partial<Employee>;
 
-    // Salário não pode ser alterado pela edição comum da ficha.
-    // Toda alteração salarial precisa passar pelo fluxo de solicitação à contabilidade
-    // e só é aplicada após o retorno da folha processada.
+    // Administradores podem corrigir o salário-base da ficha oficial.
+    // Alterações salariais para o fechamento continuam disponíveis no painel específico.
     if (Object.prototype.hasOwnProperty.call(changes, 'salarioBase')) {
-      delete (changes as any).salarioBase;
-      toast.info('Alteração de salário removida da edição comum. Use o bloco "Alteração salarial".');
+      const salary = changes.salarioBase;
+      if (!isAdmin || typeof salary !== 'number' || !Number.isFinite(salary) || salary <= 0 || Math.round(salary * 100) / 100 !== salary) {
+        toast.error('Informe um salário-base válido, positivo e com até duas casas decimais.');
+        return;
+      }
     }
 
     if (Object.keys(changes).length === 0) {
@@ -423,7 +425,10 @@ const EmployeeDetailPage: React.FC = () => {
               <Field label="Nº Registro" {...fieldFor('registro')} />
               <Field label="Matrícula eSocial" {...fieldFor('matriculaEsocial')} />
               <Field label="Cargo / Função" {...fieldFor('cargo')} />
-              <Field label="Salário Base" value={formatCurrency(Number(emp.salarioBase || 0))} />
+              {isEditing ? (
+                <Field label="Salário Base (R$)" value={String(workingEmp.salarioBase ?? '')}
+                  type="number" onChange={(value) => updateDraft({ salarioBase: value.trim() === '' ? NaN : Number(value) })} />
+              ) : <Field label="Salário Base" value={formatCurrency(Number(emp.salarioBase || 0))} />}
               <Field label="Data Admissão" {...fieldFor('dataAdmissao', 'date')} />
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Status</label>
