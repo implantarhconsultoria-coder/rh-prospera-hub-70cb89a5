@@ -250,7 +250,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
       doc.text(`Nome: ${emp.name || '-'}`, 105, assinaturaY + 12, { align: 'center' });
       doc.setFontSize(7);
-      doc.text(`Operador administrativo: ${operador.nome || 'NÃO IDENTIFICADO'} · CPF: ${operador.cpf || 'PENDENTE'}`, pageLeft, assinaturaY + 22);
+      doc.text(`Operador administrativo: ${operador.nome || 'NÃO IDENTIFICADO'}`, pageLeft, assinaturaY + 22);
 
       doc.setDrawColor(156, 163, 175);
       const footerY = Math.min(266, Math.max(assinaturaY + 28, isAmbos ? 252 : 236));
@@ -463,7 +463,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
                 <div className="mt-12">
                   <div className="border-t border-black w-3/4 mx-auto pt-1 text-center text-xs">Assinatura do colaborador</div>
                   <p className="text-center text-xs mt-1">Nome: {emp.name}</p>
-                  <p className="text-center text-xs mt-1">Data: ____/____/________</p>
+                  
                 </div>
 
                 <div className="mt-8 pt-3 border-t border-gray-400 text-center text-[9px] text-gray-500">{' '}</div>
