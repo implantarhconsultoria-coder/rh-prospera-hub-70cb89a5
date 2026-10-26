@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getWorkingDays } from '@/lib/workingDays';
-import { buildVTReportRows, getPreviousCompetencia, mergeBenefitGenerationSnapshot, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
+import { buildVTReportRows, getVRAdmissionCalculation, getPreviousCompetencia, mergeBenefitGenerationSnapshot, sumBenefitRows, type BenefitReportRow } from '@/lib/benefitReports';
 import { formatCurrency } from '@/lib/calculations';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useBenefitMedicalLeaves } from '@/hooks/useBenefitMedicalLeaves';
@@ -108,6 +108,14 @@ const RelatorioVTPage: React.FC = () => {
       ...(correction.data_pagamento ? { dataPagamentoCorrecao: correction.data_pagamento } : {}),
     } as BenefitReportRow;
   };
+
+  const individualAdmission = individualEmployee ? getVRAdmissionCalculation(individualEmployee, competencia) : null;
+  const individualPreview = individualEmployee && individualAdmission?.eligible
+    ? buildVTReportRows([individualEmployee],
+        entries.filter(entry => entry.companyId === individualEmployee.companyId &&
+          (entry.competencia === competencia || entry.competencia === getPreviousCompetencia(competencia))),
+        Math.max(0, Number(diasPagos || 0)), competencia, medical.atestados)[0]
+    : null;
 
   const buildBlocks = (companyIds: string[], entryPool: any[]) => {
     const days = Math.max(0, Number(diasPagos || 0));
@@ -272,6 +280,7 @@ const RelatorioVTPage: React.FC = () => {
       return toast.error('Selecione um funcionário ativo com VT habilitado.');
     const days = Number(diasPagos);
     if (!competencia || !Number.isInteger(days) || days <= 0) return toast.error('Informe competência e dias pagos válidos.');
+    if (individualAdmission?.eligible === false) return toast.info('Funcionário ainda não admitido nesta competência.');
     if (operador.loading || !operador.completo) return toast.error('Complete o nome e CPF do operador.');
     if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
     if ((medical.pendentesPorFuncionario[individualEmployee.id] || 0) > 0)
@@ -291,6 +300,7 @@ const RelatorioVTPage: React.FC = () => {
         (entry.competencia === competencia || entry.competencia === previous));
       const raw = buildVTReportRows([individualEmployee], employeeEntries, days, competencia, medical.atestados)[0];
       if (!raw) throw new Error('Não foi possível calcular o VT para esta competência.');
+      if (raw.diasPrevistos === 0) return toast.info('Nenhum dia útil restante para VT nesta competência.');
       if (raw.pendenciaConferencia) throw new Error('Há faltas sem conferência no ponto.');
       const row = applyCorrection(raw, company.id);
       const snapshotRow = {
@@ -553,8 +563,26 @@ const RelatorioVTPage: React.FC = () => {
             <Input type="date" value={individualPaymentDate} onChange={event => { setIndividualPaymentDate(event.target.value); setIndividualReceiptUrl(''); }} />
           </label>
         </div>
+        {individualEmployee && <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-border/70 p-3">
+            <p className="text-xs text-muted-foreground">Data de admissão</p>
+            <p className="font-semibold">{individualEmployee.dataAdmissao || '—'}</p>
+          </div>
+          <div className="rounded-lg border border-border/70 p-3">
+            <p className="text-xs text-muted-foreground">Dias de VT calculados</p>
+            <p className="font-semibold">{individualPreview?.diasFinais ?? '—'}</p>
+          </div>
+          <div className="rounded-lg border border-border/70 p-3">
+            <p className="text-xs text-muted-foreground">Total proporcional de VT</p>
+            <p className="font-semibold">{formatCurrency(individualPreview?.valorTotal || 0)}</p>
+          </div>
+        </div>}
+        {individualAdmission?.tipoCalculo === 'PROPORCIONAL_ADMISSAO' &&
+          <p className="text-xs text-muted-foreground">Cálculo proporcional por admissão: de {individualAdmission.periodoInicio} a {individualAdmission.periodoFim} (somente dias úteis).</p>}
+        {individualAdmission?.eligible === false &&
+          <p className="text-xs text-amber-500">Admissão posterior à competência selecionada.</p>}
         <div className="flex flex-wrap gap-2">
-          <Button onClick={handleIndividualGenerate} disabled={individualGenerating || !individualEmployeeId}>
+          <Button onClick={handleIndividualGenerate} disabled={individualGenerating || !individualEmployeeId || individualAdmission?.eligible === false}>
             {individualGenerating ? 'EMITINDO...' : 'EMITIR RECIBO INDIVIDUAL'}
           </Button>
           {individualReceiptUrl && <Button variant="outline" onClick={() => window.open(individualReceiptUrl, '_blank', 'noopener,noreferrer')}>
