@@ -9,6 +9,15 @@ const MecanicoExtAlias = () => {
   return <Navigate to={`/app-mecanico/${acessoId}${resto}`} replace />;
 };
 
+// Mantem URLs antigas e atalhos de locacao, mas abre Protocolo dentro da Central.
+const ProtocoloTabRedirect = () => {
+  const location = useLocation();
+  const pathname = location.pathname.startsWith('/admin/') ? '/admin/operacional' : '/operacional';
+  const params = new URLSearchParams(location.search);
+  params.set('tab', 'protocolo');
+  return <Navigate to={{ pathname, search: '?' + params.toString() }} replace />;
+};
+
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -234,7 +243,7 @@ const AuthGate = () => {
         <Route path="/admin/pre-cadastro-admissional" element={<PreCadastroAdmissionalPage />} />
         <Route path="/admin/prestadores" element={<PrestadoresPage />} />
         <Route path="/admin/galoes-combustivel" element={<CombustivelPage />} />
-        <Route path="/admin/protocolo" element={<Navigate to="/admin/operacional/protocolo" replace />} />
+        <Route path="/admin/protocolo" element={<ProtocoloTabRedirect />} />
         <Route path="/admin/documentos-ativos" element={<PrivateFleetGuard><DocumentosVeiculosPage /></PrivateFleetGuard>} />
         <Route path="/admin/aviso-ferias" element={<AvisoFeriasPage />} />
         <Route path="/admin/atestados" element={<AtestadosImportPage />} />
@@ -250,7 +259,7 @@ const AuthGate = () => {
         <Route path="/admin/monitoramento" element={<PrivateFleetGuard><RastreamentoFrotaPage /></PrivateFleetGuard>} />
         <Route path="/admin/gerenciar-usuarios" element={<Navigate to="/admin" replace />} />
         <Route path="/admin/operacional" element={<DespacharChamadoPage />} />
-        <Route path="/admin/operacional/protocolo" element={<ProtocoloPage />} />
+        <Route path="/admin/operacional/protocolo" element={<ProtocoloTabRedirect />} />
         <Route path="/admin/chamados" element={<Navigate to="/admin/operacional" replace />} />
         <Route path="/admin/app-mecanico" element={<AppMecanicoAdminPage />} />
         <Route path="/admin/app-operacional" element={<Navigate to="/admin/app-mecanico" replace />} />
@@ -292,7 +301,7 @@ const AuthGate = () => {
       <Route element={<OperacionalLayout />}>
         <Route path="/operacional" element={<DespacharChamadoPage />} />
         <Route path="/operacional/chamados" element={<DespacharChamadoPage />} />
-        <Route path="/operacional/protocolo" element={<ProtocoloPage />} />
+        <Route path="/operacional/protocolo" element={<ProtocoloTabRedirect />} />
         <Route path="/operacional/importacao-dados" element={<Navigate to="/operacional" replace />} />
       </Route>
 

@@ -20,6 +20,7 @@ import OperacionalMovimentacoesPanel from '@/components/operacional/OperacionalM
 import OperacionalClientesPanel from '@/components/operacional/OperacionalClientesPanel';
 import OperacionalDisponibilidadePlacas from '@/components/operacional/OperacionalDisponibilidadePlacas';
 import OperacionalOcorrenciasHistoricoPanel from '@/components/operacional/OperacionalOcorrenciasHistoricoPanel';
+import ProtocoloPage from '@/pages/ProtocoloPage';
 import { formalizarOperacaoPorEmail } from '@/lib/operacionalFormalizacao';
 import { toast } from 'sonner';
 
@@ -64,7 +65,7 @@ const emptyChamadoForm = {
   solicitante_contato: '',
 };
 
-type Tab = 'clientes' | 'disponibilidade' | 'novo' | 'lista' | 'historico' | 'movimentacoes' | 'operadores';
+type Tab = 'clientes' | 'disponibilidade' | 'novo' | 'lista' | 'historico' | 'movimentacoes' | 'operadores' | 'protocolo';
 
 const DespacharChamadoPage: React.FC = () => {
   const { session, userRoles } = useApp();
@@ -76,7 +77,27 @@ const DespacharChamadoPage: React.FC = () => {
   const operatorBootstrap = useOperatorBootstrap('operacional', canBootstrapOperator);
   const { developerMode } = useDeveloperMode();
 
-  const [tab, setTab] = useState<Tab>('clientes');
+  const [tab, setTab] = useState<Tab>(() => {
+    const initialTab = new URLSearchParams(location.search).get('tab');
+    return initialTab === 'protocolo' ? 'protocolo' : 'clientes';
+  });
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('tab') === 'protocolo') {
+      setTab('protocolo');
+    }
+  }, [location.search]);
+
+  const selecionarAba = (nextTab: Tab) => {
+    setTab(nextTab);
+    const params = new URLSearchParams(location.search);
+    if (nextTab !== 'protocolo' && params.get('tab') === 'protocolo') {
+      params.delete('tab');
+      params.delete('acao');
+      params.delete('placa');
+      navigate({ pathname: location.pathname, search: params.toString() ? '?' + params.toString() : '' }, { replace: true });
+    }
+  };
   const [busca, setBusca] = useState('');
   const [loading, setLoading] = useState(false);
   const [tecnicos, setTecnicos] = useState<any[]>([]);
@@ -193,22 +214,13 @@ const DespacharChamadoPage: React.FC = () => {
       cliente: cliente?.razao_social || '',
       local_servico: local?.nome || [cliente?.endereco, cliente?.cidade, cliente?.uf].filter(Boolean).join(' - '),
     });
-    setTab('novo');
+    selecionarAba('novo');
   };
 
   const canShowProtocolo =
     location.pathname.startsWith('/admin/operacional') ||
     location.pathname.startsWith('/operacional') ||
     location.pathname.startsWith('/operacional-ext');
-
-  const abrirProtocolo = () => {
-    if (location.pathname.startsWith('/operacional-ext/')) {
-      const base = location.pathname.match(/^\/operacional-ext\/[^/]+/)?.[0] || '/operacional-ext';
-      navigate(`${base}/protocolo`);
-      return;
-    }
-    navigate(location.pathname.startsWith('/operacional') ? '/operacional/protocolo' : '/admin/operacional/protocolo');
-  };
 
   const exigirOperador = (
     action: (codigo: string) => Promise<void>,
@@ -632,6 +644,7 @@ tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
     { key: 'historico', label: 'Histórico' },
     { key: 'movimentacoes', label: 'Movimentações' },
     ...(showAdminTools ? [{ key: 'operadores' as Tab, label: 'Operadores' }] : []),
+    ...(canShowProtocolo ? [{ key: 'protocolo' as Tab, label: 'Protocolo' }] : []),
   ];
 
   return (
@@ -668,16 +681,16 @@ tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <button type="button" onClick={() => setTab('lista')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
+          <button type="button" onClick={() => selecionarAba('lista')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
             <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-600">Aguardando aceite</p><strong className="mt-1 block text-xl text-white">{metricas.novos}</strong>
           </button>
-          <button type="button" onClick={() => setTab('lista')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
+          <button type="button" onClick={() => selecionarAba('lista')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
             <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-600">Em andamento</p><strong className="mt-1 block text-xl text-white">{metricas.andamento}</strong>
           </button>
-          <button type="button" onClick={() => setTab('lista')} className={`rounded-[9px] border p-3 text-left transition ${metricas.adicionais ? 'border-amber-500/30 bg-amber-500/[.07]' : 'border-[#2b2631] bg-[#080b10]'}`}>
+          <button type="button" onClick={() => selecionarAba('lista')} className={`rounded-[9px] border p-3 text-left transition ${metricas.adicionais ? 'border-amber-500/30 bg-amber-500/[.07]' : 'border-[#2b2631] bg-[#080b10]'}`}>
             <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-zinc-600"><BellRing className="h-3 w-3" /> Adicionais</p><strong className={`mt-1 block text-xl ${metricas.adicionais ? 'text-amber-300' : 'text-white'}`}>{metricas.adicionais}</strong>
           </button>
-          <button type="button" onClick={() => setTab('historico')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
+          <button type="button" onClick={() => selecionarAba('historico')} className="rounded-[9px] border border-[#2b2631] bg-[#080b10] p-3 text-left transition hover:border-violet-500/30">
             <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-600">Concluídos</p><strong className="mt-1 block text-xl text-white">{metricas.concluidos}</strong>
           </button>
         </div>
@@ -685,12 +698,11 @@ tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
 
       <div className="flex flex-wrap gap-1 rounded-[10px] border border-[#2c2235] bg-[#05080b] p-1.5">
         {tabs.map((item) => (
-          <Button key={item.key} variant="ghost" size="sm" onClick={() => setTab(item.key)} className={`relative h-8 rounded-[7px] px-3 text-[10px] font-bold ${tab === item.key ? 'bg-violet-500/15 text-white ring-1 ring-violet-500/30' : 'text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200'}`}>
+          <Button key={item.key} variant="ghost" size="sm" onClick={() => selecionarAba(item.key)} className={`relative h-8 rounded-[7px] px-3 text-[10px] font-bold ${tab === item.key ? 'bg-violet-500/15 text-white ring-1 ring-violet-500/30' : 'text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200'}`}>
             {item.label}
             {!!item.alert && item.alert > 0 && <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[10px] text-white">{item.alert}</span>}
           </Button>
         ))}
-        {canShowProtocolo && <Button variant="ghost" size="sm" onClick={abrirProtocolo} className="h-8 rounded-[7px] px-3 text-[10px] font-bold text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200">Protocolo</Button>}
       </div>
 
       {tab === 'clientes' && (
@@ -858,6 +870,7 @@ tr.attention{background:#fff4c9!important;border-left:4px solid #eab51f}
 
       {tab === 'movimentacoes' && <OperacionalMovimentacoesPanel equipamentos={equipamentos} clientes={clientes} />}
       {tab === 'operadores' && showAdminTools && <OperadoresOperacaoPanel />}
+      {tab === 'protocolo' && canShowProtocolo && <ProtocoloPage />}
 
       <Dialog open={!!editando} onOpenChange={(open) => { if (!open && !savingEdit) setEditando(null); }}>
         <DialogContent className="max-w-2xl">
