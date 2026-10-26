@@ -163,7 +163,9 @@ const findEntry = (entries: MonthlyEntry[], employeeId: string, competencia?: st
 const findEntryWithFallback = (entries: MonthlyEntry[], employeeId: string, competencia?: string) =>
   findEntry(entries, employeeId, competencia) || findEntry(getCompleteEntries(entries), employeeId, competencia);
 
-const getDiasPrevistos = (entry: MonthlyEntry | undefined, diasUteis: number, type: 'vr' | 'vt') => {
+const getDiasPrevistos = (entry: MonthlyEntry | undefined, diasUteis: number, type: 'vr' | 'vt', proportionalAdmission = false) => {
+  // A competência de admissão pode ter zero dias úteis. Jamais recorrer ao VR mensal nesse caso.
+  if (proportionalAdmission) return Math.max(0, Number(diasUteis || 0));
   const diasPagosSelecionados = Math.max(0, Number(diasUteis || 0));
   if (diasPagosSelecionados > 0) return diasPagosSelecionados;
   if (type === 'vt') return 0;
@@ -177,6 +179,7 @@ const buildBenefitRow = ({
   diasUteis,
   type,
   diasAtestado = 0,
+  proportionalAdmission = false,
 }: {
   emp: Employee;
   entry?: MonthlyEntry;
@@ -184,6 +187,7 @@ const buildBenefitRow = ({
   diasUteis: number;
   type: 'vr' | 'vt';
   diasAtestado?: number;
+  proportionalAdmission?: boolean;
 }): BenefitReportRow => {
   // VR e VT são pagos antecipadamente. As faltas lançadas no mês anterior
   // são descontadas na competência atual. O lançamento do próprio mês não
@@ -199,7 +203,7 @@ const buildBenefitRow = ({
   // Manter o cálculo conservador e exigir conciliação humana antes de emitir pagamentos.
   const pendenciaSobreposicao = faltasValidadas > 0 && diasAtestado > 0;
   const pendenciaGeral = pendenciaConferencia || pendenciaSobreposicao;
-  const diasPrevistos = getDiasPrevistos(entry, diasUteis, type);
+  const diasPrevistos = getDiasPrevistos(entry, diasUteis, type, proportionalAdmission);
   // Sem datas das faltas, usar o maior dos dois conjuntos evita abatimento duplicado.
   const diasDescontados = Math.min(Math.max(faltasValidadas, diasAtestado), diasPrevistos);
   const diasFinais = Math.max(0, diasPrevistos - diasDescontados);
@@ -251,6 +255,7 @@ export const buildVRReportRows = (
         : findEntryWithFallback(entries, emp.id, previousCompetencia),
       diasUteis: diasBase,
       type: 'vr',
+      proportionalAdmission: proportional,
       diasAtestado: proportional ? 0 : medicalLeaveWorkingDays(emp, previousCompetencia, 'vr', atestados, feriados),
     });
     return [{
@@ -264,19 +269,43 @@ export const buildVRReportRows = (
   });
 };
 
-export const buildVTReportRows = (employees: Employee[], entries: MonthlyEntry[], diasUteis: number, competencia?: string, atestados: BenefitMedicalLeave[] = []) => {
+export const buildVTReportRows = (
+  employees: Employee[],
+  entries: MonthlyEntry[],
+  diasUteis: number,
+  competencia?: string,
+  atestados: BenefitMedicalLeave[] = [],
+  feriados: string[] = [],
+) => {
   const currentCompetencia = inferCompetencia(entries, competencia);
   const previousCompetencia = getPreviousCompetencia(currentCompetencia);
-  return employees.map((emp) =>
-    buildBenefitRow({
+  return employees.flatMap((emp) => {
+    // Mesma regra do VR: pagar apenas os dias úteis desde a admissão até o fim da competência.
+    const admission = getVRAdmissionCalculation(emp, currentCompetencia, feriados);
+    if (!admission.eligible) return [];
+    const proportional = admission.tipoCalculo === 'PROPORCIONAL_ADMISSAO';
+    const diasBase = proportional ? Number(admission.diasUteisCalculados || 0) : diasUteis;
+    const row = buildBenefitRow({
       emp,
       entry: findEntryWithFallback(entries, emp.id, currentCompetencia),
-      descontoEntry: previousCompetencia ? findEntryWithFallback(entries, emp.id, previousCompetencia) : undefined,
-      diasUteis,
+      // Admitidos no mês corrente não podem herdar descontos de faltas da competência anterior.
+      descontoEntry: proportional || !previousCompetencia
+        ? undefined
+        : findEntryWithFallback(entries, emp.id, previousCompetencia),
+      diasUteis: diasBase,
       type: 'vt',
-      diasAtestado: medicalLeaveWorkingDays(emp, previousCompetencia, 'vt', atestados),
-    }),
-  );
+      proportionalAdmission: proportional,
+      diasAtestado: proportional ? 0 : medicalLeaveWorkingDays(emp, previousCompetencia, 'vt', atestados, feriados),
+    });
+    return [{
+      ...row,
+      tipoCalculo: admission.tipoCalculo,
+      dataAdmissao: admission.dataAdmissao,
+      periodoInicio: admission.periodoInicio,
+      periodoFim: admission.periodoFim,
+      diasUteisCalculados: proportional ? Number(admission.diasUteisCalculados || 0) : row.diasPrevistos,
+    }];
+  });
 };
 
 export type BenefitCorrectionInput = {
@@ -375,18 +404,27 @@ export const buildIndividualBenefitData = ({
   descontoEntry,
   diasUteis,
   type,
+  competencia,
 }: {
   emp?: Employee;
   entry?: MonthlyEntry;
   descontoEntry?: MonthlyEntry;
   diasUteis: number;
   type: 'vr' | 'vt';
+  competencia?: string;
 }) => {
   if (!emp) return null;
   if (type === 'vr' && !emp.vrAtivo) return null;
   if (type === 'vt' && !emp.vtAtivo) return null;
 
-  const row = buildBenefitRow({ emp, entry, descontoEntry, diasUteis, type });
+  const admission = competencia ? getVRAdmissionCalculation(emp, competencia) : null;
+  if (admission && !admission.eligible) return null;
+  const proportional = admission?.tipoCalculo === 'PROPORCIONAL_ADMISSAO';
+  const row = buildBenefitRow({
+    emp, entry, descontoEntry: proportional ? undefined : descontoEntry,
+    diasUteis: proportional ? Number(admission?.diasUteisCalculados || 0) : diasUteis,
+    type, proportionalAdmission: proportional,
+  });
   return {
     valorDiario: row.valorDiario,
     diasPrevistos: row.diasPrevistos,

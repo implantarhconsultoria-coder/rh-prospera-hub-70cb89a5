@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApp } from '@/context/AppContext';
 import { getWorkingDays, getFirstBusinessDayOfNextMonth } from '@/lib/workingDays';
 import { formatCurrency } from '@/lib/calculations';
-import { buildVRReportRows, buildVTReportRows, applyBenefitCorrection, type BenefitReportRow } from '@/lib/benefitReports';
+import { buildVRReportRows, buildVTReportRows, getPreviousCompetencia, applyBenefitCorrection, type BenefitReportRow } from '@/lib/benefitReports';
 import { useRecibosCorrecoes } from '@/hooks/useRecibosCorrecoes';
 import { useOperatorIdentity } from '@/hooks/useOperatorIdentity';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
@@ -72,13 +72,17 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
   const funcionarioIds = funcionariosParam ? funcionariosParam.split(',').filter(Boolean) : null;
 
   const diasUteis = diasUteisManual > 0 ? diasUteisManual : getWorkingDays(competencia);
+  const competenciaAnterior = getPreviousCompetencia(competencia);
   const dataEmissao = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const dataPagamento = formatInputDateBr(dataPagamentoParam) || getFirstBusinessDayOfNextMonth(competencia);
 
   useEffect(() => {
-    if (!dataLoading) empresaIds.forEach((cid) => getOrCreateEntries(cid, competencia));
+    if (!dataLoading) empresaIds.forEach((cid) => {
+      getOrCreateEntries(cid, competencia);
+      if (competenciaAnterior) getOrCreateEntries(cid, competenciaAnterior);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empresasParam, competencia, dataLoading]);
+  }, [empresasParam, competencia, competenciaAnterior, dataLoading]);
 
   const correcoesVR = useRecibosCorrecoes({ tipo: 'vr', competencia });
   const correcoesVT = useRecibosCorrecoes({ tipo: 'vt', competencia });
@@ -94,15 +98,16 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       const baseEmps = employees.filter(
         (e) => e.companyId === cid && e.status === 'ativo' && e.categoria === 'operacional',
       );
-      const compEntries = entries.filter((e) => e.companyId === cid && e.competencia === competencia);
+      const compEntries = entries.filter((e) => e.companyId === cid &&
+        (e.competencia === competencia || e.competencia === competenciaAnterior));
 
       const vrEmps = baseEmps.filter((e: any) => e.vrAtivo);
       const vtEmps = baseEmps.filter((e: any) => e.vtAtivo);
 
-      const vrRowsAll = buildVRReportRows(vrEmps, compEntries, diasUteis).map((r) =>
+      const vrRowsAll = buildVRReportRows(vrEmps, compEntries, diasUteis, competencia).map((r) =>
         applyCorrecao(r, correcoesVR.findFor('vr', cid, r.emp.id, competencia)),
       );
-      const vtRowsAll = buildVTReportRows(vtEmps, compEntries, diasUteis).map((r) =>
+      const vtRowsAll = buildVTReportRows(vtEmps, compEntries, diasUteis, competencia).map((r) =>
         applyCorrecao(r, correcoesVT.findFor('vt', cid, r.emp.id, competencia)),
       );
 
@@ -124,7 +129,7 @@ const RecibosBeneficioImpressaoPage: React.FC = () => {
       });
     }
     return out;
-  }, [empresaIds, companies, employees, entries, competencia, diasUteis, formato, funcionariosParam, correcoesVR, correcoesVT, dataLoading, loading]);
+  }, [empresaIds, companies, employees, entries, competencia, competenciaAnterior, diasUteis, formato, funcionariosParam, correcoesVR, correcoesVT, dataLoading, loading]);
 
   const competenciaLabel = competenciaPt(competencia);
 

@@ -135,7 +135,7 @@ const RelatorioVTImpressaoPage: React.FC = () => {
         const compEntries = entries.filter(e =>
           e.companyId === company.id && (e.competencia === competencia || e.competencia === competenciaAnterior),
         );
-        const rawRows = buildVTReportRows(compEmps, compEntries, diasUteis, competencia, medical.atestados);
+        const rawRows = buildVTReportRows(compEmps, compEntries, diasUteis, competencia, medical.atestados, feriadosDatas);
         const rows: BenefitReportRow[] = rawRows.map(r => {
           const c = correcoes.findFor('vt', company.id, r.emp.id, competencia);
           if (!c) return r;
