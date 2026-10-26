@@ -178,7 +178,7 @@ const addReceipt = (doc: jsPDF, block: VTPackageBlock, row: BenefitReportRow, op
   doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
   doc.text(`Nome: ${safe(row.emp.name)}`, 105, assinaturaY + 12, { align: 'center' });
   doc.setFontSize(7);
-  doc.text(`Operador administrativo: ${safe(options.operador?.nome) || 'NÃO IDENTIFICADO'} · CPF: ${safe(options.operador?.cpf) || 'PENDENTE'}`, left, 225);
+  doc.text(`Operador administrativo: ${safe(options.operador?.nome) || 'NÃO IDENTIFICADO'}`, left, 225);
 };
 
 export const buildVTReceiptPdfBlob = (block: VTPackageBlock, row: BenefitReportRow, options: PackageOptions) => {
