@@ -91,7 +91,7 @@ export const buildVRReceiptPdfBlob = (company: Company, row: BenefitReportRow, o
   doc.text('Assinatura do colaborador', 105, assinaturaY + 6, { align: 'center' });
   doc.text(`Nome: ${safe(row.emp.name)}`, 105, assinaturaY + 12, { align: 'center' });
   doc.setFontSize(7);
-  doc.text(`Operador administrativo: ${safe(options.operador?.nome) || 'NÃO IDENTIFICADO'} · CPF: ${safe(options.operador?.cpf) || 'PENDENTE'}`, left, 225);
+  doc.text(`Operador administrativo: ${safe(options.operador?.nome) || 'NÃO IDENTIFICADO'}`, left, 225);
 
   return doc.output('blob');
 };
