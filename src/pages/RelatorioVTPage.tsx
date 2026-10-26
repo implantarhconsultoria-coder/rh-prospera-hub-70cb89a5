@@ -110,11 +110,14 @@ const RelatorioVTPage: React.FC = () => {
   };
 
   const individualAdmission = individualEmployee ? getVRAdmissionCalculation(individualEmployee, competencia) : null;
-  const individualPreview = individualEmployee && individualAdmission?.eligible
+  const individualPreviewBase = individualEmployee && individualAdmission?.eligible
     ? buildVTReportRows([individualEmployee],
         entries.filter(entry => entry.companyId === individualEmployee.companyId &&
           (entry.competencia === competencia || entry.competencia === getPreviousCompetencia(competencia))),
         Math.max(0, Number(diasPagos || 0)), competencia, medical.atestados)[0]
+    : null;
+  const individualPreview = individualPreviewBase && individualEmployee
+    ? applyCorrection(individualPreviewBase, individualEmployee.companyId)
     : null;
 
   const buildBlocks = (companyIds: string[], entryPool: any[]) => {
