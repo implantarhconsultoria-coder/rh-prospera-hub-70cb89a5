@@ -284,7 +284,7 @@ const RelatorioVTPage: React.FC = () => {
     const days = Number(diasPagos);
     if (!competencia || !Number.isInteger(days) || days <= 0) return toast.error('Informe competência e dias pagos válidos.');
     if (individualAdmission?.eligible === false) return toast.info('Funcionário ainda não admitido nesta competência.');
-    if (operador.loading || !operador.completo) return toast.error('Complete o nome e CPF do operador.');
+    if (operador.loading || !operador.nome?.trim()) return toast.error('Informe o nome completo do operador.');
     if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
     if ((medical.pendentesPorFuncionario[individualEmployee.id] || 0) > 0)
       return toast.error('Revise os atestados do funcionário antes da emissão.');
@@ -366,7 +366,7 @@ const RelatorioVTPage: React.FC = () => {
     if (!Number.isFinite(days) || days <= 0) return toast.error('Informe os dias pagos.');
     if (!selectedCompanyIds.length) return toast.error('Selecione ao menos uma empresa.');
     if (!session?.user?.id) return toast.error('Sessão administrativa expirada. Entre novamente.');
-    if (operador.loading || !operador.completo) return toast.error('Para emitir o documento, atualize o nome completo e CPF do operador no cadastro administrativo.');
+    if (operador.loading || !operador.nome?.trim()) return toast.error('Para emitir o documento, atualize o nome completo do operador.');
     if (medical.loading || medical.error) return toast.error(medical.error || 'Consultando atestados.');
     if (selectedCompanyIds.some(id => (medical.pendentesPorEmpresa[id] || 0) > 0)) return toast.error('Há atestados sem datas conferidas nas empresas selecionadas. Revise antes de gerar VT.');
 
