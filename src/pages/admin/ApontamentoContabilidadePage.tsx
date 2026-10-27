@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Save, Printer, FileText, Loader2, RefreshCw, Send, Download } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCompetencia } from '@/lib/workingDays';
@@ -1154,6 +1155,41 @@ const ApontamentoContabilidadePage: React.FC = () => {
     ].join('\n');
   };
 
+  /** Generates the workbook from the same in-memory rows as the accounting PDF. */
+  const gerarExcelAnexo = (grupos: Array<{ empresa: string; rows: ItemRow[] }>): Blob => {
+    const workbook = XLSX.utils.book_new();
+    grupos.forEach(({ empresa, rows }, index) => {
+      const sheet = XLSX.utils.json_to_sheet(rows.map((row) => ({
+        Funcionario: row.nome,
+        CPF: row.cpf,
+        Salario: row.salario,
+        Insalubridade: row.insalubridade,
+        Periculosidade: row.periculosidade,
+        BaseComissao: row.comissao_base,
+        PercentualComissao: row.comissao_percentual,
+        ValorComissao: row.comissao_valor,
+        HE50Horas: row.hora_extra_50_horas,
+        HE50Valor: row.hora_extra_50,
+        HE60Horas: row.hora_extra_60_horas,
+        HE60Valor: row.hora_extra_60,
+        HE100Horas: row.hora_extra_100_horas,
+        HE100Valor: row.hora_extra_100,
+        AssistenciaMedica: row.assistencia_medica,
+        FaltasDias: row.faltas_qtd,
+        DescontoFalta: row.desconto_falta,
+        DSRDias: row.dsr_qtd,
+        DescontoDSR: row.desconto_dsr,
+        Adiantamento: row.adiantamento,
+        Liquido: row.total,
+      })));
+      sheet['!cols'] = [{ wch: 36 }, { wch: 17 }, ...Array.from({ length: 19 }, () => ({ wch: 18 }))];
+      const sheetName = (empresa.replace(/[\\/?*\[\]:]/g, '').trim() || 'Empresa').slice(0, 25);
+      XLSX.utils.book_append_sheet(workbook, sheet, `${index + 1}-${sheetName}`.slice(0, 31));
+    });
+    const data = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    return new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  };
+
   const enviarParaContabilidade = async () => {
     if (!company) { toast.error('Selecione uma empresa'); return; }
     if (items.length === 0) { toast.error('Sem itens para enviar'); return; }
@@ -1194,8 +1230,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
         `Total geral: ${formatBRL(totalGeral)}\nQuantidade de funcionarios: ${items.length}\n` +
         blocoAlteracoes +
         `\nAtenciosamente,\nRodrigo De Souza Sabino`,
-      attachmentBlob: pdfBlob,
-      attachmentName: buildApontamentoPdfName(company.name, competencia),
+      attachments: [
+        { attachmentBlob: pdfBlob, attachmentName: buildApontamentoPdfName(company.name, competencia), attachmentContentType: 'application/pdf' },
+        { attachmentBlob: gerarExcelAnexo([{ empresa: company.name, rows: items }]), attachmentName: `APONTAMENTO - ${company.name} - ${competencia}.xlsx`, attachmentContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+      ],
       afterSend: async () => {
         await registrarAcao({
           modulo: 'contabilidade',
@@ -1251,8 +1289,10 @@ const ApontamentoContabilidadePage: React.FC = () => {
           `Total geral do lote: ${formatBRL(totalLote)}\nQuantidade de funcionarios: ${qtdFuncionarios}\n` +
           blocoAlteracoes +
           `\nAtenciosamente,\nRodrigo De Souza Sabino`,
-        attachmentBlob: blob,
-        attachmentName: buildApontamentoLotePdfName(grupos.map((g) => g.company.name), competencia),
+        attachments: [
+          { attachmentBlob: blob, attachmentName: buildApontamentoLotePdfName(grupos.map((g) => g.company.name), competencia), attachmentContentType: 'application/pdf' },
+          { attachmentBlob: gerarExcelAnexo(grupos.map((g) => ({ empresa: g.company.name, rows: g.items }))), attachmentName: `APONTAMENTO-LOTE-${competencia}.xlsx`, attachmentContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        ],
         afterSend: async () => {
           await registrarAcao({
             modulo: 'contabilidade',
