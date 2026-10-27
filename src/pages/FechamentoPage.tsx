@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Bus, FileText, Lock, RefreshCw, RotateCcw, Save, Send, Table, UtensilsCrossed } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import * as XLSX from 'xlsx';
 import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { useApp } from '@/context/AppContext';
@@ -361,36 +362,52 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
       const workbook = XLSX.write(book, { bookType: 'xlsx', type: 'array' });
       const excelBlob = new Blob([workbook], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(14);
-      pdf.text('TOPAC RH PRO - RELATORIO DE APONTAMENTO', 12, 15);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
-      pdf.text(`${selectedCompanyData.name} - Competencia ${competencia}`, 12, 22);
-      pdf.setFontSize(7.5);
-      let y = 32;
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Funcionario', 12, y);
-      pdf.text('Faltas', 111, y);
-      pdf.text('HE 50/60/100', 139, y);
-      pdf.text('Comissao', 190, y);
-      pdf.text('Liquido', 234, y);
-      pdf.setFont('helvetica', 'normal');
-      for (const row of rows) {
-        if (y > 186) { pdf.addPage(); y = 17; }
-        y += 6;
-        pdf.text(pdf.splitTextToSize(row.Funcionario, 93)[0] || '', 12, y);
-        pdf.text(String(row.Faltas), 111, y);
-        pdf.text(`${row.HE50} / ${row.HE60} / ${row.HE100}`, 139, y);
-        pdf.text(formatCurrency(row.Comissao), 190, y);
-        pdf.text(formatCurrency(row.Liquido), 234, y);
+      // Reutiliza a MESMA página do PDF oficial (RelatorioImpressaoPage).
+      // A renderização antiga em jsPDF produzia um relatório diferente do botão "Salvar PDF".
+      const reportUrl = `/relatorio-impressao?empresa=${encodeURIComponent(selectedCompany)}&competencia=${encodeURIComponent(competencia)}&diasUteis=${diasUteis}&domingosFeriados=${domingosFeriados}`;
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText = 'position:fixed;left:-15000px;top:0;width:1123px;height:900px;border:0;opacity:1;pointer-events:none';
+      document.body.appendChild(iframe);
+      let pdfBlob: Blob;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => reject(new Error('O relatório oficial demorou a carregar. Tente novamente.')), 25000);
+          iframe.onload = () => { window.clearTimeout(timeout); resolve(); };
+          iframe.onerror = () => { window.clearTimeout(timeout); reject(new Error('Não foi possível abrir o relatório oficial.')); };
+          iframe.src = reportUrl;
+        });
+        const doc = iframe.contentDocument;
+        if (!doc) throw new Error('Acesso ao relatório indisponível.');
+        const reportNode = await new Promise<HTMLElement>((resolve, reject) => {
+          let attempts = 0;
+          const check = () => {
+            const node = doc.querySelector('#fech-print-area') as HTMLElement | null;
+            const text = node?.textContent || '';
+            if (node && text.includes(selectedCompanyData.name) && text.includes('Relatório de Apontamento')) { resolve(node); return; }
+            if (++attempts > 45) { reject(new Error('O relatório oficial não carregou os dados da empresa.')); return; }
+            window.setTimeout(check, 300);
+          };
+          check();
+        });
+        await doc.fonts?.ready;
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+        const canvas = await html2canvas(reportNode, {
+          backgroundColor: '#ffffff', scale: 2, useCORS: true,
+          width: 1123, windowWidth: 1123, logging: false,
+        });
+        if (canvas.width < 100 || canvas.height < 100) throw new Error('O PDF oficial não pôde ser renderizado.');
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const ratio = Math.min(pageW / canvas.width, pageH / canvas.height);
+        const renderW = canvas.width * ratio;
+        const renderH = canvas.height * ratio;
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (pageW - renderW) / 2, 0, renderW, renderH);
+        pdfBlob = pdf.output('blob');
+      } finally {
+        iframe.remove();
       }
-      y += 9;
-      if (y > 190) { pdf.addPage(); y = 17; }
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(`Total liquido: ${formatCurrency(rows.reduce((sum, row) => sum + row.Liquido, 0))}`, 12, y);
-      const pdfBlob = pdf.output('blob');
       const filename = `TOPAC_APONTAMENTO_${selectedCompanyData.name}_${competencia}`.replace(/[^a-zA-Z0-9_-]/g, '_');
       const goiania = /goi[âa]nia/i.test(selectedCompanyData.name);
       setEmailDraft({
