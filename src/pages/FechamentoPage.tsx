@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Bus, FileText, Lock, RefreshCw, RotateCcw, Save, Table, UtensilsCrossed } from 'lucide-react';
+import { Bus, FileText, Lock, RefreshCw, RotateCcw, Save, Send, Table, UtensilsCrossed } from 'lucide-react';
 import { toast } from 'sonner';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
+import EmailPdfModal, { type EmailPdfDraft } from '@/components/EmailPdfModal';
 import { useApp } from '@/context/AppContext';
 import { calcPayrollBreakdown, formatCurrency, getComissaoPercentual, getHoraExtraSemanalPercentual } from '@/lib/calculations';
 import { getWorkingDays } from '@/lib/workingDays';
@@ -48,6 +51,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
   const setDiasUteisManual = (value: number) => setViewState((current) => ({ ...current, diasUteisManual: value }));
   const setDomingosFeriados = (value: number) => setViewState((current) => ({ ...current, domingosFeriados: value }));
   const [saving, setSaving] = useState(false);
+  const [emailDraft, setEmailDraft] = useState<EmailPdfDraft | null>(null);
   const [retificationReason, setRetificationReason] = useState('');
   const saveQueueRef = useRef<Map<string, Promise<void>>>(new Map());
 
@@ -325,6 +329,88 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
     document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url);
   };
 
+  const prepararEnvioContabilidade = async () => {
+    if (saving || !selectedCompanyData || compEmps.length === 0) {
+      toast.error('Selecione uma empresa com funcionários para enviar.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await persistAllEntries();
+      const rows = compEmps.map((emp) => {
+        const entry = compEntries.find((item) => item.employeeId === emp.id);
+        if (!entry) return null;
+        const calc = calcPayroll(emp, entry);
+        return {
+          Funcionario: emp.name, Empresa: selectedCompanyData.name,
+          Faltas: entry.faltasDias, Datas: getFaltaDatas(entry.observacoes),
+          HorasDescontadas: entry.atrasos || 0, HorasDocumento: getHorasDocumento(entry.observacoes),
+          HE50: entry.he50, HE60: entry.he60, HE100: entry.he100,
+          DSR: calc.dsrHE + calc.dsrComissao,
+          BaseComissao: entry.comissaoBase || 0, Comissao: calc.comissaoVal,
+          Adicional: entry.adicionais || 0, DescontoExtra: entry.descontosDiversos || 0,
+          Adiantamento: calc.adiantamento, Liquido: calc.liquido,
+          Observacoes: getObservacaoLivre(entry.observacoes),
+        };
+      }).filter((row): row is NonNullable<typeof row> => row !== null);
+      if (!rows.length) throw new Error('Não há apontamentos para anexar.');
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      worksheet['!cols'] = Object.keys(rows[0]).map((key) => ({ wch: key === 'Funcionario' ? 38 : 19 }));
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, worksheet, 'Apontamento');
+      const workbook = XLSX.write(book, { bookType: 'xlsx', type: 'array' });
+      const excelBlob = new Blob([workbook], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.text('TOPAC RH PRO - RELATORIO DE APONTAMENTO', 12, 15);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text(`${selectedCompanyData.name} - Competencia ${competencia}`, 12, 22);
+      pdf.setFontSize(7.5);
+      let y = 32;
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Funcionario', 12, y);
+      pdf.text('Faltas', 111, y);
+      pdf.text('HE 50/60/100', 139, y);
+      pdf.text('Comissao', 190, y);
+      pdf.text('Liquido', 234, y);
+      pdf.setFont('helvetica', 'normal');
+      for (const row of rows) {
+        if (y > 186) { pdf.addPage(); y = 17; }
+        y += 6;
+        pdf.text(pdf.splitTextToSize(row.Funcionario, 93)[0] || '', 12, y);
+        pdf.text(String(row.Faltas), 111, y);
+        pdf.text(`${row.HE50} / ${row.HE60} / ${row.HE100}`, 139, y);
+        pdf.text(formatCurrency(row.Comissao), 190, y);
+        pdf.text(formatCurrency(row.Liquido), 234, y);
+      }
+      y += 9;
+      if (y > 190) { pdf.addPage(); y = 17; }
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`Total liquido: ${formatCurrency(rows.reduce((sum, row) => sum + row.Liquido, 0))}`, 12, y);
+      const pdfBlob = pdf.output('blob');
+      const filename = `TOPAC_APONTAMENTO_${selectedCompanyData.name}_${competencia}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const goiania = /goi[âa]nia/i.test(selectedCompanyData.name);
+      setEmailDraft({
+        to: goiania ? ['requisicao@incocontabilidade.com.br'] : ['marisa@aatconsultoria.com.br', 'dp@aatconsultoria.com.br'],
+        subject: `[TOPAC RH PRO] Apontamento - ${selectedCompanyData.name} - ${competencia}`,
+        body: `Prezados,\n\nSegue o apontamento da empresa ${selectedCompanyData.name}, competência ${competencia}, com relatórios PDF e Excel para conferência.\n\nAtenciosamente,\nTOPAC RH PRO`,
+        moduleOrigin: 'contabilidade_folha',
+        threadKey: `apontamento:${selectedCompany}:${competencia}`,
+        attachments: [
+          { attachmentBlob: pdfBlob, attachmentName: `${filename}.pdf`, attachmentContentType: 'application/pdf' },
+          { attachmentBlob: excelBlob, attachmentName: `${filename}.xlsx`, attachmentContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        ],
+      });
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível preparar os anexos.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const openPdf = () => navigate(`/relatorio-impressao?empresa=${selectedCompany}&competencia=${competencia}&diasUteis=${diasUteis}&domingosFeriados=${domingosFeriados}`);
   const statusColor = fechamento.status === 'fechado' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : fechamento.status === 'em_conferencia' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : 'border-violet-400/30 bg-violet-500/10 text-violet-300';
   const inputClass = 'h-7 w-full min-w-0 border-violet-400/20 bg-black/20 px-1 text-[10px] focus:border-violet-400/60';
@@ -385,7 +471,7 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
       <section className="card-premium overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-violet-400/20 p-4 md:flex-row md:items-center md:justify-between">
           <div><h2 className="text-base font-bold text-foreground">Apontamento para Contabilidade</h2><p className="text-xs text-muted-foreground">Grade única e editável. Funcionário e empresa são fixos; os demais apontamentos podem ser preenchidos aqui.</p></div>
-          <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={exportApontamentoCsv}><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button><Button variant="outline" size="sm" onClick={openPdf}><FileText className="mr-2 h-4 w-4" /> PDF</Button></div>
+          <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={exportApontamentoCsv}><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button><Button variant="outline" size="sm" onClick={openPdf}><FileText className="mr-2 h-4 w-4" /> PDF</Button><Button size="sm" disabled={saving} onClick={prepararEnvioContabilidade}><Send className="mr-2 h-4 w-4" /> Enviar para Contabilidade</Button></div>
         </div>
         <div className="max-h-[calc(100vh-315px)] w-full overflow-auto overscroll-contain [scrollbar-gutter:stable]">
           <table className="w-full table-fixed text-[10px]">
@@ -443,8 +529,10 @@ const FechamentoPage: React.FC<{ abrirInteligente?: boolean }> = ({ abrirIntelig
           )}
           <Button onClick={openPdf} variant="outline"><FileText className="mr-2 h-4 w-4" /> Gerar PDF</Button>
           <Button onClick={exportApontamentoCsv} variant="outline"><Table className="mr-2 h-4 w-4" /> Exportar Excel</Button>
+          <Button disabled={saving} onClick={prepararEnvioContabilidade}><Send className="mr-2 h-4 w-4" /> Enviar para Contabilidade</Button>
         </div>
       </section>
+      <EmailPdfModal open={!!emailDraft} draft={emailDraft} onOpenChange={(open) => { if (!open) setEmailDraft(null); }} />
     </div>
   );
 };
