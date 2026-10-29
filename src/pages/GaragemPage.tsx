@@ -43,6 +43,7 @@ const GaragemPage: React.FC = () => {
   const [newPlate, setNewPlate] = useState('');
   const [rowEdit, setRowEdit] = useState<Record<string, { veiculo: string; placa: string }>>({});
   const [lastGenerated, setLastGenerated] = useState('');
+  const [receiptRefreshKey, setReceiptRefreshKey] = useState(0);
 
   const allowed = userRoles.includes('admin') || userRoles.includes('diretor_geral');
   const employeeMap = useMemo(() => new Map(employees.map(employee => [employee.id, employee])), [employees]);
@@ -214,6 +215,7 @@ const GaragemPage: React.FC = () => {
       }
     }
     setLastGenerated(created + ' novo(s), ' + skipped + ' já existente(s), ' + failures + ' falha(s).');
+    setReceiptRefreshKey(value => value + 1);
     if (failures) toast.error('Geração parcial. Consulte os recibos abaixo e tente novamente para os pendentes.');
     else toast.success('Recibos gerados e vinculados ao cadastro. ' + created + ' novo(s); ' + skipped + ' preservado(s).');
     await audit('gerou', { employee_id:reportRows[0].employeeId, company_id: reportRows[0].companyId }, null, { competencia, created, skipped, failures });
@@ -311,7 +313,7 @@ const GaragemPage: React.FC = () => {
         <p className="mt-3 text-xs text-muted-foreground">Emissão não significa pagamento confirmado; os recibos ficam aguardando assinatura, sem bloquear o fechamento.</p>
       </section>
       {companyId !== ALL
-        ? <GarageReceiptAdminModule companyId={companyId} competencia={competencia} dataReferencia={dataPagamento} />
+        ? <GarageReceiptAdminModule key={companyId + competencia + receiptRefreshKey} companyId={companyId} competencia={competencia} dataReferencia={dataPagamento} />
         : <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">Selecione uma empresa para consultar, imprimir, importar ou enviar os recibos individuais já arquivados na Assinatura Digital.</p>}
     </main>
   );
