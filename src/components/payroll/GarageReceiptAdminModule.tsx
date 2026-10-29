@@ -22,7 +22,7 @@ const garageAmount = (text: string) => {
   return Number.isFinite(value) ? value : 200;
 };
 
-const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: string }> = ({ companyId, competencia }) => {
+const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: string; dataReferencia?: string }> = ({ companyId, competencia, dataReferencia }) => {
   const { employees, companies } = useApp();
   const company = companies.find(item => item.id === companyId);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,9 +38,13 @@ const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: strin
   ), [companyId, employees]);
 
   const referenceDate = useMemo(() => {
+    if (dataReferencia && /^\d{4}-\d{2}-\d{2}$/.test(dataReferencia)) {
+      const [year, month, day] = dataReferencia.split('-');
+      return `${day}/${month}/${year}`;
+    }
     const [year, month] = competencia.split('-');
     return year && month ? `05/${month}/${year}` : 'dia 5';
-  }, [competencia]);
+  }, [competencia, dataReferencia]);
 
   const load = async () => {
     if (!companyId || !competencia) return;
@@ -212,7 +216,7 @@ const GarageReceiptAdminModule: React.FC<{ companyId: string; competencia: strin
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-violet-400">Assinatura Digital · Garagem</p>
           <h2 className="mt-1 flex items-center gap-2 text-lg font-bold"><Building2 className="h-5 w-5" />Recibos de garagem</h2>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">Referência padrão: <b>{referenceDate}</b> (dia 5). O recibo entra no portal para assinatura quando existir, mas <b>nunca bloqueia o fechamento</b>. Se ainda não estiver disponível, o processo continua normalmente e o arquivo pode ser incluído depois.</p>
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">Referência para esta tela: <b>{referenceDate}</b>. O recibo entra no portal para assinatura quando existir, mas <b>nunca bloqueia o fechamento</b>. Se ainda não estiver disponível, o processo continua normalmente e o arquivo pode ser incluído depois.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => inputRef.current?.click()} disabled={uploading}><FileUp className="mr-2 h-4 w-4" />SUBIR RECIBOS DE GARAGEM</Button>
