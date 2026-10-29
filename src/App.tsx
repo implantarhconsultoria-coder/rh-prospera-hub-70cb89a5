@@ -64,6 +64,7 @@ import UniformePage from "@/pages/UniformePage";
 import EntregaImpressaoPage from "@/pages/EntregaImpressaoPage";
 import RelatorioVRPage from "@/pages/RelatorioVRPage";
 import RelatorioVTPage from "@/pages/RelatorioVTPage";
+import GaragemPage from "@/pages/GaragemPage";
 import ConsolidadoBeneficiosPage from "@/pages/ConsolidadoBeneficiosPage";
 import ConferenciaAtestadosBeneficiosPage from "@/pages/ConferenciaAtestadosBeneficiosPage";
 import RelatorioVRImpressaoPage from "@/pages/RelatorioVRImpressaoPage";
@@ -232,6 +233,7 @@ const AuthGate = () => {
         <Route path="/admin/uniformes" element={<UniformePage />} />
         <Route path="/admin/relatorio-vr" element={<RelatorioVRPage />} />
         <Route path="/admin/relatorio-vt" element={<RelatorioVTPage />} />
+        <Route path="/admin/garagem" element={<GaragemPage />} />
         <Route path="/admin/consolidado-vr" element={<ConsolidadoBeneficiosPage tipo="vr" />} />
         <Route path="/admin/consolidado-vt" element={<ConsolidadoBeneficiosPage tipo="vt" />} />
         <Route path="/admin/conferencia-atestados-vr" element={<ConferenciaAtestadosBeneficiosPage tipo="vr" />} />
