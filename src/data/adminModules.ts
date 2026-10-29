@@ -14,6 +14,7 @@ export const ADMIN_MODULE_GROUPS = [
     items: [
       {label:'VR',description:'Vale-refeição • relatório e conferência',path:'/admin/relatorio-vr',icon:WalletCards},
       {label:'VT',description:'Vale-transporte • relatório e conferência',path:'/admin/relatorio-vt',icon:Bus},
+      {label:'Garagem',description:'Beneficiários, recibos e impressão',path:'/admin/garagem',icon:Car},
       {label:'Funcionários',description:'Cadastro e histórico por funcionário',path:'/admin/funcionarios',icon:Users},
       {label:'Uniformes',description:'Estoque, entrega e impressão',path:'/admin/uniformes',icon:Shirt},
       {label:'Estoque Interno',description:'Materiais do escritório',path:'/admin/estoque-interno',icon:Archive},
