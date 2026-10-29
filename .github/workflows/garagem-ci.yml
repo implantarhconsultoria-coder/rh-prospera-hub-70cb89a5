@@ -1,0 +1,33 @@
+name: TOPAC Garagem - validacao isolada
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/pages/GaragemPage.tsx'
+      - 'src/lib/garageReceipts.ts'
+      - 'src/lib/__tests__/garageReceipts.test.ts'
+      - 'src/components/payroll/GarageReceiptAdminModule.tsx'
+      - 'docs/GARAGEM_CONTROLE_20261029.sql'
+      - '.github/workflows/garagem-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  garagem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instalar dependencias conforme build existente
+        run: npm install --no-package-lock --no-audit --no-fund
+      - name: Testes novos de recibos de garagem
+        run: npx vitest run src/lib/__tests__/garageReceipts.test.ts
+      - name: Build com as alteracoes reais do PR
+        run: npm run build
