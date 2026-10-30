@@ -5,12 +5,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UNIFORM_TYPES, type DeliveryItem } from '@/data/deliveries';
+import MaterialRequestPage from '@/pages/MaterialRequestPage';
 import { Shirt, Plus, Trash2, FileText, Search, Package, ArrowDownCircle, RefreshCw, AlertTriangle, History, ChevronDown, ClipboardList, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const db = supabase as any;
 type Unidade = 'SAO_PAULO' | 'PRAIA_GRANDE' | 'GOIANIA';
-type Mode = 'painel' | 'estoque' | 'entregas' | 'historico';
+type Mode = 'painel' | 'estoque' | 'entregas' | 'historico' | 'solicitacao';
 type StockMetric = 'variacoes' | 'quantidade' | 'reposicao' | 'sem_saldo';
 type Stock = { id:string; unidade:Unidade; tipo:string; tamanho:string; modelo:string; saldo:number; minimo:number; observacao:string|null; atualizado_em:string };
 type RecordedDelivery = { id:string; funcionario_id:string; company_id:string; unidade:Unidade; data_entrega:string; itens:DeliveryItem[]; gerado_por:string; criado_em:string };
@@ -29,6 +30,7 @@ const UNIFORM_CARDS = [
   {key:'estoque',label:'Estoque / contagem',description:'Conferir e receber peças',icon:Package},
   {key:'entregas',label:'Entregar e imprimir',description:'Registrar e abater saldo',icon:Shirt},
   {key:'historico',label:'Histórico',description:'Movimentos e reimpressão',icon:History},
+  {key:'solicitacao',label:'Solicitação',description:'Solicitar peças e emitir ficha',icon:ClipboardList},
 ] as const;
 // Rascunho da ficha recebida em 23/09/2026: NENHUM valor é importado sem conferência.
 // A ficha não tem unidade assinalada; alguns números e modelos manuscritos são incertos.
@@ -387,6 +389,7 @@ const UniformePage:React.FC=()=>{
           onClick={()=>void saveAndPrint()}><FileText className="h-4 w-4 mr-1"/>Confirmar entrega, abater estoque e gerar ficha</Button>
       </div>
     </div>}
+    {mode==='solicitacao'&&<MaterialRequestPage tipo="UNIFORME" />}
     {mode==='historico'&&<div className="card-premium p-5 space-y-3">
       <h2 className="font-bold flex items-center gap-2"><History className="h-4 w-4"/>Entregas confirmadas / reimpressão</h2>
       <p className="text-xs text-muted-foreground">A reimpressão consulta a ficha já registrada: nenhuma segunda baixa de estoque.</p>
