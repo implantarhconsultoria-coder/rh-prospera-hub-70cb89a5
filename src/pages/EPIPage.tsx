@@ -3,13 +3,15 @@ import { ClipboardCheck, ClipboardList, ChevronDown, HardHat } from 'lucide-reac
 import EpiDailyDeliveryPage from '@/pages/EpiDailyDeliveryPage';
 import EPIManagementPage from '@/pages/EPIManagementPage';
 import ProtocoloEntregaLivrePage from '@/pages/ProtocoloEntregaLivrePage';
+import MaterialRequestPage from '@/pages/MaterialRequestPage';
 
-type Mode = 'daily' | 'management' | 'protocol';
+type Mode = 'daily' | 'management' | 'protocol' | 'request';
 
 const EPI_CARDS = [
   {key:'daily',label:'Entrega diária de EPI',description:'Registrar entrega e imprimir',icon:HardHat},
   {key:'management',label:'Gestão semestral / fichas',description:'Solicitações, entregas e controle',icon:ClipboardCheck},
   {key:'protocol',label:'Protocolo de entrega livre',description:'Gerar comprovante de materiais',icon:ClipboardList},
+  {key:'request',label:'Solicitação',description:'Solicitar EPI e emitir ficha',icon:ClipboardList},
 ] as const;
 
 const EPIPage: React.FC = () => {
@@ -39,6 +41,7 @@ const EPIPage: React.FC = () => {
     {mode==='daily'&&<EpiDailyDeliveryPage />}
     {mode==='management'&&<EPIManagementPage />}
     {mode==='protocol'&&<ProtocoloEntregaLivrePage />}
+    {mode==='request'&&<MaterialRequestPage tipo="EPI" />}
   </div>;
 };
 
