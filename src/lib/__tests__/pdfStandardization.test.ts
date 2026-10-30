@@ -25,7 +25,9 @@ describe('padronização de PDFs TOPAC RH', () => {
   it('faz imprimir e salvar compartilharem o mesmo handler no fechamento', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/pages/RelatorioImpressaoPage.tsx'), 'utf8');
     expect((source.match(/onClick=\{handlePrintOrPdf\}/g) || []).length).toBeGreaterThanOrEqual(2);
-    expect(source).toContain("tipo: allCompanies ? 'Relatorio' : 'Fechamento'");
+    expect(source).toContain('const handlePrintOrPdf = () => printDocumentAsPdf(pdfFileName)');
+    expect(source).toContain('buildTopacRhPdfFileName({');
+    expect(source).toContain("tipo: allCompanies ? 'Apontamento Multiempresas' : 'Apontamento'");
     expect(source).toContain("nome: allCompanies ? 'Multiempresas'");
   });
 });
