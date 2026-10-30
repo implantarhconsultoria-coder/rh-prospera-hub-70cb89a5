@@ -389,6 +389,7 @@ const UniformePage:React.FC=()=>{
           onClick={()=>void saveAndPrint()}><FileText className="h-4 w-4 mr-1"/>Confirmar entrega, abater estoque e gerar ficha</Button>
       </div>
     </div>}
+    {mode==='solicitacao'&&<MaterialRequestPage tipo="UNIFORME" />}
     {mode==='historico'&&<div className="card-premium p-5 space-y-3">
       <h2 className="font-bold flex items-center gap-2"><History className="h-4 w-4"/>Entregas confirmadas / reimpressão</h2>
       <p className="text-xs text-muted-foreground">A reimpressão consulta a ficha já registrada: nenhuma segunda baixa de estoque.</p>
